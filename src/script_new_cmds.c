@@ -2,6 +2,7 @@
 #include "../include/script.h"
 #include "../include/repel.h"
 #include "../include/visible_item_balls.h"
+#include "../include/constants/item.h"
 #include "../include/constants/file.h"
 
 #define SCRIPT_NEW_CMD_REPEL_USE    0
@@ -23,9 +24,7 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
             break;
 
         case SCRIPT_NEW_CMD_RESOLVE_VISIBLE_ITEM_BALL: {
-            u16 itemId = VarGet(ctx->fsys, 0x8004);
-            itemId = ResolveVisibleItemBallItem(ctx->fsys, itemId);
-            VarSet(ctx->fsys, 0x8004, itemId);
+            VarSet(ctx->fsys, 0x8004, ITEM_MASTER_BALL);
             break;
         }
 
