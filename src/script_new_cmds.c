@@ -1,12 +1,10 @@
 #include "../include/types.h"
 #include "../include/script.h"
 #include "../include/repel.h"
-#include "../include/visible_item_balls.h"
 #include "../include/constants/item.h"
 #include "../include/constants/file.h"
 
 #define SCRIPT_NEW_CMD_REPEL_USE    0
-#define SCRIPT_NEW_CMD_RESOLVE_VISIBLE_ITEM_BALL 1
 
 #define SCRIPT_NEW_CMD_MAX          256
 
@@ -22,12 +20,6 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
             Repel_Use(most_recent_repel, HEAPID_MAIN_HEAP);
 #endif
             break;
-
-        case SCRIPT_NEW_CMD_RESOLVE_VISIBLE_ITEM_BALL: {
-            u16 itemId = VarGet(ctx->fsys, 0x8004);
-            VarSet(ctx->fsys, 0x8004, ResolveVisibleItemBallItem(ctx->fsys, itemId));
-            break;
-        }
 
         default: break;
     }
