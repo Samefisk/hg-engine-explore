@@ -8,7 +8,6 @@
 #define ITEM_BALL_GFX_ID               87
 #define ITEM_BALL_SCRIPT_MIN           7000
 #define ITEM_BALL_SCRIPT_MAX           8000
-#define ITEM_BALL_TIER_UP_CHANCE       20
 #define DIR_NORTH                      0
 #define DIR_SOUTH                      1
 #define DIR_WEST                       2
@@ -18,6 +17,8 @@ enum VisibleItemPoolId {
     VISIBLE_ITEM_POOL_COMMON,
     VISIBLE_ITEM_POOL_GOOD,
     VISIBLE_ITEM_POOL_RARE,
+    VISIBLE_ITEM_POOL_VERY_RARE,
+    VISIBLE_ITEM_POOL_EXTREMELY_RARE,
     VISIBLE_ITEM_POOL_COUNT,
 };
 
@@ -66,10 +67,43 @@ static const u16 sVisibleItemPoolRare[] = {
     ITEM_CARBOS,
 };
 
+static const u16 sVisibleItemPoolVeryRare[] = {
+    ITEM_PP_MAX,
+    ITEM_MAX_ELIXIR,
+    ITEM_RARE_BONE,
+    ITEM_SHINY_STONE,
+    ITEM_DUSK_STONE,
+    ITEM_DAWN_STONE,
+    ITEM_OVAL_STONE,
+    ITEM_KINGS_ROCK,
+    ITEM_LUCKY_EGG,
+    ITEM_METAL_COAT,
+    ITEM_LEFTOVERS,
+    ITEM_DRAGON_SCALE,
+    ITEM_UP_GRADE,
+    ITEM_PROTECTOR,
+    ITEM_ELECTIRIZER,
+    ITEM_MAGMARIZER,
+    ITEM_DUBIOUS_DISC,
+};
+
+static const u16 sVisibleItemPoolExtremelyRare[] = {
+    ITEM_MASTER_BALL,
+    ITEM_BIG_NUGGET,
+    ITEM_PEARL_STRING,
+    ITEM_COMET_SHARD,
+    ITEM_ABILITY_CAPSULE,
+    ITEM_BOTTLE_CAP,
+    ITEM_GOLD_BOTTLE_CAP,
+    ITEM_ABILITY_PATCH,
+};
+
 static const VisibleItemPool sVisibleItemPools[VISIBLE_ITEM_POOL_COUNT] = {
     [VISIBLE_ITEM_POOL_COMMON] = { sVisibleItemPoolCommon, NELEMS(sVisibleItemPoolCommon) },
     [VISIBLE_ITEM_POOL_GOOD] = { sVisibleItemPoolGood, NELEMS(sVisibleItemPoolGood) },
     [VISIBLE_ITEM_POOL_RARE] = { sVisibleItemPoolRare, NELEMS(sVisibleItemPoolRare) },
+    [VISIBLE_ITEM_POOL_VERY_RARE] = { sVisibleItemPoolVeryRare, NELEMS(sVisibleItemPoolVeryRare) },
+    [VISIBLE_ITEM_POOL_EXTREMELY_RARE] = { sVisibleItemPoolExtremelyRare, NELEMS(sVisibleItemPoolExtremelyRare) },
 };
 
 static u32 HashVisibleItemBallSeed(u32 seed)
@@ -86,7 +120,7 @@ static int GetUpgradedVisibleItemPoolId(int poolId, u32 seed)
 {
     while (poolId < VISIBLE_ITEM_POOL_COUNT - 1) {
         seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x27D4EB2D);
-        if (seed % 100 >= ITEM_BALL_TIER_UP_CHANCE) {
+        if (seed % 100 >= VISIBLE_ITEM_BALL_TIER_UP_CHANCE) {
             break;
         }
 
@@ -240,6 +274,35 @@ static int GetVisibleItemPoolId(u16 originalItem)
         case ITEM_CALCIUM:
         case ITEM_CARBOS:
             return VISIBLE_ITEM_POOL_RARE;
+
+        case ITEM_PP_MAX:
+        case ITEM_MAX_ELIXIR:
+        case ITEM_RARE_BONE:
+        case ITEM_SHINY_STONE:
+        case ITEM_DUSK_STONE:
+        case ITEM_DAWN_STONE:
+        case ITEM_OVAL_STONE:
+        case ITEM_KINGS_ROCK:
+        case ITEM_LUCKY_EGG:
+        case ITEM_METAL_COAT:
+        case ITEM_LEFTOVERS:
+        case ITEM_DRAGON_SCALE:
+        case ITEM_UP_GRADE:
+        case ITEM_PROTECTOR:
+        case ITEM_ELECTIRIZER:
+        case ITEM_MAGMARIZER:
+        case ITEM_DUBIOUS_DISC:
+            return VISIBLE_ITEM_POOL_VERY_RARE;
+
+        case ITEM_MASTER_BALL:
+        case ITEM_BIG_NUGGET:
+        case ITEM_PEARL_STRING:
+        case ITEM_COMET_SHARD:
+        case ITEM_ABILITY_CAPSULE:
+        case ITEM_BOTTLE_CAP:
+        case ITEM_GOLD_BOTTLE_CAP:
+        case ITEM_ABILITY_PATCH:
+            return VISIBLE_ITEM_POOL_EXTREMELY_RARE;
     }
 
     return -1;
