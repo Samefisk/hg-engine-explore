@@ -8,6 +8,7 @@
 #define ITEM_BALL_GFX_ID               87
 #define ITEM_BALL_SCRIPT_MIN           7000
 #define ITEM_BALL_SCRIPT_MAX           8000
+#define ITEM_BALL_TIER_UP_CHANCE       20
 #define DIR_NORTH                      0
 #define DIR_SOUTH                      1
 #define DIR_WEST                       2
@@ -79,6 +80,20 @@ static u32 HashVisibleItemBallSeed(u32 seed)
     seed *= 0x846CA68B;
     seed ^= seed >> 16;
     return seed;
+}
+
+static int GetUpgradedVisibleItemPoolId(int poolId, u32 seed)
+{
+    while (poolId < VISIBLE_ITEM_POOL_COUNT - 1) {
+        seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x27D4EB2D);
+        if (seed % 100 >= ITEM_BALL_TIER_UP_CHANCE) {
+            break;
+        }
+
+        poolId++;
+    }
+
+    return poolId;
 }
 
 static LocalMapObject *GetActiveVisibleItemBallObject(FieldSystem *fsys)
@@ -260,7 +275,10 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
     seed ^= (u32)(poolId + 1) * 0x85EBCA6B;
     seed ^= (u32)originalItem * 0xC2B2AE35;
     seed = HashVisibleItemBallSeed(seed);
+    poolId = GetUpgradedVisibleItemPoolId(poolId, seed);
+    seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x165667B1);
 
+    pool = &sVisibleItemPools[poolId];
     poolIndex = seed % pool->count;
     if (pool->count > 1 && pool->items[poolIndex] == originalItem) {
         poolIndex = (poolIndex + 1) % pool->count;
