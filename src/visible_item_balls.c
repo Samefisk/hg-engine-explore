@@ -5,10 +5,9 @@
 #include "../include/save.h"
 #include "../include/script.h"
 
-#define DIR_NORTH                      0
-#define DIR_SOUTH                      1
-#define DIR_WEST                       2
-#define DIR_EAST                       3
+#define ITEM_BALL_GFX_ID               87
+#define ITEM_BALL_SCRIPT_MIN           7000
+#define ITEM_BALL_SCRIPT_MAX           8000
 
 enum VisibleItemPoolId {
     VISIBLE_ITEM_POOL_COMMON,
@@ -78,44 +77,51 @@ static u32 HashVisibleItemBallSeed(u32 seed)
     return seed;
 }
 
+static LocalMapObject *GetActiveVisibleItemBallObject(FieldSystem *fsys)
+{
+    u16 *lastTalkedPtr;
+    LocalMapObject *mapObject;
+    int objectId;
+
+    if (fsys == NULL || fsys->mapObjectMan == NULL) {
+        return NULL;
+    }
+
+    lastTalkedPtr = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_LAST_TALKED);
+    if (lastTalkedPtr == NULL) {
+        return NULL;
+    }
+
+    objectId = *lastTalkedPtr;
+    mapObject = GetMapObjectByID(fsys->mapObjectMan, objectId);
+    if (mapObject == NULL) {
+        return NULL;
+    }
+
+    if (mapObject->gfxId != ITEM_BALL_GFX_ID) {
+        return NULL;
+    }
+
+    if (mapObject->evFlagId == 0) {
+        return NULL;
+    }
+
+    if (mapObject->scriptId < ITEM_BALL_SCRIPT_MIN || mapObject->scriptId >= ITEM_BALL_SCRIPT_MAX) {
+        return NULL;
+    }
+
+    return mapObject;
+}
+
 static u32 GetVisibleItemBallSpotSeed(FieldSystem *fsys)
 {
-    u16 *facingPtr;
-    u32 mapId;
-    int x;
-    int y;
-    int facing;
+    LocalMapObject *mapObject = GetActiveVisibleItemBallObject(fsys);
 
-    if (fsys == NULL || fsys->playerAvatar == NULL || fsys->location == NULL) {
+    if (mapObject == NULL) {
         return 0;
     }
 
-    mapId = fsys->location->mapId;
-    x = GetPlayerXCoord(fsys->playerAvatar);
-    y = GetPlayerYCoord(fsys->playerAvatar);
-
-    facingPtr = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_FACING_DIRECTION);
-    facing = facingPtr != NULL ? *facingPtr : DIR_NORTH;
-
-    switch (facing) {
-        case DIR_NORTH:
-            y -= 1;
-            break;
-
-        case DIR_SOUTH:
-            y += 1;
-            break;
-
-        case DIR_WEST:
-            x -= 1;
-            break;
-
-        case DIR_EAST:
-            x += 1;
-            break;
-    }
-
-    return mapId ^ ((u32)(x & 0xFFFF) << 16) ^ (u32)(y & 0xFFFF);
+    return ((u32)mapObject->evFlagId << 16) ^ (u32)mapObject->scriptId;
 }
 
 static int GetVisibleItemPoolId(u16 originalItem)

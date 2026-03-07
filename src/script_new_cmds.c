@@ -24,7 +24,8 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
             break;
 
         case SCRIPT_NEW_CMD_RESOLVE_VISIBLE_ITEM_BALL: {
-            VarSet(ctx->fsys, 0x8004, ITEM_MASTER_BALL);
+            u16 itemId = VarGet(ctx->fsys, 0x8004);
+            VarSet(ctx->fsys, 0x8004, ResolveVisibleItemBallItem(ctx->fsys, itemId));
             break;
         }
 

@@ -627,7 +627,6 @@ scr_seq_0003_008:
 
 _080A:
     call _04F2
-    setvar VAR_SPECIAL_x8004, ITEM_MASTER_BALL
     giveitem VAR_SPECIAL_x8004, VAR_SPECIAL_x8005, VAR_SPECIAL_RESULT
     getitempocket VAR_SPECIAL_x8004, VAR_SPECIAL_RESULT
     compare VAR_SPECIAL_RESULT, 7
@@ -652,7 +651,6 @@ scr_seq_0003_033_give_item_verbose:
 
 _085F:
     call _04F2
-    ResolveVisibleItemBall
     giveitem VAR_SPECIAL_x8004, VAR_SPECIAL_x8005, VAR_SPECIAL_RESULT
     getitempocket VAR_SPECIAL_x8004, VAR_SPECIAL_RESULT
     compare VAR_SPECIAL_RESULT, 7

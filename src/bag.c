@@ -8,6 +8,7 @@
 #include "../include/message.h"
 #include "../include/save.h"
 #include "../include/script.h"
+#include "../include/visible_item_balls.h"
 
 #ifdef DEBUG_BATTLE_SCENARIOS
 #include "../include/test_battle.h"
@@ -191,6 +192,17 @@ BOOL Bag_HasSpaceForItem(BAG_DATA *bag, u16 itemId, u16 quantity, int heap_id) {
 }
 
 BOOL Bag_AddItem(BAG_DATA *bag, u16 itemId, u16 quantity, int heap_id) {
+    if (gFieldSysPtr != NULL) {
+        u16 resolvedItem = ResolveVisibleItemBallItem(gFieldSysPtr, itemId);
+
+        if (resolvedItem != itemId) {
+            if (VarGet(gFieldSysPtr, 0x8004) == itemId) {
+                VarSet(gFieldSysPtr, 0x8004, resolvedItem);
+            }
+            itemId = resolvedItem;
+        }
+    }
+
     ITEM_SLOT *slot = Bag_GetItemSlotForAdd(bag, itemId, quantity, heap_id);
     if (slot == NULL) {
         return FALSE;
