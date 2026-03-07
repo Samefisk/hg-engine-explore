@@ -8,6 +8,10 @@
 #define ITEM_BALL_GFX_ID               87
 #define ITEM_BALL_SCRIPT_MIN           7000
 #define ITEM_BALL_SCRIPT_MAX           8000
+#define DIR_NORTH                      0
+#define DIR_SOUTH                      1
+#define DIR_WEST                       2
+#define DIR_EAST                       3
 
 enum VisibleItemPoolId {
     VISIBLE_ITEM_POOL_COMMON,
@@ -113,9 +117,67 @@ static LocalMapObject *GetActiveVisibleItemBallObject(FieldSystem *fsys)
     return mapObject;
 }
 
+static const OBJECT_EVENT *GetVisibleItemBallEventAhead(FieldSystem *fsys)
+{
+    int targetX;
+    int targetY;
+    int facing;
+    u32 i;
+
+    if (fsys == NULL || fsys->map_events == NULL || fsys->playerAvatar == NULL) {
+        return NULL;
+    }
+
+    targetX = GetPlayerXCoord(fsys->playerAvatar);
+    targetY = GetPlayerYCoord(fsys->playerAvatar);
+    facing = fsys->playerAvatar->mapObject != NULL ? fsys->playerAvatar->mapObject->curFacing : fsys->location->direction;
+
+    switch (facing) {
+        case DIR_NORTH:
+            targetY--;
+            break;
+        case DIR_SOUTH:
+            targetY++;
+            break;
+        case DIR_WEST:
+            targetX--;
+            break;
+        case DIR_EAST:
+            targetX++;
+            break;
+    }
+
+    for (i = 0; i < fsys->map_events->num_object_events; i++) {
+        const OBJECT_EVENT *objectEvent = &fsys->map_events->object_events[i];
+
+        if (objectEvent->ovid != ITEM_BALL_GFX_ID) {
+            continue;
+        }
+
+        if (objectEvent->flag == 0) {
+            continue;
+        }
+
+        if (objectEvent->scr < ITEM_BALL_SCRIPT_MIN || objectEvent->scr >= ITEM_BALL_SCRIPT_MAX) {
+            continue;
+        }
+
+        if (objectEvent->x == targetX && objectEvent->y == targetY) {
+            return objectEvent;
+        }
+    }
+
+    return NULL;
+}
+
 static u32 GetVisibleItemBallSpotSeed(FieldSystem *fsys)
 {
+    const OBJECT_EVENT *objectEvent = GetVisibleItemBallEventAhead(fsys);
     LocalMapObject *mapObject = GetActiveVisibleItemBallObject(fsys);
+
+    if (objectEvent != NULL) {
+        return ((u32)objectEvent->flag << 16) ^ (u32)objectEvent->scr;
+    }
 
     if (mapObject == NULL) {
         return 0;
