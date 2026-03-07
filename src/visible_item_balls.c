@@ -1,9 +1,9 @@
-#include "../../include/visible_item_balls.h"
+#include "../include/visible_item_balls.h"
 
-#include "../../include/constants/item.h"
-#include "../../include/map_events_internal.h"
-#include "../../include/save.h"
-#include "../../include/script.h"
+#include "../include/constants/item.h"
+#include "../include/map_events_internal.h"
+#include "../include/save.h"
+#include "../include/script.h"
 
 #define VAR_SPECIAL_LAST_TALKED        0x800D
 #define FLAG_HIDE_ITEMBALL_FIRST       1056
