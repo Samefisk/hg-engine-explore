@@ -5,9 +5,10 @@
 #include "../include/save.h"
 #include "../include/script.h"
 
-#define VAR_SPECIAL_LAST_TALKED        0x800D
-#define FLAG_HIDE_ITEMBALL_FIRST       1056
-#define FLAG_HIDE_ITEMBALL_LAST        1310
+#define DIR_NORTH                      0
+#define DIR_SOUTH                      1
+#define DIR_WEST                       2
+#define DIR_EAST                       3
 
 enum VisibleItemPoolId {
     VISIBLE_ITEM_POOL_COMMON,
@@ -77,36 +78,44 @@ static u32 HashVisibleItemBallSeed(u32 seed)
     return seed;
 }
 
-static u16 GetVisibleItemBallSpotId(FieldSystem *fsys)
+static u32 GetVisibleItemBallSpotSeed(FieldSystem *fsys)
 {
-    MapObjectMan *mapObjectMan;
-    u16 lastTalkedId;
+    u16 *facingPtr;
+    u32 mapId;
+    int x;
+    int y;
+    int facing;
 
-    if (fsys == NULL || fsys->mapObjectMan == NULL) {
+    if (fsys == NULL || fsys->playerAvatar == NULL || fsys->location == NULL) {
         return 0;
     }
 
-    mapObjectMan = fsys->mapObjectMan;
-    if (mapObjectMan->objects == NULL) {
-        return 0;
+    mapId = fsys->location->mapId;
+    x = GetPlayerXCoord(fsys->playerAvatar);
+    y = GetPlayerYCoord(fsys->playerAvatar);
+
+    facingPtr = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_FACING_DIRECTION);
+    facing = facingPtr != NULL ? *facingPtr : DIR_NORTH;
+
+    switch (facing) {
+        case DIR_NORTH:
+            y -= 1;
+            break;
+
+        case DIR_SOUTH:
+            y += 1;
+            break;
+
+        case DIR_WEST:
+            x -= 1;
+            break;
+
+        case DIR_EAST:
+            x += 1;
+            break;
     }
 
-    lastTalkedId = VarGet(fsys, VAR_SPECIAL_LAST_TALKED);
-    for (u32 i = 0; i < mapObjectMan->object_count; i++) {
-        LocalMapObject *object = &mapObjectMan->objects[i];
-
-        if ((object->flags & MAPOBJECTFLAG_ACTIVE) == 0 || object->id != lastTalkedId) {
-            continue;
-        }
-
-        if (object->evFlagId < FLAG_HIDE_ITEMBALL_FIRST || object->evFlagId > FLAG_HIDE_ITEMBALL_LAST) {
-            return 0;
-        }
-
-        return object->evFlagId;
-    }
-
-    return 0;
+    return mapId ^ ((u32)(x & 0xFFFF) << 16) ^ (u32)(y & 0xFFFF);
 }
 
 static int GetVisibleItemPoolId(u16 originalItem)
@@ -158,11 +167,11 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
     struct PlayerProfile *profile;
     const VisibleItemPool *pool;
     int poolId;
-    u16 spotId;
+    u32 spotSeed;
     u32 seed;
 
-    spotId = GetVisibleItemBallSpotId(fsys);
-    if (spotId == 0) {
+    spotSeed = GetVisibleItemBallSpotSeed(fsys);
+    if (spotSeed == 0) {
         return originalItem;
     }
 
@@ -178,7 +187,7 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
 
     profile = Sav2_PlayerData_GetProfileAddr(fsys->savedata);
     seed = profile->id;
-    seed ^= (u32)spotId * 0x9E3779B9;
+    seed ^= spotSeed * 0x9E3779B9;
     seed ^= (u32)(poolId + 1) * 0x85EBCA6B;
     seed ^= (u32)originalItem * 0xC2B2AE35;
     seed = HashVisibleItemBallSeed(seed);
