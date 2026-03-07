@@ -168,6 +168,7 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
     const VisibleItemPool *pool;
     int poolId;
     u32 spotSeed;
+    u32 poolIndex;
     u32 seed;
 
     spotSeed = GetVisibleItemBallSpotSeed(fsys);
@@ -192,5 +193,10 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
     seed ^= (u32)originalItem * 0xC2B2AE35;
     seed = HashVisibleItemBallSeed(seed);
 
-    return pool->items[seed % pool->count];
+    poolIndex = seed % pool->count;
+    if (pool->count > 1 && pool->items[poolIndex] == originalItem) {
+        poolIndex = (poolIndex + 1) % pool->count;
+    }
+
+    return pool->items[poolIndex];
 }
