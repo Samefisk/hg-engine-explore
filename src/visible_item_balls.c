@@ -70,32 +70,21 @@ static const u16 sVisibleItemPoolRare[] = {
 static const u16 sVisibleItemPoolVeryRare[] = {
     ITEM_PP_MAX,
     ITEM_MAX_ELIXIR,
+    ITEM_HP_UP,
+    ITEM_HEART_SCALE,
     ITEM_RARE_BONE,
     ITEM_SHINY_STONE,
-    ITEM_DUSK_STONE,
     ITEM_DAWN_STONE,
     ITEM_OVAL_STONE,
     ITEM_KINGS_ROCK,
-    ITEM_LUCKY_EGG,
-    ITEM_METAL_COAT,
-    ITEM_LEFTOVERS,
-    ITEM_DRAGON_SCALE,
+    ITEM_LIFE_ORB,
     ITEM_UP_GRADE,
-    ITEM_PROTECTOR,
-    ITEM_ELECTIRIZER,
-    ITEM_MAGMARIZER,
-    ITEM_DUBIOUS_DISC,
 };
 
 static const u16 sVisibleItemPoolExtremelyRare[] = {
-    ITEM_MASTER_BALL,
-    ITEM_BIG_NUGGET,
-    ITEM_PEARL_STRING,
-    ITEM_COMET_SHARD,
-    ITEM_ABILITY_CAPSULE,
-    ITEM_BOTTLE_CAP,
-    ITEM_GOLD_BOTTLE_CAP,
-    ITEM_ABILITY_PATCH,
+    ITEM_PROTECTOR,
+    ITEM_ELECTIRIZER,
+    ITEM_DUBIOUS_DISC,
 };
 
 static const VisibleItemPool sVisibleItemPools[VISIBLE_ITEM_POOL_COUNT] = {
@@ -280,31 +269,20 @@ static int GetVisibleItemPoolId(u16 originalItem)
 
     case ITEM_PP_MAX:
     case ITEM_MAX_ELIXIR:
+    case ITEM_HP_UP:
+    case ITEM_HEART_SCALE:
     case ITEM_RARE_BONE:
     case ITEM_SHINY_STONE:
-    case ITEM_DUSK_STONE:
     case ITEM_DAWN_STONE:
     case ITEM_OVAL_STONE:
     case ITEM_KINGS_ROCK:
-    case ITEM_LUCKY_EGG:
-    case ITEM_METAL_COAT:
-    case ITEM_LEFTOVERS:
-    case ITEM_DRAGON_SCALE:
+    case ITEM_LIFE_ORB:
     case ITEM_UP_GRADE:
-    case ITEM_PROTECTOR:
-    case ITEM_ELECTIRIZER:
-    case ITEM_MAGMARIZER:
-    case ITEM_DUBIOUS_DISC:
         return VISIBLE_ITEM_POOL_VERY_RARE;
 
-    case ITEM_MASTER_BALL:
-    case ITEM_BIG_NUGGET:
-    case ITEM_PEARL_STRING:
-    case ITEM_COMET_SHARD:
-    case ITEM_ABILITY_CAPSULE:
-    case ITEM_BOTTLE_CAP:
-    case ITEM_GOLD_BOTTLE_CAP:
-    case ITEM_ABILITY_PATCH:
+    case ITEM_PROTECTOR:
+    case ITEM_ELECTIRIZER:
+    case ITEM_DUBIOUS_DISC:
         return VISIBLE_ITEM_POOL_EXTREMELY_RARE;
     }
 
