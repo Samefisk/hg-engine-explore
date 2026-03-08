@@ -5,13 +5,13 @@
 #include "../include/save.h"
 #include "../include/script.h"
 
-#define ITEM_BALL_GFX_ID               87
-#define ITEM_BALL_SCRIPT_MIN           7000
-#define ITEM_BALL_SCRIPT_MAX           8000
-#define DIR_NORTH                      0
-#define DIR_SOUTH                      1
-#define DIR_WEST                       2
-#define DIR_EAST                       3
+#define ITEM_BALL_GFX_ID     87
+#define ITEM_BALL_SCRIPT_MIN 7000
+#define ITEM_BALL_SCRIPT_MAX 8000
+#define DIR_NORTH            0
+#define DIR_SOUTH            1
+#define DIR_WEST             2
+#define DIR_EAST             3
 
 enum VisibleItemPoolId {
     VISIBLE_ITEM_POOL_COMMON,
@@ -182,18 +182,18 @@ static const OBJECT_EVENT *GetVisibleItemBallEventAhead(FieldSystem *fsys)
     facing = fsys->playerAvatar->mapObject != NULL ? fsys->playerAvatar->mapObject->curFacing : fsys->location->direction;
 
     switch (facing) {
-        case DIR_NORTH:
-            targetY--;
-            break;
-        case DIR_SOUTH:
-            targetY++;
-            break;
-        case DIR_WEST:
-            targetX--;
-            break;
-        case DIR_EAST:
-            targetX++;
-            break;
+    case DIR_NORTH:
+        targetY--;
+        break;
+    case DIR_SOUTH:
+        targetY++;
+        break;
+    case DIR_WEST:
+        targetX--;
+        break;
+    case DIR_EAST:
+        targetX++;
+        break;
     }
 
     for (i = 0; i < fsys->map_events->num_object_events; i++) {
@@ -237,72 +237,75 @@ static u32 GetVisibleItemBallSpotSeed(FieldSystem *fsys)
 
 static int GetVisibleItemPoolId(u16 originalItem)
 {
+    // These mappings follow how scarce the original HGSS field pickup is,
+    // rather than how generically useful the item is.
     switch (originalItem) {
-        case ITEM_POTION:
-        case ITEM_SUPER_POTION:
-        case ITEM_ANTIDOTE:
-        case ITEM_PARALYZE_HEAL:
-        case ITEM_AWAKENING:
-        case ITEM_BURN_HEAL:
-        case ITEM_ICE_HEAL:
-        case ITEM_FULL_HEAL:
-        case ITEM_ESCAPE_ROPE:
-        case ITEM_REPEL:
-        case ITEM_GREAT_BALL:
-            return VISIBLE_ITEM_POOL_COMMON;
+    case ITEM_POTION:
+    case ITEM_ANTIDOTE:
+    case ITEM_PARALYZE_HEAL:
+    case ITEM_AWAKENING:
+    case ITEM_BURN_HEAL:
+    case ITEM_ICE_HEAL:
+    case ITEM_REPEL:
+    case ITEM_POKE_BALL:
+        return VISIBLE_ITEM_POOL_COMMON;
 
-        case ITEM_HYPER_POTION:
-        case ITEM_MAX_POTION:
-        case ITEM_REVIVE:
-        case ITEM_ETHER:
-        case ITEM_MAX_ETHER:
-        case ITEM_ELIXIR:
-        case ITEM_ULTRA_BALL:
-        case ITEM_SUPER_REPEL:
-        case ITEM_MAX_REPEL:
-        case ITEM_PP_UP:
-            return VISIBLE_ITEM_POOL_GOOD;
+    case ITEM_SUPER_POTION:
+    case ITEM_FULL_HEAL:
+    case ITEM_ESCAPE_ROPE:
+    case ITEM_GREAT_BALL:
+    case ITEM_HYPER_POTION:
+    case ITEM_MAX_POTION:
+    case ITEM_REVIVE:
+    case ITEM_ETHER:
+    case ITEM_MAX_ETHER:
+    case ITEM_ELIXIR:
+    case ITEM_ULTRA_BALL:
+    case ITEM_SUPER_REPEL:
+    case ITEM_MAX_REPEL:
+    case ITEM_PP_UP:
+        return VISIBLE_ITEM_POOL_GOOD;
 
-        case ITEM_FULL_RESTORE:
-        case ITEM_MAX_REVIVE:
-        case ITEM_RARE_CANDY:
-        case ITEM_NUGGET:
-        case ITEM_BIG_PEARL:
-        case ITEM_STAR_PIECE:
-        case ITEM_PROTEIN:
-        case ITEM_IRON:
-        case ITEM_CALCIUM:
-        case ITEM_CARBOS:
-            return VISIBLE_ITEM_POOL_RARE;
+    case ITEM_FULL_RESTORE:
+    case ITEM_MAX_REVIVE:
+    case ITEM_RARE_CANDY:
+    case ITEM_NUGGET:
+    case ITEM_BIG_PEARL:
+    case ITEM_STAR_PIECE:
+    case ITEM_PROTEIN:
+    case ITEM_IRON:
+    case ITEM_CALCIUM:
+    case ITEM_CARBOS:
+        return VISIBLE_ITEM_POOL_RARE;
 
-        case ITEM_PP_MAX:
-        case ITEM_MAX_ELIXIR:
-        case ITEM_RARE_BONE:
-        case ITEM_SHINY_STONE:
-        case ITEM_DUSK_STONE:
-        case ITEM_DAWN_STONE:
-        case ITEM_OVAL_STONE:
-        case ITEM_KINGS_ROCK:
-        case ITEM_LUCKY_EGG:
-        case ITEM_METAL_COAT:
-        case ITEM_LEFTOVERS:
-        case ITEM_DRAGON_SCALE:
-        case ITEM_UP_GRADE:
-        case ITEM_PROTECTOR:
-        case ITEM_ELECTIRIZER:
-        case ITEM_MAGMARIZER:
-        case ITEM_DUBIOUS_DISC:
-            return VISIBLE_ITEM_POOL_VERY_RARE;
+    case ITEM_PP_MAX:
+    case ITEM_MAX_ELIXIR:
+    case ITEM_RARE_BONE:
+    case ITEM_SHINY_STONE:
+    case ITEM_DUSK_STONE:
+    case ITEM_DAWN_STONE:
+    case ITEM_OVAL_STONE:
+    case ITEM_KINGS_ROCK:
+    case ITEM_LUCKY_EGG:
+    case ITEM_METAL_COAT:
+    case ITEM_LEFTOVERS:
+    case ITEM_DRAGON_SCALE:
+    case ITEM_UP_GRADE:
+    case ITEM_PROTECTOR:
+    case ITEM_ELECTIRIZER:
+    case ITEM_MAGMARIZER:
+    case ITEM_DUBIOUS_DISC:
+        return VISIBLE_ITEM_POOL_VERY_RARE;
 
-        case ITEM_MASTER_BALL:
-        case ITEM_BIG_NUGGET:
-        case ITEM_PEARL_STRING:
-        case ITEM_COMET_SHARD:
-        case ITEM_ABILITY_CAPSULE:
-        case ITEM_BOTTLE_CAP:
-        case ITEM_GOLD_BOTTLE_CAP:
-        case ITEM_ABILITY_PATCH:
-            return VISIBLE_ITEM_POOL_EXTREMELY_RARE;
+    case ITEM_MASTER_BALL:
+    case ITEM_BIG_NUGGET:
+    case ITEM_PEARL_STRING:
+    case ITEM_COMET_SHARD:
+    case ITEM_ABILITY_CAPSULE:
+    case ITEM_BOTTLE_CAP:
+    case ITEM_GOLD_BOTTLE_CAP:
+    case ITEM_ABILITY_PATCH:
+        return VISIBLE_ITEM_POOL_EXTREMELY_RARE;
     }
 
     return -1;
