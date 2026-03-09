@@ -8,6 +8,10 @@
 #define ITEM_BALL_GFX_ID     87
 #define ITEM_BALL_SCRIPT_MIN 7000
 #define ITEM_BALL_SCRIPT_MAX 8000
+#define HIDDEN_ITEM_TABLE_ADDRESS 0x020FA558
+#define HIDDEN_ITEM_TABLE_COUNT   231
+#define HIDDEN_ITEM_VAR_BASE      8000
+#define HIDDEN_ITEM_FLAG_BASE     800
 #define DIR_NORTH            0
 #define DIR_SOUTH            1
 #define DIR_WEST             2
@@ -26,6 +30,14 @@ typedef struct VisibleItemPool {
     const u16 *items;
     u16 count;
 } VisibleItemPool;
+
+typedef struct HiddenItemEntry {
+    u16 itemId;
+    u8 quantity;
+    u8 unknown;
+    u16 unknown2;
+    u16 hiddenItemKey;
+} HiddenItemEntry;
 
 static const u16 sVisibleItemPoolCommon[] = {
     // Healing
@@ -408,6 +420,8 @@ static const VisibleItemPool sVisibleItemPools[VISIBLE_ITEM_POOL_COUNT] = {
     [VISIBLE_ITEM_POOL_EXTREMELY_RARE] = { sVisibleItemPoolExtremelyRare, NELEMS(sVisibleItemPoolExtremelyRare) },
 };
 
+static const HiddenItemEntry *const sHiddenItemTable = (const HiddenItemEntry *)HIDDEN_ITEM_TABLE_ADDRESS;
+
 static u32 HashVisibleItemBallSeed(u32 seed)
 {
     seed ^= seed >> 16;
@@ -418,7 +432,17 @@ static u32 HashVisibleItemBallSeed(u32 seed)
     return seed;
 }
 
-static int GetUpgradedVisibleItemPoolId(int poolId, u32 seed)
+static int ApplyMandatoryTierUps(int poolId, int mandatoryTierUps)
+{
+    while (mandatoryTierUps > 0 && poolId < VISIBLE_ITEM_POOL_COUNT - 1) {
+        poolId++;
+        mandatoryTierUps--;
+    }
+
+    return poolId;
+}
+
+static int GetUpgradedPickupPoolId(int poolId, u32 seed)
 {
     while (poolId < VISIBLE_ITEM_POOL_COUNT - 1) {
         seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x27D4EB2D);
@@ -537,7 +561,7 @@ static u32 GetVisibleItemBallSpotSeed(FieldSystem *fsys)
     return ((u32)mapObject->evFlagId << 16) ^ (u32)mapObject->scriptId;
 }
 
-static int GetVisibleItemPoolId(u16 originalItem)
+static int GetPickupPoolId(u16 originalItem)
 {
     // These mappings follow how scarce the original HGSS field pickup is,
     // rather than how generically useful the item is.
@@ -602,44 +626,102 @@ static int GetVisibleItemPoolId(u16 originalItem)
     return -1;
 }
 
-u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
+static u16 ResolvePickupPoolItem(u32 saveId, u16 originalItem, u32 spotSeed, int mandatoryTierUps)
 {
-    struct PlayerProfile *profile;
     const VisibleItemPool *pool;
     int poolId;
-    u32 spotSeed;
     u32 poolIndex;
     u32 seed;
 
-    spotSeed = GetVisibleItemBallSpotSeed(fsys);
-    if (spotSeed == 0) {
-        return originalItem;
-    }
-
-    poolId = GetVisibleItemPoolId(originalItem);
+    poolId = GetPickupPoolId(originalItem);
     if (poolId < 0) {
         return originalItem;
     }
+
+    seed = saveId;
+    seed ^= spotSeed * 0x9E3779B9;
+    seed ^= (u32)(poolId + 1) * 0x85EBCA6B;
+    seed ^= (u32)originalItem * 0xC2B2AE35;
+    seed = HashVisibleItemBallSeed(seed);
+    poolId = ApplyMandatoryTierUps(poolId, mandatoryTierUps);
+    poolId = GetUpgradedPickupPoolId(poolId, seed);
+    seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x165667B1);
 
     pool = &sVisibleItemPools[poolId];
     if (pool->count == 0) {
         return ITEM_POKE_BALL;
     }
 
-    profile = Sav2_PlayerData_GetProfileAddr(fsys->savedata);
-    seed = profile->id;
-    seed ^= spotSeed * 0x9E3779B9;
-    seed ^= (u32)(poolId + 1) * 0x85EBCA6B;
-    seed ^= (u32)originalItem * 0xC2B2AE35;
-    seed = HashVisibleItemBallSeed(seed);
-    poolId = GetUpgradedVisibleItemPoolId(poolId, seed);
-    seed = HashVisibleItemBallSeed(seed ^ (u32)(poolId + 1) * 0x165667B1);
-
-    pool = &sVisibleItemPools[poolId];
     poolIndex = seed % pool->count;
     if (pool->count > 1 && pool->items[poolIndex] == originalItem) {
         poolIndex = (poolIndex + 1) % pool->count;
     }
 
     return pool->items[poolIndex];
+}
+
+static const HiddenItemEntry *GetHiddenItemEntry(u16 hiddenItemKey)
+{
+    int i;
+
+    for (i = 0; i < HIDDEN_ITEM_TABLE_COUNT; i++) {
+        if (sHiddenItemTable[i].hiddenItemKey == hiddenItemKey) {
+            return &sHiddenItemTable[i];
+        }
+    }
+
+    return NULL;
+}
+
+static u16 GetHiddenItemKey(u16 hiddenItemId)
+{
+    return hiddenItemId - HIDDEN_ITEM_VAR_BASE;
+}
+
+static u16 GetHiddenItemFlag(u16 hiddenItemId)
+{
+    return hiddenItemId - (HIDDEN_ITEM_VAR_BASE - HIDDEN_ITEM_FLAG_BASE);
+}
+
+u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
+{
+    struct PlayerProfile *profile;
+    u32 spotSeed;
+
+    spotSeed = GetVisibleItemBallSpotSeed(fsys);
+    if (spotSeed == 0) {
+        return originalItem;
+    }
+
+    profile = Sav2_PlayerData_GetProfileAddr(fsys->savedata);
+    return ResolvePickupPoolItem(profile->id, originalItem, spotSeed, 0);
+}
+
+BOOL ResolveHiddenItemVars(FieldSystem *fsys, u16 hiddenItemId)
+{
+    struct PlayerProfile *profile;
+    const HiddenItemEntry *entry;
+    u16 *itemVar;
+    u16 *quantityVar;
+    u16 *flagVar;
+    u16 hiddenItemFlag;
+    u16 itemId;
+
+    hiddenItemFlag = GetHiddenItemFlag(hiddenItemId);
+    entry = GetHiddenItemEntry(GetHiddenItemKey(hiddenItemId));
+    if (entry == NULL) {
+        return FALSE;
+    }
+
+    itemVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8000);
+    quantityVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8001);
+    flagVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8002);
+
+    profile = Sav2_PlayerData_GetProfileAddr(fsys->savedata);
+    itemId = ResolvePickupPoolItem(profile->id, entry->itemId, hiddenItemFlag, 1);
+
+    *itemVar = itemId;
+    *quantityVar = entry->quantity;
+    *flagVar = hiddenItemFlag;
+    return TRUE;
 }

@@ -5,5 +5,6 @@
 #include "types.h"
 
 u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem);
+BOOL ResolveHiddenItemVars(FieldSystem *fsys, u16 hiddenItemId);
 
 #endif
