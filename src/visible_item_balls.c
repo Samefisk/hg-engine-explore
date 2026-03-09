@@ -697,7 +697,7 @@ u16 ResolveVisibleItemBallItem(FieldSystem *fsys, u16 originalItem)
     return ResolvePickupPoolItem(profile->id, originalItem, spotSeed, 0);
 }
 
-BOOL ResolveHiddenItemVars(FieldSystem *fsys, u16 hiddenItemId)
+BOOL ResolveHiddenItemVars(void *scriptEnv, u16 hiddenItemId)
 {
     struct PlayerProfile *profile;
     const HiddenItemEntry *entry;
@@ -707,17 +707,24 @@ BOOL ResolveHiddenItemVars(FieldSystem *fsys, u16 hiddenItemId)
     u16 hiddenItemFlag;
     u16 itemId;
 
+    if (scriptEnv == NULL || gFieldSysPtr == NULL) {
+        return FALSE;
+    }
+
     hiddenItemFlag = GetHiddenItemFlag(hiddenItemId);
     entry = GetHiddenItemEntry(GetHiddenItemKey(hiddenItemId));
     if (entry == NULL) {
         return FALSE;
     }
 
-    itemVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8000);
-    quantityVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8001);
-    flagVar = GetEvScriptWorkMemberAdrs(fsys, SCRIPTENV_SPECIAL_VAR_8002);
+    itemVar = GetEvScriptWorkMemberAdrs(scriptEnv, SCRIPTENV_SPECIAL_VAR_8000);
+    quantityVar = GetEvScriptWorkMemberAdrs(scriptEnv, SCRIPTENV_SPECIAL_VAR_8001);
+    flagVar = GetEvScriptWorkMemberAdrs(scriptEnv, SCRIPTENV_SPECIAL_VAR_8002);
+    if (itemVar == NULL || quantityVar == NULL || flagVar == NULL) {
+        return FALSE;
+    }
 
-    profile = Sav2_PlayerData_GetProfileAddr(fsys->savedata);
+    profile = Sav2_PlayerData_GetProfileAddr(gFieldSysPtr->savedata);
     itemId = ResolvePickupPoolItem(profile->id, entry->itemId, hiddenItemFlag, 1);
 
     *itemVar = itemId;
