@@ -311,6 +311,28 @@ BOOL MoveHitAttackerAbilityCheck(void *bw, struct BattleStruct *sp, int *seq_no)
 
     switch (GetBattlerAbility(sp, sp->attack_client))
     {
+        case ABILITY_RISING_STAR:
+            if ((sp->battlemon[sp->attack_client].hp)
+                && ((sp->waza_status_flag & WAZA_STATUS_FLAG_NO_OUT) == 0)
+                && ((sp->server_status_flag & SERVER_STATUS_FLAG_x20) == 0)
+                && (CheckSubstitute(sp, sp->defence_client) == FALSE)
+                && (sp->current_move_index != MOVE_FUTURE_SIGHT)
+                && (sp->current_move_index != MOVE_DOOM_DESIRE)
+                && (((GetMoveSplit(sp, sp->current_move_index) == SPLIT_PHYSICAL) && (sp->oneSelfFlag[sp->defence_client].physical_damage < 0))
+                 || ((GetMoveSplit(sp, sp->current_move_index) == SPLIT_SPECIAL) && (sp->oneSelfFlag[sp->defence_client].special_damage < 0)))
+                && (sp->battlemon[sp->attack_client].states[STAT_ATTACK] < 12
+                 || sp->battlemon[sp->attack_client].states[STAT_DEFENSE] < 12
+                 || sp->battlemon[sp->attack_client].states[STAT_SPATK] < 12
+                 || sp->battlemon[sp->attack_client].states[STAT_SPDEF] < 12
+                 || sp->battlemon[sp->attack_client].states[STAT_SPEED] < 12))
+            {
+                sp->addeffect_type = ADD_STATUS_ABILITY;
+                sp->state_client = sp->attack_client;
+                sp->battlerIdTemp = sp->attack_client;
+                seq_no[0] = SUB_SEQ_RISING_STAR;
+                ret = TRUE;
+            }
+            break;
         case ABILITY_POISON_TOUCH:
             if ((sp->battlemon[sp->defence_client].hp)
                 && (sp->battlemon[sp->defence_client].condition == 0)
