@@ -1623,3 +1623,6 @@ The effects of Throat Chop prevent\nthe opposing {STRVAR_1 1, 0, 0}\ffrom using 
 {STRVAR_1 1, 0, 0} held on out of love!
 The wild {STRVAR_1 1, 0, 0} held on out of love!
 The opposing {STRVAR_1 1, 0, 0} held on out of love!
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
