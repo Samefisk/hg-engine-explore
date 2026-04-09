@@ -311,3 +311,4 @@ Teraform Zero
 Poison Puppeteer
 Rising Star
 Neurotoxin
+Brilliance

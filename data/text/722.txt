@@ -311,3 +311,4 @@ Reduces effects of weather\nand terrain to zero.
 Poison-inflicting moves\nwill also cause confusion.
 Boosts all stats after\ndealing damage.
 Poison moves badly poison.\n3x to poisoned foes.
+Light moves strike first.\nThey also burn hot.

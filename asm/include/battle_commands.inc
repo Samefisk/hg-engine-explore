@@ -1532,7 +1532,12 @@
     .long \arg_0
     .endm
 
-    .equ BASE_ENGINE_BTL_SCR_CMDS_MAX, 279
+    .macro PrintBrillianceHeatedAttackMessage arg_0
+    .long 280
+    .long \arg_0
+    .endm
+
+    .equ BASE_ENGINE_BTL_SCR_CMDS_MAX, 280
 
     // .macro YourCustomCommand
     // .long (BASE_ENGINE_BTL_SCR_CMDS_MAX + 1)

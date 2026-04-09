@@ -1635,3 +1635,6 @@ The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nheated the attack!
 {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!
 The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!
 The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nsped up and heated the attack!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nsped up and heated the attack!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nsped up and heated the attack!

@@ -213,6 +213,33 @@ static int GetMagmaArmorAuraSourceBattler(struct BattleSystem *bsys, struct Batt
     return BATTLER_NONE;
 }
 
+static BOOL MoveTriggersBrillianceMessage(struct BattleStruct *ctx)
+{
+    if (GetBattlerAbility(ctx, ctx->attack_client) != ABILITY_BRILLIANCE) {
+        return FALSE;
+    }
+
+    switch (ctx->current_move_index) {
+    case MOVE_SOLAR_BEAM:
+    case MOVE_SOLAR_BLADE:
+    case MOVE_DAZZLING_GLEAM:
+    case MOVE_FLASH_CANNON:
+    case MOVE_SIGNAL_BEAM:
+    case MOVE_LUSTER_PURGE:
+    case MOVE_AURORA_BEAM:
+    case MOVE_LIGHT_OF_RUIN:
+    case MOVE_WEATHER_BALL:
+    case MOVE_SUNNY_DAY:
+    case MOVE_SYNTHESIS:
+    case MOVE_MORNING_SUN:
+    case MOVE_GROWTH:
+    case MOVE_LIGHT_SCREEN:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
 // 08014ACC
 
 /**
@@ -506,6 +533,13 @@ void __attribute__((section (".init"))) BattleController_BeforeMove(struct Battl
 #endif
 
             ctx->move_type = GetAdjustedMoveType(ctx, ctx->attack_client, ctx->current_move_index);
+            if (MoveTriggersBrillianceMessage(ctx)) {
+                ctx->wb_seq_no++;
+                LoadBattleSubSeqScript(ctx, ARC_BATTLE_SUB_SEQ, SUB_SEQ_BRILLIANCE_HEATED_ATTACK);
+                ctx->next_server_seq_no = ctx->server_seq_no;
+                ctx->server_seq_no = CONTROLLER_COMMAND_RUN_SCRIPT;
+                return;
+            }
             {
                 int magmaArmorBattler = GetMagmaArmorAuraSourceBattler(bsys, ctx);
                 if (magmaArmorBattler != BATTLER_NONE) {

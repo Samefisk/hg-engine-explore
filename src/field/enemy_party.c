@@ -38,12 +38,12 @@ void swap(int *a, int *b) {
 }
 
 #define ENABLE_WILD_TEST_HARNESS 1
-#define WILD_TEST_SPECIES SPECIES_SPINARAK
+#define WILD_TEST_SPECIES SPECIES_SUNKERN
 #define WILD_TEST_LEVEL 3
 
 static const u16 sWildTestMoves[4] = {
-    MOVE_POISON_STING,
-    MOVE_NONE,
+    MOVE_SIGNAL_BEAM,
+    MOVE_GROWTH,
     MOVE_NONE,
     MOVE_NONE,
 };
