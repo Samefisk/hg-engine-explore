@@ -115,6 +115,7 @@ BOOL btl_scr_cmd_113_HandleDoubleShock(void* bsys UNUSED, struct BattleStruct* c
 BOOL btl_scr_cmd_114_stuffCheeks(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_115_setMoveConditionFlag(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_116_printRisingStarMessage(void *bsys, struct BattleStruct *ctx);
+BOOL btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage(void *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_GoToMoveScript(struct BattleSystem *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_WeatherHPRecovery(void *bw, struct BattleStruct *sp);
 BOOL BtlCmd_CalcWeatherBallParams(void *bw, struct BattleStruct *sp);
@@ -430,6 +431,7 @@ const u8 *BattleScrCmdNames[] =
     "StuffCheeks",
     "SetMoveConditionFlag",
     "PrintRisingStarMessage",
+    "PrintMagmaArmorHeatedAttackMessage",
     // "YourCustomCommand",
 };
 
@@ -437,7 +439,7 @@ u32 cmdAddress = 0;
 #pragma GCC diagnostic pop
 #endif // DEBUG_BATTLE_SCRIPT_COMMANDS
 
-#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x116
+#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x117
 
 const btl_scr_cmd_func NewBattleScriptCmdTable[] =
 {
@@ -495,6 +497,7 @@ const btl_scr_cmd_func NewBattleScriptCmdTable[] =
     [0x114 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_114_stuffCheeks,
     [0x115 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_115_setMoveConditionFlag,
     [0x116 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_116_printRisingStarMessage,
+    [0x117 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage,
     // [BASE_ENGINE_BTL_SCR_CMDS_MAX - START_OF_NEW_BTL_SCR_CMDS + 1] = btl_scr_cmd_custom_01_your_custom_command,
 };
 
@@ -3801,6 +3804,7 @@ BOOL BtlCmd_EndOfTurnWeatherEffect(struct BattleSystem *bsys, struct BattleStruc
                 } else if (!HasType(ctx, battlerId, TYPE_ICE) &&
                            ability != ABILITY_SNOW_CLOAK &&
                            ability != ABILITY_MAGIC_GUARD &&
+                           ability != ABILITY_MAGMA_ARMOR &&
                            ability != ABILITY_OVERCOAT &&
                            hold_effect != HOLD_EFFECT_SPORE_POWDER_IMMUNITY) {
                     ctx->waza_work = MOVE_HAIL;
@@ -5271,6 +5275,33 @@ BOOL btl_scr_cmd_116_printRisingStarMessage(void *bsys, struct BattleStruct *ctx
     return FALSE;
 }
 
+BOOL btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage(void *bsys, struct BattleStruct *ctx)
+{
+    MESSAGE_PARAM msg = {0};
+    u32 client_no;
+    u16 msg_id;
+
+    IncrementBattleScriptPtr(ctx, 1);
+    client_no = GrabClientFromBattleScriptParam(bsys, ctx, read_battle_script_param(ctx));
+
+    if (!IsClientEnemy(bsys, client_no)) {
+        msg_id = BATTLE_MSG_MAGMA_ARMOR_HEATED_ATTACK;
+    } else if (BattleTypeGet(bsys) & BATTLE_TYPE_TRAINER) {
+        msg_id = BATTLE_MSG_MAGMA_ARMOR_HEATED_ATTACK + 2;
+    } else {
+        msg_id = BATTLE_MSG_MAGMA_ARMOR_HEATED_ATTACK + 1;
+    }
+
+    msg.msg_id = msg_id;
+    msg.msg_tag = TAG_NICKNAME_ABILITY | TAG_NO_DIR;
+    msg.msg_para[0] = CreateNicknameTag(ctx, client_no);
+    msg.msg_para[1] = ctx->battlemon[client_no].ability;
+    msg.msg_client = client_no;
+
+    BattleController_EmitPrintMessage(bsys, ctx, &msg);
+
+    return FALSE;
+}
 BOOL BtlCmd_CopyStatStages(struct BattleSystem *bsys UNUSED, struct BattleStruct *ctx)
 {
     IncrementBattleScriptPtr(ctx, 1);

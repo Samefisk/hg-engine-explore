@@ -37,6 +37,46 @@ void swap(int *a, int *b) {
     *b = temp;
 }
 
+#define ENABLE_WILD_TEST_HARNESS 0
+#define WILD_TEST_SPECIES SPECIES_SLUGMA
+#define WILD_TEST_LEVEL 3
+
+static const u16 sWildTestMoves[4] = {
+    MOVE_WATER_GUN,
+    MOVE_TACKLE,
+    MOVE_MUD_SLAP,
+    MOVE_ROCK_THROW,
+};
+
+static void ApplyWildEncounterTestHarness(struct PartyPokemon *encounterPartyPokemon, u16 *species)
+{
+#if ENABLE_WILD_TEST_HARNESS
+    int i;
+    u8 level = WILD_TEST_LEVEL;
+
+    // Enable this helper when you want all wild encounters to become one
+    // configurable test mon without touching normal learnsets or encounter data.
+    ZeroMonData(encounterPartyPokemon);
+    PokeParaSet(encounterPartyPokemon, WILD_TEST_SPECIES, level, 32, FALSE, 0, 0, 0);
+    *species = WILD_TEST_SPECIES;
+    ResetPartyPokemonAbility(encounterPartyPokemon);
+
+    for (i = 0; i < 4; i++) {
+        u16 move = sWildTestMoves[i];
+        u8 pp = move == MOVE_NONE ? 0 : GetMoveMaxPP(move, 0);
+        u8 ppUp = 0;
+
+        SetMonData(encounterPartyPokemon, MON_DATA_MOVE1 + i, &move);
+        SetMonData(encounterPartyPokemon, MON_DATA_MOVE1MAXPP + i, &pp);
+        SetMonData(encounterPartyPokemon, MON_DATA_MOVE1PP + i, &pp);
+        SetMonData(encounterPartyPokemon, MON_DATA_MOVE1PPUP + i, &ppUp);
+    }
+#else
+    (void)encounterPartyPokemon;
+    (void)species;
+#endif
+}
+
 /**
  *  @brief randomize the order of an array size n
  *
@@ -503,6 +543,7 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
     }
 
     species = GetMonData(encounterPartyPokemon, MON_DATA_SPECIES, NULL);
+    ApplyWildEncounterTestHarness(encounterPartyPokemon, &species);
 
     if (space_for_setmondata != 0)
     {

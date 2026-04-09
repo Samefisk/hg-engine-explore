@@ -1601,9 +1601,181 @@ u8 LONG_CALL UpdateTypeEffectiveness(u32 move_no, u32 held_effect, u8 defender_t
     return defaultEffectiveness;
 }
 
+static BOOL IsMagmaArmorAuraActive(struct BattleSystem *bw, struct BattleStruct *sp)
+{
+    int battler;
+
+    for (battler = 0; battler < BattleWorkClientSetMaxGet(bw); battler++)
+    {
+        if (sp->battlemon[battler].hp && GetBattlerAbility(sp, battler) == ABILITY_MAGMA_ARMOR)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static int GetAdditionalOffensiveMoveType(struct BattleSystem *bw, struct BattleStruct *sp, int move_no, int move_type)
+{
+    if ((move_type != TYPE_GROUND) && (move_type != TYPE_ROCK))
+    {
+        return -1;
+    }
+
+    if (GetMoveSplit(sp, move_no) == SPLIT_STATUS)
+    {
+        return -1;
+    }
+
+    if ((move_type == TYPE_GROUND) && (move_no == MOVE_THOUSAND_ARROWS))
+    {
+        return -1;
+    }
+
+    if (!IsMagmaArmorAuraActive(bw, sp))
+    {
+        return -1;
+    }
+
+    return TYPE_FIRE;
+}
+
+static int TypeEffectivenessCodeToEighths(int typeMul)
+{
+    switch (typeMul)
+    {
+        case TYPE_MUL_NO_EFFECT:
+            return 0;
+        case TYPE_MUL_TRIPLE_NOT_EFFECTIVE:
+            return 1;
+        case TYPE_MUL_DOUBLE_NOT_EFFECTIVE:
+            return 2;
+        case TYPE_MUL_NOT_EFFECTIVE:
+            return 4;
+        case TYPE_MUL_NORMAL:
+            return 8;
+        case TYPE_MUL_SUPER_EFFECTIVE:
+            return 16;
+        case TYPE_MUL_DOUBLE_SUPER_EFFECTIVE:
+            return 32;
+        case TYPE_MUL_TRIPLE_SUPER_EFFECTIVE:
+            return 64;
+    }
+
+    return 0;
+}
+
+static int TypeEffectivenessEighthsToCode(int eighths)
+{
+    switch (eighths)
+    {
+        case 0:
+            return TYPE_MUL_NO_EFFECT;
+        case 1:
+            return TYPE_MUL_TRIPLE_NOT_EFFECTIVE;
+        case 2:
+            return TYPE_MUL_DOUBLE_NOT_EFFECTIVE;
+        case 4:
+            return TYPE_MUL_NOT_EFFECTIVE;
+        case 8:
+            return TYPE_MUL_NORMAL;
+        case 16:
+            return TYPE_MUL_SUPER_EFFECTIVE;
+        case 32:
+            return TYPE_MUL_DOUBLE_SUPER_EFFECTIVE;
+        case 64:
+            return TYPE_MUL_TRIPLE_SUPER_EFFECTIVE;
+    }
+
+    return TYPE_MUL_NO_EFFECT;
+}
+
+static void SetEffectivenessFlagsFromMultiplier(u32 *flag, int typeMul)
+{
+    flag[0] &= ~(MOVE_STATUS_FLAG_SUPER_EFFECTIVE);
+    flag[0] &= ~(MOVE_STATUS_FLAG_NOT_VERY_EFFECTIVE);
+
+    switch (typeMul)
+    {
+        case TYPE_MUL_SUPER_EFFECTIVE:
+        case TYPE_MUL_DOUBLE_SUPER_EFFECTIVE:
+        case TYPE_MUL_TRIPLE_SUPER_EFFECTIVE:
+            flag[0] |= MOVE_STATUS_FLAG_SUPER_EFFECTIVE;
+            break;
+        case TYPE_MUL_NOT_EFFECTIVE:
+        case TYPE_MUL_DOUBLE_NOT_EFFECTIVE:
+        case TYPE_MUL_TRIPLE_NOT_EFFECTIVE:
+            flag[0] |= MOVE_STATUS_FLAG_NOT_VERY_EFFECTIVE;
+            break;
+    }
+}
+
+static int ApplyTypeEffectivenessToDamage(struct BattleSystem *bw, struct BattleStruct *sp, int move_no, int move_type, int attack_client, int defence_client, int damage, u32 *flag)
+{
+    int typeTableEntryNo = 0;
+    u32 base_power = sp->moveTbl[move_no].power;
+    u8 defender_type_1 = GetSanitisedType(BattlePokemonParamGet(sp, defence_client, BATTLE_MON_DATA_TYPE1, NULL));
+    u8 defender_type_2 = GetSanitisedType(BattlePokemonParamGet(sp, defence_client, BATTLE_MON_DATA_TYPE2, NULL));
+    u8 defender_type_3 = sp->battlemon[defence_client].type3;
+    u32 item_held_effect = BattleItemDataGet(sp, GetBattleMonItem(sp, defence_client), 1);
+
+    while (TypeEffectivenessTable[typeTableEntryNo][0] != TYPE_ENDTABLE)
+    {
+        if (TypeEffectivenessTable[typeTableEntryNo][0] == TYPE_FORESIGHT)
+        {
+            if ((sp->battlemon[defence_client].condition2 & STATUS2_FORESIGHT)
+             || (GetBattlerAbility(sp, attack_client) == ABILITY_SCRAPPY)
+             || (GetBattlerAbility(sp, attack_client) == ABILITY_MINDS_EYE))
+            {
+                break;
+            }
+            else
+            {
+                typeTableEntryNo++;
+                continue;
+            }
+        }
+        if (TypeEffectivenessTable[typeTableEntryNo][0] == move_type)
+        {
+            if (TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_1)
+            {
+                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
+                 && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_1))
+                {
+                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_1, TypeEffectivenessTable[typeTableEntryNo][2]);
+                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
+                }
+            }
+            else if (TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_2)
+            {
+                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
+                 && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_2))
+                {
+                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_2, TypeEffectivenessTable[typeTableEntryNo][2]);
+                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
+                }
+            }
+            else if (TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_3)
+            {
+                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
+                 && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_3))
+                {
+                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_3, TypeEffectivenessTable[typeTableEntryNo][2]);
+                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
+                }
+            }
+        }
+        typeTableEntryNo++;
+    }
+
+    return damage;
+}
+
 // TODO: Refactor this function
 int LONG_CALL GetTypeEffectiveness(struct BattleSystem *bw, struct BattleStruct *sp, int attack_client, int defence_client, int move_type, u32 *flag) {
     int typeTableEntryNo = 0; // Used to cycle through all (non-neutral) type interactions.
+    int additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, sp->current_move_index, move_type);
 
     // https://xcancel.com/Sibuna_Switch/status/1827463371383328877#m
     u8 defender_type_1 = GetSanitisedType(sp->battlemon[defence_client].type1);
@@ -1694,25 +1866,50 @@ int LONG_CALL GetTypeEffectiveness(struct BattleSystem *bw, struct BattleStruct 
     // TODO: Refactor, probably.
     // Returns the correct multiplier but moved to the right 3 decimal places.
     int typeMul = type1Effectiveness * type2Effectiveness * type3Effectiveness;
+    int primaryTypeMul;
+
     // Unfortunately this can't be directly converted into the double or triple flags, so we're stuck with this switch statement.
     switch (typeMul)
     {
         case EFFECTIVENESS_MULT_TRIPLE_SUPER_EFFECTIVE:
-            return TYPE_MUL_TRIPLE_SUPER_EFFECTIVE; // 40
+            primaryTypeMul = TYPE_MUL_TRIPLE_SUPER_EFFECTIVE; // 40
+            break;
         case EFFECTIVENESS_MULT_DOUBLE_SUPER_EFFECTIVE:
-            return TYPE_MUL_DOUBLE_SUPER_EFFECTIVE; // 30
+            primaryTypeMul = TYPE_MUL_DOUBLE_SUPER_EFFECTIVE; // 30
+            break;
         case EFFECTIVENESS_MULT_SUPER_EFFECTIVE:
-            return TYPE_MUL_SUPER_EFFECTIVE;        // 20
+            primaryTypeMul = TYPE_MUL_SUPER_EFFECTIVE;        // 20
+            break;
         case EFFECTIVENESS_MULT_NORMAL:
-            return TYPE_MUL_NORMAL;                 // 10
+            primaryTypeMul = TYPE_MUL_NORMAL;                 // 10
+            break;
         case EFFECTIVENESS_MULT_NOT_EFFECTIVE:
-            return TYPE_MUL_NOT_EFFECTIVE;          // 5
+            primaryTypeMul = TYPE_MUL_NOT_EFFECTIVE;          // 5
+            break;
         case EFFECTIVENESS_MULT_DOUBLE_NOT_EFFECTIVE:
-            return TYPE_MUL_DOUBLE_NOT_EFFECTIVE;   // 4
+            primaryTypeMul = TYPE_MUL_DOUBLE_NOT_EFFECTIVE;   // 4
+            break;
         case EFFECTIVENESS_MULT_TRIPLE_NOT_EFFECTIVE:
-            return TYPE_MUL_TRIPLE_NOT_EFFECTIVE;   // 3
+            primaryTypeMul = TYPE_MUL_TRIPLE_NOT_EFFECTIVE;   // 3
+            break;
+        default:
+            primaryTypeMul = TYPE_MUL_NO_EFFECT;              // 0
+            break;
     }
-    return TYPE_MUL_NO_EFFECT;                      // 0
+
+    if (additionalMoveType < 0)
+    {
+        SetEffectivenessFlagsFromMultiplier(flag, primaryTypeMul);
+        return primaryTypeMul;
+    }
+
+    {
+        int additionalTypeMul = GetTypeEffectiveness(bw, sp, attack_client, defence_client, additionalMoveType, flag);
+        int combinedEighths = (TypeEffectivenessCodeToEighths(primaryTypeMul) * TypeEffectivenessCodeToEighths(additionalTypeMul)) / 8;
+        int combinedTypeMul = TypeEffectivenessEighthsToCode(combinedEighths);
+        SetEffectivenessFlagsFromMultiplier(flag, combinedTypeMul);
+        return combinedTypeMul;
+    }
 }
 
 /**
@@ -1731,31 +1928,24 @@ int LONG_CALL GetTypeEffectiveness(struct BattleSystem *bw, struct BattleStruct 
 // TODO: neuter it in the future
 int LONG_CALL ServerDoTypeCalcMod(void *bw UNUSED, struct BattleStruct *sp, int move_no, int move_type, int attack_client, int defence_client, int damage, u32 *flag)
 {
-    int typeTableEntryNo = 0;
-    int modifier;
     u32 base_power;
     u8  eqp_d UNUSED;
     u8  atk_d UNUSED; // not currently used but will be
-
-    modifier = 1;
+    int additionalMoveType;
+    int combinedTypeMul;
+    u32 combinedTypeFlag = 0;
 
     if (move_no == MOVE_STRUGGLE)
         return damage;
 
     eqp_d = HeldItemHoldEffectGet(sp, defence_client);
     atk_d = HeldItemAtkGet(sp, defence_client, ATK_CHECK_NORMAL);
-
-    move_type = GetAdjustedMoveType(sp, attack_client, move_no); // new normalize checks
     base_power = sp->moveTbl[move_no].power;
+    additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, move_no, move_type);
 
     u8 attacker_type_1 = GetSanitisedType(BattlePokemonParamGet(sp, attack_client, BATTLE_MON_DATA_TYPE1, NULL));
     u8 attacker_type_2 = GetSanitisedType(BattlePokemonParamGet(sp, attack_client, BATTLE_MON_DATA_TYPE2, NULL));
     u8 attacker_type_3 = sp->battlemon[attack_client].type3;
-    u8 defender_type_1 = GetSanitisedType(BattlePokemonParamGet(sp, defence_client, BATTLE_MON_DATA_TYPE1, NULL));
-    u8 defender_type_2 = GetSanitisedType(BattlePokemonParamGet(sp, defence_client, BATTLE_MON_DATA_TYPE2, NULL));
-    u8 defender_type_3 = sp->battlemon[defence_client].type3;
-
-    u32 item_held_effect = BattleItemDataGet(sp, GetBattleMonItem(sp, defence_client), 1);
 
     if (((sp->server_status_flag & SERVER_STATUS_FLAG_TYPE_FLAT) == 0) && ((attacker_type_1 == move_type) || (attacker_type_2 == move_type) || (attacker_type_3 == move_type)))
     {
@@ -1769,67 +1959,14 @@ int LONG_CALL ServerDoTypeCalcMod(void *bw UNUSED, struct BattleStruct *sp, int 
         }
     }
 
-    // [0]: Attacking type
-    // [1]: Defending type
-    // [2]: TYPE_MUL
-    while (TypeEffectivenessTable[typeTableEntryNo][0] != TYPE_ENDTABLE)
+    damage = ApplyTypeEffectivenessToDamage(bw, sp, move_no, move_type, attack_client, defence_client, damage, flag);
+    if (additionalMoveType >= 0)
     {
-        if (TypeEffectivenessTable[typeTableEntryNo][0] == TYPE_FORESIGHT) // handle foresight
-        {
-            if ((sp->battlemon[defence_client].condition2 & STATUS2_FORESIGHT) || (GetBattlerAbility(sp, attack_client) == ABILITY_SCRAPPY) || (GetBattlerAbility(sp, attack_client) == ABILITY_MINDS_EYE))
-            {
-                break;
-            }
-            else
-            {
-                typeTableEntryNo++;
-                continue;
-            }
-        }
-        if (TypeEffectivenessTable[typeTableEntryNo][0] == move_type)
-        {
-            if (TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_1)
-            {
-                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
-                && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_1))
-                {
-                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_1, TypeEffectivenessTable[typeTableEntryNo][2]);
-                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
-                    if (TypeEffectivenessTable[typeTableEntryNo][2] == TYPE_MUL_SUPER_EFFECTIVE) // seems to be useless, modifier isn't used elsewhere
-                    {
-                        modifier *= 2;
-                    }
-                }
-            }
-            else if ((TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_2))
-            {
-                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
-                && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_2))
-                {
-                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_2, TypeEffectivenessTable[typeTableEntryNo][2]);
-                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
-                    if (TypeEffectivenessTable[typeTableEntryNo][2] == TYPE_MUL_SUPER_EFFECTIVE) // seems to be useless, modifier isn't used elsewhere
-                    {
-                        modifier *= 2;
-                    }
-                }
-            }
-            else if ((TypeEffectivenessTable[typeTableEntryNo][1] == defender_type_3))
-            {
-                if (ShouldUseNormalTypeEffCalc(sp, attack_client, defence_client, typeTableEntryNo)
-                && !StrongWindsShouldWeaken(bw, sp, typeTableEntryNo, defender_type_3))
-                {
-                    u8 typeEffectiveness = UpdateTypeEffectiveness(move_no, item_held_effect, defender_type_3, TypeEffectivenessTable[typeTableEntryNo][2]);
-                    damage = TypeCheckCalc(sp, attack_client, typeEffectiveness, damage, base_power, flag);
-                    if (TypeEffectivenessTable[typeTableEntryNo][2] == TYPE_MUL_SUPER_EFFECTIVE) // seems to be useless, modifier isn't used elsewhere
-                    {
-                        modifier *= 2;
-                    }
-                }
-            }
-        }
-        typeTableEntryNo++;
+        damage = ApplyTypeEffectivenessToDamage(bw, sp, move_no, additionalMoveType, attack_client, defence_client, damage, flag);
     }
+
+    combinedTypeMul = GetTypeEffectiveness(bw, sp, attack_client, defence_client, move_type, &combinedTypeFlag);
+    SetEffectivenessFlagsFromMultiplier(flag, combinedTypeMul);
 
 
     if ((MoldBreakerAbilityCheck(sp, attack_client, defence_client, ABILITY_WONDER_GUARD) == TRUE)
