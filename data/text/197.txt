@@ -1626,3 +1626,12 @@ The opposing {STRVAR_1 1, 0, 0} held on out of love!
 {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
 The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
 The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nboosted its stats!
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nnullified {STRVAR_1 6, 2, 0}!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nnullified {STRVAR_1 6, 2, 0}!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nnullified {STRVAR_1 6, 2, 0}!
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nheated the attack!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nheated the attack!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nheated the attack!
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 0} and raised Defense!

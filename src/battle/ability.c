@@ -189,6 +189,22 @@ int MoveCheckDamageNegatingAbilities(struct BattleStruct *sp, int attacker, int 
         }
     }
 
+    if (MoldBreakerAbilityCheck(sp, attacker, defender, ABILITY_MAGMA_ARMOR) == TRUE)
+    {
+        if ((attacker != defender)
+         && ((movetype == TYPE_WATER) || (movetype == TYPE_ICE))
+         && ((sp->server_status_flag & SERVER_STATUS_FLAG_x20) == 0)
+         && ((sp->moveTbl[sp->current_move_index].power) || (GetMoveSplit(sp, sp->current_move_index) == SPLIT_STATUS))
+         && ((sp->moveTbl[sp->current_move_index].target & RANGE_USER) == 0))
+        {
+            sp->addeffect_type = ADD_EFFECT_ABILITY;
+            sp->addeffect_param = ADD_STATUS_EFF_BOOST_STATS_DEFENSE_UP;
+            sp->state_client = defender;
+            sp->battlerIdTemp = defender;
+            scriptnum = SUB_SEQ_MAGMA_ARMOR;
+        }
+    }
+
     // TODO
     // Handle Wonder Guard
 

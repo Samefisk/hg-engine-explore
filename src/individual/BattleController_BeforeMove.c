@@ -180,6 +180,39 @@ BOOL LONG_CALL AbilityNoTransform(int ability);
 
 #define IS_GENERAL_GROUND_TYPE_ATTACK(ctx) (ctx->move_type == TYPE_GROUND && ctx->moveTbl[ctx->current_move_index].split != SPLIT_STATUS && ctx->current_move_index != MOVE_THOUSAND_ARROWS)
 
+static int GetMagmaArmorAuraSourceBattler(struct BattleSystem *bsys, struct BattleStruct *ctx)
+{
+    int battler;
+    int battlersMax = BattleWorkClientSetMaxGet(bsys);
+
+    if (ctx->moveTbl[ctx->current_move_index].split == SPLIT_STATUS) {
+        return BATTLER_NONE;
+    }
+
+    if (ctx->move_type != TYPE_GROUND && ctx->move_type != TYPE_ROCK) {
+        return BATTLER_NONE;
+    }
+
+    if (ctx->move_type == TYPE_GROUND && ctx->current_move_index == MOVE_THOUSAND_ARROWS) {
+        return BATTLER_NONE;
+    }
+
+    if (ctx->battlemon[ctx->attack_client].hp
+     && GetBattlerAbility(ctx, ctx->attack_client) == ABILITY_MAGMA_ARMOR) {
+        return ctx->attack_client;
+    }
+
+    for (battler = 0; battler < battlersMax; battler++) {
+        if (battler != ctx->attack_client
+         && ctx->battlemon[battler].hp
+         && GetBattlerAbility(ctx, battler) == ABILITY_MAGMA_ARMOR) {
+            return battler;
+        }
+    }
+
+    return BATTLER_NONE;
+}
+
 // 08014ACC
 
 /**
@@ -473,6 +506,17 @@ void __attribute__((section (".init"))) BattleController_BeforeMove(struct Battl
 #endif
 
             ctx->move_type = GetAdjustedMoveType(ctx, ctx->attack_client, ctx->current_move_index);
+            {
+                int magmaArmorBattler = GetMagmaArmorAuraSourceBattler(bsys, ctx);
+                if (magmaArmorBattler != BATTLER_NONE) {
+                    ctx->wb_seq_no++;
+                    ctx->battlerIdTemp = magmaArmorBattler;
+                    LoadBattleSubSeqScript(ctx, ARC_BATTLE_SUB_SEQ, SUB_SEQ_MAGMA_ARMOR_HEATED_ATTACK);
+                    ctx->next_server_seq_no = ctx->server_seq_no;
+                    ctx->server_seq_no = CONTROLLER_COMMAND_RUN_SCRIPT;
+                    return;
+                }
+            }
             ctx->wb_seq_no++;
             FALLTHROUGH;
         }
@@ -2433,9 +2477,25 @@ BOOL CalcDamageAndSetMoveStatusFlags(struct BattleSystem *bsys, struct BattleStr
     if ((ctx->moveTbl[ctx->current_move_index].target != RANGE_USER && ctx->moveTbl[ctx->current_move_index].target != RANGE_USER_SIDE && ctx->moveTbl[ctx->current_move_index].power != 0 && !(ctx->server_status_flag & BATTLE_STATUS_IGNORE_TYPE_IMMUNITY) /* && !(ctx->server_status_flag & BATTLE_STATUS_CHARGE_TURN) */) || ctx->current_move_index == MOVE_THUNDER_WAVE) {
         // TODO: Probably wrong?
         u32 temp = ctx->moveStatusFlagForSpreadMoves[defender];
+        u32 normalizedFlag = 0;
+        u32 typeEffectiveness;
         // TODO: Use GetTypeEffectiveness
         ServerDoTypeCalcMod(bsys, ctx, ctx->current_move_index, ctx->move_type, ctx->attack_client, defender, ctx->damageForSpreadMoves[defender], &temp);
         ctx->moveStatusFlagForSpreadMoves[defender] = temp;
+        typeEffectiveness = GetTypeEffectiveness(bsys, ctx, ctx->attack_client, defender, ctx->move_type, &normalizedFlag);
+        ctx->moveStatusFlagForSpreadMoves[defender] &= ~(MOVE_STATUS_FLAG_SUPER_EFFECTIVE | MOVE_STATUS_FLAG_NOT_VERY_EFFECTIVE);
+        switch (typeEffectiveness) {
+            case TYPE_MUL_SUPER_EFFECTIVE:
+            case TYPE_MUL_DOUBLE_SUPER_EFFECTIVE:
+            case TYPE_MUL_TRIPLE_SUPER_EFFECTIVE:
+                ctx->moveStatusFlagForSpreadMoves[defender] |= MOVE_STATUS_FLAG_SUPER_EFFECTIVE;
+                break;
+            case TYPE_MUL_NOT_EFFECTIVE:
+            case TYPE_MUL_DOUBLE_NOT_EFFECTIVE:
+            case TYPE_MUL_TRIPLE_NOT_EFFECTIVE:
+                ctx->moveStatusFlagForSpreadMoves[defender] |= MOVE_STATUS_FLAG_NOT_VERY_EFFECTIVE;
+                break;
+        }
         if (ctx->moveStatusFlagForSpreadMoves[defender] & MOVE_STATUS_FLAG_NOT_EFFECTIVE) {
             ctx->moveOutCheck[ctx->attack_client].stoppedFromIneffective = TRUE;
         }

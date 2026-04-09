@@ -492,8 +492,10 @@
 #define SUB_SEQ_MOVE_FAIL_THROAT_CHOP                 (482)
 #define SUB_SEQ_USER_DEF_DOWN_1_SPEED_UP_1            (483)
 #define SUB_SEQ_RISING_STAR                           (484)
+#define SUB_SEQ_MAGMA_ARMOR                           (485)
+#define SUB_SEQ_MAGMA_ARMOR_HEATED_ATTACK             (486)
 
-#define MAX_BASE_SUBSCRIPT_NUM 484
+#define MAX_BASE_SUBSCRIPT_NUM 486
 
 // define your custom subscripts below like this
 // #define MOVE_SUBSCRIPT_CUSTOM_1 (MAX_BASE_SUBSCRIPT_NUM + 1)
