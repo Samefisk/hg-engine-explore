@@ -37,15 +37,15 @@ void swap(int *a, int *b) {
     *b = temp;
 }
 
-#define ENABLE_WILD_TEST_HARNESS 0
-#define WILD_TEST_SPECIES SPECIES_SLUGMA
+#define ENABLE_WILD_TEST_HARNESS 1
+#define WILD_TEST_SPECIES SPECIES_SPINARAK
 #define WILD_TEST_LEVEL 3
 
 static const u16 sWildTestMoves[4] = {
-    MOVE_WATER_GUN,
-    MOVE_TACKLE,
-    MOVE_MUD_SLAP,
-    MOVE_ROCK_THROW,
+    MOVE_POISON_STING,
+    MOVE_NONE,
+    MOVE_NONE,
+    MOVE_NONE,
 };
 
 static void ApplyWildEncounterTestHarness(struct PartyPokemon *encounterPartyPokemon, u16 *species)

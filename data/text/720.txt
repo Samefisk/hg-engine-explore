@@ -310,3 +310,4 @@ Tera Shell
 Teraform Zero
 Poison Puppeteer
 Rising Star
+Neurotoxin
