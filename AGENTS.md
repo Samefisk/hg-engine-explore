@@ -6,9 +6,10 @@ This repository is maintained from `origin/main`.
 
 - `origin` is the real project repo and the default push target.
 - `upstream` is only a reference repo.
+- Never run `git pull --ff-only upstream main` as part of normal feature work.
 - Do not automatically sync this repo to `upstream/main`.
 
-If you are an agent working here, treat `origin/main` as the stable base branch unless the user explicitly asks for an upstream import task.
+If you are an agent working here, treat `origin/main` as the stable base branch unless the user explicitly asks for a separate upstream import task.
 
 ## Golden Rules
 
@@ -29,6 +30,8 @@ git fetch origin
 git pull --ff-only origin main
 git status --short
 ```
+
+Do not replace any of the commands above with `upstream`.
 
 Then:
 
@@ -143,9 +146,12 @@ When that happens:
 3. If histories diverge or a fast-forward is impossible, stop and report the situation.
 4. Do not force local `main` to match `upstream/main` unless the user explicitly asks for that rewrite.
 
+If the user asks for a normal new feature, bug fix, branch, commit, push, PR, or post-merge cleanup, stay on the `origin/main` workflow and do not touch `upstream`.
+
 ## Never Do This Automatically
 
 - Do not run `git pull --ff-only upstream main` as a default startup step.
+- Do not run `git fetch upstream && git pull --ff-only upstream main` for routine work.
 - Do not assume a merged PR already exists in local `main`.
 - Do not branch from stale `main`.
 - Do not delete a branch before verifying its work is on `main`.
