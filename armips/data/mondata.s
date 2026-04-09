@@ -4037,7 +4037,7 @@ mondata SPECIES_SUNKERN, "Sunkern"
     basefriendship 70
     growthrate GROWTH_MEDIUM_SLOW
     egggroups EGG_GROUP_GRASS, EGG_GROUP_GRASS
-    abilities ABILITY_CHLOROPHYLL, ABILITY_SOLAR_POWER
+    abilities ABILITY_BRILLIANCE, ABILITY_BRILLIANCE
     runchance 0
     colorflip BODY_COLOR_YELLOW, 0
     mondexentry SPECIES_SUNKERN, "It may plummet from the sky.\nIf attacked by a SPEAROW,\nit will violently shake its leaves."
@@ -4058,7 +4058,7 @@ mondata SPECIES_SUNFLORA, "Sunflora"
     basefriendship 70
     growthrate GROWTH_MEDIUM_SLOW
     egggroups EGG_GROUP_GRASS, EGG_GROUP_GRASS
-    abilities ABILITY_CHLOROPHYLL, ABILITY_SOLAR_POWER
+    abilities ABILITY_BRILLIANCE, ABILITY_BRILLIANCE
     runchance 0
     colorflip BODY_COLOR_YELLOW, 0
     mondexentry SPECIES_SUNFLORA, "It converts sunlight into energy.\nIn the darkness after sunset, it\ncloses its petals and becomes still."

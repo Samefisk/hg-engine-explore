@@ -128,6 +128,60 @@ const u16 TriageMovesList[] = {
     MOVE_WISH,
 };
 
+const u16 BrilliancePriorityMovesList[] = {
+    MOVE_SOLAR_BEAM,
+    MOVE_SOLAR_BLADE,
+    MOVE_DAZZLING_GLEAM,
+    MOVE_FLASH_CANNON,
+    MOVE_SIGNAL_BEAM,
+    MOVE_LUSTER_PURGE,
+    MOVE_AURORA_BEAM,
+    MOVE_LIGHT_OF_RUIN,
+    MOVE_WEATHER_BALL,
+    MOVE_SUNNY_DAY,
+    MOVE_SYNTHESIS,
+    MOVE_MORNING_SUN,
+    MOVE_GROWTH,
+    MOVE_LIGHT_SCREEN,
+};
+
+const u16 BrillianceDamagingMovesList[] = {
+    MOVE_SOLAR_BEAM,
+    MOVE_SOLAR_BLADE,
+    MOVE_DAZZLING_GLEAM,
+    MOVE_FLASH_CANNON,
+    MOVE_SIGNAL_BEAM,
+    MOVE_LUSTER_PURGE,
+    MOVE_AURORA_BEAM,
+    MOVE_LIGHT_OF_RUIN,
+    MOVE_WEATHER_BALL,
+};
+
+static BOOL MoveIsInList(const u16 *moveList, u32 moveCount, int move)
+{
+    u32 i;
+
+    for (i = 0; i < moveCount; i++)
+    {
+        if (moveList[i] == move)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL IsBrilliancePriorityMove(int move)
+{
+    return MoveIsInList(BrilliancePriorityMovesList, NELEMS(BrilliancePriorityMovesList), move);
+}
+
+static BOOL IsBrillianceDamagingMove(int move)
+{
+    return MoveIsInList(BrillianceDamagingMovesList, NELEMS(BrillianceDamagingMovesList), move);
+}
+
 const u16 BulletproofMoveList[] =
 {
     MOVE_ACID_SPRAY,
@@ -1408,6 +1462,7 @@ void LONG_CALL CalcPriorityAndQuickClawCustapBerry(void *bsys, struct BattleStru
     int command;
     int move_pos;
     u32 i;
+    int ability;
     int hold_effect;
     int hold_atk;
 
@@ -1429,25 +1484,30 @@ void LONG_CALL CalcPriorityAndQuickClawCustapBerry(void *bsys, struct BattleStru
             continue;
         }
         priority = ctx->moveTbl[move].priority;
+        ability = GetBattlerAbility(ctx, client);
 
         // Handle Grassy Glide
         if (move == MOVE_GRASSY_GLIDE && ctx->terrainOverlay.type == GRASSY_TERRAIN) {
             priority++;
         }
 
+        if (ability == ABILITY_BRILLIANCE && IsBrilliancePriorityMove(move)) {
+            priority++;
+        }
+
         // Handle Prankster
-        if (GetBattlerAbility(ctx, client) == ABILITY_PRANKSTER && GetMoveSplit(ctx, move) == SPLIT_STATUS) {
+        if (ability == ABILITY_PRANKSTER && GetMoveSplit(ctx, move) == SPLIT_STATUS) {
             priority++;
         }
 
         // Handle Gale Wings
         if (
-            GetBattlerAbility(ctx, client) == ABILITY_GALE_WINGS && ctx->moveTbl[move].type == TYPE_FLYING && ctx->battlemon[client].hp == (s32)ctx->battlemon[client].maxhp) {
+            ability == ABILITY_GALE_WINGS && ctx->moveTbl[move].type == TYPE_FLYING && ctx->battlemon[client].hp == (s32)ctx->battlemon[client].maxhp) {
             priority++;
         }
 
         // handle Triage
-        if (GetBattlerAbility(ctx, client) == ABILITY_TRIAGE) {
+        if (ability == ABILITY_TRIAGE) {
             for (i = 0; i < NELEMS(TriageMovesList); i++) {
                 if (TriageMovesList[i] == move) {
                     priority = priority + 3;
@@ -1616,14 +1676,20 @@ static BOOL IsMagmaArmorAuraActive(struct BattleSystem *bw, struct BattleStruct 
     return FALSE;
 }
 
-static int GetAdditionalOffensiveMoveType(struct BattleSystem *bw, struct BattleStruct *sp, int move_no, int move_type)
+static int GetAdditionalOffensiveMoveType(struct BattleSystem *bw, struct BattleStruct *sp, int move_no, int move_type, int attack_client)
 {
-    if ((move_type != TYPE_GROUND) && (move_type != TYPE_ROCK))
+    if (GetBattlerAbility(sp, attack_client) == ABILITY_BRILLIANCE && IsBrillianceDamagingMove(move_no))
     {
+        // Weather Ball in sun is already Fire-type, so do not apply Fire twice.
+        if (move_type != TYPE_FIRE)
+        {
+            return TYPE_FIRE;
+        }
+
         return -1;
     }
 
-    if (GetMoveSplit(sp, move_no) == SPLIT_STATUS)
+    if ((move_type != TYPE_GROUND) && (move_type != TYPE_ROCK))
     {
         return -1;
     }
@@ -1775,7 +1841,7 @@ static int ApplyTypeEffectivenessToDamage(struct BattleSystem *bw, struct Battle
 // TODO: Refactor this function
 int LONG_CALL GetTypeEffectiveness(struct BattleSystem *bw, struct BattleStruct *sp, int attack_client, int defence_client, int move_type, u32 *flag) {
     int typeTableEntryNo = 0; // Used to cycle through all (non-neutral) type interactions.
-    int additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, sp->current_move_index, move_type);
+    int additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, sp->current_move_index, move_type, attack_client);
 
     // https://xcancel.com/Sibuna_Switch/status/1827463371383328877#m
     u8 defender_type_1 = GetSanitisedType(sp->battlemon[defence_client].type1);
@@ -1941,7 +2007,7 @@ int LONG_CALL ServerDoTypeCalcMod(void *bw UNUSED, struct BattleStruct *sp, int 
     eqp_d = HeldItemHoldEffectGet(sp, defence_client);
     atk_d = HeldItemAtkGet(sp, defence_client, ATK_CHECK_NORMAL);
     base_power = sp->moveTbl[move_no].power;
-    additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, move_no, move_type);
+    additionalMoveType = GetAdditionalOffensiveMoveType(bw, sp, move_no, move_type, attack_client);
 
     u8 attacker_type_1 = GetSanitisedType(BattlePokemonParamGet(sp, attack_client, BATTLE_MON_DATA_TYPE1, NULL));
     u8 attacker_type_2 = GetSanitisedType(BattlePokemonParamGet(sp, attack_client, BATTLE_MON_DATA_TYPE2, NULL));
@@ -3518,6 +3584,7 @@ int LONG_CALL GetClientActionPriority(struct BattleSystem *bsys UNUSED, struct B
     int command = ctx->playerActions[battlerId][3];
     int move_pos = ctx->waza_no_pos[battlerId];
     int move = MOVE_NONE;
+    int ability = GetBattlerAbility(ctx, battlerId);
 
     if (command == SELECT_FIGHT_COMMAND) {
         if (ctx->oneTurnFlag[battlerId].struggle_flag) {
@@ -3536,15 +3603,19 @@ int LONG_CALL GetClientActionPriority(struct BattleSystem *bsys UNUSED, struct B
         }
     }
 
-    if ((GetBattlerAbility(ctx, battlerId) == ABILITY_PRANKSTER) && (GetMoveSplit(ctx, move) == SPLIT_STATUS)) {
+    if ((ability == ABILITY_BRILLIANCE) && IsBrilliancePriorityMove(move)) {
         return ctx->moveTbl[move].priority + 1;
     }
 
-    if ((GetBattlerAbility(ctx, battlerId) == ABILITY_GALE_WINGS) && (ctx->moveTbl[move].type == TYPE_FLYING)) {
+    if ((ability == ABILITY_PRANKSTER) && (GetMoveSplit(ctx, move) == SPLIT_STATUS)) {
         return ctx->moveTbl[move].priority + 1;
     }
 
-    if ((GetBattlerAbility(ctx, battlerId) == ABILITY_TRIAGE) && (isTriageMove)) {
+    if ((ability == ABILITY_GALE_WINGS) && (ctx->moveTbl[move].type == TYPE_FLYING)) {
+        return ctx->moveTbl[move].priority + 1;
+    }
+
+    if ((ability == ABILITY_TRIAGE) && (isTriageMove)) {
         return ctx->moveTbl[move].priority + 3;
     }
 
