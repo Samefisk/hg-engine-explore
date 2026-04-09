@@ -368,6 +368,24 @@ BOOL MoveHitAttackerAbilityCheck(void *bw, struct BattleStruct *sp, int *seq_no)
                 ret = TRUE;
             }
             break;
+        case ABILITY_NEUROTOXIN:
+            if ((sp->battlemon[sp->defence_client].hp)
+                && (sp->battlemon[sp->defence_client].condition == 0)
+                && ((sp->waza_status_flag & WAZA_STATUS_FLAG_NO_OUT) == 0)
+                && ((sp->server_status_flag & SERVER_STATUS_FLAG_x20) == 0)
+                && ((sp->server_status_flag2 & SERVER_STATUS_FLAG2_U_TURN) == 0)
+                && (CheckSubstitute(sp, sp->defence_client) == FALSE)
+                && (GetAdjustedMoveType(sp, sp->attack_client, sp->current_move_index) == TYPE_POISON)
+                && (((GetMoveSplit(sp, sp->current_move_index) == SPLIT_PHYSICAL) && (sp->oneSelfFlag[sp->defence_client].physical_damage < 0))
+                 || ((GetMoveSplit(sp, sp->current_move_index) == SPLIT_SPECIAL) && (sp->oneSelfFlag[sp->defence_client].special_damage < 0))))
+            {
+                sp->addeffect_type = ADD_STATUS_ABILITY;
+                sp->state_client = sp->defence_client;
+                sp->battlerIdTemp = sp->attack_client;
+                seq_no[0] = SUB_SEQ_BADLY_POISON;
+                ret = TRUE;
+            }
+            break;
         case ABILITY_BEAST_BOOST:
             if ((sp->defence_client == sp->fainting_client)
                 && BATTLERS_ON_DIFFERENT_SIDE(sp->attack_client, sp->fainting_client)

@@ -449,7 +449,7 @@ int UNUSED CalcBaseDamageInternal(struct BattleSystem *bw, struct BattleStruct *
             }
             break;
         case MOVE_VENOSHOCK:
-            if (DefendingMon.condition &STATUS_POISON_ALL) {
+            if (DefendingMon.condition & STATUS_POISON_ALL) {
                 basePowerModifier = QMul_RoundUp(basePowerModifier, UQ412__2_0);
             }
             break;
@@ -515,6 +515,12 @@ int UNUSED CalcBaseDamageInternal(struct BattleSystem *bw, struct BattleStruct *
 
         default:
             break;
+    }
+
+    if ((AttackingMon.ability == ABILITY_NEUROTOXIN)
+        && (movetype == TYPE_POISON)
+        && (DefendingMon.condition & STATUS_POISON_ALL)) {
+        basePowerModifier = QMul_RoundUp(basePowerModifier, UQ412__FROM_INT(3));
     }
 
     // Effects relative to a particular slot of the field (Wish, Lunar Dance, Future Sight, etc.):
