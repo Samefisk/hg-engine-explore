@@ -5302,7 +5302,6 @@ BOOL btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage(void *bsys, struct Battl
 
     return FALSE;
 }
-
 BOOL BtlCmd_CopyStatStages(struct BattleSystem *bsys UNUSED, struct BattleStruct *ctx)
 {
     IncrementBattleScriptPtr(ctx, 1);
