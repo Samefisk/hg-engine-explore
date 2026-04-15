@@ -117,6 +117,7 @@ BOOL btl_scr_cmd_115_setMoveConditionFlag(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_116_printRisingStarMessage(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_118_printBrillianceHeatedAttackMessage(void *bsys, struct BattleStruct *ctx);
+BOOL btl_scr_cmd_119_tryCordycepsSpread(void *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_GoToMoveScript(struct BattleSystem *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_WeatherHPRecovery(void *bw, struct BattleStruct *sp);
 BOOL BtlCmd_CalcWeatherBallParams(void *bw, struct BattleStruct *sp);
@@ -434,6 +435,7 @@ const u8 *BattleScrCmdNames[] =
     "PrintRisingStarMessage",
     "PrintMagmaArmorHeatedAttackMessage",
     "PrintBrillianceHeatedAttackMessage",
+    "TryCordycepsSpread",
     // "YourCustomCommand",
 };
 
@@ -441,7 +443,7 @@ u32 cmdAddress = 0;
 #pragma GCC diagnostic pop
 #endif // DEBUG_BATTLE_SCRIPT_COMMANDS
 
-#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x118
+#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x119
 
 const btl_scr_cmd_func NewBattleScriptCmdTable[] =
 {
@@ -501,6 +503,7 @@ const btl_scr_cmd_func NewBattleScriptCmdTable[] =
     [0x116 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_116_printRisingStarMessage,
     [0x117 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage,
     [0x118 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_118_printBrillianceHeatedAttackMessage,
+    [0x119 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_119_tryCordycepsSpread,
     // [BASE_ENGINE_BTL_SCR_CMDS_MAX - START_OF_NEW_BTL_SCR_CMDS + 1] = btl_scr_cmd_custom_01_your_custom_command,
 };
 
@@ -5330,6 +5333,176 @@ BOOL btl_scr_cmd_118_printBrillianceHeatedAttackMessage(void *bsys, struct Battl
     msg.msg_client = client_no;
 
     BattleController_EmitPrintMessage(bsys, ctx, &msg);
+
+    return FALSE;
+}
+
+static BOOL IsPartySlotActive(struct BattleSystem *bsys, struct BattleStruct *ctx, struct Party *party, int partySlot)
+{
+    int battler;
+
+    for (battler = 0; battler < BattleWorkClientSetMaxGet(bsys); battler++)
+    {
+        if (BattleWorkPokePartyGet(bsys, battler) == party
+         && ctx->sel_mons_no[battler] == partySlot)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL CordycepsBenchTargetCanTakeStatus(struct PartyPokemon *mon, u32 status, u32 moveType)
+{
+    u32 monStatus = GetMonData(mon, MON_DATA_STATUS, NULL);
+    u32 monAbility = GetMonData(mon, MON_DATA_ABILITY, NULL);
+    u32 type1 = GetMonData(mon, MON_DATA_TYPE_1, NULL);
+    u32 type2 = GetMonData(mon, MON_DATA_TYPE_2, NULL);
+    u32 hp = GetMonData(mon, MON_DATA_HP, NULL);
+
+    if (hp == 0 || monStatus != STATUS_NONE)
+    {
+        return FALSE;
+    }
+
+    switch (status)
+    {
+        case STATUS_POISON:
+        case STATUS_BAD_POISON:
+            if (type1 == TYPE_POISON || type2 == TYPE_POISON || type1 == TYPE_STEEL || type2 == TYPE_STEEL)
+            {
+                return FALSE;
+            }
+            if (monAbility == ABILITY_IMMUNITY || monAbility == ABILITY_COMATOSE || monAbility == ABILITY_PURIFYING_SALT)
+            {
+                return FALSE;
+            }
+            break;
+        case STATUS_BURN:
+            if (type1 == TYPE_FIRE || type2 == TYPE_FIRE)
+            {
+                return FALSE;
+            }
+            if (monAbility == ABILITY_WATER_VEIL || monAbility == ABILITY_WATER_BUBBLE || monAbility == ABILITY_COMATOSE
+             || monAbility == ABILITY_THERMAL_EXCHANGE || monAbility == ABILITY_PURIFYING_SALT)
+            {
+                return FALSE;
+            }
+            break;
+        case STATUS_PARALYSIS:
+            if (moveType == TYPE_ELECTRIC && (type1 == TYPE_GROUND || type2 == TYPE_GROUND))
+            {
+                return FALSE;
+            }
+            if (monAbility == ABILITY_LIMBER || monAbility == ABILITY_COMATOSE || monAbility == ABILITY_PURIFYING_SALT)
+            {
+                return FALSE;
+            }
+            break;
+        case STATUS_FREEZE:
+            if (type1 == TYPE_ICE || type2 == TYPE_ICE)
+            {
+                return FALSE;
+            }
+            if (monAbility == ABILITY_MAGMA_ARMOR || monAbility == ABILITY_COMATOSE || monAbility == ABILITY_PURIFYING_SALT)
+            {
+                return FALSE;
+            }
+            break;
+        default:
+            if (status & STATUS_SLEEP)
+            {
+                if (monAbility == ABILITY_INSOMNIA || monAbility == ABILITY_VITAL_SPIRIT || monAbility == ABILITY_COMATOSE || monAbility == ABILITY_PURIFYING_SALT)
+                {
+                    return FALSE;
+                }
+            }
+            break;
+    }
+
+    return TRUE;
+}
+
+BOOL btl_scr_cmd_119_tryCordycepsSpread(void *bsys, struct BattleStruct *ctx)
+{
+    struct Party *party;
+    struct PartyPokemon *mon;
+    int defender = ctx->defence_client;
+    int partyCount;
+    int eligibleSlots[6];
+    int eligibleCount = 0;
+    u32 status;
+    u32 moveType;
+    int i;
+    int chosenSlot;
+
+    IncrementBattleScriptPtr(ctx, 1);
+    status = read_battle_script_param(ctx);
+    ctx->calc_work = 0;
+
+    if (GetBattlerAbility(ctx, ctx->attack_client) != ABILITY_CORDYCEPS)
+    {
+        return FALSE;
+    }
+
+    if (defender == BATTLER_NONE || defender == ctx->attack_client)
+    {
+        return FALSE;
+    }
+
+    if (ctx->addeffect_type != ADD_EFFECT_DIRECT && ctx->addeffect_type != ADD_EFFECT_MOVE_EFFECT)
+    {
+        return FALSE;
+    }
+
+    if (BATTLER_IS_ENEMY(ctx->attack_client) == BATTLER_IS_ENEMY(defender))
+    {
+        return FALSE;
+    }
+
+    party = BattleWorkPokePartyGet(bsys, defender);
+    partyCount = BattleWorkPokeCountGet(bsys, defender);
+    moveType = GetAdjustedMoveType(ctx, ctx->attack_client, ctx->current_move_index);
+
+    for (i = 0; i < partyCount && i < 6; i++)
+    {
+        mon = Party_GetMonByIndex(party, i);
+        if (mon == NULL)
+        {
+            continue;
+        }
+
+        if (IsPartySlotActive(bsys, ctx, party, i))
+        {
+            continue;
+        }
+
+        if (CordycepsBenchTargetCanTakeStatus(mon, status, moveType))
+        {
+            eligibleSlots[eligibleCount++] = i;
+        }
+    }
+
+    if (eligibleCount == 0)
+    {
+        return FALSE;
+    }
+
+    chosenSlot = eligibleSlots[BattleRand(bsys) % eligibleCount];
+    mon = Party_GetMonByIndex(party, chosenSlot);
+
+    if (status & STATUS_SLEEP)
+    {
+        u32 sleepStatus = (BattleRand(bsys) % 3) + 2;
+        SetMonData(mon, MON_DATA_STATUS, &sleepStatus);
+    }
+    else
+    {
+        SetMonData(mon, MON_DATA_STATUS, &status);
+    }
+
+    ctx->calc_work = 1;
 
     return FALSE;
 }

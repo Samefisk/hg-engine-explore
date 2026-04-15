@@ -59,6 +59,12 @@ _105:
     Wait
     SetHealthbarStatus BATTLER_CATEGORY_SIDE_EFFECT_MON, BATTLE_ANIMATION_FROZEN
     WaitButtonABTime 30
+    TryCordycepsSpread STATUS_FREEZE
+    CompareVarToValue OPCODE_EQU, BSCRIPT_VAR_CALC_TEMP, 0, _126
+    PrintMessage 1640, TAG_NONE
+    Wait
+    WaitButtonABTime 30
+_126:
     End
 
 _127:
