@@ -177,6 +177,12 @@ _AfterMessage:
     Wait
     SetHealthbarStatus BATTLER_CATEGORY_SIDE_EFFECT_MON, BATTLE_ANIMATION_POISONED
     WaitButtonABTime 30
+    TryCordycepsSpread STATUS_BAD_POISON
+    CompareVarToValue OPCODE_EQU, BSCRIPT_VAR_CALC_TEMP, 0, _AfterCordyceps
+    PrintMessage 1640, TAG_NONE
+    Wait
+    WaitButtonABTime 30
+_AfterCordyceps:
     CompareVarToValue OPCODE_FLAG_SET, BSCRIPT_VAR_BATTLE_STATUS, BATTLE_STATUS_SYNCRONIZE, _CleanupSynchronize
     UpdateVar OPCODE_FLAG_ON, BSCRIPT_VAR_BATTLE_STATUS, BATTLE_STATUS_SYNCRONIZE
     End
