@@ -368,6 +368,13 @@ $(BATTLE_SUB_DIR)/2_%:$(BATTLE_SUB_CUSTOM_DIR)/%.s
 	$(OBJCOPY) -O binary $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/2_%_linked.o,$<) $@
 
 $(BATTLE_SUB_NARC): $(BATTLE_SUB_OBJS)
+	@for file in $(BATTLE_SUB_DIR)/*; do \
+		base=$$(basename "$$file"); \
+		case " $(notdir $(BATTLE_SUB_OBJS)) " in \
+			*" $$base "*) ;; \
+			*) rm -f "$$file" ;; \
+		esac; \
+	done
 	$(NARCHIVE) create $@ $(BATTLE_SUB_DIR) -nf
 
 NARC_FILES += $(BATTLE_SUB_NARC)

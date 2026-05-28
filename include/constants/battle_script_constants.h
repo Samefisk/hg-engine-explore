@@ -495,8 +495,9 @@
 #define SUB_SEQ_MAGMA_ARMOR                           (485)
 #define SUB_SEQ_MAGMA_ARMOR_HEATED_ATTACK             (486)
 #define SUB_SEQ_BRILLIANCE_HEATED_ATTACK              (487)
+#define SUB_SEQ_RIPTIDE                               (488)
 
-#define MAX_BASE_SUBSCRIPT_NUM 487
+#define MAX_BASE_SUBSCRIPT_NUM 488
 
 // define your custom subscripts below like this
 // #define MOVE_SUBSCRIPT_CUSTOM_1 (MAX_BASE_SUBSCRIPT_NUM + 1)

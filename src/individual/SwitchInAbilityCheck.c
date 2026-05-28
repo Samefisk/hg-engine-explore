@@ -16,8 +16,51 @@
 
 static BOOL IntimidateCheckHelper(struct BattleStruct *sp, u32 client);
 static BOOL IsValidImposterTarget(void *bw, struct BattleStruct *sp, u32 client);
+static int GetRiptideTarget(void *bw, struct BattleStruct *sp, int client);
 
 extern struct ILLUSION_STRUCT gIllusionStruct;
+
+static int GetRiptideTarget(void *bw, struct BattleStruct *sp, int client)
+{
+    int targetRight;
+    int targetLeft;
+    BOOL rightAlive;
+    BOOL leftAlive;
+
+    if ((BattleTypeGet(bw) & BATTLE_TYPE_DOUBLE) == 0)
+    {
+        int target = client ^ 1;
+
+        if (sp->battlemon[target].hp)
+        {
+            return target;
+        }
+
+        return BATTLER_NONE;
+    }
+
+    targetRight = BattleWorkEnemyClientGet(bw, client, BATTLER_POSITION_SIDE_RIGHT);
+    targetLeft = BattleWorkEnemyClientGet(bw, client, BATTLER_POSITION_SIDE_LEFT);
+    rightAlive = (targetRight != BATTLER_NONE) && sp->battlemon[targetRight].hp;
+    leftAlive = (targetLeft != BATTLER_NONE) && sp->battlemon[targetLeft].hp;
+
+    if (rightAlive && leftAlive)
+    {
+        return (BattleRand(bw) & 1) ? targetRight : targetLeft;
+    }
+
+    if (rightAlive)
+    {
+        return targetRight;
+    }
+
+    if (leftAlive)
+    {
+        return targetLeft;
+    }
+
+    return BATTLER_NONE;
+}
 
 
 /**
@@ -690,6 +733,32 @@ int UNUSED SwitchInAbilityCheck(void *bw, struct BattleStruct *sp)
                             scriptnum = SUB_SEQ_BOOST_STATS;
                             ret = SWITCH_IN_CHECK_MOVE_SCRIPT;
                             break;
+                        }
+                    }
+
+                    // Riptide
+                    {
+                        if ((sp->onceOnlyAbilityFlags[SanitizeClientForTeamAccess(bw, client_no)][sp->sel_mons_no[client_no]].riptideFlag == FALSE)
+                        && (sp->battlemon[client_no].ability_activated_flag == 0)
+                        && (sp->battlemon[client_no].hp)
+                        && (GetBattlerAbility(sp, client_no) == ABILITY_RIPTIDE))
+                        {
+                            int target = GetRiptideTarget(bw, sp, client_no);
+
+                            if (target != BATTLER_NONE && sp->battlemon[target].hp) {
+                                sp->onceOnlyAbilityFlags[SanitizeClientForTeamAccess(bw, client_no)][sp->sel_mons_no[client_no]].riptideFlag = TRUE;
+                                sp->battlemon[client_no].ability_activated_flag = 1;
+                                sp->attack_client = client_no;
+                                sp->defence_client = target;
+                                sp->battlerIdTemp = client_no;
+                                sp->calc_work = sp->current_move_index;
+                                sp->current_move_index = MOVE_SURF;
+                                sp->waza_work = MOVE_SURF;
+                                sp->critical = 0;
+                                scriptnum = SUB_SEQ_RIPTIDE;
+                                ret = SWITCH_IN_CHECK_MOVE_SCRIPT;
+                                break;
+                            }
                         }
                     }
 

@@ -1639,3 +1639,12 @@ The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nblocked {STRVAR_1 6, 2, 
 The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nsped up and heated the attack!
 The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nsped up and heated the attack!
 The spores spread to the\nopposing team...
+{STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nswept the field!
+The wild {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nswept the field!
+The opposing {STRVAR_1 1, 0, 0}’s {STRVAR_1 5, 1, 0}\nswept the field!
+{STRVAR_1 1, 0, 0}\nwon’t be moved!
+The wild {STRVAR_1 1, 0, 0}\nwon’t be moved!
+The opposing {STRVAR_1 1, 0, 0}\nwon’t be moved!
+{STRVAR_1 1, 0, 0} was dragged away\nby the riptide!
+The wild {STRVAR_1 1, 0, 0} was dragged away\nby the riptide!
+The opposing {STRVAR_1 1, 0, 0} was dragged away\nby the riptide!
