@@ -1221,6 +1221,7 @@ typedef struct OnceOnlyAbilityFlags {
     BOOL intrepidSwordFlag;
     BOOL dauntlessShieldFlag;
     BOOL superSweetSyrupFlag;
+    BOOL riptideFlag;
 } OnceOnlyAbilityFlags;
 
 typedef struct OnceOnlyMoveConditionFlags {

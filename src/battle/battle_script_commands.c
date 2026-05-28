@@ -118,6 +118,8 @@ BOOL btl_scr_cmd_116_printRisingStarMessage(void *bsys, struct BattleStruct *ctx
 BOOL btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_118_printBrillianceHeatedAttackMessage(void *bsys, struct BattleStruct *ctx);
 BOOL btl_scr_cmd_119_tryCordycepsSpread(void *bsys, struct BattleStruct *ctx);
+BOOL btl_scr_cmd_11A_tryRiptideNegatingAbility(void *bsys, struct BattleStruct *ctx);
+BOOL btl_scr_cmd_11B_tryRiptideForceSwitch(void *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_GoToMoveScript(struct BattleSystem *bsys, struct BattleStruct *ctx);
 BOOL BtlCmd_WeatherHPRecovery(void *bw, struct BattleStruct *sp);
 BOOL BtlCmd_CalcWeatherBallParams(void *bw, struct BattleStruct *sp);
@@ -436,6 +438,8 @@ const u8 *BattleScrCmdNames[] =
     "PrintMagmaArmorHeatedAttackMessage",
     "PrintBrillianceHeatedAttackMessage",
     "TryCordycepsSpread",
+    "TryRiptideNegatingAbility",
+    "TryRiptideForceSwitch",
     // "YourCustomCommand",
 };
 
@@ -443,7 +447,7 @@ u32 cmdAddress = 0;
 #pragma GCC diagnostic pop
 #endif // DEBUG_BATTLE_SCRIPT_COMMANDS
 
-#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x119
+#define BASE_ENGINE_BTL_SCR_CMDS_MAX 0x11B
 
 const btl_scr_cmd_func NewBattleScriptCmdTable[] =
 {
@@ -504,6 +508,8 @@ const btl_scr_cmd_func NewBattleScriptCmdTable[] =
     [0x117 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_117_printMagmaArmorHeatedAttackMessage,
     [0x118 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_118_printBrillianceHeatedAttackMessage,
     [0x119 - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_119_tryCordycepsSpread,
+    [0x11A - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_11A_tryRiptideNegatingAbility,
+    [0x11B - START_OF_NEW_BTL_SCR_CMDS] = btl_scr_cmd_11B_tryRiptideForceSwitch,
     // [BASE_ENGINE_BTL_SCR_CMDS_MAX - START_OF_NEW_BTL_SCR_CMDS + 1] = btl_scr_cmd_custom_01_your_custom_command,
 };
 
@@ -5503,6 +5509,52 @@ BOOL btl_scr_cmd_119_tryCordycepsSpread(void *bsys, struct BattleStruct *ctx)
     }
 
     ctx->calc_work = 1;
+
+    return FALSE;
+}
+
+BOOL btl_scr_cmd_11A_tryRiptideNegatingAbility(void *bsys, struct BattleStruct *ctx)
+{
+    int script;
+    int failAddress;
+
+    IncrementBattleScriptPtr(ctx, 1);
+    failAddress = read_battle_script_param(ctx);
+
+    script = MoveCheckDamageNegatingAbilities(ctx, ctx->attack_client, ctx->defence_client);
+    if (script) {
+        ctx->battlerIdTemp = ctx->defence_client;
+        ctx->temp_work = script;
+    } else {
+        IncrementBattleScriptPtr(ctx, failAddress);
+    }
+
+    return FALSE;
+}
+
+BOOL btl_scr_cmd_11B_tryRiptideForceSwitch(void *bsys, struct BattleStruct *ctx)
+{
+    int blockedAddress;
+    int failAddress;
+    int defender;
+
+    IncrementBattleScriptPtr(ctx, 1);
+    blockedAddress = read_battle_script_param(ctx);
+    failAddress = read_battle_script_param(ctx);
+    defender = ctx->defence_client;
+
+    if (defender == BATTLER_NONE
+     || ctx->battlemon[defender].hp == 0
+     || !CanSwitchMon(bsys, ctx, defender)) {
+        IncrementBattleScriptPtr(ctx, failAddress);
+        return FALSE;
+    }
+
+    if (ctx->battlemon[defender].is_currently_dynamaxed
+     || MoldBreakerAbilityCheck(ctx, ctx->attack_client, defender, ABILITY_SUCTION_CUPS)
+     || (ctx->battlemon[defender].effect_of_moves & MOVE_EFFECT_FLAG_INGRAIN)) {
+        IncrementBattleScriptPtr(ctx, blockedAddress);
+    }
 
     return FALSE;
 }

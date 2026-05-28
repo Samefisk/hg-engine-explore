@@ -1542,7 +1542,18 @@
     .long \arg_0
     .endm
 
-    .equ BASE_ENGINE_BTL_SCR_CMDS_MAX, 281
+    .macro TryRiptideNegatingAbility arg_0
+    .long 282
+    .long (((\arg_0 - .) / 4) - 1)
+    .endm
+
+    .macro TryRiptideForceSwitch arg_0, arg_1
+    .long 283
+    .long (((\arg_0 - .) / 4) - 1)
+    .long (((\arg_1 - .) / 4) - 1)
+    .endm
+
+    .equ BASE_ENGINE_BTL_SCR_CMDS_MAX, 283
 
     // .macro YourCustomCommand
     // .long (BASE_ENGINE_BTL_SCR_CMDS_MAX + 1)

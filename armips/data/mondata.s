@@ -21236,7 +21236,7 @@ mondata SPECIES_WIGLETT, "Wiglett"
     basefriendship 50
     growthrate GROWTH_MEDIUM_FAST
     egggroups EGG_GROUP_WATER_3, EGG_GROUP_WATER_3
-    abilities ABILITY_GOOEY, ABILITY_RATTLED
+    abilities ABILITY_RIPTIDE, ABILITY_RIPTIDE
     runchance 0
     colorflip BODY_COLOR_WHITE, 0
     mondexentry SPECIES_WIGLETT, "This Pokémon can pick up the scent\nof a Veluza just over 65 feet away\nand will hide itself in the sand."
@@ -21257,7 +21257,7 @@ mondata SPECIES_WUGTRIO, "Wugtrio"
     basefriendship 50
     growthrate GROWTH_MEDIUM_FAST
     egggroups EGG_GROUP_WATER_3, EGG_GROUP_WATER_3
-    abilities ABILITY_GOOEY, ABILITY_RATTLED
+    abilities ABILITY_RIPTIDE, ABILITY_RIPTIDE
     runchance 0
     colorflip BODY_COLOR_RED, 0
     mondexentry SPECIES_WUGTRIO, "A variety of fish Pokémon,\nWugtrio was once considered\nto be a regional form of Dugtrio."
