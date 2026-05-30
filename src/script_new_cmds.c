@@ -37,7 +37,8 @@ static void Script_QueueOverworldWildBattle(SCRIPTCONTEXT *ctx)
     sOverworldWildBattleScript[2] = encodedSpecies & 0xFF;
     sOverworldWildBattleScript[3] = encodedSpecies >> 8;
     sOverworldWildBattleScript[4] = level;
-    sOverworldWildBattleScript[5] = shiny;
+    sOverworldWildBattleScript[5] = 0;
+    sOverworldWildBattleScript[6] = shiny;
     VarSet(ctx->fsys, VAR_BATTLE_RESULT, 0);
 #endif
 
