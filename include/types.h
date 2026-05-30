@@ -136,6 +136,9 @@ void *LONG_CALL ArchiveDataLoadMallocOfs(int arcID, int datID, int heapID, int o
 void LONG_CALL ArchiveDataLoadOfs(void *data, int arcID, int datID, int ofs, int size);
 void *LONG_CALL sys_AllocMemoryLo(u32 heap_id, u32 size);
 void *LONG_CALL NARC_ctor(u32 narc_id, u32 heap_id);
+void LONG_CALL NARC_dtor(void *narc);
+u32 LONG_CALL NARC_GetMemberSize(void *narc, u32 member_no);
+void LONG_CALL NARC_ReadWholeMember(void *narc, u32 member_no, void *dest);
 
 void LONG_CALL MIi_CpuClearFast(u32 value, void *dest, u32 size);
 u16 LONG_CALL GF_CalcCRC16(const void *data, u32 size);

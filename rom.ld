@@ -50,6 +50,9 @@ ArchiveDataLoadMalloc = 0x02007524 | 1;
 ArchiveDataLoad = 0x02007509;
 ArchiveDataLoadMallocOfs = 0x0200757C | 1;
 NARC_ctor = 0x02007688 | 1;
+NARC_dtor = 0x0200770C | 1;
+NARC_ReadWholeMember = 0x0200778C | 1;
+NARC_GetMemberSize = 0x020077E8 | 1;
 ArchiveDataLoadOfs = 0x02007560 | 1;
 /*sqrt = 0x0200048A | 1;*/
 
@@ -332,6 +335,7 @@ MapObject_SetXRange = 0x0205F318 | 1;
 MapObject_SetYRange = 0x0205F320 | 1;
 FieldSysGetAttrAddr = 0x020402F0 | 1;
 MapObject_GfxDraw = 0x0205f484 | 1;
+FieldOverworldResourceManager_GetPokemonOwNarc = 0x0205F1F0 | 1;
 ChangeMapObjSprite = 0x021FA930 | 1;
 
 /* 0x16C54 in overlay1 */

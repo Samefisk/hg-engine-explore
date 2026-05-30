@@ -1,6 +1,7 @@
 .include "armips/include/config.s"
 .include "armips/include/constants.s"
 .include "armips/include/generated/levelup.s"
+.include "armips/include/generated/c_symbols.s"
 
 // standard assembler includes
 .include "asm/include/abilities.inc"
@@ -26,6 +27,7 @@
 .include "armips/asm/hidden_items.s" // allows editing of hidden items for Dowsing Machine
 
 .include "armips/asm/no_partner_double_battles.s" // allows no partner double battles
+.include "armips/asm/shiny_overworlds.s" // redirects shiny overworld BTX loads to the shiny archive
 
 .if FAIRY_TYPE_IMPLEMENTED == 1
 

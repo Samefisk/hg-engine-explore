@@ -231,6 +231,7 @@ TOOLS += $(ENCODEPWIMG)
 rom_gen.ld:$(LINK) $(OUTPUT) rom.ld $(VENV_ACTIVATE)
 	cp rom.ld rom_gen.ld
 	$(PYTHON) scripts/generate_ld.py
+	$(PYTHON_NO_VENV) scripts/generate_armips_symbols.py rom_gen.ld armips/include/generated/c_symbols.s
 
 # create output folders if they do not exist
 define FOLDER_CREATE_DEFINE
@@ -402,6 +403,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "pokemon overworlds:"
 	cp $(OVERWORLDS_NARC) $(OVERWORLDS_TARGET)
+
+	@echo "shiny pokemon overworlds:"
+	cp $(OVERWORLDS_SHINY_NARC) $(OVERWORLDS_SHINY_TARGET)
 
 	@echo "pokemon overworld data:"
 	cp $(OVERWORLD_DATA_NARC) $(OVERWORLD_DATA_TARGET)
