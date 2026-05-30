@@ -4,6 +4,7 @@
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
+#include "../include/constants/file.h"
 #include "../include/constants/maps.h"
 #include "../include/constants/species.h"
 #include "../include/map_events_internal.h"
@@ -11,6 +12,9 @@
 #include "../include/script.h"
 
 #define OW_WILD_MAX_SPAWNS 3
+#define OW_WILD_GRASS_SLOTS 12
+#define OW_WILD_SPECIES_MASK 0x7FF
+#define OW_WILD_FORM_SHIFT 11
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -20,32 +24,29 @@ typedef struct OverworldWildSpawn {
     u8 active;
 } OverworldWildSpawn;
 
+typedef struct OverworldWildGrassEncounterData {
+    u8 rates[6];
+    u8 padding[2];
+    u8 walkLevels[OW_WILD_GRASS_SLOTS];
+    u16 morningSpecies[OW_WILD_GRASS_SLOTS];
+    u16 daySpecies[OW_WILD_GRASS_SLOTS];
+    u16 nightSpecies[OW_WILD_GRASS_SLOTS];
+} OverworldWildGrassEncounterData;
+
+typedef struct OverworldWildRolledEncounter {
+    u16 species;
+    u8 form;
+    u8 level;
+} OverworldWildRolledEncounter;
+
 static OverworldWildSpawn sOverworldWildSpawns[OW_WILD_MAX_SPAWNS];
 static int sOverworldWildSpawnMap = MAP_NOTHING;
 static u8 sOverworldWildJustSpawned;
 static u16 sOverworldWildPendingSpecies;
 static u8 sOverworldWildPendingLevel;
 
-static const u16 sRoute29MorningSpecies[12] = {
-    SPECIES_SENTRET, SPECIES_PIDGEY,  SPECIES_SENTRET, SPECIES_PIDGEY,
-    SPECIES_DELIBIRD, SPECIES_PIDGEY, SPECIES_PICHU,   SPECIES_PIDGEY,
-    SPECIES_RATTATA, SPECIES_PIDGEY,  SPECIES_RATTATA, SPECIES_PIDGEY,
-};
-
-static const u16 sRoute29DaySpecies[12] = {
-    SPECIES_SENTRET, SPECIES_PIDGEY, SPECIES_SENTRET,   SPECIES_PIDGEY,
-    SPECIES_PIDGEY,  SPECIES_PIDGEY, SPECIES_PICHU,     SPECIES_IGGLYBUFF,
-    SPECIES_RATTATA, SPECIES_PIDGEY, SPECIES_RATTATA,   SPECIES_PIDGEY,
-};
-
-static const u16 sRoute29NightSpecies[12] = {
-    SPECIES_HOOTHOOT, SPECIES_HOOTHOOT, SPECIES_SPINARAK, SPECIES_SPINARAK,
-    SPECIES_SPINARAK, SPECIES_RATTATA,  SPECIES_SENTRET,  SPECIES_RATTATA,
-    SPECIES_RATTATA,  SPECIES_RATTATA,  SPECIES_RATTATA,  SPECIES_SENTRET,
-};
-
-static const u8 sRoute29WalkLevels[12] = {
-    2, 3, 2, 3, 3, 3, 2, 2, 4, 4, 4, 4,
+static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
+    20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
 };
 
 static const s8 sSpawnOffsets[OW_WILD_MAX_SPAWNS][2] = {
@@ -79,39 +80,89 @@ static BOOL OverworldWildSpawns_IsTestMap(FieldSystem *fieldSystem)
         && fieldSystem->location->mapId == OVERWORLD_WILD_SPAWNS_TEST_MAP;
 }
 
-static const u16 *OverworldWildSpawns_GetRoute29SpeciesTable(void)
+static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, int *encounterDataId)
 {
-    switch (GF_RTC_GetTimeOfDayWildParam()) {
-    case TIMEOFDAY_WILD_MORN:
-        return sRoute29MorningSpecies;
-    case TIMEOFDAY_WILD_NITE:
-        return sRoute29NightSpecies;
-    case TIMEOFDAY_WILD_DAY:
+    if (fieldSystem == NULL || fieldSystem->location == NULL) {
+        return FALSE;
+    }
+
+    switch (fieldSystem->location->mapId) {
+    case MAP_R29:
+        *encounterDataId = 1;
+        return TRUE;
     default:
-        return sRoute29DaySpecies;
+        return FALSE;
     }
 }
 
-static void OverworldWildSpawns_RollRoute29Encounter(u16 *species, u8 *form, u8 *level)
+static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildGrassEncounterData *encounterData)
 {
-    u32 slot = gf_rand() % 12;
-    const u16 *speciesTable = OverworldWildSpawns_GetRoute29SpeciesTable();
+    switch (GF_RTC_GetTimeOfDayWildParam()) {
+    case TIMEOFDAY_WILD_MORN:
+        return encounterData->morningSpecies;
+    case TIMEOFDAY_WILD_NITE:
+        return encounterData->nightSpecies;
+    case TIMEOFDAY_WILD_DAY:
+    default:
+        return encounterData->daySpecies;
+    }
+}
 
-    *species = speciesTable[slot] & 0x7FF;
-    *form = (speciesTable[slot] >> 11) & 0x1F;
-    *level = sRoute29WalkLevels[slot];
+static u8 OverworldWildSpawns_RollGrassSlot(void)
+{
+    u32 roll = gf_rand() % 100;
+    u8 slot;
+
+    for (slot = 0; slot < OW_WILD_GRASS_SLOTS; slot++) {
+        if (roll < sGrassSlotWeights[slot]) {
+            return slot;
+        }
+        roll -= sGrassSlotWeights[slot];
+    }
+
+    return OW_WILD_GRASS_SLOTS - 1;
+}
+
+static BOOL OverworldWildSpawns_TryRollGrassEncounter(FieldSystem *fieldSystem, OverworldWildRolledEncounter *encounter)
+{
+    int encounterDataId;
+    int attempts;
+    OverworldWildGrassEncounterData encounterData;
+    const u16 *speciesTable;
+
+    if (!OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId)) {
+        return FALSE;
+    }
+
+    ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
+    speciesTable = OverworldWildSpawns_GetTimeOfDaySpeciesTable(&encounterData);
+
+    for (attempts = 0; attempts < OW_WILD_GRASS_SLOTS; attempts++) {
+        u8 slot = OverworldWildSpawns_RollGrassSlot();
+        u16 encodedSpecies = speciesTable[slot];
+        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
+
+        if (species != SPECIES_NONE && encounterData.walkLevels[slot] != 0) {
+            encounter->species = species;
+            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
+            encounter->level = encounterData.walkLevels[slot];
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
 {
     int x;
     int y;
-    u16 species;
-    u8 form;
-    u8 level;
+    OverworldWildRolledEncounter encounter;
     LocalMapObject *object;
 
-    OverworldWildSpawns_RollRoute29Encounter(&species, &form, &level);
+    if (!OverworldWildSpawns_TryRollGrassEncounter(fieldSystem, &encounter)) {
+        return FALSE;
+    }
 
     x = GetPlayerXCoord(fieldSystem->playerAvatar) + sSpawnOffsets[slot][0];
     y = GetPlayerYCoord(fieldSystem->playerAvatar) + sSpawnOffsets[slot][1];
@@ -121,21 +172,21 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
         x,
         y,
         1,
-        FollowingPokemon_GetSpriteID(species, form, 0),
+        FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
         0,
         fieldSystem->location->mapId);
     if (object == NULL) {
         return FALSE;
     }
 
-    MapObject_SetParam(object, species, 0);
-    MapObject_SetParam(object, form, 1);
-    MapObject_SetParam(object, level, 2);
+    MapObject_SetParam(object, encounter.species, 0);
+    MapObject_SetParam(object, encounter.form, 1);
+    MapObject_SetParam(object, encounter.level, 2);
 
     sOverworldWildSpawns[slot].object = object;
-    sOverworldWildSpawns[slot].species = species;
-    sOverworldWildSpawns[slot].form = form;
-    sOverworldWildSpawns[slot].level = level;
+    sOverworldWildSpawns[slot].species = encounter.species;
+    sOverworldWildSpawns[slot].form = encounter.form;
+    sOverworldWildSpawns[slot].level = encounter.level;
     sOverworldWildSpawns[slot].active = TRUE;
 
     return TRUE;
