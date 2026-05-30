@@ -1010,22 +1010,21 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     shiny = OverworldWildSpawns_RollShiny();
 
-    object = CreateFollowingSpriteFieldObject(
+    object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
-        encounter.species,
-        encounter.form,
-        0,
-        1,
         position.startX,
         position.startY,
-        shiny);
+        1,
+        FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
+        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
+        fieldSystem->location->mapId);
     if (object == NULL) {
         return FALSE;
     }
 
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
-    object->movement = OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
     OverworldWildSpawns_ApplyMovementRange(object);
+    FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;
