@@ -37,6 +37,8 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_SHINY_TEST_RATE 8
+#define OW_WILD_RENDER_FLAG_FOLLOW_SPRITE ((u32)(9 << 10))
+#define OW_WILD_RENDER_FLAG_FOLLOW_CLEAR ((u32)(6 << 6))
 #define OW_WILD_OBJECT_ID_START 0xE0
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
@@ -973,6 +975,11 @@ static BOOL OverworldWildSpawns_RollShiny(void)
     return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
+static BOOL OverworldWildSpawns_HasShinyPalette(u32 spriteId)
+{
+    return (spriteId >= 201 && spriteId <= 206) || spriteId >= 297;
+}
+
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
     MapObject_SetXRange(object, 2);
@@ -985,6 +992,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     OverworldWildSpawnPosition position;
     LocalMapObject *object;
     BOOL shiny;
+    u32 spriteId;
 
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
         if (!OverworldWildSpawns_TryPickHeadbuttSpawnPosition(state, fieldSystem, &position)) {
@@ -1008,36 +1016,30 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
     }
 
-    shiny = OverworldWildSpawns_RollShiny();
+    spriteId = FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0);
+    shiny = OverworldWildSpawns_HasShinyPalette(spriteId) && OverworldWildSpawns_RollShiny();
 
-    if (shiny) {
-        object = CreateFollowingSpriteFieldObject(
-            fieldSystem->mapObjectMan,
-            encounter.species,
-            encounter.form,
-            0,
-            1,
-            position.startX,
-            position.startY,
-            TRUE);
-    } else {
-        object = CreateSpecialFieldObject(
-            fieldSystem->mapObjectMan,
-            position.startX,
-            position.startY,
-            1,
-            FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
-            OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
-            fieldSystem->location->mapId);
-    }
+    object = CreateSpecialFieldObject(
+        fieldSystem->mapObjectMan,
+        position.startX,
+        position.startY,
+        1,
+        spriteId,
+        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
+        fieldSystem->location->mapId);
     if (object == NULL) {
         return FALSE;
     }
 
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
-    object->movement = OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
     OverworldWildSpawns_ApplyMovementRange(object);
     FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
+    if (shiny) {
+        MapObject_SetBits(object, OW_WILD_RENDER_FLAG_FOLLOW_SPRITE);
+        MapObject_ClearBits(object, OW_WILD_RENDER_FLAG_FOLLOW_CLEAR);
+        MapObject_SetFlag29(object, TRUE);
+        sub_02069DC8(object, TRUE);
+    }
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;
