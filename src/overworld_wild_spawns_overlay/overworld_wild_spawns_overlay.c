@@ -1041,7 +1041,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     OverworldWildSpawns_ApplyMovementRange(object);
     FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
     if (shiny) {
-        ChangeMapObjSprite(object, spriteId);
+        sub_02069DC8(object, TRUE);
     }
 
     state->spawns[slot].object = object;
