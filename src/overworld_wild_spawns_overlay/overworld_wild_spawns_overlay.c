@@ -30,10 +30,6 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
-#define OW_WILD_MOVEMENT_JUMP_UP_SITE 0x30
-#define OW_WILD_MOVEMENT_JUMP_DOWN_SITE 0x31
-#define OW_WILD_MOVEMENT_JUMP_LEFT_SITE 0x32
-#define OW_WILD_MOVEMENT_JUMP_RIGHT_SITE 0x33
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -85,9 +81,6 @@ typedef struct OverworldWildRolledEncounter {
 typedef struct OverworldWildSpawnPosition {
     int startX;
     int startY;
-    int hopStartX;
-    int hopStartY;
-    u8 hopMovement;
     u8 headbuttTreeType;
 } OverworldWildSpawnPosition;
 
@@ -119,7 +112,6 @@ typedef struct OverworldWildHeadbuttTree {
 typedef struct OverworldWildHeadbuttLandingOffset {
     s8 dx;
     s8 dy;
-    u8 hopMovement;
 } OverworldWildHeadbuttLandingOffset;
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
@@ -140,10 +132,10 @@ static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
 };
 
 static const OverworldWildHeadbuttLandingOffset sHeadbuttLandingOffsets[] = {
-    { 0, 1, OW_WILD_MOVEMENT_JUMP_DOWN_SITE },
-    { 0, -1, OW_WILD_MOVEMENT_JUMP_UP_SITE },
-    { -1, 0, OW_WILD_MOVEMENT_JUMP_LEFT_SITE },
-    { 1, 0, OW_WILD_MOVEMENT_JUMP_RIGHT_SITE },
+    { 0, 1 },
+    { 0, -1 },
+    { -1, 0 },
+    { 1, 0 },
 };
 
 static const OverworldWildEncounterArea sOverworldWildEncounterAreas[] = {
@@ -400,9 +392,6 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
 
         position->startX = x;
         position->startY = y;
-        position->hopStartX = x;
-        position->hopStartY = y;
-        position->hopMovement = 0;
         return TRUE;
     }
 
@@ -460,9 +449,6 @@ static void OverworldWildSpawns_TryPickHeadbuttLanding(FieldSystem *fieldSystem,
         if ((gf_rand() % *candidateCount) == 0) {
             position->startX = treeX;
             position->startY = treeY;
-            position->hopStartX = treeX;
-            position->hopStartY = treeY;
-            position->hopMovement = landing->hopMovement;
             position->headbuttTreeType = treeType;
         }
     }
@@ -632,14 +618,6 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
-static void OverworldWildSpawns_StartHeadbuttHop(LocalMapObject *object, const OverworldWildSpawnPosition *position)
-{
-    object->movementCmd = position->hopMovement;
-    object->movementStep = 0;
-    object->flags &= ~BIT_JUMP_START;
-    object->flags |= BIT_MOVE | BIT_MOVE_START;
-}
-
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
     OverworldWildRolledEncounter encounter;
@@ -683,9 +661,6 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].form = encounter.form;
     state->spawns[slot].level = encounter.level;
     state->spawns[slot].active = TRUE;
-    if (position.hopMovement != 0) {
-        OverworldWildSpawns_StartHeadbuttHop(object, &position);
-    }
 
     return TRUE;
 }
