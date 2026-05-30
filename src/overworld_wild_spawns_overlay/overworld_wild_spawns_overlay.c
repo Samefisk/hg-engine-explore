@@ -22,6 +22,7 @@
 #define OW_WILD_HEADBUTT_SPECIAL_TREE 1
 #define OW_WILD_HEADBUTT_EMPTY_COORD -1
 #define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 10
+#define OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_DESPAWN_DISTANCE 14
@@ -266,6 +267,18 @@ static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
 
 static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildLandEncounterData *landSlots)
 {
+    if ((gf_rand() % 100) < OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT) {
+        switch (gf_rand() % 3) {
+        case 0:
+            return landSlots->morningSpecies;
+        case 1:
+            return landSlots->daySpecies;
+        case 2:
+        default:
+            return landSlots->nightSpecies;
+        }
+    }
+
     switch (GF_RTC_GetTimeOfDayWildParam()) {
     case TIMEOFDAY_WILD_MORN:
         return landSlots->morningSpecies;
