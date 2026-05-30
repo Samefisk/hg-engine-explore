@@ -45,6 +45,8 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
+#define OW_WILD_PAL_PARAM_ENABLE 2
+#define OW_WILD_PAL_PARAM_SHINY 1
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -1022,7 +1024,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         fieldSystem->location->mapId,
         0,
         0,
-        shiny ? 1 : 0);
+        OW_WILD_PAL_PARAM_ENABLE | (shiny ? OW_WILD_PAL_PARAM_SHINY : 0));
     if (object == NULL) {
         return FALSE;
     }
