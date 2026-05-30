@@ -37,6 +37,7 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_SHINY_TEST_RATE 8
+#define OW_WILD_OBJECT_ID_START 0xE0
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -276,10 +277,7 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
         return FALSE;
     }
 
-    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-        && MapObject_GetParam(spawn->object, 0) == spawn->species
-        && MapObject_GetParam(spawn->object, 1) == spawn->form
-        && MapObject_GetParam(spawn->object, 2) == spawn->shiny;
+    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0;
 }
 
 static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
@@ -1012,21 +1010,22 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     shiny = OverworldWildSpawns_RollShiny();
 
-    object = CreateSpecialFieldObject(
+    object = CreateFollowingSpriteFieldObject(
         fieldSystem->mapObjectMan,
+        encounter.species,
+        encounter.form,
+        0,
+        1,
         position.startX,
         position.startY,
-        1,
-        FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
-        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
-        fieldSystem->location->mapId);
+        shiny);
     if (object == NULL) {
         return FALSE;
     }
 
+    MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
+    object->movement = OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
     OverworldWildSpawns_ApplyMovementRange(object);
-    FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
-    MapObject_SetParam(object, shiny, 2);
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;
