@@ -209,6 +209,11 @@ static int OverworldWildSpawns_DistanceFromPlayer(FieldSystem *fieldSystem, int 
     return OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
 }
 
+static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
+{
+    return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
+}
+
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
 {
     if (deleteObject && state->spawns[slot].active && state->spawns[slot].object != NULL) {
@@ -301,7 +306,7 @@ static BOOL OverworldWildSpawns_TryGetSpawnTerrain(FieldSystem *fieldSystem, int
     }
 
     behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    if (behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42) {
+    if (OverworldWildSpawns_IsSurfBehavior(behavior)) {
         *terrain = OW_WILD_SPAWN_TERRAIN_SURF;
     } else if (behavior == OW_WILD_TILE_ENCOUNTER_GRASS
         || behavior == OW_WILD_TILE_LONG_GRASS
@@ -400,90 +405,114 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
     return FALSE;
 }
 
+static u32 OverworldWildSpawns_GetHeadbuttTreeDataOffset(void)
+{
+    return sizeof(OverworldWildHeadbuttHeader)
+        + (OW_WILD_HEADBUTT_NORMAL_SLOTS + OW_WILD_HEADBUTT_SPECIAL_SLOTS) * sizeof(OverworldWildHeadbuttEncounterSlot);
+}
+
+static BOOL OverworldWildSpawns_IsHeadbuttLandingTile(FieldSystem *fieldSystem, int x, int y)
+{
+    u8 behavior;
+
+    if (x < 0 || y < 0) {
+        return FALSE;
+    }
+    if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
+        return FALSE;
+    }
+    if (IsMetatileBlockedAt(fieldSystem, x, y)) {
+        return FALSE;
+    }
+
+    behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
+    if (behavior == OW_WILD_TILE_HEADBUTT || OverworldWildSpawns_IsSurfBehavior(behavior)) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static void OverworldWildSpawns_TryPickHeadbuttLanding(FieldSystem *fieldSystem, int treeX, int treeY, u8 treeType, OverworldWildSpawnPosition *position, u32 *candidateCount)
+{
+    u32 landingStart = gf_rand() % NELEMS(sHeadbuttLandingOffsets);
+    u32 landingAttempt;
+
+    for (landingAttempt = 0; landingAttempt < NELEMS(sHeadbuttLandingOffsets); landingAttempt++) {
+        const OverworldWildHeadbuttLandingOffset *landing =
+            &sHeadbuttLandingOffsets[(landingStart + landingAttempt) % NELEMS(sHeadbuttLandingOffsets)];
+        int spawnX = treeX + landing->dx;
+        int spawnY = treeY + landing->dy;
+        int distance = OverworldWildSpawns_DistanceFromPlayer(fieldSystem, spawnX, spawnY);
+
+        if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
+            continue;
+        }
+        if (!OverworldWildSpawns_IsHeadbuttLandingTile(fieldSystem, spawnX, spawnY)) {
+            continue;
+        }
+
+        (*candidateCount)++;
+        if ((gf_rand() % *candidateCount) == 0) {
+            position->startX = treeX;
+            position->startY = treeY;
+            position->hopMovement = landing->hopMovement;
+            position->headbuttTreeType = treeType;
+        }
+    }
+}
+
 static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
 {
-    int playerX;
-    int playerY;
-    int attempt;
     OverworldWildHeadbuttHeader header;
     u32 treeDataOffset;
+    u32 candidateCount = 0;
+    u32 treeGroup;
 
     if (fieldSystem == NULL || fieldSystem->location == NULL) {
         return FALSE;
     }
-
-    playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
 
     ArchiveDataLoadOfs(&header, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, 0, sizeof(header));
     if (header.normalTreeCount == 0 && header.specialTreeCount == 0) {
         return FALSE;
     }
 
-    treeDataOffset = sizeof(header)
-        + (OW_WILD_HEADBUTT_NORMAL_SLOTS + OW_WILD_HEADBUTT_SPECIAL_SLOTS) * sizeof(OverworldWildHeadbuttEncounterSlot);
+    treeDataOffset = OverworldWildSpawns_GetHeadbuttTreeDataOffset();
 
-    for (attempt = 0; attempt < OW_WILD_SPAWN_ATTEMPTS; attempt++) {
-        OverworldWildHeadbuttTree tree;
-        OverworldWildSpawnTerrain terrain;
-        u32 totalTrees = header.normalTreeCount + header.specialTreeCount;
-        u32 treeIndex = gf_rand() % totalTrees;
+    for (treeGroup = 0; treeGroup < 2; treeGroup++) {
+        u8 treeType = treeGroup == 0 ? OW_WILD_HEADBUTT_NORMAL_TREE : OW_WILD_HEADBUTT_SPECIAL_TREE;
+        u32 treeCount = treeType == OW_WILD_HEADBUTT_NORMAL_TREE ? header.normalTreeCount : header.specialTreeCount;
         u32 treeOffset = treeDataOffset;
-        u8 treeType = OW_WILD_HEADBUTT_NORMAL_TREE;
-        int coordStart = gf_rand() % OW_WILD_HEADBUTT_COORDS_PER_TREE;
-        int coordAttempt;
+        u32 treeIndex;
 
-        if (treeIndex >= header.normalTreeCount) {
-            treeType = OW_WILD_HEADBUTT_SPECIAL_TREE;
-            treeIndex -= header.normalTreeCount;
+        if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
             treeOffset += header.normalTreeCount * sizeof(OverworldWildHeadbuttTree);
         }
-        treeOffset += treeIndex * sizeof(OverworldWildHeadbuttTree);
 
-        ArchiveDataLoadOfs(&tree, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, treeOffset, sizeof(tree));
-        for (coordAttempt = 0; coordAttempt < OW_WILD_HEADBUTT_COORDS_PER_TREE; coordAttempt++) {
-            int coordIndex = (coordStart + coordAttempt) % OW_WILD_HEADBUTT_COORDS_PER_TREE;
-            int treeX = tree.coords[coordIndex].x;
-            int treeY = tree.coords[coordIndex].y;
-            u32 landingStart = gf_rand() % NELEMS(sHeadbuttLandingOffsets);
-            u32 landingAttempt;
-            int distance;
+        for (treeIndex = 0; treeIndex < treeCount; treeIndex++) {
+            OverworldWildHeadbuttTree tree;
+            u32 coordIndex;
 
-            if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
-                continue;
-            }
+            ArchiveDataLoadOfs(&tree, ARC_HEADBUTT_TREES, fieldSystem->location->mapId,
+                treeOffset + treeIndex * sizeof(tree), sizeof(tree));
+            for (coordIndex = 0; coordIndex < OW_WILD_HEADBUTT_COORDS_PER_TREE; coordIndex++) {
+                int treeX = tree.coords[coordIndex].x;
+                int treeY = tree.coords[coordIndex].y;
 
-            distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(treeX - playerX), OverworldWildSpawns_Abs(treeY - playerY));
-            if (distance < OW_WILD_SPAWN_MIN_DISTANCE
-                || distance > OW_WILD_SPAWN_MAX_DISTANCE
-                || GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
-                continue;
-            }
-
-            for (landingAttempt = 0; landingAttempt < NELEMS(sHeadbuttLandingOffsets); landingAttempt++) {
-                const OverworldWildHeadbuttLandingOffset *landing =
-                    &sHeadbuttLandingOffsets[(landingStart + landingAttempt) % NELEMS(sHeadbuttLandingOffsets)];
-                int spawnX = treeX + landing->dx;
-                int spawnY = treeY + landing->dy;
-
-                if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, spawnX, spawnY)) {
+                if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
                     continue;
                 }
-                if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, spawnX, spawnY, &terrain)
-                    || terrain != OW_WILD_SPAWN_TERRAIN_LAND) {
+                if (GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
                     continue;
                 }
 
-                position->startX = treeX;
-                position->startY = treeY;
-                position->hopMovement = landing->hopMovement;
-                position->headbuttTreeType = treeType;
-                return TRUE;
+                OverworldWildSpawns_TryPickHeadbuttLanding(fieldSystem, treeX, treeY, treeType, position, &candidateCount);
             }
         }
     }
 
-    return FALSE;
+    return candidateCount != 0;
 }
 
 static BOOL OverworldWildSpawns_TryRollHeadbuttEncounter(FieldSystem *fieldSystem, u8 treeType, OverworldWildRolledEncounter *encounter)

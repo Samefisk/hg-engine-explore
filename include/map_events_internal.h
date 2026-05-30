@@ -300,6 +300,7 @@ typedef struct FIELD_PLAYER_AVATAR {
     u32 unk3c;
 } FIELD_PLAYER_AVATAR; //size: 0x40
 
+BOOL LONG_CALL IsMetatileBlockedAt(FieldSystem *fieldSystem, int x, int y);
 u8 LONG_CALL GetMetatileBehaviorAt(FieldSystem *fieldSystem, int x, int y);
 int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
