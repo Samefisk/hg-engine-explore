@@ -505,12 +505,6 @@ arm9 form_evo_hook_2 0207641C 0
 0015 BagApp_GetRepelStepCountAddr 021F993C 3
 #endif
 
-#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-arm9 MapObjectMan_Update_WildSpawnTick_hook 0205E574 0
-arm9 MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterObject_hook 0205E5D8 0
-arm9 MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterLoop_hook 0205E5E0 0
-#endif
-
 0012 BattleContext_Main 022486B0 2
 
 arm9 sub_0207B0B0 0207B0B0 2

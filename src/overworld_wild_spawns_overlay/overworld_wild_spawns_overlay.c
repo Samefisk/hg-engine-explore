@@ -119,12 +119,10 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
-static BOOL OverworldWildSpawns_OverlayOnMapObjectTick(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state);
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
-    OverworldWildSpawns_OverlayOnMapObjectTick,
     OverworldWildSpawns_OverlayCleanupPendingBattle,
 };
 
@@ -741,56 +739,24 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
 
 static BOOL OverworldWildSpawns_IsTouchingPlayer(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
 {
-    int playerX;
-    int playerY;
-    int fallbackPlayerX;
-    int fallbackPlayerY;
-    int coords[2][2];
-    int i;
+    int dx;
+    int dy;
 
-    if (!spawn->active || spawn->object == NULL || fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
+    if (!spawn->active || spawn->object == NULL) {
         return FALSE;
     }
 
-    playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
-    fallbackPlayerX = fieldSystem->location != NULL ? fieldSystem->location->x : playerX;
-    fallbackPlayerY = fieldSystem->location != NULL ? fieldSystem->location->z : playerY;
-    coords[0][0] = spawn->object->xPrev;
-    coords[0][1] = spawn->object->yPrev;
-    coords[1][0] = spawn->object->xCurr;
-    coords[1][1] = spawn->object->yCurr;
+    dx = (int)MapObject_GetCurrentX(spawn->object) - GetPlayerXCoord(fieldSystem->playerAvatar);
+    dy = (int)MapObject_GetCurrentY(spawn->object) - GetPlayerYCoord(fieldSystem->playerAvatar);
 
-    for (i = 0; i < 2; i++) {
-        int x = coords[i][0];
-        int y = coords[i][1];
-        int dx = x - playerX;
-        int dy = y - playerY;
-
-        if (dx < 0) {
-            dx = -dx;
-        }
-        if (dy < 0) {
-            dy = -dy;
-        }
-        if ((dx + dy) <= 1) {
-            return TRUE;
-        }
-
-        dx = x - fallbackPlayerX;
-        dy = y - fallbackPlayerY;
-        if (dx < 0) {
-            dx = -dx;
-        }
-        if (dy < 0) {
-            dy = -dy;
-        }
-        if ((dx + dy) <= 1) {
-            return TRUE;
-        }
+    if (dx < 0) {
+        dx = -dx;
+    }
+    if (dy < 0) {
+        dy = -dy;
     }
 
-    return FALSE;
+    return (dx + dy) <= 1;
 }
 
 static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
@@ -863,15 +829,6 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 
     OverworldWildSpawns_TryRefill(state, fieldSystem);
     return FALSE;
-}
-
-static BOOL OverworldWildSpawns_OverlayOnMapObjectTick(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
-{
-    if (!OverworldWildSpawns_UpdateMapState(fieldSystem, state)) {
-        return FALSE;
-    }
-
-    return OverworldWildSpawns_TryStartBattle(state, fieldSystem);
 }
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
