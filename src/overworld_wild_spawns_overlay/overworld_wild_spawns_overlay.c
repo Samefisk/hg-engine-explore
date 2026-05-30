@@ -37,6 +37,8 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_SHINY_TEST_RATE 8
+#define OW_WILD_RENDER_FLAG_FOLLOW_SPRITE ((u32)(9 << 10))
+#define OW_WILD_RENDER_FLAG_FOLLOW_CLEAR ((u32)(6 << 6))
 #define OW_WILD_OBJECT_ID_START 0xE0
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
@@ -1026,6 +1028,9 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     OverworldWildSpawns_ApplyMovementRange(object);
     FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
     if (shiny) {
+        MapObject_SetBits(object, OW_WILD_RENDER_FLAG_FOLLOW_SPRITE);
+        MapObject_ClearBits(object, OW_WILD_RENDER_FLAG_FOLLOW_CLEAR);
+        MapObject_SetFlag29(object, TRUE);
         sub_02069DC8(object, TRUE);
     }
 
