@@ -984,10 +984,13 @@ static BOOL OverworldWildSpawns_RollShiny(void)
     return FALSE;
 }
 
+#ifdef IMPLEMENT_OVERWORLD_WILD_SHINY_SPRITES
 static const u16 sOverworldWildShinySpriteIDs[] = {
 #include "generated_shiny_overworld_sprite_ids.inc"
 };
+#endif
 
+#ifdef IMPLEMENT_OVERWORLD_WILD_SHINY_SPRITES
 static BOOL OverworldWildSpawns_HasShinySpriteID(u32 spriteId)
 {
     u32 i;
@@ -1000,14 +1003,19 @@ static BOOL OverworldWildSpawns_HasShinySpriteID(u32 spriteId)
 
     return FALSE;
 }
+#endif
 
 static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form, BOOL shiny)
 {
     u32 spriteId = FollowingPokemon_GetSpriteID(species, form, 0);
 
+#ifdef IMPLEMENT_OVERWORLD_WILD_SHINY_SPRITES
     if (shiny && OverworldWildSpawns_HasShinySpriteID(spriteId)) {
         return spriteId + OW_WILD_SHINY_TAG_OFFSET;
     }
+#else
+    (void)shiny;
+#endif
 
     return spriteId;
 }
