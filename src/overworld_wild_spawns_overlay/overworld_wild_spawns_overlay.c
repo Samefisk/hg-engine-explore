@@ -21,6 +21,7 @@
 #define OW_WILD_HEADBUTT_NORMAL_TREE 0
 #define OW_WILD_HEADBUTT_SPECIAL_TREE 1
 #define OW_WILD_HEADBUTT_EMPTY_COORD -1
+#define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 10
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_DESPAWN_DISTANCE 14
@@ -691,7 +692,8 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
         return;
     }
 
-    if (!state->spawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active) {
+    if (!state->spawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active
+        && (gf_rand() % 100) < OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT) {
         spawned = OverworldWildSpawns_SpawnOne(
             state,
             fieldSystem,
