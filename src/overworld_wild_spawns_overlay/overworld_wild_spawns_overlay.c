@@ -30,10 +30,10 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
-#define OW_WILD_MOVEMENT_JUMP_UP 0x34
-#define OW_WILD_MOVEMENT_JUMP_DOWN 0x35
-#define OW_WILD_MOVEMENT_JUMP_LEFT 0x36
-#define OW_WILD_MOVEMENT_JUMP_RIGHT 0x37
+#define OW_WILD_MOVEMENT_LEDGE_JUMP_UP 0x38
+#define OW_WILD_MOVEMENT_LEDGE_JUMP_DOWN 0x39
+#define OW_WILD_MOVEMENT_LEDGE_JUMP_LEFT 0x3A
+#define OW_WILD_MOVEMENT_LEDGE_JUMP_RIGHT 0x3B
 #define OW_WILD_TILE_CENTER_FX32 0x8000
 
 typedef enum OverworldWildSpawnTerrain {
@@ -141,10 +141,10 @@ static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
 };
 
 static const OverworldWildHeadbuttLandingOffset sHeadbuttLandingOffsets[] = {
-    { 0, 1, OW_WILD_MOVEMENT_JUMP_DOWN },
-    { 0, -1, OW_WILD_MOVEMENT_JUMP_UP },
-    { -1, 0, OW_WILD_MOVEMENT_JUMP_LEFT },
-    { 1, 0, OW_WILD_MOVEMENT_JUMP_RIGHT },
+    { 0, 1, OW_WILD_MOVEMENT_LEDGE_JUMP_DOWN },
+    { 0, -1, OW_WILD_MOVEMENT_LEDGE_JUMP_UP },
+    { -1, 0, OW_WILD_MOVEMENT_LEDGE_JUMP_LEFT },
+    { 1, 0, OW_WILD_MOVEMENT_LEDGE_JUMP_RIGHT },
 };
 
 static const OverworldWildEncounterArea sOverworldWildEncounterAreas[] = {
