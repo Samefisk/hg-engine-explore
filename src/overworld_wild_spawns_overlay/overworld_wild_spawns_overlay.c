@@ -168,6 +168,8 @@ static const OverworldWildHeadbuttLandingOffset sHeadbuttLandingOffsets[] = {
     { 1, 0 },
 };
 
+static u8 sOverworldWildShinyTestCounter = OW_WILD_SHINY_TEST_RATE - 1;
+
 static const OverworldWildEncounterArea sOverworldWildEncounterAreas[] = {
     {MAP_T20, 0}, {MAP_R29, 1}, {MAP_T21, 2}, {MAP_R30, 3},
     {MAP_R31, 4}, {MAP_T22, 5}, {MAP_D15R0102, 6}, {MAP_D15R0103, 7},
@@ -972,7 +974,13 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
 
 static BOOL OverworldWildSpawns_RollShiny(void)
 {
-    return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
+    sOverworldWildShinyTestCounter++;
+    if (sOverworldWildShinyTestCounter >= OW_WILD_SHINY_TEST_RATE) {
+        sOverworldWildShinyTestCounter = 0;
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
