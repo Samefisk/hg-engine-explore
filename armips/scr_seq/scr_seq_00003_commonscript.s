@@ -88,6 +88,7 @@ scrdef scr_seq_0003_070
 scrdef scr_seq_0003_071
 scrdef scr_seq_0003_072_repels
 scrdef scr_seq_0003_073_autobattle_testing
+scrdef scr_seq_0003_074_overworld_wild_battle
 scrdef_end
 
 scr_seq_0003_002:
@@ -1738,6 +1739,12 @@ scr_seq_0003_073_autobattle_testing:
     npc_msg 120
     closemsg
     trainer_battle 1, 0, 0, 0
+    releaseall
+    end
+
+scr_seq_0003_074_overworld_wild_battle:
+    lockall
+    wild_battle VAR_SPECIAL_x8000, VAR_SPECIAL_x8001, 0
     releaseall
     end
 

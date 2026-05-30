@@ -82,6 +82,12 @@
 // NOTE:  wild double battles are currently unstable and broken.  i would not use them at this time.  see this issue for updates on this problem: https://github.com/BluRosie/hg-engine/issues/86
 // #define IMPLEMENT_WILD_DOUBLE_BATTLES
 
+// IMPLEMENT_OVERWORLD_WILD_SPAWNS enables a prototype visible wild Pokemon
+// encounter layer.  The first pass is intentionally scoped to Route 29.
+#define IMPLEMENT_OVERWORLD_WILD_SPAWNS
+#define OVERWORLD_WILD_SPAWNS_TEST_MAP 33 // MAP_R29
+#define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
+
 // IMPLEMENT_CAPTURE_EXPERIENCE defines whether or not capturing wild pokemon will net experience
 // commenting this line out disables capture experience
 #define IMPLEMENT_CAPTURE_EXPERIENCE

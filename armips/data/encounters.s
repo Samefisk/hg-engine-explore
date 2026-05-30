@@ -114,7 +114,7 @@ pokemon SPECIES_MAGIKARP
 
 encounterdata   1   // Route 29
 
-walkrate 25
+walkrate 0
 surfrate 0
 rocksmashrate 0
 oldrodrate 0

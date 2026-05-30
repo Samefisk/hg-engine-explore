@@ -3,6 +3,8 @@
 #include "../include/constants/item.h"
 #include "../include/bag.h"
 #include "../include/constants/file.h"
+#include "../include/config.h"
+#include "../include/overworld_wild_spawns.h"
 
 
 void Repel_SetCurrentType();
@@ -11,6 +13,12 @@ void Repel_SetCurrentType();
 u16 ALIGN4 CurrentRepelType = 0;
 
 bool32 PlayerStepEvent_RepelCounterDecrement(SaveData *saveData, FieldSystem *fieldSystem) {
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (OverworldWildSpawns_OnPlayerStep(fieldSystem)) {
+        return TRUE;
+    }
+#endif
+
     void *roamerSaveData = EncDataSave_GetSaveDataPtr(saveData);
     u8* repel_addr = SaveData_GetRepelPtr(roamerSaveData);
 

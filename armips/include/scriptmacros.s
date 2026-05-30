@@ -208,6 +208,7 @@ std_fade_end_kimono_girl_music  equ 2068
 std_fade_heal_fade              equ 2069
 std_play_rival_outro_music      equ 2070
 std_fade_end_rival_outro_music  equ 2071
+std_overworld_wild_battle       equ 2074
 
 // Creates a new script context to run the indicated script and wait
 .macro callstd,id
