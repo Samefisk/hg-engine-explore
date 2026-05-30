@@ -765,7 +765,9 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 {
     int i;
 
-    if (state->pendingSpecies != SPECIES_NONE || state->pendingLevel != 0) {
+    if (state->pendingSlot >= 0
+        || state->pendingSpecies != SPECIES_NONE
+        || state->pendingLevel != 0) {
         return FALSE;
     }
 
