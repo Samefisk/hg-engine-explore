@@ -9,6 +9,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/rtc.h"
 #include "../../include/script.h"
+#include "../../include/sound.h"
 
 #define OW_WILD_GRASS_SLOTS 12
 #define OW_WILD_SOUND_SLOTS 2
@@ -32,6 +33,8 @@
 #define OW_WILD_SPAWN_ATTEMPTS 48
 #define OW_WILD_SPAWN_MIN_MON_DISTANCE 3
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
+#define OW_WILD_AMBIENT_CRY_MIN_COOLDOWN_STEPS 24
+#define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 48
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -134,6 +137,7 @@ static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem,
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
+static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state);
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -288,6 +292,49 @@ static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, F
     }
 }
 
+static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state)
+{
+    state->ambientCryCooldown = OW_WILD_AMBIENT_CRY_MIN_COOLDOWN_STEPS
+        + (gf_rand() % OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS);
+}
+
+static void OverworldWildSpawns_TryPlayAmbientCry(OverworldWildSpawnState *state)
+{
+    int i;
+    int activeCount = 0;
+    int chosen;
+
+    if (state->ambientCryCooldown != 0) {
+        state->ambientCryCooldown--;
+        return;
+    }
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (state->spawns[i].active && state->spawns[i].object != NULL) {
+            activeCount++;
+        }
+    }
+
+    if (activeCount == 0) {
+        OverworldWildSpawns_ResetAmbientCryCooldown(state);
+        return;
+    }
+
+    chosen = gf_rand() % activeCount;
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (state->spawns[i].active && state->spawns[i].object != NULL) {
+            if (chosen == 0) {
+                PlayCry(state->spawns[i].species, state->spawns[i].form);
+                OverworldWildSpawns_ResetAmbientCryCooldown(state);
+                return;
+            }
+            chosen--;
+        }
+    }
+
+    OverworldWildSpawns_ResetAmbientCryCooldown(state);
+}
+
 static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
 {
     return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
@@ -318,6 +365,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     state->spawnCooldown = 0;
     state->headbuttSpawnCooldown = OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN;
     state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
+    OverworldWildSpawns_ResetAmbientCryCooldown(state);
     state->battleGraceSteps = 0;
     state->pendingSlot = -1;
 }
@@ -1157,6 +1205,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
         return TRUE;
     }
 
+    OverworldWildSpawns_TryPlayAmbientCry(state);
     OverworldWildSpawns_TryRefill(state, fieldSystem);
     return FALSE;
 }

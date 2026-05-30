@@ -33,6 +33,7 @@ typedef struct OverworldWildSpawnState {
     u8 spawnCooldown;
     u8 headbuttSpawnCooldown;
     u8 fishingSpawnCooldown;
+    u8 ambientCryCooldown;
     u8 battleGraceSteps;
     u16 pendingSpecies;
     u8 pendingLevel;
