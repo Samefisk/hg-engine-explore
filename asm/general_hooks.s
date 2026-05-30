@@ -141,15 +141,15 @@ bx  r2
 
 .global MapObjectMan_Update_WildSpawnTick_hook
 MapObjectMan_Update_WildSpawnTick_hook:
-ldr r0, [sp]
+mov r0, r5
 push {r0-r3}
 bl OverworldWildSpawns_OnMapObjectManTick
 pop {r0-r3}
-ldr r0, [sp]
-ldr r3, =0x0205F1A0 | 1
+mov r0, r5
+mov r4, #0
+ldr r3, =0x0205F168 | 1
 bl bx_r3
-mov r1, r0
-ldr r3, =0x0205E174 | 1
+ldr r3, =0x0205E538 | 1
 bx r3
 
 .pool
