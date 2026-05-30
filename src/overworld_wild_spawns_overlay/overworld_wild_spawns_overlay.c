@@ -30,7 +30,6 @@
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_DESPAWN_DISTANCE 14
 #define OW_WILD_SPAWN_ATTEMPTS 48
-#define OW_WILD_SURF_MAX_SHORE_DISTANCE 3
 #define OW_WILD_SPAWN_MIN_MON_DISTANCE 3
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
 #define OW_WILD_FLEE_GRACE_STEPS 3
@@ -132,7 +131,6 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 } OverworldWildHeadbuttLandingOffset;
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
-static BOOL OverworldWildSpawns_IsSurfTileNearShore(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 
@@ -443,10 +441,6 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(OverworldWildSpawnState *st
         if (terrain != requestedTerrain) {
             continue;
         }
-        if (requestedTerrain == OW_WILD_SPAWN_TERRAIN_SURF
-            && !OverworldWildSpawns_IsSurfTileNearShore(fieldSystem, x, y)) {
-            continue;
-        }
         if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
             continue;
         }
@@ -513,11 +507,14 @@ static BOOL OverworldWildSpawns_HasAdjacentWater(FieldSystem *fieldSystem, int x
     return FALSE;
 }
 
-static BOOL OverworldWildSpawns_IsWalkableShoreTile(FieldSystem *fieldSystem, int x, int y)
+static BOOL OverworldWildSpawns_IsFishingShoreTile(FieldSystem *fieldSystem, int x, int y)
 {
     u8 behavior;
 
     if (x < 0 || y < 0) {
+        return FALSE;
+    }
+    if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
         return FALSE;
     }
     if (IsMetatileBlockedAt(fieldSystem, x, y)) {
@@ -530,34 +527,6 @@ static BOOL OverworldWildSpawns_IsWalkableShoreTile(FieldSystem *fieldSystem, in
     }
 
     return OverworldWildSpawns_HasAdjacentWater(fieldSystem, x, y);
-}
-
-static BOOL OverworldWildSpawns_IsFishingShoreTile(FieldSystem *fieldSystem, int x, int y)
-{
-    if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
-        return FALSE;
-    }
-
-    return OverworldWildSpawns_IsWalkableShoreTile(fieldSystem, x, y);
-}
-
-static BOOL OverworldWildSpawns_IsSurfTileNearShore(FieldSystem *fieldSystem, int x, int y)
-{
-    int dx;
-    int dy;
-
-    for (dy = -OW_WILD_SURF_MAX_SHORE_DISTANCE; dy <= OW_WILD_SURF_MAX_SHORE_DISTANCE; dy++) {
-        for (dx = -OW_WILD_SURF_MAX_SHORE_DISTANCE; dx <= OW_WILD_SURF_MAX_SHORE_DISTANCE; dx++) {
-            if (OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy)) > OW_WILD_SURF_MAX_SHORE_DISTANCE) {
-                continue;
-            }
-            if (OverworldWildSpawns_IsWalkableShoreTile(fieldSystem, x + dx, y + dy)) {
-                return TRUE;
-            }
-        }
-    }
-
-    return FALSE;
 }
 
 static BOOL OverworldWildSpawns_TryPickFishingSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
