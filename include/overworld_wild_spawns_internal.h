@@ -1,0 +1,41 @@
+#ifndef OVERWORLD_WILD_SPAWNS_INTERNAL_H
+#define OVERWORLD_WILD_SPAWNS_INTERNAL_H
+
+#include "overworld_wild_spawns.h"
+#include "constants/maps.h"
+
+#define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR 0x023CD000
+
+#define OW_WILD_GRASS_MAX_SPAWNS 3
+#define OW_WILD_SURF_MAX_SPAWNS 3
+#define OW_WILD_HEADBUTT_MAX_SPAWNS 1
+#define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS)
+#define OW_WILD_SPECIES_MASK 0x7FF
+#define OW_WILD_FORM_SHIFT 11
+
+typedef struct OverworldWildSpawn {
+    LocalMapObject *object;
+    u16 species;
+    u8 form;
+    u8 level;
+    u8 active;
+} OverworldWildSpawn;
+
+typedef struct OverworldWildSpawnState {
+    OverworldWildSpawn spawns[OW_WILD_MAX_SPAWNS];
+    int mapId;
+    u8 justSpawned;
+    u8 spawnCooldown;
+    u16 pendingSpecies;
+    u8 pendingLevel;
+    s8 pendingSlot;
+} OverworldWildSpawnState;
+
+typedef struct OverworldWildSpawnsOverlayEntry {
+    BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+    void (*cleanupPendingBattle)(OverworldWildSpawnState *state);
+} OverworldWildSpawnsOverlayEntry;
+
+#define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)
+
+#endif // OVERWORLD_WILD_SPAWNS_INTERNAL_H
