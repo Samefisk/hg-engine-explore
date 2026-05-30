@@ -89,21 +89,6 @@ scrdef scr_seq_0003_071
 scrdef scr_seq_0003_072_repels
 scrdef scr_seq_0003_073_autobattle_testing
 scrdef scr_seq_0003_074_overworld_wild_battle
-scrdef scr_seq_0003_075_overworld_wild_pidgey_2
-scrdef scr_seq_0003_076_overworld_wild_pidgey_3
-scrdef scr_seq_0003_077_overworld_wild_pidgey_4
-scrdef scr_seq_0003_078_overworld_wild_rattata_2
-scrdef scr_seq_0003_079_overworld_wild_rattata_3
-scrdef scr_seq_0003_080_overworld_wild_rattata_4
-scrdef scr_seq_0003_081_overworld_wild_sentret_2
-scrdef scr_seq_0003_082_overworld_wild_sentret_4
-scrdef scr_seq_0003_083_overworld_wild_hoothoot_2
-scrdef scr_seq_0003_084_overworld_wild_hoothoot_3
-scrdef scr_seq_0003_085_overworld_wild_spinarak_2
-scrdef scr_seq_0003_086_overworld_wild_spinarak_3
-scrdef scr_seq_0003_087_overworld_wild_pichu_2
-scrdef scr_seq_0003_088_overworld_wild_igglybuff_2
-scrdef scr_seq_0003_089_overworld_wild_delibird_3
 scrdef_end
 
 scr_seq_0003_002:
@@ -1759,99 +1744,7 @@ scr_seq_0003_073_autobattle_testing:
 
 scr_seq_0003_074_overworld_wild_battle:
     lockall
-    wild_battle 19, 4, 0
-    releaseall
-    end
-
-scr_seq_0003_075_overworld_wild_pidgey_2:
-    lockall
-    wild_battle 16, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_076_overworld_wild_pidgey_3:
-    lockall
-    wild_battle 16, 3, 0
-    releaseall
-    end
-
-scr_seq_0003_077_overworld_wild_pidgey_4:
-    lockall
-    wild_battle 16, 4, 0
-    releaseall
-    end
-
-scr_seq_0003_078_overworld_wild_rattata_2:
-    lockall
-    wild_battle 19, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_079_overworld_wild_rattata_3:
-    lockall
-    wild_battle 19, 3, 0
-    releaseall
-    end
-
-scr_seq_0003_080_overworld_wild_rattata_4:
-    lockall
-    wild_battle 19, 4, 0
-    releaseall
-    end
-
-scr_seq_0003_081_overworld_wild_sentret_2:
-    lockall
-    wild_battle 161, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_082_overworld_wild_sentret_4:
-    lockall
-    wild_battle 161, 4, 0
-    releaseall
-    end
-
-scr_seq_0003_083_overworld_wild_hoothoot_2:
-    lockall
-    wild_battle 163, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_084_overworld_wild_hoothoot_3:
-    lockall
-    wild_battle 163, 3, 0
-    releaseall
-    end
-
-scr_seq_0003_085_overworld_wild_spinarak_2:
-    lockall
-    wild_battle 167, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_086_overworld_wild_spinarak_3:
-    lockall
-    wild_battle 167, 3, 0
-    releaseall
-    end
-
-scr_seq_0003_087_overworld_wild_pichu_2:
-    lockall
-    wild_battle 172, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_088_overworld_wild_igglybuff_2:
-    lockall
-    wild_battle 174, 2, 0
-    releaseall
-    end
-
-scr_seq_0003_089_overworld_wild_delibird_3:
-    lockall
-    wild_battle 225, 3, 0
-    releaseall
-    end
+    OverworldWildBattle
 
 
 

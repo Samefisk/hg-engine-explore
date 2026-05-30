@@ -23,6 +23,8 @@ typedef struct OverworldWildSpawn {
 static OverworldWildSpawn sOverworldWildSpawns[OW_WILD_MAX_SPAWNS];
 static int sOverworldWildSpawnMap = MAP_NOTHING;
 static u8 sOverworldWildJustSpawned;
+static u16 sOverworldWildPendingSpecies;
+static u8 sOverworldWildPendingLevel;
 
 static const u16 sRoute29MorningSpecies[12] = {
     SPECIES_SENTRET, SPECIES_PIDGEY,  SPECIES_SENTRET, SPECIES_PIDGEY,
@@ -179,59 +181,6 @@ static BOOL OverworldWildSpawns_IsTouchingPlayer(FieldSystem *fieldSystem, const
     return (dx + dy) <= 1;
 }
 
-static u16 OverworldWildSpawns_GetRoute29BattleScript(u16 species, u8 level)
-{
-    switch (species) {
-    case SPECIES_PIDGEY:
-        if (level == 2) {
-            return 2075;
-        }
-        if (level == 4) {
-            return 2077;
-        }
-        return 2076;
-
-    case SPECIES_RATTATA:
-        if (level == 2) {
-            return 2078;
-        }
-        if (level == 3) {
-            return 2079;
-        }
-        return 2080;
-
-    case SPECIES_SENTRET:
-        if (level == 4) {
-            return 2082;
-        }
-        return 2081;
-
-    case SPECIES_HOOTHOOT:
-        if (level == 3) {
-            return 2084;
-        }
-        return 2083;
-
-    case SPECIES_SPINARAK:
-        if (level == 2) {
-            return 2085;
-        }
-        return 2086;
-
-    case SPECIES_PICHU:
-        return 2087;
-
-    case SPECIES_IGGLYBUFF:
-        return 2088;
-
-    case SPECIES_DELIBIRD:
-        return 2089;
-
-    default:
-        return OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
-    }
-}
-
 static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
 {
     int i;
@@ -243,20 +192,34 @@ static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &sOverworldWildSpawns[i])) {
-            u16 script = OverworldWildSpawns_GetRoute29BattleScript(
-                sOverworldWildSpawns[i].species,
-                sOverworldWildSpawns[i].level);
+            sOverworldWildPendingSpecies = sOverworldWildSpawns[i].species | (sOverworldWildSpawns[i].form << 11);
+            sOverworldWildPendingLevel = sOverworldWildSpawns[i].level;
 
             DeleteMapObject(sOverworldWildSpawns[i].object);
             sOverworldWildSpawns[i].active = FALSE;
             sOverworldWildSpawns[i].object = NULL;
 
-            EventSet_Script(fieldSystem, script, NULL);
+            EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
             return TRUE;
         }
     }
 
     return FALSE;
+}
+
+BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
+{
+    if (sOverworldWildPendingSpecies == SPECIES_NONE || sOverworldWildPendingLevel == 0) {
+        return FALSE;
+    }
+
+    *encodedSpecies = sOverworldWildPendingSpecies;
+    *level = sOverworldWildPendingLevel;
+
+    sOverworldWildPendingSpecies = SPECIES_NONE;
+    sOverworldWildPendingLevel = 0;
+
+    return TRUE;
 }
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)

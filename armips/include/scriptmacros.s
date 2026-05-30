@@ -6747,6 +6747,7 @@ FORM_ROCKET_DISGUISE                    equ 1024
 
 // 208 has been reused for new script commands
 .equ NEW_COMMAND_QUEUE_NEW_REPEL, 0
+.equ NEW_COMMAND_OVERWORLD_WILD_BATTLE, 1
 
 .macro RunNewCommand,slot,unk
 DummyTextTrap slot, unk
@@ -6754,6 +6755,10 @@ DummyTextTrap slot, unk
 
 .macro QueueNewRepel
 RunNewCommand NEW_COMMAND_QUEUE_NEW_REPEL, 0x800C
+.endmacro
+
+.macro OverworldWildBattle
+RunNewCommand NEW_COMMAND_OVERWORLD_WILD_BATTLE, 0
 .endmacro
 
 // Dummy
