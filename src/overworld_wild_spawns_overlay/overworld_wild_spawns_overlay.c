@@ -683,6 +683,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         OverworldWildSpawns_SetObjectTilePosition(object, position.hopStartX, position.hopStartY);
         object->movementCmd = position.hopMovement;
         object->movementStep = 0;
+        object->flags &= ~BIT_JUMP_START;
         object->flags |= BIT_MOVE | BIT_MOVE_START;
     }
     MapObject_SetParam(object, encounter.species, 0);
