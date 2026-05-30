@@ -408,7 +408,7 @@ OVERWORLDS_TARGET := $(FILESYS)/a/0/8/1
 OVERWORLDS_DEPENDENCIES_DIR := data/graphics/overworlds
 OVERWORLDS_SHINY_GENERATED_DIR := $(BUILD)/generated_shiny_overworlds
 OVERWORLDS_SHINY_GENERATOR := tools/generate_shiny_overworld_variants.py
-OVERWORLDS_SHINY_GENERATOR_DEPS := $(OVERWORLDS_SHINY_GENERATOR) src/field/overworld_table.c src/field/generated_shiny_overworld_table.inc src/overworld_wild_spawns_overlay/generated_shiny_overworld_sprite_ids.inc
+OVERWORLDS_SHINY_GENERATOR_DEPS := $(OVERWORLDS_SHINY_GENERATOR) armips/data/encounters.s armips/data/headbutt.s data/SpeciesToOWGfx.c src/field/overworld_table.c src/field/generated_shiny_overworld_table.inc src/overworld_wild_spawns_overlay/generated_shiny_overworld_sprite_ids.inc
 
 OVERWORLDS_SRCS := $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.png) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.bin) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.json) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.pal)
 OVERWORLDS_OBJS := $(patsubst $(OVERWORLDS_DEPENDENCIES_DIR)/%.png,$(OVERWORLDS_DIR)/1_%.btx0,$(OVERWORLDS_SRCS)) $(patsubst $(OVERWORLDS_DEPENDENCIES_DIR)/%.bin,$(OVERWORLDS_DIR)/1_%.bin,$(OVERWORLDS_SRCS))
