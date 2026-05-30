@@ -35,6 +35,22 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
 }
 
+void OverworldWildSpawns_OnFieldSystemTick(FieldSystem *fieldSystem)
+{
+    const OverworldWildSpawnsOverlayEntry *entry;
+
+    if (fieldSystem == NULL) {
+        return;
+    }
+
+    entry = OverworldWildSpawns_GetOverlayEntry();
+    if (entry == NULL || entry->onMapObjectTick == NULL) {
+        return;
+    }
+
+    entry->onMapObjectTick(fieldSystem, &sOverworldWildSpawnState);
+}
+
 void OverworldWildSpawns_OnMapObjectManTick(void *mapObjectMan)
 {
     const OverworldWildSpawnsOverlayEntry *entry;
