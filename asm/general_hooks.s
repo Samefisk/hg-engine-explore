@@ -141,15 +141,16 @@ bx  r2
 
 .global MapObjectMan_Update_WildSpawnTick_hook
 MapObjectMan_Update_WildSpawnTick_hook:
-mov r0, r5
-push {r0-r3}
+add r4, #1
+add r5, r7
+cmp r4, r6
+blt MapObjectMan_Update_WildSpawnTick_ReturnLoop
+ldr r0, [sp, #8]
 bl OverworldWildSpawns_OnMapObjectManTick
-pop {r0-r3}
-mov r0, r5
-mov r4, #0
-ldr r3, =0x0205F168 | 1
-bl bx_r3
-ldr r3, =0x0205E538 | 1
+pop {r3-r7, pc}
+
+MapObjectMan_Update_WildSpawnTick_ReturnLoop:
+ldr r3, =0x0205E546 | 1
 bx r3
 
 .pool
