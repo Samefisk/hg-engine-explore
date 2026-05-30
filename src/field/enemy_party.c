@@ -3,7 +3,6 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
-#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -41,6 +40,8 @@ void swap(int *a, int *b) {
 #define ENABLE_WILD_TEST_HARNESS 0
 #define WILD_TEST_SPECIES SPECIES_WIGLETT
 #define WILD_TEST_LEVEL 3
+#define OVERWORLD_WILD_VAR_SPECIES 0x8000
+#define OVERWORLD_WILD_VAR_LEVEL   0x8001
 
 #if ENABLE_WILD_TEST_HARNESS
 static const u16 sWildTestMoves[4] = {
@@ -77,6 +78,40 @@ static void ApplyWildEncounterTestHarness(struct PartyPokemon *encounterPartyPok
 #else
     (void)encounterPartyPokemon;
     (void)species;
+#endif
+}
+
+static BOOL ApplyOverworldWildEncounterOverride(struct PartyPokemon *encounterPartyPokemon, u16 *species, u8 *form)
+{
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    u16 encodedSpecies;
+    u16 level;
+
+    if (gFieldSysPtr == NULL) {
+        return FALSE;
+    }
+
+    encodedSpecies = VarGet(gFieldSysPtr, OVERWORLD_WILD_VAR_SPECIES);
+    level = VarGet(gFieldSysPtr, OVERWORLD_WILD_VAR_LEVEL);
+    if (encodedSpecies == SPECIES_NONE || level == 0) {
+        return FALSE;
+    }
+
+    VarSet(gFieldSysPtr, OVERWORLD_WILD_VAR_SPECIES, SPECIES_NONE);
+    VarSet(gFieldSysPtr, OVERWORLD_WILD_VAR_LEVEL, 0);
+
+    *species = encodedSpecies & 0x7FF;
+    *form = (encodedSpecies >> 11) & 0x1F;
+
+    ZeroMonData(encounterPartyPokemon);
+    PokeParaSet(encounterPartyPokemon, *species, level, 32, FALSE, 0, 0, 0);
+
+    return TRUE;
+#else
+    (void)encounterPartyPokemon;
+    (void)species;
+    (void)form;
+    return FALSE;
 #endif
 }
 
@@ -546,11 +581,9 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
     }
 
     species = GetMonData(encounterPartyPokemon, MON_DATA_SPECIES, NULL);
-#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-    if (OverworldWildSpawns_ApplyPendingBattleMon(encounterPartyPokemon, &species, &form_no)) {
+    if (ApplyOverworldWildEncounterOverride(encounterPartyPokemon, &species, &form_no)) {
         change_form = 1;
     }
-#endif
     ApplyWildEncounterTestHarness(encounterPartyPokemon, &species);
 
     if (space_for_setmondata != 0)

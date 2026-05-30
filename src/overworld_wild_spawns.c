@@ -11,6 +11,8 @@
 #include "../include/script.h"
 
 #define OW_WILD_MAX_SPAWNS 3
+#define OW_WILD_SCRIPT_VAR_SPECIES 0x8000
+#define OW_WILD_SCRIPT_VAR_LEVEL   0x8001
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -21,7 +23,6 @@ typedef struct OverworldWildSpawn {
 } OverworldWildSpawn;
 
 static OverworldWildSpawn sOverworldWildSpawns[OW_WILD_MAX_SPAWNS];
-static OverworldWildSpawn sOverworldWildPendingBattle;
 static int sOverworldWildSpawnMap = MAP_NOTHING;
 static u8 sOverworldWildJustSpawned;
 
@@ -191,9 +192,10 @@ static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &sOverworldWildSpawns[i])) {
-            sOverworldWildPendingBattle = sOverworldWildSpawns[i];
-            sOverworldWildPendingBattle.active = TRUE;
+            u16 encodedSpecies = sOverworldWildSpawns[i].species | (sOverworldWildSpawns[i].form << 11);
 
+            VarSet(fieldSystem, OW_WILD_SCRIPT_VAR_SPECIES, encodedSpecies);
+            VarSet(fieldSystem, OW_WILD_SCRIPT_VAR_LEVEL, sOverworldWildSpawns[i].level);
             DeleteMapObject(sOverworldWildSpawns[i].object);
             sOverworldWildSpawns[i].active = FALSE;
             sOverworldWildSpawns[i].object = NULL;
@@ -204,22 +206,6 @@ static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
     }
 
     return FALSE;
-}
-
-BOOL OverworldWildSpawns_ApplyPendingBattleMon(struct PartyPokemon *pokemon, u16 *species, u8 *form)
-{
-    if (!sOverworldWildPendingBattle.active) {
-        return FALSE;
-    }
-
-    ZeroMonData(pokemon);
-    PokeParaSet(pokemon, sOverworldWildPendingBattle.species, sOverworldWildPendingBattle.level, 32, FALSE, 0, 0, 0);
-
-    *species = sOverworldWildPendingBattle.species;
-    *form = sOverworldWildPendingBattle.form;
-    sOverworldWildPendingBattle.active = FALSE;
-
-    return TRUE;
 }
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
