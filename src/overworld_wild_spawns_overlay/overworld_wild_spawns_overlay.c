@@ -34,6 +34,7 @@
 #define OW_WILD_MOVEMENT_JUMP_DOWN 0x35
 #define OW_WILD_MOVEMENT_JUMP_LEFT 0x36
 #define OW_WILD_MOVEMENT_JUMP_RIGHT 0x37
+#define OW_WILD_TILE_CENTER_FX32 0x8000
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -632,6 +633,18 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
+static void OverworldWildSpawns_SetObjectTilePosition(LocalMapObject *object, int x, int y)
+{
+    object->xInit = x;
+    object->xPrev = x;
+    object->xCurr = x;
+    object->yInit = y;
+    object->yPrev = y;
+    object->yCurr = y;
+    object->posVec[0] = (x << 16) + OW_WILD_TILE_CENTER_FX32;
+    object->posVec[2] = (y << 16) + OW_WILD_TILE_CENTER_FX32;
+}
+
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
     OverworldWildRolledEncounter encounter;
@@ -667,11 +680,10 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     OverworldWildSpawns_ApplyMovementRange(object);
     if (position.hopMovement != 0) {
-        MapObject_SetCurrentX(object, position.hopStartX);
-        MapObject_SetCurrentY(object, position.hopStartY);
+        OverworldWildSpawns_SetObjectTilePosition(object, position.hopStartX, position.hopStartY);
         object->movementCmd = position.hopMovement;
         object->movementStep = 0;
-        object->flags |= MAPOBJECTFLAG_SINGLE_MOVEMENT;
+        object->flags |= BIT_MOVE | BIT_MOVE_START;
     }
     MapObject_SetParam(object, encounter.species, 0);
     MapObject_SetParam(object, encounter.form, 1);
