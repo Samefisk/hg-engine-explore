@@ -34,6 +34,7 @@ typedef struct OverworldWildSpawnState {
 
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+    BOOL (*onMapObjectTick)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
     void (*cleanupPendingBattle)(OverworldWildSpawnState *state);
 } OverworldWildSpawnsOverlayEntry;
 

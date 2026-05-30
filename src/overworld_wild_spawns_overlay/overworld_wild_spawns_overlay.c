@@ -119,10 +119,12 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+static BOOL OverworldWildSpawns_OverlayOnMapObjectTick(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state);
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
+    OverworldWildSpawns_OverlayOnMapObjectTick,
     OverworldWildSpawns_OverlayCleanupPendingBattle,
 };
 
@@ -763,6 +765,10 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 {
     int i;
 
+    if (state->pendingSpecies != SPECIES_NONE || state->pendingLevel != 0) {
+        return FALSE;
+    }
+
     if (state->justSpawned) {
         state->justSpawned = FALSE;
         return FALSE;
@@ -792,7 +798,7 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
     state->pendingSlot = -1;
 }
 
-static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
+static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
 {
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
         if (state->mapId != MAP_NOTHING) {
@@ -807,6 +813,15 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
         state->mapId = fieldSystem->location->mapId;
     }
 
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
+{
+    if (!OverworldWildSpawns_UpdateMapState(fieldSystem, state)) {
+        return FALSE;
+    }
+
     OverworldWildSpawns_DespawnFarMons(state, fieldSystem);
     if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
         return TRUE;
@@ -814,6 +829,15 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 
     OverworldWildSpawns_TryRefill(state, fieldSystem);
     return FALSE;
+}
+
+static BOOL OverworldWildSpawns_OverlayOnMapObjectTick(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
+{
+    if (!OverworldWildSpawns_UpdateMapState(fieldSystem, state)) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_TryStartBattle(state, fieldSystem);
 }
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS

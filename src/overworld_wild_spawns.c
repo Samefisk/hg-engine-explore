@@ -6,6 +6,7 @@
 
 #include "../include/constants/file.h"
 #include "../include/constants/species.h"
+#include "../include/map_events_internal.h"
 #include "../include/overlay.h"
 
 static OverworldWildSpawnState sOverworldWildSpawnState = {
@@ -32,6 +33,23 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     }
 
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
+}
+
+void OverworldWildSpawns_OnMapObjectManTick(void *mapObjectMan)
+{
+    const OverworldWildSpawnsOverlayEntry *entry;
+    MapObjectMan *manager = (MapObjectMan *)mapObjectMan;
+
+    if (manager == NULL || manager->fsys == NULL) {
+        return;
+    }
+
+    entry = OverworldWildSpawns_GetOverlayEntry();
+    if (entry == NULL || entry->onMapObjectTick == NULL) {
+        return;
+    }
+
+    entry->onMapObjectTick(manager->fsys, &sOverworldWildSpawnState);
 }
 
 BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)

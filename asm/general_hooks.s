@@ -138,3 +138,18 @@ ldr r2, =0x021FF662 | 1
 bx  r2
 
 .pool
+
+.global MapObjectMan_Update_WildSpawnTick_hook
+MapObjectMan_Update_WildSpawnTick_hook:
+ldr r0, [sp]
+push {r0-r3}
+bl OverworldWildSpawns_OnMapObjectManTick
+pop {r0-r3}
+ldr r0, [sp]
+ldr r3, =0x0205F1A0 | 1
+bl bx_r3
+mov r1, r0
+ldr r3, =0x0205E174 | 1
+bx r3
+
+.pool
