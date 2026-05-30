@@ -15,6 +15,12 @@
 #define OW_WILD_SURF_SLOTS 5
 #define OW_WILD_ROCK_SMASH_SLOTS 2
 #define OW_WILD_FISH_SLOTS 5
+#define OW_WILD_HEADBUTT_NORMAL_SLOTS 12
+#define OW_WILD_HEADBUTT_SPECIAL_SLOTS 6
+#define OW_WILD_HEADBUTT_COORDS_PER_TREE 6
+#define OW_WILD_HEADBUTT_NORMAL_TREE 0
+#define OW_WILD_HEADBUTT_SPECIAL_TREE 1
+#define OW_WILD_HEADBUTT_EMPTY_COORD -1
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_DESPAWN_DISTANCE 14
@@ -77,12 +83,33 @@ typedef struct OverworldWildSpawnPosition {
     int startX;
     int startY;
     u8 hopMovement;
+    u8 headbuttTreeType;
 } OverworldWildSpawnPosition;
 
 typedef struct OverworldWildEncounterArea {
     u16 mapId;
     u16 encounterDataId;
 } OverworldWildEncounterArea;
+
+typedef struct OverworldWildHeadbuttHeader {
+    u16 normalTreeCount;
+    u16 specialTreeCount;
+} OverworldWildHeadbuttHeader;
+
+typedef struct OverworldWildHeadbuttEncounterSlot {
+    u16 species;
+    u8 minLevel;
+    u8 maxLevel;
+} OverworldWildHeadbuttEncounterSlot;
+
+typedef struct OverworldWildHeadbuttCoord {
+    s16 x;
+    s16 y;
+} OverworldWildHeadbuttCoord;
+
+typedef struct OverworldWildHeadbuttTree {
+    OverworldWildHeadbuttCoord coords[OW_WILD_HEADBUTT_COORDS_PER_TREE];
+} OverworldWildHeadbuttTree;
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
@@ -359,35 +386,118 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
 
 static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
 {
-    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    int playerX;
+    int playerY;
     int attempt;
-    OverworldWildSpawnTerrain terrain;
+    OverworldWildHeadbuttHeader header;
+    u32 treeDataOffset;
+
+    if (fieldSystem == NULL || fieldSystem->location == NULL) {
+        return FALSE;
+    }
+
+    playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+
+    ArchiveDataLoadOfs(&header, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, 0, sizeof(header));
+    if (header.normalTreeCount == 0 && header.specialTreeCount == 0) {
+        return FALSE;
+    }
+
+    treeDataOffset = sizeof(header)
+        + (OW_WILD_HEADBUTT_NORMAL_SLOTS + OW_WILD_HEADBUTT_SPECIAL_SLOTS) * sizeof(OverworldWildHeadbuttEncounterSlot);
 
     for (attempt = 0; attempt < OW_WILD_SPAWN_ATTEMPTS; attempt++) {
-        int dx = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
-        int dy = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
-        int treeX = playerX + dx;
-        int treeY = playerY + dy;
-        int distance;
+        OverworldWildHeadbuttTree tree;
+        OverworldWildSpawnTerrain terrain;
+        u32 totalTrees = header.normalTreeCount + header.specialTreeCount;
+        u32 treeIndex = gf_rand() % totalTrees;
+        u32 treeOffset = treeDataOffset;
+        u8 treeType = OW_WILD_HEADBUTT_NORMAL_TREE;
+        int coordStart = gf_rand() % OW_WILD_HEADBUTT_COORDS_PER_TREE;
+        int coordAttempt;
 
-        distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(treeX - playerX), OverworldWildSpawns_Abs(treeY - playerY));
-        if (distance < OW_WILD_SPAWN_MIN_DISTANCE
-            || distance > OW_WILD_SPAWN_MAX_DISTANCE
-            || GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
-            continue;
+        if (treeIndex >= header.normalTreeCount) {
+            treeType = OW_WILD_HEADBUTT_SPECIAL_TREE;
+            treeIndex -= header.normalTreeCount;
+            treeOffset += header.normalTreeCount * sizeof(OverworldWildHeadbuttTree);
         }
-        position->startX = treeX;
-        position->startY = treeY++;
-        if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, treeX, treeY)) {
-            continue;
-        }
-        if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, treeX, treeY, &terrain) || terrain != OW_WILD_SPAWN_TERRAIN_LAND) {
-            continue;
-        }
+        treeOffset += treeIndex * sizeof(OverworldWildHeadbuttTree);
 
-        position->hopMovement = OW_WILD_MOVEMENT_JUMP_DOWN;
-        return TRUE;
+        ArchiveDataLoadOfs(&tree, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, treeOffset, sizeof(tree));
+        for (coordAttempt = 0; coordAttempt < OW_WILD_HEADBUTT_COORDS_PER_TREE; coordAttempt++) {
+            int coordIndex = (coordStart + coordAttempt) % OW_WILD_HEADBUTT_COORDS_PER_TREE;
+            int treeX = tree.coords[coordIndex].x;
+            int treeY = tree.coords[coordIndex].y;
+            int spawnY = treeY + 1;
+            int distance;
+
+            if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
+                continue;
+            }
+
+            distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(treeX - playerX), OverworldWildSpawns_Abs(treeY - playerY));
+            if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+                || distance > OW_WILD_SPAWN_MAX_DISTANCE
+                || GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
+                continue;
+            }
+            if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, treeX, spawnY)) {
+                continue;
+            }
+            if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, treeX, spawnY, &terrain)
+                || terrain != OW_WILD_SPAWN_TERRAIN_LAND) {
+                continue;
+            }
+
+            position->startX = treeX;
+            position->startY = spawnY;
+            position->hopMovement = OW_WILD_MOVEMENT_JUMP_DOWN;
+            position->headbuttTreeType = treeType;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollHeadbuttEncounter(FieldSystem *fieldSystem, u8 treeType, OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+    u32 slotOffset = sizeof(OverworldWildHeadbuttHeader);
+    u8 slotCount = OW_WILD_HEADBUTT_NORMAL_SLOTS;
+
+    if (fieldSystem == NULL || fieldSystem->location == NULL) {
+        return FALSE;
+    }
+
+    if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
+        slotOffset += OW_WILD_HEADBUTT_NORMAL_SLOTS * sizeof(OverworldWildHeadbuttEncounterSlot);
+        slotCount = OW_WILD_HEADBUTT_SPECIAL_SLOTS;
+    }
+
+    for (attempts = 0; attempts < slotCount; attempts++) {
+        OverworldWildHeadbuttEncounterSlot slot;
+        u32 slotIndex = gf_rand() % slotCount;
+        u16 species;
+
+        ArchiveDataLoadOfs(&slot, ARC_HEADBUTT_TREES, fieldSystem->location->mapId,
+            slotOffset + slotIndex * sizeof(slot), sizeof(slot));
+
+        species = slot.species & OW_WILD_SPECIES_MASK;
+        if (species != SPECIES_NONE && slot.minLevel != 0) {
+            encounter->species = species;
+            encounter->form = slot.species >> OW_WILD_FORM_SHIFT;
+            encounter->level = slot.minLevel;
+            if (slot.maxLevel > slot.minLevel) {
+                encounter->level += gf_rand() % (slot.maxLevel - slot.minLevel + 1);
+            }
+            return TRUE;
+        }
+    }
+
+    if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
+        return OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, OW_WILD_HEADBUTT_NORMAL_TREE, encounter);
     }
 
     return FALSE;
@@ -475,11 +585,15 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         if (!OverworldWildSpawns_TryPickHeadbuttSpawnPosition(fieldSystem, &position)) {
             return FALSE;
         }
+        if (!OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, position.headbuttTreeType, &encounter)) {
+            return FALSE;
+        }
     } else if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, terrain, &position)) {
         return FALSE;
-    }
-    if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
-        return FALSE;
+    } else {
+        if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
+            return FALSE;
+        }
     }
 
     object = CreateSpecialFieldObject(

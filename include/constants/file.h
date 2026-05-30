@@ -27,6 +27,7 @@
 #define ARC_ICON_FORM_CHANGE_SPA 208
 #define ARC_DEX_LISTS 216
 #define ARC_EGG_MOVES 231
+#define ARC_HEADBUTT_TREES 254
 
 
 //ARC_BATTLE_GFX file indexes
