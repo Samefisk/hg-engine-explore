@@ -26,7 +26,6 @@
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
 #define OW_WILD_MOVE_WANDER_VERTICAL 4
 #define OW_WILD_MOVE_WANDER_HORIZONTAL 5
-#define OW_WILD_MOVE_CHASE_PLAYER 48
 #define OW_WILD_MOVE_SKITTISH_RUN 20
 
 typedef struct OverworldWildSpawn {
@@ -273,7 +272,7 @@ static u8 OverworldWildSpawns_ChooseMovement(u16 species)
     switch (species) {
     case SPECIES_RATTATA:
     case SPECIES_SPINARAK:
-        return personality < 65 ? OW_WILD_MOVE_CHASE_PLAYER : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
+        return personality < 65 ? OW_WILD_MOVE_WANDER_ALL_DIRECTIONS : OW_WILD_MOVE_SKITTISH_RUN;
     case SPECIES_PIDGEY:
     case SPECIES_HOOTHOOT:
         return personality < 70 ? OW_WILD_MOVE_SKITTISH_RUN : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
@@ -298,10 +297,6 @@ static u8 OverworldWildSpawns_ChooseMovement(u16 species)
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object, u8 movement)
 {
     switch (movement) {
-    case OW_WILD_MOVE_CHASE_PLAYER:
-        MapObject_SetXRange(object, -1);
-        MapObject_SetYRange(object, -1);
-        break;
     case OW_WILD_MOVE_SKITTISH_RUN:
     case OW_WILD_MOVE_WANDER_ALL_DIRECTIONS:
         MapObject_SetXRange(object, 2);
