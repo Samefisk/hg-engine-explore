@@ -22,6 +22,7 @@
 #define OW_WILD_HEADBUTT_SPECIAL_TREE 1
 #define OW_WILD_HEADBUTT_EMPTY_COORD -1
 #define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 10
+#define OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN 10
 #define OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
@@ -233,6 +234,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
 
     state->justSpawned = FALSE;
     state->spawnCooldown = 0;
+    state->headbuttSpawnCooldown = 0;
     state->pendingSlot = -1;
 }
 
@@ -699,19 +701,26 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
 {
     int slot;
     BOOL spawned = FALSE;
+    int headbuttSlot = OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS;
 
     if (state->spawnCooldown != 0) {
         state->spawnCooldown--;
         return;
     }
 
-    if (!state->spawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active
-        && (gf_rand() % 100) < OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT) {
-        spawned = OverworldWildSpawns_SpawnOne(
-            state,
-            fieldSystem,
-            OW_WILD_SPAWN_TERRAIN_HEADBUTT,
-            OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS);
+    if (!state->spawns[headbuttSlot].active) {
+        if (state->headbuttSpawnCooldown != 0) {
+            state->headbuttSpawnCooldown--;
+        } else {
+            state->headbuttSpawnCooldown = OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN;
+            if ((gf_rand() % 100) < OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT) {
+                spawned = OverworldWildSpawns_SpawnOne(
+                    state,
+                    fieldSystem,
+                    OW_WILD_SPAWN_TERRAIN_HEADBUTT,
+                    headbuttSlot);
+            }
+        }
     }
 
     if (!spawned && OverworldWildSpawns_TryGetFreeSlot(state, 0, OW_WILD_GRASS_MAX_SPAWNS, &slot)) {

@@ -26,6 +26,7 @@ typedef struct OverworldWildSpawnState {
     int mapId;
     u8 justSpawned;
     u8 spawnCooldown;
+    u8 headbuttSpawnCooldown;
     u16 pendingSpecies;
     u8 pendingLevel;
     s8 pendingSlot;
