@@ -3,6 +3,7 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
+#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -545,6 +546,11 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
     }
 
     species = GetMonData(encounterPartyPokemon, MON_DATA_SPECIES, NULL);
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (OverworldWildSpawns_ApplyPendingBattleMon(encounterPartyPokemon, &species, &form_no)) {
+        change_form = 1;
+    }
+#endif
     ApplyWildEncounterTestHarness(encounterPartyPokemon, &species);
 
     if (space_for_setmondata != 0)

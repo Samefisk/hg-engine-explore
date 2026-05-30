@@ -1744,7 +1744,8 @@ scr_seq_0003_073_autobattle_testing:
 
 scr_seq_0003_074_overworld_wild_battle:
     lockall
-    wild_battle VAR_SPECIAL_x8000, VAR_SPECIAL_x8001, 0
+    // Placeholder; AddWildPartyPokemon replaces it with the pending overworld spawn.
+    wild_battle 19, 2, 0
     releaseall
     end
 
