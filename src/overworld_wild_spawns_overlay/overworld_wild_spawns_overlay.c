@@ -316,7 +316,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
 
     state->justSpawned = FALSE;
     state->spawnCooldown = 0;
-    state->headbuttSpawnCooldown = 0;
+    state->headbuttSpawnCooldown = OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN;
     state->fishingSpawnCooldown = 0;
     state->battleGraceSteps = 0;
     state->pendingSlot = -1;
