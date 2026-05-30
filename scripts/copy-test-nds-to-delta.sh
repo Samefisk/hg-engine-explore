@@ -35,5 +35,25 @@ else
 fi
 
 mkdir -p "$dest_dir"
-cp -f "$source_rom" "$dest_dir/test.nds"
-echo "Copied test.nds to $dest_dir/test.nds"
+
+counter_file="$dest_dir/.test-nds-sync-counter"
+last_number=0
+if [[ -f "$counter_file" ]]; then
+  last_number="$(tr -cd '0-9' < "$counter_file")"
+  if [[ -z "$last_number" ]]; then
+    last_number=0
+  fi
+fi
+next_number=$((last_number + 1))
+
+rm -f "$dest_dir/test.nds"
+for old_rom in "$dest_dir"/test[0-9]*.nds; do
+  if [[ -e "$old_rom" ]]; then
+    rm -f "$old_rom"
+  fi
+done
+
+dest_rom="$dest_dir/test${next_number}.nds"
+cp -f "$source_rom" "$dest_rom"
+printf '%s\n' "$next_number" > "$counter_file"
+echo "Copied test.nds to $dest_rom"
