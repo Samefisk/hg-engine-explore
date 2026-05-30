@@ -11,22 +11,18 @@
 #include "../include/rtc.h"
 #include "../include/script.h"
 
-#define OW_WILD_MAX_SPAWNS 3
+#define OW_WILD_MAX_SPAWNS 4
 #define OW_WILD_GRASS_SLOTS 12
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
-#define OW_WILD_DESPAWN_DISTANCE 10
+#define OW_WILD_DESPAWN_DISTANCE 14
 #define OW_WILD_SPAWN_ATTEMPTS 48
 #define OW_WILD_REFILL_COOLDOWN_STEPS 2
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
-#define OW_WILD_MOVE_IDLE_LOOK_AROUND 2
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
-#define OW_WILD_MOVE_WANDER_VERTICAL 4
-#define OW_WILD_MOVE_WANDER_HORIZONTAL 5
-#define OW_WILD_MOVE_SKITTISH_RUN 20
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -265,56 +261,10 @@ static BOOL OverworldWildSpawns_TryRollGrassEncounter(FieldSystem *fieldSystem, 
     return FALSE;
 }
 
-static u8 OverworldWildSpawns_ChooseMovement(u16 species)
+static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
-    u32 personality = gf_rand() % 100;
-
-    switch (species) {
-    case SPECIES_RATTATA:
-    case SPECIES_SPINARAK:
-        return personality < 65 ? OW_WILD_MOVE_WANDER_ALL_DIRECTIONS : OW_WILD_MOVE_SKITTISH_RUN;
-    case SPECIES_PIDGEY:
-    case SPECIES_HOOTHOOT:
-        return personality < 70 ? OW_WILD_MOVE_SKITTISH_RUN : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
-    case SPECIES_SENTRET:
-    case SPECIES_PICHU:
-    case SPECIES_IGGLYBUFF:
-        return personality < 45 ? OW_WILD_MOVE_IDLE_LOOK_AROUND : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
-    default:
-        if (personality < 20) {
-            return OW_WILD_MOVE_IDLE_LOOK_AROUND;
-        }
-        if (personality < 45) {
-            return OW_WILD_MOVE_WANDER_HORIZONTAL;
-        }
-        if (personality < 70) {
-            return OW_WILD_MOVE_WANDER_VERTICAL;
-        }
-        return OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
-    }
-}
-
-static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object, u8 movement)
-{
-    switch (movement) {
-    case OW_WILD_MOVE_SKITTISH_RUN:
-    case OW_WILD_MOVE_WANDER_ALL_DIRECTIONS:
-        MapObject_SetXRange(object, 2);
-        MapObject_SetYRange(object, 2);
-        break;
-    case OW_WILD_MOVE_WANDER_HORIZONTAL:
-        MapObject_SetXRange(object, 3);
-        MapObject_SetYRange(object, 0);
-        break;
-    case OW_WILD_MOVE_WANDER_VERTICAL:
-        MapObject_SetXRange(object, 0);
-        MapObject_SetYRange(object, 3);
-        break;
-    default:
-        MapObject_SetXRange(object, 0);
-        MapObject_SetYRange(object, 0);
-        break;
-    }
+    MapObject_SetXRange(object, 2);
+    MapObject_SetYRange(object, 2);
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
@@ -322,7 +272,6 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnPosition position;
     LocalMapObject *object;
-    u8 movement;
 
     if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, &position)) {
         return FALSE;
@@ -331,20 +280,19 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
         return FALSE;
     }
 
-    movement = OverworldWildSpawns_ChooseMovement(encounter.species);
     object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
         position.x,
         position.y,
         1,
         FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
-        movement,
+        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
         fieldSystem->location->mapId);
     if (object == NULL) {
         return FALSE;
     }
 
-    OverworldWildSpawns_ApplyMovementRange(object, movement);
+    OverworldWildSpawns_ApplyMovementRange(object);
     MapObject_SetParam(object, encounter.species, 0);
     MapObject_SetParam(object, encounter.form, 1);
     MapObject_SetParam(object, encounter.level, 2);
