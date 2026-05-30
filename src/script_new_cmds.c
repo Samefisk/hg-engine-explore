@@ -8,6 +8,7 @@
 
 #define SCRIPT_NEW_CMD_REPEL_USE    0
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE 1
+#define SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP 2
 
 #define SCRIPT_NEW_CMD_MAX          256
 
@@ -16,6 +17,9 @@ static u8 sOverworldWildBattleScript[] = {
     0x13, 0x00, // species fallback: Rattata
     0x04, 0x00, // level fallback: 4
     0x00,       // shiny
+    0xD0, 0x00, // RunNewCommand
+    SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP,
+    0x00, 0x00,
     0x61, 0x00, // releaseall
     0x02, 0x00, // end
 };
@@ -52,6 +56,12 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
 
         case SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE:
             Script_QueueOverworldWildBattle(ctx);
+            break;
+
+        case SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP:
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+            OverworldWildSpawns_CleanupPendingBattle();
+#endif
             break;
 
         default: break;

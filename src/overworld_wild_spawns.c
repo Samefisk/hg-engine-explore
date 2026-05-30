@@ -22,6 +22,12 @@
 #define OW_WILD_REFILL_COOLDOWN_STEPS 2
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
+#define OW_WILD_MOVE_IDLE_LOOK_AROUND 2
+#define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
+#define OW_WILD_MOVE_WANDER_VERTICAL 4
+#define OW_WILD_MOVE_WANDER_HORIZONTAL 5
+#define OW_WILD_MOVE_CHASE_PLAYER 48
+#define OW_WILD_MOVE_SKITTISH_RUN 20
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -57,6 +63,7 @@ static u8 sOverworldWildJustSpawned;
 static u8 sOverworldWildSpawnCooldown;
 static u16 sOverworldWildPendingSpecies;
 static u8 sOverworldWildPendingLevel;
+static s8 sOverworldWildPendingSlot = -1;
 
 static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
     20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
@@ -103,6 +110,7 @@ static void OverworldWildSpawns_Clear(BOOL deleteObjects)
 
     sOverworldWildJustSpawned = FALSE;
     sOverworldWildSpawnCooldown = 0;
+    sOverworldWildPendingSlot = -1;
 }
 
 static BOOL OverworldWildSpawns_IsTestMap(FieldSystem *fieldSystem)
@@ -258,11 +266,68 @@ static BOOL OverworldWildSpawns_TryRollGrassEncounter(FieldSystem *fieldSystem, 
     return FALSE;
 }
 
+static u8 OverworldWildSpawns_ChooseMovement(u16 species)
+{
+    u32 personality = gf_rand() % 100;
+
+    switch (species) {
+    case SPECIES_RATTATA:
+    case SPECIES_SPINARAK:
+        return personality < 65 ? OW_WILD_MOVE_CHASE_PLAYER : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
+    case SPECIES_PIDGEY:
+    case SPECIES_HOOTHOOT:
+        return personality < 70 ? OW_WILD_MOVE_SKITTISH_RUN : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
+    case SPECIES_SENTRET:
+    case SPECIES_PICHU:
+    case SPECIES_IGGLYBUFF:
+        return personality < 45 ? OW_WILD_MOVE_IDLE_LOOK_AROUND : OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
+    default:
+        if (personality < 20) {
+            return OW_WILD_MOVE_IDLE_LOOK_AROUND;
+        }
+        if (personality < 45) {
+            return OW_WILD_MOVE_WANDER_HORIZONTAL;
+        }
+        if (personality < 70) {
+            return OW_WILD_MOVE_WANDER_VERTICAL;
+        }
+        return OW_WILD_MOVE_WANDER_ALL_DIRECTIONS;
+    }
+}
+
+static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object, u8 movement)
+{
+    switch (movement) {
+    case OW_WILD_MOVE_CHASE_PLAYER:
+        MapObject_SetXRange(object, -1);
+        MapObject_SetYRange(object, -1);
+        break;
+    case OW_WILD_MOVE_SKITTISH_RUN:
+    case OW_WILD_MOVE_WANDER_ALL_DIRECTIONS:
+        MapObject_SetXRange(object, 2);
+        MapObject_SetYRange(object, 2);
+        break;
+    case OW_WILD_MOVE_WANDER_HORIZONTAL:
+        MapObject_SetXRange(object, 3);
+        MapObject_SetYRange(object, 0);
+        break;
+    case OW_WILD_MOVE_WANDER_VERTICAL:
+        MapObject_SetXRange(object, 0);
+        MapObject_SetYRange(object, 3);
+        break;
+    default:
+        MapObject_SetXRange(object, 0);
+        MapObject_SetYRange(object, 0);
+        break;
+    }
+}
+
 static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
 {
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnPosition position;
     LocalMapObject *object;
+    u8 movement;
 
     if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, &position)) {
         return FALSE;
@@ -271,18 +336,20 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
         return FALSE;
     }
 
+    movement = OverworldWildSpawns_ChooseMovement(encounter.species);
     object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
         position.x,
         position.y,
         1,
         FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
-        0,
+        movement,
         fieldSystem->location->mapId);
     if (object == NULL) {
         return FALSE;
     }
 
+    OverworldWildSpawns_ApplyMovementRange(object, movement);
     MapObject_SetParam(object, encounter.species, 0);
     MapObject_SetParam(object, encounter.form, 1);
     MapObject_SetParam(object, encounter.level, 2);
@@ -367,8 +434,7 @@ static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &sOverworldWildSpawns[i])) {
             sOverworldWildPendingSpecies = sOverworldWildSpawns[i].species | (sOverworldWildSpawns[i].form << 11);
             sOverworldWildPendingLevel = sOverworldWildSpawns[i].level;
-
-            OverworldWildSpawns_ClearSlot(i, TRUE);
+            sOverworldWildPendingSlot = i;
             sOverworldWildSpawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
             EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
@@ -377,6 +443,15 @@ static BOOL OverworldWildSpawns_TryStartBattle(FieldSystem *fieldSystem)
     }
 
     return FALSE;
+}
+
+void OverworldWildSpawns_CleanupPendingBattle(void)
+{
+    if (sOverworldWildPendingSlot >= 0 && sOverworldWildPendingSlot < OW_WILD_MAX_SPAWNS) {
+        OverworldWildSpawns_ClearSlot(sOverworldWildPendingSlot, TRUE);
+    }
+
+    sOverworldWildPendingSlot = -1;
 }
 
 BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
