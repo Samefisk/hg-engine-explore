@@ -35,6 +35,9 @@
 #define OW_WILD_MOVEMENT_LEDGE_JUMP_LEFT 0x3A
 #define OW_WILD_MOVEMENT_LEDGE_JUMP_RIGHT 0x3B
 #define OW_WILD_TILE_CENTER_FX32 0x8000
+#define OW_WILD_TILE_FX32 0x10000
+#define OW_WILD_HEADBUTT_HOP_STEPS 4
+#define OW_WILD_HEADBUTT_HOP_HEIGHT_FX32 0x8000
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -225,9 +228,15 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
 
     state->spawns[slot].object = NULL;
     state->spawns[slot].species = SPECIES_NONE;
+    state->spawns[slot].hopStartX = 0;
+    state->spawns[slot].hopStartY = 0;
+    state->spawns[slot].hopTargetX = 0;
+    state->spawns[slot].hopTargetY = 0;
     state->spawns[slot].form = 0;
     state->spawns[slot].level = 0;
     state->spawns[slot].active = FALSE;
+    state->spawns[slot].hopStep = 0;
+    state->spawns[slot].hopSteps = 0;
 }
 
 static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL deleteObjects)
@@ -642,7 +651,58 @@ static void OverworldWildSpawns_SetObjectTilePosition(LocalMapObject *object, in
     object->yPrev = y;
     object->yCurr = y;
     object->posVec[0] = (x << 16) + OW_WILD_TILE_CENTER_FX32;
+    object->posVec[1] = 0;
     object->posVec[2] = (y << 16) + OW_WILD_TILE_CENTER_FX32;
+}
+
+static void OverworldWildSpawns_SetObjectHopFrame(OverworldWildSpawn *spawn)
+{
+    LocalMapObject *object = spawn->object;
+    int step = spawn->hopStep;
+    int steps = spawn->hopSteps;
+    int xDelta = spawn->hopTargetX - spawn->hopStartX;
+    int yDelta = spawn->hopTargetY - spawn->hopStartY;
+    int height = (OW_WILD_HEADBUTT_HOP_HEIGHT_FX32 * 4 * step * (steps - step)) / (steps * steps);
+
+    object->posVec[0] = (spawn->hopStartX << 16) + OW_WILD_TILE_CENTER_FX32 + ((xDelta * OW_WILD_TILE_FX32 * step) / steps);
+    object->posVec[1] = height;
+    object->posVec[2] = (spawn->hopStartY << 16) + OW_WILD_TILE_CENTER_FX32 + ((yDelta * OW_WILD_TILE_FX32 * step) / steps);
+}
+
+static void OverworldWildSpawns_StartHeadbuttHop(OverworldWildSpawn *spawn, LocalMapObject *object, const OverworldWildSpawnPosition *position)
+{
+    MapObject_PauseMovement(object);
+    OverworldWildSpawns_SetObjectTilePosition(object, position->hopStartX, position->hopStartY);
+
+    spawn->hopStartX = position->hopStartX;
+    spawn->hopStartY = position->hopStartY;
+    spawn->hopTargetX = position->startX;
+    spawn->hopTargetY = position->startY;
+    spawn->hopStep = 0;
+    spawn->hopSteps = OW_WILD_HEADBUTT_HOP_STEPS;
+}
+
+static void OverworldWildSpawns_UpdateHeadbuttHops(OverworldWildSpawnState *state)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        OverworldWildSpawn *spawn = &state->spawns[i];
+
+        if (!spawn->active || spawn->object == NULL || spawn->hopSteps == 0) {
+            continue;
+        }
+
+        spawn->hopStep++;
+        if (spawn->hopStep >= spawn->hopSteps) {
+            OverworldWildSpawns_SetObjectTilePosition(spawn->object, spawn->hopTargetX, spawn->hopTargetY);
+            spawn->hopStep = 0;
+            spawn->hopSteps = 0;
+            MapObject_UnpauseMovement(spawn->object);
+        } else {
+            OverworldWildSpawns_SetObjectHopFrame(spawn);
+        }
+    }
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
@@ -679,13 +739,6 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     }
 
     OverworldWildSpawns_ApplyMovementRange(object);
-    if (position.hopMovement != 0) {
-        OverworldWildSpawns_SetObjectTilePosition(object, position.hopStartX, position.hopStartY);
-        object->movementCmd = position.hopMovement;
-        object->movementStep = 0;
-        object->flags &= ~BIT_JUMP_START;
-        object->flags |= BIT_MOVE | BIT_MOVE_START;
-    }
     MapObject_SetParam(object, encounter.species, 0);
     MapObject_SetParam(object, encounter.form, 1);
     MapObject_SetParam(object, encounter.level, 2);
@@ -695,6 +748,12 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].form = encounter.form;
     state->spawns[slot].level = encounter.level;
     state->spawns[slot].active = TRUE;
+    state->spawns[slot].hopStep = 0;
+    state->spawns[slot].hopSteps = 0;
+    if (position.hopMovement != 0) {
+        OverworldWildSpawns_StartHeadbuttHop(&state->spawns[slot], object, &position);
+        OverworldWildSpawns_UpdateHeadbuttHops(state);
+    }
 
     return TRUE;
 }
@@ -817,6 +876,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
         state->mapId = fieldSystem->location->mapId;
     }
 
+    OverworldWildSpawns_UpdateHeadbuttHops(state);
     OverworldWildSpawns_DespawnFarMons(state, fieldSystem);
     if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
         return TRUE;

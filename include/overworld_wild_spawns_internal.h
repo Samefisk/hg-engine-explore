@@ -16,9 +16,15 @@
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
     u16 species;
+    s16 hopStartX;
+    s16 hopStartY;
+    s16 hopTargetX;
+    s16 hopTargetY;
     u8 form;
     u8 level;
     u8 active;
+    u8 hopStep;
+    u8 hopSteps;
 } OverworldWildSpawn;
 
 typedef struct OverworldWildSpawnState {

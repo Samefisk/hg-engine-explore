@@ -306,5 +306,6 @@ int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
 BOOL MapObject_IsSingleMovementActive(LocalMapObject *obj);
 void MapObject_PauseMovement(LocalMapObject *obj);
+void MapObject_UnpauseMovement(LocalMapObject *obj);
 
 #endif //POKEHEARTGOLD_MAP_EVENTS_INTERNAL_H
