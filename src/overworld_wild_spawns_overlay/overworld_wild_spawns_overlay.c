@@ -23,6 +23,8 @@
 #define OW_WILD_HEADBUTT_EMPTY_COORD -1
 #define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 15
 #define OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN 5
+#define OW_WILD_FISHING_SPAWN_CHANCE_PERCENT 20
+#define OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN 4
 #define OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
@@ -38,7 +40,14 @@ typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
     OW_WILD_SPAWN_TERRAIN_SURF,
     OW_WILD_SPAWN_TERRAIN_HEADBUTT,
+    OW_WILD_SPAWN_TERRAIN_FISHING,
 } OverworldWildSpawnTerrain;
+
+typedef enum OverworldWildFishingRodTable {
+    OW_WILD_FISHING_ROD_OLD,
+    OW_WILD_FISHING_ROD_GOOD,
+    OW_WILD_FISHING_ROD_SUPER,
+} OverworldWildFishingRodTable;
 
 typedef struct OverworldWildLandEncounterData {
     u8 levels[OW_WILD_GRASS_SLOTS];
@@ -131,6 +140,10 @@ static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
 };
 
 static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
+    60, 30, 5, 4, 1,
+};
+
+static const u8 sFishingSlotWeights[OW_WILD_FISH_SLOTS] = {
     60, 30, 5, 4, 1,
 };
 
@@ -235,6 +248,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     state->justSpawned = FALSE;
     state->spawnCooldown = 0;
     state->headbuttSpawnCooldown = 0;
+    state->fishingSpawnCooldown = 0;
     state->pendingSlot = -1;
 }
 
@@ -442,6 +456,79 @@ static BOOL OverworldWildSpawns_IsHeadbuttLandingTile(FieldSystem *fieldSystem, 
     return TRUE;
 }
 
+static BOOL OverworldWildSpawns_HasAdjacentWater(FieldSystem *fieldSystem, int x, int y)
+{
+    static const OverworldWildHeadbuttLandingOffset waterOffsets[] = {
+        { 0, 1 },
+        { 0, -1 },
+        { -1, 0 },
+        { 1, 0 },
+    };
+    u32 i;
+
+    for (i = 0; i < NELEMS(waterOffsets); i++) {
+        int waterX = x + waterOffsets[i].dx;
+        int waterY = y + waterOffsets[i].dy;
+
+        if (waterX >= 0 && waterY >= 0
+            && OverworldWildSpawns_IsSurfBehavior(GetMetatileBehaviorAt(fieldSystem, waterX, waterY))) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_IsFishingShoreTile(FieldSystem *fieldSystem, int x, int y)
+{
+    u8 behavior;
+
+    if (x < 0 || y < 0) {
+        return FALSE;
+    }
+    if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
+        return FALSE;
+    }
+    if (IsMetatileBlockedAt(fieldSystem, x, y)) {
+        return FALSE;
+    }
+
+    behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
+    if (behavior == OW_WILD_TILE_HEADBUTT || OverworldWildSpawns_IsSurfBehavior(behavior)) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_HasAdjacentWater(fieldSystem, x, y);
+}
+
+static BOOL OverworldWildSpawns_TryPickFishingSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
+{
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    int attempt;
+
+    for (attempt = 0; attempt < OW_WILD_SPAWN_ATTEMPTS; attempt++) {
+        int dx = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
+        int dy = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
+        int x = playerX + dx;
+        int y = playerY + dy;
+        int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
+
+        if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
+            continue;
+        }
+        if (!OverworldWildSpawns_IsFishingShoreTile(fieldSystem, x, y)) {
+            continue;
+        }
+
+        position->startX = x;
+        position->startY = y;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 static void OverworldWildSpawns_TryPickHeadbuttLanding(FieldSystem *fieldSystem, int treeX, int treeY, u8 treeType, OverworldWildSpawnPosition *position, u32 *candidateCount)
 {
     u32 landingStart = gf_rand() % NELEMS(sHeadbuttLandingOffsets);
@@ -611,6 +698,121 @@ static BOOL OverworldWildSpawns_TryRollSurfEncounter(const OverworldWildEncounte
     return FALSE;
 }
 
+static const OverworldWildEncounterDataSlot *OverworldWildSpawns_GetFishingSlots(
+    const OverworldWildEncounterData *encounterData,
+    OverworldWildFishingRodTable rodTable)
+{
+    switch (rodTable) {
+    case OW_WILD_FISHING_ROD_OLD:
+        return encounterData->oldRodSlots;
+    case OW_WILD_FISHING_ROD_GOOD:
+        return encounterData->goodRodSlots;
+    case OW_WILD_FISHING_ROD_SUPER:
+    default:
+        return encounterData->superRodSlots;
+    }
+}
+
+static u8 OverworldWildSpawns_GetFishingRate(const OverworldWildEncounterData *encounterData, OverworldWildFishingRodTable rodTable)
+{
+    switch (rodTable) {
+    case OW_WILD_FISHING_ROD_OLD:
+        return encounterData->oldRodRate;
+    case OW_WILD_FISHING_ROD_GOOD:
+        return encounterData->goodRodRate;
+    case OW_WILD_FISHING_ROD_SUPER:
+    default:
+        return encounterData->superRodRate;
+    }
+}
+
+static BOOL OverworldWildSpawns_FishingTableHasValidSlot(const OverworldWildEncounterDataSlot *slots)
+{
+    u8 slot;
+
+    for (slot = 0; slot < OW_WILD_FISH_SLOTS; slot++) {
+        if ((slots[slot].species & OW_WILD_SPECIES_MASK) != SPECIES_NONE && slots[slot].minLevel != 0) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryPickFishingRodTable(
+    const OverworldWildEncounterData *encounterData,
+    OverworldWildFishingRodTable *rodTable)
+{
+    u16 totalRate = 0;
+    u16 roll;
+    u8 rod;
+
+    for (rod = 0; rod < 3; rod++) {
+        OverworldWildFishingRodTable currentRod = (OverworldWildFishingRodTable)rod;
+        const OverworldWildEncounterDataSlot *slots = OverworldWildSpawns_GetFishingSlots(encounterData, currentRod);
+        u8 rate = OverworldWildSpawns_GetFishingRate(encounterData, currentRod);
+
+        if (rate != 0 && OverworldWildSpawns_FishingTableHasValidSlot(slots)) {
+            totalRate += rate;
+        }
+    }
+
+    if (totalRate == 0) {
+        return FALSE;
+    }
+
+    roll = gf_rand() % totalRate;
+    for (rod = 0; rod < 3; rod++) {
+        OverworldWildFishingRodTable currentRod = (OverworldWildFishingRodTable)rod;
+        const OverworldWildEncounterDataSlot *slots = OverworldWildSpawns_GetFishingSlots(encounterData, currentRod);
+        u8 rate = OverworldWildSpawns_GetFishingRate(encounterData, currentRod);
+
+        if (rate == 0 || !OverworldWildSpawns_FishingTableHasValidSlot(slots)) {
+            continue;
+        }
+        if (roll < rate) {
+            *rodTable = currentRod;
+            return TRUE;
+        }
+        roll -= rate;
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollFishingEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
+{
+    OverworldWildFishingRodTable rodTable;
+    const OverworldWildEncounterDataSlot *slots;
+    int attempts;
+
+    if (!OverworldWildSpawns_TryPickFishingRodTable(encounterData, &rodTable)) {
+        return FALSE;
+    }
+
+    slots = OverworldWildSpawns_GetFishingSlots(encounterData, rodTable);
+    for (attempts = 0; attempts < OW_WILD_FISH_SLOTS; attempts++) {
+        u8 slot = OverworldWildSpawns_RollWeightedSlot(sFishingSlotWeights, OW_WILD_FISH_SLOTS);
+        u16 encodedSpecies = slots[slot].species;
+        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
+
+        if (species != SPECIES_NONE && slots[slot].minLevel != 0) {
+            u8 minLevel = slots[slot].minLevel;
+            u8 maxLevel = slots[slot].maxLevel;
+
+            encounter->species = species;
+            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
+            encounter->level = minLevel;
+            if (maxLevel > minLevel) {
+                encounter->level += gf_rand() % (maxLevel - minLevel + 1);
+            }
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, OverworldWildRolledEncounter *encounter)
 {
     int encounterDataId;
@@ -624,6 +826,9 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
 
     if (terrain == OW_WILD_SPAWN_TERRAIN_SURF) {
         return OverworldWildSpawns_TryRollSurfEncounter(&encounterData, encounter);
+    }
+    if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
+        return OverworldWildSpawns_TryRollFishingEncounter(&encounterData, encounter);
     }
     return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
 }
@@ -645,6 +850,13 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
             return FALSE;
         }
         if (!OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, position.headbuttTreeType, &encounter)) {
+            return FALSE;
+        }
+    } else if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
+        if (!OverworldWildSpawns_TryPickFishingSpawnPosition(fieldSystem, &position)) {
+            return FALSE;
+        }
+        if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
             return FALSE;
         }
     } else if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, terrain, &position)) {
@@ -701,7 +913,8 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
 {
     int slot;
     BOOL spawned = FALSE;
-    int headbuttSlot = OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS;
+    int headbuttSlot = OW_WILD_HEADBUTT_SLOT_START;
+    int fishingSlot = OW_WILD_FISH_SLOT_START;
 
     if (state->spawnCooldown != 0) {
         state->spawnCooldown--;
@@ -719,6 +932,21 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
                     fieldSystem,
                     OW_WILD_SPAWN_TERRAIN_HEADBUTT,
                     headbuttSlot);
+            }
+        }
+    }
+
+    if (!spawned && !state->spawns[fishingSlot].active) {
+        if (state->fishingSpawnCooldown != 0) {
+            state->fishingSpawnCooldown--;
+        } else {
+            state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
+            if ((gf_rand() % 100) < OW_WILD_FISHING_SPAWN_CHANCE_PERCENT) {
+                spawned = OverworldWildSpawns_SpawnOne(
+                    state,
+                    fieldSystem,
+                    OW_WILD_SPAWN_TERRAIN_FISHING,
+                    fishingSlot);
             }
         }
     }
