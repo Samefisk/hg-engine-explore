@@ -13,9 +13,9 @@ encounterdata   0   // New Bark Town
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -221,9 +221,9 @@ encounterdata   2   // Cherrygrove City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -325,9 +325,9 @@ encounterdata   3   // Route 30
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 2, 3, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4
 
 // morning encounter slots
@@ -429,9 +429,9 @@ encounterdata   4   // Route 31
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 3, 4, 3, 4, 3, 3, 5, 5, 5, 5, 5, 5
 
 // morning encounter slots
@@ -533,9 +533,9 @@ encounterdata   5   // Violet City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -845,9 +845,9 @@ encounterdata   8   // Route 32
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 6, 4, 6, 4, 6, 6, 6, 6, 6, 4, 6, 4
 
 // morning encounter slots
@@ -948,10 +948,10 @@ encounterdata   9   // Ruins of Alph (Outside)
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 20
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 20, 22, 20, 22, 18, 18, 24, 24, 20, 22, 20, 22
 
 // morning encounter slots
@@ -1469,9 +1469,9 @@ encounterdata  14   // Union Cave 1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 6, 6, 6, 6, 5, 5, 4, 4, 7, 6, 7, 6
 
 // morning encounter slots
@@ -1573,9 +1573,9 @@ encounterdata  15   // Union Cave B1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 8, 8, 8, 8, 7, 7, 8, 8, 9, 6, 9, 6
 
 // morning encounter slots
@@ -1677,9 +1677,9 @@ encounterdata  16   // Union Cave B2F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 22, 22, 22, 22, 22, 22, 21, 21, 20, 23, 20, 23
 
 // morning encounter slots
@@ -1885,9 +1885,9 @@ encounterdata  18   // Slowpoke Well 1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 5, 6, 5, 6, 7, 7, 6, 6, 8, 8, 8, 8
 
 // morning encounter slots
@@ -1989,9 +1989,9 @@ encounterdata  19   // Slowpoke Well B2F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 21, 23, 21, 23, 19, 19, 21, 21, 23, 23, 23, 23
 
 // morning encounter slots
@@ -2093,9 +2093,9 @@ encounterdata  20   // Ilex Forest
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 5, 6, 5, 6, 6, 6, 5, 5, 5, 6, 5, 6
 
 // morning encounter slots
@@ -2197,9 +2197,9 @@ encounterdata  21   // Route 34
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 10, 11, 10, 11, 12, 12, 10, 10, 13, 10, 13, 10
 
 // morning encounter slots
@@ -2301,9 +2301,9 @@ encounterdata  22   // Route 35
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 12, 12, 12, 12, 14, 14, 10, 10, 14, 10, 14, 12
 
 // morning encounter slots
@@ -2821,9 +2821,9 @@ encounterdata  27   // Ecruteak City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -4173,9 +4173,9 @@ encounterdata  40   // Olivine City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -4277,9 +4277,9 @@ encounterdata  41   // Route 40
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -4381,9 +4381,9 @@ encounterdata  42   // Route 41
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -4485,9 +4485,9 @@ encounterdata  43   // Whirl Islands 1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 22, 23, 22, 23, 24, 24, 22, 22, 23, 24, 23, 24
 
 // morning encounter slots
@@ -4797,9 +4797,9 @@ encounterdata  46   // Whirl Islands B2F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 22, 23, 22, 23, 24, 24, 22, 22, 23, 24, 23, 24
 
 // morning encounter slots
@@ -5316,10 +5316,10 @@ encounterdata  51   // Cianwood City
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 30
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -5421,9 +5421,9 @@ encounterdata  52   // Route 42
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 15, 13, 15, 13, 14, 14, 16, 16, 15, 17, 15, 17
 
 // morning encounter slots
@@ -5525,9 +5525,9 @@ encounterdata  53   // Mt. Mortar (Waterfall room)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 13, 15, 13, 15, 14, 14, 14, 14, 14, 16, 14, 15
 
 // morning encounter slots
@@ -5733,9 +5733,9 @@ encounterdata  55   // Mt. Mortar (Room above waterfall)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 31, 32, 31, 32, 31, 31, 30, 30, 28, 30, 28, 30
 
 // morning encounter slots
@@ -5837,9 +5837,9 @@ encounterdata  56   // Mt. Mortar B1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 15, 17, 15, 17, 16, 16, 16, 16, 16, 16, 16, 16
 
 // morning encounter slots
@@ -5941,9 +5941,9 @@ encounterdata  57   // Route 43
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 15, 15, 15, 15, 17, 17, 15, 15, 16, 17, 16, 17
 
 // morning encounter slots
@@ -6045,9 +6045,9 @@ encounterdata  58   // Lake of Rage
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -6149,9 +6149,9 @@ encounterdata  59   // Route 44
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 23, 22, 23, 22, 22, 22, 24, 24, 24, 26, 24, 26
 
 // morning encounter slots
@@ -6773,9 +6773,9 @@ encounterdata  65   // Blackthorn City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -6877,9 +6877,9 @@ encounterdata  66   // Dragons Den
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -6981,9 +6981,9 @@ encounterdata  67   // Route 45
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 23, 23, 23, 23, 24, 24, 20, 20, 25, 27, 25, 27
 
 // morning encounter slots
@@ -7188,10 +7188,10 @@ encounterdata  69   // Dark Cave (Route 31 entrance)
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 50
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 3, 2, 3, 2, 2, 2, 4, 4, 3, 4, 3, 4
 
 // morning encounter slots
@@ -7293,9 +7293,9 @@ encounterdata  70   // Dark Cave (Route 45 entrance)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 23, 23, 23, 23, 25, 25, 20, 20, 25, 23, 25, 23
 
 // morning encounter slots
@@ -7397,9 +7397,9 @@ encounterdata  71   // Route 47
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 35, 35, 34, 33, 32, 31, 32, 31, 34, 31, 33, 40
 
 // morning encounter slots
@@ -7501,9 +7501,9 @@ encounterdata  72   // Mt. Moon (Outside area)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -7605,9 +7605,9 @@ encounterdata  73   // Mt. Moon (Outside area when Clefairy are active)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -8125,9 +8125,9 @@ encounterdata  78   // Seafoam Islands B4F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 37, 40, 34, 34, 38, 38, 39, 38, 37, 38, 40, 40
 
 // morning encounter slots
@@ -8229,9 +8229,9 @@ encounterdata  79   // Mt. Silver (Moltres room)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 45, 48, 45, 48, 48, 47, 45, 45, 48, 20, 48, 15
 
 // morning encounter slots
@@ -8333,9 +8333,9 @@ encounterdata  80   // Mt. Silver 3F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 45, 48, 46, 48, 48, 50, 45, 45, 48, 20, 48, 15
 
 // morning encounter slots
@@ -8437,9 +8437,9 @@ encounterdata  81   // Mt. Silver 4F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 50, 48, 45, 48, 47, 47, 45, 45, 48, 20, 48, 15
 
 // morning encounter slots
@@ -8541,9 +8541,9 @@ encounterdata  82   // Cliff Edge Gate
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -8644,7 +8644,7 @@ encounterdata  83   // Cliff Cave
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
+rocksmashrate 30
 oldrodrate 0
 goodrodrate 0
 superrodrate 0
@@ -8853,9 +8853,9 @@ encounterdata  85   // Mt. Silver (Outside area with Pokemon Center)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 41, 42, 41, 42, 42, 42, 44, 44, 41, 43, 41, 43
 
 // morning encounter slots
@@ -8957,9 +8957,9 @@ encounterdata  86   // Mt. Silver 1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 42, 44, 42, 44, 43, 43, 42, 41, 45, 20, 45, 15
 
 // morning encounter slots
@@ -9269,9 +9269,9 @@ encounterdata  89   // Mt. Silver (Top, snowy area)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 45, 48, 45, 48, 47, 47, 30, 45, 48, 20, 48, 15
 
 // morning encounter slots
@@ -9477,9 +9477,9 @@ encounterdata  91   // Safari Zone (Placeholder, not used)
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 100
+goodrodrate 100
+superrodrate 100
 walklevels 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20
 
 // morning encounter slots
@@ -9581,9 +9581,9 @@ encounterdata  92   // Route 12
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -9684,10 +9684,10 @@ encounterdata  93   // Route 19
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 30
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -9789,9 +9789,9 @@ encounterdata  94   // Route 20
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -9893,9 +9893,9 @@ encounterdata  95   // Pallet Town
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -9997,9 +9997,9 @@ encounterdata  96   // Viridian City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -10101,9 +10101,9 @@ encounterdata  97   // Cerulean City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -10204,10 +10204,10 @@ encounterdata  98   // Vermilion City
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 40
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -10413,9 +10413,9 @@ encounterdata 100   // Fuchsia City
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -10517,9 +10517,9 @@ encounterdata 101   // Cinnabar Island
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 // morning encounter slots
@@ -10725,9 +10725,9 @@ encounterdata 103   // Route 26
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 28, 28, 28, 28, 32, 32, 30, 30, 30, 30, 30, 30
 
 // morning encounter slots
@@ -10829,9 +10829,9 @@ encounterdata 104   // Route 27
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 28, 28, 28, 28, 30, 30, 30, 30, 32, 30, 32, 30
 
 // morning encounter slots
@@ -10933,9 +10933,9 @@ encounterdata 105   // Route 28
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 39, 40, 39, 40, 40, 40, 42, 42, 41, 43, 41, 43
 
 // morning encounter slots
@@ -11348,7 +11348,7 @@ encounterdata 109   // Rock Tunnel B1F
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
+rocksmashrate 20
 oldrodrate 0
 goodrodrate 0
 superrodrate 0
@@ -11869,9 +11869,9 @@ encounterdata 114   // Route 4
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 5, 5, 5, 5, 8, 8, 6, 6, 10, 8, 10, 8
 
 // morning encounter slots
@@ -12077,9 +12077,9 @@ encounterdata 116   // Route 6
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 13, 13, 13, 13, 14, 14, 15, 15, 12, 14, 12, 14
 
 // morning encounter slots
@@ -12389,9 +12389,9 @@ encounterdata 119   // Route 9
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 13, 15, 13, 15, 13, 13, 15, 15, 15, 15, 15, 15
 
 // morning encounter slots
@@ -12493,9 +12493,9 @@ encounterdata 120   // Route 10
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 16, 17, 16, 17, 16, 16, 18, 18, 18, 15, 18, 15
 
 // morning encounter slots
@@ -12701,9 +12701,9 @@ encounterdata 122   // Route 13
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 23, 23, 23, 23, 25, 25, 22, 22, 24, 24, 24, 25
 
 // morning encounter slots
@@ -13325,9 +13325,9 @@ encounterdata 128   // Route 21
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 30, 25, 30, 25, 35, 35, 20, 20, 30, 28, 30, 28
 
 // morning encounter slots
@@ -13429,9 +13429,9 @@ encounterdata 129   // Route 22
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 3, 3, 3, 3, 5, 5, 4, 4, 6, 7, 6, 7
 
 // morning encounter slots
@@ -13533,9 +13533,9 @@ encounterdata 130   // Route 24
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 8, 10, 8, 10, 9, 9, 12, 12, 8, 14, 8, 14
 
 // morning encounter slots
@@ -13637,9 +13637,9 @@ encounterdata 131   // Route 25
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 8, 10, 8, 10, 8, 8, 9, 9, 10, 14, 10, 14
 
 // morning encounter slots
@@ -13741,9 +13741,9 @@ encounterdata 132   // Tohjo Falls
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 22, 22, 22, 22, 22, 22, 21, 21, 20, 23, 20, 23
 
 // morning encounter slots
@@ -14052,7 +14052,7 @@ encounterdata 135   // Victory Road 3F
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
+rocksmashrate 40
 oldrodrate 0
 goodrodrate 0
 superrodrate 0
@@ -14468,10 +14468,10 @@ encounterdata 139   // Cerulean Cave 1F
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 5
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 39, 38, 38, 38, 40, 39, 40, 37, 39, 40, 39, 40
 
 // morning encounter slots
@@ -14573,9 +14573,9 @@ encounterdata 140   // Cerulean Cave B1F
 walkrate 0
 surfrate 0
 rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 42, 40, 41, 39, 41, 42, 41, 42, 41, 42, 41, 42
 
 // morning encounter slots
@@ -14676,10 +14676,10 @@ encounterdata 141   // Cerulean Cave B2F
 
 walkrate 0
 surfrate 0
-rocksmashrate 0
-oldrodrate 0
-goodrodrate 0
-superrodrate 0
+rocksmashrate 5
+oldrodrate 25
+goodrodrate 50
+superrodrate 75
 walklevels 46, 45, 47, 45, 45, 45, 46, 47, 47, 49, 47, 49
 
 // morning encounter slots
