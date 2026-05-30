@@ -47,11 +47,7 @@
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
 #define OW_WILD_PAL_PARAM_ENABLE 2
 #define OW_WILD_PAL_PARAM_SHINY 1
-#define OW_WILD_SHINY_RATTATA_SPRITE 5447
-#define OW_WILD_SHINY_TENTACOOL_SPRITE 5530
-#define OW_WILD_SHINY_MAGIKARP_SPRITE 5606
-#define OW_WILD_SHINY_HOOTHOOT_SPRITE 5646
-#define OW_WILD_SHINY_SPINARAK_SPRITE 5650
+#define OW_WILD_SHINY_TAG_OFFSET 5000
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -988,26 +984,32 @@ static BOOL OverworldWildSpawns_RollShiny(void)
     return FALSE;
 }
 
-static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form, BOOL shiny)
+static const u16 sOverworldWildShinySpriteIDs[] = {
+#include "generated_shiny_overworld_sprite_ids.inc"
+};
+
+static BOOL OverworldWildSpawns_HasShinySpriteID(u32 spriteId)
 {
-    if (!shiny) {
-        return FollowingPokemon_GetSpriteID(species, form, 0);
+    u32 i;
+
+    for (i = 0; i < NELEMS(sOverworldWildShinySpriteIDs); i++) {
+        if (spriteId == sOverworldWildShinySpriteIDs[i]) {
+            return TRUE;
+        }
     }
 
-    switch (species) {
-    case SPECIES_RATTATA:
-        return OW_WILD_SHINY_RATTATA_SPRITE;
-    case SPECIES_TENTACOOL:
-        return OW_WILD_SHINY_TENTACOOL_SPRITE;
-    case SPECIES_MAGIKARP:
-        return OW_WILD_SHINY_MAGIKARP_SPRITE;
-    case SPECIES_HOOTHOOT:
-        return OW_WILD_SHINY_HOOTHOOT_SPRITE;
-    case SPECIES_SPINARAK:
-        return OW_WILD_SHINY_SPINARAK_SPRITE;
-    default:
-        return FollowingPokemon_GetSpriteID(species, form, 0);
+    return FALSE;
+}
+
+static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form, BOOL shiny)
+{
+    u32 spriteId = FollowingPokemon_GetSpriteID(species, form, 0);
+
+    if (shiny && OverworldWildSpawns_HasShinySpriteID(spriteId)) {
+        return spriteId + OW_WILD_SHINY_TAG_OFFSET;
     }
+
+    return spriteId;
 }
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)

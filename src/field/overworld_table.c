@@ -13,7 +13,7 @@
  */
 
 #define NEW_NPC_START 7000
-#define NEW_NPC_GFX_START 1558 // exact number may depend--it is the number of the first overworld gfx that is not used in the overworld table
+#define NEW_NPC_GFX_START 2000 // exact number may depend--it is the number of the first overworld gfx that is not used in the overworld table
 #define NEW_NPC_ENTRY(num) {.tag = NEW_NPC_START + num, .gfx = NEW_NPC_GFX_START + num, .callback_params = 0}
 
 struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts that are specifically for pokémon
@@ -1675,11 +1675,7 @@ struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts tha
     { .tag = 1795, .gfx =  297, .callback_params = OVERWORLD_SIZE_SMALL}, // SPECIES_IRON_CROWN
     { .tag = 1796, .gfx =  297, .callback_params = OVERWORLD_SIZE_SMALL}, // SPECIES_TERAPAGOS
     { .tag = 1797, .gfx = 1547, .callback_params = OVERWORLD_SIZE_SMALL}, // SPECIES_PECHARUNT
-    { .tag = 5447, .gfx = 1553, .callback_params = OVERWORLD_SIZE_SMALL}, // shiny SPECIES_RATTATA
-    { .tag = 5530, .gfx = 1554, .callback_params = OVERWORLD_SIZE_SMALL}, // shiny SPECIES_TENTACOOL
-    { .tag = 5606, .gfx = 1555, .callback_params = OVERWORLD_SIZE_SMALL}, // shiny SPECIES_MAGIKARP
-    { .tag = 5646, .gfx = 1556, .callback_params = OVERWORLD_SIZE_SMALL}, // shiny SPECIES_HOOTHOOT
-    { .tag = 5650, .gfx = 1557, .callback_params = OVERWORLD_SIZE_SMALL}, // shiny SPECIES_SPINARAK
+#include "generated_shiny_overworld_table.inc"
     { 0xFFFF, 0, 0},
 };
 

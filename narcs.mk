@@ -406,6 +406,9 @@ OVERWORLDS_DIR := $(BUILD)/pokemonow
 OVERWORLDS_NARC := $(BUILD_NARC)/pokemonow.narc
 OVERWORLDS_TARGET := $(FILESYS)/a/0/8/1
 OVERWORLDS_DEPENDENCIES_DIR := data/graphics/overworlds
+OVERWORLDS_SHINY_GENERATED_DIR := $(BUILD)/generated_shiny_overworlds
+OVERWORLDS_SHINY_GENERATOR := tools/generate_shiny_overworld_variants.py
+OVERWORLDS_SHINY_GENERATOR_DEPS := $(OVERWORLDS_SHINY_GENERATOR) armips/data/encounters.s armips/data/headbutt.s data/SpeciesToOWGfx.c src/field/overworld_table.c src/field/generated_shiny_overworld_table.inc src/overworld_wild_spawns_overlay/generated_shiny_overworld_sprite_ids.inc
 
 OVERWORLDS_SRCS := $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.png) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.bin) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.json) $(wildcard $(OVERWORLDS_DEPENDENCIES_DIR)/*.pal)
 OVERWORLDS_OBJS := $(patsubst $(OVERWORLDS_DEPENDENCIES_DIR)/%.png,$(OVERWORLDS_DIR)/1_%.btx0,$(OVERWORLDS_SRCS)) $(patsubst $(OVERWORLDS_DEPENDENCIES_DIR)/%.bin,$(OVERWORLDS_DIR)/1_%.bin,$(OVERWORLDS_SRCS))
@@ -427,11 +430,13 @@ $(OVERWORLDS_DIR)/2_%.btx0:$(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.png $(OVERWOR
 	$(BTX) $< $@
 
 #$(OVERWORLDS_NARC): $(ALL_OVERWORLDS_SRCS) | overworld_extract $(ALL_OVERWORLDS_OBJS)
-$(OVERWORLDS_NARC): $(ALL_OVERWORLDS_SRCS) $(ALL_OVERWORLDS_OBJS)
+$(OVERWORLDS_NARC): $(ALL_OVERWORLDS_SRCS) $(ALL_OVERWORLDS_OBJS) $(OVERWORLDS_SHINY_GENERATOR_DEPS)
+	python3 $(OVERWORLDS_SHINY_GENERATOR) --mode assets --asset-dir $(OVERWORLDS_DEPENDENCIES_DIR) --generated-dir $(OVERWORLDS_SHINY_GENERATED_DIR)
+	for file in $(OVERWORLDS_SHINY_GENERATED_DIR)/*.png; do $(BTX) $$file $(OVERWORLDS_DIR)/1_$$(basename $$file .png).btx0; done
 	$(NARCHIVE) create $@ $(OVERWORLDS_DIR) -nf
 
 NARC_FILES += $(OVERWORLDS_NARC)
-REQUIRED_DIRECTORIES += $(OVERWORLDS_DIR)
+REQUIRED_DIRECTORIES += $(OVERWORLDS_DIR) $(OVERWORLDS_SHINY_GENERATED_DIR)
 
 
 DEXGFX_DIR := $(BUILD)/dexgfx
