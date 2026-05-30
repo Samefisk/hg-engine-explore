@@ -32,12 +32,15 @@ void *OverworldWildSpawns_LoadOverworldModelResource(void *resourceManager, u32 
     void *data;
 
     if (memberNo >= OW_SHINY_GFX_START && memberNo < OW_SHINY_GFX_START + OW_SHINY_GFX_COUNT) {
-        narc = NARC_ctor(ARC_SHINY_OVERWORLDS, OW_OVERWORLD_RESOURCE_HEAP_ID);
+        narc = NARC_ctor(ARC_CODE_ADDONS, OW_OVERWORLD_RESOURCE_HEAP_ID);
         if (narc == NULL) {
             return NULL;
         }
 
-        data = LoadOverworldModelMember(narc, memberNo - OW_SHINY_GFX_START, allocHigh);
+        data = LoadOverworldModelMember(
+            narc,
+            CODE_ADDON_SHINY_OVERWORLD_BTX_START + memberNo - OW_SHINY_GFX_START,
+            allocHigh);
         NARC_dtor(narc);
         return data;
     }

@@ -458,6 +458,7 @@ move_narc: $(NARC_FILES)
 		rm -rf build/a028/8_7 build/a028/8_8 build/a028/8_9; \
 	fi
 	@rm -rf $(CODE_ADDON_ARTIFACTS)
+	@rm -rf $(BUILD)/a028/z_*
 
 	@echo "hidden ability table:"
 	cp $(HIDDEN_ABILITY_TABLE_BIN) $(HIDDEN_ABILITY_TABLE_TARGET)
@@ -488,6 +489,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "battle tests:"
 	cp $(BATTLETESTS_BIN) $(BATTLETESTS_TARGET)
+
+	@echo "shiny overworld btx data:"
+	for file in $(OVERWORLDS_SHINY_DIR)/*.btx0; do cp $$file $(BUILD)/a028/z_$$(basename $$file .btx0 | sed 's/^1_//'); done
 
 
 DUMP_SCRIPT_LOCATION := tools/source/dumptools
