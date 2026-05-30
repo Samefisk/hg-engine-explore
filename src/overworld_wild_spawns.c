@@ -50,12 +50,12 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
     return TRUE;
 }
 
-void OverworldWildSpawns_CleanupPendingBattle(void)
+void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
 {
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
 
     if (entry != NULL && entry->cleanupPendingBattle != NULL) {
-        entry->cleanupPendingBattle(&sOverworldWildSpawnState);
+        entry->cleanupPendingBattle(&sOverworldWildSpawnState, battleResult);
     } else {
         sOverworldWildSpawnState.pendingSlot = -1;
     }

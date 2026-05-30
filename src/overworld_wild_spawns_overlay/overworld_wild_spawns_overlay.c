@@ -31,6 +31,9 @@
 #define OW_WILD_DESPAWN_DISTANCE 14
 #define OW_WILD_SPAWN_ATTEMPTS 48
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
+#define OW_WILD_FLEE_GRACE_STEPS 3
+#define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
+#define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
@@ -128,7 +131,7 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
-static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state);
+static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -249,6 +252,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     state->spawnCooldown = 0;
     state->headbuttSpawnCooldown = 0;
     state->fishingSpawnCooldown = 0;
+    state->battleGraceSteps = 0;
     state->pendingSlot = -1;
 }
 
@@ -913,15 +917,13 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
 {
     int slot;
     BOOL spawned = FALSE;
-    int headbuttSlot = OW_WILD_HEADBUTT_SLOT_START;
-    int fishingSlot = OW_WILD_FISH_SLOT_START;
 
     if (state->spawnCooldown != 0) {
         state->spawnCooldown--;
         return;
     }
 
-    if (!state->spawns[headbuttSlot].active) {
+    if (OverworldWildSpawns_TryGetFreeSlot(state, OW_WILD_HEADBUTT_SLOT_START, OW_WILD_FISH_SLOT_START, &slot)) {
         if (state->headbuttSpawnCooldown != 0) {
             state->headbuttSpawnCooldown--;
         } else {
@@ -931,12 +933,12 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
                     state,
                     fieldSystem,
                     OW_WILD_SPAWN_TERRAIN_HEADBUTT,
-                    headbuttSlot);
+                    slot);
             }
         }
     }
 
-    if (!spawned && !state->spawns[fishingSlot].active) {
+    if (!spawned && OverworldWildSpawns_TryGetFreeSlot(state, OW_WILD_FISH_SLOT_START, OW_WILD_MAX_SPAWNS, &slot)) {
         if (state->fishingSpawnCooldown != 0) {
             state->fishingSpawnCooldown--;
         } else {
@@ -946,7 +948,7 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
                     state,
                     fieldSystem,
                     OW_WILD_SPAWN_TERRAIN_FISHING,
-                    fishingSlot);
+                    slot);
             }
         }
     }
@@ -991,6 +993,11 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 {
     int i;
 
+    if (state->battleGraceSteps != 0) {
+        state->battleGraceSteps--;
+        return FALSE;
+    }
+
     if (state->pendingSlot >= 0
         || state->pendingSpecies != SPECIES_NONE
         || state->pendingLevel != 0) {
@@ -1017,10 +1024,20 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
     return FALSE;
 }
 
-static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state)
+static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
+{
+    return battleResult == OW_WILD_BATTLE_RESULT_PLAYER_FLED
+        || (battleResult & OW_WILD_BATTLE_RESULT_TRY_FLEE) != 0;
+}
+
+static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult)
 {
     if (state->pendingSlot >= 0 && state->pendingSlot < OW_WILD_MAX_SPAWNS) {
-        OverworldWildSpawns_ClearSlot(state, state->pendingSlot, TRUE);
+        if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
+            state->battleGraceSteps = OW_WILD_FLEE_GRACE_STEPS;
+        } else {
+            OverworldWildSpawns_ClearSlot(state, state->pendingSlot, TRUE);
+        }
     }
 
     state->pendingSlot = -1;

@@ -6,6 +6,6 @@
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem);
 BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level);
-void OverworldWildSpawns_CleanupPendingBattle(void);
+void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult);
 
 #endif // OVERWORLD_WILD_SPAWNS_H

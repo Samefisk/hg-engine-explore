@@ -8,8 +8,8 @@
 
 #define OW_WILD_GRASS_MAX_SPAWNS 3
 #define OW_WILD_SURF_MAX_SPAWNS 3
-#define OW_WILD_HEADBUTT_MAX_SPAWNS 1
-#define OW_WILD_FISH_MAX_SPAWNS 1
+#define OW_WILD_HEADBUTT_MAX_SPAWNS 2
+#define OW_WILD_FISH_MAX_SPAWNS 2
 #define OW_WILD_HEADBUTT_SLOT_START (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS)
 #define OW_WILD_FISH_SLOT_START (OW_WILD_HEADBUTT_SLOT_START + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
@@ -31,6 +31,7 @@ typedef struct OverworldWildSpawnState {
     u8 spawnCooldown;
     u8 headbuttSpawnCooldown;
     u8 fishingSpawnCooldown;
+    u8 battleGraceSteps;
     u16 pendingSpecies;
     u8 pendingLevel;
     s8 pendingSlot;
@@ -38,7 +39,7 @@ typedef struct OverworldWildSpawnState {
 
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
-    void (*cleanupPendingBattle)(OverworldWildSpawnState *state);
+    void (*cleanupPendingBattle)(OverworldWildSpawnState *state, u16 battleResult);
 } OverworldWildSpawnsOverlayEntry;
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)

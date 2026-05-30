@@ -11,6 +11,7 @@
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP 2
 
 #define SCRIPT_NEW_CMD_MAX          256
+#define VAR_BATTLE_RESULT           0x4013
 
 static u8 sOverworldWildBattleScript[] = {
     0x4D, 0x02, // wild_battle
@@ -36,6 +37,7 @@ static void Script_QueueOverworldWildBattle(SCRIPTCONTEXT *ctx)
     sOverworldWildBattleScript[3] = encodedSpecies >> 8;
     sOverworldWildBattleScript[4] = level;
     sOverworldWildBattleScript[5] = 0;
+    VarSet(ctx->fsys, VAR_BATTLE_RESULT, 0);
 #endif
 
     ScriptJump(ctx, sOverworldWildBattleScript);
@@ -60,7 +62,7 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
 
         case SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP:
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-            OverworldWildSpawns_CleanupPendingBattle();
+            OverworldWildSpawns_CleanupPendingBattle(VarGet(ctx->fsys, VAR_BATTLE_RESULT));
 #endif
             break;
 
