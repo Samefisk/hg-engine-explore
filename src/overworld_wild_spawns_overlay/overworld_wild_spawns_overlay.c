@@ -85,6 +85,8 @@ typedef struct OverworldWildRolledEncounter {
 typedef struct OverworldWildSpawnPosition {
     int startX;
     int startY;
+    int hopStartX;
+    int hopStartY;
     u8 hopMovement;
     u8 headbuttTreeType;
 } OverworldWildSpawnPosition;
@@ -398,6 +400,8 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
 
         position->startX = x;
         position->startY = y;
+        position->hopStartX = x;
+        position->hopStartY = y;
         position->hopMovement = 0;
         return TRUE;
     }
@@ -454,8 +458,10 @@ static void OverworldWildSpawns_TryPickHeadbuttLanding(FieldSystem *fieldSystem,
 
         (*candidateCount)++;
         if ((gf_rand() % *candidateCount) == 0) {
-            position->startX = treeX;
-            position->startY = treeY;
+            position->startX = spawnX;
+            position->startY = spawnY;
+            position->hopStartX = treeX;
+            position->hopStartY = treeY;
             position->hopMovement = landing->hopMovement;
             position->headbuttTreeType = treeType;
         }
@@ -501,9 +507,6 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(FieldSystem *fieldS
                 int treeY = tree.coords[coordIndex].y;
 
                 if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
-                    continue;
-                }
-                if (GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
                     continue;
                 }
 
@@ -664,6 +667,8 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     OverworldWildSpawns_ApplyMovementRange(object);
     if (position.hopMovement != 0) {
+        MapObject_SetCurrentX(object, position.hopStartX);
+        MapObject_SetCurrentY(object, position.hopStartY);
         object->movementCmd = position.hopMovement;
         object->movementStep = 0;
         object->flags |= MAPOBJECTFLAG_SINGLE_MOVEMENT;
@@ -700,18 +705,30 @@ static void OverworldWildSpawns_DespawnFarMons(OverworldWildSpawnState *state, F
 static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int slot;
+    BOOL spawned = FALSE;
 
     if (state->spawnCooldown != 0) {
         state->spawnCooldown--;
         return;
     }
 
-    if ((OverworldWildSpawns_TryGetFreeSlot(state, 0, OW_WILD_GRASS_MAX_SPAWNS, &slot)
-            && OverworldWildSpawns_SpawnOne(state, fieldSystem, OW_WILD_SPAWN_TERRAIN_LAND, slot))
-        || (OverworldWildSpawns_TryGetFreeSlot(state, OW_WILD_GRASS_MAX_SPAWNS, OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS, &slot)
-            && OverworldWildSpawns_SpawnOne(state, fieldSystem, OW_WILD_SPAWN_TERRAIN_SURF, slot))
-        || (!state->spawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active
-            && OverworldWildSpawns_SpawnOne(state, fieldSystem, OW_WILD_SPAWN_TERRAIN_HEADBUTT, OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS))) {
+    if (!state->spawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active) {
+        spawned = OverworldWildSpawns_SpawnOne(
+            state,
+            fieldSystem,
+            OW_WILD_SPAWN_TERRAIN_HEADBUTT,
+            OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS);
+    }
+
+    if (!spawned && OverworldWildSpawns_TryGetFreeSlot(state, 0, OW_WILD_GRASS_MAX_SPAWNS, &slot)) {
+        spawned = OverworldWildSpawns_SpawnOne(state, fieldSystem, OW_WILD_SPAWN_TERRAIN_LAND, slot);
+    }
+
+    if (!spawned && OverworldWildSpawns_TryGetFreeSlot(state, OW_WILD_GRASS_MAX_SPAWNS, OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS, &slot)) {
+        spawned = OverworldWildSpawns_SpawnOne(state, fieldSystem, OW_WILD_SPAWN_TERRAIN_SURF, slot);
+    }
+
+    if (spawned) {
         state->justSpawned = TRUE;
         state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
     }
