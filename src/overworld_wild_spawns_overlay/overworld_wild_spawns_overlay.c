@@ -1012,6 +1012,21 @@ static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form, BOOL shiny)
     return spriteId;
 }
 
+static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
+{
+    return CreateSpecialFieldObjectWithParams(
+        fieldSystem->mapObjectMan,
+        position->startX,
+        position->startY,
+        1,
+        spriteId,
+        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
+        fieldSystem->location->mapId,
+        0,
+        0,
+        OW_WILD_PAL_PARAM_ENABLE | (shiny ? OW_WILD_PAL_PARAM_SHINY : 0));
+}
+
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
     MapObject_SetXRange(object, 2);
@@ -1051,17 +1066,12 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     shiny = OverworldWildSpawns_RollShiny();
     spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form, shiny);
 
-    object = CreateSpecialFieldObjectWithParams(
-        fieldSystem->mapObjectMan,
-        position.startX,
-        position.startY,
-        1,
-        spriteId,
-        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
-        fieldSystem->location->mapId,
-        0,
-        0,
-        OW_WILD_PAL_PARAM_ENABLE | (shiny ? OW_WILD_PAL_PARAM_SHINY : 0));
+    object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId, shiny);
+    if (object == NULL && shiny) {
+        shiny = FALSE;
+        spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form, FALSE);
+        object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId, FALSE);
+    }
     if (object == NULL) {
         return FALSE;
     }
