@@ -3,6 +3,7 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
+#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -40,6 +41,7 @@ void swap(int *a, int *b) {
 #define ENABLE_WILD_TEST_HARNESS 0
 #define WILD_TEST_SPECIES SPECIES_WIGLETT
 #define WILD_TEST_LEVEL 3
+#define OVERWORLD_WILD_NON_SHINY_PID_XOR 0x1000
 
 #if ENABLE_WILD_TEST_HARNESS
 static const u16 sWildTestMoves[4] = {
@@ -76,6 +78,33 @@ static void ApplyWildEncounterTestHarness(struct PartyPokemon *encounterPartyPok
 #else
     (void)encounterPartyPokemon;
     (void)species;
+#endif
+}
+
+static void ApplyOverworldWildShinyOverride(struct PartyPokemon *encounterPartyPokemon)
+{
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    BOOL shiny;
+    u32 otId;
+    u32 pid;
+
+    if (!OverworldWildSpawns_ConsumeBattleShinyOverride(&shiny)) {
+        return;
+    }
+
+    otId = GetMonData(encounterPartyPokemon, MON_DATA_OTID, NULL);
+    pid = GetMonData(encounterPartyPokemon, MON_DATA_PERSONALITY, NULL);
+
+    if (shiny) {
+        pid = GenerateShinyPIDKeepSubstructuresIntact(otId, pid);
+    } else if (SHINY_CHECK(otId, pid)) {
+        pid ^= OVERWORLD_WILD_NON_SHINY_PID_XOR;
+    }
+
+    SetMonData(encounterPartyPokemon, MON_DATA_PERSONALITY, &pid);
+    RecalcPartyPokemonStats(encounterPartyPokemon);
+#else
+    (void)encounterPartyPokemon;
 #endif
 }
 
@@ -581,6 +610,7 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
         InitBoxMonMoveset(&encounterPartyPokemon->box);
     }
 
+    ApplyOverworldWildShinyOverride(encounterPartyPokemon);
     ChangeToBattleForm(encounterPartyPokemon);
 
     return PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);

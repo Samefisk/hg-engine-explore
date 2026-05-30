@@ -13,6 +13,9 @@ static OverworldWildSpawnState sOverworldWildSpawnState = {
     .pendingSlot = -1,
 };
 
+static u8 sBattleShinyOverrideActive;
+static u8 sBattleShinyOverrideValue;
+
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
 {
     if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
@@ -34,7 +37,7 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
 }
 
-BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
+BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *shiny)
 {
     if (sOverworldWildSpawnState.pendingSpecies == SPECIES_NONE
         || sOverworldWildSpawnState.pendingLevel == 0) {
@@ -43,10 +46,27 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
 
     *encodedSpecies = sOverworldWildSpawnState.pendingSpecies;
     *level = sOverworldWildSpawnState.pendingLevel;
+    *shiny = sOverworldWildSpawnState.pendingShiny;
+
+    sBattleShinyOverrideActive = TRUE;
+    sBattleShinyOverrideValue = sOverworldWildSpawnState.pendingShiny;
 
     sOverworldWildSpawnState.pendingSpecies = SPECIES_NONE;
     sOverworldWildSpawnState.pendingLevel = 0;
+    sOverworldWildSpawnState.pendingShiny = FALSE;
 
+    return TRUE;
+}
+
+BOOL OverworldWildSpawns_ConsumeBattleShinyOverride(BOOL *shiny)
+{
+    if (!sBattleShinyOverrideActive) {
+        return FALSE;
+    }
+
+    *shiny = sBattleShinyOverrideValue;
+    sBattleShinyOverrideActive = FALSE;
+    sBattleShinyOverrideValue = FALSE;
     return TRUE;
 }
 
@@ -59,6 +79,9 @@ void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
     } else {
         sOverworldWildSpawnState.pendingSlot = -1;
     }
+
+    sBattleShinyOverrideActive = FALSE;
+    sBattleShinyOverrideValue = FALSE;
 }
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS

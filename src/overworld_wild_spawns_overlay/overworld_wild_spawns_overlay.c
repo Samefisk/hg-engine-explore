@@ -36,6 +36,7 @@
 #define OW_WILD_AMBIENT_CRY_MIN_COOLDOWN_STEPS 48
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
+#define OW_WILD_SHINY_TEST_RATE 8
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -278,7 +279,7 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
     return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
         && MapObject_GetParam(spawn->object, 0) == spawn->species
         && MapObject_GetParam(spawn->object, 1) == spawn->form
-        && MapObject_GetParam(spawn->object, 2) == spawn->level;
+        && MapObject_GetParam(spawn->object, 2) == spawn->shiny;
 }
 
 static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
@@ -357,6 +358,7 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
     state->spawns[slot].species = SPECIES_NONE;
     state->spawns[slot].form = 0;
     state->spawns[slot].level = 0;
+    state->spawns[slot].shiny = FALSE;
     state->spawns[slot].active = FALSE;
 }
 
@@ -374,6 +376,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
     OverworldWildSpawns_ResetAmbientCryCooldown(state);
     state->battleGraceSteps = 0;
+    state->pendingShiny = FALSE;
     state->pendingSlot = -1;
 }
 
@@ -967,6 +970,11 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
     return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
 }
 
+static BOOL OverworldWildSpawns_RollShiny(void)
+{
+    return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
+}
+
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
     MapObject_SetXRange(object, 2);
@@ -978,6 +986,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnPosition position;
     LocalMapObject *object;
+    BOOL shiny;
 
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
         if (!OverworldWildSpawns_TryPickHeadbuttSpawnPosition(state, fieldSystem, &position)) {
@@ -1001,6 +1010,8 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
     }
 
+    shiny = OverworldWildSpawns_RollShiny();
+
     object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
         position.startX,
@@ -1014,14 +1025,14 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     }
 
     OverworldWildSpawns_ApplyMovementRange(object);
-    MapObject_SetParam(object, encounter.species, 0);
-    MapObject_SetParam(object, encounter.form, 1);
-    MapObject_SetParam(object, encounter.level, 2);
+    FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
+    MapObject_SetParam(object, shiny, 2);
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;
     state->spawns[slot].form = encounter.form;
     state->spawns[slot].level = encounter.level;
+    state->spawns[slot].shiny = shiny;
     state->spawns[slot].active = TRUE;
 
     return TRUE;
@@ -1143,6 +1154,7 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
+            state->pendingShiny = state->spawns[i].shiny;
             state->pendingSlot = i;
             state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
