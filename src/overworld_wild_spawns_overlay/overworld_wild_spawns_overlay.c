@@ -35,6 +35,7 @@
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
 #define OW_WILD_AMBIENT_CRY_MIN_COOLDOWN_STEPS 24
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 48
+#define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -302,12 +303,8 @@ static void OverworldWildSpawns_TryPlayAmbientCry(OverworldWildSpawnState *state
 {
     int i;
     int activeCount = 0;
+    u8 cooldownTick;
     int chosen;
-
-    if (state->ambientCryCooldown != 0) {
-        state->ambientCryCooldown--;
-        return;
-    }
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active && state->spawns[i].object != NULL) {
@@ -317,6 +314,16 @@ static void OverworldWildSpawns_TryPlayAmbientCry(OverworldWildSpawnState *state
 
     if (activeCount == 0) {
         OverworldWildSpawns_ResetAmbientCryCooldown(state);
+        return;
+    }
+
+    cooldownTick = 1 + (activeCount / 3);
+    if (cooldownTick > OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK) {
+        cooldownTick = OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK;
+    }
+
+    if (state->ambientCryCooldown > cooldownTick) {
+        state->ambientCryCooldown -= cooldownTick;
         return;
     }
 
