@@ -244,6 +244,7 @@ void LONG_CALL FollowPokeFsysParamSet(FieldSystem *fsys, int species, u8 forme, 
 void LONG_CALL FollowPokeMapObjectSetParams(LocalMapObject *mapObject, int species, u8 forme, BOOL shiny);
 void LONG_CALL FsysFollowMonClear(FollowMon *followMon);
 LocalMapObject * LONG_CALL CreateSpecialFieldObject(void *objectMan, u32 x, u32 z, u32 direction, u32 sprite, u32 movement, u32 mapNo);
+LocalMapObject * LONG_CALL CreateSpecialFieldObjectWithParams(void *objectMan, u32 x, u32 z, u32 direction, u32 sprite, u32 movement, u32 mapNo, u32 param0, u32 param1, u32 param2);
 void LONG_CALL DeleteMapObject(LocalMapObject *mapObject);
 u32 LONG_CALL MapObject_GetCurrentX(LocalMapObject *object);
 u32 LONG_CALL MapObject_GetCurrentY(LocalMapObject *object);
