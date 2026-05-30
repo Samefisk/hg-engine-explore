@@ -13,6 +13,10 @@
 
 #define OW_WILD_MAX_SPAWNS 4
 #define OW_WILD_GRASS_SLOTS 12
+#define OW_WILD_SOUND_SLOTS 2
+#define OW_WILD_SURF_SLOTS 5
+#define OW_WILD_ROCK_SMASH_SLOTS 2
+#define OW_WILD_FISH_SLOTS 5
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
@@ -20,9 +24,12 @@
 #define OW_WILD_DESPAWN_DISTANCE 14
 #define OW_WILD_SPAWN_ATTEMPTS 48
 #define OW_WILD_REFILL_COOLDOWN_STEPS 2
-#define OW_WILD_TILE_ENCOUNTER_GRASS 2
-#define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
+
+typedef enum OverworldWildSpawnTerrain {
+    OW_WILD_SPAWN_TERRAIN_LAND,
+    OW_WILD_SPAWN_TERRAIN_SURF,
+} OverworldWildSpawnTerrain;
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -32,14 +39,40 @@ typedef struct OverworldWildSpawn {
     u8 active;
 } OverworldWildSpawn;
 
-typedef struct OverworldWildGrassEncounterData {
-    u8 rates[6];
-    u8 padding[2];
-    u8 walkLevels[OW_WILD_GRASS_SLOTS];
+typedef struct OverworldWildLandEncounterData {
+    u8 levels[OW_WILD_GRASS_SLOTS];
     u16 morningSpecies[OW_WILD_GRASS_SLOTS];
     u16 daySpecies[OW_WILD_GRASS_SLOTS];
     u16 nightSpecies[OW_WILD_GRASS_SLOTS];
-} OverworldWildGrassEncounterData;
+} OverworldWildLandEncounterData;
+
+typedef struct OverworldWildEncounterDataSlot {
+    u8 minLevel;
+    u8 maxLevel;
+    u16 species;
+} OverworldWildEncounterDataSlot;
+
+typedef struct OverworldWildEncounterData {
+    u8 walkingRate;
+    u8 surfingRate;
+    u8 rockSmashRate;
+    u8 oldRodRate;
+    u8 goodRodRate;
+    u8 superRodRate;
+    u8 padding[2];
+    OverworldWildLandEncounterData landSlots;
+    u16 hoennSoundsSpecies[OW_WILD_SOUND_SLOTS];
+    u16 sinnohSoundsSpecies[OW_WILD_SOUND_SLOTS];
+    OverworldWildEncounterDataSlot surfSlots[OW_WILD_SURF_SLOTS];
+    OverworldWildEncounterDataSlot rockSmashSlots[OW_WILD_ROCK_SMASH_SLOTS];
+    OverworldWildEncounterDataSlot oldRodSlots[OW_WILD_FISH_SLOTS];
+    OverworldWildEncounterDataSlot goodRodSlots[OW_WILD_FISH_SLOTS];
+    OverworldWildEncounterDataSlot superRodSlots[OW_WILD_FISH_SLOTS];
+    u16 landSwarm;
+    u16 surfSwarm;
+    u16 nightFish;
+    u16 fishSwarm;
+} OverworldWildEncounterData;
 
 typedef struct OverworldWildRolledEncounter {
     u16 species;
@@ -50,6 +83,7 @@ typedef struct OverworldWildRolledEncounter {
 typedef struct OverworldWildSpawnPosition {
     int x;
     int y;
+    OverworldWildSpawnTerrain terrain;
 } OverworldWildSpawnPosition;
 
 typedef struct OverworldWildEncounterArea {
@@ -67,6 +101,10 @@ static s8 sOverworldWildPendingSlot = -1;
 
 static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
     20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
+};
+
+static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
+    60, 30, 5, 4, 1,
 };
 
 static const OverworldWildEncounterArea sOverworldWildEncounterAreas[] = {
@@ -189,35 +227,35 @@ static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
         && OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId);
 }
 
-static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildGrassEncounterData *encounterData)
+static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildLandEncounterData *landSlots)
 {
     switch (GF_RTC_GetTimeOfDayWildParam()) {
     case TIMEOFDAY_WILD_MORN:
-        return encounterData->morningSpecies;
+        return landSlots->morningSpecies;
     case TIMEOFDAY_WILD_NITE:
-        return encounterData->nightSpecies;
+        return landSlots->nightSpecies;
     case TIMEOFDAY_WILD_DAY:
     default:
-        return encounterData->daySpecies;
+        return landSlots->daySpecies;
     }
 }
 
-static u8 OverworldWildSpawns_RollGrassSlot(void)
+static u8 OverworldWildSpawns_RollWeightedSlot(const u8 *weights, u8 count)
 {
     u32 roll = gf_rand() % 100;
     u8 slot;
 
-    for (slot = 0; slot < OW_WILD_GRASS_SLOTS; slot++) {
-        if (roll < sGrassSlotWeights[slot]) {
+    for (slot = 0; slot < count; slot++) {
+        if (roll < weights[slot]) {
             return slot;
         }
-        roll -= sGrassSlotWeights[slot];
+        roll -= weights[slot];
     }
 
-    return OW_WILD_GRASS_SLOTS - 1;
+    return count - 1;
 }
 
-static BOOL OverworldWildSpawns_IsGrassTile(FieldSystem *fieldSystem, int x, int y)
+static BOOL OverworldWildSpawns_TryGetSpawnTerrain(FieldSystem *fieldSystem, int x, int y, OverworldWildSpawnTerrain *terrain)
 {
     u8 behavior;
 
@@ -226,7 +264,17 @@ static BOOL OverworldWildSpawns_IsGrassTile(FieldSystem *fieldSystem, int x, int
     }
 
     behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    return behavior == OW_WILD_TILE_ENCOUNTER_GRASS || behavior == OW_WILD_TILE_LONG_GRASS;
+    if (!MetatileBehavior_CanGenerateWalkingEncounters(behavior)) {
+        return FALSE;
+    }
+
+    if (MetatileBehavior_IsSurfableWater(behavior)) {
+        *terrain = OW_WILD_SPAWN_TERRAIN_SURF;
+    } else {
+        *terrain = OW_WILD_SPAWN_TERRAIN_LAND;
+    }
+
+    return TRUE;
 }
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y)
@@ -273,7 +321,7 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
         if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
             continue;
         }
-        if (!OverworldWildSpawns_IsGrassTile(fieldSystem, x, y)) {
+        if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, x, y, &position->terrain)) {
             continue;
         }
         if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
@@ -288,34 +336,73 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
     return FALSE;
 }
 
-static BOOL OverworldWildSpawns_TryRollGrassEncounter(FieldSystem *fieldSystem, OverworldWildRolledEncounter *encounter)
+static BOOL OverworldWildSpawns_TryRollLandEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+    const u16 *speciesTable;
+
+    speciesTable = OverworldWildSpawns_GetTimeOfDaySpeciesTable(&encounterData->landSlots);
+
+    for (attempts = 0; attempts < OW_WILD_GRASS_SLOTS; attempts++) {
+        u8 slot = OverworldWildSpawns_RollWeightedSlot(sGrassSlotWeights, OW_WILD_GRASS_SLOTS);
+        u16 encodedSpecies = speciesTable[slot];
+        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
+
+        if (species != SPECIES_NONE && encounterData->landSlots.levels[slot] != 0) {
+            encounter->species = species;
+            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
+            encounter->level = encounterData->landSlots.levels[slot];
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollSurfEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+
+    for (attempts = 0; attempts < OW_WILD_SURF_SLOTS; attempts++) {
+        u8 slot = OverworldWildSpawns_RollWeightedSlot(sSurfSlotWeights, OW_WILD_SURF_SLOTS);
+        u16 encodedSpecies = encounterData->surfSlots[slot].species;
+        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
+
+        if (species != SPECIES_NONE && encounterData->surfSlots[slot].minLevel != 0) {
+            u8 minLevel = encounterData->surfSlots[slot].minLevel;
+            u8 maxLevel = encounterData->surfSlots[slot].maxLevel;
+
+            encounter->species = species;
+            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
+            encounter->level = minLevel;
+            if (maxLevel > minLevel) {
+                encounter->level += gf_rand() % (maxLevel - minLevel + 1);
+            }
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, OverworldWildRolledEncounter *encounter)
 {
     int encounterDataId;
-    int attempts;
-    OverworldWildGrassEncounterData encounterData;
-    const u16 *speciesTable;
+    OverworldWildEncounterData encounterData;
 
     if (!OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId)) {
         return FALSE;
     }
 
     ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
-    speciesTable = OverworldWildSpawns_GetTimeOfDaySpeciesTable(&encounterData);
 
-    for (attempts = 0; attempts < OW_WILD_GRASS_SLOTS; attempts++) {
-        u8 slot = OverworldWildSpawns_RollGrassSlot();
-        u16 encodedSpecies = speciesTable[slot];
-        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
-
-        if (species != SPECIES_NONE && encounterData.walkLevels[slot] != 0) {
-            encounter->species = species;
-            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
-            encounter->level = encounterData.walkLevels[slot];
-            return TRUE;
-        }
+    switch (terrain) {
+    case OW_WILD_SPAWN_TERRAIN_SURF:
+        return OverworldWildSpawns_TryRollSurfEncounter(&encounterData, encounter);
+    case OW_WILD_SPAWN_TERRAIN_LAND:
+    default:
+        return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
     }
-
-    return FALSE;
 }
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
@@ -333,7 +420,7 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
     if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, &position)) {
         return FALSE;
     }
-    if (!OverworldWildSpawns_TryRollGrassEncounter(fieldSystem, &encounter)) {
+    if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, position.terrain, &encounter)) {
         return FALSE;
     }
 

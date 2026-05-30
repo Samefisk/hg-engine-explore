@@ -301,6 +301,8 @@ typedef struct FIELD_PLAYER_AVATAR {
 } FIELD_PLAYER_AVATAR; //size: 0x40
 
 u8 LONG_CALL GetMetatileBehaviorAt(FieldSystem *fieldSystem, int x, int y);
+BOOL LONG_CALL MetatileBehavior_IsSurfableWater(u8 tile);
+BOOL LONG_CALL MetatileBehavior_CanGenerateWalkingEncounters(u8 tile);
 int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
 BOOL MapObject_IsSingleMovementActive(LocalMapObject *obj);

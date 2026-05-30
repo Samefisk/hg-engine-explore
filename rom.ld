@@ -359,6 +359,8 @@ MapObjectMan_PauseAllMovement = 0x0205F574 | 1;
 MapObjectMan_UnpauseAllMovement = 0x0205F5A4 | 1;
 MapObject_IsSingleMovementActive = 0x0205F648 | 1;
 GetMetatileBehaviorAt = 0x02054918 | 1;
+MetatileBehavior_IsSurfableWater = 0x0205B778 | 1;
+MetatileBehavior_CanGenerateWalkingEncounters = 0x0205B990 | 1;
 GetPlayerXCoord = 0x0205C67C | 1;
 GetPlayerYCoord = 0x0205C688 | 1;
 
@@ -826,4 +828,3 @@ sButtonWindowTemplates = 0x02101654;
 sButtonWindowIDs = 0x021016B4;
 PartyMenu_DisableMainScreenBlend_AfterYesNo = 0x0207CB90 | 1;
 sBattleBgProfileTable = 0x0226E70C;
-
