@@ -240,6 +240,9 @@ void LONG_CALL SetUpItemScript(void *iuwk, const void *icwk, u32 scr_id);
  *  @return queried data corresponding to param
  */
 u32 LONG_CALL GetItemData(u16 item, u32 param, u32 heap_id);
+u16 LONG_CALL ItemToMachineMoveIndex(u16 itemId);
+u16 LONG_CALL ItemToMachineMove(u16 itemId);
+BOOL LONG_CALL MoveIsHM(u16 moveId);
 
 /* item use funcs */
 BOOL LONG_CALL THUMB_FUNC ItemFieldUseFunc_Generic(struct ItemFieldUseData *data);
