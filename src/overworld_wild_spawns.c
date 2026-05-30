@@ -11,8 +11,8 @@
 #include "../include/script.h"
 
 #define OW_WILD_MAX_SPAWNS 3
-#define OW_WILD_SCRIPT_VAR_SPECIES 0x8000
-#define OW_WILD_SCRIPT_VAR_LEVEL   0x8001
+#define OW_WILD_SCRIPT_VAR_SPECIES 0x800A
+#define OW_WILD_SCRIPT_VAR_LEVEL   0x800B
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
