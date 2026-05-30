@@ -1,5 +1,4 @@
 #include "../../include/types.h"
-#include "../../include/config.h"
 #include "../../include/constants/file.h"
 #include "../../include/constants/species.h"
 #include "../../include/pokemon.h"

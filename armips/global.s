@@ -27,7 +27,6 @@
 .include "armips/asm/hidden_items.s" // allows editing of hidden items for Dowsing Machine
 
 .include "armips/asm/no_partner_double_battles.s" // allows no partner double battles
-.include "armips/asm/shiny_overworlds.s" // redirects shiny overworld BTX loads to the shiny archive
 
 .if FAIRY_TYPE_IMPLEMENTED == 1
 
