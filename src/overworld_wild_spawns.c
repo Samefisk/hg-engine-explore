@@ -11,7 +11,10 @@
 #include "../include/rtc.h"
 #include "../include/script.h"
 
-#define OW_WILD_MAX_SPAWNS 4
+#define OW_WILD_GRASS_MAX_SPAWNS 3
+#define OW_WILD_SURF_MAX_SPAWNS 3
+#define OW_WILD_HEADBUTT_MAX_SPAWNS 1
+#define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_GRASS_SLOTS 12
 #define OW_WILD_SOUND_SLOTS 2
 #define OW_WILD_SURF_SLOTS 5
@@ -23,16 +26,17 @@
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_DESPAWN_DISTANCE 14
 #define OW_WILD_SPAWN_ATTEMPTS 48
-#define OW_WILD_REFILL_COOLDOWN_STEPS 2
+#define OW_WILD_REFILL_COOLDOWN_STEPS 6
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
-#define OW_WILD_TILE_FLAG_SURFABLE 1
-#define OW_WILD_TILE_FLAG_WALKING_ENCOUNTER 2
+#define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
+#define OW_WILD_MOVEMENT_JUMP_DOWN 0x35
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
     OW_WILD_SPAWN_TERRAIN_SURF,
+    OW_WILD_SPAWN_TERRAIN_HEADBUTT,
 } OverworldWildSpawnTerrain;
 
 typedef struct OverworldWildSpawn {
@@ -85,9 +89,9 @@ typedef struct OverworldWildRolledEncounter {
 } OverworldWildRolledEncounter;
 
 typedef struct OverworldWildSpawnPosition {
-    int x;
-    int y;
-    OverworldWildSpawnTerrain terrain;
+    int startX;
+    int startY;
+    u8 hopMovement;
 } OverworldWildSpawnPosition;
 
 typedef struct OverworldWildEncounterArea {
@@ -103,47 +107,14 @@ static u16 sOverworldWildPendingSpecies;
 static u8 sOverworldWildPendingLevel;
 static s8 sOverworldWildPendingSlot = -1;
 
+static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
+
 static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
     20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
 };
 
 static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
     60, 30, 5, 4, 1,
-};
-
-static const u8 sEncounterTileBehaviorFlags[256] = {
-    0x00, 0x00, 0x02, 0x02, 0x00, 0x02, 0x00, 0x00,
-    0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
-    0x03, 0x01, 0x03, 0x01, 0x01, 0x03, 0x00, 0x00,
-    0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
-    0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x02,
-    0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 static const OverworldWildEncounterArea sOverworldWildEncounterAreas[] = {
@@ -297,27 +268,45 @@ static u8 OverworldWildSpawns_RollWeightedSlot(const u8 *weights, u8 count)
 static BOOL OverworldWildSpawns_TryGetSpawnTerrain(FieldSystem *fieldSystem, int x, int y, OverworldWildSpawnTerrain *terrain)
 {
     u8 behavior;
-    u8 flags;
 
     if (x < 0 || y < 0) {
         return FALSE;
     }
 
     behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    flags = sEncounterTileBehaviorFlags[behavior];
-    if ((flags & OW_WILD_TILE_FLAG_WALKING_ENCOUNTER) == 0
-        && behavior != OW_WILD_TILE_ENCOUNTER_GRASS
-        && behavior != OW_WILD_TILE_LONG_GRASS) {
+    if (behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42) {
+        *terrain = OW_WILD_SPAWN_TERRAIN_SURF;
+    } else if (behavior == OW_WILD_TILE_ENCOUNTER_GRASS
+        || behavior == OW_WILD_TILE_LONG_GRASS
+        || behavior == 5
+        || behavior == 8
+        || behavior == 11
+        || behavior == 37
+        || behavior == 112
+        || behavior == 119
+        || behavior == 123
+        || behavior == 163
+        || behavior == 164) {
+        *terrain = OW_WILD_SPAWN_TERRAIN_LAND;
+    } else {
         return FALSE;
     }
 
-    if ((flags & OW_WILD_TILE_FLAG_SURFABLE) != 0) {
-        *terrain = OW_WILD_SPAWN_TERRAIN_SURF;
-    } else {
-        *terrain = OW_WILD_SPAWN_TERRAIN_LAND;
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_TryGetFreeSlot(u8 start, u8 end, int *slot)
+{
+    u8 i;
+
+    for (i = start; i < end; i++) {
+        if (!sOverworldWildSpawns[i].active) {
+            *slot = i;
+            return TRUE;
+        }
     }
 
-    return TRUE;
+    return FALSE;
 }
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y)
@@ -348,11 +337,12 @@ static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem,
     return FALSE;
 }
 
-static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
+static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnTerrain requestedTerrain, OverworldWildSpawnPosition *position)
 {
     int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
     int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
     int attempt;
+    OverworldWildSpawnTerrain terrain;
 
     for (attempt = 0; attempt < OW_WILD_SPAWN_ATTEMPTS; attempt++) {
         int dx = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
@@ -364,15 +354,55 @@ static BOOL OverworldWildSpawns_TryPickSpawnPosition(FieldSystem *fieldSystem, O
         if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
             continue;
         }
-        if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, x, y, &position->terrain)) {
+        if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, x, y, &terrain)) {
+            continue;
+        }
+        if (terrain != requestedTerrain) {
             continue;
         }
         if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
             continue;
         }
 
-        position->x = x;
-        position->y = y;
+        position->startX = x;
+        position->startY = y;
+        position->hopMovement = 0;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
+{
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    int attempt;
+    OverworldWildSpawnTerrain terrain;
+
+    for (attempt = 0; attempt < OW_WILD_SPAWN_ATTEMPTS; attempt++) {
+        int dx = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
+        int dy = (int)(gf_rand() % (OW_WILD_SPAWN_MAX_DISTANCE * 2 + 1)) - OW_WILD_SPAWN_MAX_DISTANCE;
+        int treeX = playerX + dx;
+        int treeY = playerY + dy;
+        int distance;
+
+        distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(treeX - playerX), OverworldWildSpawns_Abs(treeY - playerY));
+        if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+            || distance > OW_WILD_SPAWN_MAX_DISTANCE
+            || GetMetatileBehaviorAt(fieldSystem, treeX, treeY) != OW_WILD_TILE_HEADBUTT) {
+            continue;
+        }
+        position->startX = treeX;
+        position->startY = treeY++;
+        if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, treeX, treeY)) {
+            continue;
+        }
+        if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, treeX, treeY, &terrain) || terrain != OW_WILD_SPAWN_TERRAIN_LAND) {
+            continue;
+        }
+
+        position->hopMovement = OW_WILD_MOVEMENT_JUMP_DOWN;
         return TRUE;
     }
 
@@ -439,13 +469,10 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
 
     ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
 
-    switch (terrain) {
-    case OW_WILD_SPAWN_TERRAIN_SURF:
+    if (terrain == OW_WILD_SPAWN_TERRAIN_SURF) {
         return OverworldWildSpawns_TryRollSurfEncounter(&encounterData, encounter);
-    case OW_WILD_SPAWN_TERRAIN_LAND:
-    default:
-        return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
     }
+    return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
 }
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
@@ -454,23 +481,27 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
-static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
+static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnPosition position;
     LocalMapObject *object;
 
-    if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, &position)) {
+    if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
+        if (!OverworldWildSpawns_TryPickHeadbuttSpawnPosition(fieldSystem, &position)) {
+            return FALSE;
+        }
+    } else if (!OverworldWildSpawns_TryPickSpawnPosition(fieldSystem, terrain, &position)) {
         return FALSE;
     }
-    if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, position.terrain, &encounter)) {
+    if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
         return FALSE;
     }
 
     object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
-        position.x,
-        position.y,
+        position.startX,
+        position.startY,
         1,
         FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0),
         OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
@@ -480,6 +511,11 @@ static BOOL OverworldWildSpawns_SpawnOne(FieldSystem *fieldSystem, int slot)
     }
 
     OverworldWildSpawns_ApplyMovementRange(object);
+    if (position.hopMovement != 0) {
+        object->movementCmd = position.hopMovement;
+        object->movementStep = 0;
+        object->flags |= MAPOBJECTFLAG_SINGLE_MOVEMENT;
+    }
     MapObject_SetParam(object, encounter.species, 0);
     MapObject_SetParam(object, encounter.form, 1);
     MapObject_SetParam(object, encounter.level, 2);
@@ -511,21 +547,21 @@ static void OverworldWildSpawns_DespawnFarMons(FieldSystem *fieldSystem)
 
 static void OverworldWildSpawns_TryRefill(FieldSystem *fieldSystem)
 {
-    int i;
+    int slot;
 
     if (sOverworldWildSpawnCooldown != 0) {
         sOverworldWildSpawnCooldown--;
         return;
     }
 
-    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        if (!sOverworldWildSpawns[i].active) {
-            if (OverworldWildSpawns_SpawnOne(fieldSystem, i)) {
-                sOverworldWildJustSpawned = TRUE;
-                sOverworldWildSpawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
-            }
-            return;
-        }
+    if ((OverworldWildSpawns_TryGetFreeSlot(0, OW_WILD_GRASS_MAX_SPAWNS, &slot)
+            && OverworldWildSpawns_SpawnOne(fieldSystem, OW_WILD_SPAWN_TERRAIN_LAND, slot))
+        || (OverworldWildSpawns_TryGetFreeSlot(OW_WILD_GRASS_MAX_SPAWNS, OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS, &slot)
+            && OverworldWildSpawns_SpawnOne(fieldSystem, OW_WILD_SPAWN_TERRAIN_SURF, slot))
+        || (!sOverworldWildSpawns[OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS].active
+            && OverworldWildSpawns_SpawnOne(fieldSystem, OW_WILD_SPAWN_TERRAIN_HEADBUTT, OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS))) {
+        sOverworldWildJustSpawned = TRUE;
+        sOverworldWildSpawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
     }
 }
 
