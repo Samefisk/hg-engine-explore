@@ -133,6 +133,7 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
+static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -241,6 +242,50 @@ static BOOL OverworldWildSpawns_IsNearActiveSpawn(OverworldWildSpawnState *state
     }
 
     return FALSE;
+}
+
+static BOOL OverworldWildSpawns_IsCurrentMapObject(FieldSystem *fieldSystem, LocalMapObject *object)
+{
+    MapObjectMan *mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    LocalMapObject *objects;
+    u32 objectAddr;
+    u32 startAddr;
+    u32 endAddr;
+
+    if (object == NULL || mapObjectMan == NULL || mapObjectMan->objects == NULL) {
+        return FALSE;
+    }
+
+    objects = mapObjectMan->objects;
+    objectAddr = (u32)object;
+    startAddr = (u32)objects;
+    endAddr = startAddr + mapObjectMan->object_count * sizeof(LocalMapObject);
+
+    return objectAddr >= startAddr && objectAddr < endAddr;
+}
+
+static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
+{
+    if (!spawn->active || !OverworldWildSpawns_IsCurrentMapObject(fieldSystem, spawn->object)) {
+        return FALSE;
+    }
+
+    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+        && MapObject_GetParam(spawn->object, 0) == spawn->species
+        && MapObject_GetParam(spawn->object, 1) == spawn->form
+        && MapObject_GetParam(spawn->object, 2) == spawn->level;
+}
+
+static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (state->spawns[i].active
+            && !OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
+            OverworldWildSpawns_ClearSlot(state, i, FALSE);
+        }
+    }
 }
 
 static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
@@ -1075,17 +1120,26 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
 
 static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
 {
+    MapObjectMan *mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    void *mapObjects = mapObjectMan != NULL ? mapObjectMan->objects : NULL;
+
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
-        if (state->mapId != MAP_NOTHING) {
+        if (state->mapId != MAP_NOTHING || state->mapObjectMan != NULL || state->mapObjects != NULL) {
             OverworldWildSpawns_Clear(state, FALSE);
             state->mapId = MAP_NOTHING;
+            state->mapObjectMan = NULL;
+            state->mapObjects = NULL;
         }
         return FALSE;
     }
 
-    if (state->mapId != fieldSystem->location->mapId) {
+    if (state->mapId != fieldSystem->location->mapId
+        || state->mapObjectMan != mapObjectMan
+        || state->mapObjects != mapObjects) {
         OverworldWildSpawns_Clear(state, FALSE);
         state->mapId = fieldSystem->location->mapId;
+        state->mapObjectMan = mapObjectMan;
+        state->mapObjects = mapObjects;
     }
 
     return TRUE;
@@ -1097,6 +1151,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
         return FALSE;
     }
 
+    OverworldWildSpawns_DropStaleSlots(state, fieldSystem);
     OverworldWildSpawns_DespawnFarMons(state, fieldSystem);
     if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
         return TRUE;

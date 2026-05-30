@@ -27,6 +27,8 @@ typedef struct OverworldWildSpawn {
 typedef struct OverworldWildSpawnState {
     OverworldWildSpawn spawns[OW_WILD_MAX_SPAWNS];
     int mapId;
+    void *mapObjectMan;
+    void *mapObjects;
     u8 justSpawned;
     u8 spawnCooldown;
     u8 headbuttSpawnCooldown;
