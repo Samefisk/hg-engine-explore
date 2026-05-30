@@ -4,7 +4,11 @@
 fi
 
 docker run -it --rm --mount type=bind,source="$(pwd)",destination=/hg-engine hg-engine /bin/bash -lc 'cd /hg-engine && make -j$(nproc) VENV=/tmp/hg-engine-venv'
-exit
+build_status=$?
+if [ "$build_status" -eq 0 ]; then
+  ./scripts/copy-test-nds-to-delta.sh || exit $?
+fi
+exit "$build_status"
 
 :WINDOWS
 
