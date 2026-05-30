@@ -975,11 +975,6 @@ static BOOL OverworldWildSpawns_RollShiny(void)
     return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
-static BOOL OverworldWildSpawns_HasShinyPalette(u32 spriteId)
-{
-    return (spriteId >= 201 && spriteId <= 206) || spriteId >= 297;
-}
-
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
     MapObject_SetXRange(object, 2);
@@ -1017,7 +1012,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     }
 
     spriteId = FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0);
-    shiny = OverworldWildSpawns_HasShinyPalette(spriteId) && OverworldWildSpawns_RollShiny();
+    shiny = OverworldWildSpawns_RollShiny();
 
     object = CreateSpecialFieldObject(
         fieldSystem->mapObjectMan,
@@ -1033,6 +1028,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     OverworldWildSpawns_ApplyMovementRange(object);
+    MapObject_SetParam(object, 0, 2);
     FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
     if (shiny) {
         MapObject_SetBits(object, OW_WILD_RENDER_FLAG_FOLLOW_SPRITE);
