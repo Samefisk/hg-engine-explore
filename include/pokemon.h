@@ -1897,6 +1897,8 @@ BOOL Mon_UpdateRotomForm(struct PartyPokemon *mon, int form, int defaultSlot);
 
 BOOL LONG_CALL CanUseItemOnMonInParty(struct Party *party, u16 itemID, s32 partyIdx, s32 moveIdx, u32 heapID);
 
+BOOL LONG_CALL GetMonMachineMoveCompat(struct PartyPokemon *pp, u16 machineMoveIndex);
+
 BOOL LONG_CALL IsBabySpecies(u16 species);
 
 void LONG_CALL TrySetBabyBondRibbon(struct PartyPokemon *pokemon);

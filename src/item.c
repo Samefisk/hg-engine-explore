@@ -365,7 +365,7 @@ static const u16 sMachineMoves[] = {
 
 u16 GetItemIndex(u16 item, u16 type);
 void *GetItemArcData(u16 item, u16 type, u32 heap_id);
-u16 ItemToMachineMove(u16 itemId);
+u16 LONG_CALL ItemToMachineMove(u16 itemId);
 //void *LONG_CALL ItemDataTableLoad(int heapID);
 void ItemMenuUseFunc_RevealGlass(struct ItemMenuUseData *data, const struct ItemCheckUseData *dat2);
 BOOL ItemFieldUseFunc_RevealGlass(struct ItemFieldUseData *data);
@@ -513,7 +513,7 @@ void *LONG_CALL ItemDataTableLoad(int heapID)
  * @brief converts an item id to its corresponding TM/HM/TR index within sMachineMoves
  * @see   pret/pokeheartgold ItemToTMHMId
  */
-u16 ItemToMachineMoveIndex(u16 itemId) {
+u16 LONG_CALL ItemToMachineMoveIndex(u16 itemId) {
     if (itemId >= ITEM_TM001 && itemId <= ITEM_HM08) {
         return (itemId - ITEM_TM001);
     }
@@ -543,7 +543,7 @@ u16 ItemToMachineMoveIndex(u16 itemId) {
  * @brief converts an item id to its corresponding TM/HM/TR move id
  * @see   pret/pokeheartgold TMHMGetMove
  */
-u16 ItemToMachineMove(u16 itemId) {
+u16 LONG_CALL ItemToMachineMove(u16 itemId) {
     if (itemId < ITEM_TM001) {
         return MOVE_NONE;
     }
@@ -555,7 +555,7 @@ u16 ItemToMachineMove(u16 itemId) {
     return sMachineMoves[index];
 }
 
-BOOL MoveIsHM(u16 moveId) {
+BOOL LONG_CALL MoveIsHM(u16 moveId) {
     for (u8 i = 0; i < NUM_HMS; i++) {
         if (sMachineMoves[i + ITEM_HM01 - ITEM_TM001] == moveId) {
 #if defined(REUSABLE_TMS) && defined(DELETABLE_HMS)

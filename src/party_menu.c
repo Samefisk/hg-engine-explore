@@ -1,6 +1,7 @@
 #include "../include/bag.h"
 #include "../include/battle.h"
 #include "../include/config.h"
+#include "../include/item.h"
 #include "../include/party_menu.h"
 #include "../include/pokemon.h"
 #include "../include/message.h"
@@ -19,11 +20,64 @@ extern const s8 sButtonWindowIDs[][2][8];
 // mirrors the button layout
 static const u8 sPartyMenuRotomCatalogFormOrder[] = {3, 4, 5, /*quit*/ 0, 0, 1, 2};
 
+#ifdef FIELD_MOVE_HM_COMPATIBILITY
+static const u16 sPartyMenuFieldMoveHmItems[] = {
+    ITEM_HM01, // Cut
+    ITEM_HM02, // Fly
+    ITEM_HM03, // Surf
+    ITEM_HM04, // Strength
+    ITEM_HM05, // Whirlpool
+    ITEM_HM06, // Rock Smash
+    ITEM_HM07, // Waterfall
+    ITEM_HM08, // Rock Climb
+};
+#endif
+
 u32 LONG_CALL getButtonColorDepressed(int selection);
 u32 LONG_CALL getButtonColorRaised(int selection);
 void LONG_CALL PartyMonContextMenuAction_RotomCatalog(struct PartyMenu *partyMenu, int *pState);
 void LONG_CALL PartyMonContextMenuAction_QuitToBag(struct PartyMenu *partyMenu, int *pState);
 static void PartyMenu_ShowRotomCatalogList(struct PartyMenu *partyMenu);
+
+static BOOL PartyMenu_FieldMoveAlreadyRegistered(const u16 *registeredMoves, u8 count, u16 move)
+{
+    for (u8 i = 0; i < count; ++i)
+    {
+        if (registeredMoves[i] == move)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL PartyMenu_TryAddFieldMove(struct PartyMenu *wk, u8 *buf, u8 *count, u8 *fieldMoveIndex, u16 *registeredMoves, u16 move)
+{
+    if (move == MOVE_NONE || *count >= MAX_BUTTONS_IN_PARTY_MENU || *fieldMoveIndex >= MAX_MON_MOVES)
+    {
+        return FALSE;
+    }
+
+    if (PartyMenu_FieldMoveAlreadyRegistered(registeredMoves, *fieldMoveIndex, move))
+    {
+        return FALSE;
+    }
+
+    u8 fieldEffect = MoveId_GetFieldEffectId(move);
+    if (fieldEffect == 0xFF)
+    {
+        return FALSE;
+    }
+
+    buf[*count] = fieldEffect;
+    ++(*count);
+    PartyMenu_ContextMenuAddFieldMove(wk, move, *fieldMoveIndex);
+    registeredMoves[*fieldMoveIndex] = move;
+    ++(*fieldMoveIndex);
+
+    return TRUE;
+}
 
 u8 LONG_CALL sub_0207B0B0(struct PartyMenu *wk, u8 *buf)
 {
@@ -32,7 +86,7 @@ u8 LONG_CALL sub_0207B0B0(struct PartyMenu *wk, u8 *buf)
     u8 fieldMoveIndex = 0;
     u8 i;
     u8 count = 0;
-    u8 fieldEffect;
+    u16 registeredFieldMoves[MAX_MON_MOVES] = { MOVE_NONE, MOVE_NONE, MOVE_NONE, MOVE_NONE };
 
     u8 isEgg = GetMonData(pp, MON_DATA_IS_EGG, NULL);
     u32 item = GetMonData(pp, MON_DATA_HELD_ITEM, NULL);
@@ -57,8 +111,6 @@ u8 LONG_CALL sub_0207B0B0(struct PartyMenu *wk, u8 *buf)
             buf[count] = PARTY_MON_CONTEXT_MENU_QUIT;
             ++count;
 
-            // here is where a custom check would go.  replace the below for loop with your own checks
-
             for (i = 0; i < MAX_MON_MOVES; ++i)
             {
                 move = GetMonData(pp, MON_DATA_MOVE1 + i, NULL);
@@ -67,15 +119,22 @@ u8 LONG_CALL sub_0207B0B0(struct PartyMenu *wk, u8 *buf)
                     break;
                 }
 
-                fieldEffect = MoveId_GetFieldEffectId(move);
-                if (fieldEffect != 0xFF)
+                PartyMenu_TryAddFieldMove(wk, buf, &count, &fieldMoveIndex, registeredFieldMoves, move);
+            }
+
+#ifdef FIELD_MOVE_HM_COMPATIBILITY
+            for (i = 0; i < NELEMS(sPartyMenuFieldMoveHmItems); ++i)
+            {
+                u16 itemId = sPartyMenuFieldMoveHmItems[i];
+                u16 machineMoveIndex = ItemToMachineMoveIndex(itemId);
+
+                if (GetMonMachineMoveCompat(pp, machineMoveIndex) == TRUE)
                 {
-                    buf[count] = fieldEffect;
-                    ++count;
-                    PartyMenu_ContextMenuAddFieldMove(wk, move, fieldMoveIndex);
-                    ++fieldMoveIndex;
+                    move = ItemToMachineMove(itemId);
+                    PartyMenu_TryAddFieldMove(wk, buf, &count, &fieldMoveIndex, registeredFieldMoves, move);
                 }
             }
+#endif
         }
         else
         {

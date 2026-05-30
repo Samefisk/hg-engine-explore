@@ -2563,7 +2563,7 @@ void LONG_CALL ChangeToBattleForm(struct PartyPokemon *pp)
  * @brief checks if a given mon can learn a specific TM or HM by index. reads from data/generated/MachineMoveLearnsets.c
  * @see   pret/pokeheartgold GetMonTMHMCompat
  */
-BOOL GetMonMachineMoveCompat(struct PartyPokemon *pp, u16 machineMoveIndex)
+BOOL LONG_CALL GetMonMachineMoveCompat(struct PartyPokemon *pp, u16 machineMoveIndex)
 {
     u32 species = GetMonData(pp, MON_DATA_SPECIES, NULL);
     u16 form = GetMonData(pp, MON_DATA_FORM, NULL);

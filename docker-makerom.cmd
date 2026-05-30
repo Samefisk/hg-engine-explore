@@ -3,9 +3,9 @@
   goto :WINDOWS
 fi
 
-docker run -it --rm --mount type=bind,source="$(pwd)",destination=/hg-engine hg-engine
+docker run -it --rm --mount type=bind,source="$(pwd)",destination=/hg-engine hg-engine /bin/bash -lc 'cd /hg-engine && make -j$(nproc) VENV=/tmp/hg-engine-venv'
 exit
 
 :WINDOWS
 
-for /f "usebackq tokens=*" %%i in (`cd`) do docker run -it --rm --mount type=bind,source="%%i",destination=/hg-engine hg-engine
+for /f "usebackq tokens=*" %%i in (`cd`) do docker run -it --rm --mount type=bind,source="%%i",destination=/hg-engine hg-engine /bin/bash -lc "cd /hg-engine && make -j$(nproc) VENV=/tmp/hg-engine-venv"

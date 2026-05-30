@@ -196,6 +196,10 @@
 // Comment out the line below to disable this feature
 #define UPDATE_MACHINE_MOVE_LABELS
 
+// FIELD_MOVE_HM_COMPATIBILITY lets a Pokemon use HM field moves from the party menu if it can learn
+// the relevant HM, even if the move is not currently in its moveset.
+#define FIELD_MOVE_HM_COMPATIBILITY
+
 // Configs the ball capture ratio. 4 emulates the behaviour in HeartGold. However, due to the modernization of
 // the capture formula, it is only an estimate. Some are left as 4 to be less disruptive. Use GEN_LATEST for vanilla behaviour
 #define NEST_BALL_GENERATION   GEN_LATEST
