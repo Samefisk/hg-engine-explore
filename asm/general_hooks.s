@@ -145,10 +145,8 @@ add r4, #1
 add r5, r7
 cmp r4, r6
 blt MapObjectMan_Update_WildSpawnTick_ReturnLoop
-sub r0, r5, r7
-mov r1, #0x4A
-lsl r1, r1, #2
-ldr r0, [r0, r1]
+ldr r0, =gFieldSysPtr
+ldr r0, [r0]
 bl OverworldWildSpawns_OnFieldSystemTick
 pop {r3-r7, pc}
 
