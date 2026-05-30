@@ -47,6 +47,11 @@
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
 #define OW_WILD_PAL_PARAM_ENABLE 2
 #define OW_WILD_PAL_PARAM_SHINY 1
+#define OW_WILD_SHINY_RATTATA_SPRITE 5447
+#define OW_WILD_SHINY_TENTACOOL_SPRITE 5530
+#define OW_WILD_SHINY_MAGIKARP_SPRITE 5606
+#define OW_WILD_SHINY_HOOTHOOT_SPRITE 5646
+#define OW_WILD_SHINY_SPINARAK_SPRITE 5650
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -983,6 +988,28 @@ static BOOL OverworldWildSpawns_RollShiny(void)
     return FALSE;
 }
 
+static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form, BOOL shiny)
+{
+    if (!shiny) {
+        return FollowingPokemon_GetSpriteID(species, form, 0);
+    }
+
+    switch (species) {
+    case SPECIES_RATTATA:
+        return OW_WILD_SHINY_RATTATA_SPRITE;
+    case SPECIES_TENTACOOL:
+        return OW_WILD_SHINY_TENTACOOL_SPRITE;
+    case SPECIES_MAGIKARP:
+        return OW_WILD_SHINY_MAGIKARP_SPRITE;
+    case SPECIES_HOOTHOOT:
+        return OW_WILD_SHINY_HOOTHOOT_SPRITE;
+    case SPECIES_SPINARAK:
+        return OW_WILD_SHINY_SPINARAK_SPRITE;
+    default:
+        return FollowingPokemon_GetSpriteID(species, form, 0);
+    }
+}
+
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
 {
     MapObject_SetXRange(object, 2);
@@ -1019,8 +1046,8 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
     }
 
-    spriteId = FollowingPokemon_GetSpriteID(encounter.species, encounter.form, 0);
     shiny = OverworldWildSpawns_RollShiny();
+    spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form, shiny);
 
     object = CreateSpecialFieldObjectWithParams(
         fieldSystem->mapObjectMan,
@@ -1040,9 +1067,6 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     OverworldWildSpawns_ApplyMovementRange(object);
     FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, shiny);
-    if (shiny) {
-        sub_02069DC8(object, TRUE);
-    }
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;
