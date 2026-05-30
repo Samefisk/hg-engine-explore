@@ -155,3 +155,30 @@ ldr r3, =0x0205E546 | 1
 bx r3
 
 .pool
+
+.global MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterObject_hook
+MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterObject_hook:
+mov r0, r5
+ldr r3, =0x020611DC | 1
+bl bx_r3
+ldr r0, =gFieldSysPtr
+ldr r0, [r0]
+bl OverworldWildSpawns_OnFieldSystemTick
+pop {r3-r7, pc}
+
+.global MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterLoop_hook
+MapObjectMan_UpdateAlt_WildSpawnTick_ReturnAfterLoop_hook:
+add r4, #1
+add r5, r7
+cmp r4, r6
+blt MapObjectMan_UpdateAlt_WildSpawnTick_ReturnLoop
+ldr r0, =gFieldSysPtr
+ldr r0, [r0]
+bl OverworldWildSpawns_OnFieldSystemTick
+pop {r3-r7, pc}
+
+MapObjectMan_UpdateAlt_WildSpawnTick_ReturnLoop:
+ldr r3, =0x0205E5A6 | 1
+bx r3
+
+.pool

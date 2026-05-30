@@ -741,24 +741,56 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
 
 static BOOL OverworldWildSpawns_IsTouchingPlayer(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
 {
-    int dx;
-    int dy;
+    int playerX;
+    int playerY;
+    int fallbackPlayerX;
+    int fallbackPlayerY;
+    int coords[2][2];
+    int i;
 
-    if (!spawn->active || spawn->object == NULL) {
+    if (!spawn->active || spawn->object == NULL || fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
         return FALSE;
     }
 
-    dx = (int)MapObject_GetCurrentX(spawn->object) - GetPlayerXCoord(fieldSystem->playerAvatar);
-    dy = (int)MapObject_GetCurrentY(spawn->object) - GetPlayerYCoord(fieldSystem->playerAvatar);
+    playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    fallbackPlayerX = fieldSystem->location != NULL ? fieldSystem->location->x : playerX;
+    fallbackPlayerY = fieldSystem->location != NULL ? fieldSystem->location->z : playerY;
+    coords[0][0] = spawn->object->xPrev;
+    coords[0][1] = spawn->object->yPrev;
+    coords[1][0] = spawn->object->xCurr;
+    coords[1][1] = spawn->object->yCurr;
 
-    if (dx < 0) {
-        dx = -dx;
-    }
-    if (dy < 0) {
-        dy = -dy;
+    for (i = 0; i < 2; i++) {
+        int x = coords[i][0];
+        int y = coords[i][1];
+        int dx = x - playerX;
+        int dy = y - playerY;
+
+        if (dx < 0) {
+            dx = -dx;
+        }
+        if (dy < 0) {
+            dy = -dy;
+        }
+        if ((dx + dy) <= 1) {
+            return TRUE;
+        }
+
+        dx = x - fallbackPlayerX;
+        dy = y - fallbackPlayerY;
+        if (dx < 0) {
+            dx = -dx;
+        }
+        if (dy < 0) {
+            dy = -dy;
+        }
+        if ((dx + dy) <= 1) {
+            return TRUE;
+        }
     }
 
-    return (dx + dy) <= 1;
+    return FALSE;
 }
 
 static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
