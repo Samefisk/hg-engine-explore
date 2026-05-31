@@ -29,11 +29,13 @@ This keeps shiny rendering dynamic by species/form without generating duplicate 
 - no shiny tag table or shiny NARC is generated
 - no shared overworld model loader hook is installed
 - normal spawns keep the existing special-field-object render path
-- shiny spawns stay on the normal special-field-object render path, set the palette metadata bits, apply the follower shiny toggle, reload the same sprite tag after params are populated, then clear the normal-object vanish bit
+- shiny spawns stay on the normal special-field-object render path, mark the object with the follower Pokemon object type, set the palette metadata bits, apply the follower shiny toggle, reload the same sprite tag after params are populated, then clear the normal-object vanish bit
 
 One important stability note: do not set the follower render flags on overworld wild objects. Those flags make the wild object take the follower draw path without being created as a real follower object, which can make shiny spawns render invisible. Disassembly also showed that `sub_02069DC8(object, TRUE)` sets `BIT_VANISH` (`1 << 9`) as part of its follower shiny setup, which hides normal special field objects. The current test path keeps the follower shiny setup, but clears only `BIT_VANISH` afterward so the object remains visible.
 
-This specific combination was checked against history before trying it. Earlier attempts covered seeded param 2 only, `ChangeMapObjSprite` only, `sub_02069DC8` only, full follower render flags, direct follower object construction, shiny tag remaps, appended shiny BTX resources, and shared loader hooks. None of those attempts called `sub_02069DC8` and then cleared `BIT_VANISH` while leaving the rest of the shiny toggle state in place.
+The later normal-palette failure came from a separate follower palette gate. Overlay 1's shiny-palette helper only reads param 2's shiny bit when the map object type is `0xFD`, `0xFA`, or `0xFB`; otherwise it returns non-shiny even if param 2 is seeded correctly. The current test path sets only the `0xFD` Pokemon object type for shiny overworld wild objects before the sprite reload, without constructing the object through `CreateFollowingSpriteFieldObject` or applying the full follower render flag set.
+
+This specific type-marker attempt was checked against history before trying it. Earlier attempts covered seeded param 2 only, `ChangeMapObjSprite` only, `sub_02069DC8` only, `sub_02069DC8` plus clearing `BIT_VANISH`, full follower render flags, direct follower object construction, shiny tag remaps, appended shiny BTX resources, and shared loader hooks. None of those attempts set the shiny special field object's type to `0xFD` while leaving creation, movement, and render flags on the normal overworld wild path.
 
 ## What Was Tried
 
