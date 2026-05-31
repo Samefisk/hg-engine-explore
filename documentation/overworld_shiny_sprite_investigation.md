@@ -19,6 +19,18 @@ The stable system after the revert is:
 - No shiny overworld archive is generated.
 - No overlay hook redirects overworld model resource loading.
 
+## Follow-Up Implementation
+
+The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and use the existing follower overworld palette metadata to select the shiny palette for the spawned object.
+
+This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
+
+- the normal `pokemonow.narc` layout is unchanged
+- no shiny tag table or shiny NARC is generated
+- no shared overworld model loader hook is installed
+- normal spawns keep the existing special-field-object render path
+- shiny spawns opt into the same follower render flags used by shiny following Pokemon
+
 ## What Was Tried
 
 ### 1. Forced shiny battle state

@@ -34,7 +34,7 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
 }
 
-BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
+BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *shiny)
 {
     if (sOverworldWildSpawnState.pendingSpecies == SPECIES_NONE
         || sOverworldWildSpawnState.pendingLevel == 0) {
@@ -43,9 +43,11 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level)
 
     *encodedSpecies = sOverworldWildSpawnState.pendingSpecies;
     *level = sOverworldWildSpawnState.pendingLevel;
+    *shiny = sOverworldWildSpawnState.pendingShiny;
 
     sOverworldWildSpawnState.pendingSpecies = SPECIES_NONE;
     sOverworldWildSpawnState.pendingLevel = 0;
+    sOverworldWildSpawnState.pendingShiny = FALSE;
 
     return TRUE;
 }
