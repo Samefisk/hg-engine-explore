@@ -21,7 +21,7 @@ The stable system after the revert is:
 
 ## Follow-Up Implementation
 
-The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette.
+The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette. The current temporary test rate is 1/2.
 
 This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
 
@@ -35,9 +35,9 @@ One important stability note: do not set the follower render flags on overworld 
 
 The later normal-palette failure came from a separate follower palette gate. Overlay 1's shiny-palette helper only reads param 2's shiny bit when the map object ID is one of the follower IDs `0xFD`, `0xFA`, or `0xFB`; otherwise it returns non-shiny even if param 2 is seeded correctly. Setting the map object type to `0xFD` was the wrong lever and caused freezes when shiny objects spawned, because it let follower logic treat the wild object as follower-like while the palette helper still checked object ID.
 
-The current test path patches only that palette helper so it also recognizes the reserved overworld wild object ID range `0xE0` through `0xE9`. This lets shiny wild objects keep their normal object type, movement, and lifecycle while reusing the follower shiny bit in param 2.
+The first follow-up patch only changed that shiny-palette helper, but shiny wild objects still rendered with the normal palette. A second disassembly pass showed why: the actual shiny palette load function at `0x02205808` repeats its own hardcoded follower object-ID gate before copying the shiny palette data. The current test path patches both gates so they recognize the reserved overworld wild object ID range `0xE0` through `0xE9`. This lets shiny wild objects keep their normal object type, movement, and lifecycle while reusing the follower shiny bit in param 2.
 
-This specific palette-helper ID-gate attempt was checked against history before trying it. Earlier attempts covered seeded param 2 only, `ChangeMapObjSprite` only, `sub_02069DC8` only, `sub_02069DC8` plus clearing `BIT_VANISH`, full follower render flags, direct follower object construction, setting the special field object's type to `0xFD`, shiny tag remaps, appended shiny BTX resources, a shared model-resource loader hook, and a separate shiny archive. None of those attempts patched the shiny-palette helper to admit only the overworld wild object ID range while keeping the objects on the normal special-field path.
+This specific pair of ID-gate patches was checked against history before trying it. Earlier attempts covered seeded param 2 only, `ChangeMapObjSprite` only, `sub_02069DC8` only, `sub_02069DC8` plus clearing `BIT_VANISH`, full follower render flags, direct follower object construction, setting the special field object's type to `0xFD`, shiny tag remaps, appended shiny BTX resources, a shared model-resource loader hook, and a separate shiny archive. None of those attempts patched the shiny palette loader's internal object-ID gate at `0x0220582C` while keeping the objects on the normal special-field path.
 
 ## What Was Tried
 

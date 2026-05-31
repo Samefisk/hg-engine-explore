@@ -18,10 +18,45 @@ nop
 // object IDs. Let overworld wild spawn IDs use the same param 2 bit without
 // changing their object type or stealing the real follower object path.
 .org 0x0220553C
-.area 0x26, 0x00
+.area 0x08, 0x00
     ldr r3, =OverworldWildSpawns_CheckShinyPaletteObject|1
     bx r3
     .pool
+.endarea
+
+.org 0x02205544
+.area 0x20, 0x00
+OverworldWildSpawns_IsPokemonPaletteObjectId:
+    ldr r0, [r0, #8]
+    cmp r0, #253
+    beq @@isPokemonPaletteObject
+    cmp r0, #250
+    beq @@isPokemonPaletteObject
+    cmp r0, #251
+    beq @@isPokemonPaletteObject
+
+    sub r0, #OW_WILD_OBJECT_ID_START
+    cmp r0, #OW_WILD_MAX_SPAWNS
+    bcc @@isPokemonPaletteObject
+
+    mov r0, #0
+    bx lr
+
+@@isPokemonPaletteObject:
+    mov r0, #1
+    bx lr
+.endarea
+
+// The shiny palette loader repeats the follower object-ID gate after the
+// shiny check. Admit wild object IDs there too, otherwise shiny wild objects
+// pass the first check but still keep the normal palette.
+.org 0x0220582C
+.area 0x10, 0x00
+    mov r0, r5
+    bl OverworldWildSpawns_IsPokemonPaletteObjectId
+    cmp r0, #0
+    beq 0x0220586A
+    b 0x0220583C
 .endarea
 
 .org 0x02209B18
@@ -30,17 +65,9 @@ OverworldWildSpawns_CheckShinyPaletteObject:
     push {r4, lr}
     mov r4, r0
 
-    ldr r0, [r4, #8]
-    cmp r0, #253
-    beq @@readShinyParam
-    cmp r0, #250
-    beq @@readShinyParam
-    cmp r0, #251
-    beq @@readShinyParam
-
-    sub r0, #OW_WILD_OBJECT_ID_START
-    cmp r0, #OW_WILD_MAX_SPAWNS
-    bcc @@readShinyParam
+    bl OverworldWildSpawns_IsPokemonPaletteObjectId
+    cmp r0, #0
+    bne @@readShinyParam
 
     mov r0, #0
     pop {r4, pc}
