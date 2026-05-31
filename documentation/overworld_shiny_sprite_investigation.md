@@ -21,7 +21,7 @@ The stable system after the revert is:
 
 ## Follow-Up Implementation
 
-The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and use the existing follower overworld palette metadata to select the shiny palette for the spawned object.
+The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette.
 
 This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
 
@@ -29,7 +29,9 @@ This keeps shiny rendering dynamic by species/form without generating duplicate 
 - no shiny tag table or shiny NARC is generated
 - no shared overworld model loader hook is installed
 - normal spawns keep the existing special-field-object render path
-- shiny spawns opt into the same follower render flags used by shiny following Pokemon
+- shiny spawns stay on the normal special-field-object render path and only set the palette metadata bits
+
+One important stability note: do not set the follower render flags on overworld wild objects. Those flags make the wild object take the follower draw path without being created as a real follower object, which can make shiny spawns render invisible. The stable path is to pass the shiny palette bit through object param 2 while keeping the normal object renderer.
 
 ## What Was Tried
 
