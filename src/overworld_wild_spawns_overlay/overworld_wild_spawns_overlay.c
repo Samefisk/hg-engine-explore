@@ -1008,6 +1008,7 @@ static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object,
     if (shiny) {
         sub_02069DC8(object, TRUE);
         ChangeMapObjSprite(object, spriteId);
+        MapObject_ClearBits(object, BIT_VANISH);
     }
 }
 
