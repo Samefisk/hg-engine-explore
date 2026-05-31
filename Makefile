@@ -404,9 +404,6 @@ move_narc: $(NARC_FILES)
 	@echo "pokemon overworlds:"
 	cp $(OVERWORLDS_NARC) $(OVERWORLDS_TARGET)
 
-	@echo "shiny pokemon overworlds:"
-	cp $(OVERWORLDS_SHINY_NARC) $(OVERWORLDS_SHINY_TARGET)
-
 	@echo "pokemon overworld data:"
 	cp $(OVERWORLD_DATA_NARC) $(OVERWORLD_DATA_TARGET)
 

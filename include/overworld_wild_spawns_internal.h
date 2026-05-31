@@ -21,7 +21,6 @@ typedef struct OverworldWildSpawn {
     u16 species;
     u8 form;
     u8 level;
-    u8 shiny;
     u8 active;
 } OverworldWildSpawn;
 
@@ -38,7 +37,6 @@ typedef struct OverworldWildSpawnState {
     u8 battleGraceSteps;
     u16 pendingSpecies;
     u8 pendingLevel;
-    u8 pendingShiny;
     s8 pendingSlot;
 } OverworldWildSpawnState;
 

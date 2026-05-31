@@ -5,9 +5,7 @@ import sys
 from pathlib import Path
 
 
-SYMBOLS = [
-    "OverworldWildSpawns_LoadOverworldModelResource",
-]
+SYMBOLS = []
 
 
 def main():

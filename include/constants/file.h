@@ -28,7 +28,6 @@
 #define ARC_DEX_LISTS 216
 #define ARC_EGG_MOVES 231
 #define ARC_HEADBUTT_TREES 254
-#define ARC_SHINY_OVERWORLDS 272
 
 
 //ARC_BATTLE_GFX file indexes

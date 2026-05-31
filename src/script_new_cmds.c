@@ -30,15 +30,14 @@ static void Script_QueueOverworldWildBattle(SCRIPTCONTEXT *ctx)
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
     u16 encodedSpecies = SPECIES_RATTATA;
     u8 level = 4;
-    BOOL shiny = FALSE;
 
-    OverworldWildSpawns_PopPendingBattle(&encodedSpecies, &level, &shiny);
+    OverworldWildSpawns_PopPendingBattle(&encodedSpecies, &level);
 
     sOverworldWildBattleScript[2] = encodedSpecies & 0xFF;
     sOverworldWildBattleScript[3] = encodedSpecies >> 8;
     sOverworldWildBattleScript[4] = level;
     sOverworldWildBattleScript[5] = 0;
-    sOverworldWildBattleScript[6] = shiny;
+    sOverworldWildBattleScript[6] = 0;
     VarSet(ctx->fsys, VAR_BATTLE_RESULT, 0);
 #endif
 
