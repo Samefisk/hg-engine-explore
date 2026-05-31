@@ -45,7 +45,6 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
-#define OW_WILD_POKEMON_OBJECT_TYPE 0xFD
 // Param 2 mirrors the follower palette metadata without switching to follower rendering.
 #define OW_WILD_PAL_PARAM_SHINY 1
 #define OW_WILD_PAL_PARAM_ENABLE 2
@@ -1007,7 +1006,6 @@ static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object,
 {
     FollowPokeMapObjectSetParams(object, species, form, shiny);
     if (shiny) {
-        MapObject_SetType(object, OW_WILD_POKEMON_OBJECT_TYPE);
         sub_02069DC8(object, TRUE);
         ChangeMapObjSprite(object, spriteId);
         MapObject_ClearBits(object, BIT_VANISH);
