@@ -5,6 +5,7 @@
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
 #include "../../include/constants/file.h"
+#include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
 #include "../../include/rtc.h"
@@ -1061,6 +1062,10 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].shiny = shiny;
     state->spawns[slot].active = TRUE;
 
+    if (shiny) {
+        PlaySE(SEQ_SE_PL_KIRAKIRA);
+    }
+
     return TRUE;
 }
 
@@ -1073,7 +1078,8 @@ static void OverworldWildSpawns_DespawnFarMons(OverworldWildSpawnState *state, F
             int x = MapObject_GetCurrentX(state->spawns[i].object);
             int y = MapObject_GetCurrentY(state->spawns[i].object);
 
-            if (OverworldWildSpawns_DistanceFromPlayer(fieldSystem, x, y) > OW_WILD_DESPAWN_DISTANCE) {
+            if (!state->spawns[i].shiny
+                && OverworldWildSpawns_DistanceFromPlayer(fieldSystem, x, y) > OW_WILD_DESPAWN_DISTANCE) {
                 OverworldWildSpawns_ClearSlot(state, i, TRUE);
             }
         }

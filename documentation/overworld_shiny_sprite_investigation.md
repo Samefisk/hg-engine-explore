@@ -23,6 +23,8 @@ The stable system after the revert is:
 
 The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette. The current temporary test rate is 1/2.
 
+The current spawn behavior also uses that stored shiny state for two local overworld-only effects: shiny spawns play the standard sparkle sound effect after the object is created, and shiny slots are skipped by the distance-based despawn pass so walking away does not delete them.
+
 This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
 
 - the normal `pokemonow.narc` layout is unchanged
