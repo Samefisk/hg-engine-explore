@@ -1002,9 +1002,13 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
-static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object, u16 species, u8 form, BOOL shiny)
+static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object, u16 species, u8 form, u32 spriteId, BOOL shiny)
 {
     FollowPokeMapObjectSetParams(object, species, form, shiny);
+    if (shiny) {
+        sub_02069DC8(object, TRUE);
+        ChangeMapObjSprite(object, spriteId);
+    }
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
@@ -1047,7 +1051,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     OverworldWildSpawns_ApplyMovementRange(object);
-    OverworldWildSpawns_ApplyPokemonRenderParams(object, encounter.species, encounter.form, shiny);
+    OverworldWildSpawns_ApplyPokemonRenderParams(object, encounter.species, encounter.form, spriteId, shiny);
 
     state->spawns[slot].object = object;
     state->spawns[slot].species = encounter.species;

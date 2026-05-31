@@ -29,9 +29,9 @@ This keeps shiny rendering dynamic by species/form without generating duplicate 
 - no shiny tag table or shiny NARC is generated
 - no shared overworld model loader hook is installed
 - normal spawns keep the existing special-field-object render path
-- shiny spawns stay on the normal special-field-object render path and only set the palette metadata bits
+- shiny spawns stay on the normal special-field-object render path, set the palette metadata bits, apply the small follower palette toggle, and reload the same sprite tag after params are populated
 
-One important stability note: do not set the follower render flags on overworld wild objects. Those flags make the wild object take the follower draw path without being created as a real follower object, which can make shiny spawns render invisible. The stable path is to pass the shiny palette bit through object param 2 while keeping the normal object renderer.
+One important stability note: do not set the follower render flags on overworld wild objects. Those flags make the wild object take the follower draw path without being created as a real follower object, which can make shiny spawns render invisible. The stable path is to pass the shiny palette bit through object param 2, enable the palette toggle with `sub_02069DC8`, and reload the object's existing sprite tag while keeping the normal object renderer.
 
 ## What Was Tried
 
