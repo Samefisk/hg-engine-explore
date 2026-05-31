@@ -37,6 +37,7 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
+#define OW_WILD_SHINY_TEST_RATE 2
 #define OW_WILD_RENDER_FLAG_FOLLOW_SPRITE ((u32)(9 << 10))
 #define OW_WILD_RENDER_FLAG_FOLLOW_CLEAR ((u32)(6 << 6))
 #define OW_WILD_FLEE_GRACE_STEPS 3
@@ -976,7 +977,7 @@ static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form)
 
 static BOOL OverworldWildSpawns_RollShiny(void)
 {
-    return gf_rand() < SHINY_ODDS;
+    return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
 static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId)
