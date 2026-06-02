@@ -37,10 +37,7 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
-#define OW_WILD_ALERT_OBJECT_ID 0xEF
-#define OW_WILD_ALERT_OBJECT_TAG 713
-#define OW_WILD_ALERT_MOVE_STILL 0
-#define OW_WILD_ALERT_HEIGHT_OFFSET 1
+#define OW_WILD_ALERT_MOVEMENT_EXCLAMATION 0x004B
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_MEW_SPAWN_CHANCE_PERCENT 50
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
@@ -143,7 +140,6 @@ typedef struct OverworldWildHeadbuttLandingOffset {
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
-static void OverworldWildSpawns_ClearAlert(OverworldWildSpawnState *state, BOOL deleteObject);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
 static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state);
 
@@ -351,15 +347,6 @@ static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
     return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
 }
 
-static void OverworldWildSpawns_ClearAlert(OverworldWildSpawnState *state, BOOL deleteObject)
-{
-    if (deleteObject && state->alertObject != NULL) {
-        DeleteMapObject(state->alertObject);
-    }
-
-    state->alertObject = NULL;
-}
-
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
 {
     if (deleteObject && state->spawns[slot].active && state->spawns[slot].object != NULL) {
@@ -376,8 +363,6 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
 static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL deleteObjects)
 {
     int i;
-
-    OverworldWildSpawns_ClearAlert(state, deleteObjects);
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         OverworldWildSpawns_ClearSlot(state, i, deleteObjects);
@@ -1016,45 +1001,13 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
-static void OverworldWildSpawns_LiftAlertObject(LocalMapObject *alertObject, const LocalMapObject *spawnObject)
+static void OverworldWildSpawns_ShowInteractionAlert(const OverworldWildSpawn *spawn)
 {
-    int height = spawnObject->hCurr + OW_WILD_ALERT_HEIGHT_OFFSET;
-    u32 heightVec = spawnObject->posVec[1] + (OW_WILD_ALERT_HEIGHT_OFFSET << FX32_SHIFT);
-
-    alertObject->hInit = height;
-    alertObject->hPrev = height;
-    alertObject->hCurr = height;
-    alertObject->posVec[0] = spawnObject->posVec[0];
-    alertObject->posVec[1] = heightVec;
-    alertObject->posVec[2] = spawnObject->posVec[2];
-}
-
-static void OverworldWildSpawns_ShowInteractionAlert(OverworldWildSpawnState *state, FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
-{
-    LocalMapObject *alertObject;
-
     if (spawn->object == NULL) {
         return;
     }
 
-    OverworldWildSpawns_ClearAlert(state, TRUE);
-
-    alertObject = CreateSpecialFieldObject(
-        fieldSystem->mapObjectMan,
-        MapObject_GetCurrentX(spawn->object),
-        MapObject_GetCurrentY(spawn->object),
-        1,
-        OW_WILD_ALERT_OBJECT_TAG,
-        OW_WILD_ALERT_MOVE_STILL,
-        fieldSystem->location->mapId);
-
-    if (alertObject == NULL) {
-        return;
-    }
-
-    MapObject_SetID(alertObject, OW_WILD_ALERT_OBJECT_ID);
-    OverworldWildSpawns_LiftAlertObject(alertObject, spawn->object);
-    state->alertObject = alertObject;
+    ov01_021F9408(spawn->object, OW_WILD_ALERT_MOVEMENT_EXCLAMATION);
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
@@ -1221,7 +1174,7 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
-            OverworldWildSpawns_ShowInteractionAlert(state, fieldSystem, &state->spawns[i]);
+            OverworldWildSpawns_ShowInteractionAlert(&state->spawns[i]);
 
             if (state->spawns[i].species == SPECIES_MEW) {
                 state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
@@ -1251,8 +1204,6 @@ static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
 
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult)
 {
-    OverworldWildSpawns_ClearAlert(state, TRUE);
-
     if (state->pendingSlot >= 0 && state->pendingSlot < OW_WILD_MAX_SPAWNS) {
         if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
             state->battleGraceSteps = OW_WILD_FLEE_GRACE_STEPS;

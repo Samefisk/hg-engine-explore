@@ -253,6 +253,7 @@ void LONG_CALL MapObject_SetCurrentX(LocalMapObject* object, u32 x);
 void LONG_CALL MapObject_SetFlag29(LocalMapObject* object, BOOL set);
 void LONG_CALL sub_02069DC8(LocalMapObject *mapObject, BOOL enable_bit);
 void LONG_CALL ov01_021F9048(LocalMapObject* map_object);
+void LONG_CALL ov01_021F9408(LocalMapObject *mapObject, u32 movement);
 void LONG_CALL MapObjectMan_PauseAllMovement(MapObjectMan* manager);
 void LONG_CALL MapObjectMan_UnpauseAllMovement(MapObjectMan* manager);
 void LONG_CALL ChangeMapObjSprite(LocalMapObject *mapObject, u32 overworldTag);
