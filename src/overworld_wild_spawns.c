@@ -55,7 +55,7 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
 
 void OverworldWildSpawns_ApplyPendingBattleGender(struct PartyPokemon *mon)
 {
-    u8 gender;
+    u32 gender;
 
     if (mon == NULL
         || sOverworldWildSpawnState.pendingSlot < 0
