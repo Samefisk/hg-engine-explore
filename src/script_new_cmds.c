@@ -5,6 +5,7 @@
 #include "../include/repel.h"
 #include "../include/constants/file.h"
 #include "../include/constants/maps.h"
+#include "../include/constants/sndseq.h"
 #include "../include/constants/species.h"
 
 #define SCRIPT_NEW_CMD_REPEL_USE    0
@@ -14,6 +15,7 @@
 
 #define SCRIPT_NEW_CMD_MAX          256
 #define VAR_BATTLE_RESULT           0x4013
+#define SCRIPT_CMD_PLAY_SE          73
 #define SCRIPT_CMD_FADE_SCREEN      174
 #define SCRIPT_CMD_WAIT_FADE        175
 #define SCRIPT_CMD_WARP             176
@@ -21,6 +23,7 @@
 #define SCRIPT_CMD_END              2
 #define OW_WILD_MEW_WARP_NONE       0xFFFF
 #define OW_WILD_MEW_WARP_DIR_SOUTH  1
+#define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
 
 typedef struct OverworldWildMewWarpDestination {
     u16 mapId;
@@ -43,11 +46,13 @@ static u8 sOverworldWildBattleScript[] = {
 };
 
 static u8 sOverworldWildMewWarpScript[] = {
+    SCRIPT_CMD_PLAY_SE & 0xFF, SCRIPT_CMD_PLAY_SE >> 8,
+    SEQ_SE_PL_WARP & 0xFF, SEQ_SE_PL_WARP >> 8,
     SCRIPT_CMD_FADE_SCREEN & 0xFF, SCRIPT_CMD_FADE_SCREEN >> 8,
     0x06, 0x00,
     0x01, 0x00,
     0x00, 0x00,
-    0x00, 0x00,
+    OW_WILD_MEW_WARP_FLASH_COLOR & 0xFF, OW_WILD_MEW_WARP_FLASH_COLOR >> 8,
     SCRIPT_CMD_WAIT_FADE & 0xFF, SCRIPT_CMD_WAIT_FADE >> 8,
     SCRIPT_CMD_WARP & 0xFF, SCRIPT_CMD_WARP >> 8,
     MAP_T21PC0101 & 0xFF, MAP_T21PC0101 >> 8,
@@ -59,7 +64,7 @@ static u8 sOverworldWildMewWarpScript[] = {
     0x06, 0x00,
     0x01, 0x00,
     0x01, 0x00,
-    0x00, 0x00,
+    OW_WILD_MEW_WARP_FLASH_COLOR & 0xFF, OW_WILD_MEW_WARP_FLASH_COLOR >> 8,
     SCRIPT_CMD_WAIT_FADE & 0xFF, SCRIPT_CMD_WAIT_FADE >> 8,
     SCRIPT_CMD_RELEASE_ALL & 0xFF, SCRIPT_CMD_RELEASE_ALL >> 8,
     SCRIPT_CMD_END & 0xFF, SCRIPT_CMD_END >> 8,
@@ -116,11 +121,11 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
     const OverworldWildMewWarpDestination *destination =
         &sOverworldWildMewWarpDestinations[gf_rand() % NELEMS(sOverworldWildMewWarpDestinations)];
 
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 14, destination->mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 16, destination->warpId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 18, destination->x);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 20, destination->z);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 22, destination->direction);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 18, destination->mapId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 20, destination->warpId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 22, destination->x);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 24, destination->z);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 26, destination->direction);
 #endif
 
     ScriptJump(ctx, sOverworldWildMewWarpScript);
