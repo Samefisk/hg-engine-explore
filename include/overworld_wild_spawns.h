@@ -12,7 +12,7 @@ struct BattleSystem;
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem);
 BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *shiny);
 BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL *shiny);
-void OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome);
+void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome);
 void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult);
 
 #endif // OVERWORLD_WILD_SPAWNS_H

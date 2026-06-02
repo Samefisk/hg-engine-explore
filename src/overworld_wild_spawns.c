@@ -245,7 +245,7 @@ BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL
     return TRUE;
 }
 
-void OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome)
+void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome)
 {
     OverworldWildSpawns_TryApplySavedBattleHp(bsys, ctx);
     OverworldWildSpawns_TryRecordFledBattleHp(bsys, ctx, battleOutcome);
