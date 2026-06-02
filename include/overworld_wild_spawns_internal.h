@@ -20,7 +20,6 @@
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
     u32 personality;
-    u16 currentHp;
     u16 mapId;
     u16 species;
     u8 form;
@@ -32,7 +31,6 @@ typedef struct OverworldWildSpawn {
 
 typedef struct OverworldWildSavedShiny {
     u32 personality;
-    u16 currentHp;
     u16 mapId;
     u16 species;
     u8 form;
@@ -54,7 +52,6 @@ typedef struct OverworldWildSpawnState {
     u8 ambientCryCooldown;
     u8 battleGraceSteps;
     u32 pendingPersonality;
-    u16 pendingHp;
     u16 pendingSpecies;
     u8 pendingLevel;
     u8 pendingShiny;

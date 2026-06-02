@@ -3,7 +3,6 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
-#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -583,10 +582,6 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
     }
 
     ChangeToBattleForm(encounterPartyPokemon);
-
-#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-    OverworldWildSpawns_ApplyPendingBattleHp(encounterPartyPokemon);
-#endif
 
     return PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);
 }

@@ -100,7 +100,6 @@ typedef struct OverworldWildEncounterData {
 
 typedef struct OverworldWildRolledEncounter {
     u32 personality;
-    u16 currentHp;
     u16 species;
     u8 form;
     u8 level;
@@ -289,7 +288,6 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
 static void OverworldWildSpawns_ClearSavedShiny(OverworldWildSpawnState *state, int slot)
 {
     state->savedShinies[slot].personality = 0;
-    state->savedShinies[slot].currentHp = 0;
     state->savedShinies[slot].mapId = MAP_NOTHING;
     state->savedShinies[slot].species = SPECIES_NONE;
     state->savedShinies[slot].form = 0;
@@ -313,7 +311,6 @@ static void OverworldWildSpawns_TrySaveShinyReservation(OverworldWildSpawnState 
         if (!state->savedShinies[i].active) {
             state->savedShinies[i].mapId = spawn->mapId;
             state->savedShinies[i].personality = spawn->personality;
-            state->savedShinies[i].currentHp = spawn->currentHp;
             state->savedShinies[i].species = spawn->species;
             state->savedShinies[i].form = spawn->form;
             state->savedShinies[i].level = spawn->level;
@@ -342,7 +339,6 @@ static int OverworldWildSpawns_FindSavedShiny(OverworldWildSpawnState *state, u1
 static void OverworldWildSpawns_LoadSavedShinyEncounter(OverworldWildSpawnState *state, int slot, OverworldWildRolledEncounter *encounter)
 {
     encounter->personality = state->savedShinies[slot].personality;
-    encounter->currentHp = state->savedShinies[slot].currentHp;
     encounter->species = state->savedShinies[slot].species;
     encounter->form = state->savedShinies[slot].form;
     encounter->level = state->savedShinies[slot].level;
@@ -428,7 +424,6 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
 
     state->spawns[slot].object = NULL;
     state->spawns[slot].personality = 0;
-    state->spawns[slot].currentHp = 0;
     state->spawns[slot].mapId = MAP_NOTHING;
     state->spawns[slot].species = SPECIES_NONE;
     state->spawns[slot].form = 0;
@@ -453,7 +448,6 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     OverworldWildSpawns_ResetAmbientCryCooldown(state);
     state->battleGraceSteps = 0;
     state->pendingPersonality = 0;
-    state->pendingHp = 0;
     state->pendingShiny = FALSE;
     state->pendingSlot = -1;
 }
@@ -1148,7 +1142,6 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
 
         encounter.personality = OverworldWildSpawns_RollPersonality();
-        encounter.currentHp = 0;
         shiny = OverworldWildSpawns_RollShiny(state);
         if (shiny) {
             encounter.personality = OverworldWildSpawns_MakePersonalityShiny(encounter.personality);
@@ -1176,7 +1169,6 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
     state->spawns[slot].object = object;
     state->spawns[slot].personality = encounter.personality;
-    state->spawns[slot].currentHp = encounter.currentHp;
     state->spawns[slot].mapId = fieldSystem->location->mapId;
     state->spawns[slot].species = encounter.species;
     state->spawns[slot].form = encounter.form;
@@ -1309,7 +1301,6 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
             state->pendingPersonality = state->spawns[i].personality;
-            state->pendingHp = state->spawns[i].currentHp;
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
             state->pendingShiny = state->spawns[i].shiny;
@@ -1342,7 +1333,6 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
 
     state->pendingSlot = -1;
     state->pendingPersonality = 0;
-    state->pendingHp = 0;
 }
 
 static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
