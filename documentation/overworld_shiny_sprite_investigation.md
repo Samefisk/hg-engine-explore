@@ -21,7 +21,7 @@ The stable system after the revert is:
 
 ## Follow-Up Implementation
 
-The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette. The current temporary test rate is 1/2.
+The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette. The current rate is the normal 1/8192 shiny odds.
 
 The current spawn behavior also uses that stored shiny state for two local overworld-only effects: shiny spawns play the standard sparkle sound effect after the object is created, and shiny slots are skipped by the distance-based despawn pass so walking away does not delete them. For focused testing, the spawn state also suppresses additional shiny rolls after the first shiny object successfully spawns.
 

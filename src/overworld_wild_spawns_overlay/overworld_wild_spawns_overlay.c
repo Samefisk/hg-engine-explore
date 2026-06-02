@@ -38,7 +38,7 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
-#define OW_WILD_SHINY_TEST_RATE 2
+#define OW_WILD_SHINY_ODDS 8192
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -1053,7 +1053,7 @@ static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
         return FALSE;
     }
 
-    return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
+    return (gf_rand() % OW_WILD_SHINY_ODDS) == 0;
 }
 
 static u32 OverworldWildSpawns_RollPersonality(void)
