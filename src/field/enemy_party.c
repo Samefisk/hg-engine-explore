@@ -536,7 +536,6 @@ extern u32 space_for_setmondata;
 BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, struct PartyPokemon *encounterPartyPokemon, struct BATTLE_PARAM *encounterBattleParam)
 {
     int range = 0;
-    BOOL added;
     u8 change_form = 0;
     u8 form_no;
     u16 species;
@@ -589,14 +588,7 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
     OverworldWildSpawns_ApplyPendingBattleHp(encounterPartyPokemon);
 #endif
 
-    added = PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);
-#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-    if (added) {
-        OverworldWildSpawns_RegisterBattleParty(encounterBattleParam->poke_party[inTarget]);
-    }
-#endif
-
-    return added;
+    return PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);
 }
 
 void LONG_CALL SetupAndStartTutorialBattle(TaskManager *taskManager) {

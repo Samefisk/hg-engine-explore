@@ -2,6 +2,7 @@
 #include "../../include/battle_controller_player.h"
 #include "../../include/constants/battle_message_constants.h"
 #include "../../include/config.h"
+#include "../../include/overworld_wild_spawns.h"
 
 #ifdef DEBUG_BATTLE_SCENARIOS
 #include "../../include/test_battle.h"
@@ -80,6 +81,12 @@ BOOL LONG_CALL BattleContext_Main(struct BattleSystem *bsys, struct BattleStruct
             ctx->server_seq_no = CONTROLLER_COMMAND_42;
         }
     }
+
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (BattleSystem_GetBattleOutcomeFlags(bsys) == BATTLE_OUTCOME_PLAYER_FLED) {
+        OverworldWildSpawns_RecordBattleHpFromBattleSystem(bsys, ctx);
+    }
+#endif
 
     sPlayerBattleCommands[ctx->server_seq_no](bsys, ctx);
 #ifdef DEBUG_BATTLE_SCENARIOS

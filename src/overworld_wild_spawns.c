@@ -6,10 +6,8 @@
 
 #include "../include/constants/file.h"
 #include "../include/constants/species.h"
+#include "../include/battle.h"
 #include "../include/overlay.h"
-
-#define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
-#define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 
 static OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
@@ -22,7 +20,6 @@ static u8 sBattleShinyOverrideValue;
 static u16 sBattleHpOverrideValue;
 static u32 sBattleTrackedPersonality;
 static u32 sBattlePersonalityOverrideValue;
-static struct PartyPokemon *sBattleTrackedMon;
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
 {
@@ -116,55 +113,44 @@ void OverworldWildSpawns_ApplyPendingBattleHp(struct PartyPokemon *mon)
     }
 }
 
-void OverworldWildSpawns_RegisterBattleParty(struct Party *party)
+void OverworldWildSpawns_RecordBattleHpFromBattleSystem(struct BattleSystem *bsys, struct BattleStruct *ctx)
 {
-    int i;
+    int battler;
 
-    sBattleTrackedMon = NULL;
-    if (party == NULL || !sBattleTrackingActive) {
+    if (bsys == NULL
+        || ctx == NULL
+        || !sBattleTrackingActive
+        || sOverworldWildSpawnState.pendingSlot < 0
+        || sOverworldWildSpawnState.pendingSlot >= OW_WILD_MAX_SPAWNS) {
         return;
     }
 
-    for (i = 0; i < 6; i++) {
-        struct PartyPokemon *mon = Party_GetMonByIndex(party, i);
-        if (mon != NULL
-            && GetMonData(mon, MON_DATA_SPECIES, NULL) != SPECIES_NONE
-            && GetMonData(mon, MON_DATA_PERSONALITY, NULL) == sBattleTrackedPersonality) {
-            sBattleTrackedMon = mon;
+    for (battler = BATTLER_ENEMY; battler < CLIENT_MAX; battler += 2) {
+        u16 hp;
+
+        if (battler >= bsys->maxBattlers
+            || ctx->battlemon[battler].personal_rnd != sBattleTrackedPersonality
+            || ctx->battlemon[battler].maxhp == 0
+            || ctx->battlemon[battler].hp <= 0) {
+            continue;
+        }
+
+        hp = (u16)ctx->battlemon[battler].hp;
+        if (hp > ctx->battlemon[battler].maxhp) {
+            hp = (u16)ctx->battlemon[battler].maxhp;
+        }
+
+        if (hp != 0) {
+            sOverworldWildSpawnState.spawns[sOverworldWildSpawnState.pendingSlot].currentHp = hp;
+            sBattleTrackingActive = FALSE;
             return;
         }
-    }
-}
-
-static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
-{
-    return battleResult == OW_WILD_BATTLE_RESULT_PLAYER_FLED
-        || (battleResult & OW_WILD_BATTLE_RESULT_TRY_FLEE) != 0;
-}
-
-static void OverworldWildSpawns_TryStoreFledBattleHp(void)
-{
-    u16 hp;
-
-    if (sOverworldWildSpawnState.pendingSlot < 0
-        || sOverworldWildSpawnState.pendingSlot >= OW_WILD_MAX_SPAWNS
-        || sBattleTrackedMon == NULL) {
-        return;
-    }
-
-    hp = OverworldWildSpawns_ClampHp(sBattleTrackedMon, (u16)GetMonData(sBattleTrackedMon, MON_DATA_HP, NULL));
-    if (hp != 0) {
-        sOverworldWildSpawnState.spawns[sOverworldWildSpawnState.pendingSlot].currentHp = hp;
     }
 }
 
 void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
 {
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
-
-    if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
-        OverworldWildSpawns_TryStoreFledBattleHp();
-    }
 
     if (entry != NULL && entry->cleanupPendingBattle != NULL) {
         entry->cleanupPendingBattle(&sOverworldWildSpawnState, battleResult);
@@ -178,7 +164,6 @@ void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
     sBattleShinyOverrideValue = FALSE;
     sBattleHpOverrideValue = 0;
     sBattleTrackedPersonality = 0;
-    sBattleTrackedMon = NULL;
     sBattlePersonalityOverrideActive = FALSE;
     sBattleTrackingActive = FALSE;
 }
