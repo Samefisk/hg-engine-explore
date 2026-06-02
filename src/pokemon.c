@@ -14,6 +14,7 @@
 #include "../include/constants/species.h"
 #include "../include/constants/weather_numbers.h"
 #include "../include/debug.h"
+#include "../include/overworld_wild_spawns.h"
 #include "../include/overlay.h"
 #include "../include/rtc.h"
 #include "../include/save.h"
@@ -1677,6 +1678,13 @@ void LONG_CALL CreateBoxMonData(struct BoxPokemon *boxmon, int species, int leve
 
     flag = BoxMonSetFastModeOn(boxmon);
 
+    if (!rndflag) {
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+        if (OverworldWildSpawns_ConsumeBattlePersonalityOverride(&rnd)) {
+            rndflag = TRUE;
+        }
+#endif
+    }
     if (!rndflag) {
         rnd = (gf_rand() | (gf_rand() << 16));
     }

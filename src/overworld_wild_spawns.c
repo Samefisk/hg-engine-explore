@@ -10,9 +10,11 @@
 
 static OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
-    .pendingGender = POKEMON_GENDER_UNKNOWN,
     .pendingSlot = -1,
 };
+
+static u8 sBattlePersonalityOverrideActive;
+static u32 sBattlePersonalityOverrideValue;
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
 {
@@ -46,6 +48,10 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
     *level = sOverworldWildSpawnState.pendingLevel;
     *shiny = sOverworldWildSpawnState.pendingShiny;
 
+    sBattlePersonalityOverrideValue = sOverworldWildSpawnState.pendingPersonality;
+    sBattlePersonalityOverrideActive = TRUE;
+
+    sOverworldWildSpawnState.pendingPersonality = 0;
     sOverworldWildSpawnState.pendingSpecies = SPECIES_NONE;
     sOverworldWildSpawnState.pendingLevel = 0;
     sOverworldWildSpawnState.pendingShiny = FALSE;
@@ -53,21 +59,17 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
     return TRUE;
 }
 
-void OverworldWildSpawns_ApplyPendingBattleGender(struct PartyPokemon *mon)
+BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality)
 {
-    u32 gender;
-
-    if (mon == NULL
-        || sOverworldWildSpawnState.pendingSlot < 0
-        || !sOverworldWildSpawnState.pendingGenderActive) {
-        return;
+    if (personality == NULL || !sBattlePersonalityOverrideActive) {
+        return FALSE;
     }
 
-    gender = sOverworldWildSpawnState.pendingGender;
-    SetMonData(mon, MON_DATA_GENDER, &gender);
+    *personality = sBattlePersonalityOverrideValue;
+    sBattlePersonalityOverrideValue = 0;
+    sBattlePersonalityOverrideActive = FALSE;
 
-    sOverworldWildSpawnState.pendingGender = POKEMON_GENDER_UNKNOWN;
-    sOverworldWildSpawnState.pendingGenderActive = FALSE;
+    return TRUE;
 }
 
 void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
@@ -77,10 +79,12 @@ void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
     if (entry != NULL && entry->cleanupPendingBattle != NULL) {
         entry->cleanupPendingBattle(&sOverworldWildSpawnState, battleResult);
     } else {
-        sOverworldWildSpawnState.pendingGender = POKEMON_GENDER_UNKNOWN;
-        sOverworldWildSpawnState.pendingGenderActive = FALSE;
+        sOverworldWildSpawnState.pendingPersonality = 0;
         sOverworldWildSpawnState.pendingSlot = -1;
     }
+
+    sBattlePersonalityOverrideValue = 0;
+    sBattlePersonalityOverrideActive = FALSE;
 }
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
