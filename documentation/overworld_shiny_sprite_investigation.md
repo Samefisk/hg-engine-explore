@@ -25,7 +25,7 @@ The later implementation avoids the failed archive and loader-hook approaches. O
 
 The current spawn behavior also uses that stored shiny state for two local overworld-only effects: shiny spawns play the standard sparkle sound effect after the object is created, and shiny slots are skipped by the distance-based despawn pass so walking away does not delete them.
 
-Location transitions no longer clear the whole overworld spawn state just because the map id or map-object storage changed. The map context is updated in place, and the stale-object pass only drops slots whose object is no longer a current active wild-spawn object. This removes the enter/leave-location despawn trigger for all spawns while still avoiding stale object pointers.
+Location transitions no longer clear the whole overworld spawn state just because the map id or map-object storage changed. Active wild-spawn objects also refresh their internal map id to the player's current location before the stale-object pass runs. This targets route/city boundary transitions, such as leaving Route 29, without recreating despawned objects from saved slot data.
 
 This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
 

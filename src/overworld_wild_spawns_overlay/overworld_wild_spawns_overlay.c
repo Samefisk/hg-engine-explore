@@ -297,6 +297,17 @@ static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, F
     }
 }
 
+static void OverworldWildSpawns_UpdateObjectMapIDs(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i], i)) {
+            MapObject_SetMapID(state->spawns[i].object, fieldSystem->location->mapId);
+        }
+    }
+}
+
 static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state)
 {
     state->ambientCryCooldown = OW_WILD_AMBIENT_CRY_MIN_COOLDOWN_STEPS
@@ -392,6 +403,14 @@ static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
         && fieldSystem->mapObjectMan != NULL
         && fieldSystem->playerAvatar != NULL
         && OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId);
+}
+
+static BOOL OverworldWildSpawns_HasMapObjectContext(FieldSystem *fieldSystem)
+{
+    return fieldSystem != NULL
+        && fieldSystem->location != NULL
+        && fieldSystem->mapObjectMan != NULL
+        && fieldSystem->playerAvatar != NULL;
 }
 
 static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildLandEncounterData *landSlots)
@@ -1202,21 +1221,24 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
 
 static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
 {
-    MapObjectMan *mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
-    void *mapObjects = mapObjectMan != NULL ? mapObjectMan->objects : NULL;
+    MapObjectMan *mapObjectMan;
+    void *mapObjects;
 
-    if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
+    if (!OverworldWildSpawns_HasMapObjectContext(fieldSystem)) {
         state->mapId = MAP_NOTHING;
         state->mapObjectMan = NULL;
         state->mapObjects = NULL;
         return FALSE;
     }
 
+    mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    mapObjects = mapObjectMan->objects;
     state->mapId = fieldSystem->location->mapId;
     state->mapObjectMan = mapObjectMan;
     state->mapObjects = mapObjects;
+    OverworldWildSpawns_UpdateObjectMapIDs(state, fieldSystem);
 
-    return TRUE;
+    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
 }
 
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
