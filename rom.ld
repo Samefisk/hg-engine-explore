@@ -325,7 +325,6 @@ sub_0205F6AC = 0x0205F6AC | 1;
 MapObject_SetBits = 0x0205F20C | 1;
 MapObject_ClearBits = 0x0205F214 | 1;
 MapObject_SetID = 0x0205F248 | 1;
-MapObject_SetMapID = 0x0205F250 | 1;
 MapObject_SetType = 0x0205F268 | 1;
 MapObject_GetType = 0x0205F26C | 1;
 MapObject_SetFlagID = 0x0205F270 | 1;

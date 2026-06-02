@@ -226,7 +226,6 @@ void LONG_CALL sub_0205F6AC(LocalMapObject *mapObject, int a1);
 void LONG_CALL MapObject_SetBits(LocalMapObject *mapObject, u32 bits);
 void LONG_CALL MapObject_ClearBits(LocalMapObject *mapObject, u32 bits);
 void LONG_CALL MapObject_SetID(LocalMapObject *mapObject, u32 id);
-void LONG_CALL MapObject_SetMapID(LocalMapObject *mapObject, u32 mapId);
 void LONG_CALL MapObject_SetType(LocalMapObject *mapObject, u32 type);
 u32 LONG_CALL MapObject_GetType(LocalMapObject *mapObject, u32 type);
 void LONG_CALL MapObject_SetFlagID(LocalMapObject *mapObject, u32 flagId);
