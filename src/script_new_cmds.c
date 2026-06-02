@@ -15,6 +15,7 @@
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP 3
 #define SCRIPT_NEW_CMD_SOUND_TEST_GET_ID 4
 #define SCRIPT_NEW_CMD_SOUND_TEST_ACTION 5
+#define SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_SOUND 6
 
 #define SCRIPT_NEW_CMD_MAX          256
 #define SOUND_TEST_SE_MIN           SEQ_SE_PL_W012
@@ -26,6 +27,9 @@
 #define SOUND_TEST_ACTION_FORWARD   3
 #define SOUND_TEST_ACTION_BACK      4
 #define VAR_BATTLE_RESULT           0x4013
+#define SCRIPT_CMD_PLAY_CRY         76
+#define SCRIPT_CMD_WAIT_CRY         77
+#define SCRIPT_CMD_RUN_NEW_COMMAND  208
 #define SCRIPT_CMD_FADE_SCREEN      174
 #define SCRIPT_CMD_WAIT_FADE        175
 #define SCRIPT_CMD_WARP             176
@@ -33,7 +37,7 @@
 #define SCRIPT_CMD_END              2
 #define OW_WILD_MEW_WARP_NONE       0xFFFF
 #define OW_WILD_MEW_WARP_DIR_SOUTH  1
-#define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BOWABOWA
+#define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BREC03
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
 
 typedef struct OverworldWildMewWarpDestination {
@@ -57,6 +61,13 @@ static u8 sOverworldWildBattleScript[] = {
 };
 
 static u8 sOverworldWildMewWarpScript[] = {
+    SCRIPT_CMD_PLAY_CRY & 0xFF, SCRIPT_CMD_PLAY_CRY >> 8,
+    SPECIES_MEW & 0xFF, SPECIES_MEW >> 8,
+    0x00, 0x00,
+    SCRIPT_CMD_WAIT_CRY & 0xFF, SCRIPT_CMD_WAIT_CRY >> 8,
+    SCRIPT_CMD_RUN_NEW_COMMAND & 0xFF, SCRIPT_CMD_RUN_NEW_COMMAND >> 8,
+    SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_SOUND,
+    0x00, 0x00,
     SCRIPT_CMD_FADE_SCREEN & 0xFF, SCRIPT_CMD_FADE_SCREEN >> 8,
     0x06, 0x00,
     0x01, 0x00,
@@ -132,12 +143,11 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
     const OverworldWildMewWarpDestination *destination =
         &sOverworldWildMewWarpDestinations[gf_rand() % NELEMS(sOverworldWildMewWarpDestinations)];
 
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 14, destination->mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 16, destination->warpId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 18, destination->x);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 20, destination->z);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 22, destination->direction);
-    PlaySE(OW_WILD_MEW_WARP_SOUND);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 27, destination->mapId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, destination->warpId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, destination->x);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, destination->z);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 35, destination->direction);
 #endif
 
     ScriptJump(ctx, sOverworldWildMewWarpScript);
@@ -212,6 +222,10 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
 
         case SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP:
             Script_QueueOverworldWildMewWarp(ctx);
+            break;
+
+        case SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_SOUND:
+            PlaySE(OW_WILD_MEW_WARP_SOUND);
             break;
 
         case SCRIPT_NEW_CMD_SOUND_TEST_GET_ID:
