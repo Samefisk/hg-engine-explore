@@ -1057,11 +1057,11 @@ static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
     return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
-static u8 OverworldWildSpawns_RollGender(u16 species, u8 form)
+static u8 OverworldWildSpawns_RollGender(u16 species)
 {
     u32 pid = gf_rand() | (gf_rand() << 16);
 
-    return GrabSexFromSpeciesAndForm(species, pid, form);
+    return PokeSexGetMonsNo(species, pid);
 }
 
 static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
@@ -1129,7 +1129,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
             return FALSE;
         }
 
-        encounter.gender = OverworldWildSpawns_RollGender(encounter.species, encounter.form);
+        encounter.gender = OverworldWildSpawns_RollGender(encounter.species);
         shiny = OverworldWildSpawns_RollShiny(state);
     }
 
