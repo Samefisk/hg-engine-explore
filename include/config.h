@@ -86,6 +86,7 @@
 // encounter layer on maps with configured wild encounter data.
 #define IMPLEMENT_OVERWORLD_WILD_SPAWNS
 #define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
+#define OVERWORLD_WILD_SPAWNS_MEW_WARP_SCRIPT 2075
 
 // IMPLEMENT_CAPTURE_EXPERIENCE defines whether or not capturing wild pokemon will net experience
 // commenting this line out disables capture experience

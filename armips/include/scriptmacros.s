@@ -209,6 +209,7 @@ std_fade_heal_fade              equ 2069
 std_play_rival_outro_music      equ 2070
 std_fade_end_rival_outro_music  equ 2071
 std_overworld_wild_battle       equ 2074
+std_overworld_wild_mew_warp     equ 2075
 
 // Creates a new script context to run the indicated script and wait
 .macro callstd,id
@@ -6749,6 +6750,7 @@ FORM_ROCKET_DISGUISE                    equ 1024
 .equ NEW_COMMAND_QUEUE_NEW_REPEL, 0
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE, 1
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE_CLEANUP, 2
+.equ NEW_COMMAND_OVERWORLD_WILD_MEW_WARP, 3
 
 .macro RunNewCommand,slot,unk
 DummyTextTrap slot, unk
@@ -6760,6 +6762,10 @@ RunNewCommand NEW_COMMAND_QUEUE_NEW_REPEL, 0x800C
 
 .macro OverworldWildBattle
 RunNewCommand NEW_COMMAND_OVERWORLD_WILD_BATTLE, 0
+.endmacro
+
+.macro OverworldWildMewWarp
+RunNewCommand NEW_COMMAND_OVERWORLD_WILD_MEW_WARP, 0
 .endmacro
 
 // Dummy

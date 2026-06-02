@@ -38,6 +38,7 @@
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
 #define OW_WILD_FLEE_GRACE_STEPS 3
+#define OW_WILD_MEW_SPAWN_CHANCE_PERCENT 50
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
@@ -965,6 +966,14 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
     return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
 }
 
+static void OverworldWildSpawns_TryApplySpecialMewSpawn(OverworldWildRolledEncounter *encounter)
+{
+    if ((gf_rand() % 100) < OW_WILD_MEW_SPAWN_CHANCE_PERCENT) {
+        encounter->species = SPECIES_MEW;
+        encounter->form = 0;
+    }
+}
+
 static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form)
 {
     return FollowingPokemon_GetSpriteID(species, form, 0);
@@ -1020,6 +1029,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
     }
 
+    OverworldWildSpawns_TryApplySpecialMewSpawn(&encounter);
     spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form);
 
     object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId);
@@ -1154,6 +1164,14 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
+            if (state->spawns[i].species == SPECIES_MEW) {
+                OverworldWildSpawns_ClearSlot(state, i, TRUE);
+                state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
+
+                EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_MEW_WARP_SCRIPT, NULL);
+                return TRUE;
+            }
+
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
             state->pendingSlot = i;
