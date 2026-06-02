@@ -90,6 +90,7 @@ scrdef scr_seq_0003_072_repels
 scrdef scr_seq_0003_073_autobattle_testing
 scrdef scr_seq_0003_074_overworld_wild_battle
 scrdef scr_seq_0003_075_overworld_wild_mew_warp
+scrdef scr_seq_0003_076_sound_effect_test
 scrdef_end
 
 scr_seq_0003_002:
@@ -1750,6 +1751,35 @@ scr_seq_0003_074_overworld_wild_battle:
 scr_seq_0003_075_overworld_wild_mew_warp:
     lockall
     OverworldWildMewWarp
+
+scr_seq_0003_076_sound_effect_test:
+    play_se SEQ_SE_DP_SELECT
+    lockall
+    touchscreen_menu_hide
+
+_sound_effect_test_loop:
+    SoundTestGetId VAR_SPECIAL_x8004
+    buffer_int 0, VAR_SPECIAL_x8004
+    npc_msg 121
+    menu_init 1, 1, 0, 1, VAR_SPECIAL_RESULT
+    menu_item_add 122, 255, 0
+    menu_item_add 123, 255, 1
+    menu_item_add 124, 255, 2
+    menu_item_add 125, 255, 3
+    menu_item_add 126, 255, 4
+    menu_item_add 127, 255, 5
+    menu_exec
+    compare VAR_SPECIAL_RESULT, 5
+    goto_if_eq _sound_effect_test_exit
+    SoundTestAction VAR_SPECIAL_RESULT
+    closemsg
+    goto _sound_effect_test_loop
+
+_sound_effect_test_exit:
+    closemsg
+    touchscreen_menu_show
+    releaseall
+    end
 
 
 

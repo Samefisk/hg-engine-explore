@@ -119,3 +119,10 @@ NOT TELLING
 The repellent’s effect wore off!\nWould you like to use another one?
 You used the {STRVAR_1 8, 1, 0}.
 Begin auto-battle.
+Sound effect test.\nCurrent ID: {STRVAR_1 0, 0, 0}
+Play current
+Next (+1)
+Previous (-1)
+Forward (+10)
+Back (-10)
+Exit

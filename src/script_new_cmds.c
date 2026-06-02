@@ -2,6 +2,7 @@
 #include "../include/config.h"
 #include "../include/overworld_wild_spawns.h"
 #include "../include/script.h"
+#include "../include/sound.h"
 #include "../include/repel.h"
 #include "../include/constants/file.h"
 #include "../include/constants/maps.h"
@@ -12,8 +13,18 @@
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE 1
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_BATTLE_CLEANUP 2
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP 3
+#define SCRIPT_NEW_CMD_SOUND_TEST_GET_ID 4
+#define SCRIPT_NEW_CMD_SOUND_TEST_ACTION 5
 
 #define SCRIPT_NEW_CMD_MAX          256
+#define SOUND_TEST_SE_MIN           SEQ_SE_PL_W012
+#define SOUND_TEST_SE_MAX           (SEQ_SE_END - 1)
+#define SOUND_TEST_SE_COUNT         (SOUND_TEST_SE_MAX - SOUND_TEST_SE_MIN + 1)
+#define SOUND_TEST_ACTION_PLAY      0
+#define SOUND_TEST_ACTION_NEXT      1
+#define SOUND_TEST_ACTION_PREVIOUS  2
+#define SOUND_TEST_ACTION_FORWARD   3
+#define SOUND_TEST_ACTION_BACK      4
 #define VAR_BATTLE_RESULT           0x4013
 #define SCRIPT_CMD_PLAY_SE          73
 #define SCRIPT_CMD_FADE_SCREEN      174
@@ -69,6 +80,8 @@ static u8 sOverworldWildMewWarpScript[] = {
     SCRIPT_CMD_RELEASE_ALL & 0xFF, SCRIPT_CMD_RELEASE_ALL >> 8,
     SCRIPT_CMD_END & 0xFF, SCRIPT_CMD_END >> 8,
 };
+
+static u16 sSoundTestSeqId = SOUND_TEST_SE_MIN;
 
 static const OverworldWildMewWarpDestination sOverworldWildMewWarpDestinations[] = {
     { MAP_T21PC0101, OW_WILD_MEW_WARP_NONE, 7, 7, OW_WILD_MEW_WARP_DIR_SOUTH },
@@ -131,6 +144,50 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
     ScriptJump(ctx, sOverworldWildMewWarpScript);
 }
 
+static void Script_SoundTestOffset(s16 offset)
+{
+    s32 nextSeqId = sSoundTestSeqId + offset;
+
+    while (nextSeqId < SOUND_TEST_SE_MIN) {
+        nextSeqId += SOUND_TEST_SE_COUNT;
+    }
+
+    while (nextSeqId > SOUND_TEST_SE_MAX) {
+        nextSeqId -= SOUND_TEST_SE_COUNT;
+    }
+
+    sSoundTestSeqId = nextSeqId;
+}
+
+static void Script_SoundTestRunAction(u16 action)
+{
+    switch (action) {
+        case SOUND_TEST_ACTION_PLAY:
+            break;
+
+        case SOUND_TEST_ACTION_NEXT:
+            Script_SoundTestOffset(1);
+            break;
+
+        case SOUND_TEST_ACTION_PREVIOUS:
+            Script_SoundTestOffset(-1);
+            break;
+
+        case SOUND_TEST_ACTION_FORWARD:
+            Script_SoundTestOffset(10);
+            break;
+
+        case SOUND_TEST_ACTION_BACK:
+            Script_SoundTestOffset(-10);
+            break;
+
+        default:
+            return;
+    }
+
+    PlaySE(sSoundTestSeqId);
+}
+
 BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
     u8 sw = ScriptReadByte(ctx);
     u16 UNUSED arg0 = ScriptReadHalfword(ctx);
@@ -156,6 +213,14 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
 
         case SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP:
             Script_QueueOverworldWildMewWarp(ctx);
+            break;
+
+        case SCRIPT_NEW_CMD_SOUND_TEST_GET_ID:
+            SetScriptVar(arg0, sSoundTestSeqId);
+            break;
+
+        case SCRIPT_NEW_CMD_SOUND_TEST_ACTION:
+            Script_SoundTestRunAction(GetScriptVar(arg0));
             break;
 
         default: break;

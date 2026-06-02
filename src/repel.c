@@ -12,8 +12,27 @@ void Repel_SetCurrentType();
 #ifdef IMPLEMENT_REUSABLE_REPELS
 u16 ALIGN4 CurrentRepelType = 0;
 
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+static BOOL SoundEffectTest_TryStart(FieldSystem *fieldSystem)
+{
+    const u16 buttons = PAD_Read();
+    const u16 soundTestButtons = PAD_BUTTON_SELECT | PAD_BUTTON_R;
+
+    if ((buttons & soundTestButtons) != soundTestButtons) {
+        return FALSE;
+    }
+
+    EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_SOUND_TEST_SCRIPT, NULL);
+    return TRUE;
+}
+#endif
+
 bool32 PlayerStepEvent_RepelCounterDecrement(SaveData *saveData, FieldSystem *fieldSystem) {
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (SoundEffectTest_TryStart(fieldSystem)) {
+        return TRUE;
+    }
+
     if (OverworldWildSpawns_OnPlayerStep(fieldSystem)) {
         return TRUE;
     }
