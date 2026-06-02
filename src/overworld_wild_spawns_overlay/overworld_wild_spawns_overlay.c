@@ -275,13 +275,14 @@ static BOOL OverworldWildSpawns_IsCurrentMapObject(FieldSystem *fieldSystem, Loc
     return objectAddr >= startAddr && objectAddr < endAddr;
 }
 
-static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
+static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn, int slot)
 {
     if (!spawn->active || !OverworldWildSpawns_IsCurrentMapObject(fieldSystem, spawn->object)) {
         return FALSE;
     }
 
-    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0;
+    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+        && spawn->object->id == OW_WILD_OBJECT_ID_START + slot;
 }
 
 static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
@@ -290,7 +291,7 @@ static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active
-            && !OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
+            && !OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i], i)) {
             OverworldWildSpawns_ClearSlot(state, i, FALSE);
         }
     }
@@ -362,24 +363,6 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
     state->spawns[slot].level = 0;
     state->spawns[slot].shiny = FALSE;
     state->spawns[slot].active = FALSE;
-}
-
-static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL deleteObjects)
-{
-    int i;
-
-    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        OverworldWildSpawns_ClearSlot(state, i, deleteObjects);
-    }
-
-    state->justSpawned = FALSE;
-    state->spawnCooldown = 0;
-    state->headbuttSpawnCooldown = OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN;
-    state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
-    OverworldWildSpawns_ResetAmbientCryCooldown(state);
-    state->battleGraceSteps = 0;
-    state->pendingShiny = FALSE;
-    state->pendingSlot = -1;
 }
 
 static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, int *encounterDataId)
@@ -1223,23 +1206,15 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     void *mapObjects = mapObjectMan != NULL ? mapObjectMan->objects : NULL;
 
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
-        if (state->mapId != MAP_NOTHING || state->mapObjectMan != NULL || state->mapObjects != NULL) {
-            OverworldWildSpawns_Clear(state, FALSE);
-            state->mapId = MAP_NOTHING;
-            state->mapObjectMan = NULL;
-            state->mapObjects = NULL;
-        }
+        state->mapId = MAP_NOTHING;
+        state->mapObjectMan = NULL;
+        state->mapObjects = NULL;
         return FALSE;
     }
 
-    if (state->mapId != fieldSystem->location->mapId
-        || state->mapObjectMan != mapObjectMan
-        || state->mapObjects != mapObjects) {
-        OverworldWildSpawns_Clear(state, FALSE);
-        state->mapId = fieldSystem->location->mapId;
-        state->mapObjectMan = mapObjectMan;
-        state->mapObjects = mapObjects;
-    }
+    state->mapId = fieldSystem->location->mapId;
+    state->mapObjectMan = mapObjectMan;
+    state->mapObjects = mapObjects;
 
     return TRUE;
 }
