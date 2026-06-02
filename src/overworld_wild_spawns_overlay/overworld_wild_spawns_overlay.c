@@ -977,8 +977,12 @@ static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form)
     return FollowingPokemon_GetSpriteID(species, form, 0);
 }
 
-static BOOL OverworldWildSpawns_RollShiny(void)
+static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
 {
+    if (state->shinySpawned) {
+        return FALSE;
+    }
+
     return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
@@ -1043,7 +1047,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         }
     }
 
-    shiny = OverworldWildSpawns_RollShiny();
+    shiny = OverworldWildSpawns_RollShiny(state);
     spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form);
 
     object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId, shiny);
@@ -1063,6 +1067,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].active = TRUE;
 
     if (shiny) {
+        state->shinySpawned = TRUE;
         PlaySE(SEQ_SE_PL_KIRAKIRA);
     }
 

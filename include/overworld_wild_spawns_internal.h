@@ -39,6 +39,7 @@ typedef struct OverworldWildSpawnState {
     u16 pendingSpecies;
     u8 pendingLevel;
     u8 pendingShiny;
+    u8 shinySpawned;
     s8 pendingSlot;
 } OverworldWildSpawnState;
 
