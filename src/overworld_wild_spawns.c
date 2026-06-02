@@ -14,6 +14,7 @@ static OverworldWildSpawnState sOverworldWildSpawnState = {
 };
 
 static u8 sBattlePersonalityOverrideActive;
+static u8 sBattleShinyOverrideValue;
 static u32 sBattlePersonalityOverrideValue;
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
@@ -49,6 +50,7 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
     *shiny = sOverworldWildSpawnState.pendingShiny;
 
     sBattlePersonalityOverrideValue = sOverworldWildSpawnState.pendingPersonality;
+    sBattleShinyOverrideValue = sOverworldWildSpawnState.pendingShiny;
     sBattlePersonalityOverrideActive = TRUE;
 
     sOverworldWildSpawnState.pendingPersonality = 0;
@@ -59,13 +61,15 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
     return TRUE;
 }
 
-BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality)
+BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL *shiny)
 {
-    if (personality == NULL || !sBattlePersonalityOverrideActive) {
+    if (personality == NULL || shiny == NULL || !sBattlePersonalityOverrideActive) {
         return FALSE;
     }
 
     *personality = sBattlePersonalityOverrideValue;
+    *shiny = sBattleShinyOverrideValue;
+    sBattleShinyOverrideValue = FALSE;
     sBattlePersonalityOverrideValue = 0;
     sBattlePersonalityOverrideActive = FALSE;
 
@@ -84,6 +88,7 @@ void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
     }
 
     sBattlePersonalityOverrideValue = 0;
+    sBattleShinyOverrideValue = FALSE;
     sBattlePersonalityOverrideActive = FALSE;
 }
 

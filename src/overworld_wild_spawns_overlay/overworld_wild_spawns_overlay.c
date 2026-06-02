@@ -1061,6 +1061,21 @@ static u32 OverworldWildSpawns_RollPersonality(void)
     return gf_rand() | (gf_rand() << 16);
 }
 
+static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality)
+{
+    u32 shinyValue = SHINY_VALUE(OVERWORLD_WILD_BATTLE_SHINY_OTID, personality);
+
+    if (shinyValue >= SHINY_ODDS) {
+        if (shinyValue & 0xE000) {
+            personality ^= (shinyValue << 16) & 0xE0000000;
+        }
+        personality ^= shinyValue & 0x1FFF;
+        personality ^= gf_rand() % SHINY_ODDS;
+    }
+
+    return personality;
+}
+
 static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
 {
     return CreateSpecialFieldObjectWithParams(
@@ -1128,6 +1143,9 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
         encounter.personality = OverworldWildSpawns_RollPersonality();
         shiny = OverworldWildSpawns_RollShiny(state);
+        if (shiny) {
+            encounter.personality = OverworldWildSpawns_MakePersonalityShiny(encounter.personality);
+        }
     }
 
     if (encounter.species == SPECIES_NONE || encounter.level == 0) {
