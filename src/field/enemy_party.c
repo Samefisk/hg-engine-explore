@@ -3,6 +3,7 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
+#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -535,6 +536,7 @@ extern u32 space_for_setmondata;
 BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, struct PartyPokemon *encounterPartyPokemon, struct BATTLE_PARAM *encounterBattleParam)
 {
     int range = 0;
+    BOOL added;
     u8 change_form = 0;
     u8 form_no;
     u16 species;
@@ -583,7 +585,18 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
 
     ChangeToBattleForm(encounterPartyPokemon);
 
-    return PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    OverworldWildSpawns_ApplyPendingBattleHp(encounterPartyPokemon);
+#endif
+
+    added = PokeParty_Add(encounterBattleParam->poke_party[inTarget], encounterPartyPokemon);
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (added) {
+        OverworldWildSpawns_RegisterBattleParty(encounterBattleParam->poke_party[inTarget]);
+    }
+#endif
+
+    return added;
 }
 
 void LONG_CALL SetupAndStartTutorialBattle(TaskManager *taskManager) {
