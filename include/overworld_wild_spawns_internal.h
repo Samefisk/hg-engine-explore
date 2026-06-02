@@ -23,6 +23,7 @@ typedef struct OverworldWildSpawn {
     u16 species;
     u8 form;
     u8 level;
+    u8 gender;
     u8 terrain;
     u8 shiny;
     u8 active;
@@ -33,6 +34,7 @@ typedef struct OverworldWildSavedShiny {
     u16 species;
     u8 form;
     u8 level;
+    u8 gender;
     u8 terrain;
     u8 active;
 } OverworldWildSavedShiny;
@@ -52,6 +54,8 @@ typedef struct OverworldWildSpawnState {
     u16 pendingSpecies;
     u8 pendingLevel;
     u8 pendingShiny;
+    u8 pendingGender;
+    u8 pendingGenderActive;
     u8 shinySpawned;
     s8 pendingSlot;
 } OverworldWildSpawnState;

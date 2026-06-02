@@ -102,6 +102,7 @@ typedef struct OverworldWildRolledEncounter {
     u16 species;
     u8 form;
     u8 level;
+    u8 gender;
 } OverworldWildRolledEncounter;
 
 typedef struct OverworldWildSpawnPosition {
@@ -290,6 +291,7 @@ static void OverworldWildSpawns_ClearSavedShiny(OverworldWildSpawnState *state, 
     state->savedShinies[slot].species = SPECIES_NONE;
     state->savedShinies[slot].form = 0;
     state->savedShinies[slot].level = 0;
+    state->savedShinies[slot].gender = POKEMON_GENDER_UNKNOWN;
     state->savedShinies[slot].terrain = 0;
     state->savedShinies[slot].active = FALSE;
 }
@@ -311,6 +313,7 @@ static void OverworldWildSpawns_TrySaveShinyReservation(OverworldWildSpawnState 
             state->savedShinies[i].species = spawn->species;
             state->savedShinies[i].form = spawn->form;
             state->savedShinies[i].level = spawn->level;
+            state->savedShinies[i].gender = spawn->gender;
             state->savedShinies[i].terrain = spawn->terrain;
             state->savedShinies[i].active = TRUE;
             return;
@@ -338,6 +341,7 @@ static void OverworldWildSpawns_LoadSavedShinyEncounter(OverworldWildSpawnState 
     encounter->species = state->savedShinies[slot].species;
     encounter->form = state->savedShinies[slot].form;
     encounter->level = state->savedShinies[slot].level;
+    encounter->gender = state->savedShinies[slot].gender;
 }
 
 static void OverworldWildSpawns_ClearSlotAndSaveShiny(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
@@ -423,6 +427,7 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
     state->spawns[slot].species = SPECIES_NONE;
     state->spawns[slot].form = 0;
     state->spawns[slot].level = 0;
+    state->spawns[slot].gender = POKEMON_GENDER_UNKNOWN;
     state->spawns[slot].terrain = 0;
     state->spawns[slot].shiny = FALSE;
     state->spawns[slot].active = FALSE;
@@ -443,6 +448,8 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     OverworldWildSpawns_ResetAmbientCryCooldown(state);
     state->battleGraceSteps = 0;
     state->pendingShiny = FALSE;
+    state->pendingGender = POKEMON_GENDER_UNKNOWN;
+    state->pendingGenderActive = FALSE;
     state->pendingSlot = -1;
 }
 
@@ -1050,6 +1057,13 @@ static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
     return (gf_rand() % OW_WILD_SHINY_TEST_RATE) == 0;
 }
 
+static u8 OverworldWildSpawns_RollGender(u16 species, u8 form)
+{
+    u32 pid = gf_rand() | (gf_rand() << 16);
+
+    return GrabSexFromSpeciesAndForm(species, pid, form);
+}
+
 static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
 {
     return CreateSpecialFieldObjectWithParams(
@@ -1115,6 +1129,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
             return FALSE;
         }
 
+        encounter.gender = OverworldWildSpawns_RollGender(encounter.species, encounter.form);
         shiny = OverworldWildSpawns_RollShiny(state);
     }
 
@@ -1142,6 +1157,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].species = encounter.species;
     state->spawns[slot].form = encounter.form;
     state->spawns[slot].level = encounter.level;
+    state->spawns[slot].gender = encounter.gender;
     state->spawns[slot].terrain = terrain;
     state->spawns[slot].shiny = shiny;
     state->spawns[slot].active = TRUE;
@@ -1272,6 +1288,8 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
             state->pendingShiny = state->spawns[i].shiny;
+            state->pendingGender = state->spawns[i].gender;
+            state->pendingGenderActive = TRUE;
             state->pendingSlot = i;
             state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
@@ -1300,6 +1318,8 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
     }
 
     state->pendingSlot = -1;
+    state->pendingGender = POKEMON_GENDER_UNKNOWN;
+    state->pendingGenderActive = FALSE;
 }
 
 static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)

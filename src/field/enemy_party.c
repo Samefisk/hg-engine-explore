@@ -3,6 +3,7 @@
 #include "../../include/battle.h"
 #include "../../include/config.h"
 #include "../../include/debug.h"
+#include "../../include/overworld_wild_spawns.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
@@ -580,6 +581,10 @@ BOOL LONG_CALL AddWildPartyPokemon(int inTarget, EncounterInfo *encounterInfo, s
         ResetPartyPokemonAbility(encounterPartyPokemon);
         InitBoxMonMoveset(&encounterPartyPokemon->box);
     }
+
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    OverworldWildSpawns_ApplyPendingBattleGender(encounterPartyPokemon);
+#endif
 
     ChangeToBattleForm(encounterPartyPokemon);
 

@@ -10,6 +10,7 @@
 
 static OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
+    .pendingGender = POKEMON_GENDER_UNKNOWN,
     .pendingSlot = -1,
 };
 
@@ -52,6 +53,23 @@ BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *
     return TRUE;
 }
 
+void OverworldWildSpawns_ApplyPendingBattleGender(struct PartyPokemon *mon)
+{
+    u8 gender;
+
+    if (mon == NULL
+        || sOverworldWildSpawnState.pendingSlot < 0
+        || !sOverworldWildSpawnState.pendingGenderActive) {
+        return;
+    }
+
+    gender = sOverworldWildSpawnState.pendingGender;
+    SetMonData(mon, MON_DATA_GENDER, &gender);
+
+    sOverworldWildSpawnState.pendingGender = POKEMON_GENDER_UNKNOWN;
+    sOverworldWildSpawnState.pendingGenderActive = FALSE;
+}
+
 void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
 {
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
@@ -59,6 +77,8 @@ void OverworldWildSpawns_CleanupPendingBattle(u16 battleResult)
     if (entry != NULL && entry->cleanupPendingBattle != NULL) {
         entry->cleanupPendingBattle(&sOverworldWildSpawnState, battleResult);
     } else {
+        sOverworldWildSpawnState.pendingGender = POKEMON_GENDER_UNKNOWN;
+        sOverworldWildSpawnState.pendingGenderActive = FALSE;
         sOverworldWildSpawnState.pendingSlot = -1;
     }
 }
