@@ -38,6 +38,7 @@
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
 #define OW_WILD_ALERT_MOVEMENT_EXCLAMATION 0x004B
+#define OW_WILD_ALERT_OBJECT_LOCK_BITS 0x40
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_MEW_SPAWN_CHANCE_PERCENT 50
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
@@ -1008,6 +1009,7 @@ static void OverworldWildSpawns_ShowInteractionAlert(const OverworldWildSpawn *s
     }
 
     ov01_021F9408(spawn->object, OW_WILD_ALERT_MOVEMENT_EXCLAMATION);
+    MapObject_SetBits(spawn->object, OW_WILD_ALERT_OBJECT_LOCK_BITS);
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
@@ -1205,6 +1207,10 @@ static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult)
 {
     if (state->pendingSlot >= 0 && state->pendingSlot < OW_WILD_MAX_SPAWNS) {
+        if (state->spawns[state->pendingSlot].object != NULL) {
+            MapObject_ClearBits(state->spawns[state->pendingSlot].object, OW_WILD_ALERT_OBJECT_LOCK_BITS);
+        }
+
         if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
             state->battleGraceSteps = OW_WILD_FLEE_GRACE_STEPS;
         } else {
