@@ -27,6 +27,8 @@
 #define SOUND_TEST_ACTION_FORWARD   3
 #define SOUND_TEST_ACTION_BACK      4
 #define VAR_BATTLE_RESULT           0x4013
+#define VAR_SCRIPT_TEMP             0x800C
+#define SCRIPT_CMD_WAIT             3
 #define SCRIPT_CMD_PLAY_CRY         76
 #define SCRIPT_CMD_WAIT_CRY         77
 #define SCRIPT_CMD_RUN_NEW_COMMAND  208
@@ -39,6 +41,10 @@
 #define OW_WILD_MEW_WARP_DIR_SOUTH  1
 #define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BREC03
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
+#define OW_WILD_ALERT_WAIT_FRAMES   24
+#define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 8
+#define OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET 10
+#define OW_WILD_BATTLE_SCRIPT_SHINY_OFFSET 12
 
 typedef struct OverworldWildMewWarpDestination {
     u16 mapId;
@@ -49,6 +55,9 @@ typedef struct OverworldWildMewWarpDestination {
 } OverworldWildMewWarpDestination;
 
 static u8 sOverworldWildBattleScript[] = {
+    SCRIPT_CMD_WAIT & 0xFF, SCRIPT_CMD_WAIT >> 8,
+    OW_WILD_ALERT_WAIT_FRAMES & 0xFF, OW_WILD_ALERT_WAIT_FRAMES >> 8,
+    VAR_SCRIPT_TEMP & 0xFF, VAR_SCRIPT_TEMP >> 8,
     0x4D, 0x02, // wild_battle
     0x13, 0x00, // species fallback: Rattata
     0x04, 0x00, // level fallback: 4
@@ -126,11 +135,9 @@ static void Script_QueueOverworldWildBattle(SCRIPTCONTEXT *ctx)
 
     OverworldWildSpawns_PopPendingBattle(&encodedSpecies, &level);
 
-    sOverworldWildBattleScript[2] = encodedSpecies & 0xFF;
-    sOverworldWildBattleScript[3] = encodedSpecies >> 8;
-    sOverworldWildBattleScript[4] = level;
-    sOverworldWildBattleScript[5] = 0;
-    sOverworldWildBattleScript[6] = 0;
+    Script_WriteHalfword(sOverworldWildBattleScript, OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET, encodedSpecies);
+    Script_WriteHalfword(sOverworldWildBattleScript, OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET, level);
+    sOverworldWildBattleScript[OW_WILD_BATTLE_SCRIPT_SHINY_OFFSET] = 0;
     VarSet(ctx->fsys, VAR_BATTLE_RESULT, 0);
 #endif
 
