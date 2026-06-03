@@ -41,7 +41,8 @@
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
 #define OW_WILD_MEW_FLY_SKIP_DISABLED 0x4D57
 #define OW_WILD_MEW_FLY_SKIP_ACTIVE   0x5445
-#define OW_WILD_MEW_FLY_SKIP_NO_FOLLOWER_SUBSTATE 2
+#define OW_WILD_MEW_FLY_FOLLOWER_RELOCATION_SUBSTATE 4
+#define OW_WILD_MEW_FLY_NO_FOLLOWER_RELOCATION_SUBSTATE 6
 #define OW_WILD_MEW_FLY_WORK_HAS_FOLLOWER 1
 #define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 2
 #define OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET 4
@@ -173,8 +174,12 @@ BOOL Script_MewFlyAnimationTask(TaskManager *taskManager)
         MewFlyAnimationWork *work = (MewFlyAnimationWork *)taskManager->env;
 
         sOverworldWildMewFlySkipState = OW_WILD_MEW_FLY_SKIP_DISABLED;
-        if (work != NULL && work->hasFollower != OW_WILD_MEW_FLY_WORK_HAS_FOLLOWER) {
-            work->substate = OW_WILD_MEW_FLY_SKIP_NO_FOLLOWER_SUBSTATE;
+        if (work != NULL) {
+            if (work->hasFollower == OW_WILD_MEW_FLY_WORK_HAS_FOLLOWER) {
+                work->substate = OW_WILD_MEW_FLY_FOLLOWER_RELOCATION_SUBSTATE;
+            } else {
+                work->substate = OW_WILD_MEW_FLY_NO_FOLLOWER_RELOCATION_SUBSTATE;
+            }
         }
     }
 #endif
