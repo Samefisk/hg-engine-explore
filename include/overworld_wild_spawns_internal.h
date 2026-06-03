@@ -61,6 +61,8 @@ typedef struct OverworldWildSpawnState {
     u8 pendingShiny;
     u8 shinySpawned;
     s8 pendingSlot;
+    u8 movementSpotStates[OW_WILD_MAX_SPAWNS];
+    u8 movementEmoteTimers[OW_WILD_MAX_SPAWNS];
 } OverworldWildSpawnState;
 
 typedef struct OverworldWildSpawnsOverlayEntry {

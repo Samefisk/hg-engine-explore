@@ -77,9 +77,14 @@
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND 0x10
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
 #define OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED 1
-#define OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED 6
+#define OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED 5
+#define OW_WILD_SPAWNER_SPOT_RANGE OW_WILD_SPAWNER_MOVEMENT_RANGE
+#define OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES 16
+#define OW_WILD_SPAWNER_SPOT_EMOTE_SE SEQ_SE_GS_UFO_JUMP
+#define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
+#define OW_WILD_SPAWNER_SPOT_STATE_EMOTING 1
+#define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT
 #define OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT OW_WILD_MOVE_STOCK_IDLE
 #else
@@ -647,8 +652,6 @@ static u32 OverworldWildSpawns_GetMovementWalkCommandForSpeed(u8 speed)
         return OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND;
     case 5:
         return OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND;
-    case 6:
-        return OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND;
     case 1:
     default:
         return OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND;
@@ -667,6 +670,22 @@ static void OverworldWildSpawns_ClearMovementSlotInProgress(OverworldWildSpawnSt
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
 }
 
+static void OverworldWildSpawns_ResetSlotSpotState(OverworldWildSpawnState *state, int slot, BOOL clearObjectJump)
+{
+    if (state == NULL || slot < 0 || slot >= OW_WILD_MAX_SPAWNS) {
+        return;
+    }
+
+    if (clearObjectJump
+        && state->spawns[slot].active
+        && state->spawns[slot].object != NULL) {
+        MapObject_ClearBits(state->spawns[slot].object, BIT_JUMP_START);
+    }
+
+    state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
+    state->movementEmoteTimers[slot] = 0;
+}
+
 static void OverworldWildSpawns_ResetSlotMovementCommand(OverworldWildSpawnState *state, int slot, BOOL clearObjectCommand)
 {
     if (clearObjectCommand
@@ -677,6 +696,7 @@ static void OverworldWildSpawns_ResetSlotMovementCommand(OverworldWildSpawnState
     }
 
     OverworldWildSpawns_ClearMovementSlotInProgress(state, slot);
+    OverworldWildSpawns_ResetSlotSpotState(state, slot, clearObjectCommand);
 }
 
 static void OverworldWildSpawns_ResetAllMovementCommands(OverworldWildSpawnState *state, BOOL clearObjectCommand)
@@ -929,6 +949,46 @@ static BOOL OverworldWildSpawns_TryBattleSettleRetry(OverworldWildSpawnState *st
     return FALSE;
 }
 
+static BOOL OverworldWildSpawns_IsPlayerInSpotRange(int dx, int dy)
+{
+    return OverworldWildSpawns_DiagnosticAbs(dx) <= OW_WILD_SPAWNER_SPOT_RANGE
+        && OverworldWildSpawns_DiagnosticAbs(dy) <= OW_WILD_SPAWNER_SPOT_RANGE;
+}
+
+static BOOL OverworldWildSpawns_TickSpotEmote(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
+{
+    if (state->movementSpotStates[slot] != OW_WILD_SPAWNER_SPOT_STATE_EMOTING) {
+        return FALSE;
+    }
+
+    if (state->movementEmoteTimers[slot] != 0) {
+        state->movementEmoteTimers[slot]--;
+        if (state->movementEmoteTimers[slot] == 0) {
+            if (object != NULL) {
+                MapObject_ClearBits(object, BIT_JUMP_START);
+            }
+            state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+        }
+        return TRUE;
+    }
+
+    state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryStartSpotEmote(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
+{
+    if (state->movementSpotStates[slot] != OW_WILD_SPAWNER_SPOT_STATE_CHILL || object == NULL) {
+        return FALSE;
+    }
+
+    state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_EMOTING;
+    state->movementEmoteTimers[slot] = OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES;
+    MapObject_SetBits(object, BIT_JUMP_START);
+    PlaySE(OW_WILD_SPAWNER_SPOT_EMOTE_SE);
+    return TRUE;
+}
+
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
@@ -962,6 +1022,10 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
             }
 #endif
 
+            if (OverworldWildSpawns_TickSpotEmote(state, i, state->spawns[i].object)) {
+                continue;
+            }
+
             if (cooldown > 0) {
                 state->movementCooldowns[i] = cooldown - 1;
             } else {
@@ -976,8 +1040,10 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
                 int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
                 int behavior = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
-                int dx = playerX - objectX;
-                int dy = playerY - objectY;
+                int spotDx = playerX - objectX;
+                int spotDy = playerY - objectY;
+                int dx = spotDx;
+                int dy = spotDy;
                 u8 directions[OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS];
                 int directionCount;
 
@@ -1004,6 +1070,12 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 sOverworldWildMovementDiagnosticWalkIssued = FALSE;
                 sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = FALSE;
                 sOverworldWildMovementDiagnosticLookCommand = 0;
+                if (state->movementSpotStates[i] == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
+                    if (directionCount > 0 && OverworldWildSpawns_IsPlayerInSpotRange(spotDx, spotDy)) {
+                        OverworldWildSpawns_TryStartSpotEmote(state, i, state->spawns[i].object);
+                    }
+                    continue;
+                }
                 if (shouldIssueLookCommand && directionCount > 0) {
                     OverworldWildSpawns_TryStartSpawnerMovementCommand(state, i, directions, directionCount);
                 }

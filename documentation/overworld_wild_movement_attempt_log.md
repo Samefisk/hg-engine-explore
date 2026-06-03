@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test141.nds`
+Current ROM checkpoint: `test142.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and tests whether battle retry checks can be kept without forcing a visible idle pause between tile commands.
 
@@ -2309,6 +2309,44 @@ Verification:
 - Verified `OverworldWildSpawns_TryBattleSettleRetry` only returns `TRUE` when `OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)` actually schedules a battle.
 - Verified a failed retry now decrements `movementBattleSettleFrames` and returns `FALSE`, allowing `OverworldWildSpawns_TickMovementParams` to continue into untangle/chase command selection.
 - Verified the frame task still sets `movementBattleSettleFrames` after a completed spawner-owned movement command, so the contact retry path still runs before the next command can be issued.
+
+Runtime result:
+
+- User reported it works, and the current fastest movement is plenty fast for testing.
+
+Learning:
+
+- The non-blocking retry fixed the visible stop-and-think pause between tile commands enough to keep building on this path.
+- Current safe speed command families are still limited: speed `1` maps to `0x08`, speed `2` maps to `0x0C`, and speed `3` maps to `0x10`. Logical speeds above that were aliases rather than new motion speeds.
+
+### Attempt 45: Remove Redundant Speed 6 And Add Spot Emote
+
+Idea:
+
+Remove the redundant logical speed `6`, because it was identical to speed `5` after high speeds were capped to the fastest confirmed safe walk command. Add a first spot-emote state so a spawned Pokemon starts chill, detects the player entering spot range, hops in place with a jump sound, waits briefly, and only then enters the active chase/flee movement path.
+
+Why this is new:
+
+- Attempt 39 added logical speed levels through `6`; Attempts 41 and 43 later made the high levels aliases to the same safe command family.
+- No previous attempt has removed the duplicate highest speed level while preserving Pidgey's fastest tested behavior.
+- No previous attempt has added per-slot spotted/emoting state or tried a same-tile map-object hop before chase/flee.
+- This avoids the old risky paths: no custom movement descriptor is re-enabled, no coordinate writes are used, and the chase/flee walk command path remains the existing spawner-owned path.
+
+Files/symbols:
+
+- `include/overworld_wild_spawns_internal.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test142.nds` and copied to Delta.
+- `git diff --check` passed before the build.
+- Verified speed `6` was removed from `OverworldWildSpawns_GetMovementWalkCommandForSpeed`.
+- Verified Pidgey now uses logical speed `5`, which still maps to the fastest confirmed safe walk command family through the speed `3` alias.
+- Verified `OverworldWildSpawnState` now stores per-slot `movementSpotStates` and `movementEmoteTimers`.
+- Verified a chill spawn only starts the spot emote when the player is within `OW_WILD_SPAWNER_SPOT_RANGE` and a chase/flee direction exists.
+- Verified the emote path sets `BIT_JUMP_START`, plays `SEQ_SE_GS_UFO_JUMP`, waits `OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES`, then allows the existing spawner-owned chase/flee command path to run.
 
 Runtime result:
 
