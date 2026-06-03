@@ -565,6 +565,45 @@ static BOOL OverworldWildSpawns_HasActiveMovementSpawns(OverworldWildSpawnState 
     return FALSE;
 }
 
+static BOOL OverworldWildSpawns_IsMovementFieldContextCurrent(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    MapObjectMan *mapObjectMan;
+
+    if (state == NULL
+        || fieldSystem == NULL
+        || fieldSystem->location == NULL
+        || !OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
+        return FALSE;
+    }
+
+    mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (state->mapId != fieldSystem->location->mapId
+        || state->mapObjectMan != mapObjectMan
+        || mapObjectMan == NULL
+        || state->mapObjects != mapObjectMan->objects) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_HasCurrentMovementSpawns(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    int i;
+
+    if (state == NULL || fieldSystem == NULL) {
+        return FALSE;
+    }
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static void OverworldWildSpawns_SetMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
 {
     state->movementInProgressMask |= OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
@@ -984,7 +1023,8 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     }
 
     fieldSystem = state->movementFieldSystem;
-    if (!OverworldWildSpawns_IsEnabledMap(fieldSystem) || !OverworldWildSpawns_HasActiveMovementSpawns(state)) {
+    if (!OverworldWildSpawns_IsMovementFieldContextCurrent(state, fieldSystem)
+        || !OverworldWildSpawns_HasCurrentMovementSpawns(state, fieldSystem)) {
         state->movementFieldSystem = NULL;
         OverworldWildSpawns_StopFrameMovementTask();
         return;
@@ -995,7 +1035,7 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
             continue;
         }
 
-        if (!state->spawns[i].active || state->spawns[i].object == NULL) {
+        if (!OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
             OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
             continue;
         }
@@ -1868,14 +1908,22 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
     }
 }
 
-static BOOL OverworldWildSpawns_IsTouchingPlayer(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
+static BOOL OverworldWildSpawns_IsTouchingPlayer(OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot)
 {
+    const OverworldWildSpawn *spawn = &state->spawns[slot];
     int dx;
     int dy;
 
     if (!spawn->active || spawn->object == NULL) {
         return FALSE;
     }
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+    if (OverworldWildSpawns_IsMovementSlotInProgress(state, slot)
+        || MapObject_IsSingleMovementActive(spawn->object)) {
+        return FALSE;
+    }
+#endif
 
     dx = (int)MapObject_GetCurrentX(spawn->object) - GetPlayerXCoord(fieldSystem->playerAvatar);
     dy = (int)MapObject_GetCurrentY(spawn->object) - GetPlayerYCoord(fieldSystem->playerAvatar);
@@ -1911,7 +1959,7 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
     }
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
+        if (OverworldWildSpawns_IsTouchingPlayer(state, fieldSystem, i)) {
             state->pendingPersonality = state->spawns[i].personality;
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;

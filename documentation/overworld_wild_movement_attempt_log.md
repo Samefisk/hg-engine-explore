@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test130.nds`
+Current ROM checkpoint: `test131.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
@@ -309,7 +309,7 @@ Purpose of this checkpoint:
 - If this crashes, the likely new suspect is the frame task retaining and using a `FieldSystem *` outside the player-step call.
 - If chasing still stops, `MapObject_IsMovementDirectionBlocked` may enforce more than X/Y range, or the current command type may have another leash/occupancy rule.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test129.nds` is starting to look good, but simultaneous movement can sometimes leave two spawned Pokemon on the same tile.
 - This is different from earlier blocked-direction and movement-ownership attempts: the issue happens after movement has already succeeded, so prevention alone is not enough.
@@ -322,6 +322,20 @@ Purpose of this checkpoint:
 - If overlap remains, the target-tile occupancy check or blocked-direction helper may be rejecting every nearby tile, or current coordinates may not expose the overlap at the frame we scan.
 - If this crashes, the likely new suspects are overlap-pair scanning during the persistent frame task or the untangle direction/target validation helpers.
 - If cleanup creates new pile-ups, the next direction should reserve target tiles for in-progress commands rather than only checking current map-object occupancy.
+
+New active hypothesis:
+
+- The route-exit slowdown/freeze was present before the overlap untangle test, so the strongest suspect is the persistent idle frame task from `test129.nds`, not the new untangle pass alone.
+- The frame task retained a `FieldSystem *` and only checked whether it looked like an enabled map; it did not verify that the retained map id, map-object manager, and object table still matched the spawner state.
+- `test130.nds` also made battle engagement feel like it overshoots, likely because the detector can see a spawned Pokemon's updated target/current coordinate while that Pokemon is still animating a movement command.
+- The next new test should stop the frame task whenever the retained field context no longer matches the spawner's current map/object context, and should suppress battle detection for Pokemon with an active spawner-owned or engine single-movement command.
+
+Purpose of this checkpoint:
+
+- If route exits stop slowing/freezing, stale persistent frame-task context was the route-transition problem.
+- If battle engagement no longer starts while Pokemon are visibly still moving from farther away, movement-active battle suppression fixed the overshoot.
+- If battle engagement now feels too reluctant, the next adjustment should make the contact radius stricter or add a facing/settled-position rule, but only after verifying battles still trigger reliably.
+- If route exits still slow down, the next suspect is endless idle frame-task ticking itself, and the next test should add a finite idle keepalive budget after player-step refresh.
 
 ## Attempt History
 
@@ -1930,6 +1944,44 @@ Verification:
 - Verified overlap detection compares current coordinates for active spawned Pokemon pairs.
 - Verified untangle target validation rejects negative coordinates, currently occupied target tiles, and directions blocked by `MapObject_IsMovementDirectionBlocked`.
 - Verified untangle movement reuses `OverworldWildSpawns_TryStartSpawnerMovementCommand`, so it stays on the proven spawner-owned command path.
+- Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
+
+Runtime result:
+
+- User reported two issues:
+  - route exits can slow down dramatically and sometimes freeze, and this was already present in the prior run
+  - in `test130.nds`, battle engagement overshoots badly and starts fights before the player appears close to a spawned Pokemon
+
+Learning:
+
+- The route-exit problem likely predates the overlap untangle pass and points back to the persistent idle frame task added in Attempt 33.
+- The battle overshoot could be caused by checking contact while a spawned Pokemon is still resolving a movement command.
+
+### Attempt 35: Guard Idle Frame Context And Moving Battle Contact
+
+Idea:
+
+Keep range `8`, idle chase, and one-at-a-time untangling, but make the persistent frame task stop unless its retained `FieldSystem *` still matches the spawner's current map id, map-object manager, and object table. Also make `OverworldWildSpawns_IsTouchingPlayer` ignore a spawned Pokemon while that slot has a spawner-owned movement command in progress or while the object still has an engine single-movement command active.
+
+Why this is new:
+
+- Attempt 33 validated only `OverworldWildSpawns_IsEnabledMap(fieldSystem)` before using the retained `FieldSystem *`.
+- Attempt 34 added overlap cleanup but did not add any stronger route-transition/lifetime guard.
+- No previous attempt has suppressed battle detection while a spawned Pokemon is still moving.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test131.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OverworldWildSpawns_IsMovementFieldContextCurrent` checks enabled map, retained map id, retained map-object manager, and retained object table before the frame task keeps running.
+- Verified `OverworldWildSpawns_FrameMovementTask` also requires a current active spawn via `OverworldWildSpawns_HasCurrentMovementSpawns`.
+- Verified the frame task no longer updates a slot whose object is not current for the retained field context.
+- Verified `OverworldWildSpawns_IsTouchingPlayer` returns false while the slot is in `movementInProgressMask` or the object reports `MapObject_IsSingleMovementActive`.
 - Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
 
 Runtime result:
