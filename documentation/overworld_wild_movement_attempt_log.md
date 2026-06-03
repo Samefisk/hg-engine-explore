@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test123.nds`
+Current ROM checkpoint: `test124.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is a spawner-driven walk command gated by the previously safe blocked-direction check, not a slot-47 movement callback.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is spawner-owned movement-command update/clear polling after a spawner-started walk command, not a slot-47 movement callback.
 
 Previous active hypothesis:
 
@@ -1531,6 +1531,54 @@ Expand:
 - Add spawner-owned command update/clear polling after a spawner-started command.
 - Keep fresh spawns on stock movement `3` for this probe.
 - Still avoid scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
+
+### Attempt 29: Spawner-Owned Movement Command Update And Clear
+
+Idea:
+
+Keep spawned Pokemon on stock movement `3` and keep movement slot `47` aliased to stock no-op. When the spawner starts a walk command, mark the existing movement cooldown param as `OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS` (`-1`). On the next spawner tick for that object, call `MapObject_UpdateMovementCommand`; if it reports completion, call `MapObject_ClearSingleMovementActive` and restore the normal cooldown.
+
+Why this is new:
+
+- Attempt 28/`test123.nds` proved starting a gated spawner-driven walk command does not crash.
+- Earlier update/clear attempts happened inside the slot-47 custom movement callback and were bundled with scratch writes, `object->fsys`, global movement `FieldSystem *`, or overlay movement descriptor concerns.
+- No previous build has isolated `MapObject_UpdateMovementCommand` plus `MapObject_ClearSingleMovementActive` from the stable overlay-149 spawner step loop while keeping fresh spawns on stock movement `3`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND` should be `1`.
+- The active probe should use `OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS` (`-1`) only after starting a spawner-driven walk command.
+- The active probe should call `MapObject_UpdateMovementCommand` only when the cooldown param is in-progress.
+- The active probe should call `MapObject_ClearSingleMovementActive` only if `MapObject_UpdateMovementCommand` returns complete.
+- The active probe should still avoid scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
+- Fresh spawns should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
+
+Verification:
+
+- Built as `test124.nds`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND` is enabled.
+- Source verification shows `OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS` (`-1`) is assigned only after the spawner starts a walk command.
+- Source verification shows `MapObject_UpdateMovementCommand` is called only when the cooldown param is in-progress.
+- Source verification shows `MapObject_ClearSingleMovementActive` is called only if `MapObject_UpdateMovementCommand` returns complete.
+- Disassembly target scan shows the newly added `MapObject_UpdateMovementCommand` at `0x02062429` and `MapObject_ClearSingleMovementActive` at `0x0205F63D`.
+- Disassembly target scan still shows the prior movement setup targets: `MapObject_IsMovementDirectionBlocked` at `0x02060BB9`, `MapObject_IsSingleMovementActive` at `0x0205F649`, `MapObject_MovementCommandFromDirection` at `0x0206234D`, `MapObject_StartMovementCommand` at `0x0206217D`, and `MapObject_SetSingleMovementActive` at `0x0205F631`.
+- Source still avoids active custom movement scratch writes, `object->fsys`, and slot-47 callbacks; `OverworldWildCustomMovement_SetFieldSystem` remains no-op under the current idle diagnostic.
+- Fresh spawns still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- Copied to Delta as `test124.nds`.
+- `git diff --check` passed.
 
 ## Proposed Next New Experiments
 
