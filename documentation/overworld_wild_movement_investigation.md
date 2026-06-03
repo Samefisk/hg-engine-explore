@@ -39,6 +39,8 @@ After the first runtime test, spawned Pokemon were stable but stationary. The fo
 
 The next runtime test crashed after the player took a single step. The current checkpoint removes the `MIi_CpuClearFast` call from the custom movement init path and clears the local scratch words directly, avoiding a cross-overlay helper call during movement setup while keeping the same scratch state.
 
+The follow-up report says the crash now happens before the player issues a movement command. The current diagnostic build intentionally idles the custom movement callbacks: movement `47` is still wired through the custom descriptor, but init/update do not touch map object movement state, player coordinates, field system state, or movement-command helpers. If this build is stable, the crash is inside one of the disabled helper paths rather than the descriptor itself.
+
 ## First Runtime Tests
 
 Use the current Delta build and check these in order:

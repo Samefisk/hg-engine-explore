@@ -8,6 +8,7 @@
 #define OW_WILD_LOOK_UP_COMMAND 0x00
 #define OW_WILD_WALK_UP_COMMAND 0x08
 #define OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN 8
+#define OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE 1
 
 typedef void (*OverworldWildMovementFunc)(LocalMapObject *object);
 
@@ -19,13 +20,20 @@ typedef struct OverworldWildMovementDescriptor {
     OverworldWildMovementFunc cleanup;
 } OverworldWildMovementDescriptor;
 
+#if !OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
 static FieldSystem *sOverworldWildCustomMovementFieldSystem;
+#endif
 
 void OverworldWildCustomMovement_SetFieldSystem(FieldSystem *fieldSystem)
 {
+#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
+    (void)fieldSystem;
+#else
     sOverworldWildCustomMovementFieldSystem = fieldSystem;
+#endif
 }
 
+#if !OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
 static int OverworldWildCustomMovement_Abs(int value)
 {
     return value < 0 ? -value : value;
@@ -123,17 +131,25 @@ static void OverworldWildCustomMovement_TryStartStep(LocalMapObject *object)
         MapObject_SetSingleMovementActive(object);
     }
 }
+#endif
 
 void OverworldWildCustomMovement_Init(LocalMapObject *object)
 {
+#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
+    (void)object;
+#else
     object->unkA0 = 0;
     OverworldWildCustomMovement_ClearScratch(object);
     MapObject_ClearSingleMovementActive(object);
     MapObject_SetParam(object, gf_rand() % OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+#endif
 }
 
 void OverworldWildCustomMovement_Update(LocalMapObject *object)
 {
+#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
+    (void)object;
+#else
     int cooldown;
 
     if (MapObject_IsSingleMovementActive(object)) {
@@ -151,6 +167,7 @@ void OverworldWildCustomMovement_Update(LocalMapObject *object)
 
     MapObject_SetParam(object, OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
     OverworldWildCustomMovement_TryStartStep(object);
+#endif
 }
 
 void OverworldWildCustomMovement_Finish(LocalMapObject *object)
