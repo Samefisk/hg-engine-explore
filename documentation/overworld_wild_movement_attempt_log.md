@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test108.nds`
+Current ROM checkpoint: `test109.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -76,11 +76,11 @@ New active hypothesis:
 - `test108.nds` no longer crashes.
 - Read-only `fieldSystem->mapObjectMan`, `mapObjectMan->objects`, and map eligibility checks are safe.
 - The next suspect is a side effect in `OverworldWildSpawns_UpdateMapState`.
-- The next ROM should allow map-state pointer/id writes and cooldown/default-state writes, but skip `OverworldWildSpawns_Clear(state, FALSE)`.
+- The next ROM should allow only map-state pointer/id writes and the currently no-op movement field-system publish, but skip `OverworldWildSpawns_Clear(state, FALSE)`.
 
 Purpose of this checkpoint:
 
-- If the next ROM crashes, map-state/default-state writes are unsafe.
+- If the next ROM crashes, map-state pointer/id writes or the field-system publish are unsafe.
 - If the next ROM does not crash, `OverworldWildSpawns_Clear(state, FALSE)` is probably the crash trigger.
 
 ## Attempt History
@@ -607,6 +607,52 @@ Learning:
 Do not repeat:
 
 - Do not keep testing read-only map-state diagnostics; they have been ruled safe.
+
+### Attempt 14: UpdateMapState Map Writes Without Clear
+
+Idea:
+
+Let `OverworldWildSpawns_UpdateMapState` run past read-only checks and update only:
+
+- `state->mapId`
+- `state->mapObjectMan`
+- `state->mapObjects`
+- `OverworldWildCustomMovement_SetFieldSystem(fieldSystem)`, which is currently compiled as a no-op
+
+Keep `OverworldWildSpawns_OverlayOnPlayerStep` returning immediately after update-map-state, so no spawn/refill/battle work can run. Skip `OverworldWildSpawns_Clear(state, FALSE)` on both enabled-map and disabled-map transitions.
+
+Why this is new:
+
+- Attempt 13 returned before any `OverworldWildSpawnState` writes.
+- Attempt 9 ran full map-state refresh and crashed.
+- This attempt tests map-state pointer/id mutation without the slot clear loop and without `OverworldWildSpawns_ResetAmbientCryCooldown`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY` should be `0`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR` should be `1`.
+- `OverworldWildSpawns_UpdateMapState` should write map state fields but should not call `OverworldWildSpawns_Clear`.
+- `OverworldWildSpawns_OverlayOnPlayerStep` should still return before downstream spawner work.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test109.nds`.
+- Disassembly shows the active overlay step path writes `state->mapId`, `state->mapObjectMan`, and `state->mapObjects`, calls `OverworldWildCustomMovement_SetFieldSystem`, and returns before downstream spawner work.
+- The active path does not call `OverworldWildSpawns_Clear`.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
 
 ## Proposed Next New Experiments
 
