@@ -9,11 +9,12 @@
 #define OW_WILD_WALK_UP_COMMAND 0x08
 #define OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN 8
 #define OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE 1
+#define OW_WILD_MOVEMENT_DESCRIPTOR_CLASS_STEP 3
 
 typedef void (*OverworldWildMovementFunc)(LocalMapObject *object);
 
 typedef struct OverworldWildMovementDescriptor {
-    u32 movement;
+    u32 movementClass;
     OverworldWildMovementFunc init;
     OverworldWildMovementFunc update;
     OverworldWildMovementFunc finish;
@@ -181,7 +182,7 @@ void OverworldWildCustomMovement_Cleanup(LocalMapObject *object)
 }
 
 OverworldWildMovementDescriptor ALIGN4 gOverworldWildCustomMovementDescriptor = {
-    OW_WILD_MOVE_CUSTOM_AI,
+    OW_WILD_MOVEMENT_DESCRIPTOR_CLASS_STEP,
     OverworldWildCustomMovement_Init,
     OverworldWildCustomMovement_Update,
     OverworldWildCustomMovement_Finish,

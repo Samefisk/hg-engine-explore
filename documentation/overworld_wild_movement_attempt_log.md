@@ -17,9 +17,16 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test100.nds`
+Current ROM checkpoint: `test101.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
+
+New active hypothesis:
+
+- The descriptor's first word is a movement class/category, not the movement ID.
+- Stock wander-like descriptors use first word `3`.
+- `test100.nds` used first word `47`, which may have triggered invalid descriptor-class behavior during save/map load even though callbacks were no-op.
+- `test101.nds` changes only that descriptor metadata word to `3`.
 
 Purpose of this checkpoint:
 
@@ -184,16 +191,54 @@ Verification:
 
 Runtime result:
 
-- Pending user runtime test.
+- User reported the game still crashes when the save is loaded.
+
+Learning:
+
+- Because all callbacks compiled to `bx lr`, the crash is not caused by chase logic, movement-command helpers, coordinate reads, scratch clearing, or custom callback bodies.
+- The remaining suspects are descriptor shape/metadata, descriptor storage/load timing, movement `47` object creation semantics, or the engine's handling of a previously null descriptor becoming non-null.
+
+Next decision:
+
+- Try a descriptor metadata-only change before reintroducing any helper logic.
+
+### Attempt 6: Use Stock Step Descriptor Class `3`
+
+Idea:
+
+Keep movement slot `47` patched and keep every custom callback no-op, but change descriptor word `0` from `47` to stock class `3`, matching stock wander-like descriptors.
+
+Why this is new:
+
+- Earlier attempts tested slot `47`, active callbacks, scratch clearing, and no-op callbacks.
+- None isolated only the descriptor metadata word while leaving callbacks no-op.
+
+Files/symbols:
+
+- `src/overworld_wild_movement.c`
+
+Expected verification:
+
+- Built ROM should still have ARM9 slot `47` pointing at `gOverworldWildCustomMovementDescriptor`.
+- Descriptor word `0` should be `0x00000003`.
+- Callback pointers should still be valid Thumb pointers.
+- No-op callbacks should still compile to `bx lr`.
+
+Verification:
+
+- Built as `test101.nds`.
+- ARM9 movement slot `47` at `0x020FD2B0` points at `0x023DF740`.
+- Descriptor words are `0x00000003 0x023D97ED 0x023D97EF 0x023D97F1 0x023D97F3`.
+- All callback pointers have Thumb bits set.
+- All custom callbacks still compile to `bx lr`.
+
+Runtime result:
+
+- Pending.
 
 Learning:
 
 - Pending.
-
-Next decision:
-
-- If stable, reintroduce only one narrow helper group at a time.
-- If crashing, inspect descriptor shape, movement ID semantics, object creation params, and whether movement `47` has special engine assumptions.
 
 ## Proposed Next New Experiments
 
