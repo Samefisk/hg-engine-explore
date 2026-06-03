@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test136.nds`
+Current ROM checkpoint: `test137.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2140,6 +2140,38 @@ Verification:
 - Verified Sentret maps to speed `1`, Pidgey maps to speed `2`, and every other species defaults to speed `1`.
 - Verified speed levels `3`, `4`, `5`, and `6` are selectable through the same speed-to-command helper for future species tuning.
 - Local ARM9 movement command table already shows valid stock direction families for speed levels `1` through `6`: `0x08`, `0x0C`, `0x10`, `0x14`, `0x18`, and `0x1C`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
+
+### Attempt 40: Pidgey Speed 6 Test
+
+Idea:
+
+Keep the new speed-level abstraction from Attempt 39, but set only Pidgey to speed `6` while Sentret remains speed `1`. This creates an obvious runtime test for the highest currently exposed speed level.
+
+Why this is new:
+
+- Attempt 39 added speed levels `1` through `6`, but only built Pidgey at speed `2`.
+- No previous built ROM has tested Pidgey using speed `6` / stock command family `0x1C`.
+- This still changes only the per-species speed parameter, not movement timing, battle detection, custom descriptors, or coordinate writes.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test137.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED` is `6`, while `OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED` remains `1`.
+- Verified speed `6` maps through `OverworldWildSpawns_GetMovementWalkCommandForSpeed` to stock command family `0x1C`.
 
 Runtime result:
 
