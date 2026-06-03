@@ -1164,13 +1164,6 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
-            if (state->spawns[i].species == SPECIES_MEW) {
-                state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
-
-                EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_MEW_WARP_SCRIPT, NULL);
-                return TRUE;
-            }
-
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
             state->pendingSlot = i;

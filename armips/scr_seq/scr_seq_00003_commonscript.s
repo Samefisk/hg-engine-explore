@@ -89,7 +89,7 @@ scrdef scr_seq_0003_071
 scrdef scr_seq_0003_072_repels
 scrdef scr_seq_0003_073_autobattle_testing
 scrdef scr_seq_0003_074_overworld_wild_battle
-scrdef scr_seq_0003_075_overworld_wild_mew_warp
+scrdef scr_seq_0003_075_overworld_wild_mew_battle
 scrdef scr_seq_0003_076_sound_effect_test
 scrdef_end
 
@@ -1748,9 +1748,9 @@ scr_seq_0003_074_overworld_wild_battle:
     lockall
     OverworldWildBattle
 
-scr_seq_0003_075_overworld_wild_mew_warp:
+scr_seq_0003_075_overworld_wild_mew_battle:
     lockall
-    OverworldWildMewWarp
+    OverworldWildBattle
 
 scr_seq_0003_076_sound_effect_test:
     play_se SEQ_SE_DP_SELECT

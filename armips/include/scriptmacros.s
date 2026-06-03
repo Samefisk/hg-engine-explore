@@ -209,7 +209,7 @@ std_fade_heal_fade              equ 2069
 std_play_rival_outro_music      equ 2070
 std_fade_end_rival_outro_music  equ 2071
 std_overworld_wild_battle       equ 2074
-std_overworld_wild_mew_warp     equ 2075
+std_overworld_wild_mew_battle   equ 2075
 std_overworld_wild_sound_test   equ 2076
 
 // Creates a new script context to run the indicated script and wait
@@ -6751,12 +6751,8 @@ FORM_ROCKET_DISGUISE                    equ 1024
 .equ NEW_COMMAND_QUEUE_NEW_REPEL, 0
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE, 1
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE_CLEANUP, 2
-.equ NEW_COMMAND_OVERWORLD_WILD_MEW_WARP, 3
 .equ NEW_COMMAND_SOUND_TEST_GET_ID, 4
 .equ NEW_COMMAND_SOUND_TEST_ACTION, 5
-.equ NEW_COMMAND_OVERWORLD_WILD_MEW_WARP_SOUND, 6
-.equ NEW_COMMAND_OVERWORLD_WILD_MEW_WARP_PREPARE_TRANSITION, 7
-.equ NEW_COMMAND_OVERWORLD_WILD_MEW_WARP_CLEAR_TRANSITION, 8
 
 .macro RunNewCommand,slot,unk
 DummyTextTrap slot, unk
@@ -6768,10 +6764,6 @@ RunNewCommand NEW_COMMAND_QUEUE_NEW_REPEL, 0x800C
 
 .macro OverworldWildBattle
 RunNewCommand NEW_COMMAND_OVERWORLD_WILD_BATTLE, 0
-.endmacro
-
-.macro OverworldWildMewWarp
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_MEW_WARP, 0
 .endmacro
 
 .macro SoundTestGetId,var
