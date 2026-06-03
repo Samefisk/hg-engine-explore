@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test102.nds`
+Current ROM checkpoint: `test103.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -28,16 +28,22 @@ Previous active hypothesis:
 - `test100.nds` used first word `47`, which may have triggered invalid descriptor-class behavior during save/map load even though callbacks were no-op.
 - `test101.nds` changes only that descriptor metadata word to `3`.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - The crash is caused by slot `47` pointing at overlay 129 data/code during save/map load.
 - A movement table entry that points at an existing ARM9-resident stock descriptor should be stable even if spawned objects or saved objects use movement `47`.
 - `test102.nds` changes movement slot `47` to alias stock movement `3`.
 
+New active hypothesis:
+
+- `test102.nds` loading but crashing after one player step suggests save-load got past the overlay descriptor problem.
+- The step crash may be from stale movement-47 objects whose stock movement-3 state was never initialized in earlier builds, or from freshly spawning movement-47 objects.
+- `test103.nds` should make stale movement-47 objects no-op and make fresh spawns use stock movement `3` directly.
+
 Purpose of this checkpoint:
 
-- If `test100.nds` still crashes, the problem is likely descriptor/slot/spawn wiring rather than chase logic.
-- If `test100.nds` does not crash, the next culprit is one of the disabled helper paths.
+- If `test103.nds` still crashes after one step, the crash is likely in the spawner's step/update pipeline rather than stale movement-47 object execution.
+- If `test103.nds` does not crash, movement `47` should stay inert for old saves and future custom behavior should be driven through a safer fresh-object or spawner-side path.
 
 ## Attempt History
 
@@ -282,7 +288,56 @@ Verification:
 
 Runtime result:
 
-- Pending.
+- User reported the save loaded, then the game crashed after a single player step.
+
+Learning:
+
+- Aliasing movement `47` to stock movement `3` likely avoids the save-load crash.
+- The step-time crash remains.
+- A plausible cause is that existing saved movement-47 objects now run stock movement-3 update without having gone through stock movement-3 init.
+- Another plausible cause is that using movement ID `47` for freshly created objects is unsafe in some non-descriptor engine path.
+
+Do not repeat:
+
+- Do not alias stale movement `47` directly to active stock movement `3` again unless the object's movement scratch/init state is also migrated.
+
+### Attempt 8: Make Stale Movement `47` No-Op And Spawn Fresh Objects With Stock Movement `3`
+
+Idea:
+
+Split stale-object safety from fresh-spawn behavior:
+
+- Patch movement table slot `47` to stock movement `0`'s no-op descriptor at `0x020FCEC8`.
+- Create new overworld wild spawn objects with stock movement `3` instead of movement `47`.
+
+Why this is new:
+
+- Attempt 7 aliased movement `47` to active stock movement `3`, which may run uninitialized movement state on old saved movement-47 objects.
+- This attempt keeps stale movement-47 objects inert while proving whether new stock movement-3 spawns can step safely on the same save.
+
+Files/symbols:
+
+- `armips/asm/overworld_wild_movement.s`
+- `include/overworld_wild_movement.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- Built ROM should have movement slot `47` at `0x020FD2B0` pointing at stock no-op descriptor `0x020FCEC8`.
+- New spawns should call `CreateSpecialFieldObjectWithParams` with movement `3`.
+
+Verification:
+
+- Built as `test103.nds`.
+- Slot `0` at `0x020FD1F4` points at `0x020FCEC8`.
+- Slot `3` at `0x020FD200` points at `0x020FD170`.
+- Slot `47` at `0x020FD2B0` points at `0x020FCEC8`.
+- Slot `47` descriptor words match stock no-op movement `0`: `0x00000000 0x0205FCB5 0x0205FCB9 0x0205FCBD 0x0205FCC1`.
+- Source verification: `OverworldWildSpawns_CreateObject` passes `OW_WILD_MOVE_STOCK_WANDER`, currently movement `3`, to `CreateSpecialFieldObjectWithParams`.
+
+Runtime result:
+
+- Pending user test.
 
 Learning:
 

@@ -1086,7 +1086,7 @@ static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem
         position->startY,
         1,
         spriteId,
-        OW_WILD_MOVE_CUSTOM_AI,
+        OW_WILD_MOVE_STOCK_WANDER,
         fieldSystem->location->mapId,
         0,
         OW_WILD_MOVEMENT_BEHAVIOR_CHASE_PLAYER,
