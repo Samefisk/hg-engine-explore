@@ -185,6 +185,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
 static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem);
+static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem, BOOL decrementBattleGrace);
 static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state);
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
 static void OverworldWildSpawns_ResetAllMovementCommands(OverworldWildSpawnState *state, BOOL clearObjectCommand);
@@ -1047,6 +1048,11 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     }
 
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
+    if (state->movementInProgressMask == 0
+        && OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)) {
+        return;
+    }
+
     OverworldWildSpawns_TickMovementParams(state, fieldSystem);
     if (!OverworldWildSpawns_HasActiveMovementSpawns(state)) {
         OverworldWildSpawns_StopFrameMovementTask();
@@ -1938,12 +1944,14 @@ static BOOL OverworldWildSpawns_IsTouchingPlayer(OverworldWildSpawnState *state,
     return (dx + dy) <= 1;
 }
 
-static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem, BOOL decrementBattleGrace)
 {
     int i;
 
     if (state->battleGraceSteps != 0) {
-        state->battleGraceSteps--;
+        if (decrementBattleGrace) {
+            state->battleGraceSteps--;
+        }
         return FALSE;
     }
 
@@ -2101,7 +2109,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
     return FALSE;
 #endif
 
-    if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
+    if (OverworldWildSpawns_TryStartBattle(state, fieldSystem, TRUE)) {
         return TRUE;
     }
 

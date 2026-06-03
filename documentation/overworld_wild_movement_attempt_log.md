@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test131.nds`
+Current ROM checkpoint: `test132.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
@@ -323,7 +323,7 @@ Purpose of this checkpoint:
 - If this crashes, the likely new suspects are overlap-pair scanning during the persistent frame task or the untangle direction/target validation helpers.
 - If cleanup creates new pile-ups, the next direction should reserve target tiles for in-progress commands rather than only checking current map-object occupancy.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - The route-exit slowdown/freeze was present before the overlap untangle test, so the strongest suspect is the persistent idle frame task from `test129.nds`, not the new untangle pass alone.
 - The frame task retained a `FieldSystem *` and only checked whether it looked like an enabled map; it did not verify that the retained map id, map-object manager, and object table still matched the spawner state.
@@ -336,6 +336,20 @@ Purpose of this checkpoint:
 - If battle engagement no longer starts while Pokemon are visibly still moving from farther away, movement-active battle suppression fixed the overshoot.
 - If battle engagement now feels too reluctant, the next adjustment should make the contact radius stricter or add a facing/settled-position rule, but only after verifying battles still trigger reliably.
 - If route exits still slow down, the next suspect is endless idle frame-task ticking itself, and the next test should add a finite idle keepalive budget after player-step refresh.
+
+New active hypothesis:
+
+- Battle engagement currently still depends on the player-step hook because `OverworldWildSpawns_TryStartBattle` is only called from `OverworldWildSpawns_OverlayOnPlayerStep`.
+- Since `test129.nds` made Pokemon move while the player is idle, a spawned Pokemon can reach the player without another player step happening.
+- The next new test should call the existing battle detector from `OverworldWildSpawns_FrameMovementTask` after spawner-owned movement commands have settled and before starting a new chase/untangle movement.
+- The frame-task call should not decrement flee grace every frame; only the player-step path should consume flee grace steps.
+
+Purpose of this checkpoint:
+
+- If a Pokemon can start a battle after chasing into the stationary player, frame-task battle scheduling is viable.
+- If this crashes or causes bad transitions, `EventSet_Script` is likely unsafe from this task timing and the next direction should find a safer field-frame hook.
+- If flee behavior immediately re-battles too quickly, the grace handling needs a stronger frame-task suppression rule.
+- If battle still waits for player movement, the detector may be blocked by `MapObject_IsSingleMovementActive` for longer than expected or by contact radius behavior.
 
 ## Attempt History
 
@@ -1983,6 +1997,43 @@ Verification:
 - Verified the frame task no longer updates a slot whose object is not current for the retained field context.
 - Verified `OverworldWildSpawns_IsTouchingPlayer` returns false while the slot is in `movementInProgressMask` or the object reports `MapObject_IsSingleMovementActive`.
 - Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
+
+### Attempt 36: Frame Task Battle Detection
+
+Idea:
+
+Keep the player-step battle detector, but also call `OverworldWildSpawns_TryStartBattle` from `OverworldWildSpawns_FrameMovementTask` after all in-progress spawner movement commands have been updated. The frame-task call only runs when `movementInProgressMask == 0`, so battle detection happens after movement settles and before the next chase/untangle command can start. Add a `decrementBattleGrace` parameter so player-step checks still consume flee grace, while frame-task checks observe grace without burning it every frame.
+
+Why this is new:
+
+- Previous attempts proved `OverworldWildSpawns_TryStartBattle` on the player-step path.
+- Previous attempts proved frame-task movement polling and idle chase.
+- No previous attempt has scheduled the overworld-wild battle script from the frame-task path.
+- No previous attempt has separated player-step flee-grace consumption from frame-task contact checks.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test132.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OverworldWildSpawns_FrameMovementTask` calls `OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)` only when `movementInProgressMask == 0`.
+- Verified the frame-task battle check runs before `OverworldWildSpawns_TickMovementParams`, so it can schedule battle before starting another movement command.
+- Verified the player-step path still calls `OverworldWildSpawns_TryStartBattle(state, fieldSystem, TRUE)`.
+- Verified `battleGraceSteps` is decremented only when `decrementBattleGrace` is true.
+- Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
+- Linked overlay target scan still shows the expected movement helper targets and player coordinate helpers.
 
 Runtime result:
 
