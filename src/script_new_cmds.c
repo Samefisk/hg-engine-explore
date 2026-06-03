@@ -44,10 +44,22 @@
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
 #define OW_WILD_MEW_WARP_RETRY_COUNT 16
 #define OW_WILD_MEW_WARP_FALLBACK_MAP MAP_T21PC0101
-#define OW_WILD_MEW_WARP_FALLBACK_WARP 0
+#define OW_WILD_MEW_WARP_FALLBACK_X 7
+#define OW_WILD_MEW_WARP_FALLBACK_Z 7
+#define OW_WILD_MEW_BG_EVENT_SIZE 20
+#define OW_WILD_MEW_OBJECT_EVENT_SIZE 32
+#define OW_WILD_MEW_WARP_EVENT_SIZE 12
 #define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 2
 #define OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET 4
 #define OW_WILD_BATTLE_SCRIPT_SHINY_OFFSET 6
+
+typedef struct OverworldWildMewWarpEvent {
+    u16 x;
+    u16 z;
+    u16 header;
+    u16 anchor;
+    u32 height;
+} OverworldWildMewWarpEvent;
 
 static u8 sOverworldWildBattleScript[] = {
     0x4D, 0x02, // wild_battle
@@ -154,7 +166,8 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
 {
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
     u16 mapId = OW_WILD_MEW_WARP_FALLBACK_MAP;
-    u16 warpId = OW_WILD_MEW_WARP_FALLBACK_WARP;
+    u16 x = OW_WILD_MEW_WARP_FALLBACK_X;
+    u16 z = OW_WILD_MEW_WARP_FALLBACK_Z;
     u32 attempt;
 
     for (attempt = 0; attempt < OW_WILD_MEW_WARP_RETRY_COUNT; attempt++) {
@@ -162,16 +175,35 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
         u8 warpCount = sOverworldWildMewMapWarpCounts[candidateMapId];
 
         if (warpCount != 0) {
+            u32 bgEventCount;
+            u32 objectEventCount;
+            u32 warpOffset;
+            OverworldWildMewWarpEvent warpEvent;
+
             mapId = candidateMapId;
-            warpId = gf_rand() % warpCount;
+            ArchiveDataLoadOfs(&bgEventCount, ARC_MAP_EVENTS, mapId, 0, sizeof(bgEventCount));
+            ArchiveDataLoadOfs(&objectEventCount, ARC_MAP_EVENTS, mapId,
+                sizeof(bgEventCount) + bgEventCount * OW_WILD_MEW_BG_EVENT_SIZE,
+                sizeof(objectEventCount));
+
+            warpOffset = sizeof(bgEventCount)
+                + bgEventCount * OW_WILD_MEW_BG_EVENT_SIZE
+                + sizeof(objectEventCount)
+                + objectEventCount * OW_WILD_MEW_OBJECT_EVENT_SIZE
+                + sizeof(u32)
+                + (gf_rand() % warpCount) * OW_WILD_MEW_WARP_EVENT_SIZE;
+
+            ArchiveDataLoadOfs(&warpEvent, ARC_MAP_EVENTS, mapId, warpOffset, sizeof(warpEvent));
+            x = warpEvent.x;
+            z = warpEvent.z;
             break;
         }
     }
 
     Script_WriteHalfword(sOverworldWildMewWarpScript, 27, mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, warpId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, OW_WILD_MEW_WARP_NONE);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, OW_WILD_MEW_WARP_NONE);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, OW_WILD_MEW_WARP_NONE);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, x);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, z);
     Script_WriteHalfword(sOverworldWildMewWarpScript, 35, gf_rand() % 4);
 #endif
 
