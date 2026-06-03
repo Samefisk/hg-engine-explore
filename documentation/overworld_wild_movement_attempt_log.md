@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test116.nds`
+Current ROM checkpoint: `test117.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -149,7 +149,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash, the empty-state distance-despawn path is safe and the touch-battle path can be isolated next.
 - If the next ROM crashes, the crash is likely in distance despawn's object coordinate reads, player coordinate reads, or delete path.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test115.nds` did not crash, so distance despawn is runtime-stable in the current empty/no-spawn state.
 - The next downstream piece is touch-battle detection: grace-step handling, pending battle guards, `justSpawned` handling, player-touch coordinate checks, and potential battle script scheduling.
@@ -159,6 +159,18 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, the empty-state touch-battle path is safe and ambient cry can be isolated next.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_IsTouchingPlayer`, coordinate reads, or `EventSet_Script` if an old active spawn is still touching the player.
+
+New active hypothesis:
+
+- `test116.nds` did not crash, so touch-battle detection is runtime-stable in the current empty/no-spawn state.
+- The user asked to spawn Pokemon next.
+- The next untested downstream piece is refill/spawn: free-slot search, spawn position selection, encounter rolling, object creation, render params, shiny state, and spawn cooldowns.
+- The next ROM should run `OverworldWildSpawns_TryRefill` after touch-battle detection, while still skipping ambient cry so refill/spawn is isolated.
+
+Purpose of this checkpoint:
+
+- If the next ROM spawns Pokemon and does not crash, the refill/spawn path is stable again with stock movement `3` spawns.
+- If the next ROM crashes, the crash is likely in spawn position selection, encounter rolling, `CreateSpecialFieldObjectWithParams`, Pokemon render params, shiny setup, or spawn state writes after object creation.
 
 ## Attempt History
 
@@ -1065,11 +1077,59 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
 - Build-time evidence shows this is the intended touch-battle-only probe.
+- Runtime result confirms touch-battle detection is stable in the current empty/no-spawn state.
+
+Expand:
+
+- Re-enable `OverworldWildSpawns_TryRefill` to spawn Pokemon, while skipping ambient cry for now.
+
+### Attempt 22: Re-enable Refill And Spawn Only
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` run map-state update, stale-slot cleanup, distance despawn, touch-battle detection, and refill/spawn. Skip ambient cry so this build specifically tests Pokemon object creation and spawn state.
+
+Why this is new:
+
+- Attempt 21/`test116.nds` returned before refill/spawn.
+- Earlier crashy probes bundled refill/spawn with unresolved setter/state issues.
+- No previous build has isolated refill/spawn after the `LONG_CALL` setter fix and stable stale/despawn/battle paths.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY` should be `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY` should be `1`.
+- The active overlay step path should run map-state update, stale-slot cleanup, distance despawn, touch-battle detection, and `OverworldWildSpawns_TryRefill`.
+- The active overlay step path should not run `OverworldWildSpawns_TryPlayAmbientCry`.
+- Fresh spawns should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Verification:
+
+- Built as `test117.nds`.
+- `OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY` is `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY` is `1`.
+- Disassembly shows the active overlay step path reaches `OverworldWildSpawns_SpawnOne` from refill/spawn call sites.
+- Source-level diagnostic gating keeps `OverworldWildSpawns_TryPlayAmbientCry` skipped for this build.
+- Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `test.nds` was copied to Delta as `test117.nds`.
+- `git diff --check` passed.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
 
 ## Proposed Next New Experiments
 
