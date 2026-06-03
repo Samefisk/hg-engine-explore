@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test129.nds`
+Current ROM checkpoint: `test130.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
@@ -295,7 +295,7 @@ Purpose of this checkpoint:
 - If movement still dies after battle, the task lifecycle may need to be restarted from the battle cleanup hook or a different field callback.
 - If the next ROM crashes, the likely new suspects are clearing single-movement flags during battle transitions or the added per-slot state fields.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test128.nds` is a huge improvement and fixes the prior quirks, but Pokemon stop chasing after a threshold.
 - The threshold is likely the object movement leash: `OverworldWildSpawns_ApplyMovementRange` currently sets X/Y range to `2`, and the chase path is gated by `MapObject_IsMovementDirectionBlocked`.
@@ -308,6 +308,20 @@ Purpose of this checkpoint:
 - If Pokemon continue chasing while the player stands still, frame-task decision issuing is a viable idle-chase surface.
 - If this crashes, the likely new suspect is the frame task retaining and using a `FieldSystem *` outside the player-step call.
 - If chasing still stops, `MapObject_IsMovementDirectionBlocked` may enforce more than X/Y range, or the current command type may have another leash/occupancy rule.
+
+New active hypothesis:
+
+- `test129.nds` is starting to look good, but simultaneous movement can sometimes leave two spawned Pokemon on the same tile.
+- This is different from earlier blocked-direction and movement-ownership attempts: the issue happens after movement has already succeeded, so prevention alone is not enough.
+- The next new test should add a conservative after-the-fact untangle pass that scans active spawn pairs only when no spawner-owned command is in progress.
+- When an overlap is found, the pass should start one normal spawner-owned walk command into a valid adjacent unoccupied tile, then wait for that movement to finish before trying another untangle.
+
+Purpose of this checkpoint:
+
+- If overlapped Pokemon separate without crashes, one-at-a-time after-the-fact cleanup is a viable polish layer.
+- If overlap remains, the target-tile occupancy check or blocked-direction helper may be rejecting every nearby tile, or current coordinates may not expose the overlap at the frame we scan.
+- If this crashes, the likely new suspects are overlap-pair scanning during the persistent frame task or the untangle direction/target validation helpers.
+- If cleanup creates new pile-ups, the next direction should reserve target tiles for in-progress commands rather than only checking current map-object occupancy.
 
 ## Attempt History
 
@@ -1880,6 +1894,43 @@ Verification:
 - Verified the frame task calls `OverworldWildSpawns_TickMovementParams`, so movement decisions can be issued without a new player step.
 - Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
 - Verified active overlay code still avoids direct `object->fsys` and `object->unkD8` access; remaining references are in the dormant custom movement file.
+
+Runtime result:
+
+- User reported this is starting to look really good, with a minor issue where Pokemon that move at the same time can sometimes end on the same tile.
+
+Learning:
+
+- Range `8` and idle frame chase are viable enough to continue polishing.
+- The next issue is not core movement timing; it is after-the-fact overlap cleanup for simultaneous successful moves.
+
+### Attempt 34: One-At-A-Time Overlap Untangle
+
+Idea:
+
+Keep the successful range `8` and idle frame chase from `test129.nds`, but add a post-move untangle pass inside the spawner movement tick. When no spawner-owned command is in progress, scan active spawned Pokemon for duplicate current coordinates. If a pair overlaps, start one normal spawner-owned walk command for one of the pair into an adjacent unoccupied, unblocked tile, then return so only one untangle move is active at a time.
+
+Why this is new:
+
+- Previous attempts tested movement descriptors, safe command timing, per-slot ownership, battle reset, range, and idle chase.
+- No previous attempt has scanned active spawned Pokemon for duplicate current coordinates.
+- No previous attempt has used the proven spawner-owned walk command path specifically as an after-the-fact overlap resolver.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test130.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OverworldWildSpawns_TryUntangleOverlaps` runs before normal chase decisions inside `OverworldWildSpawns_TickMovementParams`.
+- Verified the untangle pass only runs when `movementInProgressMask == 0`.
+- Verified overlap detection compares current coordinates for active spawned Pokemon pairs.
+- Verified untangle target validation rejects negative coordinates, currently occupied target tiles, and directions blocked by `MapObject_IsMovementDirectionBlocked`.
+- Verified untangle movement reuses `OverworldWildSpawns_TryStartSpawnerMovementCommand`, so it stays on the proven spawner-owned command path.
+- Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
 
 Runtime result:
 

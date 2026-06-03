@@ -67,6 +67,7 @@
 #define OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS 32
 #define OW_WILD_SPAWNER_MOVEMENT_FRAME_TASK_PRIORITY 1300
 #define OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS 2
+#define OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS 4
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08
@@ -665,12 +666,169 @@ static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(OverworldWildSpaw
     return FALSE;
 }
 
+static int OverworldWildSpawns_MovementDirectionDeltaX(u8 direction)
+{
+    if (direction == OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT) {
+        return -1;
+    }
+    if (direction == OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT) {
+        return 1;
+    }
+    return 0;
+}
+
+static int OverworldWildSpawns_MovementDirectionDeltaY(u8 direction)
+{
+    if (direction == OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP) {
+        return -1;
+    }
+    if (direction == OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN) {
+        return 1;
+    }
+    return 0;
+}
+
+static void OverworldWildSpawns_AddUntangleDirection(u8 *directions, int *count, u8 direction)
+{
+    int i;
+
+    if (*count >= OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS) {
+        return;
+    }
+
+    for (i = 0; i < *count; i++) {
+        if (directions[i] == direction) {
+            return;
+        }
+    }
+
+    directions[*count] = direction;
+    (*count)++;
+}
+
+static int OverworldWildSpawns_BuildUntangleDirections(FieldSystem *fieldSystem, LocalMapObject *object, int slot, u8 *directions)
+{
+    static const u8 fallbackDirections[OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS] = {
+        OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP,
+        OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT,
+        OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN,
+        OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT,
+    };
+    int objectX = MapObject_GetCurrentX(object);
+    int objectY = MapObject_GetCurrentY(object);
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    int count = 0;
+    int i;
+
+    count = OverworldWildSpawns_DiagnosticBuildDirections(objectX - playerX, objectY - playerY, directions);
+
+    for (i = 0; i < OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS; i++) {
+        u8 direction = fallbackDirections[(slot + i) % OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS];
+
+        OverworldWildSpawns_AddUntangleDirection(directions, &count, direction);
+    }
+
+    return count;
+}
+
+static BOOL OverworldWildSpawns_TryStartUntangleMovementCommand(OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot)
+{
+    u8 directions[OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS];
+    u8 validDirections[OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS];
+    LocalMapObject *object = state->spawns[slot].object;
+    int objectX;
+    int objectY;
+    int directionCount;
+    int validDirectionCount = 0;
+    int i;
+
+    if (fieldSystem == NULL || fieldSystem->playerAvatar == NULL || object == NULL) {
+        return FALSE;
+    }
+    if (OverworldWildSpawns_IsMovementSlotInProgress(state, slot) || MapObject_IsSingleMovementActive(object)) {
+        return FALSE;
+    }
+
+    objectX = MapObject_GetCurrentX(object);
+    objectY = MapObject_GetCurrentY(object);
+    directionCount = OverworldWildSpawns_BuildUntangleDirections(fieldSystem, object, slot, directions);
+
+    for (i = 0; i < directionCount; i++) {
+        u8 direction = directions[i];
+        int targetX = objectX + OverworldWildSpawns_MovementDirectionDeltaX(direction);
+        int targetY = objectY + OverworldWildSpawns_MovementDirectionDeltaY(direction);
+
+        if (targetX < 0 || targetY < 0) {
+            continue;
+        }
+        if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, targetX, targetY)) {
+            continue;
+        }
+        if (MapObject_IsMovementDirectionBlocked(object, direction)) {
+            continue;
+        }
+
+        validDirections[validDirectionCount++] = direction;
+    }
+
+    return validDirectionCount > 0
+        && OverworldWildSpawns_TryStartSpawnerMovementCommand(state, slot, validDirections, validDirectionCount);
+}
+
+static BOOL OverworldWildSpawns_TryUntangleOverlaps(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    int i;
+
+    if (state == NULL || fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
+        return FALSE;
+    }
+    if (state->movementInProgressMask != 0) {
+        return FALSE;
+    }
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        int j;
+        int x;
+        int y;
+
+        if (!state->spawns[i].active || state->spawns[i].object == NULL) {
+            continue;
+        }
+
+        x = MapObject_GetCurrentX(state->spawns[i].object);
+        y = MapObject_GetCurrentY(state->spawns[i].object);
+        for (j = i + 1; j < OW_WILD_MAX_SPAWNS; j++) {
+            if (!state->spawns[j].active || state->spawns[j].object == NULL) {
+                continue;
+            }
+            if ((int)MapObject_GetCurrentX(state->spawns[j].object) != x
+                || (int)MapObject_GetCurrentY(state->spawns[j].object) != y) {
+                continue;
+            }
+
+            if (OverworldWildSpawns_TryStartUntangleMovementCommand(state, fieldSystem, j)) {
+                return TRUE;
+            }
+            if (OverworldWildSpawns_TryStartUntangleMovementCommand(state, fieldSystem, i)) {
+                return TRUE;
+            }
+        }
+    }
+
+    return FALSE;
+}
+
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
 
     state->movementFieldSystem = fieldSystem;
     sOverworldWildMovementDiagnosticCommandsStartedThisTick = 0;
+
+    if (OverworldWildSpawns_TryUntangleOverlaps(state, fieldSystem)) {
+        return;
+    }
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active && state->spawns[i].object != NULL) {
