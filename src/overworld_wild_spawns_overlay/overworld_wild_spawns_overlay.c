@@ -49,7 +49,8 @@
 #define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY 0
-#define OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY 1
+#define OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY 0
+#define OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY 1
 #define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY 0
@@ -1447,6 +1448,10 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
     if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
         return TRUE;
     }
+
+#if OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY
+    return FALSE;
+#endif
 
     OverworldWildSpawns_TryPlayAmbientCry(state);
     OverworldWildSpawns_TryRefill(state, fieldSystem);

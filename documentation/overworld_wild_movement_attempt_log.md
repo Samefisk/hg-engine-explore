@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test115.nds`
+Current ROM checkpoint: `test116.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -138,7 +138,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash, stale-slot validation and clearing are safe enough to keep while moving to distance despawn.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_IsCurrentSpawnObject`, shiny-reservation save-on-clear, or `OverworldWildSpawns_ClearSlot`.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test114.nds` did not crash, so stale-slot validation and clearing are runtime-stable.
 - The next downstream piece is distance-based despawn: iterating active spawns, reading map object coordinates, measuring player distance, and deleting far non-shiny objects.
@@ -148,6 +148,17 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, the empty-state distance-despawn path is safe and the touch-battle path can be isolated next.
 - If the next ROM crashes, the crash is likely in distance despawn's object coordinate reads, player coordinate reads, or delete path.
+
+New active hypothesis:
+
+- `test115.nds` did not crash, so distance despawn is runtime-stable in the current empty/no-spawn state.
+- The next downstream piece is touch-battle detection: grace-step handling, pending battle guards, `justSpawned` handling, player-touch coordinate checks, and potential battle script scheduling.
+- The next ROM should run `OverworldWildSpawns_TryStartBattle` after distance despawn, then return before ambient cry or refill/spawn.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, the empty-state touch-battle path is safe and ambient cry can be isolated next.
+- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_IsTouchingPlayer`, coordinate reads, or `EventSet_Script` if an old active spawn is still touching the player.
 
 ## Attempt History
 
@@ -1006,11 +1017,59 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
 - Build-time evidence shows this is the intended distance-despawn-only probe.
+- Runtime result confirms distance despawn is stable in the current empty/no-spawn state.
+
+Expand:
+
+- Re-enable `OverworldWildSpawns_TryStartBattle` only, while returning before ambient cry and refill/spawn.
+
+### Attempt 21: Re-enable Touch-Battle Detection Only
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` run map-state update, stale-slot cleanup, distance despawn, and `OverworldWildSpawns_TryStartBattle`, then immediately return `FALSE` if no battle was started.
+
+Why this is new:
+
+- Attempt 20/`test115.nds` returned before touch-battle detection.
+- Earlier crashy probes bundled touch-battle detection with ambient cry and refill/spawn.
+- No previous build has isolated touch-battle detection after the `LONG_CALL` setter fix and stable stale/despawn paths.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY` should be `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY` should be `1`.
+- The active overlay step path should run map-state update, stale-slot cleanup, distance despawn, and touch-battle detection.
+- If `OverworldWildSpawns_TryStartBattle` returns `TRUE`, the active path should still return `TRUE`.
+- If no battle is started, the active path should return `FALSE` before ambient cry or refill/spawn.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test116.nds`.
+- `OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY` is `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY` is `1`.
+- Disassembly shows the active overlay step path runs map-state update, stale-slot cleanup, distance despawn, and touch-battle detection.
+- Disassembly shows the battle-start path can set pending battle state, call `EventSet_Script`, and return `TRUE`.
+- Disassembly shows the no-battle path returns `FALSE` before ambient cry or refill/spawn.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Build-time evidence shows this is the intended touch-battle-only probe.
 
 ## Proposed Next New Experiments
 
