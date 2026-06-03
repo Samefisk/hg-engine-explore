@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test114.nds`
+Current ROM checkpoint: `test115.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -127,7 +127,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash, map-state writes are safe and the downstream step actions can be reintroduced one at a time.
 - If the next ROM crashes, the state writes themselves are still unsafe even after fixing the setter call.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test113.nds` did not crash, so map-state writes are runtime-stable with the corrected `LONG_CALL` setter.
 - The next untested downstream piece is stale-slot cleanup: validating stored spawn object pointers against the current map object list, saving shiny reservations if needed, and clearing stale slots without deleting objects.
@@ -137,6 +137,17 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, stale-slot validation and clearing are safe enough to keep while moving to distance despawn.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_IsCurrentSpawnObject`, shiny-reservation save-on-clear, or `OverworldWildSpawns_ClearSlot`.
+
+New active hypothesis:
+
+- `test114.nds` did not crash, so stale-slot validation and clearing are runtime-stable.
+- The next downstream piece is distance-based despawn: iterating active spawns, reading map object coordinates, measuring player distance, and deleting far non-shiny objects.
+- The next ROM should run `OverworldWildSpawns_DespawnFarMons` after stale-slot cleanup, then return before touch battle, ambient cry, or refill/spawn.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, the empty-state distance-despawn path is safe and the touch-battle path can be isolated next.
+- If the next ROM crashes, the crash is likely in distance despawn's object coordinate reads, player coordinate reads, or delete path.
 
 ## Attempt History
 
@@ -949,11 +960,57 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
 - Build-time evidence shows this is the intended stale-slot-only probe.
+- Runtime result confirms stale-slot validation and clearing are stable.
+
+Expand:
+
+- Re-enable `OverworldWildSpawns_DespawnFarMons` only, while returning before touch battle, ambient cry, and refill/spawn.
+
+### Attempt 20: Re-enable Distance Despawn Only
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` run map-state update, stale-slot cleanup, and `OverworldWildSpawns_DespawnFarMons`, then immediately return `FALSE`.
+
+Why this is new:
+
+- Attempt 19/`test114.nds` returned before distance despawn.
+- Earlier crashy probes bundled distance despawn with touch battle, ambient cry, and refill/spawn.
+- No previous build has isolated distance despawn after the `LONG_CALL` setter fix and stable stale-slot cleanup.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY` should be `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY` should be `1`.
+- The active overlay step path should run map-state update, stale-slot cleanup, distance despawn, then return `FALSE`.
+- The active overlay step path should not run touch battle, ambient cry, or refill/spawn.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test115.nds`.
+- `OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY` is `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY` is `1`.
+- Disassembly shows the active overlay step path runs map-state update, stale-slot cleanup, distance despawn, then returns `FALSE`.
+- Disassembly shows no touch-battle, ambient-cry, or refill/spawn path after distance despawn in the active step path.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Build-time evidence shows this is the intended distance-despawn-only probe.
 
 ## Proposed Next New Experiments
 
