@@ -54,7 +54,9 @@
 #define OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY 0
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK 1
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ 1
+#define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND 1
 #define OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET 8
+#define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE 0xFF
 #define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP 0
 #define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN 1
@@ -178,6 +180,9 @@ static volatile int sOverworldWildMovementDiagnosticDx;
 static volatile int sOverworldWildMovementDiagnosticDy;
 static volatile int sOverworldWildMovementDiagnosticBehavior;
 static volatile int sOverworldWildMovementDiagnosticDirection;
+static volatile int sOverworldWildMovementDiagnosticLookIssued;
+static volatile int sOverworldWildMovementDiagnosticSingleActive;
+static volatile u32 sOverworldWildMovementDiagnosticLookCommand;
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -481,11 +486,13 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active && state->spawns[i].object != NULL) {
             int cooldown = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+            int shouldIssueLookCommand = FALSE;
 
             if (cooldown > 0) {
                 MapObject_SetParam(state->spawns[i].object, cooldown - 1, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
             } else {
                 MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+                shouldIssueLookCommand = TRUE;
             }
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ
@@ -497,11 +504,14 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 int behavior = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
                 int dx = playerX - objectX;
                 int dy = playerY - objectY;
+                u8 direction;
 
                 if (behavior == OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER) {
                     dx = -dx;
                     dy = -dy;
                 }
+
+                direction = OverworldWildSpawns_DiagnosticPreferredDirection(dx, dy);
 
                 sOverworldWildMovementDiagnosticObjectX = objectX;
                 sOverworldWildMovementDiagnosticObjectY = objectY;
@@ -510,7 +520,26 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 sOverworldWildMovementDiagnosticDx = dx;
                 sOverworldWildMovementDiagnosticDy = dy;
                 sOverworldWildMovementDiagnosticBehavior = behavior;
-                sOverworldWildMovementDiagnosticDirection = OverworldWildSpawns_DiagnosticPreferredDirection(dx, dy);
+                sOverworldWildMovementDiagnosticDirection = direction;
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND
+                sOverworldWildMovementDiagnosticLookIssued = FALSE;
+                sOverworldWildMovementDiagnosticSingleActive = FALSE;
+                sOverworldWildMovementDiagnosticLookCommand = 0;
+                if (shouldIssueLookCommand && direction != OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE) {
+                    BOOL singleMovementActive = MapObject_IsSingleMovementActive(state->spawns[i].object);
+
+                    sOverworldWildMovementDiagnosticSingleActive = singleMovementActive;
+                    if (!singleMovementActive) {
+                        u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND);
+
+                        MapObject_StartMovementCommand(state->spawns[i].object, movementCommand);
+                        MapObject_SetSingleMovementActive(state->spawns[i].object);
+                        sOverworldWildMovementDiagnosticLookCommand = movementCommand;
+                        sOverworldWildMovementDiagnosticLookIssued = TRUE;
+                    }
+                }
+#endif
             }
 #else
             (void)fieldSystem;
