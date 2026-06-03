@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test125.nds`
+Current ROM checkpoint: `test126.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0` and the active custom-movement probe burst-polls a spawner-started walk command so movement should be visually obvious.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
 Previous active hypothesis:
 
@@ -252,7 +252,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash, spawner-driven command update/clear is viable and we can start reducing stock wander's ownership of spawned Pokemon movement.
 - If the next ROM crashes, the crash is likely in polling or clearing a movement command from the spawner loop, rather than in starting the command.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test124.nds` did not crash, so spawner-owned command update/clear polling is runtime-stable.
 - The user could not reliably tell whether movement was more directed because stock movement `3` can still mask the spawner command and the command may take multiple updates to complete.
@@ -264,6 +264,19 @@ Purpose of this checkpoint:
 - If the next ROM does not crash and movement is obvious, the spawner-driven movement path works and stock wander was hiding the signal.
 - If the next ROM does not crash but movement is still not obvious, the spawner step hook may be the wrong timing surface for visual movement and we should look for a frame-level callback/task.
 - If the next ROM crashes, the crash is likely from switching fresh spawns to stock idle movement `0`, burst-polling movement commands, or their combination.
+
+New active hypothesis:
+
+- `test125.nds` did not crash and made the movement signal visible, but the burst-poll completed a tile step inside one player-step tick, making the Pokemon look like it teleported.
+- The movement-command path itself is viable; the problem is update timing.
+- The next isolated piece is a short-lived frame-level `SysTask`: the spawner starts the walk command, creates a task if needed, and the task calls `MapObject_UpdateMovementCommand` once per frame until no spawned Pokemon has an in-progress spawner command.
+- This should test smooth movement timing without reintroducing slot-47 callbacks, active custom movement scratch writes, `object->fsys`, or global movement `FieldSystem *`.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash and movement animates smoothly toward the player, the frame-task timing surface is the right direction.
+- If the next ROM does not crash but Pokemon do not move, the normal `CreateSysTask` queue may not run during this field context or the task may need a different queue/priority.
+- If the next ROM crashes, the crash is likely in task creation, task lifetime, or frame-level command polling.
 
 ## Attempt History
 
@@ -1633,11 +1646,15 @@ Expected verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
+- Pokemon rarely moved toward the player.
+- When movement happened, it felt like an instant teleport to the adjacent tile rather than animated movement.
 
 Learning:
 
-- Pending.
+- Switching fresh spawns to stock idle movement `0` and burst-polling the command does not crash.
+- The burst-poll proves the command can complete a tile step, but completing all update iterations inside one player-step tick is not visually acceptable.
+- The next direction should preserve spawner-owned commands but advance them over frames.
 
 Verification:
 
@@ -1653,6 +1670,64 @@ Verification:
 - Source still avoids slot-47 callbacks, active custom movement scratch writes, `object->fsys`, and global movement `FieldSystem *`; references in `src/overworld_wild_movement.c` remain behind the idle diagnostic and are not part of the active overlay movement path.
 - Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - Copied to Delta as `test125.nds`.
+- `git diff --check` passed.
+
+Expand:
+
+- Disable burst polling.
+- Keep fresh spawns on stock idle movement `0` to avoid stock wander masking the test.
+- Create a short-lived `SysTask` when a spawner-owned command starts.
+- Let the task call `MapObject_UpdateMovementCommand` once per frame and destroy itself when no in-progress commands remain.
+
+### Attempt 31: Frame Task Movement Command Updates
+
+Idea:
+
+Keep fresh spawned Pokemon on stock idle movement `0`, but stop completing their walk command in the player-step hook. When the spawner starts a walk command, mark the object in-progress and create a frame-level `SysTask` if one is not already running. The task loops active spawned Pokemon, updates only objects with the in-progress marker, clears the single-movement flag when the command finishes, resets the cooldown, and destroys itself once no in-progress commands remain.
+
+Why this is new:
+
+- Attempt 30/`test125.nds` proved burst-polling can complete a tile step, but it visually teleports.
+- Earlier update/clear attempts were either player-step based or inside slot-47 callbacks.
+- No previous build has isolated a `CreateSysTask`-driven frame updater for spawner-owned wild Pokemon movement while keeping slot `47` no-op and fresh spawns on stock idle movement `0`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE` should be `0`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK` should be `1`.
+- The active path should call `CreateSysTask` when a spawner-owned movement command starts.
+- The frame task should call `MapObject_UpdateMovementCommand` at most once per object per task tick.
+- The frame task should call `MapObject_ClearSingleMovementActive` only when update reports completion.
+- The frame task should call `DestroySysTask` after no active spawned Pokemon has `OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS`.
+- Map-context changes and battle start should stop the frame task.
+- The active probe should still avoid slot-47 callbacks, active custom movement scratch writes, `object->fsys`, and global movement `FieldSystem *`.
+- Movement slot `47` should remain stock no-op for stale objects.
+
+Runtime result:
+
+- Built as `test126.nds`.
+- Pending user test.
+
+Learning:
+
+- Pending runtime result.
+
+Verification:
+
+- `./docker-makerom.cmd` completed successfully.
+- Copied to Delta as `test126.nds`.
+- Source flags confirm `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE` is `0` and `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK` is `1`.
+- Source confirms fresh spawns still use `OW_WILD_MOVE_STOCK_IDLE`.
+- Source confirms the active path creates `OverworldWildSpawns_FrameMovementTask` with `CreateSysTask`, stops it with `DestroySysTask`, and calls the stop path on battle start and map-context changes.
+- Source confirms `OverworldWildSpawns_UpdateSpawnerMovementCommand` calls `MapObject_UpdateMovementCommand` and clears the single-movement flag only when update reports completion.
+- Linked overlay target scan found `CreateSysTask` target `0x0200E321`, `DestroySysTask` target `0x0200E391`, `MapObject_UpdateMovementCommand` target `0x02062429`, and `MapObject_ClearSingleMovementActive` target `0x0205F63D`.
+- Linked overlay target scan still contains the expected movement helper targets `0x02060BB9`, `0x0205F649`, `0x0206234D`, `0x0206217D`, and `0x0205F631`.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `git diff --check` passed.
 
 ## Proposed Next New Experiments
