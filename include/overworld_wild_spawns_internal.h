@@ -13,19 +13,35 @@
 #define OW_WILD_HEADBUTT_SLOT_START (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS)
 #define OW_WILD_FISH_SLOT_START (OW_WILD_HEADBUTT_SLOT_START + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
+#define OW_WILD_MAX_SAVED_SHINIES 10
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
+    u32 personality;
+    u16 mapId;
     u16 species;
     u8 form;
     u8 level;
+    u8 terrain;
+    u8 shiny;
     u8 active;
 } OverworldWildSpawn;
 
+typedef struct OverworldWildSavedShiny {
+    u32 personality;
+    u16 mapId;
+    u16 species;
+    u8 form;
+    u8 level;
+    u8 terrain;
+    u8 active;
+} OverworldWildSavedShiny;
+
 typedef struct OverworldWildSpawnState {
     OverworldWildSpawn spawns[OW_WILD_MAX_SPAWNS];
+    OverworldWildSavedShiny savedShinies[OW_WILD_MAX_SAVED_SHINIES];
     int mapId;
     void *mapObjectMan;
     void *mapObjects;
@@ -35,8 +51,11 @@ typedef struct OverworldWildSpawnState {
     u8 fishingSpawnCooldown;
     u8 ambientCryCooldown;
     u8 battleGraceSteps;
+    u32 pendingPersonality;
     u16 pendingSpecies;
     u8 pendingLevel;
+    u8 pendingShiny;
+    u8 shinySpawned;
     s8 pendingSlot;
 } OverworldWildSpawnState;
 

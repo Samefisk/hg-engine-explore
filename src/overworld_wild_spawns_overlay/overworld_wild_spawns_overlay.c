@@ -5,6 +5,7 @@
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
 #include "../../include/constants/file.h"
+#include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
 #include "../../include/rtc.h"
@@ -37,6 +38,7 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
+#define OW_WILD_SHINY_ODDS 8192
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -44,6 +46,9 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
+// Param 2 mirrors the follower palette metadata without switching to follower rendering.
+#define OW_WILD_PAL_PARAM_SHINY 1
+#define OW_WILD_PAL_PARAM_ENABLE 2
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -94,6 +99,7 @@ typedef struct OverworldWildEncounterData {
 } OverworldWildEncounterData;
 
 typedef struct OverworldWildRolledEncounter {
+    u32 personality;
     u16 species;
     u8 form;
     u8 level;
@@ -279,6 +285,71 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
     return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0;
 }
 
+static void OverworldWildSpawns_ClearSavedShiny(OverworldWildSpawnState *state, int slot)
+{
+    state->savedShinies[slot].personality = 0;
+    state->savedShinies[slot].mapId = MAP_NOTHING;
+    state->savedShinies[slot].species = SPECIES_NONE;
+    state->savedShinies[slot].form = 0;
+    state->savedShinies[slot].level = 0;
+    state->savedShinies[slot].terrain = 0;
+    state->savedShinies[slot].active = FALSE;
+}
+
+static void OverworldWildSpawns_TrySaveShinyReservation(OverworldWildSpawnState *state, const OverworldWildSpawn *spawn)
+{
+    int i;
+
+    if (!spawn->active
+        || !spawn->shiny
+        || spawn->species == SPECIES_NONE
+        || spawn->mapId == MAP_NOTHING) {
+        return;
+    }
+
+    for (i = 0; i < OW_WILD_MAX_SAVED_SHINIES; i++) {
+        if (!state->savedShinies[i].active) {
+            state->savedShinies[i].mapId = spawn->mapId;
+            state->savedShinies[i].personality = spawn->personality;
+            state->savedShinies[i].species = spawn->species;
+            state->savedShinies[i].form = spawn->form;
+            state->savedShinies[i].level = spawn->level;
+            state->savedShinies[i].terrain = spawn->terrain;
+            state->savedShinies[i].active = TRUE;
+            return;
+        }
+    }
+}
+
+static int OverworldWildSpawns_FindSavedShiny(OverworldWildSpawnState *state, u16 mapId, OverworldWildSpawnTerrain terrain)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SAVED_SHINIES; i++) {
+        if (state->savedShinies[i].active
+            && state->savedShinies[i].mapId == mapId
+            && state->savedShinies[i].terrain == terrain) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static void OverworldWildSpawns_LoadSavedShinyEncounter(OverworldWildSpawnState *state, int slot, OverworldWildRolledEncounter *encounter)
+{
+    encounter->personality = state->savedShinies[slot].personality;
+    encounter->species = state->savedShinies[slot].species;
+    encounter->form = state->savedShinies[slot].form;
+    encounter->level = state->savedShinies[slot].level;
+}
+
+static void OverworldWildSpawns_ClearSlotAndSaveShiny(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
+{
+    OverworldWildSpawns_TrySaveShinyReservation(state, &state->spawns[slot]);
+    OverworldWildSpawns_ClearSlot(state, slot, deleteObject);
+}
+
 static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
@@ -286,7 +357,7 @@ static void OverworldWildSpawns_DropStaleSlots(OverworldWildSpawnState *state, F
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active
             && !OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
-            OverworldWildSpawns_ClearSlot(state, i, FALSE);
+            OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, FALSE);
         }
     }
 }
@@ -352,9 +423,13 @@ static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int sl
     }
 
     state->spawns[slot].object = NULL;
+    state->spawns[slot].personality = 0;
+    state->spawns[slot].mapId = MAP_NOTHING;
     state->spawns[slot].species = SPECIES_NONE;
     state->spawns[slot].form = 0;
     state->spawns[slot].level = 0;
+    state->spawns[slot].terrain = 0;
+    state->spawns[slot].shiny = FALSE;
     state->spawns[slot].active = FALSE;
 }
 
@@ -363,7 +438,7 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     int i;
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        OverworldWildSpawns_ClearSlot(state, i, deleteObjects);
+        OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, deleteObjects);
     }
 
     state->justSpawned = FALSE;
@@ -372,6 +447,8 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
     OverworldWildSpawns_ResetAmbientCryCooldown(state);
     state->battleGraceSteps = 0;
+    state->pendingPersonality = 0;
+    state->pendingShiny = FALSE;
     state->pendingSlot = -1;
 }
 
@@ -970,7 +1047,36 @@ static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form)
     return FollowingPokemon_GetSpriteID(species, form, 0);
 }
 
-static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId)
+static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
+{
+    if (state->shinySpawned) {
+        return FALSE;
+    }
+
+    return (gf_rand() % OW_WILD_SHINY_ODDS) == 0;
+}
+
+static u32 OverworldWildSpawns_RollPersonality(void)
+{
+    return gf_rand() | (gf_rand() << 16);
+}
+
+static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality)
+{
+    u32 shinyValue = SHINY_VALUE(OVERWORLD_WILD_BATTLE_SHINY_OTID, personality);
+
+    if (shinyValue >= SHINY_ODDS) {
+        if (shinyValue & 0xE000) {
+            personality ^= (shinyValue << 16) & 0xE0000000;
+        }
+        personality ^= shinyValue & 0x1FFF;
+        personality ^= gf_rand() % SHINY_ODDS;
+    }
+
+    return personality;
+}
+
+static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
 {
     return CreateSpecialFieldObjectWithParams(
         fieldSystem->mapObjectMan,
@@ -982,7 +1088,7 @@ static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem
         fieldSystem->location->mapId,
         0,
         0,
-        0);
+        OW_WILD_PAL_PARAM_ENABLE | (shiny ? OW_WILD_PAL_PARAM_SHINY : 0));
 }
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
@@ -991,51 +1097,90 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
+static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object, u16 species, u8 form, u32 spriteId, BOOL shiny)
+{
+    FollowPokeMapObjectSetParams(object, species, form, shiny);
+    if (shiny) {
+        sub_02069DC8(object, TRUE);
+        ChangeMapObjSprite(object, spriteId);
+        MapObject_ClearBits(object, BIT_VANISH);
+    }
+}
+
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
     OverworldWildRolledEncounter encounter;
-    OverworldWildSpawnPosition position;
+    OverworldWildSpawnPosition position = { 0 };
     LocalMapObject *object;
     u32 spriteId;
+    int savedShinySlot;
+    BOOL shiny;
 
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
         if (!OverworldWildSpawns_TryPickHeadbuttSpawnPosition(state, fieldSystem, &position)) {
-            return FALSE;
-        }
-        if (!OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, position.headbuttTreeType, &encounter)) {
             return FALSE;
         }
     } else if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
         if (!OverworldWildSpawns_TryPickFishingSpawnPosition(state, fieldSystem, &position)) {
             return FALSE;
         }
-        if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
-            return FALSE;
-        }
     } else if (!OverworldWildSpawns_TryPickSpawnPosition(state, fieldSystem, terrain, &position)) {
         return FALSE;
+    }
+
+    savedShinySlot = OverworldWildSpawns_FindSavedShiny(state, fieldSystem->location->mapId, terrain);
+    if (savedShinySlot >= 0) {
+        OverworldWildSpawns_LoadSavedShinyEncounter(state, savedShinySlot, &encounter);
+        shiny = TRUE;
     } else {
-        if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
+        if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
+            if (!OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, position.headbuttTreeType, &encounter)) {
+                return FALSE;
+            }
+        } else if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, &encounter)) {
             return FALSE;
         }
+
+        encounter.personality = OverworldWildSpawns_RollPersonality();
+        shiny = OverworldWildSpawns_RollShiny(state);
+        if (shiny) {
+            encounter.personality = OverworldWildSpawns_MakePersonalityShiny(encounter.personality);
+        }
+    }
+
+    if (encounter.species == SPECIES_NONE || encounter.level == 0) {
+        return FALSE;
     }
 
     spriteId = OverworldWildSpawns_GetSpriteID(encounter.species, encounter.form);
 
-    object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId);
+    object = OverworldWildSpawns_CreateObject(fieldSystem, &position, spriteId, shiny);
     if (object == NULL) {
         return FALSE;
     }
 
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     OverworldWildSpawns_ApplyMovementRange(object);
-    FollowPokeMapObjectSetParams(object, encounter.species, encounter.form, FALSE);
+    OverworldWildSpawns_ApplyPokemonRenderParams(object, encounter.species, encounter.form, spriteId, shiny);
+
+    if (savedShinySlot >= 0) {
+        OverworldWildSpawns_ClearSavedShiny(state, savedShinySlot);
+    }
 
     state->spawns[slot].object = object;
+    state->spawns[slot].personality = encounter.personality;
+    state->spawns[slot].mapId = fieldSystem->location->mapId;
     state->spawns[slot].species = encounter.species;
     state->spawns[slot].form = encounter.form;
     state->spawns[slot].level = encounter.level;
+    state->spawns[slot].terrain = terrain;
+    state->spawns[slot].shiny = shiny;
     state->spawns[slot].active = TRUE;
+
+    if (shiny) {
+        state->shinySpawned = TRUE;
+        PlaySE(SEQ_SE_PL_KIRAKIRA);
+    }
 
     return TRUE;
 }
@@ -1049,8 +1194,9 @@ static void OverworldWildSpawns_DespawnFarMons(OverworldWildSpawnState *state, F
             int x = MapObject_GetCurrentX(state->spawns[i].object);
             int y = MapObject_GetCurrentY(state->spawns[i].object);
 
-            if (OverworldWildSpawns_DistanceFromPlayer(fieldSystem, x, y) > OW_WILD_DESPAWN_DISTANCE) {
-                OverworldWildSpawns_ClearSlot(state, i, TRUE);
+            if (!state->spawns[i].shiny
+                && OverworldWildSpawns_DistanceFromPlayer(fieldSystem, x, y) > OW_WILD_DESPAWN_DISTANCE) {
+                OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, TRUE);
             }
         }
     }
@@ -1154,8 +1300,10 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
+            state->pendingPersonality = state->spawns[i].personality;
             state->pendingSpecies = state->spawns[i].species | (state->spawns[i].form << OW_WILD_FORM_SHIFT);
             state->pendingLevel = state->spawns[i].level;
+            state->pendingShiny = state->spawns[i].shiny;
             state->pendingSlot = i;
             state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
@@ -1184,6 +1332,7 @@ static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnSt
     }
 
     state->pendingSlot = -1;
+    state->pendingPersonality = 0;
 }
 
 static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, OverworldWildSpawnState *state)

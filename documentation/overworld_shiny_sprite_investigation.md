@@ -19,6 +19,30 @@ The stable system after the revert is:
 - No shiny overworld archive is generated.
 - No overlay hook redirects overworld model resource loading.
 
+## Follow-Up Implementation
+
+The later implementation avoids the failed archive and loader-hook approaches. Overworld wild spawns now roll and store shiny state locally, pass that same state to the generated wild battle script, and seed the existing overworld Pokemon palette metadata so the spawned object can select its shiny palette. The current rate is the normal 1/8192 shiny odds.
+
+The current spawn behavior also uses that stored shiny state for two local overworld-only effects: shiny spawns play the standard sparkle sound effect after the object is created, and shiny slots are skipped by the distance-based despawn pass so walking away does not delete them. For focused testing, the spawn state also suppresses additional shiny rolls after the first shiny object successfully spawns.
+
+The MVP shiny reservation system stores up to 10 despawned shiny overworld encounters in the current spawner state. When a shiny slot is cleared by map/object lifecycle cleanup, the reservation keeps its map, terrain pool, species, form, level, and personality/PID. The next successful spawn attempt for the same map and pool consumes the oldest matching reservation before rolling a random encounter, so the same shiny can return without adding save-data scope yet. The overworld sprite still ignores gender-specific visual variants for now, but battle gender is preserved through the stored PID instead of a post-creation `MON_DATA_GENDER` write. The PID is rolled with the same vanilla-style `gf_rand() | (gf_rand() << 16)` math used by `CreateBoxMonData`, and shiny spawns adjust that stored PID so it is valid against `OVERWORLD_WILD_BATTLE_SHINY_OTID` before the object is saved. The pending battle consumes the PID and shiny state as a one-shot creation-time override; if the spawn is shiny, `CreateBoxMonData` also forces that matching OTID. Current HP persistence is deliberately kept out of the shared spawner state: the base spawner module stores up to 10 PID-keyed HP entries in a private side table, applies a matching HP value to the live enemy `BattlePokemon` after the battle reaches command selection, and records the live battle HP again when the player flees. This override must replace the battle script's supplied PID, because the wild battle path calls `PokeParaSet` with `rndflag = TRUE`; otherwise shiny can still be forced by the shiny flag while gender drifts with each battle-generated PID. The current pool set is land, surf, headbutt, and fishing; cave/walking encounters share the land pool in this spawner.
+
+This keeps shiny rendering dynamic by species/form without generating duplicate overworld BTX members:
+
+- the normal `pokemonow.narc` layout is unchanged
+- no shiny tag table or shiny NARC is generated
+- no shared overworld model loader hook is installed
+- normal spawns keep the existing special-field-object render path
+- shiny spawns stay on the normal special-field-object render path, set the palette metadata bits, apply the follower shiny toggle, reload the same sprite tag after params are populated, then clear the normal-object vanish bit
+
+One important stability note: do not set the follower render flags on overworld wild objects. Those flags make the wild object take the follower draw path without being created as a real follower object, which can make shiny spawns render invisible. Disassembly also showed that `sub_02069DC8(object, TRUE)` sets `BIT_VANISH` (`1 << 9`) as part of its follower shiny setup, which hides normal special field objects. The current test path keeps the follower shiny setup, but clears only `BIT_VANISH` afterward so the object remains visible.
+
+The later normal-palette failure came from a separate follower palette gate. Overlay 1's shiny-palette helper only reads param 2's shiny bit when the map object ID is one of the follower IDs `0xFD`, `0xFA`, or `0xFB`; otherwise it returns non-shiny even if param 2 is seeded correctly. Setting the map object type to `0xFD` was the wrong lever and caused freezes when shiny objects spawned, because it let follower logic treat the wild object as follower-like while the palette helper still checked object ID.
+
+The first follow-up patch only changed that shiny-palette helper, but shiny wild objects still rendered with the normal palette. A second disassembly pass showed why: the actual shiny palette load function at `0x02205808` repeats its own hardcoded follower object-ID gate before copying the shiny palette data. The current test path patches both gates so they recognize the reserved overworld wild object ID range `0xE0` through `0xE9`. This lets shiny wild objects keep their normal object type, movement, and lifecycle while reusing the follower shiny bit in param 2.
+
+This specific pair of ID-gate patches was checked against history before trying it. Earlier attempts covered seeded param 2 only, `ChangeMapObjSprite` only, `sub_02069DC8` only, `sub_02069DC8` plus clearing `BIT_VANISH`, full follower render flags, direct follower object construction, setting the special field object's type to `0xFD`, shiny tag remaps, appended shiny BTX resources, a shared model-resource loader hook, and a separate shiny archive. None of those attempts patched the shiny palette loader's internal object-ID gate at `0x0220582C` while keeping the objects on the normal special-field path.
+
 ## What Was Tried
 
 ### 1. Forced shiny battle state
