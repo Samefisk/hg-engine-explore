@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test103.nds`
+Current ROM checkpoint: `test104.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -34,16 +34,22 @@ Previous active hypothesis:
 - A movement table entry that points at an existing ARM9-resident stock descriptor should be stable even if spawned objects or saved objects use movement `47`.
 - `test102.nds` changes movement slot `47` to alias stock movement `3`.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test102.nds` loading but crashing after one player step suggests save-load got past the overlay descriptor problem.
 - The step crash may be from stale movement-47 objects whose stock movement-3 state was never initialized in earlier builds, or from freshly spawning movement-47 objects.
 - `test103.nds` should make stale movement-47 objects no-op and make fresh spawns use stock movement `3` directly.
 
+New active hypothesis:
+
+- `test103.nds` still crashes after one player step, so stale movement-47 object execution is less likely.
+- The next isolation point is the overworld wild spawner's player-step pipeline: stale-slot dropping, distance despawn, touch battle, ambient cry, or refill/spawn.
+- `test104.nds` should run only map-state refresh inside `OverworldWildSpawns_OverlayOnPlayerStep` and skip every downstream step action.
+
 Purpose of this checkpoint:
 
-- If `test103.nds` still crashes after one step, the crash is likely in the spawner's step/update pipeline rather than stale movement-47 object execution.
-- If `test103.nds` does not crash, movement `47` should stay inert for old saves and future custom behavior should be driven through a safer fresh-object or spawner-side path.
+- If `test104.nds` still crashes after one step, the crash is probably outside the spawner step pipeline or inside `OverworldWildSpawns_UpdateMapState`.
+- If `test104.nds` does not crash, re-enable the skipped step actions one at a time.
 
 ## Attempt History
 
@@ -334,6 +340,53 @@ Verification:
 - Slot `47` at `0x020FD2B0` points at `0x020FCEC8`.
 - Slot `47` descriptor words match stock no-op movement `0`: `0x00000000 0x0205FCB5 0x0205FCB9 0x0205FCBD 0x0205FCC1`.
 - Source verification: `OverworldWildSpawns_CreateObject` passes `OW_WILD_MOVE_STOCK_WANDER`, currently movement `3`, to `CreateSpecialFieldObjectWithParams`.
+
+Runtime result:
+
+- User reported the game still crashes.
+
+Learning:
+
+- Stale movement `47` running stock movement `3` was not the only cause.
+- Fresh spawns using stock movement `3` plus stale movement `47` idling is still not enough to survive the one-step test.
+- The next likely culprit is the spawner's player-step pipeline, or something that runs independently after the player step.
+
+Do not repeat:
+
+- Do not keep changing only movement-slot aliasing for this crash unless the player-step pipeline is ruled out.
+
+### Attempt 9: Disable Spawner Step Actions After Map-State Refresh
+
+Idea:
+
+Keep map-state refresh alive but skip every action after it in `OverworldWildSpawns_OverlayOnPlayerStep`:
+
+- no stale-slot dropping
+- no distance despawn
+- no touch battle checks
+- no ambient cry
+- no refill/spawn attempt
+
+Why this is new:
+
+- Earlier attempts focused on movement descriptor wiring, callback behavior, and fresh object movement IDs.
+- No earlier attempt isolated the spawner's player-step pipeline after a successful save load.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` should be `1`.
+- `OverworldWildSpawns_OverlayOnPlayerStep` should return `FALSE` immediately after `OverworldWildSpawns_UpdateMapState` succeeds.
+- The rest of the step actions should remain compiled but unreachable behind the diagnostic switch.
+
+Verification:
+
+- Built as `test104.nds`.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- Disassembly of `OverworldWildSpawns_OverlayOnPlayerStep` shows it reaches `OverworldWildSpawns_UpdateMapState` behavior and then returns `FALSE`; calls to `OverworldWildSpawns_DropStaleSlots`, `OverworldWildSpawns_DespawnFarMons`, `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_TryPlayAmbientCry`, and `OverworldWildSpawns_TryRefill` are not present in the active step path.
 
 Runtime result:
 
