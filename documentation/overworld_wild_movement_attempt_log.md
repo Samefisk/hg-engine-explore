@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test117.nds`
+Current ROM checkpoint: `test118.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -160,7 +160,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash, the empty-state touch-battle path is safe and ambient cry can be isolated next.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_IsTouchingPlayer`, coordinate reads, or `EventSet_Script` if an old active spawn is still touching the player.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test116.nds` did not crash, so touch-battle detection is runtime-stable in the current empty/no-spawn state.
 - The user asked to spawn Pokemon next.
@@ -171,6 +171,17 @@ Purpose of this checkpoint:
 
 - If the next ROM spawns Pokemon and does not crash, the refill/spawn path is stable again with stock movement `3` spawns.
 - If the next ROM crashes, the crash is likely in spawn position selection, encounter rolling, `CreateSpecialFieldObjectWithParams`, Pokemon render params, shiny setup, or spawn state writes after object creation.
+
+New active hypothesis:
+
+- `test117.nds` spawned Pokemon without crashing, so refill/spawn is stable with stock movement `3` and ambient cry skipped.
+- The next remaining piece of the stock spawner pipeline is ambient cry: iterating active spawns, reading species/form/shiny metadata, choosing a cry, and calling the sound path.
+- The next ROM should restore `OverworldWildSpawns_TryPlayAmbientCry` while keeping fresh spawns on stock movement `3`.
+
+Purpose of this checkpoint:
+
+- If the next ROM spawns Pokemon, plays ambient cries, and does not crash, the full stock spawner pipeline is stable again.
+- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryPlayAmbientCry`, cry selection, active-spawn metadata reads, or the sound call.
 
 ## Attempt History
 
@@ -1121,6 +1132,51 @@ Verification:
 - Source-level diagnostic gating keeps `OverworldWildSpawns_TryPlayAmbientCry` skipped for this build.
 - Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `test.nds` was copied to Delta as `test117.nds`.
+- `git diff --check` passed.
+
+Runtime result:
+
+- User reported no crash.
+
+Learning:
+
+- Refill/spawn is stable again with stock movement `3` and ambient cry skipped.
+- This rules out spawn position selection, encounter rolling, `CreateSpecialFieldObjectWithParams`, Pokemon render params, shiny setup, and post-create spawn state writes as immediate crash causes for this checkpoint.
+
+Expand:
+
+- Restore `OverworldWildSpawns_TryPlayAmbientCry` while keeping stock movement `3` spawns, so the full stock spawner pipeline is tested before custom movement work resumes.
+
+### Attempt 23: Restore Ambient Cry With Stock Movement
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` run the full stock spawner pipeline again: map-state update, stale-slot cleanup, distance despawn, touch-battle detection, ambient cry, and refill/spawn. Fresh spawns still use stock movement `3`; custom movement slot `47` remains no-op.
+
+Why this is new:
+
+- Attempt 22/`test117.nds` skipped ambient cry and did not crash.
+- Earlier crashy probes bundled ambient cry with unresolved setter/state issues and custom movement uncertainty.
+- No previous build has restored ambient cry after the `LONG_CALL` setter fix and stable stale/despawn/battle/refill paths.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY` should be `0`.
+- The active overlay step path should run `OverworldWildSpawns_TryPlayAmbientCry` before `OverworldWildSpawns_TryRefill`.
+- Fresh spawns should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Verification:
+
+- Built as `test118.nds`.
+- `OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY` is `0`.
+- Disassembly shows the active overlay step path reaches `PlayCry` at `0x02006219`.
+- Disassembly shows the active overlay step path still reaches `OverworldWildSpawns_SpawnOne` from refill/spawn call sites after the ambient-cry section.
+- Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `test.nds` was copied to Delta as `test118.nds`.
 - `git diff --check` passed.
 
 Runtime result:
