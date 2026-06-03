@@ -1711,11 +1711,14 @@ Expected verification:
 Runtime result:
 
 - Built as `test126.nds`.
-- Pending user test.
+- User reported no crash.
+- User reported the movement works.
 
 Learning:
 
-- Pending runtime result.
+- Advancing the spawner-owned walk command through a frame-level `SysTask` fixes the instant-tile-snap behavior seen in `test125.nds`.
+- The stable path is: keep slot `47` no-op, spawn Pokemon with stock idle movement `0`, start a spawner-owned walk command from the player-step hook, and update that command once per frame until complete.
+- This confirms the previous bug was update timing, not the walk command helper itself.
 
 Verification:
 
