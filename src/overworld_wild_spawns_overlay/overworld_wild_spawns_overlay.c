@@ -72,6 +72,7 @@
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08
+#define OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND 0x0C
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT
 #define OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT OW_WILD_MOVE_STOCK_IDLE
 #else
@@ -612,6 +613,15 @@ static void OverworldWildSpawns_SetMovementSlotInProgress(OverworldWildSpawnStat
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
 }
 
+static u32 OverworldWildSpawns_GetMovementWalkCommand(const OverworldWildSpawn *spawn)
+{
+    if (spawn != NULL && spawn->active && spawn->species == SPECIES_PIDGEY) {
+        return OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND;
+    }
+
+    return OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND;
+}
+
 static void OverworldWildSpawns_ClearMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
 {
     state->movementInProgressMask &= ~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
@@ -673,7 +683,8 @@ static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(OverworldWildSpaw
 #endif
         if (!directionBlocked) {
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_WALK_COMMAND
-            u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND);
+            u32 walkCommand = OverworldWildSpawns_GetMovementWalkCommand(&state->spawns[slot]);
+            u32 movementCommand = MapObject_MovementCommandFromDirection(direction, walkCommand);
 
             MapObject_StartMovementCommand(object, movementCommand);
             MapObject_SetSingleMovementActive(object);

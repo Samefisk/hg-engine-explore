@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test134.nds`
+Current ROM checkpoint: `test135.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2073,6 +2073,40 @@ Verification:
 - Verified `OverworldWildSpawns_TickMovementParams` returns early while the settle window is active, so no new chase/untangle command can start before the retry window resolves.
 - Verified the player-step path returns `TRUE` if the settle retry starts a pending battle during movement ticking.
 - Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- User reported the build seems more stable.
+
+Learning:
+
+- The post-movement settle window appears to improve the remaining simultaneous-movement battle timing issue.
+- Per-species speed should not be implemented by slowing other species with larger decision cooldowns when the requested test is for Pidgey to be faster.
+
+### Attempt 38: Pidgey Fast Movement Command
+
+Idea:
+
+Keep the existing global movement decision cooldown at `0`, and make Pidgey faster by changing only its movement command family from normal stock walk `0x08` to stock fast walk `0x0C`. Sentret and every other species stay on the current `0x08` baseline.
+
+Why this is new:
+
+- Earlier attempts changed global movement cadence and command ownership, but did not select movement command speed per species.
+- A partial cooldown-only idea would have made Sentret slower rather than Pidgey faster; that was rejected before building and is not the active solution.
+- Local ARM9 disassembly shows the `0x08` direction family uses a 16-frame movement setup, while the `0x0C` direction family uses an 8-frame movement setup, so this tests a stock faster movement command instead of direct coordinate writes or burst-poll teleporting.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test135.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified source uses `OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND 0x0C` only when `spawn->species == SPECIES_PIDGEY`.
+- Verified Sentret has no species-specific slowdown path and remains on the default `OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08`.
+- Verified local ARM9 command table entries for `0x08` and `0x0C` are valid stock movement command families.
 
 Runtime result:
 
