@@ -55,6 +55,7 @@
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK 1
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ 1
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND 1
+#define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK 1
 #define OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET 8
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE 0xFF
@@ -182,6 +183,7 @@ static volatile int sOverworldWildMovementDiagnosticBehavior;
 static volatile int sOverworldWildMovementDiagnosticDirection;
 static volatile int sOverworldWildMovementDiagnosticLookIssued;
 static volatile int sOverworldWildMovementDiagnosticSingleActive;
+static volatile int sOverworldWildMovementDiagnosticDirectionBlocked;
 static volatile u32 sOverworldWildMovementDiagnosticLookCommand;
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
@@ -525,8 +527,14 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND
                 sOverworldWildMovementDiagnosticLookIssued = FALSE;
                 sOverworldWildMovementDiagnosticSingleActive = FALSE;
+                sOverworldWildMovementDiagnosticDirectionBlocked = -1;
                 sOverworldWildMovementDiagnosticLookCommand = 0;
                 if (shouldIssueLookCommand && direction != OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE) {
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK
+                    BOOL directionBlocked = MapObject_IsMovementDirectionBlocked(state->spawns[i].object, direction);
+
+                    sOverworldWildMovementDiagnosticDirectionBlocked = directionBlocked;
+#endif
                     BOOL singleMovementActive = MapObject_IsSingleMovementActive(state->spawns[i].object);
 
                     sOverworldWildMovementDiagnosticSingleActive = singleMovementActive;

@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test121.nds`
+Current ROM checkpoint: `test122.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is a spawner-driven look-command diagnostic, not a slot-47 movement callback.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is a spawner-driven blocked-direction diagnostic plus the previously safe look command, not a slot-47 movement callback.
 
 Previous active hypothesis:
 
@@ -205,7 +205,7 @@ Purpose of this checkpoint:
 - If `test120.nds` does not crash, position lookup and direction calculation are safe for spawned Pokemon from the spawner step loop.
 - If `test120.nds` crashes, the crash is likely in object/player coordinate reads or behavior/direction calculation, not movement command execution.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test120.nds` did not crash, so position lookup and chase/flee direction calculation are safe for spawned Pokemon from the spawner step loop.
 - The next isolated movement-command piece is a non-walking look command issued from the spawner loop on cooldown reset.
@@ -215,6 +215,18 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, spawner-driven look-command setup is safe enough to expand toward actual walking or command update handling.
 - If the next ROM crashes, the crash is likely in single-movement flag checking/setting, command construction/start, or conflicts with stock movement ownership.
+
+New active hypothesis:
+
+- `test121.nds` did not crash, so spawner-driven non-walking look-command setup is runtime-stable on active spawned Pokemon.
+- The user could not visually confirm the look behavior because stock wander masks facing changes.
+- The next isolated piece before actual walking is `MapObject_IsMovementDirectionBlocked`, called from the stable spawner loop on the same cooldown tick as the look command.
+- This should test blocked-direction lookup without introducing walking commands, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, or slot-47 callbacks.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, the blocked-direction helper is safe enough to use as the gate for a real spawner-driven walk command.
+- If the next ROM crashes, the crash is likely in `MapObject_IsMovementDirectionBlocked` or in asking it during the stock-wander object's active lifecycle.
 
 ## Attempt History
 
@@ -1365,6 +1377,63 @@ Verification:
 - Source verification shows the active probe still avoids walking commands, blocked-direction checks, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
 - Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `test.nds` was copied to Delta as `test121.nds`.
+- `git diff --check` passed.
+
+Runtime result:
+
+- User reported no crash.
+- Visual confirmation was not practical because stock wander masks occasional facing changes.
+
+Learning:
+
+- Spawner-driven `MapObject_IsSingleMovementActive`, `MapObject_MovementCommandFromDirection`, `MapObject_StartMovementCommand`, and `MapObject_SetSingleMovementActive` are runtime-stable for a non-walking look command.
+- Because stock wander remains active, this proves command setup safety but not visible behavior.
+
+Expand:
+
+- Add a spawner-driven `MapObject_IsMovementDirectionBlocked` check on the same cooldown tick.
+- Still avoid walking commands, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
+
+### Attempt 27: Spawner-Driven Blocked Direction Check
+
+Idea:
+
+Keep spawned Pokemon on stock movement `3` and keep movement slot `47` aliased to stock no-op. Before issuing the already-stable spawner-driven look command, call `MapObject_IsMovementDirectionBlocked` for the preferred chase/flee direction and store the result in volatile diagnostics. Do not use the blocked result to walk yet.
+
+Why this is new:
+
+- Attempt 26/`test121.nds` tested non-walking command setup and did not crash.
+- Earlier movement attempts bundled blocked-direction checks with slot-47 callbacks, walking commands, movement-command update/clear calls, scratch writes, `object->fsys`, or global movement `FieldSystem *`.
+- No previous build has isolated `MapObject_IsMovementDirectionBlocked` from the stable overlay-149 spawner step loop while keeping stock movement `3`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK` should be `1`.
+- The active probe should call `MapObject_IsMovementDirectionBlocked` only after a cooldown reset and a valid preferred direction.
+- The active probe should still avoid walking commands, `MapObject_UpdateMovementCommand`, `MapObject_ClearSingleMovementActive`, scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
+- Fresh spawn parameters should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Verification:
+
+- Built as `test122.nds`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` is `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ` is `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND` is `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK` is `1`.
+- Source verification shows the active probe calls `MapObject_IsMovementDirectionBlocked` only after cooldown reset and a non-`NONE` preferred direction.
+- Disassembly target scan shows `MapObject_IsMovementDirectionBlocked` at `0x02060BB9`.
+- Disassembly target scan still shows the previously safe look-command setup targets: `MapObject_IsSingleMovementActive` at `0x0205F649`, `MapObject_MovementCommandFromDirection` at `0x0206234D`, `MapObject_StartMovementCommand` at `0x0206217D`, and `MapObject_SetSingleMovementActive` at `0x0205F631`.
+- Disassembly target scan did not find `MapObject_UpdateMovementCommand` at `0x02062429` or `MapObject_ClearSingleMovementActive` at `0x0205F63D` in the overlay object.
+- Source verification shows the active probe still avoids walking commands, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, and slot-47 callbacks.
+- Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `test.nds` was copied to Delta as `test122.nds`.
 - `git diff --check` passed.
 
 Runtime result:
