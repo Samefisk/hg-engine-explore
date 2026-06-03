@@ -42,6 +42,16 @@ static int OverworldWildCustomMovement_AddDirection(u32 *directions, int count, 
     return count;
 }
 
+static void OverworldWildCustomMovement_ClearScratch(LocalMapObject *object)
+{
+    u32 *scratch = (u32 *)object->unkD8;
+
+    scratch[0] = 0;
+    scratch[1] = 0;
+    scratch[2] = 0;
+    scratch[3] = 0;
+}
+
 static int OverworldWildCustomMovement_BuildDirections(LocalMapObject *object, u32 *directions)
 {
     FieldSystem *fieldSystem = sOverworldWildCustomMovementFieldSystem;
@@ -117,7 +127,7 @@ static void OverworldWildCustomMovement_TryStartStep(LocalMapObject *object)
 void OverworldWildCustomMovement_Init(LocalMapObject *object)
 {
     object->unkA0 = 0;
-    MIi_CpuClearFast(0, object->unkD8, sizeof(object->unkD8));
+    OverworldWildCustomMovement_ClearScratch(object);
     MapObject_ClearSingleMovementActive(object);
     MapObject_SetParam(object, gf_rand() % OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
 }

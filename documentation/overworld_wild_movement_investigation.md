@@ -37,6 +37,8 @@ Binary sanity checks on the built ROM:
 
 After the first runtime test, spawned Pokemon were stable but stationary. The follow-up change made the spawner publish the active `FieldSystem *` to the boot-resident movement code instead of relying only on `LocalMapObject::fsys`, initialized the same small movement scratch area that stock wander initializes, and added a blocked-walk facing fallback so a ticking-but-blocked callback can still show visible activity.
 
+The next runtime test crashed after the player took a single step. The current checkpoint removes the `MIi_CpuClearFast` call from the custom movement init path and clears the local scratch words directly, avoiding a cross-overlay helper call during movement setup while keeping the same scratch state.
+
 ## First Runtime Tests
 
 Use the current Delta build and check these in order:
