@@ -4,6 +4,7 @@
 #include "types.h"
 
 #define OW_WILD_MOVE_CUSTOM_AI 47
+#define OW_WILD_MOVE_STOCK_IDLE 0
 #define OW_WILD_MOVE_STOCK_WANDER 3
 
 #define OW_WILD_MOVEMENT_PARAM_COOLDOWN 0

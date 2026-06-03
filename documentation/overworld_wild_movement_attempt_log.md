@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test124.nds`
+Current ROM checkpoint: `test125.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is spawner-owned movement-command update/clear polling after a spawner-started walk command, not a slot-47 movement callback.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0` and the active custom-movement probe burst-polls a spawner-started walk command so movement should be visually obvious.
 
 Previous active hypothesis:
 
@@ -240,7 +240,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash but movement is not visible, the command may be masked or consumed by stock movement, and the next step should isolate command ownership/update timing.
 - If the next ROM crashes, the crash is likely in starting a walking movement command on a stock-wander object from the spawner loop.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test123.nds` did not crash, so starting a gated walk command on an active spawned Pokemon from the spawner step loop is runtime-stable.
 - Stock movement `3` has its own command state machine and may mask, consume, or overwrite externally started movement commands.
@@ -251,6 +251,19 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, spawner-driven command update/clear is viable and we can start reducing stock wander's ownership of spawned Pokemon movement.
 - If the next ROM crashes, the crash is likely in polling or clearing a movement command from the spawner loop, rather than in starting the command.
+
+New active hypothesis:
+
+- `test124.nds` did not crash, so spawner-owned command update/clear polling is runtime-stable.
+- The user could not reliably tell whether movement was more directed because stock movement `3` can still mask the spawner command and the command may take multiple updates to complete.
+- The next visibility probe should make movement unmistakable by temporarily giving fresh spawns stock idle movement `0`, setting the spawner cooldown to `0`, and burst-polling a spawner-started walk command up to 32 update iterations.
+- This should produce a clear tile-step toward the player without using slot-47 callbacks, active custom movement scratch writes, `object->fsys`, or global movement `FieldSystem *`.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash and movement is obvious, the spawner-driven movement path works and stock wander was hiding the signal.
+- If the next ROM does not crash but movement is still not obvious, the spawner step hook may be the wrong timing surface for visual movement and we should look for a frame-level callback/task.
+- If the next ROM crashes, the crash is likely from switching fresh spawns to stock idle movement `0`, burst-polling movement commands, or their combination.
 
 ## Attempt History
 
@@ -1560,11 +1573,14 @@ Expected verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
+- User could not reliably tell whether movement was more directed or less random.
 
 Learning:
 
-- Pending.
+- Spawner-owned `MapObject_UpdateMovementCommand` and `MapObject_ClearSingleMovementActive` are runtime-stable in the current player-step hook.
+- The visual signal is still too subtle while fresh spawns use stock movement `3`.
+- The next diagnostic should remove stock-wander interference and exaggerate command progression.
 
 Verification:
 
@@ -1578,6 +1594,65 @@ Verification:
 - Source still avoids active custom movement scratch writes, `object->fsys`, and slot-47 callbacks; `OverworldWildCustomMovement_SetFieldSystem` remains no-op under the current idle diagnostic.
 - Fresh spawns still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - Copied to Delta as `test124.nds`.
+- `git diff --check` passed.
+
+Expand:
+
+- Temporarily switch fresh spawns from stock movement `3` to stock idle movement `0` so only the spawner-owned command should move them.
+- Set `OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET` to `0` so a new command can be started as soon as the previous command finishes.
+- Burst-poll the command up to a bounded number of iterations immediately after starting it so a successful command should visibly complete a tile step.
+
+### Attempt 30: Obvious Spawner-Driven Tile Movement
+
+Idea:
+
+Make the movement result unmistakable for runtime testing. Fresh spawned Pokemon temporarily use stock idle movement `0` instead of stock wander `3`. After the spawner starts a walk command, it immediately burst-polls `MapObject_UpdateMovementCommand` up to 32 iterations and clears the single-movement flag if the command finishes. The cooldown reset is `0`, so a finished command can be followed by another command on the next player-step tick.
+
+Why this is new:
+
+- Attempt 29/`test124.nds` proved update/clear polling does not crash but was visually ambiguous.
+- Previous no-op movement tests used slot `47` aliasing or disabled spawn paths; no previous build spawned Pokemon directly with movement `0` while driving their walk commands from the stable overlay-149 spawner step loop.
+- No previous build has tried bounded burst-polling to force a started spawner command to visually complete for testing.
+
+Files/symbols:
+
+- `include/overworld_wild_movement.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT` should resolve to `OW_WILD_MOVE_STOCK_IDLE`.
+- Fresh spawns should pass movement `0` into `CreateSpecialFieldObjectWithParams`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET` should be `0`.
+- `OverworldWildSpawns_UpdateSpawnerMovementCommand` should cap burst polling at `OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS` (`32`).
+- The active probe should still avoid slot-47 callbacks, active custom movement scratch writes, `object->fsys`, and global movement `FieldSystem *`.
+- Movement slot `47` should remain stock no-op for stale objects.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
+
+Verification:
+
+- Built as `test125.nds`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT` is enabled.
+- `OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT` resolves to `OW_WILD_MOVE_STOCK_IDLE`.
+- Fresh spawns pass `OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT` into `CreateSpecialFieldObjectWithParams`; source now defines `OW_WILD_MOVE_STOCK_IDLE` as movement `0`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE` is enabled.
+- `OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET` is `0`.
+- Source verification shows `OverworldWildSpawns_UpdateSpawnerMovementCommand` caps burst polling at `OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS` (`32`).
+- Disassembly of `OverworldWildSpawns_UpdateSpawnerMovementCommand` shows the loop bound compare against `#32`, and target calls to `MapObject_IsSingleMovementActive` at `0x0205F649`, `MapObject_UpdateMovementCommand` at `0x02062429`, and `MapObject_ClearSingleMovementActive` at `0x0205F63D`.
+- Disassembly target scan still shows the walk setup targets: `MapObject_IsMovementDirectionBlocked` at `0x02060BB9`, `MapObject_MovementCommandFromDirection` at `0x0206234D`, `MapObject_StartMovementCommand` at `0x0206217D`, and `MapObject_SetSingleMovementActive` at `0x0205F631`.
+- Source still avoids slot-47 callbacks, active custom movement scratch writes, `object->fsys`, and global movement `FieldSystem *`; references in `src/overworld_wild_movement.c` remain behind the idle diagnostic and are not part of the active overlay movement path.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- Copied to Delta as `test125.nds`.
 - `git diff --check` passed.
 
 ## Proposed Next New Experiments
