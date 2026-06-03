@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test137.nds`
+Current ROM checkpoint: `test138.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2172,6 +2172,40 @@ Verification:
 - `git diff --check` passed.
 - Verified `OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED` is `6`, while `OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED` remains `1`.
 - Verified speed `6` maps through `OverworldWildSpawns_GetMovementWalkCommandForSpeed` to stock command family `0x1C`.
+
+Runtime result:
+
+- User reported Pidgey does not move and just stands still.
+
+Learning:
+
+- Stock command family `0x1C` is not usable as a spawner-owned walk command in this context, even though it exists in the local movement command table.
+- The earlier verification was too broad: table presence does not prove a command family uses the same walk update path as `0x08`, `0x0C`, `0x10`, or `0x14`.
+
+### Attempt 41: Alias High Logical Speeds To Fastest Stock Walk
+
+Idea:
+
+Keep Pidgey at logical speed `6`, but map speed levels `5` and `6` to the fastest stock walk command family `0x14` instead of the non-walking `0x18` / `0x1C` command families.
+
+Why this is new:
+
+- Attempt 40 directly tested speed `6` mapped to `0x1C`, and runtime showed Pidgey standing still.
+- No previous attempt has kept the speed `1` through `6` parameter scale while aliasing unsupported high speed levels back to the fastest confirmed stock walk command.
+- This avoids returning to burst-polling, custom movement descriptors, coordinate writes, or global timing changes.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test138.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified Pidgey remains logical speed `6`.
+- Verified speed `5` and speed `6` now map to `OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND` / stock command family `0x14`.
+- Local disassembly shows `0x08`, `0x0C`, `0x10`, and `0x14` share the stock walk update path, while `0x18` and `0x1C` switch to a different update path.
 
 Runtime result:
 
