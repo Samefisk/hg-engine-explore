@@ -14,6 +14,7 @@
 .include "armips/asm/moves.s" // repoints all the move table defines within the structure
 .include "armips/asm/trainer_ai.s" // repoints all the move table defines for trainer ai within the structure
 .include "armips/asm/syntheticoverlay.s" // code for loading in the synthetic overlay
+.include "armips/asm/mew_teleport.s" // skips Fly presentation for Mew's special teleport
 .include "armips/asm/trainers.s" // code for fixing the trainer ai accessing move data
 .include "armips/asm/cries.s" // code for remapping species to the file in the sdat
 .include "armips/asm/user_config.s" // user configurable code

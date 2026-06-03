@@ -3,6 +3,7 @@
 #include "../include/overworld_wild_spawns.h"
 #include "../include/script.h"
 #include "../include/sound.h"
+#include "../include/task.h"
 #include "../include/repel.h"
 #include "../include/constants/file.h"
 #include "../include/constants/maps.h"
@@ -16,6 +17,7 @@
 #define SCRIPT_NEW_CMD_SOUND_TEST_GET_ID 4
 #define SCRIPT_NEW_CMD_SOUND_TEST_ACTION 5
 #define SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_SOUND 6
+#define SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_PREPARE_TRANSITION 7
 
 #define SCRIPT_NEW_CMD_MAX          256
 #define SOUND_TEST_SE_MIN           SEQ_SE_PL_W012
@@ -37,15 +39,30 @@
 #define SCRIPT_CMD_END              2
 #define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BREC03
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
+#define OW_WILD_MEW_FLY_SKIP_DISABLED 0x4D57
+#define OW_WILD_MEW_FLY_SKIP_ACTIVE   0x5445
+#define OW_WILD_MEW_FLY_SKIP_NO_FOLLOWER_SUBSTATE 2
+#define OW_WILD_MEW_FLY_WORK_HAS_FOLLOWER 1
 #define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 2
 #define OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET 4
 #define OW_WILD_BATTLE_SCRIPT_SHINY_OFFSET 6
+#define OW_WILD_MEW_WARP_SCRIPT_MAP_OFFSET 32
+#define OW_WILD_MEW_WARP_SCRIPT_X_OFFSET 34
+#define OW_WILD_MEW_WARP_SCRIPT_Z_OFFSET 36
 
 typedef struct OverworldWildMewWarpDestination {
     u16 mapId;
     u16 x;
     u16 z;
 } OverworldWildMewWarpDestination;
+
+typedef struct MewFlyAnimationWork {
+    u32 substate;
+    u32 timer;
+    u32 hasFollower;
+} MewFlyAnimationWork;
+
+BOOL LONG_CALL THUMB_FUNC FieldTask_FlyAnimation(TaskManager *taskManager);
 
 static u8 sOverworldWildBattleScript[] = {
     0x4D, 0x02, // wild_battle
@@ -73,6 +90,9 @@ static u8 sOverworldWildMewWarpScript[] = {
     0x00, 0x00,
     OW_WILD_MEW_WARP_FLASH_COLOR & 0xFF, OW_WILD_MEW_WARP_FLASH_COLOR >> 8,
     SCRIPT_CMD_WAIT_FADE & 0xFF, SCRIPT_CMD_WAIT_FADE >> 8,
+    SCRIPT_CMD_RUN_NEW_COMMAND & 0xFF, SCRIPT_CMD_RUN_NEW_COMMAND >> 8,
+    SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_PREPARE_TRANSITION,
+    0x00, 0x00,
     SCRIPT_CMD_FLY_ANIMATION & 0xFF, SCRIPT_CMD_FLY_ANIMATION >> 8,
     MAP_R29 & 0xFF, MAP_R29 >> 8,
     454 & 0xFF, 454 >> 8,
@@ -88,6 +108,7 @@ static u8 sOverworldWildMewWarpScript[] = {
 };
 
 static u16 sSoundTestSeqId = SOUND_TEST_SE_MIN;
+static u16 sOverworldWildMewFlySkipState = OW_WILD_MEW_FLY_SKIP_DISABLED;
 
 static const OverworldWildMewWarpDestination sOverworldWildMewWarpDestinations[] = {
     // Outdoor route-gate anchors pulled from map warp events.
@@ -134,12 +155,31 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
     const OverworldWildMewWarpDestination *destination =
         &sOverworldWildMewWarpDestinations[gf_rand() % NELEMS(sOverworldWildMewWarpDestinations)];
 
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 27, destination->mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, destination->x);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, destination->z);
+    sOverworldWildMewFlySkipState = OW_WILD_MEW_FLY_SKIP_DISABLED;
+    Script_WriteHalfword(sOverworldWildMewWarpScript, OW_WILD_MEW_WARP_SCRIPT_MAP_OFFSET, destination->mapId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, OW_WILD_MEW_WARP_SCRIPT_X_OFFSET, destination->x);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, OW_WILD_MEW_WARP_SCRIPT_Z_OFFSET, destination->z);
 #endif
 
     ScriptJump(ctx, sOverworldWildMewWarpScript);
+}
+
+BOOL Script_MewFlyAnimationTask(TaskManager *taskManager)
+{
+    BOOL result = FieldTask_FlyAnimation(taskManager);
+
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (sOverworldWildMewFlySkipState == OW_WILD_MEW_FLY_SKIP_ACTIVE) {
+        MewFlyAnimationWork *work = (MewFlyAnimationWork *)taskManager->env;
+
+        sOverworldWildMewFlySkipState = OW_WILD_MEW_FLY_SKIP_DISABLED;
+        if (work != NULL && work->hasFollower != OW_WILD_MEW_FLY_WORK_HAS_FOLLOWER) {
+            work->substate = OW_WILD_MEW_FLY_SKIP_NO_FOLLOWER_SUBSTATE;
+        }
+    }
+#endif
+
+    return result;
 }
 
 static void Script_SoundTestOffset(s16 offset)
@@ -215,6 +255,12 @@ BOOL Script_RunNewCmd(SCRIPTCONTEXT *ctx) {
 
         case SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_SOUND:
             PlaySE(OW_WILD_MEW_WARP_SOUND);
+            break;
+
+        case SCRIPT_NEW_CMD_OVERWORLD_WILD_MEW_WARP_PREPARE_TRANSITION:
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+            sOverworldWildMewFlySkipState = OW_WILD_MEW_FLY_SKIP_ACTIVE;
+#endif
             break;
 
         case SCRIPT_NEW_CMD_SOUND_TEST_GET_ID:

@@ -5,7 +5,9 @@ import sys
 from pathlib import Path
 
 
-SYMBOLS = []
+SYMBOLS = [
+    "Script_MewFlyAnimationTask",
+]
 
 
 def main():
