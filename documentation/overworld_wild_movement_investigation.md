@@ -1,5 +1,7 @@
 # Overworld Wild Movement Investigation
 
+Before trying a new fix, read `documentation/overworld_wild_movement_attempt_log.md` and verify the approach has not already been tried.
+
 ## Current Milestone
 
 Movement type `47` is now patched from a null vanilla descriptor to a boot-resident descriptor in overlay 129. Overworld wild spawns use movement `47` instead of stock wander `3`.
