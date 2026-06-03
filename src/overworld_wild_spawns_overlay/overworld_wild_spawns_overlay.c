@@ -62,10 +62,11 @@
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE 0
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK 1
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT 1
-#define OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET 0
-#define OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS (-1)
+#define OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN 0
 #define OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS 32
 #define OW_WILD_SPAWNER_MOVEMENT_FRAME_TASK_PRIORITY 1300
+#define OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS 2
+#define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT
@@ -182,6 +183,9 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
 static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state);
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+static void OverworldWildSpawns_ResetAllMovementCommands(OverworldWildSpawnState *state, BOOL clearObjectCommand);
+#endif
 
 static volatile void *sOverworldWildDiagnosticMapObjectMan;
 static volatile void *sOverworldWildDiagnosticMapObjects;
@@ -205,6 +209,9 @@ static volatile int sOverworldWildMovementDiagnosticUpdateAttempted;
 static volatile int sOverworldWildMovementDiagnosticUpdateFinished;
 static volatile int sOverworldWildMovementDiagnosticUpdateFoundInactive;
 static volatile int sOverworldWildMovementDiagnosticUpdateIterations;
+static volatile int sOverworldWildMovementDiagnosticCommandsStartedThisTick;
+static volatile int sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects;
+static volatile u32 sOverworldWildMovementDiagnosticInProgressMask;
 static volatile u32 sOverworldWildMovementDiagnosticLookCommand;
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND
@@ -493,47 +500,169 @@ static int OverworldWildSpawns_DiagnosticAbs(int value)
     return value < 0 ? -value : value;
 }
 
-static u8 OverworldWildSpawns_DiagnosticPreferredDirection(int dx, int dy)
+static int OverworldWildSpawns_DiagnosticBuildDirections(int dx, int dy, u8 *directions)
 {
+    int count = 0;
+
     if (dx == 0 && dy == 0) {
-        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
+        return 0;
     }
 
     if (OverworldWildSpawns_DiagnosticAbs(dx) >= OverworldWildSpawns_DiagnosticAbs(dy)) {
         if (dx > 0) {
-            return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT;
+            directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT;
         }
-        if (dx < 0) {
-            return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT;
+        if (dx < 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+            directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT;
         }
+        if (dy > 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+            directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN;
+        }
+        if (dy < 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+            directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP;
+        }
+        return count;
     }
 
     if (dy > 0) {
-        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN;
+        directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN;
     }
-    if (dy < 0) {
-        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP;
+    if (dy < 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+        directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP;
+    }
+    if (dx > 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+        directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT;
+    }
+    if (dx < 0 && count < OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS) {
+        directions[count++] = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT;
     }
 
-    return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
+    return count;
+}
+
+static BOOL OverworldWildSpawns_IsMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
+{
+    return (state->movementInProgressMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot)) != 0;
+}
+
+static void OverworldWildSpawns_SetMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
+{
+    state->movementInProgressMask |= OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
+    sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
+}
+
+static void OverworldWildSpawns_ClearMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
+{
+    state->movementInProgressMask &= ~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN;
+    sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
+}
+
+static void OverworldWildSpawns_ResetSlotMovementCommand(OverworldWildSpawnState *state, int slot, BOOL clearObjectCommand)
+{
+    if (clearObjectCommand
+        && state->spawns[slot].active
+        && state->spawns[slot].object != NULL
+        && MapObject_IsSingleMovementActive(state->spawns[slot].object)) {
+        MapObject_ClearSingleMovementActive(state->spawns[slot].object);
+    }
+
+    OverworldWildSpawns_ClearMovementSlotInProgress(state, slot);
+}
+
+static void OverworldWildSpawns_ResetAllMovementCommands(OverworldWildSpawnState *state, BOOL clearObjectCommand)
+{
+    int i;
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
+    OverworldWildSpawns_StopFrameMovementTask();
+#endif
+
+    if (state == NULL) {
+        return;
+    }
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        OverworldWildSpawns_ResetSlotMovementCommand(state, i, clearObjectCommand);
+    }
+}
+
+static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(OverworldWildSpawnState *state, int slot, const u8 *directions, int directionCount)
+{
+    int j;
+    BOOL blockedAnyDirection = FALSE;
+    LocalMapObject *object = state->spawns[slot].object;
+
+    if (object == NULL || MapObject_IsSingleMovementActive(object)) {
+        sOverworldWildMovementDiagnosticSingleActive = object != NULL ? MapObject_IsSingleMovementActive(object) : FALSE;
+        return FALSE;
+    }
+
+    sOverworldWildMovementDiagnosticSingleActive = FALSE;
+
+    for (j = 0; j < directionCount; j++) {
+        BOOL directionBlocked = FALSE;
+        u8 direction = directions[j];
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK
+        directionBlocked = MapObject_IsMovementDirectionBlocked(object, direction);
+        sOverworldWildMovementDiagnosticDirectionBlocked = directionBlocked;
+#endif
+        if (!directionBlocked) {
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_WALK_COMMAND
+            u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND);
+
+            MapObject_StartMovementCommand(object, movementCommand);
+            MapObject_SetSingleMovementActive(object);
+            OverworldWildSpawns_SetMovementSlotInProgress(state, slot);
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
+            OverworldWildSpawns_EnsureFrameMovementTask(state);
+#endif
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND && OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE
+            if (OverworldWildSpawns_UpdateSpawnerMovementCommand(object)) {
+                OverworldWildSpawns_ClearMovementSlotInProgress(state, slot);
+            }
+#endif
+            sOverworldWildMovementDiagnosticLookCommand = movementCommand;
+            sOverworldWildMovementDiagnosticWalkIssued = TRUE;
+            sOverworldWildMovementDiagnosticCommandsStartedThisTick++;
+            return TRUE;
+#else
+            u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND);
+
+            MapObject_StartMovementCommand(object, movementCommand);
+            MapObject_SetSingleMovementActive(object);
+            sOverworldWildMovementDiagnosticLookCommand = movementCommand;
+            sOverworldWildMovementDiagnosticLookIssued = TRUE;
+            return TRUE;
+#endif
+        }
+
+        blockedAnyDirection = TRUE;
+    }
+
+    sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = blockedAnyDirection;
+    return FALSE;
 }
 
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
 
+    sOverworldWildMovementDiagnosticCommandsStartedThisTick = 0;
+
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].active && state->spawns[i].object != NULL) {
-            int cooldown = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+            int cooldown = state->movementCooldowns[i];
             int shouldIssueLookCommand = FALSE;
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND
-            if (cooldown == OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS) {
+            if (OverworldWildSpawns_IsMovementSlotInProgress(state, i)) {
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
                 OverworldWildSpawns_EnsureFrameMovementTask(state);
 #else
                 if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
-                    MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+                    OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
                 }
 #endif
                 continue;
@@ -541,9 +670,9 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
 #endif
 
             if (cooldown > 0) {
-                MapObject_SetParam(state->spawns[i].object, cooldown - 1, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+                state->movementCooldowns[i] = cooldown - 1;
             } else {
-                MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+                state->movementCooldowns[i] = OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN;
                 shouldIssueLookCommand = TRUE;
             }
 
@@ -556,14 +685,15 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 int behavior = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
                 int dx = playerX - objectX;
                 int dy = playerY - objectY;
-                u8 direction;
+                u8 directions[OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS];
+                int directionCount;
 
                 if (behavior == OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER) {
                     dx = -dx;
                     dy = -dy;
                 }
 
-                direction = OverworldWildSpawns_DiagnosticPreferredDirection(dx, dy);
+                directionCount = OverworldWildSpawns_DiagnosticBuildDirections(dx, dy, directions);
 
                 sOverworldWildMovementDiagnosticObjectX = objectX;
                 sOverworldWildMovementDiagnosticObjectY = objectY;
@@ -572,7 +702,7 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 sOverworldWildMovementDiagnosticDx = dx;
                 sOverworldWildMovementDiagnosticDy = dy;
                 sOverworldWildMovementDiagnosticBehavior = behavior;
-                sOverworldWildMovementDiagnosticDirection = direction;
+                sOverworldWildMovementDiagnosticDirection = directionCount > 0 ? directions[0] : OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_LOOK_COMMAND
                 sOverworldWildMovementDiagnosticLookIssued = FALSE;
@@ -581,47 +711,8 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
                 sOverworldWildMovementDiagnosticWalkIssued = FALSE;
                 sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = FALSE;
                 sOverworldWildMovementDiagnosticLookCommand = 0;
-                if (shouldIssueLookCommand && direction != OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE) {
-                    BOOL directionBlocked = FALSE;
-
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK
-                    directionBlocked = MapObject_IsMovementDirectionBlocked(state->spawns[i].object, direction);
-
-                    sOverworldWildMovementDiagnosticDirectionBlocked = directionBlocked;
-#endif
-                    BOOL singleMovementActive = MapObject_IsSingleMovementActive(state->spawns[i].object);
-
-                    sOverworldWildMovementDiagnosticSingleActive = singleMovementActive;
-                    if (!singleMovementActive) {
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_WALK_COMMAND
-                        if (!directionBlocked) {
-                            u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND);
-
-                            MapObject_StartMovementCommand(state->spawns[i].object, movementCommand);
-                            MapObject_SetSingleMovementActive(state->spawns[i].object);
-                            MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-                            OverworldWildSpawns_EnsureFrameMovementTask(state);
-#endif
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND && OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BURST_UPDATE
-                            if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
-                                MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
-                            }
-#endif
-                            sOverworldWildMovementDiagnosticLookCommand = movementCommand;
-                            sOverworldWildMovementDiagnosticWalkIssued = TRUE;
-                        } else {
-                            sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
-                        }
-#else
-                        u32 movementCommand = MapObject_MovementCommandFromDirection(direction, OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND);
-
-                        MapObject_StartMovementCommand(state->spawns[i].object, movementCommand);
-                        MapObject_SetSingleMovementActive(state->spawns[i].object);
-                        sOverworldWildMovementDiagnosticLookCommand = movementCommand;
-                        sOverworldWildMovementDiagnosticLookIssued = TRUE;
-#endif
-                    }
+                if (shouldIssueLookCommand && directionCount > 0) {
+                    OverworldWildSpawns_TryStartSpawnerMovementCommand(state, i, directions, directionCount);
                 }
 #endif
             }
@@ -697,11 +788,11 @@ static void OverworldWildSpawns_EnsureFrameMovementTask(OverworldWildSpawnState 
 static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
 {
     OverworldWildSpawnState *state = (OverworldWildSpawnState *)data;
-    BOOL sawInProgress = FALSE;
     int i;
 
     (void)task;
     sOverworldWildMovementDiagnosticFrameTaskTicks++;
+    sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects = 0;
 
     if (state == NULL) {
         OverworldWildSpawns_StopFrameMovementTask();
@@ -709,19 +800,31 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     }
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        if (state->spawns[i].active && state->spawns[i].object != NULL) {
-            int cooldown = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+        if (!OverworldWildSpawns_IsMovementSlotInProgress(state, i)) {
+            continue;
+        }
 
-            if (cooldown == OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS) {
-                sawInProgress = TRUE;
-                if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
-                    MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
-                }
-            }
+        if (!state->spawns[i].active || state->spawns[i].object == NULL) {
+            OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
+            continue;
+        }
+
+        sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects++;
+        if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
+            OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
         }
     }
 
-    if (!sawInProgress) {
+    sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
+    if (state->movementInProgressMask == 0) {
+        OverworldWildSpawns_StopFrameMovementTask();
+    } else {
+        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+            if (OverworldWildSpawns_IsMovementSlotInProgress(state, i)) {
+                return;
+            }
+        }
+
         OverworldWildSpawns_StopFrameMovementTask();
     }
 }
@@ -734,6 +837,10 @@ static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
 
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
 {
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+    OverworldWildSpawns_ResetSlotMovementCommand(state, slot, FALSE);
+#endif
+
     if (deleteObject && state->spawns[slot].active && state->spawns[slot].object != NULL) {
         DeleteMapObject(state->spawns[slot].object);
     }
@@ -1494,6 +1601,9 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
     state->spawns[slot].terrain = terrain;
     state->spawns[slot].shiny = shiny;
     state->spawns[slot].active = TRUE;
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+    OverworldWildSpawns_ClearMovementSlotInProgress(state, slot);
+#endif
 
     if (shiny) {
         state->shinySpawned = TRUE;
@@ -1625,8 +1735,8 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
             state->pendingSlot = i;
             state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-            OverworldWildSpawns_StopFrameMovementTask();
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+            OverworldWildSpawns_ResetAllMovementCommands(state, TRUE);
 #endif
             EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
             return TRUE;
@@ -1644,6 +1754,10 @@ static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
 
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult)
 {
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+    OverworldWildSpawns_ResetAllMovementCommands(state, TRUE);
+#endif
+
     if (state->pendingSlot >= 0 && state->pendingSlot < OW_WILD_MAX_SPAWNS) {
         if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
             state->battleGraceSteps = OW_WILD_FLEE_GRACE_STEPS;
@@ -1687,8 +1801,8 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
         OverworldWildCustomMovement_SetFieldSystem(NULL);
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-        OverworldWildSpawns_StopFrameMovementTask();
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+        OverworldWildSpawns_ResetAllMovementCommands(state, FALSE);
 #endif
         if (state->mapId != MAP_NOTHING || state->mapObjectMan != NULL || state->mapObjects != NULL) {
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
@@ -1708,8 +1822,8 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     if (state->mapId != fieldSystem->location->mapId
         || state->mapObjectMan != mapObjectMan
         || state->mapObjects != mapObjects) {
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-        OverworldWildSpawns_StopFrameMovementTask();
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+        OverworldWildSpawns_ResetAllMovementCommands(state, FALSE);
 #endif
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
         state->mapId = fieldSystem->location->mapId;

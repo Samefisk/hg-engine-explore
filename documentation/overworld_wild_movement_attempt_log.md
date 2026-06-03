@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test126.nds`
+Current ROM checkpoint: `test128.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
@@ -265,7 +265,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash but movement is still not obvious, the spawner step hook may be the wrong timing surface for visual movement and we should look for a frame-level callback/task.
 - If the next ROM crashes, the crash is likely from switching fresh spawns to stock idle movement `0`, burst-polling movement commands, or their combination.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test125.nds` did not crash and made the movement signal visible, but the burst-poll completed a tile step inside one player-step tick, making the Pokemon look like it teleported.
 - The movement-command path itself is viable; the problem is update timing.
@@ -277,6 +277,23 @@ Purpose of this checkpoint:
 - If the next ROM does not crash and movement animates smoothly toward the player, the frame-task timing surface is the right direction.
 - If the next ROM does not crash but Pokemon do not move, the normal `CreateSysTask` queue may not run during this field context or the task may need a different queue/priority.
 - If the next ROM crashes, the crash is likely in task creation, task lifetime, or frame-level command polling.
+
+New active hypothesis:
+
+- `test126.nds` did not crash and movement animates correctly, but user testing found follow-up behavior issues:
+  - only one Pokemon seems able to move at a time
+  - after battle, no Pokemon seem able to move
+  - movement is not always active even outside those cases
+- The stable frame-task timing should be kept, but movement ownership should move out of object param `0` and into per-spawn-slot spawner state.
+- Battle start/end should explicitly clear any spawner-owned single-movement commands and reset movement cooldowns, so no stale in-progress marker can survive a battle transition.
+- The direction picker should try a secondary axis if the primary chase/flee direction is blocked, rather than suppressing movement immediately.
+
+Purpose of this checkpoint:
+
+- If the next ROM lets multiple Pokemon move, recovers movement after battle, and feels more consistently active, then per-slot ownership plus battle reset is the right foundation.
+- If movement still appears limited to one Pokemon, the limitation is likely inside the map-object movement-command system or collision/blocked-direction rules rather than our cooldown marker.
+- If movement still dies after battle, the task lifecycle may need to be restarted from the battle cleanup hook or a different field callback.
+- If the next ROM crashes, the likely new suspects are clearing single-movement flags during battle transitions or the added per-slot state fields.
 
 ## Attempt History
 
@@ -1730,6 +1747,68 @@ Verification:
 - Source confirms `OverworldWildSpawns_UpdateSpawnerMovementCommand` calls `MapObject_UpdateMovementCommand` and clears the single-movement flag only when update reports completion.
 - Linked overlay target scan found `CreateSysTask` target `0x0200E321`, `DestroySysTask` target `0x0200E391`, `MapObject_UpdateMovementCommand` target `0x02062429`, and `MapObject_ClearSingleMovementActive` target `0x0205F63D`.
 - Linked overlay target scan still contains the expected movement helper targets `0x02060BB9`, `0x0205F649`, `0x0206234D`, `0x0206217D`, and `0x0205F631`.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `git diff --check` passed.
+
+Expand:
+
+- Keep the frame-task update timing from `test126.nds`.
+- Stop using object param `0` as the spawner-owned cooldown/in-progress marker.
+- Track movement cooldown and in-progress ownership per spawn slot.
+- Clear/reset spawner-owned movement state when battle starts and when battle cleanup runs.
+- Try a secondary chase/flee direction if the primary direction is blocked.
+
+### Attempt 32: Per-Slot Movement Ownership And Battle Reset
+
+Idea:
+
+Keep the successful frame-task timing from `test126.nds`, but move movement ownership into `OverworldWildSpawnState`: each spawn slot has its own cooldown and a bit in an in-progress mask. The player-step hook starts commands per slot, and the frame task services every slot whose bit is set. Battle start and battle cleanup explicitly clear spawner-owned single-movement commands and reset movement cooldowns, so a battle cannot leave all Pokemon stuck in an in-progress state.
+
+Why this is new:
+
+- Attempt 31/`test126.nds` used a frame-level `SysTask`, but it still used object param `0` as the movement cooldown and in-progress marker.
+- Earlier attempts did not test per-spawn-slot ownership in `OverworldWildSpawnState`.
+- Earlier attempts did not reset all spawner-owned movement commands from both battle start and battle cleanup.
+- Earlier spawner-driven movement only tried one preferred chase/flee direction before suppressing movement when blocked.
+
+Files/symbols:
+
+- `include/overworld_wild_spawns_internal.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Expected verification:
+
+- `OverworldWildSpawnState` should contain per-slot movement cooldown storage and an in-progress mask.
+- `OverworldWildSpawns_TickMovementParams` should use the per-slot state instead of reading object param `0` for cooldown/in-progress.
+- `OverworldWildSpawns_FrameMovementTask` should loop every active bit in the in-progress mask, not only one object.
+- Battle start and battle cleanup should call a movement reset path.
+- The movement reset path should clear single-movement active only for currently active spawn objects.
+- Direction selection should try both primary and secondary chase/flee axes before suppressing a walk.
+- The active probe should still avoid slot-47 callbacks, active custom movement scratch writes, `object->fsys`, and global movement `FieldSystem *`.
+
+Runtime result:
+
+- Built as `test128.nds`.
+- Pending user test.
+
+Learning:
+
+- Pending runtime result.
+
+Verification:
+
+- `./docker-makerom.cmd` completed successfully.
+- Copied to Delta as `test128.nds`.
+- Source confirms `OverworldWildSpawnState` has `movementCooldowns[OW_WILD_MAX_SPAWNS]` and `movementInProgressMask`.
+- Source confirms `OverworldWildSpawns_TickMovementParams` uses `state->movementCooldowns[i]` and `OverworldWildSpawns_IsMovementSlotInProgress` instead of using object param `0` as cooldown/in-progress.
+- Source confirms `OverworldWildSpawns_FrameMovementTask` loops all slots whose in-progress bit is set and increments `sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects` per updated object.
+- Source confirms battle start and battle cleanup both call `OverworldWildSpawns_ResetAllMovementCommands(state, TRUE)`.
+- Source confirms map-context changes call `OverworldWildSpawns_ResetAllMovementCommands(state, FALSE)`.
+- Source confirms `OverworldWildSpawns_DiagnosticBuildDirections` builds up to two chase/flee axes and `OverworldWildSpawns_TryStartSpawnerMovementCommand` tries each direction before suppressing movement.
+- Source scan confirms the active overlay path no longer writes `OW_WILD_MOVEMENT_PARAM_COOLDOWN` with `MapObject_SetParam`, and the old `OW_WILD_SPAWNER_MOVEMENT_PARAM_IN_PROGRESS` marker was removed from the source.
+- Linked overlay target scan found `CreateSysTask` target `0x0200E321`, `DestroySysTask` target `0x0200E391`, `MapObject_UpdateMovementCommand` target `0x02062429`, and `MapObject_ClearSingleMovementActive` target `0x0205F63D`.
+- Linked overlay target scan still contains expected movement helper targets `0x02060BB9`, `0x0205F649`, `0x0206234D`, `0x0206217D`, and `0x0205F631`.
 - Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `git diff --check` passed.
 
