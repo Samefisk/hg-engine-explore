@@ -46,6 +46,7 @@
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
+#define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 1
 #define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 1
 // Param 2 mirrors the follower palette metadata without switching to follower rendering.
 #define OW_WILD_PAL_PARAM_SHINY 1
@@ -1369,6 +1370,12 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
 {
+#if OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY
+    (void)fieldSystem;
+    (void)state;
+    return FALSE;
+#endif
+
     if (!OverworldWildSpawns_UpdateMapState(fieldSystem, state)) {
         return FALSE;
     }
