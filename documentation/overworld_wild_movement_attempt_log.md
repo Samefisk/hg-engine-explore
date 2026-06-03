@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test110.nds`
+Current ROM checkpoint: `test111.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -78,17 +78,24 @@ Previous active hypothesis:
 - The next suspect is a side effect in `OverworldWildSpawns_UpdateMapState`.
 - The next ROM should allow only map-state pointer/id writes and the currently no-op movement field-system publish, but skip `OverworldWildSpawns_Clear(state, FALSE)`.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test109.nds` crashes.
 - `test108.nds` did not touch the `OverworldWildSpawnState *state` argument and did not crash.
 - `test109.nds` touched state by comparing/writing `state->mapId`, `state->mapObjectMan`, and `state->mapObjects`.
 - The next ROM should perform read-only state access only, with no state writes and no field-system publish.
 
+New active hypothesis:
+
+- `test110.nds` no longer crashes.
+- Reading `state->mapId` from overlay 149 is safe.
+- The remaining bundled suspects from `test109.nds` are state writes and the cross-call to `OverworldWildCustomMovement_SetFieldSystem`.
+- The next ROM should call the currently no-op field-system setter while still avoiding all state writes.
+
 Purpose of this checkpoint:
 
-- If the next ROM crashes, the overlay's read access to the ARM9/field-extension state pointer is unsafe.
-- If the next ROM does not crash, state reads are safe and the bad boundary is state writes or the field-system publish.
+- If the next ROM crashes, the cross-call to `OverworldWildCustomMovement_SetFieldSystem` is unsafe even though the callee is a no-op.
+- If the next ROM does not crash, the bad boundary is state writes.
 
 ## Attempt History
 
@@ -708,6 +715,53 @@ Adjusted meaning:
 
 - This ROM is now an even narrower diagnostic than the source-level intent: it tests whether reading one scalar field, `state->mapId`, from the overlay is safe.
 - It does not test state pointer fields, map eligibility, or the field-system pointer reads because those side effects optimized away.
+
+Runtime result:
+
+- User reported no crash.
+
+Learning:
+
+- Reading one scalar field, `state->mapId`, from overlay 149 is safe.
+- The crash in `test109.nds` is not caused by simply passing or reading the `OverworldWildSpawnState *state` pointer.
+- The next split should isolate the no-op movement field-system setter before blaming state writes.
+
+Do not repeat:
+
+- Do not repeat state-read-only probes unless they force additional specific fields to survive compiler optimization.
+
+### Attempt 16: Call No-Op Movement Setter Without State Writes
+
+Idea:
+
+Let `OverworldWildSpawns_UpdateMapState` call `OverworldWildCustomMovement_SetFieldSystem(fieldSystem)` while still returning before any `OverworldWildSpawnState` writes, before `OverworldWildSpawns_Clear`, and before downstream spawner work.
+
+Why this is new:
+
+- Attempt 14 bundled state writes with the movement setter call and crashed.
+- Attempt 15 read `state->mapId` without writing state or calling the movement setter and did not crash.
+- This attempt isolates whether the cross-call from overlay 149 to the currently no-op ARM9 movement setter is safe.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `src/overworld_wild_movement.c` for verification that `OverworldWildCustomMovement_SetFieldSystem` still compiles to `bx lr`
+
+Expected verification:
+
+- `OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY` should be `0`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY` should be `1`.
+- The active update path should call `OverworldWildCustomMovement_SetFieldSystem(fieldSystem)`.
+- The active update path should not write `state`, should not call `OverworldWildSpawns_Clear`, and should not run downstream spawner work.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test111.nds`.
+- Disassembly shows the active overlay step path calls `__OverworldWildCustomMovement_SetFieldSystem_from_thumb`, then returns `FALSE`.
+- Disassembly of `OverworldWildCustomMovement_SetFieldSystem` is still `bx lr`.
+- The active overlay path does not write `state`, does not call `OverworldWildSpawns_Clear`, and does not run downstream spawner work.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 
 Runtime result:
 

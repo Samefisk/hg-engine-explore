@@ -49,7 +49,8 @@
 #define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 1
 #define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 0
-#define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 1
+#define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 0
+#define OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY 1
 #define OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR 1
 // Param 2 mirrors the follower palette metadata without switching to follower rendering.
 #define OW_WILD_PAL_PARAM_SHINY 1
@@ -1366,6 +1367,14 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     sOverworldWildDiagnosticStateMapId = state != NULL ? state->mapId : MAP_NOTHING;
     sOverworldWildDiagnosticStateMapObjectMan = state != NULL ? state->mapObjectMan : NULL;
     sOverworldWildDiagnosticStateMapObjects = state != NULL ? state->mapObjects : NULL;
+    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
+#endif
+
+#if OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY
+    (void)state;
+    sOverworldWildDiagnosticMapObjectMan = mapObjectMan;
+    sOverworldWildDiagnosticMapObjects = mapObjects;
+    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
     return OverworldWildSpawns_IsEnabledMap(fieldSystem);
 #endif
 
