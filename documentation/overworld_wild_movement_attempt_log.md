@@ -17,16 +17,22 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test101.nds`
+Current ROM checkpoint: `test102.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - The descriptor's first word is a movement class/category, not the movement ID.
 - Stock wander-like descriptors use first word `3`.
 - `test100.nds` used first word `47`, which may have triggered invalid descriptor-class behavior during save/map load even though callbacks were no-op.
 - `test101.nds` changes only that descriptor metadata word to `3`.
+
+New active hypothesis:
+
+- The crash is caused by slot `47` pointing at overlay 129 data/code during save/map load.
+- A movement table entry that points at an existing ARM9-resident stock descriptor should be stable even if spawned objects or saved objects use movement `47`.
+- `test102.nds` changes movement slot `47` to alias stock movement `3`.
 
 Purpose of this checkpoint:
 
@@ -231,6 +237,48 @@ Verification:
 - Descriptor words are `0x00000003 0x023D97ED 0x023D97EF 0x023D97F1 0x023D97F3`.
 - All callback pointers have Thumb bits set.
 - All custom callbacks still compile to `bx lr`.
+
+Runtime result:
+
+- User reported the game still crashes.
+
+Learning:
+
+- Matching stock descriptor class `3` did not fix save-load crash.
+- The descriptor's metadata word was not the only issue.
+- Because the callbacks were still no-op, the strongest remaining suspect is the movement table entry pointing at overlay 129 rather than an ARM9-resident descriptor.
+
+Do not repeat:
+
+- Do not keep testing overlay 129 no-op/custom descriptors for slot `47` unless there is new evidence that overlay 129 is guaranteed loaded before the movement table is dereferenced.
+
+### Attempt 7: Alias Movement `47` To Stock Movement `3` Descriptor
+
+Idea:
+
+Keep spawned wild Pokemon using movement ID `47`, but patch movement table slot `47` to point at the existing stock movement `3` descriptor in ARM9 (`0x020FD170`) instead of the custom overlay 129 descriptor.
+
+Why this is new:
+
+- Earlier attempts pointed slot `47` at custom overlay 129 descriptors.
+- This attempt tests whether save/map load is stable when slot `47` resolves to a known-good ARM9-resident descriptor.
+
+Files/symbols:
+
+- `armips/asm/overworld_wild_movement.s`
+
+Expected verification:
+
+- Built ROM should have ARM9 movement slot `47` at `0x020FD2B0` pointing at `0x020FD170`.
+- Slot `47` descriptor words should match stock movement `3`.
+- Custom overlay callbacks may still exist in overlay 129, but movement `47` should not reference them.
+
+Verification:
+
+- Built as `test102.nds`.
+- Slot `3` at `0x020FD200` points at `0x020FD170`.
+- Slot `47` at `0x020FD2B0` also points at `0x020FD170`.
+- Slot `3` and slot `47` descriptor words both read `0x00000003 0x020613A1 0x020613F9 0x0205FCBD 0x0205FCC1`.
 
 Runtime result:
 
