@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test112.nds`
+Current ROM checkpoint: `test113.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -104,7 +104,7 @@ Purpose of this checkpoint:
 - If the next ROM crashes with a corrected long-call veneer, more than call generation is wrong.
 - If the next ROM does not crash, the crash was caused by the bad interworking veneer and state writes can be retested.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test112.nds` keeps the setter-only diagnostic active, with no spawner state writes and no Pokemon spawning.
 - The setter is now declared/defined as `LONG_CALL`.
@@ -115,6 +115,17 @@ Purpose of this checkpoint:
 
 - If `test112.nds` does not crash after save load and one player step, the bad veneer is confirmed and state writes can be reintroduced next.
 - If `test112.nds` still crashes, the corrected setter call itself or the called code path still has another runtime issue.
+
+New active hypothesis:
+
+- `test112.nds` did not crash, so the corrected `LONG_CALL` setter path is runtime-stable.
+- The crash in `test109.nds` was likely caused by the broken plain setter call rather than the state writes themselves.
+- The next ROM should re-enable map-state writes with the corrected setter call, while still returning before downstream spawn/despawn/battle work.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, map-state writes are safe and the downstream step actions can be reintroduced one at a time.
+- If the next ROM crashes, the state writes themselves are still unsafe even after fixing the setter call.
 
 ## Attempt History
 
@@ -832,12 +843,60 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
 - Build-time evidence supports the interworking hypothesis from Attempt 16.
-- Runtime result still needs confirmation.
+- Runtime result confirms the corrected setter-only path is stable.
+- The next retest can bring back map-state writes because the prior state-write crash included the broken setter call.
+
+Expand:
+
+- Re-enable map-state writes with `OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY` disabled, while keeping `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` enabled.
+
+### Attempt 18: Re-enable Map-State Writes After LONG_CALL Fix
+
+Idea:
+
+Let `OverworldWildSpawns_UpdateMapState` perform its normal `state->mapId`, `state->mapObjectMan`, and `state->mapObjects` writes using the corrected `LONG_CALL` setter path, but keep the overlay step diagnostic returning before spawn/despawn/battle work.
+
+Why this is new:
+
+- Attempt 14/`test109.nds` wrote state and crashed, but that build still included the broken plain setter call.
+- Attempt 17/`test112.nds` proved the corrected setter-only call is stable.
+- No previous build has tested state writes with the corrected Thumb-safe setter call.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY` should be `0`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR` should remain `1`.
+- `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` should remain `1`.
+- The active overlay step path should call `OverworldWildSpawns_UpdateMapState`, then return `FALSE` before stale-slot dropping, despawn checks, touch battle, ambient cry, or refill/spawn.
+- The active update path should write map-state fields when map context changes, call `OverworldWildCustomMovement_SetFieldSystem` through the Thumb-safe long-call path, and avoid `OverworldWildSpawns_Clear`.
+
+Verification:
+
+- Built as `test113.nds`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY` is `0`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR` remains `1`.
+- `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` remains `1`.
+- Disassembly shows the active overlay step path writes `state->mapId`, `state->mapObjectMan`, and `state->mapObjects` when the map context changes.
+- Disassembly shows the setter call still uses the Thumb-safe `0x023D97F5` target via `bx r3`.
+- Disassembly shows the active overlay step returns `FALSE` before stale-slot dropping, distance despawn, touch battle, ambient cry, or refill/spawn.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Build-time evidence shows this is the intended state-write-only probe.
 
 ## Proposed Next New Experiments
 
