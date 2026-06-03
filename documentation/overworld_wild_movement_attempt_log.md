@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test119.nds`
+Current ROM checkpoint: `test120.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is spawner-driven param ticking, not a slot-47 movement callback.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is spawner-driven param ticking plus coordinate/direction calculation, not a slot-47 movement callback.
 
 Previous active hypothesis:
 
@@ -183,7 +183,7 @@ Purpose of this checkpoint:
 - If the next ROM spawns Pokemon, plays ambient cries, and does not crash, the full stock spawner pipeline is stable again.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryPlayAmbientCry`, cry selection, active-spawn metadata reads, or the sound call.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test118.nds` did not crash, so the full stock spawner pipeline is stable with stock movement `3` and slot `47` no-op.
 - Re-pointing slot `47` back at the overlay-resident custom descriptor would repeat Attempts 5 and 6, which crashed even with no-op callbacks.
@@ -193,6 +193,17 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, `MapObject_GetParam` and `MapObject_SetParam` are safe to call on active spawned Pokemon from the spawner step loop.
 - If the next ROM crashes, the crash is likely in param access on these special objects, not coordinate reads, blocked-direction checks, movement command helpers, or slot-47 descriptor callbacks.
+
+New active hypothesis:
+
+- `test119.nds` did not crash, so spawner-driven `MapObject_GetParam`/`MapObject_SetParam` is safe on active spawned Pokemon.
+- `test120.nds` isolates the next movement-specific piece: reading active spawned object coordinates, player coordinates, behavior param, and computing the preferred chase/flee direction from the stable overlay step path.
+- `test120.nds` still avoids slot-47 callbacks, `object->fsys`, global movement `FieldSystem *`, blocked-direction checks, scratch writes, single-movement flags, and movement command helpers.
+
+Purpose of this checkpoint:
+
+- If `test120.nds` does not crash, position lookup and direction calculation are safe for spawned Pokemon from the spawner step loop.
+- If `test120.nds` crashes, the crash is likely in object/player coordinate reads or behavior/direction calculation, not movement command execution.
 
 ## Attempt History
 
@@ -1241,11 +1252,63 @@ Verification:
 
 Runtime result:
 
+- User reported no crash.
+
+Learning:
+
+- `MapObject_GetParam` and `MapObject_SetParam` are safe to call on active spawned Pokemon from the stable overlay-149 spawner step path.
+- This keeps the next probe focused on coordinate reads and direction calculation.
+
+Expand:
+
+- Add player/object coordinate reads and chase/flee direction calculation from the spawner step loop.
+- Still avoid slot-47 callbacks, movement command helpers, blocked-direction checks, scratch writes, and single-movement flags.
+
+### Attempt 25: Spawner-Driven Coordinate Read And Direction Calculation
+
+Idea:
+
+Keep spawned Pokemon on stock movement `3` and keep movement slot `47` aliased to stock no-op. Extend the spawner-step movement diagnostic to read active spawned object coordinates, player coordinates, behavior param, compute chase/flee deltas, choose a preferred direction, and store the result into volatile diagnostics.
+
+Why this is new:
+
+- Attempt 24/`test119.nds` only tested spawner-driven movement param get/set and did not crash.
+- Earlier movement attempts bundled coordinate reads with slot-47 descriptor callbacks, scratch writes, blocked-direction checks, and movement command helpers.
+- No previous build has isolated coordinate reads and direction calculation from the stable overlay-149 spawner step path while keeping stock movement `3`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` should be `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ` should be `1`.
+- The active overlay step path should still call `OverworldWildSpawns_TickMovementParams` after touch-battle detection and before ambient cry/refill.
+- The movement probe should call `MapObject_GetCurrentX`, `MapObject_GetCurrentY`, `GetPlayerXCoord`, `GetPlayerYCoord`, and `MapObject_GetParam` for active spawned objects, then store calculated values in volatile diagnostics.
+- The active movement probe should not use slot-47 callbacks, `object->fsys`, global movement `FieldSystem *`, blocked-direction checks, scratch writes, single-movement flags, or movement command helpers.
+- Fresh spawn parameters should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Verification:
+
+- Built as `test120.nds`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` is `1`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ` is `1`.
+- Source verification shows `OverworldWildSpawns_TickMovementParams` calls `MapObject_GetCurrentX`, `MapObject_GetCurrentY`, `GetPlayerXCoord`, `GetPlayerYCoord`, and `MapObject_GetParam`, then stores calculated values in volatile diagnostics.
+- Disassembly target scan shows `MapObject_GetCurrentX` at `0x0205F915`, `MapObject_GetCurrentY` at `0x0205F935`, `GetPlayerXCoord` at `0x0205C67D`, `GetPlayerYCoord` at `0x0205C689`, `MapObject_GetParam` at `0x0205F2F5`, and `MapObject_SetParam` at `0x0205F2D1`.
+- Disassembly target scan did not find `MapObject_StartMovementCommand` at `0x0206217D`, `MapObject_MovementCommandFromDirection` at `0x0206234D`, `MapObject_IsMovementDirectionBlocked` at `0x02060BB9`, or `MapObject_SetSingleMovementActive` at `0x0205F631` in the overlay object.
+- Source verification shows the active spawner movement probe does not use slot-47 callbacks, `object->fsys`, global movement `FieldSystem *`, blocked-direction checks, scratch writes, single-movement flags, or movement command helpers.
+- Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `test.nds` was copied to Delta as `test120.nds`.
+- `git diff --check` passed.
+
+Runtime result:
+
 - Pending user test.
 
 Learning:
 
-- Pending.
+- Pending runtime result.
 
 ## Proposed Next New Experiments
 

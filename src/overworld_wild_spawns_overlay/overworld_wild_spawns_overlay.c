@@ -53,7 +53,13 @@
 #define OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY 0
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK 1
+#define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ 1
 #define OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET 8
+#define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE 0xFF
+#define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP 0
+#define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN 1
+#define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT 2
+#define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT 3
 #define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY 0
@@ -164,6 +170,14 @@ static volatile void *sOverworldWildDiagnosticMapObjects;
 static volatile int sOverworldWildDiagnosticStateMapId;
 static volatile void *sOverworldWildDiagnosticStateMapObjectMan;
 static volatile void *sOverworldWildDiagnosticStateMapObjects;
+static volatile int sOverworldWildMovementDiagnosticObjectX;
+static volatile int sOverworldWildMovementDiagnosticObjectY;
+static volatile int sOverworldWildMovementDiagnosticPlayerX;
+static volatile int sOverworldWildMovementDiagnosticPlayerY;
+static volatile int sOverworldWildMovementDiagnosticDx;
+static volatile int sOverworldWildMovementDiagnosticDy;
+static volatile int sOverworldWildMovementDiagnosticBehavior;
+static volatile int sOverworldWildMovementDiagnosticDirection;
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -430,7 +444,37 @@ static void OverworldWildSpawns_TryPlayAmbientCry(OverworldWildSpawnState *state
 }
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
-static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state)
+static int OverworldWildSpawns_DiagnosticAbs(int value)
+{
+    return value < 0 ? -value : value;
+}
+
+static u8 OverworldWildSpawns_DiagnosticPreferredDirection(int dx, int dy)
+{
+    if (dx == 0 && dy == 0) {
+        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
+    }
+
+    if (OverworldWildSpawns_DiagnosticAbs(dx) >= OverworldWildSpawns_DiagnosticAbs(dy)) {
+        if (dx > 0) {
+            return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT;
+        }
+        if (dx < 0) {
+            return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT;
+        }
+    }
+
+    if (dy > 0) {
+        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN;
+    }
+    if (dy < 0) {
+        return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP;
+    }
+
+    return OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
+}
+
+static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
 
@@ -443,6 +487,34 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
             } else {
                 MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
             }
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_COORD_READ
+            if (fieldSystem != NULL && fieldSystem->playerAvatar != NULL) {
+                int objectX = MapObject_GetCurrentX(state->spawns[i].object);
+                int objectY = MapObject_GetCurrentY(state->spawns[i].object);
+                int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+                int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+                int behavior = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
+                int dx = playerX - objectX;
+                int dy = playerY - objectY;
+
+                if (behavior == OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER) {
+                    dx = -dx;
+                    dy = -dy;
+                }
+
+                sOverworldWildMovementDiagnosticObjectX = objectX;
+                sOverworldWildMovementDiagnosticObjectY = objectY;
+                sOverworldWildMovementDiagnosticPlayerX = playerX;
+                sOverworldWildMovementDiagnosticPlayerY = playerY;
+                sOverworldWildMovementDiagnosticDx = dx;
+                sOverworldWildMovementDiagnosticDy = dy;
+                sOverworldWildMovementDiagnosticBehavior = behavior;
+                sOverworldWildMovementDiagnosticDirection = OverworldWildSpawns_DiagnosticPreferredDirection(dx, dy);
+            }
+#else
+            (void)fieldSystem;
+#endif
         }
     }
 }
@@ -1476,7 +1548,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 #endif
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
-    OverworldWildSpawns_TickMovementParams(state);
+    OverworldWildSpawns_TickMovementParams(state, fieldSystem);
 #endif
 
 #if !OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY
