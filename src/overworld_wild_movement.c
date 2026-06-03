@@ -5,6 +5,7 @@
 #define OW_WILD_DIRECTION_DOWN 1
 #define OW_WILD_DIRECTION_LEFT 2
 #define OW_WILD_DIRECTION_RIGHT 3
+#define OW_WILD_LOOK_UP_COMMAND 0x00
 #define OW_WILD_WALK_UP_COMMAND 0x08
 #define OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN 8
 
@@ -17,6 +18,13 @@ typedef struct OverworldWildMovementDescriptor {
     OverworldWildMovementFunc finish;
     OverworldWildMovementFunc cleanup;
 } OverworldWildMovementDescriptor;
+
+static FieldSystem *sOverworldWildCustomMovementFieldSystem;
+
+void OverworldWildCustomMovement_SetFieldSystem(FieldSystem *fieldSystem)
+{
+    sOverworldWildCustomMovementFieldSystem = fieldSystem;
+}
 
 static int OverworldWildCustomMovement_Abs(int value)
 {
@@ -36,7 +44,7 @@ static int OverworldWildCustomMovement_AddDirection(u32 *directions, int count, 
 
 static int OverworldWildCustomMovement_BuildDirections(LocalMapObject *object, u32 *directions)
 {
-    FieldSystem *fieldSystem = object->fsys;
+    FieldSystem *fieldSystem = sOverworldWildCustomMovementFieldSystem;
     int objectX;
     int objectY;
     int playerX;
@@ -46,6 +54,9 @@ static int OverworldWildCustomMovement_BuildDirections(LocalMapObject *object, u
     int count = 0;
     int behavior = MapObject_GetParam(object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
 
+    if (fieldSystem == NULL) {
+        fieldSystem = object->fsys;
+    }
     if (fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
         return 0;
     }
@@ -94,10 +105,20 @@ static void OverworldWildCustomMovement_TryStartStep(LocalMapObject *object)
             break;
         }
     }
+
+    if (i == count && count > 0) {
+        u32 movementCommand = MapObject_MovementCommandFromDirection(directions[0], OW_WILD_LOOK_UP_COMMAND);
+
+        MapObject_StartMovementCommand(object, movementCommand);
+        MapObject_SetSingleMovementActive(object);
+    }
 }
 
 void OverworldWildCustomMovement_Init(LocalMapObject *object)
 {
+    object->unkA0 = 0;
+    MIi_CpuClearFast(0, object->unkD8, sizeof(object->unkD8));
+    MapObject_ClearSingleMovementActive(object);
     MapObject_SetParam(object, gf_rand() % OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
 }
 

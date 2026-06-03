@@ -10,4 +10,6 @@
 #define OW_WILD_MOVEMENT_BEHAVIOR_CHASE_PLAYER 1
 #define OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER 2
 
+void OverworldWildCustomMovement_SetFieldSystem(struct FieldSystem *fieldSystem);
+
 #endif

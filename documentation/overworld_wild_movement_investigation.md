@@ -35,6 +35,8 @@ Binary sanity checks on the built ROM:
 - descriptor word `0` is `47`
 - all callback pointers have the Thumb bit set
 
+After the first runtime test, spawned Pokemon were stable but stationary. The follow-up change made the spawner publish the active `FieldSystem *` to the boot-resident movement code instead of relying only on `LocalMapObject::fsys`, initialized the same small movement scratch area that stock wander initializes, and added a blocked-walk facing fallback so a ticking-but-blocked callback can still show visible activity.
+
 ## First Runtime Tests
 
 Use the current Delta build and check these in order:

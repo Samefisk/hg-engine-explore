@@ -1078,6 +1078,8 @@ static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality)
 
 static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem, const OverworldWildSpawnPosition *position, u32 spriteId, BOOL shiny)
 {
+    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
+
     return CreateSpecialFieldObjectWithParams(
         fieldSystem->mapObjectMan,
         position->startX,
@@ -1341,6 +1343,7 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     void *mapObjects = mapObjectMan != NULL ? mapObjectMan->objects : NULL;
 
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
+        OverworldWildCustomMovement_SetFieldSystem(NULL);
         if (state->mapId != MAP_NOTHING || state->mapObjectMan != NULL || state->mapObjects != NULL) {
             OverworldWildSpawns_Clear(state, FALSE);
             state->mapId = MAP_NOTHING;
@@ -1359,6 +1362,7 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
         state->mapObjects = mapObjects;
     }
 
+    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
     return TRUE;
 }
 
