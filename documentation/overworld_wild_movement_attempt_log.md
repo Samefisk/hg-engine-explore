@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test113.nds`
+Current ROM checkpoint: `test114.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -116,7 +116,7 @@ Purpose of this checkpoint:
 - If `test112.nds` does not crash after save load and one player step, the bad veneer is confirmed and state writes can be reintroduced next.
 - If `test112.nds` still crashes, the corrected setter call itself or the called code path still has another runtime issue.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test112.nds` did not crash, so the corrected `LONG_CALL` setter path is runtime-stable.
 - The crash in `test109.nds` was likely caused by the broken plain setter call rather than the state writes themselves.
@@ -126,6 +126,17 @@ Purpose of this checkpoint:
 
 - If the next ROM does not crash, map-state writes are safe and the downstream step actions can be reintroduced one at a time.
 - If the next ROM crashes, the state writes themselves are still unsafe even after fixing the setter call.
+
+New active hypothesis:
+
+- `test113.nds` did not crash, so map-state writes are runtime-stable with the corrected `LONG_CALL` setter.
+- The next untested downstream piece is stale-slot cleanup: validating stored spawn object pointers against the current map object list, saving shiny reservations if needed, and clearing stale slots without deleting objects.
+- The next ROM should run `OverworldWildSpawns_DropStaleSlots` only, then return before distance despawn, touch battle, ambient cry, or refill/spawn.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, stale-slot validation and clearing are safe enough to keep while moving to distance despawn.
+- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_IsCurrentSpawnObject`, shiny-reservation save-on-clear, or `OverworldWildSpawns_ClearSlot`.
 
 ## Attempt History
 
@@ -892,11 +903,57 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
 - Build-time evidence shows this is the intended state-write-only probe.
+- Runtime result confirms map-state writes are stable with the corrected setter path.
+
+Expand:
+
+- Re-enable `OverworldWildSpawns_DropStaleSlots` only, while returning before distance despawn, touch battle, ambient cry, and refill/spawn.
+
+### Attempt 19: Re-enable Stale-Slot Cleanup Only
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` run `OverworldWildSpawns_DropStaleSlots` after the now-stable map-state update, then immediately return `FALSE`.
+
+Why this is new:
+
+- Attempt 18/`test113.nds` returned before every downstream step action.
+- Earlier crashy probes either stopped before stale-slot cleanup or bundled it with more downstream spawner logic.
+- No previous build has isolated stale-slot validation and clearing after the `LONG_CALL` setter fix.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` should be `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY` should be `1`.
+- The active overlay step path should run map-state update, run `OverworldWildSpawns_DropStaleSlots`, then return `FALSE`.
+- The active overlay step path should not run distance despawn, touch battle, ambient cry, or refill/spawn.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test114.nds`.
+- `OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY` is `0`.
+- `OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY` is `1`.
+- Disassembly shows the active overlay step path runs map-state update, then the stale-slot validation/clear loop, then returns `FALSE`.
+- Disassembly shows no distance-despawn, touch-battle, ambient-cry, or refill/spawn path after stale-slot cleanup in the active step path.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Build-time evidence shows this is the intended stale-slot-only probe.
 
 ## Proposed Next New Experiments
 

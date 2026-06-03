@@ -47,7 +47,8 @@
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
 #define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 0
-#define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 1
+#define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 0
+#define OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY 1
 #define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY 0
@@ -1431,6 +1432,11 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 #endif
 
     OverworldWildSpawns_DropStaleSlots(state, fieldSystem);
+
+#if OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY
+    return FALSE;
+#endif
+
     OverworldWildSpawns_DespawnFarMons(state, fieldSystem);
     if (OverworldWildSpawns_TryStartBattle(state, fieldSystem)) {
         return TRUE;
