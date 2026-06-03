@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test140.nds`
+Current ROM checkpoint: `test141.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and tests whether battle retry checks can be kept without forcing a visible idle pause between tile commands.
 
 Previous active hypothesis:
 
@@ -2275,6 +2275,40 @@ Verification:
 - Verified Pidgey remains logical speed `6`.
 - Verified logical speeds `4`, `5`, and `6` now map to `OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND` / stock command family `0x10`.
 - Verified the active source restored the previous global battle-settle behavior after Attempt 42 was corrected.
+
+Runtime result:
+
+- User clarified the core problem was not the high-speed command family. Movement feels jittery at all speeds because spawned Pokemon visibly stop and "think" between every tile instead of chaining movement like the player.
+
+Learning:
+
+- The visual-command cap does not address the main smoothness issue. The next solution should target command chaining and the pause between one-tile movement commands.
+
+### Attempt 44: Non-Blocking Battle Retry Between Chained Commands
+
+Idea:
+
+Keep the post-movement battle retry check from Attempt 37, but stop using the retry counter as a movement hold. When a spawner-owned movement command finishes, perform a contact retry if no movement is currently active. If that retry does not start a battle, immediately continue into untangle/chase command selection so the next tile command can be queued without a visible "thinking" pause.
+
+Why this is new:
+
+- Attempt 37 explicitly blocked new movement while `movementBattleSettleFrames` was active.
+- Attempt 42 only tried gating that same blocking settle window by proximity, and the user corrected that this did not address the real jitter.
+- No previous attempt has made the battle retry non-blocking while still retaining the retry path before the next command can be issued.
+- This targets the all-speeds stop-and-think behavior instead of changing walk command families or per-species speed values.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test141.nds` and copied to Delta.
+- `git diff --check` passed before the build.
+- Verified `OverworldWildSpawns_TryBattleSettleRetry` only returns `TRUE` when `OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)` actually schedules a battle.
+- Verified a failed retry now decrements `movementBattleSettleFrames` and returns `FALSE`, allowing `OverworldWildSpawns_TickMovementParams` to continue into untangle/chase command selection.
+- Verified the frame task still sets `movementBattleSettleFrames` after a completed spawner-owned movement command, so the contact retry path still runs before the next command can be issued.
 
 Runtime result:
 

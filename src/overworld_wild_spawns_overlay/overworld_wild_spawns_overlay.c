@@ -911,24 +911,22 @@ static BOOL OverworldWildSpawns_TryUntangleOverlaps(OverworldWildSpawnState *sta
     return FALSE;
 }
 
-static BOOL OverworldWildSpawns_TryHoldForBattleSettle(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+static BOOL OverworldWildSpawns_TryBattleSettleRetry(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     if (state == NULL
         || fieldSystem == NULL
         || fieldSystem->playerAvatar == NULL
-        || state->movementBattleSettleFrames == 0) {
+        || state->movementBattleSettleFrames == 0
+        || state->movementInProgressMask != 0) {
         return FALSE;
     }
 
-    if (state->movementInProgressMask == 0) {
-        if (OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)) {
-            return TRUE;
-        }
-
-        state->movementBattleSettleFrames--;
+    if (OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)) {
+        return TRUE;
     }
 
-    return TRUE;
+    state->movementBattleSettleFrames--;
+    return FALSE;
 }
 
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
@@ -938,7 +936,7 @@ static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *stat
     state->movementFieldSystem = fieldSystem;
     sOverworldWildMovementDiagnosticCommandsStartedThisTick = 0;
 
-    if (OverworldWildSpawns_TryHoldForBattleSettle(state, fieldSystem)) {
+    if (OverworldWildSpawns_TryBattleSettleRetry(state, fieldSystem)) {
         return;
     }
 
@@ -1130,7 +1128,7 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     }
 
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
-    if (OverworldWildSpawns_TryHoldForBattleSettle(state, fieldSystem)) {
+    if (OverworldWildSpawns_TryBattleSettleRetry(state, fieldSystem)) {
         return;
     }
 
