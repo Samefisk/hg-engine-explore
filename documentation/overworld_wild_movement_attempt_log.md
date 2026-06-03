@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test139.nds`
+Current ROM checkpoint: `test140.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2213,8 +2213,8 @@ Runtime result:
 
 Learning:
 
-- The high-speed command path appears to expose the global post-movement battle-settle pause more clearly than slower movement.
-- Holding for `6` frames after every tile step protects battle timing, but makes fast movement feel stop-start when no battle is nearby.
+- The high-speed command path still felt stop-start with speed `6` mapped to `0x14`.
+- The first guess that this was caused by the global battle-settle pause was later corrected by the user and should not be treated as proven.
 
 ### Attempt 42: Proximity-Only Battle Settle
 
@@ -2240,6 +2240,41 @@ Verification:
 - `git diff --check` passed.
 - Verified completed movement only starts `OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES` when a finished slot is within `OW_WILD_SPAWNER_BATTLE_SETTLE_RANGE` of the player.
 - Verified movement that finishes farther from the player does not set the settle counter, allowing `OverworldWildSpawns_TickMovementParams` to start the next command immediately.
+
+Runtime result:
+
+- User corrected the assumption: this was not the cause of the jitter.
+
+Learning:
+
+- Proximity-gating the battle-settle window should not be treated as the smoothness fix.
+- The active source for the next test restores the previous global settle behavior and instead changes the high-speed visual movement command mapping.
+
+### Attempt 43: Cap High Speeds To Fluent Walk Command
+
+Idea:
+
+Keep Pidgey at logical speed `6`, but cap logical speeds `4`, `5`, and `6` to the 4-frame stock walk command family `0x10` instead of the 2-frame `0x14` family. The hypothesis is that `0x14` makes each tile step so short that the object appears to snap one tile and briefly stand still, while `0x10` should preserve a faster-than-Pidgey-speed-2 feel with more visible interpolation.
+
+Why this is new:
+
+- Attempt 40 showed `0x1C` does not move in this spawner path.
+- Attempt 41 mapped high speeds to `0x14`, but runtime still felt jittery.
+- Attempt 42 incorrectly tested the battle-settle timing; the user clarified that was not the cause.
+- No previous attempt has kept Pidgey at logical speed `6` while capping the visual movement command to `0x10`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test140.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified Pidgey remains logical speed `6`.
+- Verified logical speeds `4`, `5`, and `6` now map to `OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND` / stock command family `0x10`.
+- Verified the active source restored the previous global battle-settle behavior after Attempt 42 was corrected.
 
 Runtime result:
 

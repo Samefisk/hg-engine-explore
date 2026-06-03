@@ -69,16 +69,15 @@
 #define OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS 2
 #define OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS 4
 #define OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES 6
-#define OW_WILD_SPAWNER_BATTLE_SETTLE_RANGE 2
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT 1
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND 0x08
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND 0x0C
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND 0x10
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND 0x14
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND
 #define OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED 1
 #define OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED 6
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT
@@ -932,50 +931,6 @@ static BOOL OverworldWildSpawns_TryHoldForBattleSettle(OverworldWildSpawnState *
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_FinishedMovementNeedsBattleSettle(OverworldWildSpawnState *state, FieldSystem *fieldSystem, u16 finishedMovementMask)
-{
-    int playerX;
-    int playerY;
-    int i;
-
-    if (state == NULL
-        || fieldSystem == NULL
-        || fieldSystem->playerAvatar == NULL
-        || finishedMovementMask == 0) {
-        return FALSE;
-    }
-
-    playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
-
-    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        int dx;
-        int dy;
-
-        if ((finishedMovementMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) == 0) {
-            continue;
-        }
-        if (!OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
-            continue;
-        }
-
-        dx = (int)MapObject_GetCurrentX(state->spawns[i].object) - playerX;
-        dy = (int)MapObject_GetCurrentY(state->spawns[i].object) - playerY;
-        if (dx < 0) {
-            dx = -dx;
-        }
-        if (dy < 0) {
-            dy = -dy;
-        }
-
-        if (dx + dy <= OW_WILD_SPAWNER_BATTLE_SETTLE_RANGE) {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
@@ -1133,7 +1088,7 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
 {
     OverworldWildSpawnState *state = (OverworldWildSpawnState *)data;
     FieldSystem *fieldSystem;
-    u16 finishedMovementMask = 0;
+    BOOL movementFinishedThisFrame = FALSE;
     int i;
 
     (void)task;
@@ -1165,12 +1120,12 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
 
         sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects++;
         if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
-            finishedMovementMask |= OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i);
             OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
+            movementFinishedThisFrame = TRUE;
         }
     }
 
-    if (OverworldWildSpawns_FinishedMovementNeedsBattleSettle(state, fieldSystem, finishedMovementMask)) {
+    if (movementFinishedThisFrame) {
         state->movementBattleSettleFrames = OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES;
     }
 
