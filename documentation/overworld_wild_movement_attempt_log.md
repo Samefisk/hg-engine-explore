@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test128.nds`
+Current ROM checkpoint: `test129.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
 
@@ -278,7 +278,7 @@ Purpose of this checkpoint:
 - If the next ROM does not crash but Pokemon do not move, the normal `CreateSysTask` queue may not run during this field context or the task may need a different queue/priority.
 - If the next ROM crashes, the crash is likely in task creation, task lifetime, or frame-level command polling.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test126.nds` did not crash and movement animates correctly, but user testing found follow-up behavior issues:
   - only one Pokemon seems able to move at a time
@@ -294,6 +294,20 @@ Purpose of this checkpoint:
 - If movement still appears limited to one Pokemon, the limitation is likely inside the map-object movement-command system or collision/blocked-direction rules rather than our cooldown marker.
 - If movement still dies after battle, the task lifecycle may need to be restarted from the battle cleanup hook or a different field callback.
 - If the next ROM crashes, the likely new suspects are clearing single-movement flags during battle transitions or the added per-slot state fields.
+
+New active hypothesis:
+
+- `test128.nds` is a huge improvement and fixes the prior quirks, but Pokemon stop chasing after a threshold.
+- The threshold is likely the object movement leash: `OverworldWildSpawns_ApplyMovementRange` currently sets X/Y range to `2`, and the chase path is gated by `MapObject_IsMovementDirectionBlocked`.
+- The user requested increasing the range to `8` and making Pokemon chase even when the player is not moving.
+- The next new test should keep per-slot ownership and frame-task movement updates, set X/Y range to `8`, and make the frame task continue issuing movement decisions from the last valid map context while active spawns exist.
+
+Purpose of this checkpoint:
+
+- If the next ROM keeps chasing past the old threshold, the leash range was the threshold.
+- If Pokemon continue chasing while the player stands still, frame-task decision issuing is a viable idle-chase surface.
+- If this crashes, the likely new suspect is the frame task retaining and using a `FieldSystem *` outside the player-step call.
+- If chasing still stops, `MapObject_IsMovementDirectionBlocked` may enforce more than X/Y range, or the current command type may have another leash/occupancy rule.
 
 ## Attempt History
 
@@ -1825,6 +1839,55 @@ Expand:
 - Keep per-slot movement ownership and frame-task updates.
 - Test whether increasing or removing `MapObject_SetXRange`/`MapObject_SetYRange` lets Pokemon keep chasing without reintroducing old movement issues.
 - Alternatively, test recentering the movement leash after each successful spawner-owned step, if unlimited chase feels too chaotic.
+
+### Attempt 33: Range 8 And Idle Frame Chase
+
+Idea:
+
+Keep the successful per-slot movement ownership from `test128.nds`, increase spawned Pokemon X/Y movement range from `2` to `8`, and make the frame task continue running while a compatible map context and active spawns exist. The task should still update in-progress commands, but when no command is in progress it should call the same spawner movement decision logic with the last valid `FieldSystem *`, allowing Pokemon to start new chase steps even when the player is not moving.
+
+Why this is new:
+
+- Attempt 31 used a frame task only to update commands that player-step had already started.
+- Attempt 32 used per-slot ownership and battle reset, but movement decisions still came from the player-step hook.
+- No previous build has tested a persistent active-spawn frame task that starts new chase commands while the player is idle.
+- No previous build has tested widening the map-object X/Y range to `8`.
+
+Files/symbols:
+
+- `include/overworld_wild_spawns_internal.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Expected verification:
+
+- `OverworldWildSpawns_ApplyMovementRange` should set X/Y range to `8`.
+- `OverworldWildSpawnState` should retain a movement `FieldSystem *` only while the current map context is active.
+- `OverworldWildSpawns_EnsureFrameMovementTask` should accept/update the current `FieldSystem *`.
+- `OverworldWildSpawns_FrameMovementTask` should validate the retained field system with `OverworldWildSpawns_IsEnabledMap` before making decisions.
+- The frame task should call `OverworldWildSpawns_TickMovementParams` when active spawns exist, so new movement commands can start without player movement.
+- Map-context changes and battle reset should clear the retained field system and stop the frame task.
+- The active probe should still avoid slot-47 callbacks, active custom movement scratch writes, and `object->fsys`.
+
+Verification:
+
+- Built as `test129.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OverworldWildSpawns_ApplyMovementRange` sets X/Y range to `8`.
+- Verified `OverworldWildSpawnState` stores `movementFieldSystem`, clears it on movement reset, and refreshes it from player-step movement ticking.
+- Verified `OverworldWildSpawns_EnsureFrameMovementTask` accepts the current `FieldSystem *`.
+- Verified `OverworldWildSpawns_FrameMovementTask` stops if the retained field system is no longer an enabled map or if no active spawned objects remain.
+- Verified the frame task calls `OverworldWildSpawns_TickMovementParams`, so movement decisions can be issued without a new player step.
+- Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
+- Verified active overlay code still avoids direct `object->fsys` and `object->unkD8` access; remaining references are in the dormant custom movement file.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
 
 ## Proposed Next New Experiments
 
