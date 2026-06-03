@@ -32,14 +32,9 @@
 #define SCRIPT_CMD_RUN_NEW_COMMAND  208
 #define SCRIPT_CMD_FADE_SCREEN      174
 #define SCRIPT_CMD_WAIT_FADE        175
-#define SCRIPT_CMD_WARP             176
+#define SCRIPT_CMD_FLY_ANIMATION    180
 #define SCRIPT_CMD_RELEASE_ALL      97
 #define SCRIPT_CMD_END              2
-#define OW_WILD_MEW_WARP_ID_DEFAULT 0
-#define OW_WILD_MEW_WARP_DIR_NORTH  0
-#define OW_WILD_MEW_WARP_DIR_SOUTH  1
-#define OW_WILD_MEW_WARP_DIR_WEST   2
-#define OW_WILD_MEW_WARP_DIR_EAST   3
 #define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BREC03
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
 #define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 2
@@ -48,10 +43,8 @@
 
 typedef struct OverworldWildMewWarpDestination {
     u16 mapId;
-    u16 warpId;
     u16 x;
     u16 z;
-    u16 direction;
 } OverworldWildMewWarpDestination;
 
 static u8 sOverworldWildBattleScript[] = {
@@ -80,12 +73,10 @@ static u8 sOverworldWildMewWarpScript[] = {
     0x00, 0x00,
     OW_WILD_MEW_WARP_FLASH_COLOR & 0xFF, OW_WILD_MEW_WARP_FLASH_COLOR >> 8,
     SCRIPT_CMD_WAIT_FADE & 0xFF, SCRIPT_CMD_WAIT_FADE >> 8,
-    SCRIPT_CMD_WARP & 0xFF, SCRIPT_CMD_WARP >> 8,
-    MAP_T21PC0101 & 0xFF, MAP_T21PC0101 >> 8,
-    OW_WILD_MEW_WARP_ID_DEFAULT & 0xFF, OW_WILD_MEW_WARP_ID_DEFAULT >> 8,
-    0x07, 0x00,
-    0x07, 0x00,
-    OW_WILD_MEW_WARP_DIR_SOUTH & 0xFF, OW_WILD_MEW_WARP_DIR_SOUTH >> 8,
+    SCRIPT_CMD_FLY_ANIMATION & 0xFF, SCRIPT_CMD_FLY_ANIMATION >> 8,
+    MAP_R29 & 0xFF, MAP_R29 >> 8,
+    454 & 0xFF, 454 >> 8,
+    293 & 0xFF, 293 >> 8,
     SCRIPT_CMD_FADE_SCREEN & 0xFF, SCRIPT_CMD_FADE_SCREEN >> 8,
     0x06, 0x00,
     0x01, 0x00,
@@ -100,18 +91,18 @@ static u16 sSoundTestSeqId = SOUND_TEST_SE_MIN;
 
 static const OverworldWildMewWarpDestination sOverworldWildMewWarpDestinations[] = {
     // Outdoor route-gate anchors pulled from map warp events.
-    { MAP_R29, 0, 454, 293, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_R29, 1, 454, 294, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_R33, 0, 374, 238, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_R33, 1, 374, 237, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_R35, 0, 351, 166, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_R35, 1, 351, 167, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_R38, 0, 524, 156, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_R38, 1, 525, 156, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_T05, 5, 1214, 403, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T05, 6, 1215, 403, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T24, 8, 358, 166, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_T24, 9, 358, 167, OW_WILD_MEW_WARP_DIR_EAST },
+    { MAP_R29, 454, 293 },
+    { MAP_R29, 454, 294 },
+    { MAP_R33, 374, 238 },
+    { MAP_R33, 374, 237 },
+    { MAP_R35, 351, 166 },
+    { MAP_R35, 351, 167 },
+    { MAP_R38, 524, 156 },
+    { MAP_R38, 525, 156 },
+    { MAP_T05, 1214, 403 },
+    { MAP_T05, 1215, 403 },
+    { MAP_T24, 358, 166 },
+    { MAP_T24, 358, 167 },
 };
 
 static void Script_WriteHalfword(u8 *script, u32 offset, u16 value)
@@ -144,10 +135,8 @@ static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
         &sOverworldWildMewWarpDestinations[gf_rand() % NELEMS(sOverworldWildMewWarpDestinations)];
 
     Script_WriteHalfword(sOverworldWildMewWarpScript, 27, destination->mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, destination->warpId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, destination->x);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, destination->z);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 35, destination->direction);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, destination->x);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, destination->z);
 #endif
 
     ScriptJump(ctx, sOverworldWildMewWarpScript);
