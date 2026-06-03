@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test135.nds`
+Current ROM checkpoint: `test136.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2107,6 +2107,39 @@ Verification:
 - Verified source uses `OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND 0x0C` only when `spawn->species == SPECIES_PIDGEY`.
 - Verified Sentret has no species-specific slowdown path and remains on the default `OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08`.
 - Verified local ARM9 command table entries for `0x08` and `0x0C` are valid stock movement command families.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- Pending.
+
+### Attempt 39: Movement Speed Levels 1-6
+
+Idea:
+
+Replace the one-off Pidgey fast-walk special case with an explicit overworld-wild movement speed scale. Sentret stays at speed `1`, Pidgey stays at speed `2`, and speeds `3`, `4`, `5`, and `6` are available for future species tuning by mapping them to stock movement command families.
+
+Why this is new:
+
+- Attempt 38 proved only a hardcoded Pidgey `0x0C` command path against the default `0x08` command path.
+- No previous attempt exposed a reusable per-species speed parameter or reserved speed levels above `2`.
+- This still uses stock movement command families rather than the previously crash-prone custom movement descriptor path, burst updates, or direct coordinate changes.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test136.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified Sentret maps to speed `1`, Pidgey maps to speed `2`, and every other species defaults to speed `1`.
+- Verified speed levels `3`, `4`, `5`, and `6` are selectable through the same speed-to-command helper for future species tuning.
+- Local ARM9 movement command table already shows valid stock direction families for speed levels `1` through `6`: `0x08`, `0x0C`, `0x10`, `0x14`, `0x18`, and `0x1C`.
 
 Runtime result:
 

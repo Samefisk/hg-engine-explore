@@ -71,8 +71,15 @@
 #define OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES 6
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
-#define OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08
-#define OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND 0x0C
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT 1
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND 0x08
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND 0x0C
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND 0x10
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND 0x14
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND 0x18
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND 0x1C
+#define OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED 1
+#define OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED 2
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_IDLE_OBJECT_MOVEMENT
 #define OW_WILD_SPAWNER_MOVEMENT_OBJECT_MOVEMENT OW_WILD_MOVE_STOCK_IDLE
 #else
@@ -613,13 +620,44 @@ static void OverworldWildSpawns_SetMovementSlotInProgress(OverworldWildSpawnStat
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
 }
 
-static u32 OverworldWildSpawns_GetMovementWalkCommand(const OverworldWildSpawn *spawn)
+static u8 OverworldWildSpawns_GetMovementSpeed(const OverworldWildSpawn *spawn)
 {
-    if (spawn != NULL && spawn->active && spawn->species == SPECIES_PIDGEY) {
-        return OW_WILD_SPAWNER_MOVEMENT_FAST_WALK_UP_COMMAND;
+    if (spawn == NULL || !spawn->active) {
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
     }
 
-    return OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND;
+    switch (spawn->species) {
+    case SPECIES_PIDGEY:
+        return OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED;
+    case SPECIES_SENTRET:
+        return OW_WILD_SPAWNER_SENTRET_MOVEMENT_SPEED;
+    default:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
+    }
+}
+
+static u32 OverworldWildSpawns_GetMovementWalkCommandForSpeed(u8 speed)
+{
+    switch (speed) {
+    case 2:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND;
+    case 3:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND;
+    case 4:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND;
+    case 5:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_5_COMMAND;
+    case 6:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_6_COMMAND;
+    case 1:
+    default:
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND;
+    }
+}
+
+static u32 OverworldWildSpawns_GetMovementWalkCommand(const OverworldWildSpawn *spawn)
+{
+    return OverworldWildSpawns_GetMovementWalkCommandForSpeed(OverworldWildSpawns_GetMovementSpeed(spawn));
 }
 
 static void OverworldWildSpawns_ClearMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
