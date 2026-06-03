@@ -37,8 +37,6 @@
 #define OW_WILD_AMBIENT_CRY_RANDOM_COOLDOWN_STEPS 96
 #define OW_WILD_AMBIENT_CRY_MAX_COOLDOWN_TICK 4
 #define OW_WILD_OBJECT_ID_START 0xE0
-#define OW_WILD_ALERT_MOVEMENT_EXCLAMATION 0x004B
-#define OW_WILD_ALERT_OBJECT_LOCK_BITS 0x40
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_MEW_SPAWN_CHANCE_PERCENT 50
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
@@ -1002,16 +1000,6 @@ static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object)
     MapObject_SetYRange(object, 2);
 }
 
-static void OverworldWildSpawns_ShowInteractionAlert(const OverworldWildSpawn *spawn)
-{
-    if (spawn->object == NULL) {
-        return;
-    }
-
-    ov01_021F9408(spawn->object, OW_WILD_ALERT_MOVEMENT_EXCLAMATION);
-    MapObject_SetBits(spawn->object, OW_WILD_ALERT_OBJECT_LOCK_BITS);
-}
-
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
     OverworldWildRolledEncounter encounter;
@@ -1176,8 +1164,6 @@ static BOOL OverworldWildSpawns_TryStartBattle(OverworldWildSpawnState *state, F
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (OverworldWildSpawns_IsTouchingPlayer(fieldSystem, &state->spawns[i])) {
-            OverworldWildSpawns_ShowInteractionAlert(&state->spawns[i]);
-
             if (state->spawns[i].species == SPECIES_MEW) {
                 state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
 
@@ -1207,10 +1193,6 @@ static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult)
 {
     if (state->pendingSlot >= 0 && state->pendingSlot < OW_WILD_MAX_SPAWNS) {
-        if (state->spawns[state->pendingSlot].object != NULL) {
-            MapObject_ClearBits(state->spawns[state->pendingSlot].object, OW_WILD_ALERT_OBJECT_LOCK_BITS);
-        }
-
         if (OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
             state->battleGraceSteps = OW_WILD_FLEE_GRACE_STEPS;
         } else {

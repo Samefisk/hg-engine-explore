@@ -357,7 +357,6 @@ MapObject_SetCurrentY = 0x0205F938 | 1;
 MapObject_SetFlag29 = 0x0205F89C | 1;
 sub_02069DC8 = 0x02069DC8 | 1;
 ov01_021F9048 = 0x021F9048 | 1;
-ov01_021F9408 = 0x021F9408 | 1;
 
 MapObject_PauseMovement = 0x0205F6FC | 1;
 MapObject_UnpauseMovement = 0x0205F708 | 1;
