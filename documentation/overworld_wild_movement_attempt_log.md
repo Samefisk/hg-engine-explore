@@ -1790,11 +1790,19 @@ Expected verification:
 Runtime result:
 
 - Built as `test128.nds`.
-- Pending user test.
+- User reported this is a huge improvement.
+- User reported the previous quirks are no longer issues:
+  - multiple Pokemon movement limitation
+  - no movement after battle
+  - movement not always active outside those cases
+- New quirk: Pokemon seem to stop chasing the player after a certain threshold is reached.
 
 Learning:
 
-- Pending runtime result.
+- Per-slot movement ownership plus battle reset fixes the major follow-up problems from `test126.nds`.
+- The new threshold quirk is likely the engine's map-object movement range doing its job: `OverworldWildSpawns_ApplyMovementRange` sets X/Y range to `2`, and `MapObject_IsMovementDirectionBlocked` likely treats a chase step outside that leash as blocked.
+- The threshold therefore appears expected for the current implementation, but it is probably not the desired final chase behavior.
+- The next direction should test a leash adjustment rather than reworking frame-task timing or per-slot ownership.
 
 Verification:
 
@@ -1811,6 +1819,12 @@ Verification:
 - Linked overlay target scan still contains expected movement helper targets `0x02060BB9`, `0x0205F649`, `0x0206234D`, `0x0206217D`, and `0x0205F631`.
 - Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `git diff --check` passed.
+
+Expand:
+
+- Keep per-slot movement ownership and frame-task updates.
+- Test whether increasing or removing `MapObject_SetXRange`/`MapObject_SetYRange` lets Pokemon keep chasing without reintroducing old movement issues.
+- Alternatively, test recentering the movement leash after each successful spawner-owned step, if unlimited chase feels too chaotic.
 
 ## Proposed Next New Experiments
 
