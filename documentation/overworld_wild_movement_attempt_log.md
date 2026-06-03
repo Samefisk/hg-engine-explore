@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test132.nds`
+Current ROM checkpoint: `test134.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands on player-step and advances them through a short-lived frame-level `SysTask`.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
 Previous active hypothesis:
 
@@ -2034,6 +2034,45 @@ Verification:
 - Verified `battleGraceSteps` is decremented only when `decrementBattleGrace` is true.
 - Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020fcec8`.
 - Linked overlay target scan still shows the expected movement helper targets and player coordinate helpers.
+
+Runtime result:
+
+- User reported no crash, and battle triggering works about 90% of the time.
+- Remaining miss: when the player and spawned Pokemon move at the same time, they can end up adjacent without a battle starting.
+
+Learning:
+
+- Scheduling the battle script from the movement frame task is viable.
+- The remaining issue appears to be a settle/timing race after simultaneous player and spawned-Pokemon movement, not a broad `EventSet_Script` or battle-start crash.
+
+### Attempt 37: Post-Movement Battle Settle Window
+
+Idea:
+
+When a spawner-owned movement command finishes, start a short settle window before any new chase or untangle command can begin. During that window, retry the existing battle contact detector every frame without decrementing flee grace. This gives the engine a few frames to clear movement-active state and settle player/Pokemon coordinates after simultaneous movement, then starts the battle if they are adjacent.
+
+Why this is new:
+
+- Attempt 36 added one frame-task battle check after movement commands settled, but it did not hold off the next movement command for additional settle frames.
+- Attempt 35 suppressed battle detection while movement was active, but it did not add a retry window after movement finished.
+- No previous attempt has stored a per-state post-movement battle settle counter or blocked new spawner movement while that counter is active.
+
+Files/symbols:
+
+- `include/overworld_wild_spawns_internal.h`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test134.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified `OverworldWildSpawnState` stores `movementBattleSettleFrames`.
+- Verified `OverworldWildSpawns_FrameMovementTask` sets the settle counter only when `OverworldWildSpawns_UpdateSpawnerMovementCommand` reports a completed spawner-owned command.
+- Verified `OverworldWildSpawns_TryHoldForBattleSettle` blocks new movement while the settle counter is active, and only decrements/retries `OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)` after `movementInProgressMask` reaches `0`.
+- Verified `OverworldWildSpawns_TickMovementParams` returns early while the settle window is active, so no new chase/untangle command can start before the retry window resolves.
+- Verified the player-step path returns `TRUE` if the settle retry starts a pending battle during movement ticking.
+- Verified ARM9 movement slot `47` still points at the stock no-op descriptor `0x020FCEC8`.
 
 Runtime result:
 

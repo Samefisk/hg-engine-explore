@@ -54,6 +54,7 @@ typedef struct OverworldWildSpawnState {
     u8 battleGraceSteps;
     u8 movementCooldowns[OW_WILD_MAX_SPAWNS];
     u16 movementInProgressMask;
+    u8 movementBattleSettleFrames;
     u32 pendingPersonality;
     u16 pendingSpecies;
     u8 pendingLevel;

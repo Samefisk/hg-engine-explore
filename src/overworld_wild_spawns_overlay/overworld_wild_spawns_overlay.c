@@ -68,6 +68,7 @@
 #define OW_WILD_SPAWNER_MOVEMENT_FRAME_TASK_PRIORITY 1300
 #define OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS 2
 #define OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS 4
+#define OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES 6
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_WALK_UP_COMMAND 0x08
@@ -643,6 +644,7 @@ static void OverworldWildSpawns_ResetAllMovementCommands(OverworldWildSpawnState
     }
 
     state->movementFieldSystem = NULL;
+    state->movementBattleSettleFrames = 0;
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         OverworldWildSpawns_ResetSlotMovementCommand(state, i, clearObjectCommand);
     }
@@ -675,6 +677,7 @@ static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(OverworldWildSpaw
 
             MapObject_StartMovementCommand(object, movementCommand);
             MapObject_SetSingleMovementActive(object);
+            state->movementBattleSettleFrames = 0;
             OverworldWildSpawns_SetMovementSlotInProgress(state, slot);
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
             OverworldWildSpawns_EnsureFrameMovementTask(state, state->movementFieldSystem);
@@ -859,12 +862,36 @@ static BOOL OverworldWildSpawns_TryUntangleOverlaps(OverworldWildSpawnState *sta
     return FALSE;
 }
 
+static BOOL OverworldWildSpawns_TryHoldForBattleSettle(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
+{
+    if (state == NULL
+        || fieldSystem == NULL
+        || fieldSystem->playerAvatar == NULL
+        || state->movementBattleSettleFrames == 0) {
+        return FALSE;
+    }
+
+    if (state->movementInProgressMask == 0) {
+        if (OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)) {
+            return TRUE;
+        }
+
+        state->movementBattleSettleFrames--;
+    }
+
+    return TRUE;
+}
+
 static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
     int i;
 
     state->movementFieldSystem = fieldSystem;
     sOverworldWildMovementDiagnosticCommandsStartedThisTick = 0;
+
+    if (OverworldWildSpawns_TryHoldForBattleSettle(state, fieldSystem)) {
+        return;
+    }
 
     if (OverworldWildSpawns_TryUntangleOverlaps(state, fieldSystem)) {
         return;
@@ -1012,6 +1039,7 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
 {
     OverworldWildSpawnState *state = (OverworldWildSpawnState *)data;
     FieldSystem *fieldSystem;
+    BOOL movementFinishedThisFrame = FALSE;
     int i;
 
     (void)task;
@@ -1044,12 +1072,16 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
         sOverworldWildMovementDiagnosticFrameTaskUpdatedObjects++;
         if (OverworldWildSpawns_UpdateSpawnerMovementCommand(state->spawns[i].object)) {
             OverworldWildSpawns_ClearMovementSlotInProgress(state, i);
+            movementFinishedThisFrame = TRUE;
         }
     }
 
+    if (movementFinishedThisFrame) {
+        state->movementBattleSettleFrames = OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES;
+    }
+
     sOverworldWildMovementDiagnosticInProgressMask = state->movementInProgressMask;
-    if (state->movementInProgressMask == 0
-        && OverworldWildSpawns_TryStartBattle(state, fieldSystem, FALSE)) {
+    if (OverworldWildSpawns_TryHoldForBattleSettle(state, fieldSystem)) {
         return;
     }
 
@@ -2119,6 +2151,11 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
     OverworldWildSpawns_TickMovementParams(state, fieldSystem);
+    if (state->pendingSlot >= 0
+        || state->pendingSpecies != SPECIES_NONE
+        || state->pendingLevel != 0) {
+        return TRUE;
+    }
 #endif
 
 #if !OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY
