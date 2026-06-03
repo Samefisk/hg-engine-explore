@@ -42,17 +42,12 @@
 #define OW_WILD_MEW_WARP_DIR_EAST   3
 #define OW_WILD_MEW_WARP_SOUND      SEQ_SE_PL_BREC03
 #define OW_WILD_MEW_WARP_FLASH_COLOR 0x7FFF
+#define OW_WILD_MEW_WARP_RETRY_COUNT 16
+#define OW_WILD_MEW_WARP_FALLBACK_MAP MAP_T21PC0101
+#define OW_WILD_MEW_WARP_FALLBACK_WARP 0
 #define OW_WILD_BATTLE_SCRIPT_SPECIES_OFFSET 2
 #define OW_WILD_BATTLE_SCRIPT_LEVEL_OFFSET 4
 #define OW_WILD_BATTLE_SCRIPT_SHINY_OFFSET 6
-
-typedef struct OverworldWildMewWarpDestination {
-    u16 mapId;
-    u16 warpId;
-    u16 x;
-    u16 z;
-    u16 direction;
-} OverworldWildMewWarpDestination;
 
 static u8 sOverworldWildBattleScript[] = {
     0x4D, 0x02, // wild_battle
@@ -98,36 +93,38 @@ static u8 sOverworldWildMewWarpScript[] = {
 
 static u16 sSoundTestSeqId = SOUND_TEST_SE_MIN;
 
-static const OverworldWildMewWarpDestination sOverworldWildMewWarpDestinations[] = {
-    { MAP_T20, OW_WILD_MEW_WARP_NONE, 7, 7, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R29, OW_WILD_MEW_WARP_NONE, 14, 9, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_T21, OW_WILD_MEW_WARP_NONE, 17, 10, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R30, OW_WILD_MEW_WARP_NONE, 12, 20, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R31, OW_WILD_MEW_WARP_NONE, 10, 9, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_T22, OW_WILD_MEW_WARP_NONE, 18, 14, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R32, OW_WILD_MEW_WARP_NONE, 10, 24, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R34, OW_WILD_MEW_WARP_NONE, 10, 32, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R36, OW_WILD_MEW_WARP_NONE, 18, 14, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R37, OW_WILD_MEW_WARP_NONE, 8, 8, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T27, OW_WILD_MEW_WARP_NONE, 20, 18, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R38, OW_WILD_MEW_WARP_NONE, 16, 11, OW_WILD_MEW_WARP_DIR_WEST },
-    { MAP_R39, OW_WILD_MEW_WARP_NONE, 14, 12, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T26, OW_WILD_MEW_WARP_NONE, 17, 16, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T24, OW_WILD_MEW_WARP_NONE, 20, 20, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R42, OW_WILD_MEW_WARP_NONE, 22, 12, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_R43, OW_WILD_MEW_WARP_NONE, 10, 20, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T29, OW_WILD_MEW_WARP_NONE, 14, 18, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R44, OW_WILD_MEW_WARP_NONE, 18, 12, OW_WILD_MEW_WARP_DIR_EAST },
-    { MAP_T30, OW_WILD_MEW_WARP_NONE, 18, 20, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T31, OW_WILD_MEW_WARP_NONE, 12, 12, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T01, OW_WILD_MEW_WARP_NONE, 14, 10, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T02, OW_WILD_MEW_WARP_NONE, 18, 14, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T04, OW_WILD_MEW_WARP_NONE, 24, 18, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T06, OW_WILD_MEW_WARP_NONE, 16, 18, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T07, OW_WILD_MEW_WARP_NONE, 28, 22, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T08, OW_WILD_MEW_WARP_NONE, 20, 14, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_T09, OW_WILD_MEW_WARP_NONE, 16, 12, OW_WILD_MEW_WARP_DIR_SOUTH },
-    { MAP_R48, OW_WILD_MEW_WARP_NONE, 12, 14, OW_WILD_MEW_WARP_DIR_SOUTH },
+static const u8 sOverworldWildMewMapWarpCounts[] = {
+     0,  0,  0,  0,  0,  0,  2,  4,  2,  1,  4,  3,  2,  2,  0,  3,
+     3,  3,  0,  0,  2,  2,  0,  4,  2,  0,  1,  4,  3,  3,  2,  2,
+     3,  4,  1,  3,  4,  6,  0,  2,  2,  6,  6,  1,  1,  3,  3,  7,
+     6,  8,  7,  8,  7, 11,  1,  2, 17,  5,  1,  1,  2,  1,  1,  2,
+     5,  1,  2,  1,  1,  1, 11,  8,  8, 17,  9, 12,  1,  1,  3,  0,
+     2,  1,  1,  1,  6,  2,  8,  2,  2,  2,  0,  2,  4,  7,  2,  2,
+     8,  2,  2,  3,  2,  2,  0,  8,  6,  6,  2,  7,  3,  2, 17,  2,
+     3,  2,  6, 10, 11,  4, 10,  7,  2,  3,  2,  3,  1,  0,  0,  1,
+     2,  1,  2,  1,  2,  1,  1,  1,  1,  1,  2,  1,  1, 15,  6,  6,
+     2,  1,  7,  0,  5,  5,  4,  1,  1,  2,  1,  1,  1,  1,  1,  1,
+     2,  1,  1,  2,  1,  2,  2,  3,  3,  3,  2,  9,  6,  1,  2,  1,
+     1,  1,  2,  2,  3,  4,  3,  1,  3,  3,  3,  3,  3,  2,  3,  0,
+     7,  2,  2,  2,  1,  1,  1,  1,  3,  2,  2,  2,  2,  1,  3,  1,
+     6,  4,  3,  2,  2,  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  6,
+     6,  4,  3,  1, 14,  6,  1,  2,  2,  2,  5,  4, 10,  2,  4,  3,
+     3,  0,  0, 16,  6,  0,  3,  3,  3,  3,  2,  4,  3,  1,  2,  2,
+     2,  2,  1,  1,  1,  1,  1,  1,  2,  1,  1,  1,  1,  1,  4,  3,
+     4,  4,  4,  4,  2,  1, 13,  1,  2,  2,  2,  2,  0,  2,  2,  2,
+     0,  2,  0,  0,  1,  1,  4,  1,  1,  1,  1,  2,  3,  3,  1,  3,
+     3,  7,  5,  3,  5,  6,  8,  1,  3,  9,  2,  2,  1,  1,  1,  1,
+     1,  1,  1,  2,  1,  1,  1,  3,  3,  3,  3,  3,  2,  3,  2,  1,
+     3,  1,  1,  1,  1,  1,  1,  2,  2,  1,  2,  2,  2,  2,  2,  1,
+     1,  2,  2,  1,  1,  3,  0,  2,  1,  2,  1,  2,  1,  1, 31,  7,
+     2,  2,  6,  1,  1,  2,  2,  2,  2,  3,  2,  2,  2,  1,  1,  2,
+     1,  1,  1,  1,  1,  2,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  6,  3,  6,  4,  8,  6, 12, 14, 12,  1,  7,  3,  1,
+     1,  7,  2,  1,  2,  1,  4,  4,  1,  1,  1,  1,  2,  1,  1,  1,
+     1,  1,  1,  2,  1,  1,  1,  1,  7,  1,  2,  2,  2,  2,  1,  1,
+     1,  1,  2,  1,  1,  2,  1,  2,  2,  1,  1,  1,  2,  1,  1,  2,
+     1,  2,  2,  1,  0,  1,  1,  1,  1,  2,  1,  1,  1,  1,  1,  2,
+     2,  1,  1,  1,  6,  1,  2,  1,  1,  1,  1,
 };
 
 static void Script_WriteHalfword(u8 *script, u32 offset, u16 value)
@@ -156,14 +153,26 @@ static void Script_QueueOverworldWildBattle(SCRIPTCONTEXT *ctx)
 static void Script_QueueOverworldWildMewWarp(SCRIPTCONTEXT *ctx)
 {
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-    const OverworldWildMewWarpDestination *destination =
-        &sOverworldWildMewWarpDestinations[gf_rand() % NELEMS(sOverworldWildMewWarpDestinations)];
+    u16 mapId = OW_WILD_MEW_WARP_FALLBACK_MAP;
+    u16 warpId = OW_WILD_MEW_WARP_FALLBACK_WARP;
+    u32 attempt;
 
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 27, destination->mapId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, destination->warpId);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, destination->x);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, destination->z);
-    Script_WriteHalfword(sOverworldWildMewWarpScript, 35, destination->direction);
+    for (attempt = 0; attempt < OW_WILD_MEW_WARP_RETRY_COUNT; attempt++) {
+        u16 candidateMapId = gf_rand() % NELEMS(sOverworldWildMewMapWarpCounts);
+        u8 warpCount = sOverworldWildMewMapWarpCounts[candidateMapId];
+
+        if (warpCount != 0) {
+            mapId = candidateMapId;
+            warpId = gf_rand() % warpCount;
+            break;
+        }
+    }
+
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 27, mapId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 29, warpId);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 31, OW_WILD_MEW_WARP_NONE);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 33, OW_WILD_MEW_WARP_NONE);
+    Script_WriteHalfword(sOverworldWildMewWarpScript, 35, gf_rand() % 4);
 #endif
 
     ScriptJump(ctx, sOverworldWildMewWarpScript);
