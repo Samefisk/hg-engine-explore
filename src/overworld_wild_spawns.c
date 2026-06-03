@@ -13,7 +13,8 @@
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_HP_SLOT_COUNT 10
-#define OW_WILD_DISABLE_PLAYER_STEP_HOOK 1
+#define OW_WILD_DISABLE_PLAYER_STEP_HOOK 0
+#define OW_WILD_PLAYER_STEP_DIAGNOSTIC_LOAD_ONLY 1
 
 typedef struct OverworldWildSavedHp {
     u32 personality;
@@ -56,6 +57,11 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     if (entry == NULL || entry->onPlayerStep == NULL) {
         return FALSE;
     }
+
+#if OW_WILD_PLAYER_STEP_DIAGNOSTIC_LOAD_ONLY
+    (void)fieldSystem;
+    return FALSE;
+#endif
 
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
 #endif
