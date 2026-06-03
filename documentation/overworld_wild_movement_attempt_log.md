@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test111.nds`
+Current ROM checkpoint: `test112.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -85,17 +85,36 @@ Previous active hypothesis:
 - `test109.nds` touched state by comparing/writing `state->mapId`, `state->mapObjectMan`, and `state->mapObjects`.
 - The next ROM should perform read-only state access only, with no state writes and no field-system publish.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test110.nds` no longer crashes.
 - Reading `state->mapId` from overlay 149 is safe.
 - The remaining bundled suspects from `test109.nds` are state writes and the cross-call to `OverworldWildCustomMovement_SetFieldSystem`.
 - The next ROM should call the currently no-op field-system setter while still avoiding all state writes.
 
+Previous active hypothesis:
+
+- `test111.nds` crashes.
+- The active path only calls `OverworldWildCustomMovement_SetFieldSystem` and returns.
+- Disassembly shows the generated veneer switches from Thumb to ARM state, then branches to `0x023D97F4`, even though `OverworldWildCustomMovement_SetFieldSystem` is Thumb code.
+- The next ROM should mark the setter as `LONG_CALL`, so the overlay call is generated through a Thumb-safe long-call path.
+
 Purpose of this checkpoint:
 
-- If the next ROM crashes, the cross-call to `OverworldWildCustomMovement_SetFieldSystem` is unsafe even though the callee is a no-op.
-- If the next ROM does not crash, the bad boundary is state writes.
+- If the next ROM crashes with a corrected long-call veneer, more than call generation is wrong.
+- If the next ROM does not crash, the crash was caused by the bad interworking veneer and state writes can be retested.
+
+New active hypothesis:
+
+- `test112.nds` keeps the setter-only diagnostic active, with no spawner state writes and no Pokemon spawning.
+- The setter is now declared/defined as `LONG_CALL`.
+- Disassembly now shows the overlay loads `0x023D97F5` and jumps via `bx r3`, preserving Thumb mode.
+- The runtime test should verify whether the crash from `test111.nds` was solely caused by the bad non-`LONG_CALL` veneer.
+
+Purpose of this checkpoint:
+
+- If `test112.nds` does not crash after save load and one player step, the bad veneer is confirmed and state writes can be reintroduced next.
+- If `test112.nds` still crashes, the corrected setter call itself or the called code path still has another runtime issue.
 
 ## Attempt History
 
@@ -765,11 +784,60 @@ Verification:
 
 Runtime result:
 
+- User reported a crash.
+
+Learning:
+
+- The direct overlay-to-ARM9 setter call is unsafe as currently generated.
+- This is probably not movement logic: `OverworldWildCustomMovement_SetFieldSystem` still compiles to `bx lr`.
+- The likely bug is call generation/interworking: overlay 149's veneer switches to ARM state and branches to the Thumb function address without preserving the Thumb bit.
+
+Do not repeat:
+
+- Do not call `OverworldWildCustomMovement_SetFieldSystem` from overlay code through a plain, non-`LONG_CALL` declaration.
+
+### Attempt 17: Mark Movement Setter As LONG_CALL
+
+Idea:
+
+Change `OverworldWildCustomMovement_SetFieldSystem` to a proper `LONG_CALL` declaration/definition, matching the repo's normal cross-region function declarations, while keeping the same setter-only diagnostic active.
+
+Why this is new:
+
+- Attempt 16 proved the plain generated veneer crashes.
+- No previous attempt changed the setter's calling convention or verified the generated interworking veneer.
+
+Files/symbols:
+
+- `include/overworld_wild_movement.h`
+- `src/overworld_wild_movement.c`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OverworldWildCustomMovement_SetFieldSystem` should be declared and defined with `LONG_CALL`.
+- The active overlay step path should still only call the setter and return `FALSE`.
+- Disassembly should no longer show a veneer that switches to ARM state and branches to `0x023D97F4` without the Thumb bit.
+- The setter itself should still compile to `bx lr`.
+- Movement slot `47` should remain stock no-op.
+
+Verification:
+
+- Built as `test112.nds`.
+- `OverworldWildCustomMovement_SetFieldSystem` is declared and defined with `LONG_CALL`.
+- Disassembly shows the active overlay step path loads `0x023D97F5` and jumps via `bx r3`, so the Thumb bit is preserved.
+- Disassembly of `OverworldWildCustomMovement_SetFieldSystem` is still `bx lr`.
+- The active overlay path still only calls the setter and returns `FALSE`.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+
+Runtime result:
+
 - Pending user test.
 
 Learning:
 
-- Pending.
+- Build-time evidence supports the interworking hypothesis from Attempt 16.
+- Runtime result still needs confirmation.
 
 ## Proposed Next New Experiments
 

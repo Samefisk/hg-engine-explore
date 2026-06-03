@@ -25,7 +25,7 @@ typedef struct OverworldWildMovementDescriptor {
 static FieldSystem *sOverworldWildCustomMovementFieldSystem;
 #endif
 
-void OverworldWildCustomMovement_SetFieldSystem(FieldSystem *fieldSystem)
+void LONG_CALL OverworldWildCustomMovement_SetFieldSystem(FieldSystem *fieldSystem)
 {
 #if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
     (void)fieldSystem;

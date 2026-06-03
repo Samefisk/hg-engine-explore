@@ -1,6 +1,8 @@
 #ifndef OVERWORLD_WILD_MOVEMENT_H
 #define OVERWORLD_WILD_MOVEMENT_H
 
+#include "types.h"
+
 #define OW_WILD_MOVE_CUSTOM_AI 47
 #define OW_WILD_MOVE_STOCK_WANDER 3
 
@@ -11,6 +13,6 @@
 #define OW_WILD_MOVEMENT_BEHAVIOR_CHASE_PLAYER 1
 #define OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER 2
 
-void OverworldWildCustomMovement_SetFieldSystem(struct FieldSystem *fieldSystem);
+void LONG_CALL OverworldWildCustomMovement_SetFieldSystem(struct FieldSystem *fieldSystem);
 
 #endif
