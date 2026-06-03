@@ -46,8 +46,9 @@
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
-#define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 1
+#define OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_UPDATE_ONLY 1
+#define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 1
 // Param 2 mirrors the follower palette metadata without switching to follower rendering.
 #define OW_WILD_PAL_PARAM_SHINY 1
 #define OW_WILD_PAL_PARAM_ENABLE 2
@@ -148,6 +149,9 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(OverworldWildSpawnState *state, u16 battleResult);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
 static void OverworldWildSpawns_ResetAmbientCryCooldown(OverworldWildSpawnState *state);
+
+static volatile void *sOverworldWildDiagnosticMapObjectMan;
+static volatile void *sOverworldWildDiagnosticMapObjects;
 
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
@@ -1343,6 +1347,13 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 {
     MapObjectMan *mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
     void *mapObjects = mapObjectMan != NULL ? mapObjectMan->objects : NULL;
+
+#if OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY
+    (void)state;
+    sOverworldWildDiagnosticMapObjectMan = mapObjectMan;
+    sOverworldWildDiagnosticMapObjects = mapObjects;
+    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
+#endif
 
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
         OverworldWildCustomMovement_SetFieldSystem(NULL);

@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test107.nds`
+Current ROM checkpoint: `test108.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -58,16 +58,30 @@ Previous active hypothesis:
 - The crash is inside the overworld-wild hook path.
 - `test106.nds` should re-enable the wrapper enough to load overlay 149 and validate its entry pointer, then return before calling the overlay's step function.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test106.nds` no longer crashes, but Pokemon still do not spawn because the overlay step function is not called.
 - Overlay 149 loading itself is safe.
 - `test107.nds` should call `entry->onPlayerStep` but make `OverworldWildSpawns_OverlayOnPlayerStep` return immediately before map-state refresh.
 
+Previous active hypothesis:
+
+- `test107.nds` no longer crashes.
+- Calling into the overlay step function is safe.
+- The crash is inside `OverworldWildSpawns_UpdateMapState`.
+- `test108.nds` should run only read-only pointer/map eligibility work inside `OverworldWildSpawns_UpdateMapState`, then return before clearing or writing spawn state.
+
+New active hypothesis:
+
+- `test108.nds` no longer crashes.
+- Read-only `fieldSystem->mapObjectMan`, `mapObjectMan->objects`, and map eligibility checks are safe.
+- The next suspect is a side effect in `OverworldWildSpawns_UpdateMapState`.
+- The next ROM should allow map-state pointer/id writes and cooldown/default-state writes, but skip `OverworldWildSpawns_Clear(state, FALSE)`.
+
 Purpose of this checkpoint:
 
-- If `test107.nds` still crashes, calling the overlay function or the overlay entry pointer path is the culprit.
-- If `test107.nds` does not crash, the next culprit is inside `OverworldWildSpawns_UpdateMapState`.
+- If the next ROM crashes, map-state/default-state writes are unsafe.
+- If the next ROM does not crash, `OverworldWildSpawns_Clear(state, FALSE)` is probably the crash trigger.
 
 ## Attempt History
 
@@ -540,11 +554,59 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported no crash.
 
 Learning:
 
-- Pending.
+- Overlay step entry itself is safe.
+- The next suspect is the body of `OverworldWildSpawns_UpdateMapState`.
+
+Do not repeat:
+
+- Do not keep testing entry-only overlay calls; they have been ruled safe.
+
+### Attempt 13: Read-Only UpdateMapState Diagnostic
+
+Idea:
+
+Let `OverworldWildSpawns_OverlayOnPlayerStep` call `OverworldWildSpawns_UpdateMapState`, but make `OverworldWildSpawns_UpdateMapState` only:
+
+- read `fieldSystem->mapObjectMan`
+- read `mapObjectMan->objects`
+- store those observed pointers to volatile diagnostic globals so the reads are not optimized away
+- run `OverworldWildSpawns_IsEnabledMap(fieldSystem)`
+- return before clearing spawn state, writing map state, or publishing the movement field system
+
+Why this is new:
+
+- Attempt 12 returned before `OverworldWildSpawns_UpdateMapState`.
+- Attempt 9 ran the full map-state refresh and crashed.
+- This attempt separates read-only pointer/map checks from state-clearing side effects.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY` should be `0`.
+- `OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY` should be `1`.
+- `OverworldWildSpawns_UpdateMapState` should return before `OverworldWildSpawns_Clear` and before `OverworldWildCustomMovement_SetFieldSystem`.
+- Movement slot `47` should remain stock no-op.
+
+Runtime result:
+
+- Built as `test108.nds`.
+- User reported no crash.
+
+Learning:
+
+- Calling `OverworldWildSpawns_UpdateMapState` is safe when it only performs read-only map-object-manager observation and enabled-map detection.
+- The crash is likely caused by side effects after those reads, especially `OverworldWildSpawns_Clear(state, FALSE)` or state field writes.
+
+Do not repeat:
+
+- Do not keep testing read-only map-state diagnostics; they have been ruled safe.
 
 ## Proposed Next New Experiments
 
