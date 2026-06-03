@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test104.nds`
+Current ROM checkpoint: `test105.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
 
@@ -40,16 +40,22 @@ Previous active hypothesis:
 - The step crash may be from stale movement-47 objects whose stock movement-3 state was never initialized in earlier builds, or from freshly spawning movement-47 objects.
 - `test103.nds` should make stale movement-47 objects no-op and make fresh spawns use stock movement `3` directly.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test103.nds` still crashes after one player step, so stale movement-47 object execution is less likely.
 - The next isolation point is the overworld wild spawner's player-step pipeline: stale-slot dropping, distance despawn, touch battle, ambient cry, or refill/spawn.
 - `test104.nds` should run only map-state refresh inside `OverworldWildSpawns_OverlayOnPlayerStep` and skip every downstream step action.
 
+New active hypothesis:
+
+- `test104.nds` still crashes after one player step even though the overlay step path returns after map-state refresh.
+- The crash may be in `OverworldWildSpawns_OnPlayerStep` before/around overlay loading, inside map-state refresh, or outside the spawner step hook entirely.
+- `test105.nds` should disable `OverworldWildSpawns_OnPlayerStep` before it loads or calls the overlay.
+
 Purpose of this checkpoint:
 
-- If `test104.nds` still crashes after one step, the crash is probably outside the spawner step pipeline or inside `OverworldWildSpawns_UpdateMapState`.
-- If `test104.nds` does not crash, re-enable the skipped step actions one at a time.
+- If `test105.nds` still crashes after one step, the crash is not caused by the overworld-wild player-step hook.
+- If `test105.nds` does not crash, bisect inside `OverworldWildSpawns_OnPlayerStep`, starting with overlay load versus overlay map-state refresh.
 
 ## Attempt History
 
@@ -387,6 +393,47 @@ Verification:
 - Built as `test104.nds`.
 - Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - Disassembly of `OverworldWildSpawns_OverlayOnPlayerStep` shows it reaches `OverworldWildSpawns_UpdateMapState` behavior and then returns `FALSE`; calls to `OverworldWildSpawns_DropStaleSlots`, `OverworldWildSpawns_DespawnFarMons`, `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_TryPlayAmbientCry`, and `OverworldWildSpawns_TryRefill` are not present in the active step path.
+
+Runtime result:
+
+- User reported the game still crashes.
+
+Learning:
+
+- Disabling the overlay's downstream step actions did not stop the one-step crash.
+- The crash is now narrowed to either the ARM9 `OverworldWildSpawns_OnPlayerStep` wrapper/overlay load/map-state refresh, or code running independently of that hook.
+
+Do not repeat:
+
+- Do not keep toggling individual overlay step actions until the outer wrapper hook has been ruled in or out.
+
+### Attempt 10: Disable The Entire Overworld-Wild Player-Step Hook
+
+Idea:
+
+Return `FALSE` immediately from `OverworldWildSpawns_OnPlayerStep`, before `OverworldWildSpawns_GetOverlayEntry` can load the overlay and before `entry->onPlayerStep` can run.
+
+Why this is new:
+
+- Attempt 9 still loaded and called overlay 129, then returned after map-state refresh.
+- No previous attempt disabled the ARM9 wrapper hook before overlay loading.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns.c`
+
+Expected verification:
+
+- `OW_WILD_DISABLE_PLAYER_STEP_HOOK` should be `1`.
+- `OverworldWildSpawns_OnPlayerStep` should return `FALSE` without calling `OverworldWildSpawns_GetOverlayEntry`.
+- The build should keep movement slot `47` pointing at the stock no-op descriptor from Attempt 8.
+
+Verification:
+
+- Built as `test105.nds`.
+- Disassembly of `OverworldWildSpawns_OnPlayerStep` is `movs r0, #0; bx lr`, so it returns `FALSE` before any overlay-load path.
+- `PlayerStepEvent_RepelCounterDecrement` still calls `OverworldWildSpawns_OnPlayerStep`, but the call now always falls through to normal repel handling.
+- Movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 
 Runtime result:
 

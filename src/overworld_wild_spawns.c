@@ -13,6 +13,7 @@
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_HP_SLOT_COUNT 10
+#define OW_WILD_DISABLE_PLAYER_STEP_HOOK 1
 
 typedef struct OverworldWildSavedHp {
     u32 personality;
@@ -46,6 +47,10 @@ static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntr
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
 {
+#if OW_WILD_DISABLE_PLAYER_STEP_HOOK
+    (void)fieldSystem;
+    return FALSE;
+#else
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
 
     if (entry == NULL || entry->onPlayerStep == NULL) {
@@ -53,6 +58,7 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     }
 
     return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
+#endif
 }
 
 BOOL OverworldWildSpawns_PopPendingBattle(u16 *encodedSpecies, u8 *level, BOOL *shiny)
