@@ -305,7 +305,13 @@ BOOL LONG_CALL IsMetatileBlockedAt(FieldSystem *fieldSystem, int x, int y);
 u8 LONG_CALL GetMetatileBehaviorAt(FieldSystem *fieldSystem, int x, int y);
 int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
-BOOL MapObject_IsSingleMovementActive(LocalMapObject *obj);
-void MapObject_PauseMovement(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_IsSingleMovementActive(LocalMapObject *obj);
+void LONG_CALL MapObject_SetSingleMovementActive(LocalMapObject *obj);
+void LONG_CALL MapObject_ClearSingleMovementActive(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_IsMovementDirectionBlocked(LocalMapObject *obj, u32 direction);
+void LONG_CALL MapObject_StartMovementCommand(LocalMapObject *obj, u32 movementCommand);
+u32 LONG_CALL MapObject_MovementCommandFromDirection(u32 direction, u32 movementCommand);
+BOOL LONG_CALL MapObject_UpdateMovementCommand(LocalMapObject *obj);
+void LONG_CALL MapObject_PauseMovement(LocalMapObject *obj);
 
 #endif //POKEHEARTGOLD_MAP_EVENTS_INTERNAL_H

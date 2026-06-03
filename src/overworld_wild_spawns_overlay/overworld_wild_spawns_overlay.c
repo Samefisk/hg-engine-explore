@@ -8,6 +8,7 @@
 #include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_wild_movement.h"
 #include "../../include/rtc.h"
 #include "../../include/script.h"
 #include "../../include/sound.h"
@@ -45,7 +46,6 @@
 #define OW_WILD_TILE_ENCOUNTER_GRASS 2
 #define OW_WILD_TILE_LONG_GRASS 3
 #define OW_WILD_TILE_HEADBUTT 15
-#define OW_WILD_MOVE_WANDER_ALL_DIRECTIONS 3
 // Param 2 mirrors the follower palette metadata without switching to follower rendering.
 #define OW_WILD_PAL_PARAM_SHINY 1
 #define OW_WILD_PAL_PARAM_ENABLE 2
@@ -1084,10 +1084,10 @@ static LocalMapObject *OverworldWildSpawns_CreateObject(FieldSystem *fieldSystem
         position->startY,
         1,
         spriteId,
-        OW_WILD_MOVE_WANDER_ALL_DIRECTIONS,
+        OW_WILD_MOVE_CUSTOM_AI,
         fieldSystem->location->mapId,
         0,
-        0,
+        OW_WILD_MOVEMENT_BEHAVIOR_CHASE_PLAYER,
         OW_WILD_PAL_PARAM_ENABLE | (shiny ? OW_WILD_PAL_PARAM_SHINY : 0));
 }
 
