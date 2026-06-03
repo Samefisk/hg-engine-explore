@@ -17,7 +17,7 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test138.nds`
+Current ROM checkpoint: `test139.nds`
 
 Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and holds a short post-movement battle-settle window before issuing the next movement command.
 
@@ -2206,6 +2206,40 @@ Verification:
 - Verified Pidgey remains logical speed `6`.
 - Verified speed `5` and speed `6` now map to `OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND` / stock command family `0x14`.
 - Local disassembly shows `0x08`, `0x0C`, `0x10`, and `0x14` share the stock walk update path, while `0x18` and `0x1C` switch to a different update path.
+
+Runtime result:
+
+- User reported movement looks jittery: one step, pause, one step, pause.
+
+Learning:
+
+- The high-speed command path appears to expose the global post-movement battle-settle pause more clearly than slower movement.
+- Holding for `6` frames after every tile step protects battle timing, but makes fast movement feel stop-start when no battle is nearby.
+
+### Attempt 42: Proximity-Only Battle Settle
+
+Idea:
+
+Keep the six-frame post-movement battle-settle window, but only start that settle window when a finished movement ends near the player. Finished movement farther away from the player can immediately start the next spawner-owned movement command.
+
+Why this is new:
+
+- Attempt 37 added the global post-movement settle window after every completed movement command.
+- Attempt 41 kept high logical speeds on the fastest stock walk command, making the global settle pause visibly jittery.
+- No previous attempt has gated the settle window by proximity to the player.
+- This avoids reducing the battle-settle duration globally, so the simultaneous player/Pokemon movement battle-retry case still has a buffer near contact.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test139.nds` and copied to Delta.
+- `git diff --check` passed.
+- Verified completed movement only starts `OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES` when a finished slot is within `OW_WILD_SPAWNER_BATTLE_SETTLE_RANGE` of the player.
+- Verified movement that finishes farther from the player does not set the settle counter, allowing `OverworldWildSpawns_TickMovementParams` to start the next command immediately.
 
 Runtime result:
 
