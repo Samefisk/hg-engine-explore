@@ -17,9 +17,9 @@ When adding a new attempt, record:
 
 Branch: `feature/custom-overworld-wild-movement`
 
-Current ROM checkpoint: `test118.nds`
+Current ROM checkpoint: `test119.nds`
 
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks.
+Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Fresh spawns use stock movement `3`; slot `47` remains aliased to stock no-op. The active custom-movement probe is spawner-driven param ticking, not a slot-47 movement callback.
 
 Previous active hypothesis:
 
@@ -172,7 +172,7 @@ Purpose of this checkpoint:
 - If the next ROM spawns Pokemon and does not crash, the refill/spawn path is stable again with stock movement `3` spawns.
 - If the next ROM crashes, the crash is likely in spawn position selection, encounter rolling, `CreateSpecialFieldObjectWithParams`, Pokemon render params, shiny setup, or spawn state writes after object creation.
 
-New active hypothesis:
+Previous active hypothesis:
 
 - `test117.nds` spawned Pokemon without crashing, so refill/spawn is stable with stock movement `3` and ambient cry skipped.
 - The next remaining piece of the stock spawner pipeline is ambient cry: iterating active spawns, reading species/form/shiny metadata, choosing a cry, and calling the sound path.
@@ -182,6 +182,17 @@ Purpose of this checkpoint:
 
 - If the next ROM spawns Pokemon, plays ambient cries, and does not crash, the full stock spawner pipeline is stable again.
 - If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryPlayAmbientCry`, cry selection, active-spawn metadata reads, or the sound call.
+
+New active hypothesis:
+
+- `test118.nds` did not crash, so the full stock spawner pipeline is stable with stock movement `3` and slot `47` no-op.
+- Re-pointing slot `47` back at the overlay-resident custom descriptor would repeat Attempts 5 and 6, which crashed even with no-op callbacks.
+- The safer next movement probe is spawner-driven: keep fresh spawns on stock movement `3`, keep slot `47` no-op, and only touch active spawned objects' movement params from the stable overlay step path.
+
+Purpose of this checkpoint:
+
+- If the next ROM does not crash, `MapObject_GetParam` and `MapObject_SetParam` are safe to call on active spawned Pokemon from the spawner step loop.
+- If the next ROM crashes, the crash is likely in param access on these special objects, not coordinate reads, blocked-direction checks, movement command helpers, or slot-47 descriptor callbacks.
 
 ## Attempt History
 
@@ -1177,6 +1188,55 @@ Verification:
 - Disassembly shows the active overlay step path still reaches `OverworldWildSpawns_SpawnOne` from refill/spawn call sites after the ambient-cry section.
 - Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
 - `test.nds` was copied to Delta as `test118.nds`.
+- `git diff --check` passed.
+
+Runtime result:
+
+- User reported no crash.
+
+Learning:
+
+- The full stock spawner pipeline is stable again: stale-slot cleanup, distance despawn, touch-battle detection, ambient cry, and refill/spawn all run with stock movement `3`.
+- This rules out ambient cry as the current crash source and gives a clean baseline before custom movement probes resume.
+
+Expand:
+
+- Avoid re-pointing slot `47` to the overlay-resident descriptor because Attempts 5 and 6 already showed that crashes even with no-op callbacks.
+- Start custom movement again from the stable spawner step loop by ticking `MapObject` params only.
+
+### Attempt 24: Spawner-Driven Movement Param Tick
+
+Idea:
+
+Keep spawned Pokemon on stock movement `3` and keep movement slot `47` aliased to stock no-op. Add a spawner-step diagnostic that iterates active spawned Pokemon and only reads/writes their movement cooldown param with `MapObject_GetParam` and `MapObject_SetParam`.
+
+Why this is new:
+
+- Attempts 5 and 6 tested slot-47 overlay callbacks and crashed even when callbacks were no-op.
+- Earlier movement attempts bundled param access with coordinate reads, scratch writes, movement command helpers, or slot-47 descriptor wiring.
+- No previous build has tested `MapObject_GetParam`/`MapObject_SetParam` on active spawned Pokemon from the stable overlay-149 spawner step path while keeping stock movement `3`.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+
+Expected verification:
+
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` should be `1`.
+- The active overlay step path should call `OverworldWildSpawns_TickMovementParams` after touch-battle detection and before ambient cry/refill.
+- `OverworldWildSpawns_TickMovementParams` should only call `MapObject_GetParam` and `MapObject_SetParam` for active spawned objects.
+- The active movement probe should not use `object->fsys`, global `FieldSystem *`, coordinate reads, blocked-direction checks, scratch writes, single-movement flags, or movement command helpers.
+- Fresh spawn parameters should still use stock movement `3`; movement slot `47` should remain stock no-op for stale objects.
+
+Verification:
+
+- Built as `test119.nds`.
+- `OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK` is `1`.
+- Disassembly shows the active overlay path contains `MapObject_GetParam` at `0x0205F2F5` and `MapObject_SetParam` at `0x0205F2D1`.
+- Source verification shows `OverworldWildSpawns_TickMovementParams` only reads/writes `OW_WILD_MOVEMENT_PARAM_COOLDOWN` for active spawned objects.
+- The new movement probe does not use `object->fsys`, global `FieldSystem *`, coordinate reads, blocked-direction checks, scratch writes, single-movement flags, or movement command helpers.
+- Fresh spawn parameters still use stock movement `3`; movement slot `47` at `0x020FD2B0` still points at stock no-op descriptor `0x020FCEC8`.
+- `test.nds` was copied to Delta as `test119.nds`.
 - `git diff --check` passed.
 
 Runtime result:

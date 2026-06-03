@@ -52,6 +52,8 @@
 #define OW_WILD_STEP_DIAGNOSTIC_DESPAWN_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY 0
 #define OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY 0
+#define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK 1
+#define OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET 8
 #define OW_WILD_UPDATE_DIAGNOSTIC_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY 0
 #define OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY 0
@@ -426,6 +428,25 @@ static void OverworldWildSpawns_TryPlayAmbientCry(OverworldWildSpawnState *state
 
     OverworldWildSpawns_ResetAmbientCryCooldown(state);
 }
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+static void OverworldWildSpawns_TickMovementParams(OverworldWildSpawnState *state)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (state->spawns[i].active && state->spawns[i].object != NULL) {
+            int cooldown = MapObject_GetParam(state->spawns[i].object, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+
+            if (cooldown > 0) {
+                MapObject_SetParam(state->spawns[i].object, cooldown - 1, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+            } else {
+                MapObject_SetParam(state->spawns[i].object, OW_WILD_SPAWNER_MOVEMENT_PARAM_RESET, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
+            }
+        }
+    }
+}
+#endif
 
 static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior)
 {
@@ -1452,6 +1473,10 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 
 #if OW_WILD_STEP_DIAGNOSTIC_BATTLE_ONLY
     return FALSE;
+#endif
+
+#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
+    OverworldWildSpawns_TickMovementParams(state);
 #endif
 
 #if !OW_WILD_STEP_DIAGNOSTIC_SKIP_AMBIENT_CRY
