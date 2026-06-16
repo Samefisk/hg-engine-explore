@@ -58,11 +58,26 @@ Build/runtime verification:
   - `PIL` was unavailable for a full unstubbed viewer import; the parser/data-model path was validated with an import stub because image rendering is not part of behavior table parsing.
   - Full ROM build, Delta copy, overlay-table ROM inspection, and headless runtime verification could not be completed here without Docker or the ARM toolchain.
 
+Headless follow-up:
+
+- Existing `test.nds` inspection with `ndspy`:
+  - Y9 size is `0x12C0`, which is 150 rows and therefore only covers overlays `0..149`.
+  - Overlay 149 is present at `0x023CD000` with size `0xAD18`.
+  - Overlay 150 has no Y9 row in the existing ROM.
+- `scripts/headless-overworld-test.py --rom test.nds --dsv .headless_desmume/.config/desmume/test.dsv --action screenshot:documentation/verification_screenshots/overlay150_existing_rom_00_ready.png --read ov150_magic:u32:0x023C3000 --no-screenshot`
+  - Passed as a headless boot/read run against the existing ROM.
+  - Screenshot shows the loaded overworld state.
+  - Read `ov150_magic` at `0x023C3000` as `0x00000000`.
+- `scripts/headless-overworld-test.py --rom test.nds --dsv .headless_desmume/.config/desmume/test.dsv --read ov150_magic:u32:0x023C3000 --expect ov150_magic=0x4F574244 --no-screenshot`
+  - Failed as expected on the existing ROM.
+  - Expected overlay 150 magic `0x4F574244`, actual `0x00000000`.
+  - This proves the headless tester is runnable here, but the current `test.nds` does not contain this branch's overlay 150 changes.
+
 Result:
 
 - The code is split into a resident overlay 150 data module and overlay 149 entry-table consumer.
 - Static checks passed for the changed C sources and the module metadata.
-- Runtime confidence still needs a real ROM build on a machine with Docker/toolchain access.
+- Runtime confidence still needs a real ROM build on a machine with Docker/toolchain access, then the same headless magic/read and overworld scenario checks should be rerun against the rebuilt ROM.
 
 Follow-up checks when Docker is available:
 
