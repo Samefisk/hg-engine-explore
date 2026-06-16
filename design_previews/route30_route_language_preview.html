@@ -1,0 +1,556 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Route 30 Route Language Preview</title><style>
+  :root {
+    --bg: #f7f9fc;
+    --panel: #fff;
+    --line: #d2dce9;
+    --soft: #e8eef6;
+    --ink: #17202d;
+    --muted: #63728c;
+    --green: #0b8063;
+    --green-bg: #eaf8f1;
+    --blue: #0875b7;
+    --blue-bg: #e9f5fd;
+    --gold: #a26012;
+    --gold-bg: #fff5e4;
+    --violet: #7548d6;
+    --violet-bg: #f4efff;
+    --pink: #d63a76;
+    --pink-bg: #fff0f6;
+    --stone: #6e675f;
+    --stone-bg: #f6f3ef;
+  }
+  * { box-sizing: border-box; min-width: 0; }
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .preview {
+    width: 100%;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: clip;
+  }
+  .routes-head {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 1px 0 rgba(20, 30, 44, .03);
+  }
+  .head-line {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 13px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 {
+    margin: 0;
+    font-size: 23px;
+    font-weight: 950;
+    letter-spacing: 0;
+  }
+  h1 span {
+    color: var(--muted);
+    font-weight: 650;
+  }
+  .head-line strong {
+    color: var(--muted);
+    font-size: 22px;
+    font-weight: 650;
+  }
+  .filter-row {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px;
+    overflow: hidden;
+  }
+  .filter-button {
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .filter-button:nth-child(-n+9) {
+    border-color: var(--line);
+    background: #fff;
+  }
+  .rate-strip {
+    margin-left: auto;
+    display: flex;
+    gap: 7px;
+    overflow: hidden;
+  }
+  .rate-pill {
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 7px 0 5px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  .search-like {
+    display: none;
+  }
+  .route-overview {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 7px 9px;
+    overflow: hidden;
+  }
+  .overview-pill {
+    min-width: 0;
+    min-height: 39px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 1 auto;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 4px 9px 4px 5px;
+  }
+  .overview-icons {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+  }
+  .overview-icons .mon-icon {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+  }
+  .type-tile {
+    width: 37px;
+    height: 37px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 2px solid var(--line);
+    border-radius: 9px;
+    background: #fff;
+    color: var(--muted);
+    font: 950 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .tile-svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+  }
+  .grass,
+  .am,
+  .day,
+  .night {
+    color: var(--green);
+    background: var(--green-bg);
+    border-color: #b7dccc;
+  }
+  .surf {
+    color: var(--blue);
+    background: var(--blue-bg);
+    border-color: #c1ddf1;
+  }
+  .old,
+  .good,
+  .super {
+    color: var(--blue);
+    background: var(--blue-bg);
+    border-color: #c1ddf1;
+  }
+  .rock {
+    color: var(--stone);
+    background: var(--stone-bg);
+    border-color: #d8d1c7;
+  }
+  .hoenn,
+  .sinnoh {
+    color: var(--violet);
+    background: var(--violet-bg);
+    border-color: #cfc1fa;
+  }
+  .swarm {
+    color: var(--pink);
+    background: var(--pink-bg);
+    border-color: #f2bfd4;
+  }
+  .route-body {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, .96fr) minmax(640px, 1.04fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .list-panel {
+    min-height: 0;
+    min-width: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .grass-list {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .source-list {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .cast-list {
+    display: none;
+  }
+  .panel-head {
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: #fbfcff;
+  }
+  .panel-head h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 950;
+  }
+  .panel-head span {
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 650;
+  }
+  .flat-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 56px 148px minmax(0, 1fr);
+    align-items: center;
+    min-height: 38px;
+    padding: 3px 7px;
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+  }
+  .source-surf,
+  .source-old,
+  .source-good,
+  .source-super {
+    background: linear-gradient(90deg, rgba(8, 117, 183, .07), #fff 48%);
+  }
+  .source-surf .pill-group,
+  .source-old .pill-group,
+  .source-good .pill-group,
+  .source-super .pill-group {
+    background: #f3faff;
+    border-color: #c6e0f4;
+  }
+  .grass-row {
+    min-height: 45px;
+  }
+  .source-row {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 4px 7px;
+  }
+  .row-index {
+    color: var(--muted);
+    font-size: 18px;
+    font-weight: 850;
+  }
+  .row-title {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .compact-stats {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .compact-stats strong {
+    color: var(--ink);
+  }
+  .source-row .row-title {
+    display: grid;
+    gap: 2px;
+    align-items: center;
+  }
+  .row-title strong {
+    font-size: 16px;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+  .row-title span {
+    min-width: 0;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-groups {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+  }
+  .pill-group {
+    min-width: 0;
+    min-height: 33px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 auto;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 3px 6px 3px 4px;
+  }
+  .time-group {
+    min-height: 37px;
+  }
+  .pill-group > .type-tile {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+  .pill-body {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .value-chip {
+    height: 20px;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--muted);
+    padding: 0 6px;
+    font: 950 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+  }
+  .slot,
+  .level,
+  .rate {
+    color: var(--ink);
+  }
+  .pct {
+    color: var(--green);
+  }
+  .mon-chip {
+    min-width: 0;
+    display: inline-grid;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px;
+  }
+  .mon-icon {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .mon-name {
+    min-width: 0;
+    height: 23px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    padding: 0 7px;
+    font: 950 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .mon-chip.none .mon-name {
+    color: #8c97a8;
+    background: #f7f9fc;
+  }
+  .form-chip {
+    height: 20px;
+    min-width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--muted);
+    font: 950 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .slot-chip {
+    min-width: 0;
+    display: inline-grid;
+    grid-template-columns: auto auto minmax(58px, 1fr) auto;
+    align-items: center;
+    gap: 5px;
+    flex: 0 1 auto;
+  }
+  .radio-chip {
+    grid-template-columns: auto auto minmax(78px, 1fr);
+  }
+  .swarm-slot {
+    grid-template-columns: 56px minmax(86px, 1fr);
+  }
+  .source-list .pill-group {
+    width: auto;
+    min-height: 30px;
+    flex: 0 1 auto;
+  }
+  .source-list .row-groups {
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 5px;
+    row-gap: 4px;
+  }
+  .source-list .pill-body {
+    flex-wrap: nowrap;
+  }
+  .source-list .slot-group {
+    padding: 2px 4px 2px 3px;
+  }
+  .source-list .slot-group > .type-tile {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+  .source-list .slot-group > .type-tile .tile-svg {
+    width: 18px;
+    height: 18px;
+  }
+  .source-list .value-chip {
+    height: 18px;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+  .source-list .slot-chip {
+    grid-template-columns: auto auto minmax(58px, 1fr) auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 3px;
+  }
+  .source-list .radio-chip {
+    grid-template-columns: auto minmax(62px, 1fr);
+  }
+  .source-list .swarm-slot {
+    grid-template-columns: auto minmax(68px, 1fr);
+  }
+  .source-list .mon-icon {
+    width: 24px;
+    height: 24px;
+  }
+  .source-list .mon-name {
+    height: 18px;
+    padding: 0 5px;
+    font-size: 9px;
+    max-width: 74px;
+  }
+  .source-list .form-chip {
+    height: 18px;
+    min-width: 20px;
+    font-size: 9px;
+  }
+  @media (max-width: 1120px) {
+    .route-body {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+    .grass-list,
+    .source-list,
+    .cast-list {
+      grid-column: auto;
+      grid-row: auto;
+      overflow: visible;
+    }
+  }
+  @media (max-width: 760px) {
+    .preview {
+      height: 100dvh;
+    }
+    .head-line {
+      height: 42px;
+    }
+    h1 {
+      font-size: 19px;
+    }
+    .head-line strong {
+      font-size: 17px;
+    }
+    .filter-row {
+      min-height: 48px;
+      gap: 6px;
+      padding: 7px;
+    }
+    .filter-button {
+      width: 42px;
+      height: 42px;
+    }
+    .filter-button .type-tile,
+    .rate-pill .type-tile {
+      width: 29px;
+      height: 29px;
+    }
+    .rate-strip {
+      display: none;
+    }
+    .route-overview {
+      min-height: 42px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      padding-bottom: 6px;
+    }
+    .route-body {
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+    .flat-row,
+    .source-row {
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 4px;
+    }
+    .row-groups {
+      grid-column: 1 / -1;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+    .pill-group {
+      width: 100%;
+    }
+  }
+</style></head><body><main class="preview"><header class="routes-head"><div class="head-line"><h1>Route 30 <span>MAP_R30</span></h1><strong>14 Pokemon</strong></div><div class="filter-row"><button class="filter-button" type="button"><span class="type-tile grass" title="Grass"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 4 13c0-6 8-10 16-10-1 8-5 16-12 16Z"/><path d="M4 20c4-4 8-8 12-12"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile rock" title="Rock smash"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 12 5-5-3-3-5 5"/><path d="M9 15 4 20"/><path d="m14 13-3 3-3-3 3-3Z"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile hoenn" title="Hoenn sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="7" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile sinnoh" title="Sinnoh sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18V6l9-2v12"/><path d="M8 10l9-2"/><circle cx="6" cy="18" r="2.5"/><circle cx="15" cy="16" r="2.5"/></svg></span></button><button class="filter-button" type="button"><span class="type-tile swarm" title="Swarms"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span></button><span class="rate-strip"><span class="rate-pill"><span class="type-tile grass" title="Grass"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 4 13c0-6 8-10 16-10-1 8-5 16-12 16Z"/><path d="M4 20c4-4 8-8 12-12"/></svg></span><span class="value-chip rate">0</span></span><span class="rate-pill"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="value-chip rate">0</span></span><span class="rate-pill"><span class="type-tile rock" title="Rock smash"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 12 5-5-3-3-5 5"/><path d="M9 15 4 20"/><path d="m14 13-3 3-3-3 3-3Z"/></svg></span><span class="value-chip rate">0</span></span><span class="rate-pill"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="value-chip rate">25</span></span><span class="rate-pill"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="value-chip rate">50</span></span><span class="rate-pill"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="value-chip rate">75</span></span></span></div><div class="route-overview"><span class="overview-pill grass"><span class="type-tile grass" title="Grass"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 4 13c0-6 8-10 16-10-1 8-5 16-12 16Z"/><path d="M4 20c4-4 8-8 12-12"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"></span></span><span class="overview-pill am"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"></span></span><span class="overview-pill day"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"></span></span><span class="overview-pill night"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"></span></span><span class="overview-pill surf"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"></span></span><span class="overview-pill old"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"></span></span><span class="overview-pill good"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"></span></span><span class="overview-pill super"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"></span></span><span class="overview-pill hoenn"><span class="type-tile hoenn" title="Radio sounds"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="7" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"></span></span><span class="overview-pill swarm"><span class="type-tile swarm" title="Swarms"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span><span class="overview-icons"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"></span></span></div></header><section class="route-body"><section class="list-panel grass-list"><div class="panel-head"><h2>Grass Slots</h2><span>12 slots</span></div><div class="flat-row grass-row"><div class="row-index">#1</div><div class="row-title compact-stats"><strong>20%</strong><span>Lv 2</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#2</div><div class="row-title compact-stats"><strong>20%</strong><span>Lv 3</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#3</div><div class="row-title compact-stats"><strong>10%</strong><span>Lv 2</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#4</div><div class="row-title compact-stats"><strong>10%</strong><span>Lv 3</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#5</div><div class="row-title compact-stats"><strong>10%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#6</div><div class="row-title compact-stats"><strong>10%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#7</div><div class="row-title compact-stats"><strong>5%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#8</div><div class="row-title compact-stats"><strong>5%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#9</div><div class="row-title compact-stats"><strong>4%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#10</div><div class="row-title compact-stats"><strong>4%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#11</div><div class="row-title compact-stats"><strong>1%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div><div class="flat-row grass-row"><div class="row-index">#12</div><div class="row-title compact-stats"><strong>1%</strong><span>Lv 4</span></div><div class="row-groups"><span class="pill-group am time-group"><span class="type-tile am" title="Morning"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16"/><path d="M6 15a6 6 0 0 1 12 0"/><path d="M12 3v5"/><path d="m4.2 7.2 2.1 2.1"/><path d="m19.8 7.2-2.1 2.1"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span><span class="pill-group day time-group"><span class="type-tile day" title="Day"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span><span class="pill-group night time-group"><span class="type-tile night" title="Night"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z"/></svg></span><span class="pill-body"><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></span></span></div></div></section><section class="list-panel source-list"><div class="panel-head"><h2>Other Sources</h2><span>Surf, rods, sounds, swarms</span></div><div class="flat-row source-row source-surf"><div class="row-groups"><span class="pill-group surf slot-group"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#1</span><span class="value-chip pct">60%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L15-25</span></span></span></span><span class="pill-group surf slot-group"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#2</span><span class="value-chip pct">30%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L10-20</span></span></span></span><span class="pill-group surf slot-group"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#3</span><span class="value-chip pct">5%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span></span><span class="value-chip level">L15-25</span></span></span></span><span class="pill-group surf slot-group"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#4</span><span class="value-chip pct">4%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span></span><span class="value-chip level">L15-25</span></span></span></span><span class="pill-group surf slot-group"><span class="type-tile surf" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#5</span><span class="value-chip pct">1%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span></span><span class="value-chip level">L32</span></span></span></span></div></div><div class="flat-row source-row source-old"><div class="row-groups"><span class="pill-group old slot-group"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#1</span><span class="value-chip pct">60%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L10</span></span></span></span><span class="pill-group old slot-group"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#2</span><span class="value-chip pct">30%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L10</span></span></span></span><span class="pill-group old slot-group"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#3</span><span class="value-chip pct">5%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L10</span></span></span></span><span class="pill-group old slot-group"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#4</span><span class="value-chip pct">4%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L10</span></span></span></span><span class="pill-group old slot-group"><span class="type-tile old" title="Old rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#5</span><span class="value-chip pct">1%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L10</span></span></span></span></div></div><div class="flat-row source-row source-good"><div class="row-groups"><span class="pill-group good slot-group"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#1</span><span class="value-chip pct">60%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L20</span></span></span></span><span class="pill-group good slot-group"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#2</span><span class="value-chip pct">30%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L20</span></span></span></span><span class="pill-group good slot-group"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#3</span><span class="value-chip pct">5%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L20</span></span></span></span><span class="pill-group good slot-group"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#4</span><span class="value-chip pct">4%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L20</span></span></span></span><span class="pill-group good slot-group"><span class="type-tile good" title="Good rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#5</span><span class="value-chip pct">1%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L20</span></span></span></span></div></div><div class="flat-row source-row source-super"><div class="row-groups"><span class="pill-group super slot-group"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#1</span><span class="value-chip pct">60%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L40</span></span></span></span><span class="pill-group super slot-group"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#2</span><span class="value-chip pct">30%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L40</span></span></span></span><span class="pill-group super slot-group"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#3</span><span class="value-chip pct">5%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L40</span></span></span></span><span class="pill-group super slot-group"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#4</span><span class="value-chip pct">4%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span><span class="value-chip level">L40</span></span></span></span><span class="pill-group super slot-group"><span class="type-tile super" title="Super rod"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#5</span><span class="value-chip pct">1%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span><span class="value-chip level">L40</span></span></span></span></div></div><div class="flat-row source-row source-rock"><div class="row-groups"><span class="pill-group rock slot-group"><span class="type-tile rock" title="Rock smash"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 12 5-5-3-3-5 5"/><path d="M9 15 4 20"/><path d="m14 13-3 3-3-3 3-3Z"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#1</span><span class="value-chip pct">50%</span><span class="mon-chip  none"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span></span><span class="value-chip level">L0</span></span></span></span><span class="pill-group rock slot-group"><span class="type-tile rock" title="Rock smash"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 12 5-5-3-3-5 5"/><path d="M9 15 4 20"/><path d="m14 13-3 3-3-3 3-3Z"/></svg></span><span class="pill-body"><span class="slot-chip"><span class="value-chip slot">#2</span><span class="value-chip pct">50%</span><span class="mon-chip  none"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span></span><span class="value-chip level">L0</span></span></span></span></div></div><div class="flat-row source-row source-radio"><div class="row-groups"><span class="pill-group hoenn slot-group"><span class="type-tile hoenn" title="Hoenn sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="7" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span class="pill-body"><span class="slot-chip radio-chip"><span class="value-chip pct">50%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><span class="mon-name">WHISMUR</span></span></span></span></span><span class="pill-group hoenn slot-group"><span class="type-tile hoenn" title="Hoenn sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="7" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span class="pill-body"><span class="slot-chip radio-chip"><span class="value-chip pct">50%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><span class="mon-name">LINOONE</span></span></span></span></span><span class="pill-group sinnoh slot-group"><span class="type-tile sinnoh" title="Sinnoh sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18V6l9-2v12"/><path d="M8 10l9-2"/><circle cx="6" cy="18" r="2.5"/><circle cx="15" cy="16" r="2.5"/></svg></span><span class="pill-body"><span class="slot-chip radio-chip"><span class="value-chip pct">50%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><span class="mon-name">BUIZEL</span></span></span></span></span><span class="pill-group sinnoh slot-group"><span class="type-tile sinnoh" title="Sinnoh sound"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18V6l9-2v12"/><path d="M8 10l9-2"/><circle cx="6" cy="18" r="2.5"/><circle cx="15" cy="16" r="2.5"/></svg></span><span class="pill-body"><span class="slot-chip radio-chip"><span class="value-chip pct">50%</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"><span class="mon-name">BIDOOF</span></span></span></span></span></div></div><div class="flat-row source-row source-swarm"><div class="row-groups"><span class="pill-group swarm slot-group"><span class="type-tile swarm" title="Grass"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span><span class="pill-body"><span class="slot-chip swarm-slot"><span class="value-chip source-label">Grass</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></span></span></span><span class="pill-group swarm slot-group"><span class="type-tile swarm" title="Surf"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span><span class="pill-body"><span class="slot-chip swarm-slot"><span class="value-chip source-label">Surf</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></span></span></span><span class="pill-group swarm slot-group"><span class="type-tile swarm" title="Good"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span><span class="pill-body"><span class="slot-chip swarm-slot"><span class="value-chip source-label">Good</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></span></span></span><span class="pill-group swarm slot-group"><span class="type-tile swarm" title="Super"><svg class="tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7Z"/><path d="M5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9Z"/><path d="M19 14l.7 1.7L21.5 16.5l-1.8.8L19 19l-.7-1.7-1.8-.8 1.8-.8Z"/></svg></span><span class="pill-body"><span class="slot-chip swarm-slot"><span class="value-chip source-label">Super</span><span class="mon-chip "><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span></span></span></span></div></div></section></section></main></body></html>

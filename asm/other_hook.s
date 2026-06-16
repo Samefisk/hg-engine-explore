@@ -365,6 +365,11 @@ StoreFieldSysPtr:
 ldr r1, =gFieldSysPtr
 str r4, [r1]
 
+push {r0-r3}
+mov r0, r4
+bl OverworldWildSpawns_OnFieldSystemReady
+pop {r0-r3}
+
 mov r1, #0
 str r1, [r0]
 ldr r0, [r4]

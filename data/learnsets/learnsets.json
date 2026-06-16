@@ -29525,6 +29525,10 @@
         "Move": "MOVE_PECK"
       },
       {
+        "Level": 1,
+        "Move": "MOVE_HEADBUTT"
+      },
+      {
         "Level": 3,
         "Move": "MOVE_TACKLE"
       },

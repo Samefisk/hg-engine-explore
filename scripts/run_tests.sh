@@ -1,6 +1,7 @@
 #!/bin/bash
 
 video=false
+export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-dummy}"
 
 while getopts 'v' flag; do
     case "${flag}" in

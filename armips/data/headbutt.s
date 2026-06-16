@@ -737,13 +737,13 @@ headbuttheader  32,  15,   0   // Route 28
 
 headbuttheader  33,  35,   0   // Route 29
     // normal slots
-    headbuttencounter SPECIES_HOOTHOOT, 2, 3
+    headbuttencounter SPECIES_CLEFAIRY, 2, 3
     headbuttencounter SPECIES_PINECO, 2, 3
     headbuttencounter SPECIES_PINECO, 2, 3
     headbuttencounter SPECIES_EXEGGCUTE, 2, 3
     headbuttencounter SPECIES_EXEGGCUTE, 2, 3
     headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_HOOTHOOT, 4, 5
+    headbuttencounter SPECIES_CLEFAIRY, 4, 5
     headbuttencounter SPECIES_SPINARAK, 4, 5
     headbuttencounter SPECIES_SPINARAK, 4, 5
     headbuttencounter SPECIES_EXEGGCUTE, 4, 5

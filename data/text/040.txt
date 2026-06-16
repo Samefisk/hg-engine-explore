@@ -119,3 +119,21 @@ NOT TELLING
 The repellent’s effect wore off!\nWould you like to use another one?
 You used the {STRVAR_1 8, 1, 0}.
 Begin auto-battle.
+Sound effect tester.
+Play SE {STRVAR_1 52, 0, 0}
+Next SE
+Previous SE
++16
+-16
++128
+-128
+Close
+Visual effect tester.
+Play VFX {STRVAR_1 52, 0, 0}
+Next VFX
+Previous VFX
++16
+-16
++128
+-128
+Close

@@ -77,6 +77,7 @@ typedef struct MAP_EVENTS {
 
 
 typedef struct LocalMapObject LocalMapObject;
+typedef struct SysTask SysTask;
 
 typedef struct MapObjectMan {
     u32 flags;
@@ -253,6 +254,66 @@ void LONG_CALL MapObject_SetCurrentX(LocalMapObject* object, u32 x);
 void LONG_CALL MapObject_SetFlag29(LocalMapObject* object, BOOL set);
 void LONG_CALL sub_02069DC8(LocalMapObject *mapObject, BOOL enable_bit);
 void LONG_CALL ov01_021F9048(LocalMapObject* map_object);
+BOOL LONG_CALL ov01_02203A48(LocalMapObject *mapObject, int emoteId);
+void LONG_CALL ov01_02203AB4(FieldSystem *fieldSystem, LocalMapObject *mapObject, int emoteId);
+void *LONG_CALL ov01_021F1450(void *effectContext, int effectId);
+void *LONG_CALL ov01_021F146C(LocalMapObject *mapObject);
+void *LONG_CALL ov01_021F1588(void *effectContext, int effectId);
+void *LONG_CALL ov01_021F1620(void *effectContext, const void *descriptor, const VecFx32 *position, int param, const void *initData, int height);
+void LONG_CALL ov01_021F1640(void *effect);
+void *LONG_CALL ov01_021FC748(FieldSystem *fieldSystem, int param0, int param1);
+void LONG_CALL ov01_021FCFEC(void *playerAvatar);
+void LONG_CALL ov01_021FCB14(void *state);
+void LONG_CALL ov01_021FCB4C(void *state);
+void LONG_CALL ov01_021FCB90(void *state, int animId);
+BOOL LONG_CALL ov01_021FCBCC(void *state);
+void *LONG_CALL ov01_021FD2EC(LocalMapObject *mapObject, const VecFx32 *position);
+void *LONG_CALL ov01_021FD640(LocalMapObject *mapObject);
+void LONG_CALL ov01_021FD684(LocalMapObject *mapObject);
+void *LONG_CALL ov01_021FD8E8(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FDA14(void *effectContext);
+void LONG_CALL ov01_021FDA30(void *effect);
+void *LONG_CALL ov01_021FDA74(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FE3F8(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FE590(void *effectContext);
+void LONG_CALL ov01_021FE5A4(void *effect);
+const void *LONG_CALL FieldEffect_GetInitData(void *effect);
+void *LONG_CALL ov01_021FE66C(LocalMapObject *mapObject);
+void *LONG_CALL ov01_021FEA0C(void *effectContext);
+void LONG_CALL ov01_021FEA20(void *effect);
+void *LONG_CALL ov01_021FECA0(LocalMapObject *mapObject, int x, int height, int y);
+void *LONG_CALL ov01_021FEE04(LocalMapObject *mapObject, int x, int height, int y);
+void *LONG_CALL ov01_021FEEEC(void *effectContext);
+void LONG_CALL ov01_021FEF08(void *effect);
+void *LONG_CALL ov01_021FF070(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FF0E4(LocalMapObject *mapObject, int param, int x, int y, BOOL lockFacing);
+void *LONG_CALL ov01_021FF464(void *effectContext);
+void LONG_CALL ov01_021FF480(void *effect);
+void *LONG_CALL ov01_021FF4FC(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FF6B0(void *effectContext);
+void LONG_CALL ov01_021FF6CC(void *effect);
+void LONG_CALL ov01_021FF74C(LocalMapObject *mapObject);
+void *LONG_CALL ov01_021FF854(void *effectContext);
+void LONG_CALL ov01_021FF870(void *effect);
+void *LONG_CALL ov01_021FF8F0(LocalMapObject *mapObject, int param);
+void *LONG_CALL ov01_021FF964(LocalMapObject *mapObject, int param, int x, int y, BOOL lockFacing);
+void *LONG_CALL ov01_021FFC0C(void *effectContext);
+void LONG_CALL ov01_021FFC28(void *effect);
+void LONG_CALL ov01_021FFF5C(LocalMapObject *mapObject, int effectId);
+void *LONG_CALL ov01_022000DC(LocalMapObject *mapObject);
+void *LONG_CALL ov01_022001E4(void *effectContext);
+void LONG_CALL ov01_022001F8(void *effect);
+void LONG_CALL ov01_022006D4(void *effect);
+void *LONG_CALL ov01_02200540(LocalMapObject *mapObject, int variant, BOOL flag);
+void *LONG_CALL ov01_02200730(LocalMapObject *mapObject);
+void *LONG_CALL ov01_022008B4(void *playerAvatar);
+void *LONG_CALL ov01_0220329C(LocalMapObject *mapObject, int variant);
+void *LONG_CALL ov01_02203A18(void *effectContext);
+void LONG_CALL ov01_02203A38(void *effect);
+void *LONG_CALL ov01_02203EA0(LocalMapObject *mapObject);
+void *LONG_CALL ov01_02203E40(void *effectContext);
+void LONG_CALL ov01_02203E64(void *effect);
+void LONG_CALL ov01_02203F2C(void *effect, fx32 phaseOrSeed);
 void LONG_CALL MapObjectMan_PauseAllMovement(MapObjectMan* manager);
 void LONG_CALL MapObjectMan_UnpauseAllMovement(MapObjectMan* manager);
 void LONG_CALL ChangeMapObjSprite(LocalMapObject *mapObject, u32 overworldTag);
@@ -305,7 +366,25 @@ BOOL LONG_CALL IsMetatileBlockedAt(FieldSystem *fieldSystem, int x, int y);
 u8 LONG_CALL GetMetatileBehaviorAt(FieldSystem *fieldSystem, int x, int y);
 int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
-BOOL MapObject_IsSingleMovementActive(LocalMapObject *obj);
-void MapObject_PauseMovement(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_IsSingleMovementActive(LocalMapObject *obj);
+void LONG_CALL MapObject_SetSingleMovementActive(LocalMapObject *obj);
+void LONG_CALL MapObject_ClearSingleMovementActive(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_IsMovementDirectionBlocked(LocalMapObject *obj, u32 direction);
+void LONG_CALL MapObject_StartMovementCommandInternal(LocalMapObject *obj, u32 movementCommand);
+void LONG_CALL MapObject_StartMovementCommand(LocalMapObject *obj, u32 movementCommand);
+u32 LONG_CALL MapObject_MovementCommandFromDirection(u32 direction, u32 movementCommand);
+BOOL LONG_CALL MapObject_UpdateMovementCommand(LocalMapObject *obj);
+SysTask * LONG_CALL MapObject_StartMovementList(LocalMapObject *obj, const u16 *movementList);
+BOOL LONG_CALL MapObject_MovementListTaskIsFinished(SysTask *task);
+void LONG_CALL MapObject_CleanupMovementListTask(SysTask *task);
+void LONG_CALL MapObject_StartJumpMovementInternal(
+    LocalMapObject *obj,
+    u32 direction,
+    s32 deltaFx32,
+    u32 frameCount,
+    u32 jumpType,
+    s32 arcTableId,
+    u32 arcStep);
+void LONG_CALL MapObject_PauseMovement(LocalMapObject *obj);
 
 #endif //POKEHEARTGOLD_MAP_EVENTS_INTERNAL_H

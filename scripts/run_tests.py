@@ -12,6 +12,8 @@ SHOW_VIDEO_OUTPUT = False
 TEST_START_INDEX = 0
 IDLE_TIMEOUT_SECONDS = 1 * 60  # 1 minute
 
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
 g_EmulatorCommunicationSendHoleAddress = 0x02FFF81C
 TEST_CASE_PASS = -1
 TEST_CASE_FAIL = -2
@@ -42,6 +44,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--video", action="store_true")
 
 emu = DeSmuME()
+emu.volume_set(0)
 emu_memory = emu.memory
 memory = DeSmuME_Memory(emu)
 

@@ -89,6 +89,9 @@ scrdef scr_seq_0003_071
 scrdef scr_seq_0003_072_repels
 scrdef scr_seq_0003_073_autobattle_testing
 scrdef scr_seq_0003_074_overworld_wild_battle
+scrdef scr_seq_0003_075_overworld_wild_ram_crash_feedback
+scrdef scr_seq_0003_076_overworld_wild_sound_tester
+scrdef scr_seq_0003_077_overworld_wild_visual_tester
 scrdef_end
 
 scr_seq_0003_002:
@@ -1745,7 +1748,170 @@ scr_seq_0003_073_autobattle_testing:
 scr_seq_0003_074_overworld_wild_battle:
     lockall
     OverworldWildBattle
+    compare VAR_SPECIAL_x8004, 0
+    goto_if_eq _overworld_wild_battle_no_pending
+    WildBattleSp VAR_SPECIAL_x8004, VAR_SPECIAL_x8005, 0
+    OverworldWildBattleCleanup
+_overworld_wild_battle_no_pending:
+    releaseall
+    end
 
+scr_seq_0003_075_overworld_wild_ram_crash_feedback:
+    ShakeOverworld VAR_SPECIAL_x8004, 5, 4, 8, 2
+    endstd
+    end
 
+scr_seq_0003_076_overworld_wild_sound_tester:
+    play_se SEQ_SE_DP_SELECT
+    lockall
+    npc_msg 121
+    touchscreen_menu_hide
+_overworld_wild_sound_tester_loop:
+    OverworldWildSoundTesterBufferNumbers
+    TextNumber 0, VAR_SPECIAL_x8004
+    menu_init 1, 1, 0, 1, VAR_SPECIAL_RESULT
+    menu_item_add 122, 255, 0
+    menu_item_add 123, 255, 1
+    menu_item_add 124, 255, 2
+    menu_item_add 125, 255, 3
+    menu_item_add 126, 255, 4
+    menu_item_add 127, 255, 5
+    menu_item_add 128, 255, 6
+    menu_item_add 129, 255, 7
+    menu_exec
+    compare VAR_SPECIAL_RESULT, 0
+    goto_if_eq _overworld_wild_sound_tester_play
+    compare VAR_SPECIAL_RESULT, 1
+    goto_if_eq _overworld_wild_sound_tester_next
+    compare VAR_SPECIAL_RESULT, 2
+    goto_if_eq _overworld_wild_sound_tester_previous
+    compare VAR_SPECIAL_RESULT, 3
+    goto_if_eq _overworld_wild_sound_tester_next_16
+    compare VAR_SPECIAL_RESULT, 4
+    goto_if_eq _overworld_wild_sound_tester_previous_16
+    compare VAR_SPECIAL_RESULT, 5
+    goto_if_eq _overworld_wild_sound_tester_next_128
+    compare VAR_SPECIAL_RESULT, 6
+    goto_if_eq _overworld_wild_sound_tester_previous_128
+    goto _overworld_wild_sound_tester_close
+
+_overworld_wild_sound_tester_play:
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_next:
+    OverworldWildSoundTesterAdjust 1
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_previous:
+    OverworldWildSoundTesterAdjust -1
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_next_16:
+    OverworldWildSoundTesterAdjust 16
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_previous_16:
+    OverworldWildSoundTesterAdjust -16
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_next_128:
+    OverworldWildSoundTesterAdjust 128
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_previous_128:
+    OverworldWildSoundTesterAdjust -128
+    OverworldWildSoundTesterPlay
+    goto _overworld_wild_sound_tester_loop
+
+_overworld_wild_sound_tester_close:
+    closemsg
+    touchscreen_menu_show
+    OverworldWildSoundTesterClose
+    releaseall
+    end
+
+scr_seq_0003_077_overworld_wild_visual_tester:
+    play_se SEQ_SE_DP_SELECT
+    lockall
+    npc_msg 130
+    touchscreen_menu_hide
+_overworld_wild_visual_tester_loop:
+    OverworldWildVisualTesterBufferNumbers
+    TextNumber 0, VAR_SPECIAL_x8004
+    menu_init 1, 1, 0, 1, VAR_SPECIAL_RESULT
+    menu_item_add 131, 255, 0
+    menu_item_add 132, 255, 1
+    menu_item_add 133, 255, 2
+    menu_item_add 134, 255, 3
+    menu_item_add 135, 255, 4
+    menu_item_add 136, 255, 5
+    menu_item_add 137, 255, 6
+    menu_item_add 138, 255, 7
+    menu_exec
+    compare VAR_SPECIAL_RESULT, 0
+    goto_if_eq _overworld_wild_visual_tester_play
+    compare VAR_SPECIAL_RESULT, 1
+    goto_if_eq _overworld_wild_visual_tester_next
+    compare VAR_SPECIAL_RESULT, 2
+    goto_if_eq _overworld_wild_visual_tester_previous
+    compare VAR_SPECIAL_RESULT, 3
+    goto_if_eq _overworld_wild_visual_tester_next_16
+    compare VAR_SPECIAL_RESULT, 4
+    goto_if_eq _overworld_wild_visual_tester_previous_16
+    compare VAR_SPECIAL_RESULT, 5
+    goto_if_eq _overworld_wild_visual_tester_next_128
+    compare VAR_SPECIAL_RESULT, 6
+    goto_if_eq _overworld_wild_visual_tester_previous_128
+    goto _overworld_wild_visual_tester_close
+
+_overworld_wild_visual_tester_play:
+    OverworldWildVisualTesterPlay
+    goto _overworld_wild_visual_tester_after_play
+
+_overworld_wild_visual_tester_after_play:
+    compare VAR_SPECIAL_x8004, 102
+    goto_if_ne _overworld_wild_visual_tester_loop
+    releaseall
+    wait 96, VAR_SPECIAL_x800A
+    OverworldWildVisualTesterClearTemporaryEffects
+    lockall
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_next:
+    OverworldWildVisualTesterNextPlay
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_previous:
+    OverworldWildVisualTesterPreviousPlay
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_next_16:
+    OverworldWildVisualTesterNext16Play
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_previous_16:
+    OverworldWildVisualTesterPrevious16Play
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_next_128:
+    OverworldWildVisualTesterNext128Play
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_previous_128:
+    OverworldWildVisualTesterPrevious128Play
+    goto _overworld_wild_visual_tester_loop
+
+_overworld_wild_visual_tester_close:
+    closemsg
+    touchscreen_menu_show
+    OverworldWildVisualTesterClose
+    releaseall
+    end
 
 .close

@@ -20006,6 +20006,10 @@
         "Move": "MOVE_FORESIGHT"
       },
       {
+        "Level": 1,
+        "Move": "MOVE_HEADBUTT"
+      },
+      {
         "Level": 5,
         "Move": "MOVE_HYPNOSIS"
       },
