@@ -2,9 +2,9 @@
 """Serve a dynamic overview of overworld wild behavior profiles.
 
 The viewer keeps the C tables as the source of truth.  It parses the current
-overlay source on every /data.json request, resolves class rules and variable
-overrides in the same order as the runtime resolver, and exposes the result to
-a small browser UI.
+runtime overlay and behavior-data overlay on every /data.json request, resolves
+class rules and variable overrides in the same order as the runtime resolver,
+and exposes the result to a small browser UI.
 """
 
 from __future__ import annotations
@@ -38,6 +38,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+BEHAVIOR_DATA_SOURCE = ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c"
+BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
@@ -74,6 +76,8 @@ BUILD_STATE = {
 }
 DATA_SOURCE_FILES = (
     OVERLAY_SOURCE,
+    BEHAVIOR_DATA_SOURCE,
+    BEHAVIOR_DATA_HEADER,
     SPECIES_HEADER,
     MAPS_HEADER,
     SPAWNS_INTERNAL_HEADER,
@@ -87,7 +91,15 @@ DATA_SOURCE_FILES = (
     ARMIPS_CONSTANTS,
     ARMIPS_CONFIG,
 )
-DEFINE_SOURCE_FILES = [SPECIES_HEADER, MAPS_HEADER, SPAWNS_INTERNAL_HEADER, OVERLAY_SOURCE, ENEMY_PARTY_SOURCE]
+DEFINE_SOURCE_FILES = [
+    SPECIES_HEADER,
+    MAPS_HEADER,
+    SPAWNS_INTERNAL_HEADER,
+    BEHAVIOR_DATA_HEADER,
+    OVERLAY_SOURCE,
+    BEHAVIOR_DATA_SOURCE,
+    ENEMY_PARTY_SOURCE,
+]
 DATA_CACHE_LOCK = threading.Lock()
 DATA_JSON_CACHE = {
     "key": None,
@@ -794,6 +806,14 @@ def parse_enum_values(text: str, enum_name: str) -> dict[str, int]:
         result[name] = value
         value += 1
     return result
+
+
+def parse_behavior_data_enums() -> tuple[dict[str, int], dict[str, int]]:
+    source = strip_c_comments(join_line_continuations(BEHAVIOR_DATA_HEADER.read_text()))
+    return (
+        parse_enum_values(source, "OverworldWildSpawnTerrain"),
+        parse_enum_values(source, "OverworldWildSpawnDestination"),
+    )
 
 
 def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
@@ -2378,6 +2398,8 @@ def group_flags_for_species(
 def data_source_metadata() -> dict[str, str]:
     return {
         "overlay": str(OVERLAY_SOURCE.relative_to(ROOT)),
+        "behaviorData": str(BEHAVIOR_DATA_SOURCE.relative_to(ROOT)),
+        "behaviorDataHeader": str(BEHAVIOR_DATA_HEADER.relative_to(ROOT)),
         "species": str(SPECIES_HEADER.relative_to(ROOT)),
         "spawnInternal": str(SPAWNS_INTERNAL_HEADER.relative_to(ROOT)),
         "wildTest": str(ENEMY_PARTY_SOURCE.relative_to(ROOT)),
@@ -2402,8 +2424,7 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values = parse_enum_values(source, "OverworldWildSpawnTerrain")
-    destination_values = parse_enum_values(source, "OverworldWildSpawnDestination")
+    terrain_values, destination_values = parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
 
@@ -2475,11 +2496,12 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
 def build_data() -> dict:
     raw_overlay = OVERLAY_SOURCE.read_text()
     source = strip_c_comments(join_line_continuations(raw_overlay))
+    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values = parse_enum_values(source, "OverworldWildSpawnTerrain")
-    destination_values = parse_enum_values(source, "OverworldWildSpawnDestination")
+    terrain_values, destination_values = parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
 
@@ -2491,12 +2513,12 @@ def build_data() -> dict:
 
     class_profiles = [
         parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassProfiles"))
+        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
     default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     default_profile = class_profiles[default_class]
     class_rules = []
-    for order, entry in enumerate(parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassRules")), 1):
+    for order, entry in enumerate(parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassRules")), 1):
         if len(entry) != 2:
             raise ParseError("class rule initializer shape changed")
         behavior_class = make_value(str(entry[1]), "behaviorClass", macros)
@@ -2509,7 +2531,7 @@ def build_data() -> dict:
         rule["className"] = class_labels.get(numeric(behavior_class) or -1, {"name": behavior_class["label"]})["name"]
         class_rules.append(rule)
 
-    variable_overrides = parse_behavior_overrides(source, macros, group_labels)
+    variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
 
     group_species = parse_group_species(source, macros)
     species = parse_species(expressions, macros, species_order)
@@ -2973,15 +2995,16 @@ def braced_entry_removal_span(text: str, entry_span: tuple[int, int], container_
 
 
 def apply_profile_changes(body: bytes) -> dict:
-    raw_overlay = OVERLAY_SOURCE.read_text()
-    source = strip_c_comments(join_line_continuations(raw_overlay))
-    expressions, _ = parse_define_expressions([SPECIES_HEADER, OVERLAY_SOURCE])
+    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
+    expressions, _ = parse_define_expressions([SPECIES_HEADER, BEHAVIOR_DATA_HEADER, OVERLAY_SOURCE, BEHAVIOR_DATA_SOURCE])
     macros = evaluate_defines(expressions)
-    macros.update(parse_enum_values(source, "OverworldWildSpawnDestination"))
+    _, destination_values = parse_behavior_data_enums()
+    macros.update(destination_values)
 
     class_profiles = [
         parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassProfiles"))
+        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
     changes = parse_save_payload(body)
     if not changes:
@@ -2996,8 +3019,8 @@ def apply_profile_changes(body: bytes) -> dict:
                 raise ValueError(f"invalid value for {field}: {raw}")
 
     replacements: list[tuple[int, int, str]] = []
-    class_array_span = initializer_brace_span(raw_overlay, "sOverworldWildBehaviorClassProfiles")
-    class_entry_spans = top_level_braced_spans(raw_overlay, class_array_span)
+    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
+    class_entry_spans = top_level_braced_spans(raw_behavior_data, class_array_span)
     if len(class_entry_spans) != len(class_profiles):
         raise ParseError("class profile entry count changed")
 
@@ -3005,17 +3028,17 @@ def apply_profile_changes(body: bytes) -> dict:
         profile_raws = raw_values(class_profiles[class_index])
         profile_raws.update(field_changes)
         entry_span = class_entry_spans[class_index]
-        profile_indent = line_indent_before(raw_overlay, entry_span[0])
+        profile_indent = line_indent_before(raw_behavior_data, entry_span[0])
         replacements.append((entry_span[0], entry_span[1], format_profile_initializer(profile_raws, profile_indent)))
 
-    updated_source = raw_overlay
+    updated_source = raw_behavior_data
     changed = False
     for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
         if updated_source[start:end] != replacement:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        OVERLAY_SOURCE.write_text(updated_source)
+        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
         invalidate_data_cache()
     return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
 
@@ -3027,10 +3050,13 @@ def apply_profile_membership_changes(body: bytes) -> dict:
 
     raw_overlay = OVERLAY_SOURCE.read_text()
     source = strip_c_comments(join_line_continuations(raw_overlay))
+    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    macros.update(parse_enum_values(source, "OverworldWildSpawnDestination"))
+    _, destination_values = parse_behavior_data_enums()
+    macros.update(destination_values)
     species = parse_species(expressions, macros, species_order)
     apply_species_type_metadata(species, parse_species_type_metadata(macros))
     valid_species = {entry["symbol"] for entry in species}
@@ -3038,10 +3064,10 @@ def apply_profile_membership_changes(body: bytes) -> dict:
     class_labels = invert_labels(macros, CLASS_PREFIX)
     class_profiles = [
         parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassProfiles"))
+        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
     class_rules = []
-    for entry in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassRules")):
+    for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassRules")):
         if len(entry) != 2:
             raise ParseError("class rule initializer shape changed")
         class_rules.append(
@@ -3059,8 +3085,8 @@ def apply_profile_membership_changes(body: bytes) -> dict:
         if class_index < 0 or class_index >= len(class_profiles):
             raise ValueError(f"class index out of range: {class_index}")
 
-    class_rule_span = initializer_brace_span(raw_overlay, "sOverworldWildBehaviorClassRules")
-    class_rule_entry_spans = top_level_braced_spans(raw_overlay, class_rule_span)
+    class_rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassRules")
+    class_rule_entry_spans = top_level_braced_spans(raw_behavior_data, class_rule_span)
     if len(class_rule_entry_spans) != len(class_rules):
         raise ParseError("class rule entry count changed")
 
@@ -3098,14 +3124,14 @@ def apply_profile_membership_changes(body: bytes) -> dict:
         insert_at = class_rule_span[1] - 1
         replacements.append((insert_at, insert_at, "".join(f"{rule},\n" for rule in appended_rules)))
 
-    updated_source = raw_overlay
+    updated_source = raw_behavior_data
     changed = False
     for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
         if updated_source[start:end] != replacement:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        OVERLAY_SOURCE.write_text(updated_source)
+        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
         invalidate_data_cache()
     return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
 
@@ -3117,17 +3143,18 @@ def apply_profile_override_changes(body: bytes) -> dict:
     if not additions and not removals:
         return {"saved": False, "message": "No changes"}
 
-    raw_overlay = OVERLAY_SOURCE.read_text()
-    source = strip_c_comments(join_line_continuations(raw_overlay))
+    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    macros.update(parse_enum_values(source, "OverworldWildSpawnTerrain"))
-    macros.update(parse_enum_values(source, "OverworldWildSpawnDestination"))
+    terrain_values, destination_values = parse_behavior_data_enums()
+    macros.update(terrain_values)
+    macros.update(destination_values)
 
     class_profiles = [
         parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorClassProfiles"))
+        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
     valid_options = valid_change_options(macros, class_profiles)
     formatted_rules = []
@@ -3156,8 +3183,8 @@ def apply_profile_override_changes(body: bytes) -> dict:
             format_behavior_override_rule(change["match"], {field}, profile_raws)
         )
 
-    override_span = initializer_brace_span(raw_overlay, "sOverworldWildBehaviorOverrides")
-    override_entry_spans = top_level_braced_spans(raw_overlay, override_span)
+    override_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrides")
+    override_entry_spans = top_level_braced_spans(raw_behavior_data, override_span)
     if removals:
         for order in removals:
             if order < 1 or order > len(override_entry_spans):
@@ -3165,20 +3192,20 @@ def apply_profile_override_changes(body: bytes) -> dict:
 
     replacements: list[tuple[int, int, str]] = []
     for order in sorted(set(removals), reverse=True):
-        start, end = braced_entry_removal_span(raw_overlay, override_entry_spans[order - 1], override_span)
+        start, end = braced_entry_removal_span(raw_behavior_data, override_entry_spans[order - 1], override_span)
         replacements.append((start, end, ""))
     if formatted_rules:
         insert_at = override_span[1] - 1
         replacements.append((insert_at, insert_at, "".join(f"{rule},\n" for rule in formatted_rules)))
 
-    updated_source = raw_overlay
+    updated_source = raw_behavior_data
     changed = False
     for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
         if updated_source[start:end] != replacement:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        OVERLAY_SOURCE.write_text(updated_source)
+        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
         invalidate_data_cache()
     total_changes = len(formatted_rules) + len(set(removals))
     label = "override change" if total_changes == 1 else "override changes"
