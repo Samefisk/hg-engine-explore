@@ -85,3 +85,31 @@ Follow-up checks when Docker is available:
 - Confirm `test.nds` copies to Delta if using the normal Mac build flow.
 - Run a headless overworld scenario that spawns visible wild Pokemon and verifies behavior assignment still resolves for several species/classes.
 - Inspect the built overlay metadata to confirm overlay 150 size stays under `0x1000` and the fixed entry address matches `y9.bin`.
+
+## Attempt A02: Build Then Test Request
+
+Goal:
+
+- Run the normal ROM build, then run the battle-test flow requested by the user.
+
+Build:
+
+- `./docker-makerom.cmd`
+  - Failed immediately because Docker is unavailable in this environment: `./docker-makerom.cmd: line 6: docker: command not found`.
+
+Test build:
+
+- `make AUTO_TEST=Y -j1`
+  - Used `-j1` because `nproc` is not available in this macOS environment.
+  - Failed at the first compiler invocation because `arm-none-eabi-gcc` is unavailable: `make: arm-none-eabi-gcc: No such file or directory`.
+
+Test runner:
+
+- `SDL_VIDEODRIVER=dummy scripts/run_tests.sh` was not run.
+- Reason: the `AUTO_TEST=Y` test ROM was not built. Running the battle-test runner against the stale existing `test.nds` would not validate this branch.
+
+Result:
+
+- Build blocked by missing Docker.
+- Test build blocked by missing ARM toolchain.
+- No tracked generated files were changed by the failed build/test build attempts.
