@@ -837,7 +837,7 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehav
     const OverworldWildBehaviorDataOverlayEntry *entry;
 
     if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)
-        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 2)) {
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 0)) {
         return NULL;
     }
 

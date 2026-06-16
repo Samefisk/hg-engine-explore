@@ -154,3 +154,43 @@ Battle-test note:
   - `docker run ... 'cd /hg-engine && make AUTO_TEST=Y -j$(nproc) VENV=/tmp/hg-engine-venv'`
   - Failed at root link with `region 'rom' overflowed by 2756 bytes`.
   - This is the battle scenario harness build, not the regular ROM build or the overworld headless runtime path.
+
+## Attempt A04: Restore Behavior Profile Assignment From Overlay 150
+
+Problem:
+
+- Runtime verification showed `0x023C3000` contained Thumb helper code (`0xF52FB500...`) instead of the behavior-data entry table.
+- That meant `OverworldWildSpawns_IsBehaviorDataEntryValid` rejected overlay 150 and Pokemon silently fell back to the default behavior profile.
+
+Root cause:
+
+- `src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c` wrapped all profile/rule/override data in `#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS`, but it did not include `include/config.h`.
+- The regular overlay 150 compile therefore emitted no data table, leaving only `thumb_help.o` at the overlay start.
+
+Fix:
+
+- Added `include/config.h` to overlay 150 so the behavior data compiles under the same feature flag as overlay 149.
+- Loaded overlay 150 synchronously from both the linked resident chain and the lazy behavior-data resolver, so profile lookup cannot race an async data load.
+
+Build:
+
+- `export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"; ./docker-makerom.cmd`
+  - Passed.
+  - Copied the ROM to `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test902.nds`.
+- Built ROM inspection:
+  - Overlay 149: load `0x023CD000`, file size `0xA4F8`.
+  - Overlay 150: load `0x023C3000`, file size `0xAC8`.
+  - Overlay 150 first bytes are `4442574f01002000...`, matching magic `0x4F574244`, version `1`, and entry size `32`.
+
+Headless verification:
+
+- `scripts/headless-overworld-test.py` read the live overlay 150 entry from the rebuilt ROM:
+  - `magic=0x4F574244`
+  - `version=1`
+  - `entry_size=32`
+  - `class_profile_count=9`
+  - `class_rule_count=109`
+  - `override_count=2`
+  - All expectations passed.
+- A follow-up key-only overworld movement smoke test passed with `comm=0`.
+  - Final screenshot: `documentation/verification_screenshots/overlay150_profiles_fixed_05_final.png`.

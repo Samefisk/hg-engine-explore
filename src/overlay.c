@@ -197,7 +197,7 @@ loadExtension:
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
             ovyId = gLinkedOverlayList[i].ext_id;
-            loadType = 2;
+            loadType = (ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA) ? 0 : 2;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
             debug_printf("Trying to load linked overlay_%04d.bin.\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS

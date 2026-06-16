@@ -1,5 +1,6 @@
 #include "../../include/overworld_wild_behavior_data.h"
 
+#include "../../include/config.h"
 #include "../../include/constants/species.h"
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
