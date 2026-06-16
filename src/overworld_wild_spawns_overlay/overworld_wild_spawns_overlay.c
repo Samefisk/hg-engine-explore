@@ -9379,7 +9379,8 @@ static void OverworldWildSpawns_DeferredBattleScriptTask(SysTask *task, void *da
     FieldSystem *fieldSystem;
 
     (void)data;
-    if (sOverworldWildMovementFrameTaskExecuting) {
+    if (sOverworldWildMovementFrameTaskExecuting
+        || sOverworldWildSoundTesterTaskExecuting) {
         return;
     }
 
@@ -9403,7 +9404,10 @@ static void OverworldWildSpawns_DeferBattleScript(FieldSystem *fieldSystem)
             NULL,
             OW_WILD_SPAWNER_MOVEMENT_FRAME_TASK_PRIORITY + 1);
     }
-    if (sOverworldWildDeferredBattleScriptTask == NULL && fieldSystem != NULL) {
+    if (sOverworldWildDeferredBattleScriptTask == NULL
+        && fieldSystem != NULL
+        && !sOverworldWildMovementFrameTaskExecuting
+        && !sOverworldWildSoundTesterTaskExecuting) {
         EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
     }
 }
@@ -9572,7 +9576,8 @@ static void OverworldWildSpawns_RequestBattleScript(FieldSystem *fieldSystem)
     OverworldWildSpawns_StopSoundTesterTaskIfActive();
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-    if (sOverworldWildMovementFrameTaskExecuting) {
+    if (sOverworldWildMovementFrameTaskExecuting
+        || sOverworldWildSoundTesterTaskExecuting) {
         OverworldWildSpawns_DeferBattleScript(fieldSystem);
         return;
     }
