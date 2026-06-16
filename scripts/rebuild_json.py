@@ -6,8 +6,26 @@ import sys
 import json
 
 
+OVERWORLD_SING_ALIAS_NAME = "SEQ_SE_OW_SING"
+OVERWORLD_SING_SOURCE_NAME = "SEQ_SE_DP_W047"
+OVERWORLD_SING_END_NAME = "SEQ_SE_END"
+
 fileblock = json.load(open("build/sdat/FileBlock.json", "rb+"))
 infoblock = json.load(open("build/sdat/InfoBlock.json", "rb+"))
+
+
+def add_overworld_sing_alias(seq_info):
+    # The move SING effect is battle-bank backed; this alias keeps the melody field-bank safe.
+    seq_info[:] = [entry for entry in seq_info if entry["name"] != OVERWORLD_SING_ALIAS_NAME]
+
+    source = next(entry for entry in seq_info if entry["name"] == OVERWORLD_SING_SOURCE_NAME)
+    end_index = next(i for i, entry in enumerate(seq_info) if entry["name"] == OVERWORLD_SING_END_NAME)
+
+    alias = dict(source)
+    alias["name"] = OVERWORLD_SING_ALIAS_NAME
+    alias["bnk"] = "BANK_SE_FIELD"
+
+    seq_info.insert(end_index, alias)
 
 
 
@@ -203,6 +221,9 @@ if (species1 <= 544): # hasn't already been expanded
         json_data["unkA"] = 0
         
         infoblock["wavarcInfo"].insert(len(infoblock["wavarcInfo"]), json_data)
+
+
+add_overworld_sing_alias(infoblock["seqInfo"])
 
 
 with open("build/sdat/InfoBlock.json", "w") as savefile:

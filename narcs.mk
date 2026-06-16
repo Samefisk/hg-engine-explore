@@ -532,7 +532,7 @@ $(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV%/00.swav:$(SDAT_DEPENDENCIES_DIR)/%.wav
 # move the swav/sbnk over
 # swar rebuilding is handled by sdattool
 # reorder cries 387+ to be numerical order in the FileBlock.json and InfoBlock.json
-$(SDAT_BUILD):$(SDAT_SWAR_OBJS)
+$(SDAT_BUILD):$(SDAT_SWAR_OBJS) scripts/rebuild_json.py
 	$(SDATTOOL) -u $(SDAT_TARGET) $(SDAT_DIR)
 	cp -rf $(SDAT_OBJ_DIR)/* $(SDAT_FILES_DIR)
 	@# trigger rebuild here

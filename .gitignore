@@ -23,7 +23,10 @@ dumpitem.py
 # pycache files
 *.pyc
 *.sav
+*.dsv
 .venv
+.headless_desmume/
+documentation/verification_screenshots/
 
 
 /armips/asm/offset.s

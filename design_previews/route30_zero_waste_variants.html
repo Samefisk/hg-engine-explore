@@ -1,0 +1,341 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Route 30 Zero Waste Variants</title><style>
+  :root {
+    --bg: #eef2f6;
+    --panel: #fff;
+    --line: #cad4e3;
+    --soft: #e6edf5;
+    --ink: #17202c;
+    --muted: #60708a;
+    --green: #0b7b68;
+    --water: #0b6ea8;
+    --gold: #9a650f;
+    --violet: #5b32c8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 11px/1.15 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .preview {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    padding: 7px;
+    display: grid;
+    gap: 5px;
+    grid-template-rows: 32px 28px minmax(0, 1fr);
+  }
+  .preview:not(.active) { display: none; }
+  .top {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+  }
+  .top strong { font-size: 13px; }
+  .route-name { font-size: 18px; font-weight: 900; }
+  .meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .source {
+    color: #0d5b52;
+    background: #d8f3ed;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-weight: 900;
+  }
+  .rates-inline {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .rate-pill {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    align-items: center;
+    gap: 5px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 3px 5px;
+    color: var(--muted);
+    font-weight: 900;
+  }
+  .rate-pill b {
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 6px;
+    background: #fff;
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .mega-board {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 23px repeat(12, minmax(38px, 1fr));
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .mega-head,
+  .mega-row {
+    display: grid;
+    grid-template-columns: 25px 37px 38px repeat(3, minmax(118px, 1.05fr)) repeat(4, minmax(96px, .9fr)) minmax(78px, .72fr) minmax(126px, 1fr) minmax(126px, 1fr);
+    min-width: 0;
+  }
+  .mega-head > div,
+  .mega-row > div {
+    min-width: 0;
+    border-right: 1px solid var(--soft);
+    border-bottom: 1px solid var(--soft);
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    overflow: hidden;
+  }
+  .mega-head > div {
+    background: #f8fbff;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 950;
+    letter-spacing: .02em;
+  }
+  .mega-row:hover > div { background: #f7fffc; }
+  .idx, .pct { justify-content: center; font-weight: 900; color: var(--muted); }
+  .pct { color: var(--green); }
+  .badge, .level-badge {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f8fafc;
+    color: var(--muted);
+    padding: 0 5px;
+    font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+  }
+  .mini-label {
+    font-size: 9px;
+    width: 38px;
+    padding: 0 2px;
+    text-transform: uppercase;
+  }
+  .mon-chip {
+    min-width: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 3px;
+  }
+  .mon-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .mon-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    height: 21px;
+    display: flex;
+    align-items: center;
+    padding: 0 5px;
+    background: #fff;
+    font: 950 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .form, .level {
+    min-width: 24px;
+    height: 20px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #fff;
+  }
+  .level { min-width: 34px; color: var(--water); }
+  .empty-cell {
+    width: 100%;
+    height: 18px;
+    border-radius: 4px;
+    background: repeating-linear-gradient(90deg, transparent, transparent 5px, #eef2f7 5px, #eef2f7 6px);
+    opacity: .65;
+  }
+  .variant-f {
+    grid-template-rows: 32px 28px minmax(0, 1fr);
+  }
+  .lanes {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(278px, .46fr) repeat(2, minmax(84px, .13fr)) repeat(3, minmax(68px, .1fr));
+    gap: 5px;
+  }
+  .lane {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .lane-title {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    background: #f8fbff;
+    color: var(--muted);
+    font-weight: 950;
+    text-transform: uppercase;
+    border-right: 1px solid var(--line);
+  }
+  .lane-cells {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-content: stretch;
+  }
+  .grass-lane .lane-cells {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .mini-slot,
+  .grass-mini {
+    min-width: 0;
+    border-right: 1px solid var(--soft);
+    border-bottom: 1px solid var(--soft);
+    padding: 3px;
+    display: grid;
+    gap: 2px;
+    align-content: center;
+  }
+  .grass-mini {
+    grid-template-rows: auto repeat(3, 21px);
+  }
+  .slotline {
+    color: var(--muted);
+    font-weight: 900;
+    font-size: 10px;
+  }
+  .variant-g {
+    grid-template-rows: 32px 28px minmax(0, 1fr);
+  }
+  .hybrid {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.95fr) minmax(320px, .75fr);
+    gap: 5px;
+  }
+  .hybrid .mega-head,
+  .hybrid .mega-row {
+    grid-template-columns: 22px 32px 34px repeat(3, minmax(88px, 1fr)) repeat(4, minmax(72px, .85fr)) minmax(58px, .62fr) minmax(82px, .7fr) minmax(82px, .7fr);
+  }
+  .hybrid .mon-name { font-size: 10px; padding: 0 3px; }
+  .hybrid .level { display: none; }
+  .pivot {
+    min-height: 0;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    display: grid;
+    grid-auto-rows: minmax(31px, 1fr);
+  }
+  .species-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 4px;
+    align-items: center;
+    padding: 3px 4px;
+    border-bottom: 1px solid var(--soft);
+  }
+  .species-row > div:last-child {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    overflow: hidden;
+    max-height: 28px;
+  }
+  @media (max-width: 760px) {
+    .preview {
+      height: auto;
+      min-height: 100vh;
+      overflow: auto;
+      padding: 5px;
+      grid-template-rows: auto auto auto;
+    }
+    .top {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+    .top strong { display: none; }
+    .route-name { font-size: 16px; }
+    .meta { grid-column: 1 / -1; }
+    .rates-inline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mega-board {
+      overflow-x: auto;
+      grid-template-rows: 23px repeat(12, 38px);
+    }
+    .mega-head,
+    .mega-row {
+      min-width: 1120px;
+    }
+    .lanes {
+      grid-template-rows: auto;
+    }
+    .lane {
+      grid-template-columns: 1fr;
+    }
+    .lane-title {
+      min-height: 24px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .lane-cells,
+    .grass-lane .lane-cells {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: auto;
+    }
+    .hybrid {
+      grid-template-columns: 1fr;
+    }
+    .pivot {
+      grid-auto-rows: minmax(30px, auto);
+    }
+  }
+</style></head><body><main class="preview variant-e"><header class="top"><strong>E Unified Matrix</strong><span class="route-name">Route 30</span><span class="meta">Encounter #3 · MAP_R30 · 14 Pokemon</span><span class="source">Source</span></header><div class="rates-inline"><span class="rate-pill grass">W<b>0</b></span><span class="rate-pill water">~<b>0</b></span><span class="rate-pill rock">R<b>0</b></span><span class="rate-pill rod">1<b>25</b></span><span class="rate-pill rod">2<b>50</b></span><span class="rate-pill rod">3<b>75</b></span></div><section class="mega-board"><div class="mega-head"><div>#</div><div>%</div><div>Lv</div><div>AM</div><div>Day</div><div>Night</div><div>Surf</div><div>Old</div><div>Good</div><div>Super</div><div>Rock</div><div>Sound</div><div>Swarm</div></div><div class="mega-row"><div class="idx">1</div><div class="pct">20%</div><div><span class="badge level-badge">2</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><span class="mon-name">WHISMUR</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><span class="mon-name">BUIZEL</span></span></div><div><span class="badge mini-label">Grass</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div></div><div class="mega-row"><div class="idx">2</div><div class="pct">20%</div><div><span class="badge level-badge">3</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10-20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><span class="mon-name">LINOONE</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"><span class="mon-name">BIDOOF</span></span></div><div><span class="badge mini-label">Surf</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div></div><div class="mega-row"><div class="idx">3</div><div class="pct">10%</div><div><span class="badge level-badge">2</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="badge mini-label">Good</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div></div><div class="mega-row"><div class="idx">4</div><div class="pct">10%</div><div><span class="badge level-badge">3</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="badge mini-label">Super</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span></div></div><div class="mega-row"><div class="idx">5</div><div class="pct">10%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">32</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">6</div><div class="pct">10%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">7</div><div class="pct">5%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">8</div><div class="pct">5%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">9</div><div class="pct">4%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">10</div><div class="pct">4%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">11</div><div class="pct">1%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">12</div><div class="pct">1%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div></section></main><main class="preview variant-f"><header class="top"><strong>F Type Lanes</strong><span class="route-name">Route 30</span><span class="meta">Encounter #3 · MAP_R30 · 14 Pokemon</span><span class="source">Source</span></header><div class="rates-inline"><span class="rate-pill grass">W<b>0</b></span><span class="rate-pill water">~<b>0</b></span><span class="rate-pill rock">R<b>0</b></span><span class="rate-pill rod">1<b>25</b></span><span class="rate-pill rod">2<b>50</b></span><span class="rate-pill rod">3<b>75</b></span></div><section class="lanes"><section class="lane grass-lane"><div class="lane-title">Grass 12 slots</div><div class="lane-cells"><div class="grass-mini"><span class="slotline">1 · 20% · Lv 2</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div class="grass-mini"><span class="slotline">2 · 20% · Lv 3</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div class="grass-mini"><span class="slotline">3 · 10% · Lv 2</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div class="grass-mini"><span class="slotline">4 · 10% · Lv 3</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div class="grass-mini"><span class="slotline">5 · 10% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div class="grass-mini"><span class="slotline">6 · 10% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">7 · 5% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">8 · 5% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">9 · 4% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">10 · 4% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">11 · 1% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div class="grass-mini"><span class="slotline">12 · 1% · Lv 4</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div></div></section><section class="lane "><div class="lane-title">Surf</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">1 · 60%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">15-25</span></span></div><div class="mini-slot"><span class="slotline">2 · 30%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10-20</span></span></div><div class="mini-slot"><span class="slotline">3 · 5%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div class="mini-slot"><span class="slotline">4 · 4%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div class="mini-slot"><span class="slotline">5 · 1%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">32</span></span></div></div></section><section class="lane "><div class="lane-title">Old rod</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">1 · 60%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div class="mini-slot"><span class="slotline">2 · 30%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div class="mini-slot"><span class="slotline">3 · 5%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div class="mini-slot"><span class="slotline">4 · 4%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div><div class="mini-slot"><span class="slotline">5 · 1%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div></div></section><section class="lane "><div class="lane-title">Good rod</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">1 · 60%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">20</span></span></div><div class="mini-slot"><span class="slotline">2 · 30%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div class="mini-slot"><span class="slotline">3 · 5%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div class="mini-slot"><span class="slotline">4 · 4%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div class="mini-slot"><span class="slotline">5 · 1%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div></div></section><section class="lane "><div class="lane-title">Super rod</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">1 · 60%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div class="mini-slot"><span class="slotline">2 · 30%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div class="mini-slot"><span class="slotline">3 · 5%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div><div class="mini-slot"><span class="slotline">4 · 4%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div class="mini-slot"><span class="slotline">5 · 1%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div></div></section><section class="lane "><div class="lane-title">Rock smash</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">1 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div><div class="mini-slot"><span class="slotline">2 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div></div></section><section class="lane low-lane"><div class="lane-title">Sound</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">Hoenn 1 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><span class="mon-name">WHISMUR</span></span></div><div class="mini-slot"><span class="slotline">Hoenn 2 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><span class="mon-name">LINOONE</span></span></div><div class="mini-slot"><span class="slotline">Sinnoh 1 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><span class="mon-name">BUIZEL</span></span></div><div class="mini-slot"><span class="slotline">Sinnoh 2 · 50%</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"><span class="mon-name">BIDOOF</span></span></div></div></section><section class="lane low-lane"><div class="lane-title">Swarms</div><div class="lane-cells"><div class="mini-slot"><span class="slotline">Grass</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div class="mini-slot"><span class="slotline">Surf</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div><div class="mini-slot"><span class="slotline">Good rod</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div><div class="mini-slot"><span class="slotline">Super rod</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span></div></div></section></section></main><main class="preview variant-g"><header class="top"><strong>G Slot Board + Species Pivot</strong><span class="route-name">Route 30</span><span class="meta">Encounter #3 · MAP_R30 · 14 Pokemon</span><span class="source">Source</span></header><div class="rates-inline"><span class="rate-pill grass">W<b>0</b></span><span class="rate-pill water">~<b>0</b></span><span class="rate-pill rock">R<b>0</b></span><span class="rate-pill rod">1<b>25</b></span><span class="rate-pill rod">2<b>50</b></span><span class="rate-pill rod">3<b>75</b></span></div><section class="hybrid"><section class="mega-board"><div class="mega-head"><div>#</div><div>%</div><div>Lv</div><div>AM</div><div>Day</div><div>Night</div><div>Surf</div><div>Old</div><div>Good</div><div>Super</div><div>Rock</div><div>Sound</div><div>Swarm</div></div><div class="mega-row"><div class="idx">1</div><div class="pct">20%</div><div><span class="badge level-badge">2</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><span class="mon-name">WHISMUR</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><span class="mon-name">BUIZEL</span></span></div><div><span class="badge mini-label">Grass</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div></div><div class="mega-row"><div class="idx">2</div><div class="pct">20%</div><div><span class="badge level-badge">3</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10-20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/0.png" alt="None" loading="lazy"><span class="mon-name">NONE</span><span class="level">0</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><span class="mon-name">LINOONE</span></span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"><span class="mon-name">BIDOOF</span></span></div><div><span class="badge mini-label">Surf</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div></div><div class="mega-row"><div class="idx">3</div><div class="pct">10%</div><div><span class="badge level-badge">2</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="badge mini-label">Good</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div></div><div class="mega-row"><div class="idx">4</div><div class="pct">10%</div><div><span class="badge level-badge">3</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">15-25</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="badge mini-label">Super</span><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span></div></div><div class="mega-row"><div class="idx">5</div><div class="pct">10%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span><span class="level">32</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">10</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span><span class="level">20</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span><span class="level">40</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">6</div><div class="pct">10%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">7</div><div class="pct">5%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">8</div><div class="pct">5%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">9</div><div class="pct">4%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">10</div><div class="pct">4%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">11</div><div class="pct">1%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div><div class="mega-row"><div class="idx">12</div><div class="pct">1%</div><div><span class="badge level-badge">4</span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div><div><span class="empty-cell"></span></div></div></section><section class="pivot"><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/16.png" alt="Pidgey" loading="lazy"><span class="mon-name">PIDGEY</span></span></div><div><span class="badge ">AM 2:20%</span><span class="badge ">AM 8:5%</span><span class="badge ">AM 9:4%</span><span class="badge ">AM 10:4%</span><span class="badge ">Day 2:20%</span><span class="badge ">Day 4:10%</span><span class="badge ">Day 5:10%</span><span class="badge ">Day 6:10%</span><span class="badge ">Day 8:5%</span><span class="badge ">Day 10:4%</span><span class="badge ">Day 12:1%</span><span class="badge ">Grass</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/19.png" alt="Rattata" loading="lazy"><span class="mon-name">RATTATA</span></span></div><div><span class="badge ">AM 11:1%</span><span class="badge ">AM 12:1%</span><span class="badge ">Day 9:4%</span><span class="badge ">Day 11:1%</span><span class="badge ">Night 6:10%</span><span class="badge ">Night 7:5%</span><span class="badge ">Night 8:5%</span><span class="badge ">Night 9:4%</span><span class="badge ">Night 10:4%</span><span class="badge ">Night 11:1%</span><span class="badge ">Night 12:1%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/60.png" alt="Poliwag" loading="lazy"><span class="mon-name">POLIWAG</span></span></div><div><span class="badge ">Surf 1:60% L15-25</span><span class="badge ">Surf 2:30% L10-20</span><span class="badge ">Old rod 4:4% L10-10</span><span class="badge ">Old rod 5:1% L10-10</span><span class="badge ">Good rod 2:30% L20-20</span><span class="badge ">Good rod 3:5% L20-20</span><span class="badge ">Good rod 4:4% L20-20</span><span class="badge ">Good rod 5:1% L20-20</span><span class="badge ">Super rod 1:60% L40-40</span><span class="badge ">Super rod 2:30% L40-40</span><span class="badge ">Super rod 4:4% L40-40</span><span class="badge ">Surf</span><span class="badge ">Good rod</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/61.png" alt="Poliwhirl" loading="lazy"><span class="mon-name">POLIWHIRL</span></span></div><div><span class="badge ">Surf 3:5% L15-25</span><span class="badge ">Surf 4:4% L15-25</span><span class="badge ">Surf 5:1% L32-32</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/129.png" alt="Magikarp" loading="lazy"><span class="mon-name">MAGIKARP</span></span></div><div><span class="badge ">Old rod 1:60% L10-10</span><span class="badge ">Old rod 2:30% L10-10</span><span class="badge ">Old rod 3:5% L10-10</span><span class="badge ">Good rod 1:60% L20-20</span><span class="badge ">Super rod 3:5% L40-40</span><span class="badge ">Super rod 5:1% L40-40</span><span class="badge ">Super rod</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/161.png" alt="Sentret" loading="lazy"><span class="mon-name">SENTRET</span></span></div><div><span class="badge ">AM 1:20%</span><span class="badge ">AM 3:10%</span><span class="badge ">Day 1:20%</span><span class="badge ">Day 3:10%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/163.png" alt="Hoothoot" loading="lazy"><span class="mon-name">HOOTHOOT</span></span></div><div><span class="badge ">Night 1:20%</span><span class="badge ">Night 2:20%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/165.png" alt="Ledyba" loading="lazy"><span class="mon-name">LEDYBA</span></span></div><div><span class="badge ">AM 4:10%</span><span class="badge ">AM 5:10%</span><span class="badge ">AM 6:10%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/167.png" alt="Spinarak" loading="lazy"><span class="mon-name">SPINARAK</span></span></div><div><span class="badge ">Night 3:10%</span><span class="badge ">Night 4:10%</span><span class="badge ">Night 5:10%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/172.png" alt="Pichu" loading="lazy"><span class="mon-name">PICHU</span></span></div><div><span class="badge ">AM 7:5%</span><span class="badge ">Day 7:5%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/264.png" alt="Linoone" loading="lazy"><span class="mon-name">LINOONE</span></span></div><div><span class="badge ">Hoenn 2:50%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/293.png" alt="Whismur" loading="lazy"><span class="mon-name">WHISMUR</span></span></div><div><span class="badge ">Hoenn 1:50%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/399.png" alt="Bidoof" loading="lazy"><span class="mon-name">BIDOOF</span></span></div><div><span class="badge ">Sinnoh 2:50%</span></div></div><div class="species-row"><div><span class="mon-chip"><img class="mon-icon" src="http://127.0.0.1:8765/icons/418.png" alt="Buizel" loading="lazy"><span class="mon-name">BUIZEL</span></span></div><div><span class="badge ">Sinnoh 1:50%</span></div></div></section></section></main><script>
+      const key = (location.hash || '#e').slice(1).toLowerCase();
+      document.querySelectorAll('.preview').forEach((node, index) => {
+        const id = ['e','f','g'][index];
+        node.classList.toggle('active', id === key);
+      });
+    </script></body></html>

@@ -31,7 +31,7 @@ BOOL LONG_CALL GF_Snd_LoadSeq(int seqNo) {
 }
 
 
-BOOL GF_Snd_LoadSeqEx(int seqNo, u32 loadFlag) {
+BOOL LONG_CALL GF_Snd_LoadSeqEx(int seqNo, u32 loadFlag) {
     BOOL ret;
     struct SND_WORK *work;
 

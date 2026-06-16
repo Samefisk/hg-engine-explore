@@ -134,6 +134,20 @@ def GetSymbols() -> {str: int}:
     return ret
 
 
+def GetSectionSize(section_file: str, section_name: str) -> int:
+    try:
+        out = subprocess.check_output([OBJDUMP, '-h', section_file])
+    except Exception:
+        return 0
+
+    for line in out.decode().split('\n'):
+        parts = line.strip().split()
+        if len(parts) >= 3 and parts[1] == section_name:
+            return int(parts[2], 16)
+
+    return 0
+
+
 def Hook(rom: _io.BufferedReader, space: int, hookAt: int, register=0, memAddress=0):
     # Align 2
     if hookAt & 1:
@@ -447,11 +461,14 @@ def writeall():
                 binary.close()
             rom.close()
         with open("base/overarm9.bin", "rb+") as y9Table:
+            overlayPath = f"base/overlay/overlay_{newOverlay:04}.bin"
+            bssSize = GetSectionSize(LINKED_SECTIONS[i + 1], '.bss')
+
             y9Table.seek(newOverlay*0x20) # seek address
             y9Table.write(struct.pack('<I', newOverlay)) # id
             y9Table.write(struct.pack('<I', address)) # memaddress
-            y9Table.write(struct.pack('<I', os.path.getsize(f"base/overlay/overlay_{newOverlay:04}.bin"))) # memsize
-            y9Table.write(struct.pack('<I', 0)) # bsssize
+            y9Table.write(struct.pack('<I', os.path.getsize(overlayPath))) # memsize
+            y9Table.write(struct.pack('<I', bssSize)) # bsssize
             y9Table.write(struct.pack('<I', 0)) # initstart
             y9Table.write(struct.pack('<I', 0)) # initend
             y9Table.write(struct.pack('<I', newOverlay)) # file id
@@ -476,11 +493,14 @@ def writeall():
                 binary.close()
             rom.close()
         with open("base/overarm9.bin", "rb+") as y9Table:
+            overlayPath = f"base/overlay/overlay_{newOverlay:04}.bin"
+            bssSize = GetSectionSize(BUILD + "/" + INDIVIDUAL_OVERLAYS[i] + "_linked.o", '.bss')
+
             y9Table.seek(newOverlay*0x20) # seek address
             y9Table.write(struct.pack('<I', newOverlay)) # id
             y9Table.write(struct.pack('<I', address)) # memaddress
-            y9Table.write(struct.pack('<I', os.path.getsize(f"base/overlay/overlay_{newOverlay:04}.bin"))) # memsize
-            y9Table.write(struct.pack('<I', 0)) # bsssize
+            y9Table.write(struct.pack('<I', os.path.getsize(overlayPath))) # memsize
+            y9Table.write(struct.pack('<I', bssSize)) # bsssize
             y9Table.write(struct.pack('<I', 0)) # initstart
             y9Table.write(struct.pack('<I', 0)) # initend
             y9Table.write(struct.pack('<I', newOverlay)) # file id

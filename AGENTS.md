@@ -20,9 +20,48 @@ If you are an agent working here, treat `origin/main` as the stable base branch 
 - Never delete a finished branch until you verify its work is reachable from `main`.
 - Never push directly to `upstream`.
 
+## Build and Test Requests
+
+Builds and tests are opt-in unless the agent needs a build to validate its own work.
+
+- Only run a build when the user's message includes `build` as a standalone sentence, or when the agent needs a build to verify something it changed itself.
+- Only run tests when the user's message includes `test` as a standalone sentence.
+- Treat `build`, `build.`, `test`, and `test.` as keyword sentences, case-insensitively.
+- Do not treat casual mentions of the words "build" or "test" inside longer sentences as requests to run those workflows.
+- When a build is requested or needed for self-validation, use the relevant build skill for this repo.
+- When tests are requested, use the relevant test skill for this repo.
+- If a coding task finishes without an authorized build or test run, report that no build or tests were run because the keyword gate was not opened.
+
+## Agent Pool Usage
+
+Actively use agents and push them to the max. Default to helper-agent parallelism, and treat solo work as the exception for tiny, single-file, obvious edits.
+
+- At the start of every non-trivial task, immediately look for independent workstreams and spawn helper agents before doing extended solo investigation.
+- Do not ask the user for permission before spawning helper agents. Agent use is part of the default workflow unless the user explicitly says not to use them.
+- Use helper agents for codebase searches, implementation options, risky-file review, regression hunting, test-log analysis, build-log analysis, documentation sweeps, and final sanity checks.
+- For substantial coding tasks, keep the agent pool busy with at least one investigator and one reviewer/verification helper while the main agent implements.
+- When there are multiple plausible angles, split them across helpers instead of serializing the work in the main thread.
+- Use the available agent pool to the maximum practical extent; do not leave agent capacity idle when there is any useful parallel work to do.
+- Keep each spawned agent focused on a clear, bounded assignment with an expected output.
+- Reconcile helper-agent results before changing shared files or reporting completion.
+- If the agent pool is full, clear inactive, completed, stale, or abandoned helper agents, then spawn new helpers for current work.
+- Never clear an active helper agent that is still producing needed results.
+- If no helper agents were used for a non-trivial task, explicitly explain why in the final response; silence means the agent missed this instruction.
+
+## Git Overhead Control
+
+Keep git hygiene targeted instead of ritualized.
+
+- Do not run `git fetch`, `git pull`, branch switching, branch listings, or broad `git status` checks after every request by default.
+- Run the full `origin/main` startup flow only when starting a new feature/fix/chore branch, preparing branch cleanup, or doing work that depends on the current state of `main`.
+- For scoped edits on the current branch, especially docs, notes, config text, or agent-instruction updates, inspect and edit only the files needed.
+- A quick `git status --short <path>` is fine when it changes the next action, but do not run git commands solely to fill out a completion template.
+- Preserve the dirty working tree. Do not spend time auditing unrelated modified files unless they affect the request.
+- For small uncommitted edits, keep the final report short: changed file, what changed, and whether build/tests ran under the keyword gate.
+
 ## Start New Work
 
-Run this flow before implementing a new task:
+Run this flow before implementing a new task that needs a fresh feature/fix/chore branch from `main`:
 
 ```bash
 git checkout main
@@ -32,6 +71,8 @@ git status --short
 ```
 
 Do not replace any of the commands above with `upstream`.
+
+Do not run this startup flow for tiny follow-ups, docs-only edits, instruction-only edits, reviews, status checks, or scoped edits that intentionally stay on the current branch.
 
 Then:
 
@@ -159,12 +200,14 @@ If the user asks for a normal new feature, bug fix, branch, commit, push, PR, or
 
 ## Reporting Requirements
 
-When reporting completion of a coding task, include:
+For branch, commit, push, PR, branch-cleanup, or substantial coding tasks, include:
 
 - branch name
 - commit hashes created
 - push destination
 - test or build result
 - whether local `main` was checked for prerequisite work
+
+For small scoped edits with no commit or push, do not run extra git commands just to report these fields. Give a concise completion note instead.
 
 If tests could not run, say so explicitly.

@@ -1,357 +1,73 @@
-# Overworld Wild Movement Attempt Log
-
-## Usage Rule
-
-Before trying a new custom overworld wild movement solution, read this log and verify the proposed change is not just a repeat of a previous attempt.
-
-When adding a new attempt, record:
-
-- the exact idea tried
-- the files or symbols changed
-- the build or ROM tested
-- the runtime result
-- what the result proves or suggests
-- whether the same approach should be avoided, retried only with new evidence, or expanded
-
-## Current Diagnostic State
-
-Branch: `feature/custom-overworld-wild-movement`
-
-Current ROM checkpoint: `test143.nds`
-
-Current code intentionally idles movement `47`: the descriptor is still installed, but `OverworldWildCustomMovement_Init`, `OverworldWildCustomMovement_Update`, `OverworldWildCustomMovement_Finish`, `OverworldWildCustomMovement_Cleanup`, and `OverworldWildCustomMovement_SetFieldSystem` compile to no-op callbacks. Slot `47` remains aliased to stock no-op. Fresh spawns temporarily use stock movement `0`; the active custom-movement probe starts walk commands from the spawner, advances them through a frame-level `SysTask`, and tests whether battle retry checks can be kept without forcing a visible idle pause between tile commands.
-
-Previous active hypothesis:
-
-- The descriptor's first word is a movement class/category, not the movement ID.
-- Stock wander-like descriptors use first word `3`.
-- `test100.nds` used first word `47`, which may have triggered invalid descriptor-class behavior during save/map load even though callbacks were no-op.
-- `test101.nds` changes only that descriptor metadata word to `3`.
-
-Previous active hypothesis:
-
-- The crash is caused by slot `47` pointing at overlay 129 data/code during save/map load.
-- A movement table entry that points at an existing ARM9-resident stock descriptor should be stable even if spawned objects or saved objects use movement `47`.
-- `test102.nds` changes movement slot `47` to alias stock movement `3`.
-
-Previous active hypothesis:
-
-- `test102.nds` loading but crashing after one player step suggests save-load got past the overlay descriptor problem.
-- The step crash may be from stale movement-47 objects whose stock movement-3 state was never initialized in earlier builds, or from freshly spawning movement-47 objects.
-- `test103.nds` should make stale movement-47 objects no-op and make fresh spawns use stock movement `3` directly.
-
-Previous active hypothesis:
-
-- `test103.nds` still crashes after one player step, so stale movement-47 object execution is less likely.
-- The next isolation point is the overworld wild spawner's player-step pipeline: stale-slot dropping, distance despawn, touch battle, ambient cry, or refill/spawn.
-- `test104.nds` should run only map-state refresh inside `OverworldWildSpawns_OverlayOnPlayerStep` and skip every downstream step action.
-
-Previous active hypothesis:
-
-- `test104.nds` still crashes after one player step even though the overlay step path returns after map-state refresh.
-- The crash may be in `OverworldWildSpawns_OnPlayerStep` before/around overlay loading, inside map-state refresh, or outside the spawner step hook entirely.
-- `test105.nds` should disable `OverworldWildSpawns_OnPlayerStep` before it loads or calls the overlay.
-
-Previous active hypothesis:
-
-- `test105.nds` no longer crashes, but Pokemon no longer spawn because the entire player-step hook returns before doing work.
-- The crash is inside the overworld-wild hook path.
-- `test106.nds` should re-enable the wrapper enough to load overlay 149 and validate its entry pointer, then return before calling the overlay's step function.
-
-Previous active hypothesis:
-
-- `test106.nds` no longer crashes, but Pokemon still do not spawn because the overlay step function is not called.
-- Overlay 149 loading itself is safe.
-- `test107.nds` should call `entry->onPlayerStep` but make `OverworldWildSpawns_OverlayOnPlayerStep` return immediately before map-state refresh.
-
-Previous active hypothesis:
-
-- `test107.nds` no longer crashes.
-- Calling into the overlay step function is safe.
-- The crash is inside `OverworldWildSpawns_UpdateMapState`.
-- `test108.nds` should run only read-only pointer/map eligibility work inside `OverworldWildSpawns_UpdateMapState`, then return before clearing or writing spawn state.
-
-Previous active hypothesis:
-
-- `test108.nds` no longer crashes.
-- Read-only `fieldSystem->mapObjectMan`, `mapObjectMan->objects`, and map eligibility checks are safe.
-- The next suspect is a side effect in `OverworldWildSpawns_UpdateMapState`.
-- The next ROM should allow only map-state pointer/id writes and the currently no-op movement field-system publish, but skip `OverworldWildSpawns_Clear(state, FALSE)`.
-
-Previous active hypothesis:
-
-- `test109.nds` crashes.
-- `test108.nds` did not touch the `OverworldWildSpawnState *state` argument and did not crash.
-- `test109.nds` touched state by comparing/writing `state->mapId`, `state->mapObjectMan`, and `state->mapObjects`.
-- The next ROM should perform read-only state access only, with no state writes and no field-system publish.
-
-Previous active hypothesis:
-
-- `test110.nds` no longer crashes.
-- Reading `state->mapId` from overlay 149 is safe.
-- The remaining bundled suspects from `test109.nds` are state writes and the cross-call to `OverworldWildCustomMovement_SetFieldSystem`.
-- The next ROM should call the currently no-op field-system setter while still avoiding all state writes.
-
-Previous active hypothesis:
-
-- `test111.nds` crashes.
-- The active path only calls `OverworldWildCustomMovement_SetFieldSystem` and returns.
-- Disassembly shows the generated veneer switches from Thumb to ARM state, then branches to `0x023D97F4`, even though `OverworldWildCustomMovement_SetFieldSystem` is Thumb code.
-- The next ROM should mark the setter as `LONG_CALL`, so the overlay call is generated through a Thumb-safe long-call path.
-
-Purpose of this checkpoint:
-
-- If the next ROM crashes with a corrected long-call veneer, more than call generation is wrong.
-- If the next ROM does not crash, the crash was caused by the bad interworking veneer and state writes can be retested.
-
-Previous active hypothesis:
-
-- `test112.nds` keeps the setter-only diagnostic active, with no spawner state writes and no Pokemon spawning.
-- The setter is now declared/defined as `LONG_CALL`.
-- Disassembly now shows the overlay loads `0x023D97F5` and jumps via `bx r3`, preserving Thumb mode.
-- The runtime test should verify whether the crash from `test111.nds` was solely caused by the bad non-`LONG_CALL` veneer.
-
-Purpose of this checkpoint:
-
-- If `test112.nds` does not crash after save load and one player step, the bad veneer is confirmed and state writes can be reintroduced next.
-- If `test112.nds` still crashes, the corrected setter call itself or the called code path still has another runtime issue.
-
-Previous active hypothesis:
-
-- `test112.nds` did not crash, so the corrected `LONG_CALL` setter path is runtime-stable.
-- The crash in `test109.nds` was likely caused by the broken plain setter call rather than the state writes themselves.
-- The next ROM should re-enable map-state writes with the corrected setter call, while still returning before downstream spawn/despawn/battle work.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, map-state writes are safe and the downstream step actions can be reintroduced one at a time.
-- If the next ROM crashes, the state writes themselves are still unsafe even after fixing the setter call.
-
-Previous active hypothesis:
-
-- `test113.nds` did not crash, so map-state writes are runtime-stable with the corrected `LONG_CALL` setter.
-- The next untested downstream piece is stale-slot cleanup: validating stored spawn object pointers against the current map object list, saving shiny reservations if needed, and clearing stale slots without deleting objects.
-- The next ROM should run `OverworldWildSpawns_DropStaleSlots` only, then return before distance despawn, touch battle, ambient cry, or refill/spawn.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, stale-slot validation and clearing are safe enough to keep while moving to distance despawn.
-- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_IsCurrentSpawnObject`, shiny-reservation save-on-clear, or `OverworldWildSpawns_ClearSlot`.
-
-Previous active hypothesis:
-
-- `test114.nds` did not crash, so stale-slot validation and clearing are runtime-stable.
-- The next downstream piece is distance-based despawn: iterating active spawns, reading map object coordinates, measuring player distance, and deleting far non-shiny objects.
-- The next ROM should run `OverworldWildSpawns_DespawnFarMons` after stale-slot cleanup, then return before touch battle, ambient cry, or refill/spawn.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, the empty-state distance-despawn path is safe and the touch-battle path can be isolated next.
-- If the next ROM crashes, the crash is likely in distance despawn's object coordinate reads, player coordinate reads, or delete path.
-
-Previous active hypothesis:
-
-- `test115.nds` did not crash, so distance despawn is runtime-stable in the current empty/no-spawn state.
-- The next downstream piece is touch-battle detection: grace-step handling, pending battle guards, `justSpawned` handling, player-touch coordinate checks, and potential battle script scheduling.
-- The next ROM should run `OverworldWildSpawns_TryStartBattle` after distance despawn, then return before ambient cry or refill/spawn.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, the empty-state touch-battle path is safe and ambient cry can be isolated next.
-- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryStartBattle`, `OverworldWildSpawns_IsTouchingPlayer`, coordinate reads, or `EventSet_Script` if an old active spawn is still touching the player.
-
-Previous active hypothesis:
-
-- `test116.nds` did not crash, so touch-battle detection is runtime-stable in the current empty/no-spawn state.
-- The user asked to spawn Pokemon next.
-- The next untested downstream piece is refill/spawn: free-slot search, spawn position selection, encounter rolling, object creation, render params, shiny state, and spawn cooldowns.
-- The next ROM should run `OverworldWildSpawns_TryRefill` after touch-battle detection, while still skipping ambient cry so refill/spawn is isolated.
-
-Purpose of this checkpoint:
-
-- If the next ROM spawns Pokemon and does not crash, the refill/spawn path is stable again with stock movement `3` spawns.
-- If the next ROM crashes, the crash is likely in spawn position selection, encounter rolling, `CreateSpecialFieldObjectWithParams`, Pokemon render params, shiny setup, or spawn state writes after object creation.
-
-Previous active hypothesis:
-
-- `test117.nds` spawned Pokemon without crashing, so refill/spawn is stable with stock movement `3` and ambient cry skipped.
-- The next remaining piece of the stock spawner pipeline is ambient cry: iterating active spawns, reading species/form/shiny metadata, choosing a cry, and calling the sound path.
-- The next ROM should restore `OverworldWildSpawns_TryPlayAmbientCry` while keeping fresh spawns on stock movement `3`.
-
-Purpose of this checkpoint:
-
-- If the next ROM spawns Pokemon, plays ambient cries, and does not crash, the full stock spawner pipeline is stable again.
-- If the next ROM crashes, the crash is likely in `OverworldWildSpawns_TryPlayAmbientCry`, cry selection, active-spawn metadata reads, or the sound call.
-
-Previous active hypothesis:
-
-- `test118.nds` did not crash, so the full stock spawner pipeline is stable with stock movement `3` and slot `47` no-op.
-- Re-pointing slot `47` back at the overlay-resident custom descriptor would repeat Attempts 5 and 6, which crashed even with no-op callbacks.
-- The safer next movement probe is spawner-driven: keep fresh spawns on stock movement `3`, keep slot `47` no-op, and only touch active spawned objects' movement params from the stable overlay step path.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, `MapObject_GetParam` and `MapObject_SetParam` are safe to call on active spawned Pokemon from the spawner step loop.
-- If the next ROM crashes, the crash is likely in param access on these special objects, not coordinate reads, blocked-direction checks, movement command helpers, or slot-47 descriptor callbacks.
-
-Previous active hypothesis:
-
-- `test119.nds` did not crash, so spawner-driven `MapObject_GetParam`/`MapObject_SetParam` is safe on active spawned Pokemon.
-- `test120.nds` isolates the next movement-specific piece: reading active spawned object coordinates, player coordinates, behavior param, and computing the preferred chase/flee direction from the stable overlay step path.
-- `test120.nds` still avoids slot-47 callbacks, `object->fsys`, global movement `FieldSystem *`, blocked-direction checks, scratch writes, single-movement flags, and movement command helpers.
-
-Purpose of this checkpoint:
-
-- If `test120.nds` does not crash, position lookup and direction calculation are safe for spawned Pokemon from the spawner step loop.
-- If `test120.nds` crashes, the crash is likely in object/player coordinate reads or behavior/direction calculation, not movement command execution.
-
-Previous active hypothesis:
-
-- `test120.nds` did not crash, so position lookup and chase/flee direction calculation are safe for spawned Pokemon from the spawner step loop.
-- The next isolated movement-command piece is a non-walking look command issued from the spawner loop on cooldown reset.
-- This should test `MapObject_IsSingleMovementActive`, `MapObject_MovementCommandFromDirection`, `MapObject_StartMovementCommand`, and `MapObject_SetSingleMovementActive` without walking commands, blocked-direction checks, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, or slot-47 callbacks.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, spawner-driven look-command setup is safe enough to expand toward actual walking or command update handling.
-- If the next ROM crashes, the crash is likely in single-movement flag checking/setting, command construction/start, or conflicts with stock movement ownership.
-
-Previous active hypothesis:
-
-- `test121.nds` did not crash, so spawner-driven non-walking look-command setup is runtime-stable on active spawned Pokemon.
-- The user could not visually confirm the look behavior because stock wander masks facing changes.
-- The next isolated piece before actual walking is `MapObject_IsMovementDirectionBlocked`, called from the stable spawner loop on the same cooldown tick as the look command.
-- This should test blocked-direction lookup without introducing walking commands, movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, or slot-47 callbacks.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, the blocked-direction helper is safe enough to use as the gate for a real spawner-driven walk command.
-- If the next ROM crashes, the crash is likely in `MapObject_IsMovementDirectionBlocked` or in asking it during the stock-wander object's active lifecycle.
-
-Previous active hypothesis:
-
-- `test122.nds` did not crash, so `MapObject_IsMovementDirectionBlocked` is runtime-stable from the spawner loop on active spawned Pokemon.
-- The next isolated piece is changing the already-safe command-start path from a look command (`0x00`) to a walk command (`0x08`), but only when the blocked check says the preferred direction is open.
-- This should test a real spawner-driven walk command without introducing movement-command update/clear calls, scratch writes, `object->fsys`, global movement `FieldSystem *`, or slot-47 callbacks.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash and movement is visible, the core spawner-driven chase/flee movement path is viable.
-- If the next ROM does not crash but movement is not visible, the command may be masked or consumed by stock movement, and the next step should isolate command ownership/update timing.
-- If the next ROM crashes, the crash is likely in starting a walking movement command on a stock-wander object from the spawner loop.
-
-Previous active hypothesis:
-
-- `test123.nds` did not crash, so starting a gated walk command on an active spawned Pokemon from the spawner step loop is runtime-stable.
-- Stock movement `3` has its own command state machine and may mask, consume, or overwrite externally started movement commands.
-- The next isolated piece is spawner-owned movement-command polling: only after the spawner starts a command, call `MapObject_UpdateMovementCommand` and clear the single-movement flag when it reports completion.
-- This should test command ownership/update timing without reintroducing scratch writes, `object->fsys`, global movement `FieldSystem *`, or slot-47 callbacks.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash, spawner-driven command update/clear is viable and we can start reducing stock wander's ownership of spawned Pokemon movement.
-- If the next ROM crashes, the crash is likely in polling or clearing a movement command from the spawner loop, rather than in starting the command.
-
-Previous active hypothesis:
-
-- `test124.nds` did not crash, so spawner-owned command update/clear polling is runtime-stable.
-- The user could not reliably tell whether movement was more directed because stock movement `3` can still mask the spawner command and the command may take multiple updates to complete.
-- The next visibility probe should make movement unmistakable by temporarily giving fresh spawns stock idle movement `0`, setting the spawner cooldown to `0`, and burst-polling a spawner-started walk command up to 32 update iterations.
-- This should produce a clear tile-step toward the player without using slot-47 callbacks, active custom movement scratch writes, `object->fsys`, or global movement `FieldSystem *`.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash and movement is obvious, the spawner-driven movement path works and stock wander was hiding the signal.
-- If the next ROM does not crash but movement is still not obvious, the spawner step hook may be the wrong timing surface for visual movement and we should look for a frame-level callback/task.
-- If the next ROM crashes, the crash is likely from switching fresh spawns to stock idle movement `0`, burst-polling movement commands, or their combination.
-
-Previous active hypothesis:
-
-- `test125.nds` did not crash and made the movement signal visible, but the burst-poll completed a tile step inside one player-step tick, making the Pokemon look like it teleported.
-- The movement-command path itself is viable; the problem is update timing.
-- The next isolated piece is a short-lived frame-level `SysTask`: the spawner starts the walk command, creates a task if needed, and the task calls `MapObject_UpdateMovementCommand` once per frame until no spawned Pokemon has an in-progress spawner command.
-- This should test smooth movement timing without reintroducing slot-47 callbacks, active custom movement scratch writes, `object->fsys`, or global movement `FieldSystem *`.
-
-Purpose of this checkpoint:
-
-- If the next ROM does not crash and movement animates smoothly toward the player, the frame-task timing surface is the right direction.
-- If the next ROM does not crash but Pokemon do not move, the normal `CreateSysTask` queue may not run during this field context or the task may need a different queue/priority.
-- If the next ROM crashes, the crash is likely in task creation, task lifetime, or frame-level command polling.
-
-Previous active hypothesis:
-
-- `test126.nds` did not crash and movement animates correctly, but user testing found follow-up behavior issues:
-  - only one Pokemon seems able to move at a time
-  - after battle, no Pokemon seem able to move
-  - movement is not always active even outside those cases
-- The stable frame-task timing should be kept, but movement ownership should move out of object param `0` and into per-spawn-slot spawner state.
-- Battle start/end should explicitly clear any spawner-owned single-movement commands and reset movement cooldowns, so no stale in-progress marker can survive a battle transition.
-- The direction picker should try a secondary axis if the primary chase/flee direction is blocked, rather than suppressing movement immediately.
-
-Purpose of this checkpoint:
-
-- If the next ROM lets multiple Pokemon move, recovers movement after battle, and feels more consistently active, then per-slot ownership plus battle reset is the right foundation.
-- If movement still appears limited to one Pokemon, the limitation is likely inside the map-object movement-command system or collision/blocked-direction rules rather than our cooldown marker.
-- If movement still dies after battle, the task lifecycle may need to be restarted from the battle cleanup hook or a different field callback.
-- If the next ROM crashes, the likely new suspects are clearing single-movement flags during battle transitions or the added per-slot state fields.
-
-Previous active hypothesis:
-
-- `test128.nds` is a huge improvement and fixes the prior quirks, but Pokemon stop chasing after a threshold.
-- The threshold is likely the object movement leash: `OverworldWildSpawns_ApplyMovementRange` currently sets X/Y range to `2`, and the chase path is gated by `MapObject_IsMovementDirectionBlocked`.
-- The user requested increasing the range to `8` and making Pokemon chase even when the player is not moving.
-- The next new test should keep per-slot ownership and frame-task movement updates, set X/Y range to `8`, and make the frame task continue issuing movement decisions from the last valid map context while active spawns exist.
-
-Purpose of this checkpoint:
-
-- If the next ROM keeps chasing past the old threshold, the leash range was the threshold.
-- If Pokemon continue chasing while the player stands still, frame-task decision issuing is a viable idle-chase surface.
-- If this crashes, the likely new suspect is the frame task retaining and using a `FieldSystem *` outside the player-step call.
-- If chasing still stops, `MapObject_IsMovementDirectionBlocked` may enforce more than X/Y range, or the current command type may have another leash/occupancy rule.
-
-Previous active hypothesis:
-
-- `test129.nds` is starting to look good, but simultaneous movement can sometimes leave two spawned Pokemon on the same tile.
-- This is different from earlier blocked-direction and movement-ownership attempts: the issue happens after movement has already succeeded, so prevention alone is not enough.
-- The next new test should add a conservative after-the-fact untangle pass that scans active spawn pairs only when no spawner-owned command is in progress.
-- When an overlap is found, the pass should start one normal spawner-owned walk command into a valid adjacent unoccupied tile, then wait for that movement to finish before trying another untangle.
-
-Purpose of this checkpoint:
-
-- If overlapped Pokemon separate without crashes, one-at-a-time after-the-fact cleanup is a viable polish layer.
-- If overlap remains, the target-tile occupancy check or blocked-direction helper may be rejecting every nearby tile, or current coordinates may not expose the overlap at the frame we scan.
-- If this crashes, the likely new suspects are overlap-pair scanning during the persistent frame task or the untangle direction/target validation helpers.
-- If cleanup creates new pile-ups, the next direction should reserve target tiles for in-progress commands rather than only checking current map-object occupancy.
-
-Previous active hypothesis:
-
-- The route-exit slowdown/freeze was present before the overlap untangle test, so the strongest suspect is the persistent idle frame task from `test129.nds`, not the new untangle pass alone.
-- The frame task retained a `FieldSystem *` and only checked whether it looked like an enabled map; it did not verify that the retained map id, map-object manager, and object table still matched the spawner state.
-- `test130.nds` also made battle engagement feel like it overshoots, likely because the detector can see a spawned Pokemon's updated target/current coordinate while that Pokemon is still animating a movement command.
-- The next new test should stop the frame task whenever the retained field context no longer matches the spawner's current map/object context, and should suppress battle detection for Pokemon with an active spawner-owned or engine single-movement command.
-
-Purpose of this checkpoint:
-
-- If route exits stop slowing/freezing, stale persistent frame-task context was the route-transition problem.
-- If battle engagement no longer starts while Pokemon are visibly still moving from farther away, movement-active battle suppression fixed the overshoot.
-- If battle engagement now feels too reluctant, the next adjustment should make the contact radius stricter or add a facing/settled-position rule, but only after verifying battles still trigger reliably.
-- If route exits still slow down, the next suspect is endless idle frame-task ticking itself, and the next test should add a finite idle keepalive budget after player-step refresh.
-
-New active hypothesis:
-
-- Battle engagement currently still depends on the player-step hook because `OverworldWildSpawns_TryStartBattle` is only called from `OverworldWildSpawns_OverlayOnPlayerStep`.
-- Since `test129.nds` made Pokemon move while the player is idle, a spawned Pokemon can reach the player without another player step happening.
-- The next new test should call the existing battle detector from `OverworldWildSpawns_FrameMovementTask` after spawner-owned movement commands have settled and before starting a new chase/untangle movement.
-- The frame-task call should not decrement flee grace every frame; only the player-step path should consume flee grace steps.
-
-Purpose of this checkpoint:
-
-- If a Pokemon can start a battle after chasing into the stationary player, frame-task battle scheduling is viable.
-- If this crashes or causes bad transitions, `EventSet_Script` is likely unsafe from this task timing and the next direction should find a safer field-frame hook.
-- If flee behavior immediately re-battles too quickly, the grace handling needs a stronger frame-task suppression rule.
-- If battle still waits for player movement, the detector may be blocked by `MapObject_IsSingleMovementActive` for longer than expected or by contact radius behavior.
-
-## Attempt History
+# Movement Architecture And Frame Task
+
+Generated from `documentation/overworld_wild_movement_attempt_log.md` during consolidation.
+The original attempt sections are copied verbatim below. Attempts may appear in multiple topic files on purpose.
+
+## Quick Reference
+
+- Stable movement architecture: avoid slot-47 overlay callbacks unless descriptor lifetime is solved.
+- Spawner-owned commands plus a frame SysTask are the safe base for custom movement.
+- Per-slot movement ownership, route/context guards, command settle windows, and conservative stock command families are the main lessons.
+
+## Included Attempts
+
+| Source order | Attempt | Title |
+|---:|---:|---|
+| 1 | 1 | Patch Movement Slot `47` To A Custom Descriptor |
+| 2 | 2 | Chase Logic Using `object->fsys` |
+| 3 | 3 | Publish Active `FieldSystem *` Globally And Add Scratch Init |
+| 4 | 4 | Replace `MIi_CpuClearFast` With Direct Scratch Clears |
+| 5 | 5 | Diagnostic Idle Callback |
+| 6 | 6 | Use Stock Step Descriptor Class `3` |
+| 7 | 7 | Alias Movement `47` To Stock Movement `3` Descriptor |
+| 8 | 8 | Make Stale Movement `47` No-Op And Spawn Fresh Objects With Stock Movement `3` |
+| 9 | 9 | Disable Spawner Step Actions After Map-State Refresh |
+| 10 | 10 | Disable The Entire Overworld-Wild Player-Step Hook |
+| 11 | 11 | Load Overlay Entry But Do Not Call Overlay Step |
+| 12 | 12 | Call Overlay Step But Return Immediately |
+| 13 | 13 | Read-Only UpdateMapState Diagnostic |
+| 14 | 14 | UpdateMapState Map Writes Without Clear |
+| 15 | 15 | Read Spawn State Without Writing It |
+| 16 | 16 | Call No-Op Movement Setter Without State Writes |
+| 17 | 17 | Mark Movement Setter As LONG_CALL |
+| 18 | 18 | Re-enable Map-State Writes After LONG_CALL Fix |
+| 19 | 19 | Re-enable Stale-Slot Cleanup Only |
+| 20 | 20 | Re-enable Distance Despawn Only |
+| 21 | 21 | Re-enable Touch-Battle Detection Only |
+| 22 | 22 | Re-enable Refill And Spawn Only |
+| 23 | 23 | Restore Ambient Cry With Stock Movement |
+| 24 | 24 | Spawner-Driven Movement Param Tick |
+| 25 | 25 | Spawner-Driven Coordinate Read And Direction Calculation |
+| 26 | 26 | Spawner-Driven Look Command |
+| 27 | 27 | Spawner-Driven Blocked Direction Check |
+| 28 | 28 | Spawner-Driven Walk Command |
+| 29 | 29 | Spawner-Owned Movement Command Update And Clear |
+| 30 | 30 | Obvious Spawner-Driven Tile Movement |
+| 31 | 31 | Frame Task Movement Command Updates |
+| 32 | 32 | Per-Slot Movement Ownership And Battle Reset |
+| 33 | 33 | Range 8 And Idle Frame Chase |
+| 34 | 34 | One-At-A-Time Overlap Untangle |
+| 35 | 35 | Guard Idle Frame Context And Moving Battle Contact |
+| 36 | 36 | Frame Task Battle Detection |
+| 37 | 37 | Post-Movement Battle Settle Window |
+| 38 | 38 | Pidgey Fast Movement Command |
+| 39 | 39 | Movement Speed Levels 1-6 |
+| 40 | 40 | Pidgey Speed 6 Test |
+| 41 | 41 | Alias High Logical Speeds To Fastest Stock Walk |
+| 42 | 42 | Proximity-Only Battle Settle |
+| 43 | 43 | Cap High Speeds To Fluent Walk Command |
+| 44 | 44 | Non-Blocking Battle Retry Between Chained Commands |
+| 63 | 63 | Behavior Profile Resolver |
+| 64 | 64 | Separate Behavior Class Rules From Behavior Variable Overrides |
+| 101 | 65 | A-Button Facing Interaction Starts Spawn Battle |
+| 109 | 66 | Implement Behavior Profile Table Semantics |
+| 181 | 103 | Behavior-Gated Ledge Far Jump |
+| 183 | 105 | Rename Aggressive Chase Profile |
+| 202 | 124 | Score Playful Ledge Jumps By Landing Tile |
+| 203 | 125 | Include Moving Target Trail For Playful Scoring |
+| 204 | 126 | Shared Moving Player Target For Movement Intent |
+
+## Original Attempt Sections
 
 ### Attempt 1: Patch Movement Slot `47` To A Custom Descriptor
 
@@ -2000,11 +1716,12 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported the route-exit slowdown/freeze and contact timing still needed follow-up.
 
 Learning:
 
-- Pending.
+- Stronger map-context guards remain useful, but route-transition and battle-timing behavior still needed follow-up.
+- Keep suppressing contact while movement is active; use later battle timing attempts for the adjacency miss.
 
 ### Attempt 36: Frame Task Battle Detection
 
@@ -2110,11 +1827,13 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User clarified that Pidgey should become faster, not that Sentret should become slower.
+- This led into generalizing movement speed levels instead of using a one-off species-only fast path.
 
 Learning:
 
-- Pending.
+- Per-species speed should use faster stock movement command families rather than slowing baseline Pokemon down.
+- The speed concept should become a behavior/profile parameter, which is expanded in the next attempt.
 
 ### Attempt 39: Movement Speed Levels 1-6
 
@@ -2143,11 +1862,14 @@ Verification:
 
 Runtime result:
 
-- Pending user test.
+- User reported this did nothing visible and also clarified this was not the desired effect.
+- The requested effect is an actual screen shake, not wobbling the crashed object or adding another non-screen visual.
 
 Learning:
 
-- Pending.
+- Manual X/Z `posVec` wobble is not a useful substitute for screen shake.
+- Remove this code and do not retry object-wobble crash feedback unless the requested effect changes.
+- The next attempt should trace or call the underlying camera/screen shake routine directly instead of scheduling field scripts or offsetting the object.
 
 ### Attempt 40: Pidgey Speed 6 Test
 
@@ -2319,18 +2041,19 @@ Learning:
 - The non-blocking retry fixed the visible stop-and-think pause between tile commands enough to keep building on this path.
 - Current safe speed command families are still limited: speed `1` maps to `0x08`, speed `2` maps to `0x0C`, and speed `3` maps to `0x10`. Logical speeds above that were aliases rather than new motion speeds.
 
-### Attempt 45: Remove Redundant Speed 6 And Add Spot Emote
+### Attempt 63: Behavior Profile Resolver
 
 Idea:
 
-Remove the redundant logical speed `6`, because it was identical to speed `5` after high speeds were capped to the fastest confirmed safe walk command. Add a first spot-emote state so a spawned Pokemon starts chill, detects the player entering spot range, hops in place with a jump sound, waits briefly, and only then enters the active chase/flee movement path.
+Replace the current scattered movement constants with a composable behavior profile. The profile contains `chill_State`, `alert_State`, `alertness`, `attentive_State`, `stamina`, `tired_State`, `rest_Time`, `max_speed`, and `range`. Resolve behavior in this order: default profile, optional behavior-class override, then species-specific override. Keep the default profile aligned with the current working behavior, move Pidgey's speed into the species override table, and keep tired Pokemon on the mapped water-droplet bubble.
 
 Why this is new:
 
-- Attempt 39 added logical speed levels through `6`; Attempts 41 and 43 later made the high levels aliases to the same safe command family.
-- No previous attempt has removed the duplicate highest speed level while preserving Pidgey's fastest tested behavior.
-- No previous attempt has added per-slot spotted/emoting state or tried a same-tile map-object hop before chase/flee.
-- This avoids the old risky paths: no custom movement descriptor is re-enabled, no coordinate writes are used, and the chase/flee walk command path remains the existing spawner-owned path.
+- Attempts 54 and 55 added tired/chill behavior directly through hardcoded counters and constants.
+- Attempts 57 through 62 focused on tired bubble presentation and icon mapping.
+- No previous attempt has introduced a data-driven behavior profile with default, behavior-class, and species-specific override layers.
+- No previous attempt has made stamina spending depend on `max_speed`.
+- No previous attempt has made movement range, alertness, rest time, attentive movement, chill behavior, and tired presentation resolve from one behavior contract.
 
 Files/symbols:
 
@@ -2340,33 +2063,37 @@ Files/symbols:
 
 Verification:
 
-- Built as `test142.nds` and copied to Delta.
+- Built as `test160.nds` and copied to Delta.
+- Delta copy: `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test160.nds`.
 - `git diff --check` passed before the build.
-- Verified speed `6` was removed from `OverworldWildSpawns_GetMovementWalkCommandForSpeed`.
-- Verified Pidgey now uses logical speed `5`, which still maps to the fastest confirmed safe walk command family through the speed `3` alias.
-- Verified `OverworldWildSpawnState` now stores per-slot `movementSpotStates` and `movementEmoteTimers`.
-- Verified a chill spawn only starts the spot emote when the player is within `OW_WILD_SPAWNER_SPOT_RANGE` and a chase/flee direction exists.
-- Verified the emote path sets `BIT_JUMP_START`, plays `SEQ_SE_GS_UFO_JUMP`, waits `OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES`, then allows the existing spawner-owned chase/flee command path to run.
+- Verified `OverworldWildBehaviorProfile` contains `chillState`, `alertState`, `alertness`, `attentiveState`, `stamina`, `tiredState`, `restTime`, `maxSpeed`, and `range`.
+- Verified profile resolution merges default profile, behavior-class override, then species-specific override.
+- Verified Pidgey's speed is now supplied by the species override table instead of a direct species switch in the movement-speed function.
+- Verified movement range, alertness, attentive chase/flee/none decision, chill wandering, stamina spending, tired rest duration, and tired bubble id are read from the resolved profile.
+- Verified completed attentive moves spend stamina equal to `maxSpeed`, capped at the profile's `stamina`.
+- Verified cleared spawn slots reset their stored behavior class.
 
 Runtime result:
 
-- User requested making the spot/emote trigger range distinct from chase range and much shorter.
+- Superseded before user runtime testing.
+- User clarified the intended hierarchy is `Default behavior -> Behavior class override -> Behavior variable override`, not `Default behavior -> Behavior class override -> species-specific override`.
 
 Learning:
 
-- Spot range should be a separate behavior parameter from chase/leash range. A Pokemon can notice the player nearby, emote, and then use a larger chase/flee range after it becomes active.
+- Avoid repeating the Attempt 63 species-specific third layer. Species, broader groups, terrain/pool, level, shiny state, and other context should be used to select behavior classes or match behavior-variable overrides; the final layer itself is a generic variable override layer.
 
-### Attempt 46: Short Independent Spot Range
+### Attempt 64: Separate Behavior Class Rules From Behavior Variable Overrides
 
 Idea:
 
-Keep chase/leash range at `8`, but stop deriving `OW_WILD_SPAWNER_SPOT_RANGE` from `OW_WILD_SPAWNER_MOVEMENT_RANGE`. Set spot range to `3` so the hop/sound emote only triggers when the player is close, while the already-spotted Pokemon can still chase/flee over the larger movement range.
+Correct the resolver hierarchy to `Default behavior -> Behavior class override -> Behavior variable override`. Add one rule table for assigning behavior classes from spawn context, and a separate ordered rule table for variable overrides. A Pokemon can therefore be classified as `Skittish` by species/group/pool/etc. and still receive independent variable overrides like `max_speed = 1`.
 
 Why this is new:
 
-- Attempt 45 added spotting, but defined `OW_WILD_SPAWNER_SPOT_RANGE` as an alias of `OW_WILD_SPAWNER_MOVEMENT_RANGE`.
-- No previous attempt has made spot/emote distance shorter than the movement/chase range.
-- This changes only the spot threshold; it does not touch the proven spawner-owned movement command path, emote state machine, jump flag, or sound call.
+- Attempt 63 introduced the behavior profile contract, but its final layer was incorrectly species-specific.
+- No previous attempt has separated behavior-class assignment from post-class variable overrides.
+- No previous attempt has added broad group matching, such as baby Pokemon, as behavior input.
+- The proposed hierarchy matches the user's corrected design: default values first, class changes second, and variable overrides last.
 
 Files/symbols:
 
@@ -2375,11 +2102,366 @@ Files/symbols:
 
 Verification:
 
-- Built as `test143.nds` and copied to Delta.
+- Built as `test161.nds` and copied to Delta.
+- Delta copy: `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test161.nds`.
 - `git diff --check` passed before the build.
-- Verified `OW_WILD_SPAWNER_MOVEMENT_RANGE` remains `8`.
-- Verified `OW_WILD_SPAWNER_SPOT_RANGE` is now a distinct literal `3`.
-- Verified `OverworldWildSpawns_IsPlayerInSpotRange` still uses the spot range only for the chill-to-emote transition.
+- Verified `OverworldWildBehaviorClassRule` assigns behavior classes from spawn context separately from variable overrides.
+- Verified `OverworldWildBehaviorVariableOverride` applies matched behavior variables after the default profile and behavior-class override.
+- Verified the resolver now merges `default behavior -> behavior class override -> behavior variable override`.
+- Verified baby Pokemon are grouped through `OW_WILD_BEHAVIOR_GROUP_BABY`, assigned `OW_WILD_BEHAVIOR_CLASS_SKITTISH`, and given a separate `maxSpeed` variable override.
+- Verified Pidgey's test speed is still present, but now as a behavior-variable override rather than a species-specific resolver layer.
+
+Runtime result:
+
+- User reported:
+  - Mankey still does not visibly travel; it blinks to trees or stands still invisible in trees.
+  - Mankey is invisible.
+  - Leaving the route still does not avoid the crash/freeze.
+
+Learning:
+
+- Clean straight-run target selection plus the internal jump starter did not solve the visibility problem.
+- Removing movement-list fallback and phantom boundary cleanup was not enough; the object still becomes invisible around the tree/perch state.
+- The next attempt should stop testing hop travel and isolate the spawn/anchor visibility state first.
+
+### Attempt 65: A-Button Facing Interaction Starts Spawn Battle
+
+Idea:
+
+Add a deliberate A-button battle path for spawned overworld Pokemon. Keep the existing contact/settle detector for automatic battles, but add a frame-polled A-button check that finds the tile the player is facing and starts a battle if any active spawned Pokemon occupies that tile. This path should ignore the automatic contact filters such as tired cooldown, flee grace, and in-progress movement, because pressing A is an intentional interaction.
+
+Why this is new:
+
+- Attempts 35 through 38 focused on contact battle timing and settle retries after player/spawn movement.
+- No previous attempt has used A-button input to start a spawned-Pokemon battle.
+- No previous attempt has matched the player's facing tile against active spawned Pokemon as a battle trigger.
+- No previous attempt has restarted the movement frame task after battle cleanup using the cleanup script's current `FieldSystem`.
+
+Files/symbols:
+
+- `include/overworld_wild_spawns.h`
+- `include/overworld_wild_spawns_internal.h`
+- `src/script_new_cmds.c`
+- `src/overworld_wild_spawns.c`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test162.nds` and copied to Delta.
+- Delta copy: `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test162.nds`.
+- `git diff --check` passed before the build.
+- Verified `OverworldWildSpawns_TryStartBattleForSlot` centralizes pending battle setup for both contact and A-button battle starts.
+- Verified `OverworldWildSpawns_TryStartBattleFromAButton` polls a new A-button press, derives the player's facing tile from the player map object's `curFacing`, and starts battle for any active spawned Pokemon on that tile.
+- Verified the A-button path does not call `OverworldWildSpawns_IsTouchingPlayer`, so tired cooldown, flee grace, and active movement-command filters do not block intentional A interactions.
+- Verified battle cleanup now receives the script context's `FieldSystem` and restarts the movement frame task if active spawned Pokemon remain on the current map.
+
+Runtime result:
+
+- User reported Mankey is spawning on the wrong tree tiles. The screenshot shows the forced `594,388` point is on the side/shoulder canopy art below the desired flat top-cap tiles.
+
+Learning:
+
+- Removing the follower render bundle was still a separate, valid safety fix, but it did not answer the tile-class question because the test coordinate was visually wrong.
+- Do not keep assuming `headbutt anchor Y - 1` is a tree-top/canopy-cap tile. The Route 29 headbutt archive shows this cluster has anchors at `(594,389)` and `(595,389)`, so the next non-repeating probe should move one more tile up to the likely top-cap row.
+
+### Attempt 66: Implement Behavior Profile Table Semantics
+
+Idea:
+
+Make the behavior resolver match the requested profile table directly:
+
+- Default: wander at max speed 1, show a question bubble when alert, then return to chill with no self-start battle.
+- Aggressive: wander at max speed 2, hop plus angry speech when alert, chase the player, and start battle on contact while attentive.
+- Skittish: wander at max speed 2, hop plus exclamation speech when alert, flee from the player, then show the water droplet tired bubble after stamina is spent.
+
+Also rename `restTime` to `restRate`, keep Pidgey as an aggressive speed-3 variable override for testing, and make alertness use a facing cone inside radius 3 instead of radius-only spotting.
+
+Why this is new:
+
+- Attempt 63 created the general behavior profile contract, but left the older default chase/stamina values in place.
+- Attempt 64 separated behavior-class rules from variable overrides, but did not implement the new default/aggressive/skittish table semantics.
+- Attempt 65 added intentional A-button battle starts, but did not change which behavior profiles can start automatic battles.
+- No previous attempt has made default Pokemon speech-only and A-button-only for battles while letting aggressive Pokemon self-start battles only during attentive chase.
+- No previous attempt has required a facing cone for alertness.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+
+Verification:
+
+- Built as `test163.nds` and copied to Delta.
+- Delta copy: `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test163.nds`.
+- `git diff --check` passed before and after the build.
+- Verified `OverworldWildBehaviorProfile` now uses `restRate` instead of `restTime`.
+- Verified the default profile is speech-only (`PONDER`) with no attentive state, stamina, tired state, or automatic battle start.
+- Verified the aggressive profile uses angry hop speech, chase-with-battle attentive state, stamina `12`, water droplet tired state, rest rate `1`, max speed `2`, and range `8`.
+- Verified the skittish profile uses scared hop speech, flee attentive state, stamina `12`, water droplet tired state, rest rate `1`, max speed `2`, and range `8`.
+- Verified Pidgey is assigned the aggressive class and then receives a max-speed `3` behavior-variable override.
+- Verified alert checks use `OverworldWildSpawns_IsPlayerInFacingCone` with radius `3`.
+- Verified contact battles require active aggressive attentive behavior; A-button facing interaction still starts a battle for any spawned Pokemon.
+
+Runtime result:
+
+- User reported Mankey is still hidden by the headbutt-tree canopy on `test379.nds`.
+
+Learning:
+
+- `LocalMapObject::unkA0` draw mode alone does not make spawned Mankey render above canopy-priority tiles.
+- Follow-up disassembly showed both draw modes route through overlay 1's draw mode table and still apply the same `0x1000` sprite priority value.
+- Avoid repeating the draw-mode-only probe. The next useful direction is a stock draw-callback/descriptor probe or a real sprite priority override.
+
+### Attempt 103: Behavior-Gated Ledge Far Jump
+
+Idea:
+
+Let spawned overworld Pokemon jump over one-tile ledges when their behavior profile allows it. Add a profile variable, `jumpLevel`, so default behavior can allow jumps while specific behavior classes or variable overrides can disable or restrict jumping later.
+
+Implementation shape:
+
+- Add `jumpLevel` to `OverworldWildBehaviorProfile`.
+- Add `OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL` to the normal behavior override hierarchy.
+- Default `jumpLevel` to `2`, meaning all current Pokemon profiles can jump both downhill and uphill.
+- Define:
+  - `0`: no ledge jump ability.
+  - `1`: downhill ledges only.
+  - `2`: downhill and uphill ledges.
+- Detect HGSS one-tile ledge metatile behaviors `56..59`.
+- Before issuing normal movement, check whether the adjacent tile is a ledge.
+- If it is a ledge, check the tile after the ledge; if that landing tile is blocked, occupied, or out of bounds, treat the movement as blocked.
+- If the ledge direction is allowed by `jumpLevel` and the landing tile is valid, issue the far-jump movement command family from base command `0x38`.
+- Route normal wandering/chasing/fleeing/playful movement, untangle movement, and aggressive ram movement through the same ledge decision.
+- For aggressive ram, a failed/disabled ledge jump is treated like a crash.
+
+Why this is new:
+
+- The movement log had no previous ledge-jump attempt.
+- Previous jump work was alert/emote hopping in place, using the in-place jump command family.
+- This approach uses the far-jump command family and a map collision/landing validation pass before movement starts.
+- It avoids changing the fragile custom movement descriptor path; the spawner still owns movement decisions.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+- `jumpLevel`
+- `OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL`
+- `OW_WILD_BEHAVIOR_JUMP_LEVEL_NONE`
+- `OW_WILD_BEHAVIOR_JUMP_LEVEL_DOWNHILL`
+- `OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH`
+- `OW_WILD_SPAWNER_MOVEMENT_LEDGE_JUMP_COMMAND`
+- `OverworldWildSpawns_TryStartLedgeJumpCommand`
+- `OverworldWildSpawns_IsValidLedgeLandingTile`
+- `OverworldWildSpawns_StartMovementCommandForSlot`
+
+Verification:
+
+- `git diff --check` passed before build.
+- Built with `./docker-makerom.cmd`; build succeeded and copied the ROM to Delta as `test201.nds`.
+- Verified `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` compiled with only the existing unused-diagnostic warnings.
+- Verified `jumpLevel` defaults to `OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH`, so all current behavior profiles inherit bidirectional ledge jumping unless an override sets `OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL`.
+- Verified ledge detection uses HGSS one-tile ledge behaviors `56..59`, and successful jumps issue the far-jump movement command family from base command `0x38`.
+- Verified failed or disabled ledge jumps are treated as blocked movement, including the aggressive-ram path.
+- Verified untangle movement no longer filters blocked directions before the ledge helper, so ledge jumps can still be considered there.
+- Audited movement coverage after the user clarified this should work for all movement, including chase and flee:
+  - active chase uses `OverworldWildSpawns_DiagnosticBuildDirections(dx, dy, directions)` and then calls `OverworldWildSpawns_TryStartSpawnerMovementCommand`;
+  - active flee negates `dx/dy`, builds directions the same way, and then calls `OverworldWildSpawns_TryStartSpawnerMovementCommand`;
+  - active playful movement builds playful directions and then calls `OverworldWildSpawns_TryStartSpawnerMovementCommand`;
+  - chill wander and untangle also call `OverworldWildSpawns_TryStartSpawnerMovementCommand`;
+  - aggressive ram has its own direct `OverworldWildSpawns_TryStartLedgeJumpCommand` call before its normal blocked check.
+- Confirmed the older `src/overworld_wild_movement.c` custom chase/flee path still contains direct movement-command code, but `OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE` keeps that descriptor in no-op mode in the current build; the active behavior system is owned by `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`.
+
+Runtime result:
+
+- Pending user test.
+
+Learning:
+
+- The implementation is build-clean and ready for runtime ledge testing.
+- Landing validation currently checks map blockage and object occupancy, but not terrain/pool compatibility. If runtime testing shows Pokemon jumping onto inappropriate terrain, add a terrain compatibility check to `OverworldWildSpawns_IsValidLedgeLandingTile`.
+
+### Attempt 105: Rename Aggressive Chase Profile
+
+Idea:
+
+Rename the normal chase/battle behavior profile from `aggressive` to `agressiveChase`, while keeping the separate aggressive-ram behavior name unchanged.
+
+Implementation shape:
+
+- Rename `OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE` to `OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE`.
+- Keep the numeric behavior class value as `2`, so existing behavior-class table indexing remains unchanged.
+- Update Pidgey's behavior-class rule to use `OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE`.
+- Leave `OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM` unchanged.
+
+Why this is new:
+
+- Earlier attempts split `aggressive_ram` away from the normal aggressive chase behavior, but did not rename the normal chase behavior profile.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+- `OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE`
+- `OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM`
+
+Verification:
+
+- `git diff --check` passed.
+- Verified active source now defines `OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE` and uses it for Pidgey's behavior-class rule.
+- Verified the separate `OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM` symbol was not renamed.
+
+Runtime result:
+
+- Not applicable; symbol-only rename.
+
+Learning:
+
+- This is a naming-only cleanup; behavior class value `2` and runtime behavior remain unchanged.
+
+### Attempt 124: Score Playful Ledge Jumps By Landing Tile
+
+Idea:
+
+Make playful chase/orbit direction scoring evaluate the tile the Pokemon will actually reach. If a direction would trigger a ledge jump, score the two-tile landing position instead of the ledge tile one step away.
+
+Implementation shape:
+
+- Add `OverworldWildSpawns_TryGetPlayfulMovementDestination`.
+- For normal movement, return the one-step destination.
+- For ledge movement, check the behavior profile's `jumpLevel`, validate the landing tile with `OverworldWildSpawns_IsValidLedgeLandingTile`, and return the two-step landing destination.
+- In `OverworldWildSpawns_BuildPlayfulDirections`, score candidate directions using this helper destination.
+- Exclude invalid ledge jumps from the scored direction list.
+- Keep the existing hard previous-tile rejection, target-tile rejection, 8-way target adjacency, orbit move-away penalty, randomized hop timing, and hop timer pause behavior unchanged.
+
+Why this is new:
+
+- Ledge jumping was added before, but the playful scorer still evaluated one-tile destinations.
+- No previous attempt has aligned playful target scoring with the actual two-tile destination used by ledge jump execution.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+- `OverworldWildSpawns_TryGetPlayfulMovementDestination`
+- `OverworldWildSpawns_BuildPlayfulDirections`
+- `OverworldWildSpawns_TryStartLedgeJumpCommand`
+- `OverworldWildSpawns_IsValidLedgeLandingTile`
+
+Verification:
+
+- `git diff --check` passed before build.
+- Built with `./docker-makerom.cmd`; build succeeded and copied the ROM to Delta as `test222.nds`.
+- Verified `test.nds` and the Delta copy are both present at 176M with a Jun 6 00:32 timestamp.
+- Verified active source contains `OverworldWildSpawns_TryGetPlayfulMovementDestination`, and `OverworldWildSpawns_BuildPlayfulDirections` now scores candidate moves through that helper destination.
+
+Runtime result:
+
+- User found another clue: when the player runs and then stops, Aipom can act weird as if the player/follower position was not updated coherently.
+- This suggests the remaining wrong-direction/spin issue may be caused by target coordinates changing mid-movement, not only by ledge destination scoring.
+
+Learning:
+
+- The next focused test should keep the movement executor unchanged and make playful target selection more tolerant of in-flight player/follower map-object positions.
+
+### Attempt 125: Include Moving Target Trail For Playful Scoring
+
+Idea:
+
+When the player or follower Pokemon is actively moving, playful movement should treat that target as occupying a tiny two-tile trail: its current tile plus its previous tile. This should make Aipom less likely to snap to the wrong side when the player runs and stops, or when the follower is still catching up.
+
+Implementation shape:
+
+- Increase `OW_WILD_SPAWNER_PLAYFUL_TARGET_MAX` from `2` to `6`.
+- Add `OverworldWildSpawns_TryAddPlayfulMapObjectTargets`.
+- For a player/follower map object, always add `MapObject_GetCurrentX/Y`.
+- If that target object reports `MapObject_IsSingleMovementActive`, also add `object->xPrev/yPrev` when it is valid and differs from the current tile.
+- Resolve the player through `fieldSystem->playerAvatar->mapObject` when possible, falling back to `GetPlayerXCoord/YCoord`.
+- Resolve follower targets through both the direct `fieldSystem->followMon.mapObject` path and the follower object-id fallback, using the same current-plus-previous trail helper.
+- Keep the playful movement command executor, ledge landing scorer, hard previous-tile block, target-tile block, orbit penalties, speed, stamina, and hop logic unchanged.
+
+Why this is new:
+
+- Attempt 112 added player/follower target selection, but only with one current tile per target.
+- Attempt 124 aligned ledge scoring with the actual ledge landing tile, but did not change player/follower target freshness.
+- Earlier attempts found spawned Pokemon `xPrev/yPrev` unreliable for their own no-backtrack bookkeeping, but no attempt has used player/follower `xPrev/yPrev` only while those target objects are actively moving.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+- `OW_WILD_SPAWNER_PLAYFUL_TARGET_MAX`
+- `OverworldWildSpawns_TryAddPlayfulMapObjectTargets`
+- `OverworldWildSpawns_BuildPlayfulTargets`
+- `MapObject_IsSingleMovementActive`
+- `LocalMapObject::xPrev`
+- `LocalMapObject::yPrev`
+
+Verification:
+
+- `git diff --check` passed before build.
+- Built with `./docker-makerom.cmd`; build succeeded and copied the ROM to Delta as `test223.nds`.
+- Verified `test.nds` and the Delta copy are both present at 176M with a Jun 6 00:41 timestamp.
+- Verified active source contains `OverworldWildSpawns_TryAddPlayfulMapObjectTargets`, the playful target cap is `6`, and `OverworldWildSpawns_BuildPlayfulTargets` now adds current-plus-previous target tiles for moving player/follower map objects.
+
+Runtime result:
+
+- User agreed the moving player/follower trail probably should be default handling for other behavior/state logic that relies on calculating the player's position.
+
+Learning:
+
+- Attempt 125 only helped playful scoring. The next change should promote the moving-target trail helper to shared movement intent, while keeping exact tile checks for battles, spawn placement, and despawn distance.
+
+### Attempt 126: Shared Moving Player Target For Movement Intent
+
+Idea:
+
+Use the current-plus-previous moving-player target trail as the default player-position source for movement intent. Behaviors that choose alert/chase/flee/ram/untangle directions should target the closest coherent moving-player tile instead of always reading only `GetPlayerXCoord/YCoord`.
+
+Implementation shape:
+
+- Rename the target-add helpers from playful-specific names to shared movement-target names:
+  - `OverworldWildSpawns_TryAddMovementTarget`;
+  - `OverworldWildSpawns_TryAddMovementMapObjectTargets`.
+- Add `OverworldWildSpawns_BuildPlayerMovementTargets`.
+- Add `OverworldWildSpawns_TrySelectClosestMovementTarget`.
+- Add `OverworldWildSpawns_TryGetClosestPlayerMovementTarget`.
+- Keep playful using the same helper for player targets, then add follower targets on top of it.
+- Update untangle movement to move away from the closest moving-player target.
+- Update the per-slot movement tick so alert detection, chase direction, flee direction, and ram's alert-start direction use the closest moving-player target.
+- Leave exact-coordinate systems unchanged for now:
+  - spawn placement;
+  - despawn distance;
+  - tile occupancy;
+  - touch battle;
+  - A-button battle;
+  - ram crash battle collision.
+
+Why this is new:
+
+- Attempt 125 applied the moving-target trail only inside playful player/follower target scoring.
+- No previous attempt has made this the shared source for player-position-based movement intent.
+- Earlier coordinate experiments only proved player/object coordinate reads were stable; they did not smooth moving-player coordinates or define exact-vs-smoothed usage boundaries.
+
+Files/symbols:
+
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+- `documentation/overworld_wild_movement_attempt_log.md`
+- `OverworldWildSpawns_TryAddMovementTarget`
+- `OverworldWildSpawns_TryAddMovementMapObjectTargets`
+- `OverworldWildSpawns_BuildPlayerMovementTargets`
+- `OverworldWildSpawns_TrySelectClosestMovementTarget`
+- `OverworldWildSpawns_TryGetClosestPlayerMovementTarget`
+- `OverworldWildSpawns_BuildUntangleDirections`
+- `OverworldWildSpawns_TickMovementParams`
+
+Verification:
+
+- `git diff --check` passed before build.
+- Built with `./docker-makerom.cmd`; build succeeded and copied the ROM to Delta as `test224.nds`.
+- Verified `test.nds` and the Delta copy are both present at 176M with a Jun 6 00:52 timestamp.
+- Verified active source contains the shared moving-player target helper path, playful now uses `OverworldWildSpawns_BuildPlayerMovementTargets`, and untangle plus the per-slot movement tick call `OverworldWildSpawns_TryGetClosestPlayerMovementTarget`.
 
 Runtime result:
 
@@ -2388,80 +2470,3 @@ Runtime result:
 Learning:
 
 - Pending.
-
-## Proposed Next New Experiments
-
-Only use this section after checking that the current idea has not already been tried above.
-
-### Experiment A: Add Back `MapObject_SetParam` Only
-
-Purpose:
-
-Check whether custom movement init/update can safely touch params without field-system lookup, scratch writes, or movement commands.
-
-Would add:
-
-- Init: set cooldown param only.
-- Update: decrement cooldown param only.
-
-Would still avoid:
-
-- `object->fsys`
-- global `FieldSystem *`
-- `object->unkD8`
-- single-movement flags
-- movement command helpers
-- coordinate reads
-
-### Experiment B: Add Back Player/Object Coordinate Reads Only
-
-Purpose:
-
-Check whether position lookup is safe before command movement is attempted.
-
-Would add:
-
-- global `FieldSystem *` setter
-- player coordinate reads
-- object coordinate reads
-
-Would still avoid:
-
-- movement command helpers
-- blocked-direction helper
-- scratch writes
-- single-movement flags
-
-### Experiment C: Add A Look Command Before Any Walk Command
-
-Purpose:
-
-Check whether starting a non-moving facing command is safer than a walk command.
-
-Would add:
-
-- `MapObject_MovementCommandFromDirection`
-- `MapObject_StartMovementCommand`
-- `MapObject_SetSingleMovementActive`
-- `MapObject_UpdateMovementCommand`
-
-Would still avoid:
-
-- walking commands
-- blocked-direction helper
-
-### Experiment D: Compare Stock Movement Descriptor Init/Update Requirements
-
-Purpose:
-
-Understand whether movement descriptor word `0` or callback semantics require stock values more specific than current assumptions.
-
-Would inspect:
-
-- stock descriptor table around movement `3`, `47`, and neighboring slots
-- stock init/update/finalize/cleanup functions near `0x020612b4` and `0x020613f8`
-- how movement manager calls descriptor callbacks
-
-Would avoid:
-
-- new runtime changes until the descriptor contract is clearer

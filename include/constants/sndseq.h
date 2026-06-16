@@ -1372,7 +1372,8 @@
 #define SEQ_SE_GS_GEARSEALGRAB               2375
 #define SEQ_SE_GS_GEARSEALHAMERU             2376
 #define SEQ_SE_GS_XBUTTON_SYUKUSHOU          2377
-#define SEQ_SE_END                           2378
+#define SEQ_SE_OW_SING                       2378
+#define SEQ_SE_END                           2379
 
 //Sounds marked BANK, WAVE, PLAYER, GROUP not ported over from pokeheartgold/include/constants/sndseq.h
 

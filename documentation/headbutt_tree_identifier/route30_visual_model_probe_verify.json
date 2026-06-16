@@ -1,0 +1,495 @@
+{
+  "empty_rows_in_320_383_by_any_tree_material": [
+    320,
+    321,
+    322,
+    323,
+    324,
+    325,
+    326,
+    345,
+    346,
+    347,
+    348,
+    349,
+    350,
+    351
+  ],
+  "map_id": 34,
+  "probe": "documentation/headbutt_tree_identifier/route30_visual_model_probe.json",
+  "row_coverage": {
+    "320": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "321": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "322": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "323": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "324": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "325": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "326": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "327": {
+      "all_tree_material_tile_count": 15,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "328": {
+      "all_tree_material_tile_count": 15,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 13,
+      "svg_colored_cell_count": 13
+    },
+    "329": {
+      "all_tree_material_tile_count": 18,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 15,
+      "svg_colored_cell_count": 15
+    },
+    "330": {
+      "all_tree_material_tile_count": 23,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 19,
+      "svg_colored_cell_count": 19
+    },
+    "331": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 21,
+      "svg_colored_cell_count": 21
+    },
+    "332": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 21,
+      "svg_colored_cell_count": 21
+    },
+    "333": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 20,
+      "svg_colored_cell_count": 20
+    },
+    "334": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 18,
+      "selected_tile_count": 21,
+      "svg_colored_cell_count": 21
+    },
+    "335": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 18,
+      "selected_tile_count": 23,
+      "svg_colored_cell_count": 23
+    },
+    "336": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 4,
+      "selected_tile_count": 9,
+      "svg_colored_cell_count": 9
+    },
+    "337": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 4,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "338": {
+      "all_tree_material_tile_count": 23,
+      "candidate_tile_count": 4,
+      "selected_tile_count": 12,
+      "svg_colored_cell_count": 12
+    },
+    "339": {
+      "all_tree_material_tile_count": 23,
+      "candidate_tile_count": 6,
+      "selected_tile_count": 13,
+      "svg_colored_cell_count": 13
+    },
+    "340": {
+      "all_tree_material_tile_count": 23,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 20,
+      "svg_colored_cell_count": 20
+    },
+    "341": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 20,
+      "svg_colored_cell_count": 20
+    },
+    "342": {
+      "all_tree_material_tile_count": 20,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 19,
+      "svg_colored_cell_count": 19
+    },
+    "343": {
+      "all_tree_material_tile_count": 19,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 19,
+      "svg_colored_cell_count": 19
+    },
+    "344": {
+      "all_tree_material_tile_count": 5,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 5,
+      "svg_colored_cell_count": 5
+    },
+    "345": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "346": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "347": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "348": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "349": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "350": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "351": {
+      "all_tree_material_tile_count": 0,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "352": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "353": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "354": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "355": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "356": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "357": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "358": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "359": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "360": {
+      "all_tree_material_tile_count": 13,
+      "candidate_tile_count": 8,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "361": {
+      "all_tree_material_tile_count": 15,
+      "candidate_tile_count": 8,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "362": {
+      "all_tree_material_tile_count": 18,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 12,
+      "svg_colored_cell_count": 12
+    },
+    "363": {
+      "all_tree_material_tile_count": 24,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "364": {
+      "all_tree_material_tile_count": 25,
+      "candidate_tile_count": 22,
+      "selected_tile_count": 21,
+      "svg_colored_cell_count": 22
+    },
+    "365": {
+      "all_tree_material_tile_count": 28,
+      "candidate_tile_count": 22,
+      "selected_tile_count": 23,
+      "svg_colored_cell_count": 23
+    },
+    "366": {
+      "all_tree_material_tile_count": 27,
+      "candidate_tile_count": 24,
+      "selected_tile_count": 25,
+      "svg_colored_cell_count": 25
+    },
+    "367": {
+      "all_tree_material_tile_count": 29,
+      "candidate_tile_count": 24,
+      "selected_tile_count": 27,
+      "svg_colored_cell_count": 27
+    },
+    "368": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 16,
+      "selected_tile_count": 16,
+      "svg_colored_cell_count": 16
+    },
+    "369": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 16,
+      "selected_tile_count": 16,
+      "svg_colored_cell_count": 16
+    },
+    "370": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 16,
+      "svg_colored_cell_count": 16
+    },
+    "371": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 15
+    },
+    "372": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 13,
+      "svg_colored_cell_count": 13
+    },
+    "373": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 12,
+      "selected_tile_count": 13,
+      "svg_colored_cell_count": 13
+    },
+    "374": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "375": {
+      "all_tree_material_tile_count": 22,
+      "candidate_tile_count": 10,
+      "selected_tile_count": 10,
+      "svg_colored_cell_count": 10
+    },
+    "376": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "377": {
+      "all_tree_material_tile_count": 23,
+      "candidate_tile_count": 0,
+      "selected_tile_count": 0,
+      "svg_colored_cell_count": 0
+    },
+    "378": {
+      "all_tree_material_tile_count": 22,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "379": {
+      "all_tree_material_tile_count": 21,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "380": {
+      "all_tree_material_tile_count": 20,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "381": {
+      "all_tree_material_tile_count": 19,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "382": {
+      "all_tree_material_tile_count": 14,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    },
+    "383": {
+      "all_tree_material_tile_count": 14,
+      "candidate_tile_count": 14,
+      "selected_tile_count": 14,
+      "svg_colored_cell_count": 14
+    }
+  },
+  "selected_material_family": "tree01_un",
+  "stamps": [
+    {
+      "all_tree_material_rows": [
+        289,
+        319,
+        31
+      ],
+      "candidate_rows": [
+        290,
+        319,
+        30
+      ],
+      "land_file_id": 6,
+      "selected_rows": [
+        290,
+        319,
+        30
+      ],
+      "svg_colored_rows": [
+        290,
+        319,
+        30
+      ],
+      "world_y": [
+        288,
+        319
+      ]
+    },
+    {
+      "all_tree_material_rows": [
+        327,
+        344,
+        18
+      ],
+      "candidate_rows": [
+        328,
+        343,
+        16
+      ],
+      "land_file_id": 7,
+      "selected_rows": [
+        328,
+        344,
+        17
+      ],
+      "svg_colored_rows": [
+        328,
+        344,
+        17
+      ],
+      "world_y": [
+        320,
+        351
+      ]
+    },
+    {
+      "all_tree_material_rows": [
+        352,
+        383,
+        32
+      ],
+      "candidate_rows": [
+        352,
+        383,
+        30
+      ],
+      "land_file_id": 8,
+      "selected_rows": [
+        352,
+        383,
+        30
+      ],
+      "svg_colored_rows": [
+        352,
+        383,
+        30
+      ],
+      "world_y": [
+        352,
+        383
+      ]
+    }
+  ],
+  "svg": "documentation/headbutt_tree_identifier/route30_visual_model_probe.svg",
+  "svg_y_axis": {
+    "max": 383,
+    "min": 288
+  }
+}

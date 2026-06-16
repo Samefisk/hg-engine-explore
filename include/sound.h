@@ -188,10 +188,12 @@ void LONG_CALL SND_AssignWaveArc(SNDBankData *bank, int index, SNDWaveArc *waveA
 
 void LONG_CALL PlayCry(u16 species, u8 forme);
 void LONG_CALL PlaySE(u32 se);
+void LONG_CALL StopSE(u32 se);
 
 
 // defined in src/sound.c
 BOOL LONG_CALL GF_Snd_LoadSeq(int seqNo);
+BOOL LONG_CALL GF_Snd_LoadSeqEx(int seqNo, u32 loadFlag);
 int LONG_CALL NNSi_SndArcLoadBank(int bankNo, u32 loadFlag, void *heap, BOOL bSetAddr, struct SNDBankData** pData);
 
 

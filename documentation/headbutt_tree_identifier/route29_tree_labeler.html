@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Route 29 Tree Labeler</title>
+  <style>
+    :root {
+      --bg: #eef2f6;
+      --panel: #ffffff;
+      --ink: #18212f;
+      --muted: #667085;
+      --line: #cbd5e1;
+      --accent: #1f7a8c;
+      --danger: #b42318;
+      --stage-w: 1632px;
+      --stage-h: 518px;
+      --grid-left: 54px;
+      --grid-top: 34px;
+      --cell: 13px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    header,
+    footer {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 14px;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      color: var(--muted);
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-weight: 700;
+      margin-right: 10px;
+    }
+
+    label {
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    input,
+    select,
+    button {
+      height: 32px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 0 9px;
+      font: inherit;
+    }
+
+    input[type="number"] {
+      width: 82px;
+    }
+
+    input[type="range"] {
+      width: 110px;
+      padding: 0;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button.active {
+      border-color: var(--accent);
+      background: #e6f4f1;
+      color: #0f5f6d;
+    }
+
+    button.danger {
+      color: var(--danger);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .workspace {
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .stage-wrap {
+      position: relative;
+      width: calc(var(--stage-w) * var(--zoom, 1));
+      height: calc(var(--stage-h) * var(--zoom, 1));
+      transform-origin: top left;
+    }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      width: var(--stage-w);
+      height: var(--stage-h);
+      transform: scale(var(--zoom, 1));
+      transform-origin: top left;
+      background: #fff;
+      box-shadow: 0 12px 30px rgb(15 23 42 / 12%);
+    }
+
+    .underlay {
+      position: absolute;
+      inset: 0;
+      width: var(--stage-w);
+      height: var(--stage-h);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .grid {
+      position: absolute;
+      left: var(--grid-left);
+      top: var(--grid-top);
+      width: calc(96 * var(--cell));
+      height: calc(34 * var(--cell));
+    }
+
+    .tile {
+      position: absolute;
+      width: var(--cell);
+      height: var(--cell);
+      border: 1px solid rgb(51 65 85 / 20%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #07111f;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 1;
+      user-select: none;
+      cursor: crosshair;
+      background: transparent;
+    }
+
+    .tile:hover {
+      outline: 2px solid #111827;
+      outline-offset: -2px;
+      z-index: 2;
+    }
+
+    .tile[data-tree]:not([data-tree=""]) {
+      text-shadow: 0 1px 0 rgb(255 255 255 / 75%);
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .spacer {
+      flex: 1 1 auto;
+    }
+
+    .status strong {
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="toolbar">
+        <div class="title">Route 29 Tree Labeler</div>
+        <label>Tree id <input id="treeId" type="number" min="1" step="1" value="1"></label>
+        <button id="paintBtn" class="active" type="button">Paint</button>
+        <button id="eraseBtn" type="button">Erase</button>
+        <label>Brush
+          <select id="brushSize">
+            <option value="1x1">1x1</option>
+            <option value="2x2">2x2</option>
+            <option value="2x3">2 wide x 3 high</option>
+          </select>
+        </label>
+        <label>Zoom <input id="zoom" type="range" min="80" max="260" value="150"> <span id="zoomValue">150%</span></label>
+        <button id="refreshBtn" type="button">Refresh UI</button>
+        <div class="spacer"></div>
+        <button id="undoBtn" type="button">Undo</button>
+        <button id="clearBtn" class="danger" type="button">Clear</button>
+        <button id="importBtn" type="button">Import</button>
+        <button id="exportJsonBtn" type="button">Export JSON</button>
+        <button id="exportCsvBtn" type="button">Export CSV</button>
+        <input id="fileInput" class="file-input" type="file" accept=".json,.csv,text/csv,application/json">
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div id="stageWrap" class="stage-wrap">
+        <div id="stage" class="stage">
+          <img class="underlay" src="route29_grid_audit.svg" alt="">
+          <div id="grid" class="grid" aria-label="Route 29 world tile label grid"></div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="status">Tile: <strong id="hoverTile">-</strong></div>
+      <div class="status">Labeled tiles: <strong id="labeledCount">0</strong></div>
+      <div class="status">Trees: <strong id="treeCount">0</strong></div>
+      <div class="status">Autosave: <strong id="saveState">ready</strong></div>
+      <div class="status">URL backup: <strong id="hashState">ready</strong></div>
+    </footer>
+  </div>
+
+  <script>
+    const bounds = { minX: 576, minY: 383, width: 96, height: 34 };
+    const storageKey = "route29-tree-labels-v1";
+    const grid = document.getElementById("grid");
+    const treeIdInput = document.getElementById("treeId");
+    const brushSize = document.getElementById("brushSize");
+    const paintBtn = document.getElementById("paintBtn");
+    const eraseBtn = document.getElementById("eraseBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const undoBtn = document.getElementById("undoBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const importBtn = document.getElementById("importBtn");
+    const exportJsonBtn = document.getElementById("exportJsonBtn");
+    const exportCsvBtn = document.getElementById("exportCsvBtn");
+    const fileInput = document.getElementById("fileInput");
+    const hoverTile = document.getElementById("hoverTile");
+    const labeledCount = document.getElementById("labeledCount");
+    const treeCount = document.getElementById("treeCount");
+    const saveState = document.getElementById("saveState");
+    const hashState = document.getElementById("hashState");
+    const zoom = document.getElementById("zoom");
+    const zoomValue = document.getElementById("zoomValue");
+
+    const cells = new Map();
+    const labels = new Map();
+    const undoStack = [];
+    let mode = "paint";
+    let pointerDown = false;
+    let lastPaintedKey = null;
+    let hashTimer = null;
+
+    function keyFor(x, y) {
+      return `${x},${y}`;
+    }
+
+    function colorForTree(id) {
+      const n = Number.parseInt(id, 10) || 0;
+      const hue = (n * 47) % 360;
+      return `hsla(${hue}, 78%, 66%, 0.72)`;
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      paintBtn.classList.toggle("active", mode === "paint");
+      eraseBtn.classList.toggle("active", mode === "erase");
+    }
+
+    function currentTreeId() {
+      const treeId = Math.max(1, Number.parseInt(treeIdInput.value, 10) || 1);
+      treeIdInput.value = treeId;
+      return treeId;
+    }
+
+    function adjustTreeId(delta) {
+      treeIdInput.value = Math.max(1, currentTreeId() + delta);
+    }
+
+    function isEditableTarget(target) {
+      if (!target) return false;
+      const tagName = target.tagName;
+      return target.isContentEditable
+        || tagName === "INPUT"
+        || tagName === "SELECT"
+        || tagName === "TEXTAREA";
+    }
+
+    function pushUndo(keyOrItem, previous, next) {
+      if (typeof keyOrItem === "object") {
+        undoStack.push(keyOrItem);
+      } else {
+        undoStack.push({ changes: [{ key: keyOrItem, previous, next }] });
+      }
+      undoBtn.disabled = undoStack.length === 0;
+    }
+
+    function setLabel(key, value, recordUndo = true) {
+      const previous = labels.get(key) || "";
+      const next = value ? String(value) : "";
+      if (previous === next) return;
+      if (recordUndo) pushUndo(key, previous, next);
+
+      if (next) {
+        labels.set(key, next);
+      } else {
+        labels.delete(key);
+      }
+
+      const cell = cells.get(key);
+      if (cell) {
+        cell.textContent = next;
+        cell.dataset.tree = next;
+        cell.style.background = next ? colorForTree(next) : "transparent";
+      }
+      updateStats();
+      scheduleSave();
+    }
+
+    function paintCell(cell) {
+      const anchorX = Number.parseInt(cell.dataset.x, 10);
+      const anchorY = Number.parseInt(cell.dataset.y, 10);
+      const brushKey = `${anchorX},${anchorY},${brushSize.value},${mode},${currentTreeId()}`;
+      if (brushKey === lastPaintedKey) return;
+      lastPaintedKey = brushKey;
+
+      const targetValue = mode === "erase" ? "" : currentTreeId();
+      const changes = [];
+      for (const tile of brushTiles(anchorX, anchorY)) {
+        const key = keyFor(tile.x, tile.y);
+        const previous = labels.get(key) || "";
+        const next = targetValue ? String(targetValue) : "";
+        if (previous === next) continue;
+        changes.push({ key, previous, next });
+        setLabel(key, next, false);
+      }
+      if (changes.length) {
+        pushUndo({ changes });
+      }
+    }
+
+    function brushTiles(anchorX, anchorY) {
+      const dimensions = {
+        "1x1": { width: 1, height: 1 },
+        "2x2": { width: 2, height: 2 },
+        "2x3": { width: 2, height: 3 }
+      }[brushSize.value] || { width: 1, height: 1 };
+      const tiles = [];
+      for (let dy = 0; dy < dimensions.height; dy++) {
+        for (let dx = 0; dx < dimensions.width; dx++) {
+          const x = anchorX + dx;
+          const y = anchorY + dy;
+          if (x < bounds.minX || x >= bounds.minX + bounds.width) continue;
+          if (y < bounds.minY || y >= bounds.minY + bounds.height) continue;
+          tiles.push({ x, y });
+        }
+      }
+      return tiles;
+    }
+
+    function updateStats() {
+      labeledCount.textContent = labels.size;
+      treeCount.textContent = new Set(labels.values()).size;
+    }
+
+    let saveTimer = null;
+    function scheduleSave() {
+      saveState.textContent = "saving";
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        if (writeAutosave(JSON.stringify(toJsonObject()))) {
+          saveState.textContent = "saved";
+        } else {
+          saveState.textContent = "unavailable";
+        }
+      }, 120);
+      scheduleHashBackup();
+    }
+
+    function compactLabels() {
+      return Array.from(labels.entries()).sort(compareKeys).map(([key, treeId]) => {
+        const [x, y] = key.split(",").map(Number);
+        return [x, y, treeId];
+      });
+    }
+
+    function encodeLabelsForHash() {
+      return btoa(JSON.stringify(compactLabels()));
+    }
+
+    function decodeLabelsFromHash() {
+      const match = window.location.hash.match(/(?:^#|&)labels=([^&]+)/);
+      if (!match) return null;
+      const compact = JSON.parse(atob(decodeURIComponent(match[1])));
+      return compact.map(([x, y, treeId]) => ({ x, y, tree_id: treeId }));
+    }
+
+    function scheduleHashBackup() {
+      hashState.textContent = "saving";
+      clearTimeout(hashTimer);
+      hashTimer = setTimeout(writeHashBackup, 180);
+    }
+
+    function writeHashBackup() {
+      try {
+        const encoded = encodeURIComponent(encodeLabelsForHash());
+        const nextUrl = `${window.location.pathname}${window.location.search}#labels=${encoded}`;
+        window.history.replaceState(null, "", nextUrl);
+        hashState.textContent = "saved";
+        return true;
+      } catch {
+        hashState.textContent = "failed";
+        return false;
+      }
+    }
+
+    function refreshUi() {
+      writeHashBackup();
+      const encoded = window.location.hash || "";
+      window.location.href = `${window.location.pathname}?v=${Date.now()}${encoded}`;
+    }
+
+    function readAutosave() {
+      try {
+        return window.localStorage ? window.localStorage.getItem(storageKey) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function writeAutosave(value) {
+      try {
+        if (!window.localStorage) return false;
+        window.localStorage.setItem(storageKey, value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function toJsonObject() {
+      const tiles = [];
+      for (const [key, treeId] of Array.from(labels.entries()).sort(compareKeys)) {
+        const [x, y] = key.split(",").map(Number);
+        tiles.push({ x, y, tree_id: treeId });
+      }
+      return {
+        schema_version: 1,
+        map_id: 33,
+        map_name: "Route 29",
+        coordinate_space: "world_tile",
+        route_bounds: {
+          min_x: bounds.minX,
+          min_y: bounds.minY,
+          max_x: bounds.minX + bounds.width - 1,
+          max_y: bounds.minY + bounds.height - 1,
+          width: bounds.width,
+          height: bounds.height
+        },
+        labels: tiles
+      };
+    }
+
+    function compareKeys(a, b) {
+      const [ax, ay] = a[0].split(",").map(Number);
+      const [bx, by] = b[0].split(",").map(Number);
+      return ay - by || ax - bx;
+    }
+
+    function exportJson() {
+      download("route29_tree_labels.json", JSON.stringify(toJsonObject(), null, 2) + "\n", "application/json");
+    }
+
+    function exportCsv() {
+      const lines = ["x,y,tree_id"];
+      for (let y = bounds.minY; y < bounds.minY + bounds.height; y++) {
+        for (let x = bounds.minX; x < bounds.minX + bounds.width; x++) {
+          lines.push(`${x},${y},${labels.get(keyFor(x, y)) || ""}`);
+        }
+      }
+      download("route29_tree_labels.csv", lines.join("\n") + "\n", "text/csv");
+    }
+
+    function download(filename, text, type) {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function importData(text, name) {
+      if (name.toLowerCase().endsWith(".json")) {
+        const parsed = JSON.parse(text);
+        loadLabels(parsed.labels || parsed.tiles || []);
+      } else {
+        const rows = parseCsv(text);
+        loadLabels(rows.map(row => ({ x: row.x, y: row.y, tree_id: row.tree_id })));
+      }
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines.shift().split(",").map(h => h.trim());
+      return lines.map(line => {
+        const values = line.split(",");
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = (values[index] || "").trim();
+        });
+        return row;
+      });
+    }
+
+    function loadLabels(items) {
+      for (const key of Array.from(labels.keys())) setLabel(key, "", false);
+      undoStack.length = 0;
+      for (const item of items) {
+        const x = Number.parseInt(item.x, 10);
+        const y = Number.parseInt(item.y, 10);
+        const id = item.tree_id ?? item.treeId ?? item.id ?? "";
+        if (!id || Number.isNaN(x) || Number.isNaN(y)) continue;
+        if (x < bounds.minX || x >= bounds.minX + bounds.width) continue;
+        if (y < bounds.minY || y >= bounds.minY + bounds.height) continue;
+        setLabel(keyFor(x, y), id, false);
+      }
+      undoBtn.disabled = true;
+      updateStats();
+      scheduleSave();
+    }
+
+    function loadAutosave() {
+      const hashLabels = decodeLabelsFromHash();
+      if (hashLabels) {
+        loadLabels(hashLabels);
+        hashState.textContent = "restored";
+        return;
+      }
+      const raw = readAutosave();
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        loadLabels(parsed.labels || []);
+      } catch {
+        saveState.textContent = "autosave error";
+      }
+    }
+
+    function buildGrid() {
+      const fragment = document.createDocumentFragment();
+      for (let y = 0; y < bounds.height; y++) {
+        for (let x = 0; x < bounds.width; x++) {
+          const worldX = bounds.minX + x;
+          const worldY = bounds.minY + y;
+          const key = keyFor(worldX, worldY);
+          const cell = document.createElement("div");
+          cell.className = "tile";
+          cell.dataset.key = key;
+          cell.dataset.x = worldX;
+          cell.dataset.y = worldY;
+          cell.style.left = `${x * 13}px`;
+          cell.style.top = `${y * 13}px`;
+          cell.addEventListener("pointerenter", () => {
+            hoverTile.textContent = `${worldX}, ${worldY}`;
+            if (pointerDown) paintCell(cell);
+          });
+          cell.addEventListener("pointerdown", event => {
+            event.preventDefault();
+            pointerDown = true;
+            lastPaintedKey = null;
+            cell.setPointerCapture(event.pointerId);
+            paintCell(cell);
+          });
+          cells.set(key, cell);
+          fragment.appendChild(cell);
+        }
+      }
+      grid.appendChild(fragment);
+    }
+
+    paintBtn.addEventListener("click", () => setMode("paint"));
+    eraseBtn.addEventListener("click", () => setMode("erase"));
+    refreshBtn.addEventListener("click", refreshUi);
+    document.addEventListener("pointerup", () => {
+      pointerDown = false;
+      lastPaintedKey = null;
+    });
+    document.addEventListener("keydown", event => {
+      if (isEditableTarget(event.target)) return;
+      const increaseKeys = new Set(["ArrowUp", "+", "=", "NumpadAdd"]);
+      const decreaseKeys = new Set(["ArrowDown", "-", "_", "NumpadSubtract"]);
+      const key = event.code && event.code.startsWith("Numpad") ? event.code : event.key;
+
+      if (increaseKeys.has(key)) {
+        event.preventDefault();
+        adjustTreeId(1);
+      } else if (decreaseKeys.has(key)) {
+        event.preventDefault();
+        adjustTreeId(-1);
+      }
+    });
+
+    undoBtn.addEventListener("click", () => {
+      const item = undoStack.pop();
+      if (!item) return;
+      for (const change of item.changes.slice().reverse()) {
+        setLabel(change.key, change.previous, false);
+      }
+      undoBtn.disabled = undoStack.length === 0;
+    });
+
+    clearBtn.addEventListener("click", () => {
+      if (!confirm("Clear all labels?")) return;
+      for (const key of Array.from(labels.keys())) setLabel(key, "");
+    });
+
+    importBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      importData(await file.text(), file.name);
+      fileInput.value = "";
+    });
+    exportJsonBtn.addEventListener("click", exportJson);
+    exportCsvBtn.addEventListener("click", exportCsv);
+
+    zoom.addEventListener("input", () => {
+      const value = Number.parseInt(zoom.value, 10);
+      document.documentElement.style.setProperty("--zoom", String(value / 100));
+      zoomValue.textContent = `${value}%`;
+    });
+
+    buildGrid();
+    undoBtn.disabled = true;
+    document.documentElement.style.setProperty("--zoom", "1.5");
+    loadAutosave();
+    updateStats();
+  </script>
+</body>
+</html>

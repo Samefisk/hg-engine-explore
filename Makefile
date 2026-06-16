@@ -86,7 +86,7 @@ ifneq ($(PYTHON_VENV_VERSION), 0)
 venv: $(VENV_ACTIVATE)
 
 # divorce this python3 from venv so that it works
-$(VENV_ACTIVATE):
+$(VENV_ACTIVATE): $(REQUIREMENTS)
 	$(PYTHON_NO_VENV) -m venv $(VENV)
 	$(PYTHON) -m pip install -r $(REQUIREMENTS)
 
