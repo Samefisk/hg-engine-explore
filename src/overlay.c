@@ -116,13 +116,10 @@ loadExtension:
     {
         if (gOverlayPriorityList[i][0] == ovyId)
         {
-            for (u32 j = 1; j < NELEMS(gOverlayPriorityList[0]); j++)
-            {
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
-                debug_printf("Overlay %d has priority over overlay %d--unloading the latter...\n", ovyId, gOverlayPriorityList[0][j]);
+            debug_printf("Overlay %d has priority over overlay %d--unloading the latter...\n", ovyId, gOverlayPriorityList[i][1]);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-                UnloadOverlayByID(gOverlayPriorityList[0][j]);
-            }
+            UnloadOverlayByID(gOverlayPriorityList[i][1]);
         }
     }
 

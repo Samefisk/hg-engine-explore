@@ -113,3 +113,44 @@ Result:
 - Build blocked by missing Docker.
 - Test build blocked by missing ARM toolchain.
 - No tracked generated files were changed by the failed build/test build attempts.
+
+## Attempt A03: Build Skill And Headless Runtime Verification
+
+Goal:
+
+- Re-run the normal Mac Docker build path through `./docker-makerom.cmd` after restoring this Codex shell's PATH to include Docker and the ARM toolchain.
+- Verify the rebuilt regular ROM boots to the overworld and can run a short key-only movement scenario with overlay 149/150 present.
+
+Build fix before rerun:
+
+- `src/overlay.c`
+  - Restored the priority-unload loop to use the matching row's linked overlay id instead of indexing through the first row. This preserves the existing priority-table shape and avoids unrelated unloads.
+- `src/save.c`
+  - Removed the always-emitted `"[SQRT]  RESULT = %08X\n"` format string from non-`DEBUG_SQRT` builds while keeping the hardware sqrt result read alive with a volatile write into the local buffer.
+  - This fixed the root ROM region overflow caused by the orphan `.rodata.str1.1` string spill from `build/save.o`.
+
+Build:
+
+- `export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"; ./docker-makerom.cmd`
+  - Passed.
+  - Created `test.nds` at 176M.
+  - Copied the ROM to `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test900.nds`.
+
+Headless verification:
+
+- `scripts/headless-test-ready.sh --screenshot documentation/verification_screenshots/overlay_modules_00_ready.png`
+  - Passed.
+  - Loaded `test.dsv` into the overworld in 6 seconds.
+  - Screenshot showed the loaded Route 29 overworld, not a title/menu/black frame.
+- `scripts/headless-overworld-test.py --action screenshot:documentation/verification_screenshots/overlay_modules_01_menu_open.png --action tap:B:6:24 --action wait:60 --action screenshot:documentation/verification_screenshots/overlay_modules_02_menu_closed.png --action hold:LEFT:45:24 --action wait:30 --action screenshot:documentation/verification_screenshots/overlay_modules_03_left.png --action hold:RIGHT:90:24 --action wait:30 --action screenshot:documentation/verification_screenshots/overlay_modules_04_right.png --action hold:DOWN:60:24 --action wait:30 --action screenshot:documentation/verification_screenshots/overlay_modules_05_down.png --read comm:s32:0x02FFF81C --expect comm=0 --screenshot documentation/verification_screenshots/overlay_modules_06_final.png`
+  - Passed.
+  - Used `/Users/christofferandersen/Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv`.
+  - Read `comm` at `0x02FFF81C` as `0`, matching the expectation.
+  - Screenshots showed player movement, a visible wild overworld Pokemon, and no black-screen/crash state.
+
+Battle-test note:
+
+- A separate `AUTO_TEST=Y` battle-test ROM build was attempted through the same Docker image:
+  - `docker run ... 'cd /hg-engine && make AUTO_TEST=Y -j$(nproc) VENV=/tmp/hg-engine-venv'`
+  - Failed at root link with `region 'rom' overflowed by 2756 bytes`.
+  - This is the battle scenario harness build, not the regular ROM build or the overworld headless runtime path.
