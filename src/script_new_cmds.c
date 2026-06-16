@@ -7,6 +7,7 @@
 #include "../include/constants/file.h"
 #include "../include/constants/sndseq.h"
 #include "../include/constants/species.h"
+#include "../include/overlay.h"
 #include "../include/sound.h"
 
 #define SCRIPT_NEW_CMD_REPEL_USE    0
@@ -75,6 +76,13 @@ static void Script_PrepareOverworldWildBattle(SCRIPTCONTEXT *ctx)
     VarSet(ctx->fsys, VAR_SPECIAL_x8004, encodedSpecies);
     VarSet(ctx->fsys, VAR_SPECIAL_x8005, level);
     VarSet(ctx->fsys, VAR_SPECIAL_x8006, shiny ? TRUE : FALSE);
+
+    /*
+     * Overlay 149/150 share the high EWRAM overlay region with battle
+     * extension overlays. Once the battle data has been copied into base
+     * state/script vars, release them before WildBattleSp loads battle code.
+     */
+    UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
 #else
     (void)ctx;
 #endif

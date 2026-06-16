@@ -1044,6 +1044,9 @@ static BOOL OverworldWildSpawns_IsFrameDrivenActiveBehaviorClass(u8 behaviorClas
 static BOOL OverworldWildSpawns_ShouldKeepPlayfulOrbitFrameTask(OverworldWildSpawnState *state, int slot);
 static OverworldWildBehaviorProfile OverworldWildSpawns_GetBehaviorProfile(OverworldWildSpawnState *state, int slot);
 static OverworldWildBehaviorProfile OverworldWildSpawns_GetMovementTickProfile(OverworldWildSpawnState *state, int slot);
+static OverworldWildBehaviorPrimitives OverworldWildSpawns_ResolveBehaviorPrimitives(
+    const OverworldWildBehaviorProfile *profile);
+static BOOL OverworldWildSpawns_IsCanopyHopperTreeTopProfile(const OverworldWildBehaviorProfile *profile);
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object, u8 range);
 static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *object, u16 species, u8 form, u32 spriteId, BOOL shiny);
 static void OverworldWildSpawns_RevealNonPhantomObjects(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
@@ -1242,6 +1245,7 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data);
 static void OverworldWildSpawns_EnsureFrameMovementTask(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static void OverworldWildSpawns_StopFrameMovementTask(void);
 #endif
+static BOOL OverworldWildSpawns_QueueBattleScriptTask(FieldSystem *fieldSystem);
 static void OverworldWildSpawns_RequestBattleScript(FieldSystem *fieldSystem);
 static void OverworldWildSpawns_EnsureSoundTesterTask(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_IsAnyTesterOpen(void);
@@ -2162,13 +2166,23 @@ static BOOL OverworldWildSpawns_HasFrameMovementWorkForSlot(OverworldWildSpawnSt
         return TRUE;
     }
     if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
+        OverworldWildBehaviorPrimitives primitives;
+
         profile = OverworldWildSpawns_GetMovementTickProfile(state, slot);
-        return OverworldWildSpawns_ProfileUsesFrameDrivenChill(&profile);
+        primitives = OverworldWildSpawns_ResolveBehaviorPrimitives(&profile);
+        return OverworldWildSpawns_ProfileUsesFrameDrivenChill(&profile)
+            || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(&profile)
+                && primitives.chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_LONG_HOP);
     }
-    if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-        && (OverworldWildSpawns_IsFrameDrivenActiveBehaviorClass(state->movementBehaviorClasses[slot])
-            || OverworldWildSpawns_ShouldKeepPlayfulOrbitFrameTask(state, slot))) {
-        return TRUE;
+    if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
+        OverworldWildBehaviorPrimitives primitives;
+
+        profile = OverworldWildSpawns_GetMovementTickProfile(state, slot);
+        primitives = OverworldWildSpawns_ResolveBehaviorPrimitives(&profile);
+        return OverworldWildSpawns_IsFrameDrivenActiveBehaviorClass(state->movementBehaviorClasses[slot])
+            || OverworldWildSpawns_ShouldKeepPlayfulOrbitFrameTask(state, slot)
+            || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(&profile)
+                && primitives.attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_LONG_HOP);
     }
     if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_TIRED) {
         return state->movementEmoteTimers[slot] != 0;
@@ -9360,6 +9374,16 @@ static void OverworldWildSpawns_StopFrameMovementTask(void)
     }
 }
 
+static BOOL OverworldWildSpawns_QueueBattleScriptTask(FieldSystem *fieldSystem)
+{
+    if (fieldSystem == NULL || fieldSystem != gFieldSysPtr) {
+        return FALSE;
+    }
+
+    EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
+    return TRUE;
+}
+
 static void OverworldWildSpawns_CancelDeferredBattleScript(void)
 {
     if (sOverworldWildDeferredBattleScriptTask != NULL) {
@@ -9390,7 +9414,7 @@ static void OverworldWildSpawns_DeferredBattleScriptTask(SysTask *task, void *da
 
     OverworldWildSpawns_StopFrameMovementTask();
     if (fieldSystem != NULL) {
-        EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
+        OverworldWildSpawns_QueueBattleScriptTask(fieldSystem);
     }
     DestroySysTask(task);
 }
@@ -9408,7 +9432,7 @@ static void OverworldWildSpawns_DeferBattleScript(FieldSystem *fieldSystem)
         && fieldSystem != NULL
         && !sOverworldWildMovementFrameTaskExecuting
         && !sOverworldWildSoundTesterTaskExecuting) {
-        EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
+        OverworldWildSpawns_QueueBattleScriptTask(fieldSystem);
     }
 }
 
@@ -9585,7 +9609,7 @@ static void OverworldWildSpawns_RequestBattleScript(FieldSystem *fieldSystem)
     OverworldWildSpawns_StopFrameMovementTask();
 #endif
 
-    EventSet_Script(fieldSystem, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT, NULL);
+    OverworldWildSpawns_QueueBattleScriptTask(fieldSystem);
 }
 
 static void OverworldWildSpawns_OpenSoundTester(FieldSystem *fieldSystem)

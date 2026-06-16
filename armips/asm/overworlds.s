@@ -59,6 +59,14 @@ OverworldWildSpawns_IsPokemonPaletteObjectId:
     b 0x0220583C
 .endarea
 
+// Battle/field transitions dispatch through a callback table with BLX. If a
+// Thumb callback ever arrives with bit 0 cleared, the ARM9 enters valid Thumb
+// bytes as ARM and halts. Keep the target Thumb-tagged at the dispatch point.
+.org 0x021EFB42
+.area 0x04, 0x00
+    bl OverworldWildSpawns_TransitionDispatchThumbThunk
+.endarea
+
 .org 0x02209B18
 .area 0x40, 0xFF
 OverworldWildSpawns_CheckShinyPaletteObject:
@@ -78,6 +86,15 @@ OverworldWildSpawns_CheckShinyPaletteObject:
     bl 0x0205F2F4 // MapObject_GetParam
     mov r1, #1
     and r0, r1
+    pop {r4, pc}
+
+OverworldWildSpawns_TransitionDispatchThumbThunk:
+    push {r0, r3, r4, lr}
+    ldr r2, [r2, r3]
+    mov r0, #1
+    orr r2, r0
+    pop {r0, r3}
+    blx r2
     pop {r4, pc}
 
     .pool
