@@ -19,15 +19,16 @@ shape:
 Runtime behavior is unchanged. No runtime code loads `CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA`
 yet, and the overlay-150 C tables remain the active behavior data path.
 
-The later JSON/codec branch should replace the dummy emitter with a source-backed
-codec, likely from `data/overworld_wild_behavior/profiles.json`, while keeping
-the same pointerless constraints: relative offsets, no absolute pointers, and
-validation before any runtime cache decodes the blob.
+Future work should replace the dummy emitter with an OWBD binary codec/emitter
+that consumes the landed `data/overworld_wild_behavior/profiles.json` source
+while keeping the same pointerless constraints: relative offsets, no absolute
+pointers, and validation before any runtime cache decodes the blob.
 
 Useful local checks:
 
 ```bash
 python3 scripts/build_overworld_wild_behavior_data.py build --output build/OverworldWildBehaviorData.bin
 python3 scripts/build_overworld_wild_behavior_data.py validate build/OverworldWildBehaviorData.bin --json
+python3 scripts/build_overworld_wild_behavior_data.py probe
 make validate_owbd
 ```

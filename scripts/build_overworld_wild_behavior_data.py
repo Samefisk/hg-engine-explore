@@ -15,6 +15,8 @@ MAGIC = b"OWBD"
 VERSION = 1
 HEADER_FORMAT = "<4sHHIIHHHHIIIIHHHHI"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+CHECKSUM_OFFSET = struct.calcsize("<4sHHIIHHHHIIIIHHHH")
+CHECKSUM_SIZE = 4
 
 SECTION_NAMES = (
     "profiles",
@@ -29,38 +31,64 @@ class OwbdError(ValueError):
 
 
 def checksum_for(blob: bytes) -> int:
-    if len(blob) < 4:
-        raise OwbdError("OWBD blob is too small to contain a checksum")
-    return zlib.crc32(blob[:-4] + b"\0\0\0\0") & 0xFFFFFFFF
+    checksum_end = CHECKSUM_OFFSET + CHECKSUM_SIZE
+    if len(blob) < checksum_end:
+        raise OwbdError("OWBD blob is too small to contain a checksum field")
+    work = bytearray(blob)
+    work[CHECKSUM_OFFSET:checksum_end] = b"\0" * CHECKSUM_SIZE
+    return zlib.crc32(work) & 0xFFFFFFFF
 
 
-def pack_header(checksum: int = 0) -> bytes:
+def pack_header(
+    *,
+    total_size: int = HEADER_SIZE,
+    payload_size: int = 0,
+    counts: tuple[int, int, int, int] = (0, 0, 0, 0),
+    offsets: tuple[int, int, int, int] = (0, 0, 0, 0),
+    element_sizes: tuple[int, int, int, int] = (0, 0, 0, 0),
+    checksum: int = 0,
+) -> bytes:
     return struct.pack(
         HEADER_FORMAT,
         MAGIC,
         VERSION,
         HEADER_SIZE,
-        HEADER_SIZE,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        total_size,
+        payload_size,
+        *counts,
+        *offsets,
+        *element_sizes,
         checksum,
     )
 
 
 def build_dummy_blob() -> bytes:
     blob = pack_header()
-    return pack_header(checksum_for(blob))
+    return pack_header(checksum=checksum_for(blob))
+
+
+def build_probe_blob(payload: bytes = b"\x01\x02\x03\x04") -> bytes:
+    blob = (
+        pack_header(
+            total_size=HEADER_SIZE + len(payload),
+            payload_size=len(payload),
+            counts=(1, 0, 0, 0),
+            offsets=(HEADER_SIZE, 0, 0, 0),
+            element_sizes=(len(payload), 0, 0, 0),
+        )
+        + payload
+    )
+    return (
+        pack_header(
+            total_size=len(blob),
+            payload_size=len(payload),
+            counts=(1, 0, 0, 0),
+            offsets=(HEADER_SIZE, 0, 0, 0),
+            element_sizes=(len(payload), 0, 0, 0),
+            checksum=checksum_for(blob),
+        )
+        + payload
+    )
 
 
 def read_header(blob: bytes) -> dict[str, object]:
@@ -197,6 +225,35 @@ def validate_path(path: Path, dump_json: bool) -> None:
         print(f"validated {path} ({header['total_size']} bytes)")
 
 
+def run_probe() -> None:
+    blob = build_probe_blob()
+    header = validate_blob(blob)
+    checksum_end = CHECKSUM_OFFSET + CHECKSUM_SIZE
+    if checksum_end == len(blob):
+        raise OwbdError("probe checksum field unexpectedly sits at EOF")
+
+    mutated = bytearray(blob)
+    mutated[-1] ^= 0xFF
+    try:
+        validate_blob(mutated)
+    except OwbdError as exc:
+        if "checksum mismatch" not in str(exc):
+            raise
+    else:
+        raise OwbdError("probe accepted a payload mutation")
+
+    trailing_zero_blob = build_probe_blob(b"\x01\x02\x03\x04\0\0\0\0")
+    trailing_zero_header = validate_blob(trailing_zero_blob)
+    old_style_checksum = zlib.crc32(trailing_zero_blob[:-4] + b"\0\0\0\0") & 0xFFFFFFFF
+    if old_style_checksum == trailing_zero_header["checksum"]:
+        raise OwbdError("probe checksum is still compatible with zeroing the last 4 bytes")
+
+    print(
+        "validated non-empty OWBD probe "
+        f"({header['total_size']} bytes, checksum offset {CHECKSUM_OFFSET})"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -208,6 +265,11 @@ def main() -> int:
     validate_parser.add_argument("path", type=Path)
     validate_parser.add_argument("--json", action="store_true", help="dump parsed header")
 
+    subparsers.add_parser(
+        "probe",
+        help="validate an in-memory non-empty OWBD blob with payload after the header",
+    )
+
     args = parser.parse_args()
 
     try:
@@ -215,6 +277,8 @@ def main() -> int:
             write_blob(args.output)
         elif args.command == "validate":
             validate_path(args.path, args.json)
+        elif args.command == "probe":
+            run_probe()
         else:
             parser.error(f"unknown command {args.command}")
     except OwbdError as exc:
