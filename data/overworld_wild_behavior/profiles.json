@@ -1,0 +1,1073 @@
+{
+  "schemaVersion": 1,
+  "classProfiles": [
+    {
+      "name": "default",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_QUESTION_MARK",
+        "alertTime": "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
+        "alertness": "OW_WILD_SPAWNER_SPOT_RANGE",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_FLEE",
+        "stamina": "1",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+        "restTime": "4",
+        "chillSpeed": "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "attentiveSpeed": "2",
+        "tiredSpeed": "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "1",
+        "hopMaxDistance": "2",
+        "hopPause": "0",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "0",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "1",
+        "attentiveHopMaxDistance": "2",
+        "attentiveHopPause": "0",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "1",
+        "tiredHopMaxDistance": "2",
+        "tiredHopPause": "0",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "skittish",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_DESPAIR",
+        "alertTime": "15",
+        "alertness": "4",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_FLEE",
+        "stamina": "10",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
+        "restTime": "2",
+        "chillSpeed": "1",
+        "attentiveSpeed": "4",
+        "tiredSpeed": "1",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "2",
+        "hopMaxDistance": "6",
+        "hopPause": "1",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "0",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "2",
+        "attentiveHopMaxDistance": "6",
+        "attentiveHopPause": "1",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "2",
+        "tiredHopMaxDistance": "6",
+        "tiredHopPause": "1",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "aggressive_chase",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY",
+        "alertTime": "15",
+        "alertness": "OW_WILD_SPAWNER_SPOT_RANGE",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "stamina": "40",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
+        "restTime": "4",
+        "chillSpeed": "1",
+        "attentiveSpeed": "1",
+        "tiredSpeed": "1",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "hopMinDistance": "2",
+        "hopMaxDistance": "3",
+        "hopPause": "10",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "1",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "attentiveHopMinDistance": "2",
+        "attentiveHopMaxDistance": "3",
+        "attentiveHopPause": "10",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "tiredHopMinDistance": "2",
+        "tiredHopMaxDistance": "3",
+        "tiredHopPause": "10",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "playful",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_SMILE",
+        "alertTime": "10",
+        "alertness": "OW_WILD_SPAWNER_SPOT_RANGE",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_PLAYFUL",
+        "stamina": "48",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
+        "restTime": "6",
+        "chillSpeed": "1",
+        "attentiveSpeed": "4",
+        "tiredSpeed": "3",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_EMOTE",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "hopMinDistance": "2",
+        "hopMaxDistance": "3",
+        "hopPause": "1",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "2",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "attentiveHopMinDistance": "2",
+        "attentiveHopMaxDistance": "3",
+        "attentiveHopPause": "1",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_NO",
+        "tiredHopMinDistance": "2",
+        "tiredHopMaxDistance": "3",
+        "tiredHopPause": "1",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "aggressive_ram",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY",
+        "alertTime": "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
+        "alertness": "OW_WILD_SPAWNER_ONIX_RAM_ALERTNESS",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_RAM",
+        "stamina": "6",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+        "restTime": "4",
+        "chillSpeed": "1",
+        "attentiveSpeed": "2",
+        "tiredSpeed": "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "1",
+        "hopMaxDistance": "2",
+        "hopPause": "0",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "0",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "1",
+        "attentiveHopMaxDistance": "2",
+        "attentiveHopPause": "0",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "1",
+        "tiredHopMaxDistance": "2",
+        "tiredHopPause": "0",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "phantom_stalker",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_ELLIPSIS",
+        "alertTime": "OW_WILD_SPAWNER_PHANTOM_STALK_ALERT_FRAMES",
+        "alertness": "OW_WILD_SPAWNER_SPOT_RANGE",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "stamina": "16",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+        "restTime": "5",
+        "chillSpeed": "1",
+        "attentiveSpeed": "2",
+        "tiredSpeed": "1",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_EMOTE",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "4",
+        "hopMaxDistance": "4",
+        "hopPause": "0",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "0",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "5",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "4",
+        "attentiveHopMaxDistance": "4",
+        "attentiveHopPause": "0",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "4",
+        "tiredHopMaxDistance": "4",
+        "tiredHopPause": "0",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "swarm",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY",
+        "alertTime": "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
+        "alertness": "OW_WILD_SPAWNER_SWARM_SEEK_RADIUS",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "stamina": "32",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
+        "restTime": "4",
+        "chillSpeed": "1",
+        "attentiveSpeed": "2",
+        "tiredSpeed": "2",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_SWARM",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_NONE",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_SWARM",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_POOL",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "2",
+        "hopMaxDistance": "3",
+        "hopPause": "1",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
+        "alertCallSpawnAmount": "3",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "2",
+        "attentiveHopMaxDistance": "3",
+        "attentiveHopPause": "1",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "2",
+        "tiredHopMaxDistance": "3",
+        "tiredHopPause": "1",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    },
+    {
+      "name": "canopy_hopper_2",
+      "profile": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP",
+        "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY",
+        "alertTime": "20",
+        "alertness": "1",
+        "attentiveState": "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "stamina": "60",
+        "tiredState": "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+        "restTime": "4",
+        "chillSpeed": "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "attentiveSpeed": "2",
+        "tiredSpeed": "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "range": "OW_WILD_SPAWNER_MOVEMENT_RANGE",
+        "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH",
+        "profileId": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT",
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN",
+        "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
+        "chillTarget": "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+        "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE",
+        "targetSelector": "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT",
+        "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
+        "chillCooldown": "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+        "attentiveCooldown": "0",
+        "alertChance": "100",
+        "spawnDestination": "OW_WILD_SPAWN_DESTINATION_CANOPY",
+        "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_CONTACT",
+        "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+        "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+        "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "hopMinDistance": "1",
+        "hopMaxDistance": "8",
+        "hopPause": "20",
+        "teleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "teleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+        "alertCallSpawnAmount": "0",
+        "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+        "spawnDestinationMinDistance": "1",
+        "spawnDestinationMaxDistance": "5",
+        "ramAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "ramMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_CANOPY",
+        "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_CANOPY",
+        "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+        "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER_FRONT",
+        "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "attentiveHopMinDistance": "1",
+        "attentiveHopMaxDistance": "8",
+        "attentiveHopPause": "10",
+        "attentiveTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "attentiveTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "attentiveRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "attentiveRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+        "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+        "tiredHopMinDistance": "3",
+        "tiredHopMaxDistance": "8",
+        "tiredHopPause": "10",
+        "tiredTeleportTime": "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+        "tiredTeleportPause": "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+        "tiredRamAccelerationSteps": "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+        "tiredRamMaxSpeed": "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED"
+      }
+    }
+  ],
+  "classRules": [
+    {
+      "match": {
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_BABY",
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_SKITTISH"
+    },
+    {
+      "match": {
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_GHOST",
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    }
+  ],
+  "speciesClassRules": [
+    {
+      "species": "SPECIES_BEEDRILL",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_SWARM"
+    },
+    {
+      "species": "SPECIES_PIDGEY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE"
+    },
+    {
+      "species": "SPECIES_ONIX",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_MANKEY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2"
+    },
+    {
+      "species": "SPECIES_SENTRET",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2"
+    },
+    {
+      "species": "SPECIES_AIPOM",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2"
+    },
+    {
+      "species": "SPECIES_HOOTHOOT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_DEFAULT"
+    },
+    {
+      "species": "SPECIES_STEELIX",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_PHANPY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_DONPHAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_PONYTA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_PONYTA_GALARIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_RAPIDASH_GALARIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_RAPIDASH",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_GREAT_TUSK",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
+    },
+    {
+      "species": "SPECIES_SHEDINJA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SABLEYE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SHUPPET",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BANETTE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DUSCLOPS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DRIFLOON",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DRIFBLIM",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MISMAGIUS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SPIRITOMB",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DUSKNOIR",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_FROSLASS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_ROTOM",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GIRATINA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GIRATINA_ORIGIN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_YAMASK",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_COFAGRIGUS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_FRILLISH",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_JELLICENT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_LITWICK",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_LAMPENT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CHANDELURE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOLETT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOLURK",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_HONEDGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DOUBLADE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_AEGISLASH",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PHANTUMP",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_TREVENANT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PUMPKABOO",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOURGEIST",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_HOOPA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DECIDUEYE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SANDYGAST",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PALOSSAND",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MIMIKYU",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DHELMISE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_LUNALA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MARSHADOW",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BLACEPHALON",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SINISTEA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_POLTEAGEIST",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CURSOLA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_RUNERIGUS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DREEPY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DRAKLOAK",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_DRAGAPULT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SPECTRIER",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BASCULEGION",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SKELEDIRGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CERULEDGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BRAMBLIN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BRAMBLEGHAST",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GREAVARD",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_HOUNDSTONE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_ANNIHILAPE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_FLUTTER_MANE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GIMMIGHOUL",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GHOLDENGO",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_POLTCHAGEIST",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SINISTCHA",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PECHARUNT",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MEGA_GENGAR",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MEGA_SABLEYE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MEGA_BANETTE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MAROWAK_ALOLAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MAROWAK_ALOLAN_LARGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MIMIKYU_LARGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MIMIKYU_BUSTED_LARGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CORSOLA_GALARIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_YAMASK_GALARIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_AEGISLASH_BLADE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PUMPKABOO_SMALL",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PUMPKABOO_LARGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_PUMPKABOO_SUPER",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOURGEIST_SMALL",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOURGEIST_LARGE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GOURGEIST_SUPER",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_ORICORIO_SENSU",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_MIMIKYU_BUSTED",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_NECROZMA_DAWN_WINGS",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SINISTEA_ANTIQUE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_POLTEAGEIST_ANTIQUE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CALYREX_SHADOW_RIDER",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_TYPHLOSION_HISUIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_ZORUA_HISUIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_ZOROARK_HISUIAN",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_FRILLISH_FEMALE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_JELLICENT_FEMALE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_BASCULEGION_FEMALE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_GIMMIGHOUL_ROAMING",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_POLTCHAGEIST_MASTERPIECE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_SINISTCHA_MASTERPIECE",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_CLEFAIRY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PLAYFUL"
+    },
+    {
+      "species": "SPECIES_GASTLY",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER"
+    },
+    {
+      "species": "SPECIES_FURRET",
+      "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2"
+    }
+  ],
+  "overrides": [
+    {
+      "name": "fairy_singing",
+      "match": {
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_TYPE_FAIRY",
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "fields": {
+        "chillState": "OW_WILD_BEHAVIOR_KIND_SINGING"
+      }
+    },
+    {
+      "name": "flying_hop_spawn",
+      "match": {
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_TYPE_FLYING",
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "fields": {
+        "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN"
+      }
+    }
+  ]
+}

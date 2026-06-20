@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Serve a dynamic overview of overworld wild behavior profiles.
 
-The viewer keeps the C tables as the source of truth.  It parses the current
-runtime overlay and behavior-data overlay on every /data.json request, resolves
-class rules and variable overrides in the same order as the runtime resolver,
-and exposes the result to a small browser UI.
+The viewer parses the current runtime overlay and behavior-data overlay on every
+/data.json request, resolves class rules and variable overrides in the same
+order as the runtime resolver, and exposes the result to a small browser UI.
 """
 
 from __future__ import annotations
@@ -39,6 +38,10 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 BEHAVIOR_DATA_SOURCE = ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c"
+BEHAVIOR_DATA_GENERATED_SOURCE = (
+    ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_profiles.generated.inc"
+)
+BEHAVIOR_PROFILE_JSON = ROOT / "data/overworld_wild_behavior/profiles.json"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
@@ -77,6 +80,8 @@ BUILD_STATE = {
 DATA_SOURCE_FILES = (
     OVERLAY_SOURCE,
     BEHAVIOR_DATA_SOURCE,
+    BEHAVIOR_DATA_GENERATED_SOURCE,
+    BEHAVIOR_PROFILE_JSON,
     BEHAVIOR_DATA_HEADER,
     SPECIES_HEADER,
     MAPS_HEADER,
@@ -98,6 +103,7 @@ DEFINE_SOURCE_FILES = [
     BEHAVIOR_DATA_HEADER,
     OVERLAY_SOURCE,
     BEHAVIOR_DATA_SOURCE,
+    BEHAVIOR_DATA_GENERATED_SOURCE,
     ENEMY_PARTY_SOURCE,
 ]
 DATA_CACHE_LOCK = threading.Lock()
@@ -1090,6 +1096,24 @@ def extract_braced_initializer(text: str, name: str) -> str:
     raise ParseError(f"unterminated initializer for {name}")
 
 
+def read_behavior_data_source() -> str:
+    source = BEHAVIOR_DATA_SOURCE.read_text()
+    include = '#include "overworld_wild_behavior_profiles.generated.inc"'
+    if include in source and BEHAVIOR_DATA_GENERATED_SOURCE.exists():
+        return source.replace(include, BEHAVIOR_DATA_GENERATED_SOURCE.read_text())
+    return source
+
+
+def require_legacy_behavior_profile_write_target() -> None:
+    source = BEHAVIOR_DATA_SOURCE.read_text()
+    include = '#include "overworld_wild_behavior_profiles.generated.inc"'
+    if include in source:
+        raise ValueError(
+            "behavior profiles are generated from data/overworld_wild_behavior/profiles.json; "
+            "viewer profile save handlers are disabled for this compatibility step"
+        )
+
+
 def parse_initializer(src: str):
     root: list = []
     stack: list[list] = [root]
@@ -2073,7 +2097,7 @@ def parse_encounter_area_maps(source: str, macros: dict[str, int] | None = None)
                 extract_braced_initializer(source, "sOverworldWildEncounterAreaDataIds")
             )
         except ParseError:
-            behavior_source = strip_c_comments(join_line_continuations(BEHAVIOR_DATA_SOURCE.read_text()))
+            behavior_source = strip_c_comments(join_line_continuations(read_behavior_data_source()))
             try:
                 map_entries = parse_initializer(
                     extract_braced_initializer(behavior_source, "sOverworldWildEncounterAreaMapIds")
@@ -3001,6 +3025,8 @@ def data_source_metadata() -> dict[str, str]:
     return {
         "overlay": str(OVERLAY_SOURCE.relative_to(ROOT)),
         "behaviorData": str(BEHAVIOR_DATA_SOURCE.relative_to(ROOT)),
+        "behaviorDataGenerated": str(BEHAVIOR_DATA_GENERATED_SOURCE.relative_to(ROOT)),
+        "behaviorProfiles": str(BEHAVIOR_PROFILE_JSON.relative_to(ROOT)),
         "behaviorDataHeader": str(BEHAVIOR_DATA_HEADER.relative_to(ROOT)),
         "species": str(SPECIES_HEADER.relative_to(ROOT)),
         "spawnInternal": str(SPAWNS_INTERNAL_HEADER.relative_to(ROOT)),
@@ -3098,7 +3124,7 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
 def build_data() -> dict:
     raw_overlay = OVERLAY_SOURCE.read_text()
     source = strip_c_comments(join_line_continuations(raw_overlay))
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    raw_behavior_data = read_behavior_data_source()
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
@@ -3596,6 +3622,7 @@ def validate_profile_management_species(symbols: list[str], valid_species: set[s
 
 
 def apply_profile_management_change(body: bytes) -> dict:
+    require_legacy_behavior_profile_write_target()
     change = parse_profile_management_payload(body)
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
@@ -3803,6 +3830,7 @@ def braced_entry_removal_span(text: str, entry_span: tuple[int, int], container_
 
 
 def apply_profile_changes(body: bytes) -> dict:
+    require_legacy_behavior_profile_write_target()
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, _ = parse_define_expressions([SPECIES_HEADER, BEHAVIOR_DATA_HEADER, OVERLAY_SOURCE, BEHAVIOR_DATA_SOURCE])
@@ -3852,6 +3880,7 @@ def apply_profile_changes(body: bytes) -> dict:
 
 
 def apply_profile_membership_changes(body: bytes) -> dict:
+    require_legacy_behavior_profile_write_target()
     changes = parse_profile_membership_payload(body)
     if not changes:
         return {"saved": False, "message": "No changes"}
@@ -3951,6 +3980,7 @@ def apply_profile_membership_changes(body: bytes) -> dict:
 
 
 def apply_profile_override_changes(body: bytes) -> dict:
+    require_legacy_behavior_profile_write_target()
     changes = parse_profile_override_payload(body)
     additions = changes["add"]
     removals = changes["remove"]

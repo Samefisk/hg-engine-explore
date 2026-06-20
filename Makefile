@@ -77,7 +77,7 @@ PYTHON = $(PYTHON_NO_VENV)
 VENV_ACTIVATE =
 endif
 
-.PHONY: clean all dumprom report_overworld_wild_sizes
+.PHONY: clean all dumprom report_overworld_wild_sizes check_overworld_wild_behavior_data
 
 default: all
 
@@ -249,6 +249,8 @@ $1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
 -include $(basename $1).d
 endef
 $(foreach src, $(ALL_C_SRCS), $(eval $(call SRC_OBJ_INC_DEFINE,$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o, $(src)),$(src))))
+
+$(BUILD)/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.o: $(OW_WILD_BEHAVIOR_DATA_GENERATED)
 
 define ASM_OBJ_INC_DEFINE
 # these should have similar dependency scanning, but we do not currently use them in a way conducive to it

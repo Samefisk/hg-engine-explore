@@ -145,6 +145,21 @@ $(EGGLEARNSET_NARC): $(LEARNSETS_HEADER)
 NARC_FILES += $(EGGLEARNSET_NARC)
 REQUIRED_DIRECTORIES += $(BUILD)/a229 $(LEARNSET_OUTPUT_DIR)
 
+OW_WILD_BEHAVIOR_PROFILE_JSON := data/overworld_wild_behavior/profiles.json
+OW_WILD_BEHAVIOR_DATA_GENERATED := src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_profiles.generated.inc
+
+$(OW_WILD_BEHAVIOR_DATA_GENERATED): $(OW_WILD_BEHAVIOR_PROFILE_JSON) scripts/generate_overworld_wild_behavior_data.py
+	$(PYTHON_NO_VENV) scripts/generate_overworld_wild_behavior_data.py \
+		--input $(OW_WILD_BEHAVIOR_PROFILE_JSON) \
+		--output $(OW_WILD_BEHAVIOR_DATA_GENERATED)
+
+.PHONY: check_overworld_wild_behavior_data
+check_overworld_wild_behavior_data: $(OW_WILD_BEHAVIOR_DATA_GENERATED)
+	$(PYTHON_NO_VENV) scripts/generate_overworld_wild_behavior_data.py \
+		--input $(OW_WILD_BEHAVIOR_PROFILE_JSON) \
+		--output $(OW_WILD_BEHAVIOR_DATA_GENERATED) \
+		--check
+
 .PHONY: force-test
 force-test:
 
