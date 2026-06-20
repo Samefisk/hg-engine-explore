@@ -847,18 +847,30 @@ static BOOL OverworldWildSpawns_IsBehaviorDataEntryValid(
     return entry != NULL
         && entry->magic == OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
         && entry->version == OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
-        && entry->size >= sizeof(OverworldWildBehaviorDataOverlayEntry)
+        && entry->size >= sizeof(OverworldWildBehaviorDataOverlayEntry);
+}
+
+static BOOL OverworldWildSpawns_IsBehaviorDataEntryBehaviorValid(
+    const OverworldWildBehaviorDataOverlayEntry *entry)
+{
+    return OverworldWildSpawns_IsBehaviorDataEntryValid(entry)
         && entry->classProfiles != NULL
         && entry->classProfileCount > OW_WILD_BEHAVIOR_CLASS_DEFAULT
         && entry->classRules != NULL
         && entry->speciesClassRules != NULL
-        && entry->overrides != NULL
+        && entry->overrides != NULL;
+}
+
+static BOOL OverworldWildSpawns_IsBehaviorDataEntryEncounterValid(
+    const OverworldWildBehaviorDataOverlayEntry *entry)
+{
+    return OverworldWildSpawns_IsBehaviorDataEntryValid(entry)
         && entry->encounterAreaMapIds != NULL
         && entry->encounterAreaDataIds != NULL
         && entry->encounterAreaCount > 0;
 }
 
-static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehaviorDataEntry(void)
+static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehaviorDataEntryBase(void)
 {
     const OverworldWildBehaviorDataOverlayEntry *entry;
 
@@ -869,6 +881,36 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehav
 
     entry = OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY;
     if (!OverworldWildSpawns_IsBehaviorDataEntryValid(entry)) {
+        return NULL;
+    }
+
+    return entry;
+}
+
+static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehaviorDataEntry(void)
+{
+    const OverworldWildBehaviorDataOverlayEntry *entry =
+        OverworldWildSpawns_GetBehaviorDataEntryBase();
+
+    if (entry == NULL) {
+        return NULL;
+    }
+    if (entry->ensureLoaded != NULL && !entry->ensureLoaded()) {
+        return NULL;
+    }
+    if (!OverworldWildSpawns_IsBehaviorDataEntryBehaviorValid(entry)) {
+        return NULL;
+    }
+
+    return entry;
+}
+
+static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetEncounterDataEntry(void)
+{
+    const OverworldWildBehaviorDataOverlayEntry *entry =
+        OverworldWildSpawns_GetBehaviorDataEntryBase();
+
+    if (!OverworldWildSpawns_IsBehaviorDataEntryEncounterValid(entry)) {
         return NULL;
     }
 
@@ -11435,7 +11477,7 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
         return FALSE;
     }
 
-    behaviorData = OverworldWildSpawns_GetBehaviorDataEntry();
+    behaviorData = OverworldWildSpawns_GetEncounterDataEntry();
     if (behaviorData == NULL) {
         return FALSE;
     }

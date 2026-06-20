@@ -1,6 +1,7 @@
 #include "../../include/overworld_wild_behavior_data.h"
 
 #include "../../include/config.h"
+#include "../../include/constants/file.h"
 #include "../../include/constants/maps.h"
 #include "../../include/constants/species.h"
 
@@ -564,6 +565,329 @@ typedef char OverworldWildEncounterAreaCountMismatch[
 #define OW_WILD_BEHAVIOR_GROUP_TYPE_TYPELESS (1u << 20)
 #define OW_WILD_BEHAVIOR_GROUP_TYPE_STELLAR (1u << 21)
 
-#include "overworld_wild_behavior_profiles.generated.inc"
+// OWBD_VERSION is the persisted blob format version. The overlay entry ABI
+// still uses OVERWORLD_WILD_BEHAVIOR_DATA_VERSION.
+#define OWBD_VERSION 1
+#define OWBD_HEADER_SIZE 52
+// Fixed decode capacities mirror the current semantic JSON. The generator
+// fails before runtime if these sections grow.
+#define OWBD_PROFILE_MAX 8
+#define OWBD_CLASS_RULE_MAX 2
+#define OWBD_SPECIES_RULE_MAX 110
+#define OWBD_OVERRIDE_MAX 2
+#define OWBD_SECTION_PROFILES 0
+#define OWBD_SECTION_CLASS_RULES 1
+#define OWBD_SECTION_SPECIES_RULES 2
+#define OWBD_SECTION_OVERRIDES 3
+#define OWBD_SECTION_COUNT 4
+#define OWBD_CHECKSUM_OFFSET 48
+
+typedef struct OverworldWildBehaviorDataOwbdHeader {
+    char magic[4];
+    u16 version;
+    u16 headerSize;
+    u32 totalSize;
+    u32 payloadSize;
+    u16 counts[OWBD_SECTION_COUNT];
+    u32 offsets[OWBD_SECTION_COUNT];
+    u16 elementSizes[OWBD_SECTION_COUNT];
+    u32 checksum;
+} OverworldWildBehaviorDataOwbdHeader;
+
+typedef struct OverworldWildBehaviorDataOwbdRange {
+    u32 start;
+    u32 end;
+} OverworldWildBehaviorDataOwbdRange;
+
+typedef char OverworldWildBehaviorDataOwbdHeaderSize[
+    sizeof(OverworldWildBehaviorDataOwbdHeader) == OWBD_HEADER_SIZE ? 1 : -1];
+
+static BOOL sOwbdLoaded;
+static OverworldWildBehaviorProfile sOwbdClassProfiles[OWBD_PROFILE_MAX];
+static OverworldWildBehaviorClassRule sOwbdClassRules[OWBD_CLASS_RULE_MAX];
+static OverworldWildBehaviorSpeciesClassRule sOwbdSpeciesClassRules[OWBD_SPECIES_RULE_MAX];
+static OverworldWildBehaviorOverride sOwbdOverrides[OWBD_OVERRIDE_MAX];
+
+extern OverworldWildBehaviorDataOverlayEntry gOverworldWildBehaviorDataOverlayEntry;
+
+static u32 OverworldWildBehaviorData_Crc32(const u8 *data, u32 size)
+{
+    u32 crc = 0xFFFFFFFF;
+    u32 i;
+    u32 bit;
+
+    for (i = 0; i < size; i++) {
+        u8 value = (i >= OWBD_CHECKSUM_OFFSET && i < OWBD_CHECKSUM_OFFSET + sizeof(u32))
+            ? 0
+            : data[i];
+        crc ^= value;
+        for (bit = 0; bit < 8; bit++) {
+            if (crc & 1) {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc ^ 0xFFFFFFFF;
+}
+
+static BOOL OverworldWildBehaviorData_CheckSection(
+    const OverworldWildBehaviorDataOwbdHeader *header,
+    u32 section,
+    u32 expectedElementSize,
+    u32 maxCount,
+    u32 blobSize,
+    OverworldWildBehaviorDataOwbdRange *rangeOut)
+{
+    u32 count = header->counts[section];
+    u32 offset = header->offsets[section];
+    u32 byteCount;
+    u32 end;
+
+    if (count == 0) {
+        if (offset != 0 || header->elementSizes[section] != 0) {
+            return FALSE;
+        }
+        if (rangeOut != NULL) {
+            rangeOut->start = 0;
+            rangeOut->end = 0;
+        }
+        return TRUE;
+    }
+
+    if (count > maxCount
+        || header->elementSizes[section] != expectedElementSize
+        || offset < OWBD_HEADER_SIZE
+        || (offset & 3) != 0) {
+        return FALSE;
+    }
+
+    byteCount = count * expectedElementSize;
+    end = offset + byteCount;
+    if (end < offset || end > blobSize) {
+        return FALSE;
+    }
+
+    if (rangeOut != NULL) {
+        rangeOut->start = offset;
+        rangeOut->end = end;
+    }
+    return TRUE;
+}
+
+static BOOL OverworldWildBehaviorData_RangesDoNotOverlap(
+    OverworldWildBehaviorDataOwbdRange *ranges,
+    u32 count)
+{
+    u32 i;
+    u32 j;
+
+    for (i = 1; i < count; i++) {
+        OverworldWildBehaviorDataOwbdRange current = ranges[i];
+        j = i;
+        while (j > 0 && ranges[j - 1].start > current.start) {
+            ranges[j] = ranges[j - 1];
+            j--;
+        }
+        ranges[j] = current;
+    }
+
+    for (i = 1; i < count; i++) {
+        if (ranges[i].start < ranges[i - 1].end) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static BOOL OverworldWildBehaviorData_ValidateOwbd(
+    const u8 *blob,
+    u32 blobSize,
+    const OverworldWildBehaviorDataOwbdHeader **headerOut)
+{
+    const OverworldWildBehaviorDataOwbdHeader *header;
+    OverworldWildBehaviorDataOwbdRange ranges[OWBD_SECTION_COUNT];
+    OverworldWildBehaviorDataOwbdRange nonEmptyRanges[OWBD_SECTION_COUNT];
+    u32 nonEmptyRangeCount = 0;
+    u32 i;
+
+    if (blob == NULL || blobSize < OWBD_HEADER_SIZE || headerOut == NULL) {
+        return FALSE;
+    }
+
+    header = (const OverworldWildBehaviorDataOwbdHeader *)blob;
+    if (header->magic[0] != 'O'
+        || header->magic[1] != 'W'
+        || header->magic[2] != 'B'
+        || header->magic[3] != 'D'
+        || header->version != OWBD_VERSION
+        || header->headerSize != OWBD_HEADER_SIZE
+        || header->totalSize != blobSize
+        || header->payloadSize != blobSize - OWBD_HEADER_SIZE
+        || header->checksum != OverworldWildBehaviorData_Crc32(blob, blobSize)) {
+        return FALSE;
+    }
+
+    if (!OverworldWildBehaviorData_CheckSection(
+            header,
+            OWBD_SECTION_PROFILES,
+            sizeof(OverworldWildBehaviorProfile),
+            OWBD_PROFILE_MAX,
+            blobSize,
+            &ranges[OWBD_SECTION_PROFILES])
+        || !OverworldWildBehaviorData_CheckSection(
+            header,
+            OWBD_SECTION_CLASS_RULES,
+            sizeof(OverworldWildBehaviorClassRule),
+            OWBD_CLASS_RULE_MAX,
+            blobSize,
+            &ranges[OWBD_SECTION_CLASS_RULES])
+        || !OverworldWildBehaviorData_CheckSection(
+            header,
+            OWBD_SECTION_SPECIES_RULES,
+            sizeof(OverworldWildBehaviorSpeciesClassRule),
+            OWBD_SPECIES_RULE_MAX,
+            blobSize,
+            &ranges[OWBD_SECTION_SPECIES_RULES])
+        || !OverworldWildBehaviorData_CheckSection(
+            header,
+            OWBD_SECTION_OVERRIDES,
+            sizeof(OverworldWildBehaviorOverride),
+            OWBD_OVERRIDE_MAX,
+            blobSize,
+            &ranges[OWBD_SECTION_OVERRIDES])) {
+        return FALSE;
+    }
+
+    for (i = 0; i < OWBD_SECTION_COUNT; i++) {
+        if (header->counts[i] != 0) {
+            nonEmptyRanges[nonEmptyRangeCount++] = ranges[i];
+        }
+    }
+    if (!OverworldWildBehaviorData_RangesDoNotOverlap(nonEmptyRanges, nonEmptyRangeCount)) {
+        return FALSE;
+    }
+
+    *headerOut = header;
+    return TRUE;
+}
+
+static void OverworldWildBehaviorData_CopySection(
+    void *dest,
+    const u8 *blob,
+    u32 offset,
+    u32 count,
+    u32 elementSize)
+{
+    if (count != 0) {
+        memcpy(dest, (void *)(blob + offset), count * elementSize);
+    }
+}
+
+static BOOL OverworldWildBehaviorData_DecodeOwbd(const u8 *blob, u32 blobSize)
+{
+    const OverworldWildBehaviorDataOwbdHeader *header;
+
+    if (!OverworldWildBehaviorData_ValidateOwbd(blob, blobSize, &header)
+        || header->counts[OWBD_SECTION_PROFILES] <= OW_WILD_BEHAVIOR_CLASS_DEFAULT) {
+        return FALSE;
+    }
+
+    OverworldWildBehaviorData_CopySection(
+        sOwbdClassProfiles,
+        blob,
+        header->offsets[OWBD_SECTION_PROFILES],
+        header->counts[OWBD_SECTION_PROFILES],
+        sizeof(OverworldWildBehaviorProfile));
+    OverworldWildBehaviorData_CopySection(
+        sOwbdClassRules,
+        blob,
+        header->offsets[OWBD_SECTION_CLASS_RULES],
+        header->counts[OWBD_SECTION_CLASS_RULES],
+        sizeof(OverworldWildBehaviorClassRule));
+    OverworldWildBehaviorData_CopySection(
+        sOwbdSpeciesClassRules,
+        blob,
+        header->offsets[OWBD_SECTION_SPECIES_RULES],
+        header->counts[OWBD_SECTION_SPECIES_RULES],
+        sizeof(OverworldWildBehaviorSpeciesClassRule));
+    OverworldWildBehaviorData_CopySection(
+        sOwbdOverrides,
+        blob,
+        header->offsets[OWBD_SECTION_OVERRIDES],
+        header->counts[OWBD_SECTION_OVERRIDES],
+        sizeof(OverworldWildBehaviorOverride));
+
+    gOverworldWildBehaviorDataOverlayEntry.classProfiles = sOwbdClassProfiles;
+    gOverworldWildBehaviorDataOverlayEntry.classProfileCount =
+        header->counts[OWBD_SECTION_PROFILES];
+    gOverworldWildBehaviorDataOverlayEntry.classRules = sOwbdClassRules;
+    gOverworldWildBehaviorDataOverlayEntry.classRuleCount =
+        header->counts[OWBD_SECTION_CLASS_RULES];
+    gOverworldWildBehaviorDataOverlayEntry.speciesClassRules = sOwbdSpeciesClassRules;
+    gOverworldWildBehaviorDataOverlayEntry.speciesClassRuleCount =
+        header->counts[OWBD_SECTION_SPECIES_RULES];
+    gOverworldWildBehaviorDataOverlayEntry.overrides = sOwbdOverrides;
+    gOverworldWildBehaviorDataOverlayEntry.overrideCount =
+        header->counts[OWBD_SECTION_OVERRIDES];
+    sOwbdLoaded = TRUE;
+    return TRUE;
+}
+
+static BOOL OverworldWildBehaviorData_LoadFromOwbd(void)
+{
+    void *narc;
+    u8 *blob;
+    u32 blobSize;
+    BOOL loaded;
+
+    if (sOwbdLoaded) {
+        return TRUE;
+    }
+
+    narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
+    if (narc == NULL) {
+        return FALSE;
+    }
+
+    blobSize = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA);
+    if (blobSize < OWBD_HEADER_SIZE) {
+        NARC_dtor(narc);
+        return FALSE;
+    }
+
+    blob = sys_AllocMemory(HEAPID_WORLD, blobSize);
+    if (blob == NULL) {
+        NARC_dtor(narc);
+        return FALSE;
+    }
+
+    NARC_ReadWholeMember(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA, blob);
+    NARC_dtor(narc);
+    loaded = OverworldWildBehaviorData_DecodeOwbd(blob, blobSize);
+    sys_FreeMemoryEz(blob);
+    return loaded;
+}
+
+OverworldWildBehaviorDataOverlayEntry gOverworldWildBehaviorDataOverlayEntry
+    __attribute__((section(".overworld_wild_behavior_data_entry"), used)) = {
+    OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC,
+    OVERWORLD_WILD_BEHAVIOR_DATA_VERSION,
+    sizeof(OverworldWildBehaviorDataOverlayEntry),
+    NULL,
+    0,
+    NULL,
+    0,
+    NULL,
+    0,
+    NULL,
+    0,
+    sOverworldWildEncounterAreaMapIds,
+    sOverworldWildEncounterAreaDataIds,
+    OW_WILD_ENCOUNTER_AREA_COUNT,
+    OverworldWildBehaviorData_LoadFromOwbd,
+};
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
