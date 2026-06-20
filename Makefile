@@ -77,7 +77,7 @@ PYTHON = $(PYTHON_NO_VENV)
 VENV_ACTIVATE =
 endif
 
-.PHONY: clean all dumprom
+.PHONY: clean all dumprom report_overworld_wild_sizes
 
 default: all
 
@@ -280,6 +280,9 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	@echo "Making ROM..."
 	$(NDSTOOL) -c $(BUILDROM) -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
 	@echo "Done.  See output $(BUILDROM)."
+
+report_overworld_wild_sizes:
+	$(PYTHON_NO_VENV) scripts/report_overworld_wild_sizes.py
 
 
 ####################### Restore clean base ################
