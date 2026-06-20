@@ -1,5 +1,6 @@
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/overworld_wild_behavior_data.h"
+#include "../../include/overworld_wild_helper.h"
 
 #include "../../include/config.h"
 
@@ -913,6 +914,36 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetEncou
         OverworldWildSpawns_GetBehaviorDataEntryBase();
 
     if (!OverworldWildSpawns_IsBehaviorDataEntryEncounterValid(entry)) {
+        return NULL;
+    }
+
+    return entry;
+}
+
+static BOOL OverworldWildSpawns_IsHelperEntryValid(
+    const OverworldWildHelperOverlayEntry *entry)
+{
+    return entry != NULL
+        && entry->magic == OVERWORLD_WILD_HELPER_MAGIC
+        && entry->version == OVERWORLD_WILD_HELPER_VERSION
+        && entry->size >= sizeof(OverworldWildHelperOverlayEntry)
+        && entry->tryPickHeadbuttTreeHopTarget != NULL
+        && entry->tryPickHeadbuttTreeReturnTarget != NULL
+        && entry->tryPickHeadbuttTreeHopTargetToward != NULL
+        && entry->tryPickCanopyHopperTreeTopHopTarget != NULL;
+}
+
+static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperEntry(void)
+{
+    const OverworldWildHelperOverlayEntry *entry;
+
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_HELPER, 0)) {
+        return NULL;
+    }
+
+    entry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
+    if (!OverworldWildSpawns_IsHelperEntryValid(entry)) {
         return NULL;
     }
 
@@ -12875,212 +12906,6 @@ static BOOL OverworldWildSpawns_IsCanopyHopAvoidTarget(
         && state->movementCanopyHopAvoidY[slot] == targetY;
 }
 
-static BOOL OverworldWildSpawns_TryUseRandomHeadbuttTreeHopCandidate(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    const OverworldWildBehaviorProfile *profile,
-    int slot,
-    int currentX,
-    int currentY,
-    int treeX,
-    int treeY,
-    BOOL ignoreAvoidTarget,
-    int *targetX,
-    int *targetY,
-    int *bestDistance,
-    u32 *candidateCount)
-{
-    int candidateDistance;
-    u8 candidateJumpDistance;
-
-    if (state == NULL
-        || fieldSystem == NULL
-        || profile == NULL
-        || slot < 0
-        || slot >= OW_WILD_MAX_SPAWNS
-        || (treeX == currentX && treeY == currentY)
-        || targetX == NULL
-        || targetY == NULL
-        || bestDistance == NULL
-        || candidateCount == NULL) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-            profile,
-            state->movementSpotStates[slot],
-            treeX - currentX,
-            treeY - currentY,
-            NULL,
-            &candidateJumpDistance)
-        || (!ignoreAvoidTarget && OverworldWildSpawns_IsCanopyHopAvoidTarget(state, slot, treeX, treeY))
-        || OverworldWildSpawns_DistanceFromPlayer(fieldSystem, treeX, treeY) > OW_WILD_DESPAWN_DISTANCE
-        || OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, 0)) {
-        return FALSE;
-    }
-    candidateDistance = candidateJumpDistance;
-
-    if (candidateDistance < *bestDistance) {
-        return FALSE;
-    }
-    if (candidateDistance > *bestDistance) {
-        *bestDistance = candidateDistance;
-        *candidateCount = 0;
-    }
-
-    (*candidateCount)++;
-    if ((gf_rand() % *candidateCount) == 0) {
-        *targetX = treeX;
-        *targetY = treeY;
-    }
-
-    return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryUseCloserHeadbuttTreeHopCandidate(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    const OverworldWildBehaviorProfile *profile,
-    int slot,
-    int currentX,
-    int currentY,
-    int desiredX,
-    int desiredY,
-    int treeX,
-    int treeY,
-    BOOL ignoreAvoidTarget,
-    int *targetX,
-    int *targetY,
-    int *bestScore,
-    int *bestDistance,
-    u32 *candidateCount)
-{
-    int currentScore;
-    int candidateScore;
-    int candidateDistance;
-    u8 candidateJumpDistance;
-
-    if (state == NULL
-        || fieldSystem == NULL
-        || profile == NULL
-        || slot < 0
-        || slot >= OW_WILD_MAX_SPAWNS
-        || (treeX == currentX && treeY == currentY)
-        || targetX == NULL
-        || targetY == NULL
-        || bestScore == NULL
-        || bestDistance == NULL
-        || candidateCount == NULL) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-            profile,
-            state->movementSpotStates[slot],
-            treeX - currentX,
-            treeY - currentY,
-            NULL,
-            &candidateJumpDistance)
-        || (!ignoreAvoidTarget && OverworldWildSpawns_IsCanopyHopAvoidTarget(state, slot, treeX, treeY))
-        || OverworldWildSpawns_DistanceFromPlayer(fieldSystem, treeX, treeY) > OW_WILD_DESPAWN_DISTANCE
-        || OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, 0)) {
-        return FALSE;
-    }
-    candidateDistance = candidateJumpDistance;
-
-    currentScore = OverworldWildSpawns_Max(
-        OverworldWildSpawns_Abs(desiredX - currentX),
-        OverworldWildSpawns_Abs(desiredY - currentY));
-    candidateScore = OverworldWildSpawns_Max(
-        OverworldWildSpawns_Abs(desiredX - treeX),
-        OverworldWildSpawns_Abs(desiredY - treeY));
-    if (candidateScore >= currentScore) {
-        return FALSE;
-    }
-
-    if (candidateDistance < *bestDistance
-        || (candidateDistance == *bestDistance && candidateScore > *bestScore)) {
-        return FALSE;
-    }
-
-    if (candidateDistance > *bestDistance || candidateScore < *bestScore) {
-        *bestDistance = candidateDistance;
-        *bestScore = candidateScore;
-        *candidateCount = 0;
-    }
-
-    (*candidateCount)++;
-    if ((gf_rand() % *candidateCount) == 0) {
-        *targetX = treeX;
-        *targetY = treeY;
-    }
-
-    return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryUseReturnHeadbuttTreeHopCandidate(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    const OverworldWildBehaviorProfile *profile,
-    int slot,
-    int currentX,
-    int currentY,
-    int treeX,
-    int treeY,
-    int *targetX,
-    int *targetY,
-    int *bestScore,
-    u32 *candidateCount)
-{
-    int candidateScore;
-    u8 candidateDistance;
-
-    if (state == NULL
-        || fieldSystem == NULL
-        || profile == NULL
-        || slot < 0
-        || slot >= OW_WILD_MAX_SPAWNS
-        || (treeX == currentX && treeY == currentY)
-        || targetX == NULL
-        || targetY == NULL
-        || bestScore == NULL
-        || candidateCount == NULL) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-            profile,
-            state->movementSpotStates[slot],
-            treeX - currentX,
-            treeY - currentY,
-            NULL,
-            &candidateDistance)
-        || OverworldWildSpawns_DistanceFromPlayer(fieldSystem, treeX, treeY) > OW_WILD_DESPAWN_DISTANCE
-        || OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, 0)) {
-        return FALSE;
-    }
-
-    candidateScore = OverworldWildSpawns_Max(
-        OverworldWildSpawns_Abs(treeX - currentX),
-        OverworldWildSpawns_Abs(treeY - currentY));
-    if (candidateScore > *bestScore) {
-        return FALSE;
-    }
-
-    if (candidateScore < *bestScore) {
-        *bestScore = candidateScore;
-        *candidateCount = 0;
-    }
-
-    (*candidateCount)++;
-    if ((gf_rand() % *candidateCount) == 0) {
-        *targetX = treeX;
-        *targetY = treeY;
-    }
-
-    return TRUE;
-}
-
 static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTarget(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
@@ -13090,12 +12915,9 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTarget(
     int *targetX,
     int *targetY)
 {
-    OverworldWildHeadbuttTreeTopScan scan;
-    u32 candidateCount = 0;
+    const OverworldWildHelperOverlayEntry *entry;
     int currentX;
     int currentY;
-    int bestDistance = 0;
-    int avoidPass;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -13112,44 +12934,19 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTarget(
 
     currentX = MapObject_GetCurrentX(object);
     currentY = MapObject_GetCurrentY(object);
-
-    for (avoidPass = 0; avoidPass < 2 && candidateCount == 0; avoidPass++) {
-        BOOL ignoreAvoidTarget = avoidPass != 0;
-        int treeX;
-        int treeY;
-
-        bestDistance = 0;
-        if (!OverworldWildSpawns_InitHeadbuttTreeTopScan(
-                fieldSystem,
-                &scan,
-                currentX,
-                currentY,
-                OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE)) {
-            continue;
-        }
-        while (OverworldWildSpawns_NextHeadbuttTreeTopCandidate(
-                   fieldSystem,
-                   &scan,
-                   &treeX,
-                   &treeY)) {
-            OverworldWildSpawns_TryUseRandomHeadbuttTreeHopCandidate(
-                state,
-                fieldSystem,
-                profile,
-                slot,
-                currentX,
-                currentY,
-                treeX,
-                treeY,
-                ignoreAvoidTarget,
-                targetX,
-                targetY,
-                &bestDistance,
-                &candidateCount);
-        }
+    entry = OverworldWildSpawns_GetHelperEntry();
+    if (entry == NULL) {
+        return FALSE;
     }
-
-    return candidateCount != 0;
+    return entry->tryPickHeadbuttTreeHopTarget(
+        state,
+        fieldSystem,
+        profile,
+        slot,
+        currentX,
+        currentY,
+        targetX,
+        targetY);
 }
 
 static BOOL OverworldWildSpawns_TryPickHeadbuttTreeReturnTarget(
@@ -13161,13 +12958,9 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeReturnTarget(
     int *targetX,
     int *targetY)
 {
-    OverworldWildHeadbuttTreeTopScan scan;
-    u32 candidateCount = 0;
-    int treeX;
-    int treeY;
+    const OverworldWildHelperOverlayEntry *entry;
     int currentX;
     int currentY;
-    int bestScore = 255;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -13184,36 +12977,19 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeReturnTarget(
 
     currentX = MapObject_GetCurrentX(object);
     currentY = MapObject_GetCurrentY(object);
-    if (!OverworldWildSpawns_InitHeadbuttTreeTopScan(
-            fieldSystem,
-            &scan,
-            currentX,
-            currentY,
-            OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE)) {
+    entry = OverworldWildSpawns_GetHelperEntry();
+    if (entry == NULL) {
         return FALSE;
     }
-
-    while (OverworldWildSpawns_NextHeadbuttTreeTopCandidate(
-               fieldSystem,
-               &scan,
-               &treeX,
-               &treeY)) {
-        OverworldWildSpawns_TryUseReturnHeadbuttTreeHopCandidate(
-            state,
-            fieldSystem,
-            profile,
-            slot,
-            currentX,
-            currentY,
-            treeX,
-            treeY,
-            targetX,
-            targetY,
-            &bestScore,
-            &candidateCount);
-    }
-
-    return candidateCount != 0;
+    return entry->tryPickHeadbuttTreeReturnTarget(
+        state,
+        fieldSystem,
+        profile,
+        slot,
+        currentX,
+        currentY,
+        targetX,
+        targetY);
 }
 
 static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTargetToward(
@@ -13227,13 +13003,9 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTargetToward(
     int *targetX,
     int *targetY)
 {
-    OverworldWildHeadbuttTreeTopScan scan;
-    u32 candidateCount = 0;
+    const OverworldWildHelperOverlayEntry *entry;
     int currentX;
     int currentY;
-    int bestScore = 255;
-    int bestDistance = 0;
-    int avoidPass;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -13250,48 +13022,21 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttTreeHopTargetToward(
 
     currentX = MapObject_GetCurrentX(object);
     currentY = MapObject_GetCurrentY(object);
-
-    for (avoidPass = 0; avoidPass < 2 && candidateCount == 0; avoidPass++) {
-        BOOL ignoreAvoidTarget = avoidPass != 0;
-        int treeX;
-        int treeY;
-
-        bestScore = 255;
-        bestDistance = 0;
-        if (!OverworldWildSpawns_InitHeadbuttTreeTopScan(
-                fieldSystem,
-                &scan,
-                currentX,
-                currentY,
-                OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE)) {
-            continue;
-        }
-        while (OverworldWildSpawns_NextHeadbuttTreeTopCandidate(
-                   fieldSystem,
-                   &scan,
-                   &treeX,
-                   &treeY)) {
-            OverworldWildSpawns_TryUseCloserHeadbuttTreeHopCandidate(
-                state,
-                fieldSystem,
-                profile,
-                slot,
-                currentX,
-                currentY,
-                desiredX,
-                desiredY,
-                treeX,
-                treeY,
-                ignoreAvoidTarget,
-                targetX,
-                targetY,
-                &bestScore,
-                &bestDistance,
-                &candidateCount);
-        }
+    entry = OverworldWildSpawns_GetHelperEntry();
+    if (entry == NULL) {
+        return FALSE;
     }
-
-    return candidateCount != 0;
+    return entry->tryPickHeadbuttTreeHopTargetToward(
+        state,
+        fieldSystem,
+        profile,
+        slot,
+        currentX,
+        currentY,
+        desiredX,
+        desiredY,
+        targetX,
+        targetY);
 }
 
 static BOOL OverworldWildSpawns_TryGetCanopyHopperPlayerFrontTarget(
@@ -14162,53 +13907,6 @@ static BOOL OverworldWildSpawns_TryUseDirectMankeyStructuralHeadbuttTreeTopCandi
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_IsCanopyTreeHopLandCrossing(
-    FieldSystem *fieldSystem,
-    int currentX,
-    int currentY,
-    int targetX,
-    int targetY)
-{
-    int dx;
-    int dy;
-    int distance;
-    int step;
-
-    if (fieldSystem == NULL) {
-        return FALSE;
-    }
-
-    dx = targetX - currentX;
-    dy = targetY - currentY;
-    distance = OverworldWildSpawns_Max(
-        OverworldWildSpawns_Abs(dx),
-        OverworldWildSpawns_Abs(dy));
-    if (distance <= 1 || !OverworldWildSpawns_IsCanopyLongJumpVectorShape(dx, dy)) {
-        return FALSE;
-    }
-
-    if (dx != 0) {
-        dx /= distance;
-    }
-    if (dy != 0) {
-        dy /= distance;
-    }
-
-    for (step = 1; step < distance; step++) {
-        int x = currentX + dx * step;
-        int y = currentY + dy * step;
-
-        if (x < 0 || y < 0) {
-            continue;
-        }
-        if (OverworldWildSpawns_IsWalkableLandTile(fieldSystem, x, y)) {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
 static BOOL OverworldWildSpawns_TryPickCanopyHopperTreeTopHopTarget(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
@@ -14218,12 +13916,9 @@ static BOOL OverworldWildSpawns_TryPickCanopyHopperTreeTopHopTarget(
     int *targetX,
     int *targetY)
 {
-    OverworldWildHeadbuttTreeTopScan scan;
-    u32 candidateCount = 0;
+    const OverworldWildHelperOverlayEntry *entry;
     int currentX;
     int currentY;
-    BOOL bestCrossesLand = FALSE;
-    int avoidPass;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -14238,71 +13933,19 @@ static BOOL OverworldWildSpawns_TryPickCanopyHopperTreeTopHopTarget(
 
     currentX = MapObject_GetCurrentX(object);
     currentY = MapObject_GetCurrentY(object);
-
-    for (avoidPass = 0; avoidPass < 2 && candidateCount == 0; avoidPass++) {
-        BOOL ignoreAvoidTarget = avoidPass != 0;
-        int candidateX;
-        int candidateY;
-
-        bestCrossesLand = FALSE;
-        if (!OverworldWildSpawns_InitHeadbuttTreeTopScan(
-                fieldSystem,
-                &scan,
-                currentX,
-                currentY,
-                OverworldWildSpawns_GetBehaviorHopMaxDistance(
-                    profile,
-                    state->movementSpotStates[slot]))) {
-            continue;
-        }
-        while (OverworldWildSpawns_NextHeadbuttTreeTopCandidate(
-                   fieldSystem,
-                   &scan,
-                   &candidateX,
-                   &candidateY)) {
-            int dx = candidateX - currentX;
-            int dy = candidateY - currentY;
-            u8 distance;
-            BOOL crossesLand;
-
-            if (candidateX == currentX && candidateY == currentY) {
-                continue;
-            }
-            if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-                    profile,
-                    state->movementSpotStates[slot],
-                    dx,
-                    dy,
-                    NULL,
-                    &distance)
-                || (!ignoreAvoidTarget
-                    && OverworldWildSpawns_IsCanopyHopAvoidTarget(state, slot, candidateX, candidateY))) {
-                continue;
-            }
-
-            crossesLand = OverworldWildSpawns_IsCanopyTreeHopLandCrossing(
-                fieldSystem,
-                currentX,
-                currentY,
-                candidateX,
-                candidateY);
-            if (bestCrossesLand && !crossesLand) {
-                continue;
-            }
-            if (crossesLand && !bestCrossesLand) {
-                bestCrossesLand = TRUE;
-                candidateCount = 0;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                *targetX = candidateX;
-                *targetY = candidateY;
-            }
-        }
+    entry = OverworldWildSpawns_GetHelperEntry();
+    if (entry == NULL) {
+        return FALSE;
     }
-
-    return candidateCount != 0;
+    return entry->tryPickCanopyHopperTreeTopHopTarget(
+        state,
+        fieldSystem,
+        profile,
+        slot,
+        currentX,
+        currentY,
+        targetX,
+        targetY);
 }
 
 static void OverworldWildSpawns_MarkMankeyHeadbuttTreeTopTarget(

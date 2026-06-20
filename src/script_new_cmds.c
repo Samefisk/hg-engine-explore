@@ -78,7 +78,7 @@ static void Script_PrepareOverworldWildBattle(SCRIPTCONTEXT *ctx)
     VarSet(ctx->fsys, VAR_SPECIAL_x8006, shiny ? TRUE : FALSE);
 
     /*
-     * Overlay 149/150 share the high EWRAM overlay region with battle
+     * Overworld wild overlays share the high EWRAM overlay region with battle
      * extension overlays. Once the battle data has been copied into base
      * state/script vars, release them before WildBattleSp loads battle code.
      */
