@@ -101,11 +101,6 @@ typedef struct OverworldWildSpawnState {
     u8 movementCanopyHopPending[OW_WILD_MAX_SPAWNS];
     u8 movementCanopyHopAvoidValid[OW_WILD_MAX_SPAWNS];
     u8 movementMankeyPathFailureCounts[OW_WILD_MAX_SPAWNS];
-    u8 movementMankeyChaseJumpsRemaining[OW_WILD_MAX_SPAWNS];
-    u8 movementMankeyChaseTargetFailureCounts[OW_WILD_MAX_SPAWNS];
-    u8 movementMankeyPouncePending[OW_WILD_MAX_SPAWNS];
-    u8 movementMankeyPounceBattleQueued[OW_WILD_MAX_SPAWNS];
-    u8 movementMankeyPounceBattlePending[OW_WILD_MAX_SPAWNS];
     u8 movementRamDirections[OW_WILD_MAX_SPAWNS];
     u8 movementRamStepCounters[OW_WILD_MAX_SPAWNS];
     u8 movementRamSpeeds[OW_WILD_MAX_SPAWNS];

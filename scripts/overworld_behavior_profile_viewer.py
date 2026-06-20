@@ -118,13 +118,15 @@ PROFILE_FIELDS = [
     "stamina",
     "tiredState",
     "restTime",
-    "normalSpeed",
-    "maxSpeed",
+    "chillSpeed",
+    "attentiveSpeed",
+    "tiredSpeed",
     "range",
     "jumpLevel",
     "profileId",
     "spawnState",
     "chillAction",
+    "chillTarget",
     "alertRange",
     "attentiveAction",
     "targetSelector",
@@ -137,11 +139,47 @@ PROFILE_FIELDS = [
     "alertBattle",
     "attentiveBattle",
     "tiredBattle",
+    "specialAction",
+    "hopAllowNonCardinal",
+    "hopMinDistance",
+    "hopMaxDistance",
+    "hopPause",
+    "teleportTime",
+    "teleportPause",
+    "alertSpecialAction",
+    "alertCallSpawnAmount",
+    "alertCallSpawnState",
+    "spawnDestinationMinDistance",
+    "spawnDestinationMaxDistance",
+    "ramAccelerationSteps",
+    "ramMaxSpeed",
+    "chillAllowedTile",
+    "attentiveAllowedTile",
+    "tiredAllowedTile",
+    "chillAllowedTile2",
+    "attentiveAllowedTile2",
+    "tiredAllowedTile2",
+    "attentiveHopAllowNonCardinal",
+    "attentiveHopMinDistance",
+    "attentiveHopMaxDistance",
+    "attentiveHopPause",
+    "attentiveTeleportTime",
+    "attentiveTeleportPause",
+    "attentiveRamAccelerationSteps",
+    "attentiveRamMaxSpeed",
+    "tiredHopAllowNonCardinal",
+    "tiredHopMinDistance",
+    "tiredHopMaxDistance",
+    "tiredHopPause",
+    "tiredTeleportTime",
+    "tiredTeleportPause",
+    "tiredRamAccelerationSteps",
+    "tiredRamMaxSpeed",
 ]
 
 MATCH_FIELDS = [
-    "species",
     "groupMask",
+    "species",
     "terrain",
     "minLevel",
     "maxLevel",
@@ -150,25 +188,27 @@ MATCH_FIELDS = [
 ]
 
 FIELD_LABELS = {
-    "chillState": "Chill",
+    "chillState": "Behavior",
     "alertState": "Alert mode",
     "alertEmote": "Alert emote",
     "alertTime": "Time",
-    "alertness": "Range value",
-    "attentiveState": "Active state",
+    "alertness": "Range length",
+    "attentiveState": "Behavior",
     "stamina": "Stamina",
-    "tiredState": "Tired",
+    "tiredState": "Behavior",
     "restTime": "Rest",
-    "normalSpeed": "Normal speed",
-    "maxSpeed": "Max speed",
+    "chillSpeed": "Speed",
+    "attentiveSpeed": "Speed",
+    "tiredSpeed": "Speed",
     "range": "Range",
     "jumpLevel": "Jump",
-    "profileId": "Profile id",
+    "profileId": "Behavior family",
     "spawnState": "Spawn state",
-    "chillAction": "Chill action",
+    "chillAction": "Movement style",
+    "chillTarget": "Target",
     "alertRange": "Range type",
-    "attentiveAction": "Active response",
-    "targetSelector": "Target selector",
+    "attentiveAction": "Legacy response",
+    "targetSelector": "Target",
     "movementStyle": "Movement style",
     "chillCooldown": "Chill cooldown",
     "attentiveCooldown": "Active cooldown",
@@ -178,6 +218,42 @@ FIELD_LABELS = {
     "alertBattle": "Alert",
     "attentiveBattle": "Active",
     "tiredBattle": "Tired",
+    "specialAction": "Movement style",
+    "hopAllowNonCardinal": "Allow non-cardinal",
+    "hopMinDistance": "Min hop distance",
+    "hopMaxDistance": "Max hop distance",
+    "hopPause": "Hop pause",
+    "teleportTime": "Teleport time",
+    "teleportPause": "Teleport pause",
+    "alertSpecialAction": "Special action",
+    "alertCallSpawnAmount": "Spawn amount",
+    "alertCallSpawnState": "Spawn state",
+    "spawnDestinationMinDistance": "Min distance",
+    "spawnDestinationMaxDistance": "Max distance",
+    "ramAccelerationSteps": "Accelerate every",
+    "ramMaxSpeed": "Max speed",
+    "chillAllowedTile": "Allowed tile",
+    "attentiveAllowedTile": "Allowed tile",
+    "tiredAllowedTile": "Allowed tile",
+    "chillAllowedTile2": "Allowed tile 2",
+    "attentiveAllowedTile2": "Allowed tile 2",
+    "tiredAllowedTile2": "Allowed tile 2",
+    "attentiveHopAllowNonCardinal": "Allow non-cardinal",
+    "attentiveHopMinDistance": "Min hop distance",
+    "attentiveHopMaxDistance": "Max hop distance",
+    "attentiveHopPause": "Hop pause",
+    "attentiveTeleportTime": "Teleport time",
+    "attentiveTeleportPause": "Teleport pause",
+    "attentiveRamAccelerationSteps": "Accelerate every",
+    "attentiveRamMaxSpeed": "Max speed",
+    "tiredHopAllowNonCardinal": "Allow non-cardinal",
+    "tiredHopMinDistance": "Min hop distance",
+    "tiredHopMaxDistance": "Max hop distance",
+    "tiredHopPause": "Hop pause",
+    "tiredTeleportTime": "Teleport time",
+    "tiredTeleportPause": "Teleport pause",
+    "tiredRamAccelerationSteps": "Accelerate every",
+    "tiredRamMaxSpeed": "Max speed",
 }
 
 PRIMITIVE_FIELDS = [
@@ -205,24 +281,36 @@ PRIMITIVE_FIELD_LABELS = {
 }
 
 FIELD_PREFIXES = {
-    "chillState": "OW_WILD_BEHAVIOR_CHILL_STATE_",
+    "chillState": "OW_WILD_BEHAVIOR_KIND_",
     "alertState": "OW_WILD_BEHAVIOR_ALERT_STATE_",
     "alertEmote": "OW_WILD_SPAWNER_BUBBLE_ID_",
-    "attentiveState": "OW_WILD_BEHAVIOR_ATTENTIVE_STATE_",
-    "tiredState": "OW_WILD_BEHAVIOR_TIRED_STATE_",
+    "attentiveState": "OW_WILD_BEHAVIOR_KIND_",
+    "tiredState": "OW_WILD_BEHAVIOR_KIND_",
     "jumpLevel": "OW_WILD_BEHAVIOR_JUMP_LEVEL_",
     "profileId": "OW_WILD_BEHAVIOR_PROFILE_",
     "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_",
-    "chillAction": "OW_WILD_BEHAVIOR_CHILL_ACTION_",
+    "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_",
     "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_",
     "targetSelector": "OW_WILD_BEHAVIOR_TARGET_",
+    "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
+    "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
+    "tiredAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
+    "chillAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
+    "attentiveAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
+    "tiredAllowedTile2": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
     "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "spawnDestination": "OW_WILD_SPAWN_DESTINATION_",
     "chillBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
     "alertBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
     "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
     "tiredBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
+    "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
+    "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_",
+    "alertCallSpawnState": "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_",
     "spawnLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chillLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chillTarget": "OW_WILD_BEHAVIOR_TARGET_",
@@ -234,7 +322,88 @@ FIELD_PREFIXES = {
     "tiredReaction": "OW_WILD_BEHAVIOR_REACTION_",
 }
 
-OVERRIDE_FIELDS = {
+CANONICAL_BEHAVIOR_RAWS = [
+    "OW_WILD_BEHAVIOR_KIND_NONE",
+    "OW_WILD_BEHAVIOR_KIND_IDLE",
+    "OW_WILD_BEHAVIOR_KIND_WANDER",
+    "OW_WILD_BEHAVIOR_KIND_CHASE",
+    "OW_WILD_BEHAVIOR_KIND_FLEE",
+    "OW_WILD_BEHAVIOR_KIND_PLAYFUL",
+    "OW_WILD_BEHAVIOR_KIND_RAM",
+    "OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP",
+    "OW_WILD_BEHAVIOR_KIND_ASLEEP",
+    "OW_WILD_BEHAVIOR_KIND_SINGING",
+    "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
+    "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+]
+
+CANONICAL_MOVEMENT_STYLE_RAWS = [
+    "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+]
+
+CANONICAL_TARGET_RAWS = [
+    "OW_WILD_BEHAVIOR_TARGET_NONE",
+    "OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY",
+    "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+    "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
+    "OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
+    "OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT",
+    "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT",
+    "OW_WILD_BEHAVIOR_TARGET_SWARM",
+]
+
+CANONICAL_ALERT_SPECIAL_ACTION_RAWS = [
+    "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+    "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
+]
+
+CANONICAL_ALERT_CALL_SPAWN_STATE_RAWS = [
+    "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_CHILL",
+    "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ALERT",
+    "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE",
+    "OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_TIRED",
+]
+
+CANONICAL_ALLOWED_TILE_RAWS = [
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_WATER",
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_CANOPY",
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_GRASS",
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER",
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER_FRONT",
+]
+
+CANONICAL_SECONDARY_ALLOWED_TILE_RAWS = [
+    "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+    *CANONICAL_ALLOWED_TILE_RAWS,
+]
+
+CANONICAL_PROFILE_FIELD_RAWS = {
+    "chillState": CANONICAL_BEHAVIOR_RAWS,
+    "attentiveState": CANONICAL_BEHAVIOR_RAWS,
+    "tiredState": CANONICAL_BEHAVIOR_RAWS,
+    "chillAction": CANONICAL_MOVEMENT_STYLE_RAWS,
+    "chillTarget": CANONICAL_TARGET_RAWS,
+    "movementStyle": CANONICAL_MOVEMENT_STYLE_RAWS,
+    "targetSelector": CANONICAL_TARGET_RAWS,
+    "specialAction": CANONICAL_MOVEMENT_STYLE_RAWS,
+    "alertSpecialAction": CANONICAL_ALERT_SPECIAL_ACTION_RAWS,
+    "alertCallSpawnState": CANONICAL_ALERT_CALL_SPAWN_STATE_RAWS,
+    "chillAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
+    "attentiveAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
+    "tiredAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
+    "chillAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
+    "attentiveAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
+    "tiredAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
+    "attentiveHopAllowNonCardinal": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "tiredHopAllowNonCardinal": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+}
+
+OVERRIDE1_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE": "chillState",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE": "alertState",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE": "alertEmote",
@@ -244,15 +413,17 @@ OVERRIDE_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_STAMINA": "stamina",
     "OW_WILD_BEHAVIOR_OVERRIDE_TIRED_STATE": "tiredState",
     "OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME": "restTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED": "normalSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED": "maxSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED": "chillSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED": "attentiveSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED": "chillSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED": "attentiveSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED": "tiredSpeed",
     "OW_WILD_BEHAVIOR_OVERRIDE_RANGE": "range",
     "OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL": "jumpLevel",
     "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID": "profileId",
     "OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE": "spawnState",
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION": "chillAction",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE": "alertRange",
-    "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_ACTION": "attentiveAction",
     "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR": "targetSelector",
     "OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE": "movementStyle",
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_COOLDOWN": "chillCooldown",
@@ -263,11 +434,62 @@ OVERRIDE_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_BATTLE": "alertBattle",
     "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE": "attentiveBattle",
     "OW_WILD_BEHAVIOR_OVERRIDE_TIRED_BATTLE": "tiredBattle",
+    "OW_WILD_BEHAVIOR_OVERRIDE_SPECIAL_ACTION": "specialAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL": "hopAllowNonCardinal",
+    "OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE": "hopMinDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE": "hopMaxDistance",
 }
+
+OVERRIDE2_FIELDS = {
+    "OW_WILD_BEHAVIOR_OVERRIDE2_HOP_PAUSE": "hopPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_TIME": "teleportTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_PAUSE": "teleportPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_ALERT_SPECIAL_ACTION": "alertSpecialAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_ALERT_CALL_SPAWN_AMOUNT": "alertCallSpawnAmount",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MIN_DISTANCE": "spawnDestinationMinDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MAX_DISTANCE": "spawnDestinationMaxDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_RAM_ACCELERATION_STEPS": "ramAccelerationSteps",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_RAM_MAX_SPEED": "ramMaxSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE": "chillAllowedTile",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE": "attentiveAllowedTile",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE": "tiredAllowedTile",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE_2": "chillAllowedTile2",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE_2": "attentiveAllowedTile2",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE_2": "tiredAllowedTile2",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_TARGET": "chillTarget",
+}
+
+OVERRIDE3_FIELDS = {
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_ALLOW_NON_CARDINAL": "attentiveHopAllowNonCardinal",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MIN_DISTANCE": "attentiveHopMinDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MAX_DISTANCE": "attentiveHopMaxDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_PAUSE": "attentiveHopPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_TIME": "attentiveTeleportTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_PAUSE": "attentiveTeleportPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_ACCELERATION_STEPS": "attentiveRamAccelerationSteps",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_MAX_SPEED": "attentiveRamMaxSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_ALLOW_NON_CARDINAL": "tiredHopAllowNonCardinal",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MIN_DISTANCE": "tiredHopMinDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MAX_DISTANCE": "tiredHopMaxDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_PAUSE": "tiredHopPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_TIME": "tiredTeleportTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_PAUSE": "tiredTeleportPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_ACCELERATION_STEPS": "tiredRamAccelerationSteps",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_MAX_SPEED": "tiredRamMaxSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ALERT_CALL_SPAWN_STATE": "alertCallSpawnState",
+}
+
+OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
 
 OVERRIDE_SYMBOL_BY_FIELD = {
     field: symbol
     for symbol, field in OVERRIDE_FIELDS.items()
+}
+
+OVERRIDE_WORD_BY_FIELD = {
+    **{field: 1 for field in OVERRIDE1_FIELDS.values()},
+    **{field: 2 for field in OVERRIDE2_FIELDS.values()},
+    **{field: 3 for field in OVERRIDE3_FIELDS.values()},
 }
 
 CLASS_PREFIX = "OW_WILD_BEHAVIOR_CLASS_"
@@ -462,19 +684,43 @@ NUMERIC_PROFILE_FIELDS = {
     "alertness",
     "stamina",
     "restTime",
-    "normalSpeed",
-    "maxSpeed",
+    "chillSpeed",
+    "attentiveSpeed",
+    "tiredSpeed",
     "range",
     "chillCooldown",
     "attentiveCooldown",
     "alertChance",
+    "hopMinDistance",
+    "hopMaxDistance",
+    "hopPause",
+    "teleportTime",
+    "teleportPause",
+    "attentiveHopMinDistance",
+    "attentiveHopMaxDistance",
+    "attentiveHopPause",
+    "attentiveTeleportTime",
+    "attentiveTeleportPause",
+    "attentiveRamAccelerationSteps",
+    "attentiveRamMaxSpeed",
+    "tiredHopMinDistance",
+    "tiredHopMaxDistance",
+    "tiredHopPause",
+    "tiredTeleportTime",
+    "tiredTeleportPause",
+    "tiredRamAccelerationSteps",
+    "tiredRamMaxSpeed",
+    "alertCallSpawnAmount",
+    "spawnDestinationMinDistance",
+    "spawnDestinationMaxDistance",
+    "ramAccelerationSteps",
+    "ramMaxSpeed",
 }
 
 COMMON_NUMERIC_FIELD_SYMBOLS = {
     "alertTime": [
         "OW_WILD_SPAWNER_ALERT_TIME_AUTO",
         "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
-        "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_ALERT_NOTICE_FRAMES",
         "OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES_PER_JUMP",
     ],
     "alertness": [
@@ -483,13 +729,30 @@ COMMON_NUMERIC_FIELD_SYMBOLS = {
         "OW_WILD_SPAWNER_ONIX_RAM_ALERTNESS",
         "OW_WILD_SPAWNER_CANOPY_HOPPER_TREE_ALERT_RADIUS",
     ],
-    "normalSpeed": [
+    "chillSpeed": [
         "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
         "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
         "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
     ],
-    "maxSpeed": [
+    "attentiveSpeed": [
         "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
+        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
+        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
+    ],
+    "tiredSpeed": [
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
         "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
         "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
     ],
@@ -502,19 +765,101 @@ COMMON_NUMERIC_FIELD_SYMBOLS = {
     ],
     "chillCooldown": [
         "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_MAD_CHILL_COOLDOWN_FRAMES",
         "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
     ],
     "attentiveCooldown": [
         "OW_WILD_SPAWNER_CANOPY_HOPPER_ATTENTIVE_COOLDOWN_FRAMES",
         "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
     ],
+    "hopMinDistance": [
+        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MIN_TILES",
+        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
+    ],
+    "hopMaxDistance": [
+        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MAX_TILES",
+        "OW_WILD_SPAWNER_CANOPY_HOPPER_MAX_HOP_TILES",
+    ],
+    "hopPause": [
+        "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
+        "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
+    ],
+    "teleportTime": [
+        "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
+    ],
+    "teleportPause": [
+        "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
+    ],
+    "alertCallSpawnAmount": [
+        "OW_WILD_SPAWNER_SWARM_MAX_EXTRA_SPAWNS",
+    ],
+    "spawnDestinationMinDistance": [
+        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
+    ],
+    "spawnDestinationMaxDistance": [
+        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
+    ],
+    "ramAccelerationSteps": [
+        "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
+    ],
+    "ramMaxSpeed": [
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
+        "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
+    ],
 }
+
+for _profile_field, _source_field in {
+    "attentiveHopMinDistance": "hopMinDistance",
+    "tiredHopMinDistance": "hopMinDistance",
+    "attentiveHopMaxDistance": "hopMaxDistance",
+    "tiredHopMaxDistance": "hopMaxDistance",
+    "attentiveHopPause": "hopPause",
+    "tiredHopPause": "hopPause",
+    "attentiveTeleportTime": "teleportTime",
+    "tiredTeleportTime": "teleportTime",
+    "attentiveTeleportPause": "teleportPause",
+    "tiredTeleportPause": "teleportPause",
+    "attentiveRamAccelerationSteps": "ramAccelerationSteps",
+    "tiredRamAccelerationSteps": "ramAccelerationSteps",
+    "attentiveRamMaxSpeed": "ramMaxSpeed",
+    "tiredRamMaxSpeed": "ramMaxSpeed",
+}.items():
+    COMMON_NUMERIC_FIELD_SYMBOLS[_profile_field] = COMMON_NUMERIC_FIELD_SYMBOLS[_source_field]
 
 NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "alertTime": 255,
     "alertChance": 100,
+    "hopMinDistance": 12,
+    "hopMaxDistance": 12,
+    "hopPause": 255,
+    "teleportTime": 64,
+    "teleportPause": 255,
+    "alertCallSpawnAmount": 3,
+    "spawnDestinationMinDistance": 8,
+    "spawnDestinationMaxDistance": 8,
+    "ramAccelerationSteps": 32,
+    "ramMaxSpeed": 4,
 }
+
+for _profile_field, _source_field in {
+    "attentiveHopMinDistance": "hopMinDistance",
+    "tiredHopMinDistance": "hopMinDistance",
+    "attentiveHopMaxDistance": "hopMaxDistance",
+    "tiredHopMaxDistance": "hopMaxDistance",
+    "attentiveHopPause": "hopPause",
+    "tiredHopPause": "hopPause",
+    "attentiveTeleportTime": "teleportTime",
+    "tiredTeleportTime": "teleportTime",
+    "attentiveTeleportPause": "teleportPause",
+    "tiredTeleportPause": "teleportPause",
+    "attentiveRamAccelerationSteps": "ramAccelerationSteps",
+    "tiredRamAccelerationSteps": "ramAccelerationSteps",
+    "attentiveRamMaxSpeed": "ramMaxSpeed",
+    "tiredRamMaxSpeed": "ramMaxSpeed",
+}.items():
+    NUMERIC_PROFILE_FIELD_OPTION_MAX[_profile_field] = NUMERIC_PROFILE_FIELD_OPTION_MAX[_source_field]
 
 
 class ParseError(RuntimeError):
@@ -829,8 +1174,22 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     if symbol == "OW_WILD_SPAWN_DESTINATION_POOL":
         return "Pool default"
+    if symbol == "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER":
+        return "Next to player"
+    if symbol == "OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER":
+        return "1 tile in front of player"
     if symbol == "OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER":
         return "5 tiles behind player"
+    match = re.fullmatch(
+        r"OW_WILD_SPAWN_DESTINATION_(ONE|TWO|THREE|FOUR|FIVE)_TILES?_(FRONT_OF|BEHIND)_PLAYER",
+        symbol,
+    )
+    if match:
+        words = {"ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5}
+        distance = words[match.group(1)]
+        direction = "in front of" if match.group(2) == "FRONT_OF" else "behind"
+        tile = "tile" if distance == 1 else "tiles"
+        return f"{distance} {tile} {direction} player"
     if field in FIELD_PREFIXES and value is not None:
         prefix = FIELD_PREFIXES[field]
         candidates = [name for name, num in macros.items() if name.startswith(prefix) and num == value]
@@ -898,22 +1257,26 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     }
 
 
-def parse_mask(raw: str, macros: dict[str, int]) -> dict:
+def parse_mask(raw: str, macros: dict[str, int], override_fields: dict[str, str] | None = None) -> dict:
+    if override_fields is None:
+        override_fields = OVERRIDE1_FIELDS
     value = make_value(raw, None, macros)
-    symbols = re.findall(r"\bOW_WILD_BEHAVIOR_OVERRIDE_[A-Z0-9_]+\b", raw)
+    symbols = re.findall(r"\bOW_WILD_BEHAVIOR_OVERRIDE[23]?_[A-Z0-9_]+\b", raw)
     bits = []
     if symbols:
         for symbol in symbols:
+            if symbol not in override_fields:
+                continue
             bits.append(
                 {
                     "symbol": symbol,
-                    "field": OVERRIDE_FIELDS.get(symbol),
-                    "label": FIELD_LABELS.get(OVERRIDE_FIELDS.get(symbol, ""), symbol),
+                    "field": override_fields.get(symbol),
+                    "label": FIELD_LABELS.get(override_fields.get(symbol, ""), symbol),
                     "value": macros.get(symbol),
                 }
             )
     elif value["value"] is not None:
-        for symbol, field in OVERRIDE_FIELDS.items():
+        for symbol, field in override_fields.items():
             bit_value = macros.get(symbol)
             if bit_value is not None and value["value"] & bit_value:
                 bits.append(
@@ -933,11 +1296,36 @@ def parse_mask(raw: str, macros: dict[str, int]) -> dict:
 
 
 def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
-    if len(items) != 2 or not isinstance(items[1], list):
+    if len(items) == 2 and isinstance(items[1], list):
+        mask_raw = str(items[0])
+        mask2_raw = "0"
+        mask3_raw = "0"
+        profile_items = items[1]
+    elif len(items) == 3 and isinstance(items[2], list):
+        mask_raw = str(items[0])
+        mask2_raw = str(items[1])
+        mask3_raw = "0"
+        profile_items = items[2]
+    elif len(items) == 4 and isinstance(items[3], list):
+        mask_raw = str(items[0])
+        mask2_raw = str(items[1])
+        mask3_raw = str(items[2])
+        profile_items = items[3]
+    else:
         raise ParseError("behavior override initializer shape changed")
+    mask = parse_mask(mask_raw, macros, OVERRIDE1_FIELDS)
+    mask2 = parse_mask(mask2_raw, macros, OVERRIDE2_FIELDS)
+    mask3 = parse_mask(mask3_raw, macros, OVERRIDE3_FIELDS)
+    labels = mask["labels"] + mask2["labels"] + mask3["labels"]
+    extra_raws = [extra["raw"] for extra in (mask2, mask3) if extra["raw"] != "0"]
+    mask_raw_summary = mask["raw"] if not extra_raws else " / ".join([mask["raw"], *extra_raws])
     return {
-        "mask": parse_mask(str(items[0]), macros),
-        "profile": parse_profile(items[1], macros),
+        "mask": mask,
+        "mask2": mask2,
+        "mask3": mask3,
+        "maskLabels": labels,
+        "maskRaw": mask_raw_summary,
+        "profile": parse_profile(profile_items, macros),
     }
 
 
@@ -946,13 +1334,19 @@ def parse_behavior_overrides(source: str, macros: dict[str, int], group_labels: 
     try:
         entries = parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorOverrides"))
         for order, entry in enumerate(entries, 1):
-            if len(entry) != 3:
+            if len(entry) == 3:
+                behavior = parse_behavior_override([entry[1], entry[2]], macros)
+            elif len(entry) == 4:
+                behavior = parse_behavior_override([entry[1], entry[2], entry[3]], macros)
+            elif len(entry) == 5:
+                behavior = parse_behavior_override([entry[1], entry[2], entry[3], entry[4]], macros)
+            else:
                 raise ParseError("behavior override initializer shape changed")
             override = {
                 "order": order,
                 "kind": "behavior",
                 "match": parse_match(entry[0], macros),
-                "behavior": parse_behavior_override([entry[1], entry[2]], macros),
+                "behavior": behavior,
             }
             override["summary"] = match_summary(override["match"], macros, group_labels)
             overrides.append(override)
@@ -966,9 +1360,9 @@ def parse_behavior_overrides(source: str, macros: dict[str, int], group_labels: 
             raise ParseError("max-speed override initializer shape changed")
         override = {
             "order": order,
-            "kind": "maxSpeed",
+            "kind": "attentiveSpeed",
             "match": parse_match(entry[0], macros),
-            "behavior": make_single_field_behavior_override("maxSpeed", str(entry[1]), macros),
+            "behavior": make_single_field_behavior_override("attentiveSpeed", str(entry[1]), macros),
         }
         override["summary"] = match_summary(override["match"], macros, group_labels)
         overrides.append(override)
@@ -979,8 +1373,19 @@ def make_single_field_behavior_override(field: str, raw: str, macros: dict[str, 
     symbol = OVERRIDE_SYMBOL_BY_FIELD[field]
     profile = parse_profile(["0"], macros)
     profile[field] = make_value(raw, field, macros)
+    mask_raw = symbol if OVERRIDE_WORD_BY_FIELD.get(field) == 1 else "0"
+    mask2_raw = symbol if OVERRIDE_WORD_BY_FIELD.get(field) == 2 else "0"
+    mask3_raw = symbol if OVERRIDE_WORD_BY_FIELD.get(field) == 3 else "0"
+    mask = parse_mask(mask_raw, macros, OVERRIDE1_FIELDS)
+    mask2 = parse_mask(mask2_raw, macros, OVERRIDE2_FIELDS)
+    mask3 = parse_mask(mask3_raw, macros, OVERRIDE3_FIELDS)
+    extra_raws = [extra["raw"] for extra in (mask2, mask3) if extra["raw"] != "0"]
     return {
-        "mask": parse_mask(symbol, macros),
+        "mask": mask,
+        "mask2": mask2,
+        "mask3": mask3,
+        "maskLabels": mask["labels"] + mask2["labels"] + mask3["labels"],
+        "maskRaw": mask["raw"] if not extra_raws else " / ".join([mask["raw"], *extra_raws]),
         "profile": profile,
     }
 
@@ -1012,18 +1417,6 @@ def parse_primitive_maps(source: str, macros: dict[str, int]) -> dict[str, list]
             source,
             "sOverworldWildSpawnLocomotionBySpawnState",
             "spawnLocomotion",
-            macros,
-        ),
-        "chillPrimitivesByAction": parse_pair_table(
-            source,
-            "sOverworldWildChillPrimitivesByAction",
-            ("chillLocomotion", "chillTarget"),
-            macros,
-        ),
-        "activeReactionByAttentiveAction": parse_value_table(
-            source,
-            "sOverworldWildActiveReactionByAttentiveAction",
-            "activeReaction",
             macros,
         ),
         "alertPrimitivesByRange": parse_pair_table(
@@ -1058,16 +1451,61 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
     if spawn:
         primitives["spawnLocomotion"] = spawn
 
-    chill = indexed_primitive(primitive_maps["chillPrimitivesByAction"], numeric(profile["chillAction"]))
-    if chill:
-        primitives["chillLocomotion"] = chill["chillLocomotion"]
-        primitives["chillTarget"] = chill["chillTarget"]
+    chill_behavior = numeric(profile["chillState"])
+    primitives["chillTarget"] = copy.deepcopy(profile["chillTarget"])
+    if chill_behavior in {
+        macros.get("OW_WILD_BEHAVIOR_KIND_WANDER"),
+        macros.get("OW_WILD_BEHAVIOR_KIND_SINGING"),
+    }:
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY", "chillTarget", macros)
+    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "chillTarget", macros)
+    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER", "chillTarget", macros)
+    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT", "chillTarget", macros)
+    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_RAM"):
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "chillTarget", macros)
+    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"):
+        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
+        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "chillTarget", macros)
 
     primitives["attentiveLocomotion"] = copy.deepcopy(profile["movementStyle"])
     primitives["attentiveTarget"] = copy.deepcopy(profile["targetSelector"])
-    active = indexed_primitive(primitive_maps["activeReactionByAttentiveAction"], numeric(profile["attentiveAction"]))
-    if active:
-        primitives["activeReaction"] = active
+    active_behavior = numeric(profile["attentiveState"])
+    if active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
+        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_FLEE", "activeReaction", macros)
+        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER", "attentiveTarget", macros)
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_EMOTE", "activeReaction", macros)
+        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT", "attentiveTarget", macros)
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_RAM"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
+        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
+        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
+            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "attentiveTarget", macros)
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_SINGING"):
+        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_EMOTE", "activeReaction", macros)
 
     if (numeric(profile["alertness"]) or 0) != 0 and (numeric(profile["alertChance"]) or 0) != 0:
         alert = indexed_primitive(primitive_maps["alertPrimitivesByRange"], numeric(profile["alertRange"]))
@@ -1075,7 +1513,7 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
             primitives["alertLogic"] = alert["alertLogic"]
             primitives["alertReaction"] = alert["alertReaction"]
 
-    if numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_TIRED_STATE_NONE"):
+    if numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE"):
         primitives["tiredReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_TIRED", "tiredReaction", macros)
 
     return primitives
@@ -1103,7 +1541,11 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
     for field in PROFILE_FIELDS:
         options: list[dict] = []
         seen: set[str] = set()
-        if field in FIELD_PREFIXES:
+        if field in CANONICAL_PROFILE_FIELD_RAWS:
+            for symbol in CANONICAL_PROFILE_FIELD_RAWS[field]:
+                if symbol in macros:
+                    add_value_option(options, seen, symbol, field, macros)
+        elif field in FIELD_PREFIXES:
             prefix = FIELD_PREFIXES[field]
             symbols = sorted(
                 (symbol for symbol in macros if symbol.startswith(prefix)),
@@ -1117,8 +1559,9 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
             for symbol in COMMON_NUMERIC_FIELD_SYMBOLS.get(field, []):
                 if symbol in macros:
                     add_value_option(options, seen, symbol, field, macros)
-        for profile in class_profiles:
-            add_value_option(options, seen, profile[field]["raw"], field, macros)
+        if field not in CANONICAL_PROFILE_FIELD_RAWS:
+            for profile in class_profiles:
+                add_value_option(options, seen, profile[field]["raw"], field, macros)
         result[field] = options
     return result
 
@@ -1132,13 +1575,81 @@ def parse_match(items: list, macros: dict[str, int]) -> dict[str, dict]:
     }
 
 
+def parse_full_class_rules(
+    behavior_source: str,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+    class_labels: dict[int, dict],
+) -> list[dict]:
+    class_rules = []
+    for order, entry in enumerate(parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassRules")), 1):
+        if len(entry) != 2:
+            raise ParseError("class rule initializer shape changed")
+        behavior_class = make_value(str(entry[1]), "behaviorClass", macros)
+        rule = {
+            "order": order,
+            "match": parse_match(entry[0], macros),
+            "behaviorClass": behavior_class,
+            "storage": "full",
+        }
+        rule["summary"] = match_summary(rule["match"], macros, group_labels)
+        rule["className"] = class_labels.get(numeric(behavior_class) or -1, {"name": behavior_class["label"]})["name"]
+        class_rules.append(rule)
+    return class_rules
+
+
+def parse_species_class_rules(
+    behavior_source: str,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+    class_labels: dict[int, dict],
+    order_offset: int = 0,
+) -> list[dict]:
+    try:
+        entries = parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorSpeciesClassRules"))
+    except ParseError:
+        return []
+    class_rules = []
+    for index, entry in enumerate(entries, 1):
+        if len(entry) != 2:
+            raise ParseError("compact species class rule initializer shape changed")
+        match_raws = default_behavior_match_raws()
+        match_raws["species"] = clean_token(str(entry[0]))
+        behavior_class = make_value(str(entry[1]), "behaviorClass", macros)
+        rule = {
+            "order": order_offset + index,
+            "match": parse_match([match_raws[field] for field in MATCH_FIELDS], macros),
+            "behaviorClass": behavior_class,
+            "storage": "species",
+        }
+        rule["summary"] = match_summary(rule["match"], macros, group_labels)
+        rule["className"] = class_labels.get(numeric(behavior_class) or -1, {"name": behavior_class["label"]})["name"]
+        class_rules.append(rule)
+    return class_rules
+
+
+def parse_behavior_class_rules(
+    behavior_source: str,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+    class_labels: dict[int, dict],
+) -> list[dict]:
+    class_rules = parse_full_class_rules(behavior_source, macros, group_labels, class_labels)
+    class_rules.extend(parse_species_class_rules(behavior_source, macros, group_labels, class_labels, len(class_rules)))
+    return class_rules
+
+
 def clone_profile(profile: dict[str, dict]) -> dict[str, dict]:
     return copy.deepcopy(profile)
 
 
 def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
     changes = []
-    for bit in override["mask"]["bits"]:
+    for bit in (
+        override["mask"]["bits"]
+        + override.get("mask2", {"bits": []})["bits"]
+        + override.get("mask3", {"bits": []})["bits"]
+    ):
         field = bit.get("field")
         if not field:
             continue
@@ -1154,6 +1665,23 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
             }
         )
     return changes
+
+
+def behavior_override_mask_summary(behavior: dict) -> dict:
+    labels = behavior.get("maskLabels")
+    if labels is None:
+        labels = (
+            behavior["mask"]["labels"]
+            + behavior.get("mask2", {"labels": []})["labels"]
+            + behavior.get("mask3", {"labels": []})["labels"]
+        )
+    raw = behavior.get("maskRaw")
+    if raw is None:
+        mask2_raw = behavior.get("mask2", {"raw": "0"})["raw"]
+        mask3_raw = behavior.get("mask3", {"raw": "0"})["raw"]
+        extra_raws = [extra for extra in (mask2_raw, mask3_raw) if extra != "0"]
+        raw = behavior["mask"]["raw"] if not extra_raws else " / ".join([behavior["mask"]["raw"], *extra_raws])
+    return {"labels": labels, "raw": raw}
 
 
 def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[dict]:
@@ -1174,19 +1702,73 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             }
         )
 
-    if numeric(profile["maxSpeed"]) == 0:
-        set_field("maxSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
-    if numeric(profile["normalSpeed"]) == 0:
-        set_field("normalSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
+    if numeric(profile["attentiveSpeed"]) == 0:
+        set_field("attentiveSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
+    if numeric(profile["chillSpeed"]) == 0:
+        set_field("chillSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
+    if numeric(profile["tiredSpeed"]) == 0:
+        set_field("tiredSpeed", profile["chillSpeed"]["raw"])
+    for allow_field, min_field, max_field in (
+        ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
+        ("attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"),
+        ("tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"),
+    ):
+        if numeric(profile[allow_field]) not in {
+            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
+            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
+        }:
+            set_field(allow_field, "OW_WILD_BEHAVIOR_BOOL_YES")
+        if numeric(profile[min_field]) == 0:
+            set_field(min_field, "1")
+        if numeric(profile[max_field]) == 0:
+            set_field(max_field, profile[min_field]["raw"])
+        if (numeric(profile[max_field]) or 0) < (numeric(profile[min_field]) or 0):
+            set_field(max_field, profile[min_field]["raw"])
+    if numeric(profile["spawnDestinationMinDistance"]) == 0:
+        set_field("spawnDestinationMinDistance", "1")
+    elif (numeric(profile["spawnDestinationMinDistance"]) or 0) > 8:
+        set_field("spawnDestinationMinDistance", "8")
+    if numeric(profile["spawnDestinationMaxDistance"]) == 0:
+        set_field("spawnDestinationMaxDistance", "5")
+    elif (numeric(profile["spawnDestinationMaxDistance"]) or 0) > 8:
+        set_field("spawnDestinationMaxDistance", "8")
+    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
+        set_field("spawnDestinationMaxDistance", profile["spawnDestinationMinDistance"]["raw"])
+    for teleport_time_field, teleport_pause_field in (
+        ("teleportTime", "teleportPause"),
+        ("attentiveTeleportTime", "attentiveTeleportPause"),
+        ("tiredTeleportTime", "tiredTeleportPause"),
+    ):
+        if numeric(profile[teleport_time_field]) == 0:
+            set_field(teleport_time_field, "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES")
+        if numeric(profile[teleport_pause_field]) == 0:
+            set_field(teleport_pause_field, "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES")
+    if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
+        set_field("tiredState", "OW_WILD_BEHAVIOR_KIND_ASLEEP")
+        set_field("stamina", "1")
+        set_field("restTime", "0")
+        set_field("alertness", "0")
+        set_field("alertChance", "0")
+    elif numeric(profile["tiredState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
+        set_field("stamina", "1")
+        set_field("restTime", "0")
     if (
         (
-            numeric(profile["attentiveState"]) != macros.get("OW_WILD_BEHAVIOR_ATTENTIVE_STATE_NONE")
-            or numeric(profile["attentiveAction"]) != macros.get("OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_NONE")
+            numeric(profile["attentiveState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
+            or numeric(profile["targetSelector"]) != macros.get("OW_WILD_BEHAVIOR_TARGET_NONE")
+            or numeric(profile["movementStyle"]) != macros.get("OW_WILD_BEHAVIOR_LOCOMOTION_NONE")
+            or numeric(profile["attentiveBattle"]) != macros.get("OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE")
         )
-        and numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_TIRED_STATE_NONE")
+        and numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
         and numeric(profile["stamina"]) == 0
     ):
         set_field("stamina", "1")
+    if (
+        numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
+        and numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP")
+        and numeric(profile["restTime"]) == 0
+    ):
+        set_field("restTime", "1")
     return changes
 
 
@@ -2371,7 +2953,7 @@ def resolve_profile_for_context(
                     "kind": "behaviorOverride",
                     "label": f"Behavior override #{override['order']}",
                     "changes": changes,
-                    "mask": override["behavior"]["mask"],
+                    "mask": behavior_override_mask_summary(override["behavior"]),
                 }
             )
     normalizations = normalize_profile(profile, macros)
@@ -2517,19 +3099,7 @@ def build_data() -> dict:
     ]
     default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     default_profile = class_profiles[default_class]
-    class_rules = []
-    for order, entry in enumerate(parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassRules")), 1):
-        if len(entry) != 2:
-            raise ParseError("class rule initializer shape changed")
-        behavior_class = make_value(str(entry[1]), "behaviorClass", macros)
-        rule = {
-            "order": order,
-            "match": parse_match(entry[0], macros),
-            "behaviorClass": behavior_class,
-        }
-        rule["summary"] = match_summary(rule["match"], macros, group_labels)
-        rule["className"] = class_labels.get(numeric(behavior_class) or -1, {"name": behavior_class["label"]})["name"]
-        class_rules.append(rule)
+    class_rules = parse_behavior_class_rules(behavior_source, macros, group_labels, class_labels)
 
     variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
 
@@ -2575,7 +3145,7 @@ def build_data() -> dict:
             macros,
         )
         max_speed_hits = [
-            {"order": override["order"], "summary": override["summary"], "fields": override["behavior"]["mask"]["labels"]}
+            {"order": override["order"], "summary": override["summary"], "fields": behavior_override_mask_summary(override["behavior"])["labels"]}
             for override in variable_hits
         ]
         group_names = [
@@ -2626,6 +3196,8 @@ def build_data() -> dict:
                 "index": index,
                 "symbol": class_label["symbol"],
                 "name": class_label["name"],
+                "canRename": index != default_class,
+                "canDelete": index != default_class and not class_symbol_used_by_runtime(class_label["symbol"]),
                 "override": {"mask": parse_mask("0", macros), "profile": class_profile},
                 "profile": profile,
                 "primitives": resolve_primitives(profile, primitive_maps, macros),
@@ -2791,11 +3363,11 @@ def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
     return f"{{\n{values},\n{indent}}}"
 
 
-def format_mask_expression(mask_fields: set[str], indent: str) -> str:
+def format_mask_expression(mask_fields: set[str], indent: str, word: int = 1) -> str:
     symbols = [
         OVERRIDE_SYMBOL_BY_FIELD[field]
         for field in PROFILE_FIELDS
-        if field in mask_fields
+        if field in mask_fields and OVERRIDE_WORD_BY_FIELD.get(field) == word
     ]
     if not symbols:
         return "0"
@@ -2861,6 +3433,216 @@ def parse_profile_membership_payload(body: bytes) -> dict[str, int]:
             raise ValueError(f"invalid class index for {symbol}: {raw_class_index}") from exc
         parsed[symbol] = class_index
     return parsed
+
+
+def parse_profile_management_payload(body: bytes) -> dict:
+    try:
+        payload = json.loads(body.decode())
+    except Exception as exc:
+        raise ValueError(f"invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("profile management payload must be an object")
+    action = clean_token(str(payload.get("action", ""))).lower()
+    if action not in {"create", "rename", "delete"}:
+        raise ValueError("profile action must be create, rename, or delete")
+    result = {"action": action}
+    if action in {"rename", "delete"}:
+        try:
+            result["classIndex"] = int(payload.get("classIndex"))
+        except Exception as exc:
+            raise ValueError(f"invalid class index: {payload.get('classIndex')}") from exc
+    if action in {"create", "rename"}:
+        name = clean_token(str(payload.get("name", "")))
+        if not name:
+            raise ValueError("profile name is required")
+        result["name"] = name
+    if action == "create":
+        raw_pokemon = payload.get("pokemon", [])
+        if isinstance(raw_pokemon, str):
+            raw_pokemon = re.split(r"[\n,]+", raw_pokemon)
+        if not isinstance(raw_pokemon, list):
+            raise ValueError("pokemon must be a list")
+        pokemon = []
+        for raw_symbol in raw_pokemon:
+            symbol = clean_token(str(raw_symbol)).upper()
+            if symbol and not symbol.startswith("SPECIES_"):
+                symbol = f"SPECIES_{symbol}"
+            if symbol:
+                pokemon.append(symbol)
+        result["pokemon"] = pokemon
+    return result
+
+
+def class_define_entries(raw_source: str) -> list[dict]:
+    entries = []
+    for match in DEFINE_RE.finditer(raw_source):
+        name, args, expr = match.groups()
+        if args is not None or not name.startswith(CLASS_PREFIX):
+            continue
+        try:
+            value = int(clean_token(expr), 0)
+        except Exception:
+            continue
+        line_start = raw_source.rfind("\n", 0, match.start()) + 1
+        line_end = raw_source.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(raw_source)
+        else:
+            line_end += 1
+        entries.append(
+            {
+                "symbol": name,
+                "value": value,
+                "lineStart": line_start,
+                "lineEnd": line_end,
+            }
+        )
+    entries.sort(key=lambda entry: entry["value"])
+    return entries
+
+
+def validate_class_define_entries(entries: list[dict], class_profile_count: int) -> None:
+    if len(entries) < class_profile_count:
+        raise ParseError("fewer behavior class defines than profile entries")
+    values = [entry["value"] for entry in entries[:class_profile_count]]
+    if values != list(range(class_profile_count)):
+        raise ParseError("behavior class defines must be consecutive from zero")
+
+
+def replace_class_define_block(raw_source: str, symbols: list[str]) -> str:
+    entries = class_define_entries(raw_source)
+    if not entries:
+        raise ParseError("could not find behavior class defines")
+    block_start = entries[0]["lineStart"]
+    block_end = entries[-1]["lineEnd"]
+    block = "".join(f"#define {symbol} {index}\n" for index, symbol in enumerate(symbols))
+    return raw_source[:block_start] + block + raw_source[block_end:]
+
+
+def sanitize_class_symbol(name: str, existing_symbols: set[str], current_symbol: str | None = None) -> str:
+    suffix = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").upper()
+    if not suffix:
+        suffix = "CUSTOM_PROFILE"
+    if suffix[0].isdigit():
+        suffix = f"PROFILE_{suffix}"
+    base = f"{CLASS_PREFIX}{suffix}"
+    symbol = base
+    counter = 2
+    while symbol in existing_symbols and symbol != current_symbol:
+        symbol = f"{base}_{counter}"
+        counter += 1
+    return symbol
+
+
+def class_symbol_used_by_runtime(symbol: str) -> bool:
+    source = OVERLAY_SOURCE.read_text()
+    symbol_define = re.compile(rf"^\s*#\s*define\s+{re.escape(symbol)}(?:\s|$)")
+    runtime_source = "".join(
+        line
+        for line in source.splitlines(keepends=True)
+        if symbol_define.match(line) is None
+    )
+    return re.search(rf"\b{re.escape(symbol)}\b", runtime_source) is not None
+
+
+def append_profile_initializer(raw_behavior_data: str, profile_raws: dict[str, str]) -> str:
+    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
+    insert_at = class_array_span[1] - 1
+    entry_text = "    " + format_profile_initializer(profile_raws, "    ") + ",\n"
+    return raw_behavior_data[:insert_at] + entry_text + raw_behavior_data[insert_at:]
+
+
+def remove_profile_initializer(raw_behavior_data: str, class_index: int, class_profile_count: int) -> str:
+    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
+    class_entry_spans = top_level_braced_spans(raw_behavior_data, class_array_span)
+    if len(class_entry_spans) != class_profile_count:
+        raise ParseError("class profile entry count changed")
+    delete_start, delete_end = braced_entry_removal_span(raw_behavior_data, class_entry_spans[class_index], class_array_span)
+    return raw_behavior_data[:delete_start] + raw_behavior_data[delete_end:]
+
+
+def validate_profile_management_species(symbols: list[str], valid_species: set[str]) -> list[str]:
+    if not symbols:
+        raise ValueError("choose at least one Pokemon for the new profile")
+    result = []
+    seen = set()
+    for symbol in symbols:
+        if symbol not in valid_species:
+            raise ValueError(f"invalid Pokemon: {symbol}")
+        if symbol not in seen:
+            seen.add(symbol)
+            result.append(symbol)
+    return result
+
+
+def apply_profile_management_change(body: bytes) -> dict:
+    change = parse_profile_management_payload(body)
+    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
+    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
+    macros = evaluate_defines(expressions)
+    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
+    class_profiles = [
+        parse_profile(entry, macros)
+        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
+    ]
+    class_entries = class_define_entries(raw_behavior_data)
+    validate_class_define_entries(class_entries, len(class_profiles))
+    class_symbols = [entry["symbol"] for entry in class_entries[: len(class_profiles)]]
+    default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
+    if default_class < 0 or default_class >= len(class_profiles):
+        default_class = 0
+
+    action = change["action"]
+    if action == "create":
+        species = parse_species(expressions, macros, species_order)
+        valid_species = {entry["symbol"] for entry in species}
+        pokemon = validate_profile_management_species(change.get("pokemon", []), valid_species)
+        new_symbol = sanitize_class_symbol(change["name"], set(class_symbols))
+        new_index = len(class_profiles)
+        updated_source = replace_class_define_block(raw_behavior_data, class_symbols + [new_symbol])
+        updated_source = append_profile_initializer(updated_source, raw_values(class_profiles[default_class]))
+        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
+        invalidate_data_cache()
+        membership_result = apply_profile_membership_changes(
+            json.dumps({"changes": {symbol: new_index for symbol in pokemon}}).encode()
+        )
+        return {
+            "saved": True,
+            "message": f"Created {humanize_symbol(new_symbol, CLASS_PREFIX)}",
+            "classIndex": new_index,
+            "symbol": new_symbol,
+            "membership": membership_result,
+        }
+
+    class_index = change["classIndex"]
+    if class_index < 0 or class_index >= len(class_profiles):
+        raise ValueError(f"class index out of range: {class_index}")
+    old_symbol = class_symbols[class_index]
+    if action == "rename":
+        if class_index == default_class:
+            raise ValueError("Default profile cannot be renamed")
+        new_symbol = sanitize_class_symbol(change["name"], set(class_symbols), old_symbol)
+        if new_symbol == old_symbol:
+            return {"saved": False, "message": "No code changes needed", "classIndex": class_index, "symbol": old_symbol}
+        class_symbols[class_index] = new_symbol
+        updated_source = replace_class_define_block(raw_behavior_data, class_symbols)
+        updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", new_symbol, updated_source)
+        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
+        invalidate_data_cache()
+        return {"saved": True, "message": f"Renamed profile to {humanize_symbol(new_symbol, CLASS_PREFIX)}", "classIndex": class_index, "symbol": new_symbol}
+
+    if class_index == default_class:
+        raise ValueError("Default profile cannot be deleted")
+    if class_symbol_used_by_runtime(old_symbol):
+        raise ValueError(f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is still referenced by runtime code and cannot be deleted safely")
+    class_symbols.pop(class_index)
+    updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", "OW_WILD_BEHAVIOR_CLASS_DEFAULT", raw_behavior_data)
+    updated_source = replace_class_define_block(updated_source, class_symbols)
+    updated_source = remove_profile_initializer(updated_source, class_index, len(class_profiles))
+    BEHAVIOR_DATA_SOURCE.write_text(updated_source)
+    invalidate_data_cache()
+    return {"saved": True, "message": f"Deleted {humanize_symbol(old_symbol, CLASS_PREFIX)}", "classIndex": default_class}
 
 
 def default_behavior_match_raws() -> dict[str, str]:
@@ -2944,8 +3726,8 @@ def format_behavior_class_rule(species_symbol: str, class_symbol: str, indent: s
     return (
         f"{indent}{{\n"
         f"{inner}{{\n"
-        f"{value}{species_symbol},\n"
         f"{value}OW_WILD_BEHAVIOR_GROUP_NONE,\n"
+        f"{value}{species_symbol},\n"
         f"{value}OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN,\n"
         f"{value}OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,\n"
         f"{value}OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,\n"
@@ -2955,6 +3737,10 @@ def format_behavior_class_rule(species_symbol: str, class_symbol: str, indent: s
         f"{inner}{class_symbol},\n"
         f"{indent}}}"
     )
+
+
+def format_behavior_species_class_rule(species_symbol: str, class_symbol: str, indent: str = "    ") -> str:
+    return f"{indent}{{{species_symbol}, {class_symbol}}}"
 
 
 def format_match_initializer(raws: dict[str, str], indent: str) -> str:
@@ -2973,7 +3759,9 @@ def format_behavior_override_rule(
     return (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner)},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
         f"{inner}{format_profile_initializer(profile_raws, inner)},\n"
         f"{indent}}}"
     )
@@ -3062,20 +3850,14 @@ def apply_profile_membership_changes(body: bytes) -> dict:
     valid_species = {entry["symbol"] for entry in species}
     species_by_symbol = {entry["symbol"]: entry for entry in species}
     class_labels = invert_labels(macros, CLASS_PREFIX)
+    group_labels = invert_labels(macros, GROUP_PREFIX)
     class_profiles = [
         parse_profile(entry, macros)
         for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
-    class_rules = []
-    for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassRules")):
-        if len(entry) != 2:
-            raise ParseError("class rule initializer shape changed")
-        class_rules.append(
-            {
-                "match": parse_match(entry[0], macros),
-                "behaviorClass": make_value(str(entry[1]), "behaviorClass", macros),
-            }
-        )
+    full_class_rules = parse_full_class_rules(behavior_source, macros, group_labels, class_labels)
+    species_class_rules = parse_species_class_rules(behavior_source, macros, group_labels, class_labels, len(full_class_rules))
+    class_rules = full_class_rules + species_class_rules
     group_species = parse_group_species(source, macros)
     default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
 
@@ -3087,14 +3869,22 @@ def apply_profile_membership_changes(body: bytes) -> dict:
 
     class_rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassRules")
     class_rule_entry_spans = top_level_braced_spans(raw_behavior_data, class_rule_span)
-    if len(class_rule_entry_spans) != len(class_rules):
+    if len(class_rule_entry_spans) != len(full_class_rules):
         raise ParseError("class rule entry count changed")
+    species_rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorSpeciesClassRules")
+    species_rule_entry_spans = top_level_braced_spans(raw_behavior_data, species_rule_span)
+    if len(species_rule_entry_spans) != len(species_class_rules):
+        raise ParseError("compact species class rule entry count changed")
 
-    direct_rule_by_species: dict[str, tuple[int, tuple[int, int]]] = {}
-    for index, rule in enumerate(class_rules):
+    direct_rule_by_species: dict[str, tuple[str, tuple[int, int]]] = {}
+    for index, rule in enumerate(full_class_rules):
         symbol = simple_species_class_rule(rule, macros)
         if symbol:
-            direct_rule_by_species[symbol] = (index, class_rule_entry_spans[index])
+            direct_rule_by_species[symbol] = ("full", class_rule_entry_spans[index])
+    for index, rule in enumerate(species_class_rules):
+        symbol = simple_species_class_rule(rule, macros)
+        if symbol:
+            direct_rule_by_species[symbol] = ("species", species_rule_entry_spans[index])
 
     replacements: list[tuple[int, int, str]] = []
     appended_rules: list[str] = []
@@ -3113,15 +3903,19 @@ def apply_profile_membership_changes(body: bytes) -> dict:
         if current_class == class_index:
             continue
         class_symbol = class_labels.get(class_index, {"symbol": str(class_index)})["symbol"]
-        replacement = format_behavior_class_rule(symbol, class_symbol)
         if symbol in direct_rule_by_species:
-            _, span = direct_rule_by_species[symbol]
+            storage, span = direct_rule_by_species[symbol]
+            replacement = (
+                format_behavior_species_class_rule(symbol, class_symbol)
+                if storage == "species"
+                else format_behavior_class_rule(symbol, class_symbol)
+            )
             replacements.append((span[0], span[1], replacement))
         else:
-            appended_rules.append(replacement)
+            appended_rules.append(format_behavior_species_class_rule(symbol, class_symbol))
 
     if appended_rules:
-        insert_at = class_rule_span[1] - 1
+        insert_at = species_rule_span[1] - 1
         replacements.append((insert_at, insert_at, "".join(f"{rule},\n" for rule in appended_rules)))
 
     updated_source = raw_behavior_data
@@ -3163,6 +3957,8 @@ def apply_profile_override_changes(body: bytes) -> dict:
         raw = change["raw"]
         if field not in PROFILE_FIELDS:
             raise ValueError(f"invalid override field: {field}")
+        if field not in OVERRIDE_SYMBOL_BY_FIELD:
+            raise ValueError(f"field cannot be used in specific overrides: {field}")
         if raw not in valid_options[field]:
             raise ValueError(f"invalid value for {field}: {raw}")
 
@@ -3519,6 +4315,15 @@ HTML = r"""<!doctype html>
       font: inherit;
     }
 
+    select {
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364758b' d='M3 4.5h6L6 8z'/%3E%3C/svg%3E");
+      background-position: right 8px center;
+      background-repeat: no-repeat;
+      background-size: 12px 12px;
+    }
+
     html,
     body {
       height: 100%;
@@ -3628,7 +4433,11 @@ HTML = r"""<!doctype html>
     }
 
     input.control { width: min(360px, 48vw); }
-    select.control { width: 180px; }
+    select.control {
+      width: 180px;
+      padding-right: 26px;
+      background-color: #fff;
+    }
 
     button.control {
       cursor: pointer;
@@ -4087,6 +4896,54 @@ HTML = r"""<!doctype html>
       gap: 6px;
     }
 
+    .profile-management-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .profile-management-button {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .profile-management-button:hover,
+    .profile-management-button:focus-visible {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      outline: 1px solid #99d6ca;
+    }
+
+    .profile-management-button.danger:hover,
+    .profile-management-button.danger:focus-visible {
+      background: #fff1f2;
+      color: #b91c1c;
+      outline-color: #fecdd3;
+    }
+
+    .profile-management-button:disabled {
+      opacity: .38;
+      cursor: not-allowed;
+    }
+
+    .profile-management-button svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+    }
+
     .profile-core-chip {
       min-width: 0;
       min-height: 24px;
@@ -4259,6 +5116,7 @@ HTML = r"""<!doctype html>
       color: var(--ink);
       font-weight: 850;
       outline: 0;
+      padding: 0 22px 0 0;
     }
 
     .profile-bulk-preview {
@@ -4319,10 +5177,10 @@ HTML = r"""<!doctype html>
       height: 32px;
       border: 1px solid #d5e0ee;
       border-radius: 7px;
-      background: #fff;
+      background-color: #fff;
       color: var(--ink);
       font-weight: 850;
-      padding: 0 8px;
+      padding: 0 26px 0 8px;
     }
 
     .behavior-override-preview {
@@ -4575,21 +5433,56 @@ HTML = r"""<!doctype html>
 
     .profile-architecture-fields {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 1px;
       background: var(--line);
     }
 
     .profile-architecture-fields .field {
-      min-height: 54px;
-      padding: 6px 7px;
+      min-height: 38px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      padding: 4px 7px;
+      background: #fff;
+    }
+
+    .profile-architecture-fields .profile-suboption-field {
+      min-height: 34px;
+      padding-left: 18px;
+      background: #f8fbff;
+      box-shadow: inset 3px 0 0 #d7e5f5;
+    }
+
+    .profile-architecture-fields .field-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .profile-field-badge {
+      width: 30px;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .profile-field-badge .route-encounter-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
     }
 
     .profile-architecture-fields .profile-combo {
       width: 100%;
       min-width: 0;
       height: 28px;
-      margin-top: 3px;
+      margin-top: 0;
       border: 1px solid #dbe5f0;
       border-radius: 6px;
       background: #fff;
@@ -4597,6 +5490,26 @@ HTML = r"""<!doctype html>
       padding: 0 7px;
       font-weight: 800;
       text-overflow: ellipsis;
+    }
+
+    .profile-subselect {
+      width: 100%;
+      min-width: 0;
+      height: 28px;
+      border: 1px solid #dbe5f0;
+      border-radius: 6px;
+      background-color: #fff;
+      color: var(--ink);
+      padding: 0 26px 0 7px;
+      font-weight: 800;
+    }
+
+    select.control:focus-visible,
+    .profile-subselect:focus-visible,
+    .behavior-override-select:focus-visible,
+    .profile-bulk-type:focus-visible {
+      outline: 2px solid rgba(37, 99, 235, 0.35);
+      outline-offset: 1px;
     }
 
     .profile-resolver-grid {
@@ -7054,7 +7967,7 @@ HTML = r"""<!doctype html>
       }
 
       .profile-architecture-fields {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .route-swap-levels {
@@ -8841,54 +9754,143 @@ HTML = r"""<!doctype html>
       { key: "headbutt", label: "Headbutt", raw: "OW_WILD_SPAWN_TERRAIN_HEADBUTT", icon: "tree", typeClass: "type-headbutt", routeGroups: ["headbuttNormal", "headbuttSpecial"] },
     ];
     const ROUTE_SPAWN_FILTER_KEYS = new Set(ROUTE_SPAWN_FILTERS.map(filter => filter.key));
-    const COMBINED_CHILL_FIELD = "chillBehavior";
+    const ALERT_RANGE_TYPE_FIELD = "alertRangeType";
+    const SPAWN_DESTINATION_TYPE_FIELD = "spawnDestinationType";
+    const SPAWN_DESTINATION_FRONT_TYPE = "__SPAWN_DESTINATION_FRONT_OF_PLAYER";
+    const SPAWN_DESTINATION_BEHIND_TYPE = "__SPAWN_DESTINATION_BEHIND_PLAYER";
+    const SPAWN_DESTINATION_NEXT_TO_PLAYER_RAW = "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER";
     const NUMERIC_PROFILE_FIELD_KEYS = new Set([
       "alertTime",
       "alertness",
       "stamina",
       "restTime",
-      "normalSpeed",
-      "maxSpeed",
+      "chillSpeed",
+      "attentiveSpeed",
+      "tiredSpeed",
       "range",
       "chillCooldown",
       "attentiveCooldown",
       "alertChance",
+      "hopMinDistance",
+      "hopMaxDistance",
+      "hopPause",
+      "teleportTime",
+      "teleportPause",
+      "attentiveHopMinDistance",
+      "attentiveHopMaxDistance",
+      "attentiveHopPause",
+      "attentiveTeleportTime",
+      "attentiveTeleportPause",
+      "attentiveRamAccelerationSteps",
+      "attentiveRamMaxSpeed",
+      "tiredHopMinDistance",
+      "tiredHopMaxDistance",
+      "tiredHopPause",
+      "tiredTeleportTime",
+      "tiredTeleportPause",
+      "tiredRamAccelerationSteps",
+      "tiredRamMaxSpeed",
+      "alertCallSpawnAmount",
+      "spawnDestinationMinDistance",
+      "spawnDestinationMaxDistance",
+      "ramAccelerationSteps",
+      "ramMaxSpeed",
     ]);
+    const PROFILE_FIELD_HINTS = {
+      profileId: "Special behavior-family flag used by profile-specific runtime logic. Most profiles can leave this as Default.",
+      chillAllowedTile: "Tile type this Chill behavior may target.",
+      attentiveAllowedTile: "Tile type this Active behavior may target.",
+      tiredAllowedTile: "Tile type this Tired behavior may target.",
+      chillAllowedTile2: "Optional second tile type this Chill behavior may target.",
+      attentiveAllowedTile2: "Optional second tile type this Active behavior may target.",
+      tiredAllowedTile2: "Optional second tile type this Tired behavior may target.",
+    };
+    const PROFILE_DIRECT_EDIT_HIDDEN_FIELDS = new Set(["attentiveAction"]);
+    const PROFILE_OVERRIDE_BUILDER_HIDDEN_FIELDS = new Set([
+      "attentiveAction",
+    ]);
+    const PROFILE_BEHAVIOR_FIELDS = new Set(["chillState", "attentiveState", "tiredState"]);
+    const PROFILE_MOVEMENT_FIELDS = new Set(["chillAction", "movementStyle", "specialAction"]);
+    const PROFILE_TARGET_SELECTOR_RAWS = [
+      "OW_WILD_BEHAVIOR_TARGET_NONE",
+      "OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY",
+      "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+      "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
+      "OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
+      "OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT",
+      "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT",
+      "OW_WILD_BEHAVIOR_TARGET_SWARM",
+    ];
     const PROFILE_FIELD_GROUPS = [
       {
-        key: "identity",
-        label: "Identity",
-        icon: "shield",
-        typeClass: "type-test",
-        fields: ["profileId", "spawnState", "spawnDestination", "jumpLevel"],
+        key: "spawn",
+        label: "Spawn",
+        icon: "footstep",
+        typeClass: "type-movement",
+        fields: ["spawnState", "spawnDestination", "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "jumpLevel"],
       },
       {
         key: "chill",
         label: "Chill",
         icon: "leaf",
         typeClass: "type-grass",
-        fields: ["chillState", "chillAction", "chillCooldown"],
+        fields: [
+          "chillState",
+          "chillTarget",
+          "chillAction",
+          "chillSpeed",
+          "chillAllowedTile",
+          "chillAllowedTile2",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chillCooldown",
+        ],
       },
       {
         key: "alert",
         label: "Alert",
         icon: "target",
         typeClass: "type-placement",
-        fields: ["alertState", "alertEmote", "alertTime", "alertRange", "alertness", "alertChance"],
+        fields: [
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertRange",
+          "alertness",
+          "alertChance",
+          "alertSpecialAction",
+          "alertCallSpawnAmount",
+          "alertCallSpawnState",
+        ],
       },
       {
         key: "attentive",
         label: "Active",
         icon: "footstep",
         typeClass: "type-movement",
-        fields: ["attentiveState", "attentiveAction", "targetSelector", "movementStyle", "attentiveCooldown"],
-      },
-      {
-        key: "limits",
-        label: "Limits",
-        icon: "speed",
-        typeClass: "type-flow",
-        fields: ["normalSpeed", "maxSpeed", "range", "stamina", "tiredState", "restTime"],
+        fields: [
+          "attentiveState",
+          "movementStyle",
+          "attentiveSpeed",
+          "attentiveAllowedTile",
+          "attentiveAllowedTile2",
+          "attentiveHopAllowNonCardinal",
+          "attentiveHopMinDistance",
+          "attentiveHopMaxDistance",
+          "attentiveHopPause",
+          "attentiveTeleportTime",
+          "attentiveTeleportPause",
+          "attentiveRamAccelerationSteps",
+          "attentiveRamMaxSpeed",
+          "targetSelector",
+          "attentiveCooldown",
+        ],
       },
       {
         key: "battle",
@@ -8896,6 +9898,43 @@ HTML = r"""<!doctype html>
         icon: "swords",
         typeClass: "type-test",
         fields: ["chillBattle", "alertBattle", "attentiveBattle", "tiredBattle"],
+      },
+      {
+        key: "tired",
+        label: "Tired",
+        icon: "clock",
+        typeClass: "type-flow",
+        fields: [
+          "tiredState",
+          "specialAction",
+          "tiredSpeed",
+          "tiredAllowedTile",
+          "tiredAllowedTile2",
+          "tiredHopAllowNonCardinal",
+          "tiredHopMinDistance",
+          "tiredHopMaxDistance",
+          "tiredHopPause",
+          "tiredTeleportTime",
+          "tiredTeleportPause",
+          "tiredRamAccelerationSteps",
+          "tiredRamMaxSpeed",
+          "restTime",
+          "stamina",
+        ],
+      },
+      {
+        key: "stats",
+        label: "Stats",
+        icon: "speed",
+        typeClass: "type-flow",
+        fields: ["range"],
+      },
+      {
+        key: "special",
+        label: "Special",
+        icon: "shield",
+        typeClass: "type-test",
+        fields: ["profileId"],
       },
     ];
     const PRIMITIVE_GROUPS = [
@@ -8911,6 +9950,7 @@ HTML = r"""<!doctype html>
     let isSavingProfileOverrides = false;
     let isSavingEncounters = false;
     let isSavingSpawnSettings = false;
+    let isManagingProfiles = false;
     let isBuilding = false;
     let buildAfterSave = localStorage.getItem("owProfileBuildAfterSave") === "1";
     let runTestNdsAfterBuild = localStorage.getItem("owProfileRunTestAfterBuild") === "1";
@@ -9117,6 +10157,8 @@ HTML = r"""<!doctype html>
         shield: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>`,
         plus: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
         minus: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>`,
+        edit: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="m16.5 3.5 4 4L7 21H3v-4Z"/></svg>`,
+        trash: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>`,
         bolt: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-13h-7Z"/></svg>`,
         flask: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v6.5L4.6 18.7A2.3 2.3 0 0 0 6.6 22h10.8a2.3 2.3 0 0 0 2-3.3L14 8.5V2"/><path d="M8 2h8"/><path d="M7.6 16h8.8"/></svg>`,
         dot1: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>`,
@@ -9579,7 +10621,9 @@ HTML = r"""<!doctype html>
     }
 
     function profileFields(profile) {
-      return appData.fields.map(field => `
+      return appData.fields
+        .filter(field => !PROFILE_DIRECT_EDIT_HIDDEN_FIELDS.has(field.key))
+        .map(field => `
         <div class="field">
           <span class="field-label">${esc(field.label)}</span>
           <span class="field-value" title="${esc(profile[field.key]?.raw ?? "")}">${esc(fieldValue(profile[field.key]))}</span>
@@ -9589,6 +10633,87 @@ HTML = r"""<!doctype html>
 
     function profileFieldLabel(fieldKey) {
       return appData.fields.find(field => field.key === fieldKey)?.label || fieldKey;
+    }
+
+    function profileFieldIcon(fieldKey) {
+      const icons = {
+        alertChance: ["dice", "type-flow"],
+        alertEmote: ["music", "type-sound"],
+        alertRange: ["target", "type-placement"],
+        alertRangeClose: ["target", "type-placement"],
+        alertRangeType: ["target", "type-placement"],
+        alertState: ["target", "type-placement"],
+        alertSpecialAction: ["swarm", "type-swarm"],
+        alertTime: ["clock", "type-flow"],
+        alertness: ["ruler", "type-placement"],
+        alertCallSpawnAmount: ["plus", "type-swarm"],
+        alertCallSpawnState: ["footstep", "type-swarm"],
+        attentiveAllowedTile: ["target", "type-placement"],
+        attentiveAllowedTile2: ["target", "type-placement"],
+        attentiveAction: ["bolt", "type-movement"],
+        attentiveBattle: ["swords", "type-test"],
+        attentiveCooldown: ["clock", "type-flow"],
+        attentiveHopAllowNonCardinal: ["target", "type-placement"],
+        attentiveHopMinDistance: ["ruler", "type-placement"],
+        attentiveHopMaxDistance: ["ruler", "type-placement"],
+        attentiveHopPause: ["clock", "type-flow"],
+        attentiveRamAccelerationSteps: ["footstep", "type-movement"],
+        attentiveRamMaxSpeed: ["speed", "type-movement"],
+        attentiveSpeed: ["speed", "type-movement"],
+        attentiveState: ["footstep", "type-movement"],
+        attentiveTeleportTime: ["clock", "type-flow"],
+        attentiveTeleportPause: ["clock", "type-flow"],
+        chillAction: ["footstep", "type-movement"],
+        chillAllowedTile: ["target", "type-placement"],
+        chillAllowedTile2: ["target", "type-placement"],
+        chillBattle: ["swords", "type-test"],
+        chillCooldown: ["clock", "type-flow"],
+        chillSpeed: ["speed", "type-movement"],
+        chillState: ["leaf", "type-grass"],
+        chillTarget: ["target", "type-placement"],
+        alertBattle: ["swords", "type-test"],
+        hopAllowNonCardinal: ["target", "type-placement"],
+        hopMinDistance: ["ruler", "type-placement"],
+        hopMaxDistance: ["ruler", "type-placement"],
+        hopPause: ["clock", "type-flow"],
+        jumpLevel: ["footstep", "type-movement"],
+        movementStyle: ["footstep", "type-movement"],
+        profileId: ["shield", "type-test"],
+        ramAccelerationSteps: ["footstep", "type-movement"],
+        ramMaxSpeed: ["speed", "type-movement"],
+        range: ["ruler", "type-placement"],
+        restTime: ["clock", "type-flow"],
+        spawnDestination: ["target", "type-placement"],
+        spawnDestinationDistance: ["ruler", "type-placement"],
+        spawnDestinationMinDistance: ["minus", "type-placement"],
+        spawnDestinationMaxDistance: ["plus", "type-placement"],
+        spawnDestinationType: ["target", "type-placement"],
+        spawnState: ["footstep", "type-movement"],
+        specialAction: ["footstep", "type-movement"],
+        stamina: ["bolt", "type-flow"],
+        targetSelector: ["target", "type-placement"],
+        teleportTime: ["clock", "type-flow"],
+        teleportPause: ["clock", "type-flow"],
+        tiredBattle: ["swords", "type-test"],
+        tiredAllowedTile: ["target", "type-placement"],
+        tiredAllowedTile2: ["target", "type-placement"],
+        tiredHopAllowNonCardinal: ["target", "type-placement"],
+        tiredHopMinDistance: ["ruler", "type-placement"],
+        tiredHopMaxDistance: ["ruler", "type-placement"],
+        tiredHopPause: ["clock", "type-flow"],
+        tiredRamAccelerationSteps: ["footstep", "type-movement"],
+        tiredRamMaxSpeed: ["speed", "type-movement"],
+        tiredSpeed: ["speed", "type-movement"],
+        tiredState: ["clock", "type-flow"],
+        tiredTeleportTime: ["clock", "type-flow"],
+        tiredTeleportPause: ["clock", "type-flow"],
+      };
+      return icons[fieldKey] || ["target", "type-placement"];
+    }
+
+    function profileFieldBadge(fieldKey, label) {
+      const [icon, typeClass] = profileFieldIcon(fieldKey);
+      return `<span class="profile-field-badge">${encounterBadge(icon, typeClass, label)}</span>`;
     }
 
     function primitiveFieldLabel(fieldKey) {
@@ -9605,7 +10730,10 @@ HTML = r"""<!doctype html>
     }
 
     function profileComboRawDisplay(raw) {
-      return String(raw ?? "").replace(/^OW_WILD_BEHAVIOR_/, "");
+      return String(raw ?? "")
+        .replace(/^OW_WILD_BEHAVIOR_KIND_/, "")
+        .replace(/^OW_WILD_BEHAVIOR_LOCOMOTION_/, "")
+        .replace(/^OW_WILD_BEHAVIOR_/, "");
     }
 
     function profileComboLabelDisplay(option) {
@@ -9618,11 +10746,49 @@ HTML = r"""<!doctype html>
 
     function profileComboOptionDisplay(option, fieldKey = "") {
       if (!option) return "";
-      if (fieldKey === COMBINED_CHILL_FIELD) {
-        return option.label || profileComboRawDisplay(option.raw);
+      if (fieldKey === ALERT_RANGE_TYPE_FIELD) {
+        return alertRangeBaseDisplay(option.raw);
+      }
+      if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) {
+        return spawnDestinationTypeDisplay(option.raw);
       }
       if (NUMERIC_PROFILE_FIELD_KEYS.has(fieldKey) && option.value !== null && option.value !== undefined) {
         return String(option.value);
+      }
+      const displayOverrides = {
+        OW_WILD_BEHAVIOR_KIND_NONE: "None",
+        OW_WILD_BEHAVIOR_KIND_IDLE: "Idle",
+        OW_WILD_BEHAVIOR_KIND_WANDER: "Wander",
+        OW_WILD_BEHAVIOR_KIND_CHASE: "Chase",
+        OW_WILD_BEHAVIOR_KIND_FLEE: "Flee",
+        OW_WILD_BEHAVIOR_KIND_PLAYFUL: "Playful",
+        OW_WILD_BEHAVIOR_KIND_RAM: "Ram",
+        OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP: "Headbutt Tree Hop",
+        OW_WILD_BEHAVIOR_KIND_ASLEEP: "Asleep",
+        OW_WILD_BEHAVIOR_KIND_SINGING: "Singing",
+        OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE: "Tired Emote",
+        OW_WILD_BEHAVIOR_KIND_NO_VISUAL: "No Visual",
+        OW_WILD_BEHAVIOR_LOCOMOTION_NONE: "None",
+        OW_WILD_BEHAVIOR_LOCOMOTION_WANDER: "Walk",
+        OW_WILD_BEHAVIOR_LOCOMOTION_HOP: "Hop",
+        OW_WILD_BEHAVIOR_LOCOMOTION_RAM: "Ram",
+        OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT: "Phantom Teleport",
+        OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE: "None",
+        OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP: "Call for help",
+        OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_CHILL: "Chill",
+        OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ALERT: "Alert",
+        OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE: "Active",
+        OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_TIRED: "Tired",
+        OW_WILD_BEHAVIOR_TARGET_NONE: "Behavior default",
+        OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER: "Toward player",
+        OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER: "Away from player",
+        OW_WILD_BEHAVIOR_TARGET_TREE_TOP: "Tree top",
+        OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT: "Playful orbit",
+        OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT: "Player front",
+        OW_WILD_BEHAVIOR_TARGET_SWARM: "Swarm",
+      };
+      if (displayOverrides[option.raw]) {
+        return displayOverrides[option.raw];
       }
       if (String(option.raw || "").startsWith("OW_WILD_")) {
         let display = profileComboLabelDisplay(option) || profileComboRawDisplay(option.raw);
@@ -9642,29 +10808,198 @@ HTML = r"""<!doctype html>
       return profileComboRawDisplay(option.raw);
     }
 
-    function chillBehaviorOptions() {
-      const actionByValue = new Map((appData.editOptions.chillAction || []).map(option => [option.value, option]));
-      return (appData.editOptions.chillState || [])
-        .map(stateOption => {
-          const actionOption = actionByValue.get(stateOption.value);
-          if (!actionOption) return null;
-          return {
-            raw: stateOption.raw,
-            actionRaw: actionOption.raw,
-            label: profileComboOptionDisplay(stateOption, "chillState"),
-            value: stateOption.value,
-          };
-        })
-        .filter(Boolean);
+    function alertRangeIsCloseRaw(raw) {
+      return /_CLOSE_RADIUS$/.test(String(raw || ""));
+    }
+
+    function alertRangeBaseRaw(raw) {
+      return String(raw || "").replace(/_CLOSE_RADIUS$/, "");
+    }
+
+    function alertRangeBaseDisplay(raw) {
+      const option = (appData.editOptions.alertRange || []).find(item => item.raw === raw)
+        || (appData.editOptions.alertRange || []).find(item => item.raw === alertRangeBaseRaw(raw));
+      return (profileComboOptionDisplay(option, "alertRange") || profileComboRawDisplay(alertRangeBaseRaw(raw)))
+        .replace(/\s*\+\s*close radius$/i, "");
+    }
+
+    function alertRangeTypeOptions() {
+      const seen = new Map();
+      (appData.editOptions.alertRange || []).forEach(option => {
+        const baseRaw = alertRangeBaseRaw(option.raw);
+        if (seen.has(baseRaw)) return;
+        const baseOption = (appData.editOptions.alertRange || []).find(item => item.raw === baseRaw) || option;
+        seen.set(baseRaw, {
+          ...baseOption,
+          raw: baseRaw,
+          label: alertRangeBaseDisplay(option.raw),
+          value: baseOption.value ?? option.value,
+        });
+      });
+      return Array.from(seen.values()).sort((a, b) => {
+        if (Number.isFinite(a.value) && Number.isFinite(b.value) && a.value !== b.value) {
+          return a.value - b.value;
+        }
+        return profileComboOptionDisplay(a, ALERT_RANGE_TYPE_FIELD)
+          .localeCompare(profileComboOptionDisplay(b, ALERT_RANGE_TYPE_FIELD));
+      });
+    }
+
+    function alertRangeTypeOptionForRaw(raw) {
+      const baseRaw = alertRangeBaseRaw(raw);
+      return alertRangeTypeOptions().find(option => option.raw === baseRaw) || null;
+    }
+
+    function alertRangeSupportsClose(raw) {
+      const baseRaw = alertRangeBaseRaw(raw);
+      return (appData.editOptions.alertRange || []).some(option =>
+        alertRangeBaseRaw(option.raw) === baseRaw && alertRangeIsCloseRaw(option.raw));
+    }
+
+    function alertRangeRawWithClose(raw, closeEnabled) {
+      const baseRaw = alertRangeBaseRaw(raw);
+      if (!closeEnabled) {
+        return (appData.editOptions.alertRange || []).find(option => option.raw === baseRaw)?.raw || baseRaw;
+      }
+      return (appData.editOptions.alertRange || []).find(option =>
+        alertRangeBaseRaw(option.raw) === baseRaw && alertRangeIsCloseRaw(option.raw))?.raw
+        || baseRaw;
+    }
+
+    function alertRangeNeedsLength(raw) {
+      const baseRaw = alertRangeBaseRaw(raw);
+      return !/_NONE$/.test(baseRaw) && !/_TERRAIN_ONLY$/.test(baseRaw);
+    }
+
+    function alertSpecialActionCallsForHelp(raw) {
+      return raw === "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP";
+    }
+
+    function spawnDestinationPlayerInfo(raw) {
+      const value = String(raw || "");
+      if (value === "OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER") {
+        return { kind: "front", distance: 1 };
+      }
+      if (value === "OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER") {
+        return { kind: "behind", distance: 5 };
+      }
+      const match = value.match(/^OW_WILD_SPAWN_DESTINATION_(ONE|TWO|THREE|FOUR|FIVE)_TILES?_(FRONT_OF|BEHIND)_PLAYER$/);
+      if (!match) return null;
+      const distances = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+      return {
+        kind: match[2] === "FRONT_OF" ? "front" : "behind",
+        distance: distances[match[1]],
+      };
+    }
+
+    function spawnDestinationTypeKeyForRaw(raw) {
+      const info = spawnDestinationPlayerInfo(raw);
+      if (!info) return raw;
+      return info.kind === "front" ? SPAWN_DESTINATION_FRONT_TYPE : SPAWN_DESTINATION_BEHIND_TYPE;
+    }
+
+    function spawnDestinationTypeDisplay(raw) {
+      if (raw === SPAWN_DESTINATION_FRONT_TYPE) return "Front of player";
+      if (raw === SPAWN_DESTINATION_BEHIND_TYPE) return "Behind player";
+      if (raw === SPAWN_DESTINATION_NEXT_TO_PLAYER_RAW) return "Next to player";
+      return profileComboOptionDisplay(profileOptionForRaw("spawnDestination", raw), "spawnDestination")
+        || profileComboRawDisplay(raw);
+    }
+
+    function spawnDestinationDistanceOptions(typeKey) {
+      const kind = typeKey === SPAWN_DESTINATION_FRONT_TYPE
+        ? "front"
+        : typeKey === SPAWN_DESTINATION_BEHIND_TYPE
+          ? "behind"
+          : "";
+      if (!kind) return [];
+      const options = [];
+      (appData.editOptions.spawnDestination || []).forEach(option => {
+        const info = spawnDestinationPlayerInfo(option.raw);
+        if (!info || info.kind !== kind) return;
+        options.push({ ...option, distance: info.distance });
+      });
+      return options.sort((a, b) => a.distance - b.distance);
+    }
+
+    function spawnDestinationTypeOptions() {
+      const options = [];
+      (appData.editOptions.spawnDestination || []).forEach(option => {
+        if (spawnDestinationPlayerInfo(option.raw)) return;
+        options.push(option);
+      });
+      if (spawnDestinationDistanceOptions(SPAWN_DESTINATION_FRONT_TYPE).length) {
+        options.push({ raw: SPAWN_DESTINATION_FRONT_TYPE, label: "Front of player", value: null });
+      }
+      if (spawnDestinationDistanceOptions(SPAWN_DESTINATION_BEHIND_TYPE).length) {
+        options.push({ raw: SPAWN_DESTINATION_BEHIND_TYPE, label: "Behind player", value: null });
+      }
+      return options;
+    }
+
+    function spawnDestinationTypeOptionForRaw(raw) {
+      const typeKey = spawnDestinationTypeKeyForRaw(raw);
+      return spawnDestinationTypeOptions().find(option => option.raw === typeKey) || null;
+    }
+
+    function spawnDestinationRawForType(typeKey, preferredDistance = null) {
+      const distanceOptions = spawnDestinationDistanceOptions(typeKey);
+      if (!distanceOptions.length) {
+        return profileOptionForRaw("spawnDestination", typeKey)?.raw || typeKey;
+      }
+      const exact = distanceOptions.find(option => String(option.distance) === String(preferredDistance));
+      if (exact) return exact.raw;
+      const fallbackDistance = typeKey === SPAWN_DESTINATION_BEHIND_TYPE ? 5 : 1;
+      return distanceOptions.find(option => option.distance === fallbackDistance)?.raw
+        || distanceOptions[0].raw;
+    }
+
+    function spawnDestinationNeedsDistance(raw) {
+      return !!spawnDestinationPlayerInfo(raw)
+        || raw === SPAWN_DESTINATION_NEXT_TO_PLAYER_RAW;
+    }
+
+    function spawnDestinationUsesRadius(raw) {
+      return raw === SPAWN_DESTINATION_NEXT_TO_PLAYER_RAW;
+    }
+
+    function movementStyleOptions(fieldKey = "movementStyle") {
+      return (appData.editOptions[fieldKey] || appData.editOptions.movementStyle || [])
+        .map(option => ({ ...option, label: profileComboOptionDisplay(option, fieldKey) }));
+    }
+
+    function targetSelectorOptions() {
+      const byRaw = new Map((appData.editOptions.targetSelector || []).map(option => [option.raw, option]));
+      return PROFILE_TARGET_SELECTOR_RAWS
+        .map(raw => byRaw.get(raw))
+        .filter(Boolean)
+        .map(option => ({ ...option, label: profileComboOptionDisplay(option, "targetSelector") }));
     }
 
     function profileOptionsForField(fieldKey) {
-      if (fieldKey === COMBINED_CHILL_FIELD) return chillBehaviorOptions();
+      if (PROFILE_MOVEMENT_FIELDS.has(fieldKey)) return movementStyleOptions(fieldKey);
+      if (fieldKey === "targetSelector" || fieldKey === "chillTarget") return targetSelectorOptions();
+      if (fieldKey === ALERT_RANGE_TYPE_FIELD) return alertRangeTypeOptions();
+      if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) return spawnDestinationTypeOptions();
       return appData.editOptions[fieldKey] || [];
     }
 
     function profileOptionForRaw(fieldKey, raw) {
-      return profileOptionsForField(fieldKey).find(option => option.raw === raw) || null;
+      if (fieldKey === ALERT_RANGE_TYPE_FIELD) return alertRangeTypeOptionForRaw(raw);
+      if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) return spawnDestinationTypeOptionForRaw(raw);
+      const option = profileOptionsForField(fieldKey).find(item => item.raw === raw) || null;
+      if (PROFILE_MOVEMENT_FIELDS.has(fieldKey)) {
+        return option;
+      }
+      return option || (appData.editOptions[fieldKey] || []).find(item => item.raw === raw) || null;
+    }
+
+    function profileFieldRerendersSubcontrols(fieldKey) {
+      return PROFILE_BEHAVIOR_FIELDS.has(fieldKey)
+        || PROFILE_MOVEMENT_FIELDS.has(fieldKey)
+        || fieldKey === ALERT_RANGE_TYPE_FIELD
+        || fieldKey === "alertSpecialAction"
+        || fieldKey === SPAWN_DESTINATION_TYPE_FIELD;
     }
 
     function profileComboDisplay(fieldKey, raw) {
@@ -9676,7 +11011,7 @@ HTML = r"""<!doctype html>
     }
 
     function datalistOptionsHtml(fieldKey) {
-      const options = appData.editOptions[fieldKey] || [];
+      const options = profileOptionsForField(fieldKey);
       return options.map(option => `
         <option value="${esc(profileComboOptionDisplay(option, fieldKey))}"></option>
       `).join("");
@@ -9726,73 +11061,437 @@ HTML = r"""<!doctype html>
       return lookup;
     }
 
-    function profileEditField(item, fieldKey) {
+    function profileEditField(item, fieldKey, options = {}) {
       const originalRaw = item.profile[fieldKey]?.raw ?? "0";
       const raw = pendingProfileValue(item.index, fieldKey, originalRaw);
       const changed = raw !== originalRaw;
+      const label = options.label || profileFieldLabel(fieldKey);
+      const hint = options.hint || PROFILE_FIELD_HINTS[fieldKey] || label;
+      const classes = ["field", options.className || "", changed ? "changed" : ""].filter(Boolean).join(" ");
       return `
-        <label class="field ${changed ? "changed" : ""}">
-          <span class="field-label">${esc(profileFieldLabel(fieldKey))}</span>
-          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(fieldKey, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false">
+        <label class="${esc(classes)}" title="${esc(hint)}">
+          ${profileFieldBadge(fieldKey, label)}
+          <span class="field-label">${esc(label)}</span>
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(fieldKey, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(hint)}">
         </label>
       `;
     }
 
-    function profileChillBehaviorCanCombine(item) {
-      const originalStateRaw = item.profile.chillState?.raw ?? "0";
-      const originalActionRaw = item.profile.chillAction?.raw ?? "0";
-      const stateRaw = pendingProfileValue(item.index, "chillState", originalStateRaw);
-      const actionRaw = pendingProfileValue(item.index, "chillAction", originalActionRaw);
-      const stateOption = profileOptionForRaw("chillState", stateRaw);
-      const actionOption = profileOptionForRaw("chillAction", actionRaw);
-      return stateOption && actionOption && stateOption.value === actionOption.value;
+    function profileEditSpawnDestinationTypeField(item) {
+      const originalRaw = item.profile.spawnDestination?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "spawnDestination", originalRaw);
+      const changed = raw !== originalRaw;
+      const label = "Spawn destination";
+      return `
+        <label class="field ${changed ? "changed" : ""}" title="${esc(label)}">
+          ${profileFieldBadge(SPAWN_DESTINATION_TYPE_FIELD, label)}
+          <span class="field-label">${esc(label)}</span>
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(SPAWN_DESTINATION_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(SPAWN_DESTINATION_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}">
+        </label>
+      `;
     }
 
-    function profileEditChillBehaviorField(item) {
-      if (!profileChillBehaviorCanCombine(item)) {
-        return profileEditField(item, "chillState") + profileEditField(item, "chillAction");
+    function profileEditSpawnDestinationDistanceField(item) {
+      const originalRaw = item.profile.spawnDestination?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "spawnDestination", originalRaw);
+      const info = spawnDestinationPlayerInfo(raw);
+      if (!info) return "";
+      const typeKey = spawnDestinationTypeKeyForRaw(raw);
+      const options = spawnDestinationDistanceOptions(typeKey);
+      if (!options.length) return "";
+      const changed = raw !== originalRaw;
+      const label = "Spawn distance";
+      return `
+        <label class="field profile-suboption-field ${changed ? "changed" : ""}" title="${esc(label)}">
+          ${profileFieldBadge("spawnDestinationDistance", label)}
+          <span class="field-label">${esc(label)}</span>
+          <select class="profile-subselect" data-profile-spawn-destination-distance data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}">
+            ${options.map(option => `
+              <option value="${esc(option.distance)}"${option.distance === info.distance ? " selected" : ""}>${esc(option.distance)} tile${option.distance === 1 ? "" : "s"}</option>
+            `).join("")}
+          </select>
+        </label>
+      `;
+    }
+
+    function profileEditSpawnFields(item) {
+      const originalRaw = item.profile.spawnDestination?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "spawnDestination", originalRaw);
+      const usesRadius = spawnDestinationUsesRadius(raw);
+      const fields = [
+        profileEditField(item, "spawnState"),
+        profileEditSpawnDestinationTypeField(item),
+      ];
+      if (spawnDestinationNeedsDistance(raw)) {
+        fields.push(profileEditField(item, "spawnDestinationMinDistance", {
+          className: "profile-suboption-field",
+          label: "Min distance",
+          hint: usesRadius ? "Minimum radius around the player" : "Minimum tiles from the player",
+        }));
+        fields.push(profileEditField(item, "spawnDestinationMaxDistance", {
+          className: "profile-suboption-field",
+          label: "Max distance",
+          hint: usesRadius ? "Maximum radius around the player" : "Maximum tiles from the player",
+        }));
       }
-      const originalStateRaw = item.profile.chillState?.raw ?? "0";
-      const originalActionRaw = item.profile.chillAction?.raw ?? "0";
-      const stateRaw = pendingProfileValue(item.index, "chillState", originalStateRaw);
-      const actionRaw = pendingProfileValue(item.index, "chillAction", originalActionRaw);
-      const changed = stateRaw !== originalStateRaw || actionRaw !== originalActionRaw;
+      fields.push(profileEditField(item, "jumpLevel"));
+      return {
+        count: fields.length,
+        html: fields.join(""),
+      };
+    }
+
+    function profileEditAlertRangeTypeField(item) {
+      const originalRaw = item.profile.alertRange?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "alertRange", originalRaw);
+      const changed = raw !== originalRaw;
+      const label = "Range type";
       return `
-        <label class="field ${changed ? "changed" : ""}">
-          <span class="field-label">Chill behavior</span>
-          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(COMBINED_CHILL_FIELD, stateRaw))}" data-class-index="${esc(item.index)}" data-field="${esc(COMBINED_CHILL_FIELD)}" data-original="${esc(originalStateRaw)}" data-original-action="${esc(originalActionRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false">
+        <label class="field ${changed ? "changed" : ""}" title="${esc(label)}">
+          ${profileFieldBadge(ALERT_RANGE_TYPE_FIELD, label)}
+          <span class="field-label">${esc(label)}</span>
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(ALERT_RANGE_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(ALERT_RANGE_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}">
         </label>
       `;
+    }
+
+    function profileEditAlertCloseRangeField(item) {
+      const originalRaw = item.profile.alertRange?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "alertRange", originalRaw);
+      if (!alertRangeSupportsClose(raw)) return "";
+      const changed = raw !== originalRaw;
+      const label = "Close range";
+      const closeEnabled = alertRangeIsCloseRaw(raw);
+      return `
+        <label class="field profile-suboption-field ${changed ? "changed" : ""}" title="${esc(label)}">
+          ${profileFieldBadge("alertRangeClose", label)}
+          <span class="field-label">${esc(label)}</span>
+          <select class="profile-subselect" data-profile-alert-close-range data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}">
+            <option value="0"${closeEnabled ? "" : " selected"}>No</option>
+            <option value="1"${closeEnabled ? " selected" : ""}>Yes</option>
+          </select>
+        </label>
+      `;
+    }
+
+    function profileEditAlertFields(item) {
+      const originalRaw = item.profile.alertRange?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, "alertRange", originalRaw);
+      const originalSpecialRaw = item.profile.alertSpecialAction?.raw ?? "0";
+      const specialRaw = pendingProfileValue(item.index, "alertSpecialAction", originalSpecialRaw);
+      const fields = [
+        profileEditField(item, "alertState"),
+        profileEditField(item, "alertEmote"),
+        profileEditField(item, "alertTime"),
+        profileEditAlertRangeTypeField(item),
+      ];
+      if (alertRangeSupportsClose(raw)) {
+        fields.push(profileEditAlertCloseRangeField(item));
+      }
+      if (alertRangeNeedsLength(raw)) {
+        fields.push(profileEditField(item, "alertness", {
+          className: "profile-suboption-field",
+          label: "Range length",
+          hint: "Range length",
+        }));
+      }
+      fields.push(profileEditField(item, "alertChance"));
+      fields.push(profileEditField(item, "alertSpecialAction"));
+      if (alertSpecialActionCallsForHelp(specialRaw)) {
+        fields.push(profileEditField(item, "alertCallSpawnAmount", {
+          className: "profile-suboption-field",
+          label: "Spawn amount",
+          hint: "Number of same-species helpers to spawn when alert starts",
+        }));
+        fields.push(profileEditField(item, "alertCallSpawnState", {
+          className: "profile-suboption-field",
+          label: "Spawn state",
+          hint: "Behavior state helpers enter after spawning",
+        }));
+      }
+      return {
+        count: fields.length,
+        html: fields.join(""),
+      };
+    }
+
+    function movementStyleUsesHop(raw) {
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_HOP";
+    }
+
+    function movementStyleUsesPhantomTeleport(raw) {
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT";
+    }
+
+    function movementStyleUsesRam(raw) {
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
+    }
+
+    function activeBehaviorCanSelectTarget(raw) {
+      return [
+        "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "OW_WILD_BEHAVIOR_KIND_FLEE",
+        "OW_WILD_BEHAVIOR_KIND_PLAYFUL",
+        "OW_WILD_BEHAVIOR_KIND_RAM",
+        "OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP",
+      ].includes(raw);
+    }
+
+    function behaviorUsesAllowedTile(raw) {
+      return [
+        "OW_WILD_BEHAVIOR_KIND_WANDER",
+        "OW_WILD_BEHAVIOR_KIND_CHASE",
+        "OW_WILD_BEHAVIOR_KIND_FLEE",
+        "OW_WILD_BEHAVIOR_KIND_PLAYFUL",
+        "OW_WILD_BEHAVIOR_KIND_RAM",
+        "OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP",
+        "OW_WILD_BEHAVIOR_KIND_SINGING",
+      ].includes(raw);
+    }
+
+    function movementStyleUsesMovement(raw) {
+      return raw && raw !== "OW_WILD_BEHAVIOR_LOCOMOTION_NONE";
+    }
+
+    const PROFILE_MOVEMENT_SUBOPTION_FIELDS = {
+      chill: {
+        hopAllowNonCardinal: "hopAllowNonCardinal",
+        hopMinDistance: "hopMinDistance",
+        hopMaxDistance: "hopMaxDistance",
+        hopPause: "hopPause",
+        teleportTime: "teleportTime",
+        teleportPause: "teleportPause",
+        ramAccelerationSteps: "ramAccelerationSteps",
+        ramMaxSpeed: "ramMaxSpeed",
+      },
+      attentive: {
+        hopAllowNonCardinal: "attentiveHopAllowNonCardinal",
+        hopMinDistance: "attentiveHopMinDistance",
+        hopMaxDistance: "attentiveHopMaxDistance",
+        hopPause: "attentiveHopPause",
+        teleportTime: "attentiveTeleportTime",
+        teleportPause: "attentiveTeleportPause",
+        ramAccelerationSteps: "attentiveRamAccelerationSteps",
+        ramMaxSpeed: "attentiveRamMaxSpeed",
+      },
+      tired: {
+        hopAllowNonCardinal: "tiredHopAllowNonCardinal",
+        hopMinDistance: "tiredHopMinDistance",
+        hopMaxDistance: "tiredHopMaxDistance",
+        hopPause: "tiredHopPause",
+        teleportTime: "tiredTeleportTime",
+        teleportPause: "tiredTeleportPause",
+        ramAccelerationSteps: "tiredRamAccelerationSteps",
+        ramMaxSpeed: "tiredRamMaxSpeed",
+      },
+    };
+
+    function profileEditMovementFields(item, fieldKey, speedFieldKey = null, suboptionKey = "chill") {
+      const originalRaw = item.profile[fieldKey]?.raw ?? "0";
+      const raw = pendingProfileValue(item.index, fieldKey, originalRaw);
+      const suboptionFields = PROFILE_MOVEMENT_SUBOPTION_FIELDS[suboptionKey] || PROFILE_MOVEMENT_SUBOPTION_FIELDS.chill;
+      const fields = [
+        profileEditField(item, fieldKey),
+      ];
+      if (speedFieldKey && movementStyleUsesMovement(raw)) {
+        fields.push(profileEditField(item, speedFieldKey, {
+          className: "profile-suboption-field",
+          label: "Speed",
+          hint: `${profileFieldLabel(fieldKey)} speed`,
+        }));
+      }
+      if (movementStyleUsesHop(raw)) {
+        fields.push(
+          profileEditField(item, suboptionFields.hopAllowNonCardinal, {
+            className: "profile-suboption-field",
+            label: "Non-cardinal",
+            hint: "Allow diagonal/non-cardinal hops",
+          }),
+          profileEditField(item, suboptionFields.hopMinDistance, {
+            className: "profile-suboption-field",
+            label: "Min distance",
+            hint: "Minimum hop distance",
+          }),
+          profileEditField(item, suboptionFields.hopMaxDistance, {
+            className: "profile-suboption-field",
+            label: "Max distance",
+            hint: "Maximum hop distance",
+          }),
+          profileEditField(item, suboptionFields.hopPause, {
+            className: "profile-suboption-field",
+            label: "Pause",
+            hint: "Frames to wait after each Hop before the next movement decision. 0 keeps the existing/default pause.",
+          }),
+        );
+      }
+      if (movementStyleUsesPhantomTeleport(raw)) {
+        fields.push(
+          profileEditField(item, suboptionFields.teleportTime, {
+            className: "profile-suboption-field",
+            label: "Teleport time",
+            hint: "Frames spent hidden/flickering during Phantom Teleport movement",
+          }),
+          profileEditField(item, suboptionFields.teleportPause, {
+            className: "profile-suboption-field",
+            label: "Pause time",
+            hint: "Frames to wait after each Phantom Teleport before the next movement decision",
+          }),
+        );
+      }
+      if (movementStyleUsesRam(raw)) {
+        fields.push(
+          profileEditField(item, suboptionFields.ramAccelerationSteps, {
+            className: "profile-suboption-field",
+            label: "Accelerate every",
+            hint: "Completed RAM steps before speed increases by 1. 0 disables acceleration.",
+          }),
+          profileEditField(item, suboptionFields.ramMaxSpeed, {
+            className: "profile-suboption-field",
+            label: "Max speed",
+            hint: "Highest movement speed RAM can accelerate to. The state speed is the starting speed.",
+          }),
+        );
+      }
+      return {
+        count: fields.length,
+        html: fields.join(""),
+      };
     }
 
     function profileEditChillFields(item) {
-      const separate = !profileChillBehaviorCanCombine(item);
+      const movementFields = profileEditMovementFields(item, "chillAction", "chillSpeed", "chill");
+      const chillRaw = pendingProfileValue(
+        item.index,
+        "chillState",
+        item.profile.chillState?.raw ?? "0",
+      );
+      const fields = [
+        profileEditField(item, "chillState", { label: "Behavior" }),
+      ];
+      if (activeBehaviorCanSelectTarget(chillRaw)) {
+        fields.push(profileEditField(item, "chillTarget", {
+          className: "profile-suboption-field",
+          label: "Target",
+          hint: "Where this chill behavior tries to go. Movement style decides how it gets there.",
+        }));
+      }
+      if (behaviorUsesAllowedTile(chillRaw)) {
+        fields.push(profileEditField(item, "chillAllowedTile", {
+          className: "profile-suboption-field",
+          label: "Allowed tile",
+          hint: "Tile type this behavior may target",
+        }));
+        fields.push(profileEditField(item, "chillAllowedTile2", {
+          className: "profile-suboption-field",
+          label: "Also allowed",
+          hint: "Optional second tile type this behavior may target",
+        }));
+      }
+      fields.push(movementFields.html);
+      fields.push(profileEditField(item, "chillCooldown"));
       return {
-        count: separate ? 3 : 2,
-        html: `${profileEditChillBehaviorField(item)}${profileEditField(item, "chillCooldown")}`,
+        count: 2 + movementFields.count + (activeBehaviorCanSelectTarget(chillRaw) ? 1 : 0) + (behaviorUsesAllowedTile(chillRaw) ? 2 : 0),
+        html: fields.join(""),
+      };
+    }
+
+    function profileEditActiveFields(item) {
+      const movementFields = profileEditMovementFields(item, "movementStyle", "attentiveSpeed", "attentive");
+      const activeRaw = pendingProfileValue(
+        item.index,
+        "attentiveState",
+        item.profile.attentiveState?.raw ?? "0",
+      );
+      const fields = [
+        profileEditField(item, "attentiveState", { label: "Behavior" }),
+      ];
+      if (activeBehaviorCanSelectTarget(activeRaw)) {
+        fields.push(profileEditField(item, "targetSelector", {
+          className: "profile-suboption-field",
+          label: "Target",
+          hint: "Where this behavior tries to go. Movement style decides how it gets there.",
+        }));
+      }
+      if (behaviorUsesAllowedTile(activeRaw)) {
+        fields.push(profileEditField(item, "attentiveAllowedTile", {
+          className: "profile-suboption-field",
+          label: "Allowed tile",
+          hint: "Tile type this behavior may target",
+        }));
+        fields.push(profileEditField(item, "attentiveAllowedTile2", {
+          className: "profile-suboption-field",
+          label: "Also allowed",
+          hint: "Optional second tile type this behavior may target",
+        }));
+      }
+      fields.push(movementFields.html);
+      fields.push(profileEditField(item, "attentiveCooldown"));
+      return {
+        count: 2 + movementFields.count + (activeBehaviorCanSelectTarget(activeRaw) ? 1 : 0) + (behaviorUsesAllowedTile(activeRaw) ? 2 : 0),
+        html: fields.join(""),
+      };
+    }
+
+    function profileEditTiredFields(item) {
+      const movementFields = profileEditMovementFields(item, "specialAction", "tiredSpeed", "tired");
+      const tiredRaw = pendingProfileValue(
+        item.index,
+        "tiredState",
+        item.profile.tiredState?.raw ?? "0",
+      );
+      const fields = [
+        profileEditField(item, "tiredState", { label: "Behavior" }),
+      ];
+      if (behaviorUsesAllowedTile(tiredRaw)) {
+        fields.push(profileEditField(item, "tiredAllowedTile", {
+          className: "profile-suboption-field",
+          label: "Allowed tile",
+          hint: "Tile type this behavior may target",
+        }));
+        fields.push(profileEditField(item, "tiredAllowedTile2", {
+          className: "profile-suboption-field",
+          label: "Also allowed",
+          hint: "Optional second tile type this behavior may target",
+        }));
+      }
+      fields.push(movementFields.html);
+      fields.push(profileEditField(item, "restTime"));
+      fields.push(profileEditField(item, "stamina"));
+      return {
+        count: 3 + movementFields.count + (behaviorUsesAllowedTile(tiredRaw) ? 2 : 0),
+        html: fields.join(""),
       };
     }
 
     function profileEditFieldGroups(item) {
       const known = new Set();
       const groups = PROFILE_FIELD_GROUPS.map(group => {
-        const fields = group.fields.filter(field => appData.fields.some(item => item.key === field));
+        const fields = group.fields.filter(field =>
+          !PROFILE_DIRECT_EDIT_HIDDEN_FIELDS.has(field)
+          && appData.fields.some(item => item.key === field));
         fields.forEach(field => known.add(field));
         if (!fields.length) return "";
+        const spawnFields = group.key === "spawn" ? profileEditSpawnFields(item) : null;
         const chillFields = group.key === "chill" ? profileEditChillFields(item) : null;
+        const alertFields = group.key === "alert" ? profileEditAlertFields(item) : null;
+        const activeFields = group.key === "attentive" ? profileEditActiveFields(item) : null;
+        const tiredFields = group.key === "tired" ? profileEditTiredFields(item) : null;
+        const customFields = spawnFields || chillFields || alertFields || activeFields || tiredFields;
         return `
           <section class="profile-architecture-group profile-architecture-${esc(group.key)}">
             <div class="profile-architecture-head">
               <span class="profile-architecture-title">${encounterBadge(group.icon, group.typeClass, group.label)} ${esc(group.label)}</span>
-              <span class="count">${esc(chillFields ? chillFields.count : fields.length)}</span>
+              <span class="count">${esc(customFields ? customFields.count : fields.length)}</span>
             </div>
             <div class="profile-architecture-fields">
-              ${chillFields ? chillFields.html : fields.map(field => profileEditField(item, field)).join("")}
+              ${customFields ? customFields.html : fields.map(field => profileEditField(item, field)).join("")}
             </div>
           </section>
         `;
       });
-      const remaining = appData.fields.filter(field => !known.has(field.key));
+      const remaining = appData.fields.filter(field =>
+        !known.has(field.key)
+        && !PROFILE_DIRECT_EDIT_HIDDEN_FIELDS.has(field.key));
       if (remaining.length) {
         groups.push(`
           <section class="profile-architecture-group profile-architecture-other">
@@ -9900,9 +11599,9 @@ HTML = r"""<!doctype html>
 
     function profileCoreChips(item) {
       const chips = [
-        ["shield", "type-test", "Profile", profilePendingDisplay(item, "profileId")],
+        ["shield", "type-test", "Family", profilePendingDisplay(item, "profileId")],
         ["target", "type-placement", "Spawn", profilePendingDisplay(item, "spawnState")],
-        ["speed", "type-movement", "Speed", `${profilePendingDisplay(item, "normalSpeed")} / ${profilePendingDisplay(item, "maxSpeed")}`],
+        ["speed", "type-movement", "Speed", `${profilePendingDisplay(item, "chillSpeed")} / ${profilePendingDisplay(item, "attentiveSpeed")} / ${profilePendingDisplay(item, "tiredSpeed")}`],
         ["ruler", "type-placement", "Range", profilePendingDisplay(item, "range")]
       ];
       return chips.map(([icon, typeClass, label, value]) => `
@@ -9911,6 +11610,29 @@ HTML = r"""<!doctype html>
           <span class="profile-core-value">${esc(value)}</span>
         </span>
       `).join("");
+    }
+
+    function profileManagementActions(item) {
+      const renameDisabled = !item || item.canRename === false;
+      const deleteDisabled = !item || item.canDelete === false;
+      const deleteTitle = profileIsDefaultClass(item?.index)
+        ? "Default profile cannot be deleted"
+        : deleteDisabled
+          ? "This profile is referenced by runtime code and cannot be deleted safely"
+          : `Delete ${item.name}`;
+      return `
+        <span class="profile-management-actions" aria-label="Profile actions">
+          <button class="profile-management-button" type="button" data-action="create-profile" title="New profile from Default" aria-label="New profile from Default">
+            ${interfaceIcon("plus")}
+          </button>
+          <button class="profile-management-button" type="button" data-action="rename-profile" data-class-index="${esc(item?.index ?? "")}" ${renameDisabled ? "disabled" : ""} title="${renameDisabled ? "Default profile cannot be renamed" : `Rename ${esc(item.name)}`}" aria-label="Rename profile">
+            ${interfaceIcon("edit")}
+          </button>
+          <button class="profile-management-button danger" type="button" data-action="delete-profile" data-class-index="${esc(item?.index ?? "")}" ${deleteDisabled ? "disabled" : ""} title="${esc(deleteTitle)}" aria-label="Delete profile">
+            ${interfaceIcon("trash")}
+          </button>
+        </span>
+      `;
     }
 
     function profileRowAddControl(item) {
@@ -10079,13 +11801,16 @@ HTML = r"""<!doctype html>
     }
 
     function profileOverrideFieldOption(fieldKey) {
+      if (PROFILE_OVERRIDE_BUILDER_HIDDEN_FIELDS.has(fieldKey)) return null;
       return (appData.fields || []).find(field => field.key === fieldKey) || null;
     }
 
     function profileValidOverrideField() {
       return profileOverrideFieldOption(profileOverrideDraftField)
         ? profileOverrideDraftField
-        : (profileOverrideFieldOption("spawnState") ? "spawnState" : ((appData.fields || [])[0]?.key || ""));
+        : (profileOverrideFieldOption("spawnState")
+          ? "spawnState"
+          : ((appData.fields || []).find(field => !PROFILE_OVERRIDE_BUILDER_HIDDEN_FIELDS.has(field.key))?.key || ""));
     }
 
     function profileValidOverrideRaw(fieldKey = profileValidOverrideField()) {
@@ -10230,7 +11955,9 @@ HTML = r"""<!doctype html>
     }
 
     function profileOverrideFieldOptionsHtml(selectedField) {
-      return (appData.fields || []).map(field => `
+      return (appData.fields || [])
+        .filter(field => !PROFILE_OVERRIDE_BUILDER_HIDDEN_FIELDS.has(field.key))
+        .map(field => `
         <option value="${esc(field.key)}"${field.key === selectedField ? " selected" : ""}>${esc(field.label)}</option>
       `).join("");
     }
@@ -10363,8 +12090,8 @@ HTML = r"""<!doctype html>
       return `
         <div class="rule behavior-override-rule ${removing ? "pending-remove" : ""}">
           <div>
-            <div class="rule-top"><span>#${esc(rule.order)} ${esc(rule.summary)}</span><span>${esc(rule.behavior.mask.labels.join(", "))}</span></div>
-            <div class="muted">${esc(rule.behavior.mask.raw)}${removing ? " · pending removal" : ""}</div>
+            <div class="rule-top"><span>#${esc(rule.order)} ${esc(rule.summary)}</span><span>${esc((rule.behavior.maskLabels || rule.behavior.mask.labels || []).join(", "))}</span></div>
+            <div class="muted">${esc(rule.behavior.maskRaw || rule.behavior.mask.raw)}${removing ? " · pending removal" : ""}</div>
           </div>
           <button class="control subtle-action behavior-override-remove" type="button" data-action="toggle-remove-profile-override" data-override-order="${esc(rule.order)}" title="${removing ? "Undo override removal" : "Remove override"}" aria-label="${removing ? "Undo removing override" : "Remove override"} #${esc(rule.order)}">
             ${interfaceIcon(removing ? "plus" : "minus")}
@@ -12710,10 +14437,17 @@ HTML = r"""<!doctype html>
 
     function profileOptionForInput(fieldKey, text, preferredRaw = null) {
       const value = String(text || "").trim();
-      if (fieldKey === COMBINED_CHILL_FIELD) {
+      if (PROFILE_MOVEMENT_FIELDS.has(fieldKey)
+          || PROFILE_BEHAVIOR_FIELDS.has(fieldKey)
+          || fieldKey === ALERT_RANGE_TYPE_FIELD
+          || fieldKey === SPAWN_DESTINATION_TYPE_FIELD) {
         const options = profileOptionsForField(fieldKey);
         const lower = value.toLowerCase();
-        const preferred = preferredRaw ? options.find(option => option.raw === preferredRaw) : null;
+        const preferred = preferredRaw
+          ? options.find(option => option.raw === preferredRaw
+            || option.raw === alertRangeBaseRaw(preferredRaw)
+            || option.raw === spawnDestinationTypeKeyForRaw(preferredRaw))
+          : null;
         if (preferred) {
           const preferredTerms = [
             preferred.raw,
@@ -12770,28 +14504,56 @@ HTML = r"""<!doctype html>
       }
     }
 
-    function commitChillBehaviorCombo(input, normalize = false, forcedOption = null) {
-      const option = forcedOption || profileOptionForInput(COMBINED_CHILL_FIELD, input.value, input.dataset.original);
+    function commitAlertRangeTypeCombo(input, normalize = false, forcedOption = null) {
+      const option = forcedOption || profileOptionForInput(ALERT_RANGE_TYPE_FIELD, input.value, input.dataset.original);
       const field = input.closest(".field");
       if (!option) {
         trackInvalidInput(invalidProfileInputs, input, true);
         field.classList.remove("changed");
         return false;
       }
+      const currentRaw = pendingProfileValue(input.dataset.classIndex, "alertRange", input.dataset.original);
+      const closeEnabled = alertRangeSupportsClose(option.raw) && alertRangeIsCloseRaw(currentRaw);
+      const raw = alertRangeRawWithClose(option.raw, closeEnabled);
       if (normalize) {
-        input.value = profileComboDisplay(COMBINED_CHILL_FIELD, option.raw);
+        input.value = profileComboDisplay(ALERT_RANGE_TYPE_FIELD, raw);
       }
       trackInvalidInput(invalidProfileInputs, input, false);
-      setProfileEdit(input.dataset.classIndex, "chillState", option.raw, input.dataset.original);
-      setProfileEdit(input.dataset.classIndex, "chillAction", option.actionRaw, input.dataset.originalAction);
-      const changed = option.raw !== input.dataset.original || option.actionRaw !== input.dataset.originalAction;
-      field.classList.toggle("changed", changed);
+      setProfileEdit(input.dataset.classIndex, "alertRange", raw, input.dataset.original);
+      field.classList.toggle("changed", raw !== input.dataset.original);
+      return true;
+    }
+
+    function commitSpawnDestinationTypeCombo(input, normalize = false, forcedOption = null) {
+      const option = forcedOption || profileOptionForInput(SPAWN_DESTINATION_TYPE_FIELD, input.value, input.dataset.original);
+      const field = input.closest(".field");
+      if (!option) {
+        trackInvalidInput(invalidProfileInputs, input, true);
+        field.classList.remove("changed");
+        return false;
+      }
+      const currentRaw = pendingProfileValue(input.dataset.classIndex, "spawnDestination", input.dataset.original);
+      const currentInfo = spawnDestinationPlayerInfo(currentRaw);
+      const targetType = option.raw;
+      const preferredDistance = currentInfo && spawnDestinationTypeKeyForRaw(currentRaw) === targetType
+        ? currentInfo.distance
+        : null;
+      const raw = spawnDestinationRawForType(targetType, preferredDistance);
+      if (normalize) {
+        input.value = profileComboDisplay(SPAWN_DESTINATION_TYPE_FIELD, raw);
+      }
+      trackInvalidInput(invalidProfileInputs, input, false);
+      setProfileEdit(input.dataset.classIndex, "spawnDestination", raw, input.dataset.original);
+      field.classList.toggle("changed", raw !== input.dataset.original);
       return true;
     }
 
     function commitProfileCombo(input, normalize = false, forcedOption = null) {
-      if (input.dataset.field === COMBINED_CHILL_FIELD) {
-        return commitChillBehaviorCombo(input, normalize, forcedOption);
+      if (input.dataset.field === ALERT_RANGE_TYPE_FIELD) {
+        return commitAlertRangeTypeCombo(input, normalize, forcedOption);
+      }
+      if (input.dataset.field === SPAWN_DESTINATION_TYPE_FIELD) {
+        return commitSpawnDestinationTypeCombo(input, normalize, forcedOption);
       }
       const option = forcedOption || profileOptionForInput(input.dataset.field, input.value, input.dataset.original);
       const field = input.closest(".field");
@@ -12927,7 +14689,11 @@ HTML = r"""<!doctype html>
         : 0;
       els.profileComboMenu.innerHTML = options.map((option, index) => {
         const active = index === profileComboMenuIndex ? " active" : "";
-        const value = !NUMERIC_PROFILE_FIELD_KEYS.has(input.dataset.field) && option.value !== undefined ? `#${option.value}` : "";
+        const value = !NUMERIC_PROFILE_FIELD_KEYS.has(input.dataset.field)
+          && option.value !== undefined
+          && option.value !== null
+          ? `#${option.value}`
+          : "";
         return `
           <button class="profile-combo-option${active}" type="button" data-index="${esc(index)}" data-raw="${esc(option.raw)}">
             <span class="profile-combo-option-main">${esc(profileComboOptionDisplay(option, input.dataset.field))}</span>
@@ -12945,10 +14711,16 @@ HTML = r"""<!doctype html>
       if (!input) return;
       const option = profileOptionForRaw(input.dataset.field, raw);
       if (!option) return;
+      const rerenderSubcontrols = profileFieldRerendersSubcontrols(input.dataset.field);
       input.value = profileComboDisplay(input.dataset.field, option.raw);
       commitProfileCombo(input, false, option);
       updateProfileComboStatus(input, true);
       closeProfileComboMenu();
+      if (rerenderSubcontrols) {
+        markProfilePanelsDirty("profiles", "selected");
+        renderActiveProfilePanel(true);
+        return;
+      }
       input.focus();
     }
 
@@ -12980,7 +14752,7 @@ HTML = r"""<!doctype html>
     }
 
     function updateSaveControls() {
-      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isBuilding;
+      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding;
       const profilesEditable = appData?.profilesAvailable !== false;
       const hasProfileChanges = profilesEditable && (profileEdits.size > 0 || profileMemberEdits.size > 0 || profileOverrideChangeCount() > 0);
       const hasChanges = hasProfileChanges || encounterEdits.size > 0 || spawnSettingEdits.size > 0;
@@ -13624,7 +15396,7 @@ HTML = r"""<!doctype html>
     }
 
     async function saveAllChanges() {
-      if (isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isBuilding) return false;
+      if (isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding) return false;
       const profilesEditable = appData?.profilesAvailable !== false;
       if (!(profilesEditable && (profileEdits.size || profileMemberEdits.size || profileOverrideChangeCount())) && !encounterEdits.size && !spawnSettingEdits.size) return true;
       const saveProfiles = profilesEditable && profileEdits.size > 0;
@@ -13712,6 +15484,7 @@ HTML = r"""<!doctype html>
               </div>
             </div>
             <div class="profile-detail-tools">
+              ${profileManagementActions(item)}
               ${profileCoreChips(item)}
               <div class="chip">${esc(profileClassChanged(item) ? "Edited" : "Source")}</div>
             </div>
@@ -13747,6 +15520,7 @@ HTML = r"""<!doctype html>
                 <span>${esc(item.name)}</span>
               </div>
               <div class="profile-detail-tools">
+                ${profileManagementActions(item)}
                 ${profileCoreChips(item)}
                 <span class="chip">${esc(profileClassChanged(item) ? "Edited" : "Source")}</span>
               </div>
@@ -14028,6 +15802,20 @@ HTML = r"""<!doctype html>
       openTestNdsAction();
     });
     els.resetAllEdits.addEventListener("click", resetAllEdits);
+    document.addEventListener("click", event => {
+      const button = event.target.closest("[data-action='create-profile'], [data-action='rename-profile'], [data-action='delete-profile']");
+      if (!button || button.disabled) return;
+      if (!button.closest("#detailHead, #profilesTab")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (button.dataset.action === "create-profile") {
+        createProfileFromPrompt();
+      } else if (button.dataset.action === "rename-profile") {
+        renameProfileFromPrompt(button.dataset.classIndex);
+      } else if (button.dataset.action === "delete-profile") {
+        deleteProfileWithConfirmation(button.dataset.classIndex);
+      }
+    });
     els.buildAfterSave.addEventListener("change", () => {
       buildAfterSave = els.buildAfterSave.checked;
       localStorage.setItem("owProfileBuildAfterSave", buildAfterSave ? "1" : "0");
@@ -14416,6 +16204,166 @@ HTML = r"""<!doctype html>
       return appData.classes.find(row => String(row.index) === String(classIndex)) || null;
     }
 
+    function pendingProfileManagementChangeCount() {
+      return profileEdits.size + profileMemberEdits.size + profileOverrideChangeCount() + encounterEdits.size + spawnSettingEdits.size;
+    }
+
+    function discardPendingChangesForProfileManagement() {
+      const count = pendingProfileManagementChangeCount();
+      if (!count) return true;
+      const ok = window.confirm(
+        `This profile structure change reloads the data and will discard ${count} pending unsaved change${count === 1 ? "" : "s"}. Continue?`
+      );
+      if (!ok) return false;
+      profileEdits.clear();
+      profileMemberEdits.clear();
+      profileOverrideEdits = [];
+      profileOverrideRemoveEdits.clear();
+      encounterEdits.clear();
+      spawnSettingEdits.clear();
+      pendingRouteIds.clear();
+      invalidProfileInputs.clear();
+      invalidEncounterInputs.clear();
+      invalidSpawnSettingInputs.clear();
+      closeProfileAddMenu();
+      closeSpawnSettingDialog();
+      updateSaveControls();
+      return true;
+    }
+
+    function profilePromptSpeciesList(text) {
+      const rawParts = String(text || "")
+        .split(/[\n,;]+/)
+        .map(part => part.trim())
+        .filter(Boolean);
+      const pokemon = [];
+      const seen = new Set();
+      const invalid = [];
+      rawParts.forEach(part => {
+        const species = profileSpeciesOption(part);
+        if (!species) {
+          invalid.push(part);
+          return;
+        }
+        if (!seen.has(species.symbol)) {
+          seen.add(species.symbol);
+          pokemon.push(species);
+        }
+      });
+      return { pokemon, invalid };
+    }
+
+    async function manageProfile(payload, options = {}) {
+      if (isManagingProfiles) return false;
+      if (!discardPendingChangesForProfileManagement()) return false;
+      isManagingProfiles = true;
+      updateSaveControls();
+      setSaveStatus("Saving profile structure...", "busy");
+      try {
+        const response = await fetch("/manage-profiles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        const nextClassIndex = result.classIndex;
+        const nextSymbol = options.selectedSymbol || null;
+        if (nextSymbol) {
+          selectedSymbol = nextSymbol;
+        } else if (payload.action === "delete") {
+          selectedSymbol = null;
+        }
+        await loadData({ keepStatus: true });
+        if (nextClassIndex !== undefined && profileClassByIndex(nextClassIndex)) {
+          selectProfileClass(nextClassIndex, { tab: "profiles" });
+        }
+        if (nextSymbol && assignmentsBySymbol.has(nextSymbol)) {
+          selectSpecies(nextSymbol, { tab: "profiles" });
+        }
+        setSaveStatus(result.message || "Saved", "success");
+        return true;
+      } catch (error) {
+        setSaveStatus(`Profile change failed: ${error.message}`, "error");
+        return false;
+      } finally {
+        isManagingProfiles = false;
+        updateSaveControls();
+      }
+    }
+
+    async function createProfileFromPrompt() {
+      const defaultName = selectedSymbol ? `${profileSpeciesBySymbol.get(selectedSymbol)?.name || "Pokemon"} profile` : "";
+      const name = window.prompt("New profile name", defaultName);
+      if (name === null) return;
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        setSaveStatus("Profile name is required", "error");
+        return;
+      }
+      const defaultPokemon = selectedSymbol ? (profileSpeciesBySymbol.get(selectedSymbol)?.name || selectedSymbol) : "";
+      const pokemonText = window.prompt("Pokemon assigned to the new profile (comma separated)", defaultPokemon);
+      if (pokemonText === null) return;
+      const { pokemon, invalid } = profilePromptSpeciesList(pokemonText);
+      if (invalid.length) {
+        setSaveStatus(`Unknown Pokemon: ${invalid.join(", ")}`, "error");
+        return;
+      }
+      if (!pokemon.length) {
+        setSaveStatus("Choose at least one Pokemon for the new profile", "error");
+        return;
+      }
+      await manageProfile(
+        { action: "create", name: trimmedName, pokemon: pokemon.map(species => species.symbol) },
+        { selectedSymbol: pokemon[0]?.symbol }
+      );
+    }
+
+    async function renameProfileFromPrompt(classIndex) {
+      const item = profileClassByIndex(classIndex ?? selectedClassIndex);
+      if (!item) return;
+      if (item.canRename === false) {
+        setSaveStatus("Default profile cannot be renamed", "error");
+        return;
+      }
+      const name = window.prompt(`Rename ${item.name}`, item.name);
+      if (name === null) return;
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        setSaveStatus("Profile name is required", "error");
+        return;
+      }
+      await manageProfile({ action: "rename", classIndex: item.index, name: trimmedName });
+    }
+
+    async function deleteProfileWithConfirmation(classIndex) {
+      const item = profileClassByIndex(classIndex ?? selectedClassIndex);
+      if (!item) return;
+      if (profileIsDefaultClass(item.index)) {
+        setSaveStatus("Default profile cannot be deleted", "error");
+        return;
+      }
+      if (item.canDelete === false) {
+        setSaveStatus(`${item.name} is referenced by runtime code and cannot be deleted safely`, "error");
+        return;
+      }
+      const assigned = profileAssignmentsForClass(item.index);
+      const warning = [
+        `Delete ${item.name}?`,
+        `${assigned.length} Pokemon currently resolve to it and will fall back to Default.`,
+        "This rewrites the behavior data source."
+      ].join("\n\n");
+      if (!window.confirm(warning)) return;
+      const typed = window.prompt(`Type ${item.name} to confirm deletion`);
+      if (typed !== item.name) {
+        setSaveStatus("Delete cancelled");
+        return;
+      }
+      await manageProfile({ action: "delete", classIndex: item.index });
+    }
+
     function closeProfileAddMenu() {
       profileQuickAddClassIndex = null;
       els.profileAddMenu.hidden = true;
@@ -14708,6 +16656,27 @@ HTML = r"""<!doctype html>
       scheduleGlobalEditStatus();
     }
 
+    function commitAlertCloseRangeSelect(select) {
+      const originalRaw = select.dataset.original;
+      const currentRaw = pendingProfileValue(select.dataset.classIndex, "alertRange", originalRaw);
+      const raw = alertRangeRawWithClose(currentRaw, select.value === "1");
+      setProfileEdit(select.dataset.classIndex, "alertRange", raw, originalRaw);
+      updateProfileComboStatus({ dataset: { classIndex: select.dataset.classIndex } }, true);
+      markProfilePanelsDirty("profiles", "selected");
+      renderActiveProfilePanel(true);
+    }
+
+    function commitSpawnDestinationDistanceSelect(select) {
+      const originalRaw = select.dataset.original;
+      const currentRaw = pendingProfileValue(select.dataset.classIndex, "spawnDestination", originalRaw);
+      const typeKey = spawnDestinationTypeKeyForRaw(currentRaw);
+      const raw = spawnDestinationRawForType(typeKey, select.value);
+      setProfileEdit(select.dataset.classIndex, "spawnDestination", raw, originalRaw);
+      updateProfileComboStatus({ dataset: { classIndex: select.dataset.classIndex } }, true);
+      markProfilePanelsDirty("profiles", "selected");
+      renderActiveProfilePanel(true);
+    }
+
     els.profilesTab.addEventListener("input", event => {
       const input = event.target.closest(".profile-combo");
       if (!input) return;
@@ -14721,6 +16690,21 @@ HTML = r"""<!doctype html>
       if (!input) return;
       commitProfileCombo(input, true);
       updateProfileComboStatus(input, true);
+      if (profileFieldRerendersSubcontrols(input.dataset.field)) {
+        closeProfileComboMenu();
+        markProfilePanelsDirty("profiles", "selected");
+        renderActiveProfilePanel(true);
+      }
+    });
+    els.profilesTab.addEventListener("change", event => {
+      const select = event.target.closest("[data-profile-alert-close-range]");
+      if (!select) return;
+      commitAlertCloseRangeSelect(select);
+    });
+    els.profilesTab.addEventListener("change", event => {
+      const select = event.target.closest("[data-profile-spawn-destination-distance]");
+      if (!select) return;
+      commitSpawnDestinationDistanceSelect(select);
     });
     els.profilesTab.addEventListener("focusout", event => {
       const input = event.target.closest(".profile-combo");
@@ -14728,6 +16712,12 @@ HTML = r"""<!doctype html>
       commitProfileCombo(input, true);
       updateProfileComboStatus(input, true);
       delete input.dataset.comboFilter;
+      if (profileFieldRerendersSubcontrols(input.dataset.field)) {
+        closeProfileComboMenu();
+        markProfilePanelsDirty("profiles", "selected");
+        renderActiveProfilePanel(true);
+        return;
+      }
       setTimeout(() => {
         if (activeProfileComboInput === input && !els.profileComboMenu.contains(document.activeElement)) {
           closeProfileComboMenu();
@@ -14891,6 +16881,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 return
             if path == "/save-profile-memberships":
                 self.send_json(apply_profile_membership_changes(body))
+                return
+            if path == "/manage-profiles":
+                self.send_json(apply_profile_management_change(body))
                 return
             if path == "/save-profile-overrides":
                 self.send_json(apply_profile_override_changes(body))
