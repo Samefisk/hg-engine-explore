@@ -53,14 +53,15 @@ def headbuttdumper(narcPath: str, outputPath: str):
             for encounter in range(0, 6):
                 output.write("    headbuttencounter {}, {}, {}\n".format(speciesDict[struct.unpack("<H", headbuttFile.read(2))[0]], struct.unpack("<B", headbuttFile.read(1))[0], struct.unpack("<B", headbuttFile.read(1))[0]))
             # tree coordinates
+            legacyFixedTreecoords = is_legacy_fixed_treecoords(headbuttFile, treeCount)
             if (normalTrees != 0):
                 output.write("    // normal trees\n")
                 for encounter in range(0, normalTrees):
-                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, treeCount)))
+                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, legacyFixedTreecoords)))
             if (specialTrees != 0):
                 output.write("    // special trees\n")
                 for encounter in range(0, specialTrees):
-                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, treeCount)))
+                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, legacyFixedTreecoords)))
         output.write(".close\n\n")
 
 
@@ -72,8 +73,8 @@ def is_legacy_fixed_treecoords(headbuttFile, treeCount):
     return remaining == treeCount * 6 * 4
 
 
-def read_treecoords(headbuttFile, treeCount):
-    if is_legacy_fixed_treecoords(headbuttFile, treeCount):
+def read_treecoords(headbuttFile, legacyFixedTreecoords):
+    if legacyFixedTreecoords:
         return read_fixed_treecoords(headbuttFile)
 
     return read_compact_treecoords(headbuttFile)
