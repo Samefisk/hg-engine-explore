@@ -164,6 +164,7 @@ Implementation note from the experiment stack:
 - The in-place headbutt archive migration also requires the stock overlay-1 Headbutt script matcher at `0x02204FE0` to understand the compact tail. The OW-wild reader is not the only consumer of `ARC_HEADBUTT_TREES`.
 - Route 34's headbutt header declared one special tree without a matching coordinate record; the compact builder rejects that class of mismatch, so the authored header was corrected to `15` normal trees and `0` special trees.
 - Encounter archive 37 remains legacy-compatible for now. It is likely still read by normal encounter code, so in-place compression should wait for either a proven complete reader migration or an overworld-only compact sidecar with a later legacy-removal gate.
+- The overworld-only compact encounter sidecar now lives in `ARC_CODE_ADDONS` member `18` (`OWED`). It keeps `ARC_ENCOUNTERS` member `37` untouched for stock wild encounter readers, but lets the overworld wild spawn roller read a 168-byte compact record instead of the 196-byte legacy record. The compact record keeps only grass levels/species, surf slots, and old/good/super rod rates and slots; omitted legacy fields still fall back to `ARC_ENCOUNTERS` if the sidecar header is invalid.
 
 ### Option B: Overlay 150 As Data And Resolver Module
 

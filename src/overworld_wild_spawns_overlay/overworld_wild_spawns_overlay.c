@@ -986,6 +986,40 @@ typedef struct OverworldWildEncounterData {
     u16 fishSwarm;
 } OverworldWildEncounterData;
 
+#define OW_WILD_ENCOUNTER_DATA_MAGIC 0x4445574F
+#define OW_WILD_ENCOUNTER_DATA_VERSION 1
+
+typedef struct OverworldWildCompactEncounterDataHeader {
+    u32 magic;
+    u16 version;
+    u16 headerSize;
+    u16 recordSize;
+    u16 recordCount;
+    u32 totalSize;
+    u32 checksum;
+} OverworldWildCompactEncounterDataHeader;
+
+typedef struct OverworldWildCompactEncounterDataRecord {
+    u8 oldRodRate;
+    u8 goodRodRate;
+    u8 superRodRate;
+    u8 padding;
+    OverworldWildLandEncounterData landSlots;
+    OverworldWildEncounterDataSlot surfSlots[OW_WILD_SURF_SLOTS];
+    OverworldWildEncounterDataSlot oldRodSlots[OW_WILD_FISH_SLOTS];
+    OverworldWildEncounterDataSlot goodRodSlots[OW_WILD_FISH_SLOTS];
+    OverworldWildEncounterDataSlot superRodSlots[OW_WILD_FISH_SLOTS];
+} OverworldWildCompactEncounterDataRecord;
+
+typedef char OverworldWildCompactEncounterHeaderSizeMismatch[
+    sizeof(OverworldWildCompactEncounterDataHeader) == 20 ? 1 : -1];
+typedef char OverworldWildCompactEncounterRecordSizeMismatch[
+    sizeof(OverworldWildCompactEncounterDataRecord) == 168 ? 1 : -1];
+
+static u8 *sOverworldWildCompactEncounterDataBlob = NULL;
+static u32 sOverworldWildCompactEncounterDataBlobSize = 0;
+static BOOL sOverworldWildCompactEncounterDataLoadFailed = FALSE;
+
 typedef struct OverworldWildRolledEncounter {
     u32 personality;
     u16 species;
@@ -16326,6 +16360,130 @@ static BOOL OverworldWildSpawns_TryRollFishingEncounter(const OverworldWildEncou
     return FALSE;
 }
 
+static u32 OverworldWildSpawns_GetCompactEncounterDataChecksum(const u8 *data, u32 size)
+{
+    u32 checksum = 0;
+    u32 i;
+
+    for (i = 0; i < size; i++) {
+        u8 value = (i >= offsetof(OverworldWildCompactEncounterDataHeader, checksum)
+                && i < offsetof(OverworldWildCompactEncounterDataHeader, checksum) + sizeof(u32))
+            ? 0
+            : data[i];
+        checksum += value;
+    }
+
+    return checksum;
+}
+
+static BOOL OverworldWildSpawns_IsCompactEncounterDataValid(const u8 *data, u32 size)
+{
+    const OverworldWildCompactEncounterDataHeader *header;
+    u32 expectedSize;
+
+    if (data == NULL || size < sizeof(OverworldWildCompactEncounterDataHeader)) {
+        return FALSE;
+    }
+
+    header = (const OverworldWildCompactEncounterDataHeader *)data;
+    if (header->magic != OW_WILD_ENCOUNTER_DATA_MAGIC
+        || header->version != OW_WILD_ENCOUNTER_DATA_VERSION
+        || header->headerSize != sizeof(OverworldWildCompactEncounterDataHeader)
+        || header->recordSize != sizeof(OverworldWildCompactEncounterDataRecord)) {
+        return FALSE;
+    }
+
+    expectedSize = header->headerSize + (u32)header->recordSize * header->recordCount;
+    return header->totalSize == expectedSize
+        && header->totalSize == size
+        && header->checksum == OverworldWildSpawns_GetCompactEncounterDataChecksum(data, size);
+}
+
+static const u8 *OverworldWildSpawns_GetCompactEncounterDataBlob(u32 *sizeOut)
+{
+    void *narc;
+    u32 blobSize;
+    u8 *blob;
+
+    if (sOverworldWildCompactEncounterDataBlob != NULL) {
+        *sizeOut = sOverworldWildCompactEncounterDataBlobSize;
+        return sOverworldWildCompactEncounterDataBlob;
+    }
+    if (sOverworldWildCompactEncounterDataLoadFailed) {
+        return NULL;
+    }
+
+    sOverworldWildCompactEncounterDataLoadFailed = TRUE;
+    narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
+    if (narc == NULL) {
+        return NULL;
+    }
+
+    blobSize = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_DATA);
+    if (blobSize < sizeof(OverworldWildCompactEncounterDataHeader)) {
+        NARC_dtor(narc);
+        return NULL;
+    }
+
+    blob = sys_AllocMemory(HEAPID_WORLD, blobSize);
+    if (blob == NULL) {
+        NARC_dtor(narc);
+        return NULL;
+    }
+
+    NARC_ReadWholeMember(narc, CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_DATA, blob);
+    NARC_dtor(narc);
+    if (!OverworldWildSpawns_IsCompactEncounterDataValid(blob, blobSize)) {
+        sys_FreeMemoryEz(blob);
+        return NULL;
+    }
+
+    sOverworldWildCompactEncounterDataBlob = blob;
+    sOverworldWildCompactEncounterDataBlobSize = blobSize;
+    *sizeOut = blobSize;
+    return blob;
+}
+
+static BOOL OverworldWildSpawns_TryLoadCompactEncounterData(int encounterDataId, OverworldWildEncounterData *encounterData)
+{
+    const u8 *blob;
+    const OverworldWildCompactEncounterDataHeader *header;
+    const OverworldWildCompactEncounterDataRecord *record;
+    u32 blobSize;
+    u32 recordOffset;
+
+    if (encounterDataId < 0 || encounterData == NULL) {
+        return FALSE;
+    }
+
+    blob = OverworldWildSpawns_GetCompactEncounterDataBlob(&blobSize);
+    if (blob == NULL) {
+        return FALSE;
+    }
+
+    header = (const OverworldWildCompactEncounterDataHeader *)blob;
+    if ((u32)encounterDataId >= header->recordCount) {
+        return FALSE;
+    }
+
+    recordOffset = header->headerSize + (u32)encounterDataId * header->recordSize;
+    if (recordOffset + sizeof(*record) > blobSize) {
+        return FALSE;
+    }
+    record = (const OverworldWildCompactEncounterDataRecord *)(blob + recordOffset);
+
+    memset(encounterData, 0, sizeof(*encounterData));
+    encounterData->oldRodRate = record->oldRodRate;
+    encounterData->goodRodRate = record->goodRodRate;
+    encounterData->superRodRate = record->superRodRate;
+    encounterData->landSlots = record->landSlots;
+    memcpy(encounterData->surfSlots, (void *)record->surfSlots, sizeof(encounterData->surfSlots));
+    memcpy(encounterData->oldRodSlots, (void *)record->oldRodSlots, sizeof(encounterData->oldRodSlots));
+    memcpy(encounterData->goodRodSlots, (void *)record->goodRodSlots, sizeof(encounterData->goodRodSlots));
+    memcpy(encounterData->superRodSlots, (void *)record->superRodSlots, sizeof(encounterData->superRodSlots));
+    return TRUE;
+}
+
 static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, OverworldWildRolledEncounter *encounter)
 {
     int encounterDataId;
@@ -16335,7 +16493,9 @@ static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, Overw
         return FALSE;
     }
 
-    ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
+    if (!OverworldWildSpawns_TryLoadCompactEncounterData(encounterDataId, &encounterData)) {
+        ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
+    }
 
     if (terrain == OW_WILD_SPAWN_TERRAIN_SURF) {
         return OverworldWildSpawns_TryRollSurfEncounter(&encounterData, encounter);
