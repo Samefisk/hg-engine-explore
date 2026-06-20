@@ -868,6 +868,15 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehav
     }
 
     entry = OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY;
+    if (entry == NULL
+        || entry->magic != OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
+        || entry->version != OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
+        || entry->size < sizeof(OverworldWildBehaviorDataOverlayEntry)) {
+        return NULL;
+    }
+    if (entry->ensureLoaded != NULL && !entry->ensureLoaded()) {
+        return NULL;
+    }
     if (!OverworldWildSpawns_IsBehaviorDataEntryValid(entry)) {
         return NULL;
     }

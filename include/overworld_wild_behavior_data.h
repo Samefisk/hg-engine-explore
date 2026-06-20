@@ -236,6 +236,7 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     const u16 *encounterAreaMapIds;
     const u8 *encounterAreaDataIds;
     u16 encounterAreaCount;
+    BOOL (*ensureLoaded)(void);
 } OverworldWildBehaviorDataOverlayEntry;
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY \
