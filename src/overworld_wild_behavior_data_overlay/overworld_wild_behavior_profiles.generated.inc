@@ -883,4 +883,7 @@ const OverworldWildBehaviorDataOverlayEntry gOverworldWildBehaviorDataOverlayEnt
     sOverworldWildEncounterAreaMapIds,
     sOverworldWildEncounterAreaDataIds,
     OW_WILD_ENCOUNTER_AREA_COUNT,
+    NULL,
+    NULL,
+    NULL,
 };
