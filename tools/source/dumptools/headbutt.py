@@ -33,13 +33,17 @@ def headbuttdumper(narcPath: str, outputPath: str):
 
 // headbutt trees
 // headbuttheader header, numberOfNormalTrees, numberOfSpecialTrees
-// treecoords requires 6 pairs of x/y coordinates per tree.  fill the remaining pairs with -1's
+// compact treecoords store a live pair count followed by that many x/y pairs.
+// dumped armips output is padded back to 6 pairs with -1's.
 
 """)
     for file in range(0, len(os.listdir(narcPath))):
-        headbuttFile = open(narcPath + "/2_{:03d}".format(file), "rb")
+        fixedName = narcPath + "/2_{:03d}".format(file)
+        compactName = narcPath + "/{:03d}".format(file)
+        headbuttFile = open(fixedName if os.path.exists(fixedName) else compactName, "rb")
         normalTrees = struct.unpack("<H", headbuttFile.read(2))[0]
         specialTrees = struct.unpack("<H", headbuttFile.read(2))[0]
+        treeCount = normalTrees + specialTrees
         output.write("headbuttheader {:3d}, {:3d}, {:3d}\n".format(file, normalTrees, specialTrees))
         if (normalTrees != 0 or specialTrees != 0):
             output.write("    // normal slots\n")
@@ -52,38 +56,51 @@ def headbuttdumper(narcPath: str, outputPath: str):
             if (normalTrees != 0):
                 output.write("    // normal trees\n")
                 for encounter in range(0, normalTrees):
-                    output.write("    treecoords {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0]
-                    ))
+                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, treeCount)))
             if (specialTrees != 0):
                 output.write("    // special trees\n")
                 for encounter in range(0, specialTrees):
-                    output.write("    treecoords {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0],
-                        struct.unpack("<h", headbuttFile.read(2))[0]
-                    ))
+                    output.write("    treecoords {}\n".format(read_treecoords(headbuttFile, treeCount)))
         output.write(".close\n\n")
+
+
+def is_legacy_fixed_treecoords(headbuttFile, treeCount):
+    current = headbuttFile.tell()
+    headbuttFile.seek(0, os.SEEK_END)
+    remaining = headbuttFile.tell() - current
+    headbuttFile.seek(current)
+    return remaining == treeCount * 6 * 4
+
+
+def read_treecoords(headbuttFile, treeCount):
+    if is_legacy_fixed_treecoords(headbuttFile, treeCount):
+        return read_fixed_treecoords(headbuttFile)
+
+    return read_compact_treecoords(headbuttFile)
+
+
+def read_fixed_treecoords(headbuttFile):
+    coords = []
+    for _ in range(0, 6):
+        coords.append(struct.unpack("<h", headbuttFile.read(2))[0])
+        coords.append(struct.unpack("<h", headbuttFile.read(2))[0])
+
+    return ", ".join(str(coord) for coord in coords)
+
+
+def read_compact_treecoords(headbuttFile):
+    coordCount = struct.unpack("<B", headbuttFile.read(1))[0]
+    headbuttFile.read(1)
+
+    coords = []
+    for _ in range(0, coordCount):
+        coords.append(struct.unpack("<h", headbuttFile.read(2))[0])
+        coords.append(struct.unpack("<h", headbuttFile.read(2))[0])
+
+    while len(coords) < 12:
+        coords.append(-1)
+
+    return ", ".join(str(coord) for coord in coords)
 
 if __name__ == '__main__':
     args = sys.argv[1:]
