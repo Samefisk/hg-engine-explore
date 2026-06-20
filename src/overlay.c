@@ -14,6 +14,7 @@ struct LinkedOverlayList gLinkedOverlayList[] =
     {OVERLAY_POKEATHLON, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEWALKER, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_FIELD_EXTENSION, OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION},
+    {OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA},
     {OVERLAY_POKEDEX, OVERLAY_POKEDEX_EXTENSION},
 };
 
@@ -115,13 +116,10 @@ loadExtension:
     {
         if (gOverlayPriorityList[i][0] == ovyId)
         {
-            for (u32 j = 1; j < NELEMS(gOverlayPriorityList[0]); j++)
-            {
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
-                debug_printf("Overlay %d has priority over overlay %d--unloading the latter...\n", ovyId, gOverlayPriorityList[0][j]);
+            debug_printf("Overlay %d has priority over overlay %d--unloading the latter...\n", ovyId, gOverlayPriorityList[i][1]);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-                UnloadOverlayByID(gOverlayPriorityList[0][j]);
-            }
+            UnloadOverlayByID(gOverlayPriorityList[i][1]);
         }
     }
 
@@ -199,7 +197,7 @@ loadExtension:
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
             ovyId = gLinkedOverlayList[i].ext_id;
-            loadType = 2;
+            loadType = (ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA) ? 0 : 2;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
             debug_printf("Trying to load linked overlay_%04d.bin.\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS

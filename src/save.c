@@ -103,8 +103,9 @@ u32 LONG_CALL sqrt(u32 num)
 #endif
     }
 
-    sprintf(buf, "[SQRT]  RESULT = %08X\n", reg_CP_SQRT_RESULT); // need to have something here so that it won't return 0
+    ((volatile u32 *)buf)[0] = reg_CP_SQRT_RESULT; // keep the hardware result read alive
 #ifdef DEBUG_SQRT
+    sprintf(buf, "[SQRT]  RESULT = %08X\n", reg_CP_SQRT_RESULT);
     debugsyscall(buf);
 #endif
 
