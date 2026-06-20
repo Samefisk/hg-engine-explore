@@ -491,6 +491,9 @@ move_narc: $(NARC_FILES)
 	@echo "battle tests:"
 	cp $(BATTLETESTS_BIN) $(BATTLETESTS_TARGET)
 
+	@echo "overworld wild behavior data:"
+	cp $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN) $(OVERWORLD_WILD_BEHAVIOR_DATA_TARGET)
+
 
 DUMP_SCRIPT_LOCATION := tools/source/dumptools
 # the goal here is to extract the required narcs to the proper folders for the dump scripts to work.
