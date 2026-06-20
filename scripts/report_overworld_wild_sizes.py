@@ -28,6 +28,7 @@ class OverlaySpec:
 DEFAULT_OVERLAYS = (
     OverlaySpec(149, "overworld_wild_spawns_overlay", "spawns/runtime"),
     OverlaySpec(150, "overworld_wild_behavior_data_overlay", "behavior data"),
+    OverlaySpec(151, "overworld_wild_helper_overlay", "helper/pickers"),
 )
 
 
