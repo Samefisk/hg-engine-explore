@@ -403,7 +403,12 @@ def build_blob_from_data(data: dict[str, object], resolver: ConstantResolver | N
                 f"{MAX_SECTION_COUNTS[name]}"
             )
     counts = [count_by_section[name] for name in SECTION_NAMES]
-    element_sizes = [PROFILE_SIZE, CLASS_RULE_SIZE, SPECIES_RULE_SIZE, OVERRIDE_SIZE]
+    element_sizes = [
+        PROFILE_SIZE if count_by_section["profiles"] else 0,
+        CLASS_RULE_SIZE if count_by_section["class_rules"] else 0,
+        SPECIES_RULE_SIZE if count_by_section["species_rules"] else 0,
+        OVERRIDE_SIZE if count_by_section["variable_overrides"] else 0,
+    ]
     payload = bytearray()
     offsets: list[int] = []
 

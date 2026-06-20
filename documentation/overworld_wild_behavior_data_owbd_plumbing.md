@@ -39,7 +39,9 @@ beyond those capacities.
 
 Malformed or missing OWBD data makes the overlay-150 loader return `FALSE`.
 Overlay 149 then treats the behavior data entry as unavailable and falls back
-through its existing null-entry behavior paths.
+through its existing null-entry behavior paths. Encounter-area map lookup only
+uses the resident overlay-150 encounter tables, so a bad behavior blob does not
+disable map enablement by itself.
 
 Useful local checks:
 
