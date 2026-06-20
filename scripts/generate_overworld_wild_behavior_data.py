@@ -339,6 +339,9 @@ def emit_generated_c(data: dict[str, object]) -> str:
             "    sOverworldWildEncounterAreaMapIds,",
             "    sOverworldWildEncounterAreaDataIds,",
             "    OW_WILD_ENCOUNTER_AREA_COUNT,",
+            "    NULL,",
+            "    NULL,",
+            "    NULL,",
             "};",
             "",
         ]

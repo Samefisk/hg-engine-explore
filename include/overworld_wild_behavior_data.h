@@ -5,7 +5,7 @@
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 19
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 20
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -221,7 +221,19 @@ typedef struct OverworldWildBehaviorOverride {
 #define OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
 #define OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED
 
-typedef struct OverworldWildBehaviorDataOverlayEntry {
+typedef struct OverworldWildBehaviorDataOverlayEntry OverworldWildBehaviorDataOverlayEntry;
+
+typedef BOOL (*OverworldWildBehaviorResolveClassFunc)(
+    const OverworldWildBehaviorDataOverlayEntry *entry,
+    const OverworldWildBehaviorContext *context,
+    u8 *behaviorClassOut);
+typedef BOOL (*OverworldWildBehaviorResolveProfileFunc)(
+    const OverworldWildBehaviorDataOverlayEntry *entry,
+    const OverworldWildBehaviorContext *context,
+    const OverworldWildBehaviorProfile *fallbackProfile,
+    OverworldWildBehaviorProfile *profileOut);
+
+struct OverworldWildBehaviorDataOverlayEntry {
     u32 magic;
     u16 version;
     u16 size;
@@ -237,7 +249,9 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     const u8 *encounterAreaDataIds;
     u16 encounterAreaCount;
     BOOL (*ensureLoaded)(void);
-} OverworldWildBehaviorDataOverlayEntry;
+    OverworldWildBehaviorResolveClassFunc resolveBehaviorClass;
+    OverworldWildBehaviorResolveProfileFunc resolveBehaviorProfile;
+};
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY \
     ((const OverworldWildBehaviorDataOverlayEntry *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR)

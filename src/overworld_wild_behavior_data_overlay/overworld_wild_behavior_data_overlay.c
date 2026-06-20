@@ -76,6 +76,8 @@ typedef char OverworldWildEncounterAreaCountMismatch[
 #define OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS 4
 #define OW_WILD_SPAWNER_UNTANGLE_MAX_DIRECTIONS 4
 #define OW_WILD_SPAWNER_BATTLE_SETTLE_FRAMES 0
+#define OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE 1
+#define OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_1 1
@@ -610,6 +612,442 @@ static OverworldWildBehaviorOverride sOwbdOverrides[OWBD_OVERRIDE_MAX];
 
 extern OverworldWildBehaviorDataOverlayEntry gOverworldWildBehaviorDataOverlayEntry;
 
+static BOOL OverworldWildBehaviorData_IsBehaviorEntryValid(
+    const OverworldWildBehaviorDataOverlayEntry *entry)
+{
+    return entry != NULL
+        && entry->magic == OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
+        && entry->version == OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
+        && entry->size >= sizeof(OverworldWildBehaviorDataOverlayEntry)
+        && entry->classProfiles != NULL
+        && entry->classProfileCount > OW_WILD_BEHAVIOR_CLASS_DEFAULT
+        && entry->classRules != NULL
+        && entry->speciesClassRules != NULL
+        && entry->overrides != NULL;
+}
+
+static BOOL OverworldWildBehaviorData_BehaviorMatchApplies(
+    const OverworldWildBehaviorContext *context,
+    const OverworldWildBehaviorMatch *match)
+{
+    if (context == NULL || match == NULL) {
+        return FALSE;
+    }
+
+    if (match->species != OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES
+        && match->species != context->species) {
+        return FALSE;
+    }
+    if (match->groupMask != OW_WILD_BEHAVIOR_GROUP_NONE
+        && (context->groupFlags & match->groupMask) == 0) {
+        return FALSE;
+    }
+    if (match->terrain != OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN
+        && match->terrain != context->terrain) {
+        return FALSE;
+    }
+    if (match->minLevel != OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY
+        && context->level < match->minLevel) {
+        return FALSE;
+    }
+    if (match->maxLevel != OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY
+        && context->level > match->maxLevel) {
+        return FALSE;
+    }
+    if (match->shiny != OW_WILD_BEHAVIOR_MATCH_ANY_SHINY
+        && match->shiny != context->shiny) {
+        return FALSE;
+    }
+    if (match->behaviorClass != OW_WILD_BEHAVIOR_MATCH_ANY_CLASS
+        && match->behaviorClass != context->behaviorClass) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+#define OW_WILD_PROFILE_OFFSET(field) ((u8)(u32)&(((OverworldWildBehaviorProfile *)0)->field))
+
+static const u8 sOverworldWildBehaviorOverrideFieldOffsets[] = {
+    OW_WILD_PROFILE_OFFSET(chillState),
+    OW_WILD_PROFILE_OFFSET(alertState),
+    OW_WILD_PROFILE_OFFSET(alertEmote),
+    OW_WILD_PROFILE_OFFSET(alertness),
+    OW_WILD_PROFILE_OFFSET(attentiveState),
+    OW_WILD_PROFILE_OFFSET(stamina),
+    OW_WILD_PROFILE_OFFSET(tiredState),
+    OW_WILD_PROFILE_OFFSET(restTime),
+    OW_WILD_PROFILE_OFFSET(chillSpeed),
+    OW_WILD_PROFILE_OFFSET(attentiveSpeed),
+    OW_WILD_PROFILE_OFFSET(range),
+    OW_WILD_PROFILE_OFFSET(jumpLevel),
+    OW_WILD_PROFILE_OFFSET(profileId),
+    OW_WILD_PROFILE_OFFSET(spawnState),
+    OW_WILD_PROFILE_OFFSET(chillAction),
+    OW_WILD_PROFILE_OFFSET(alertRange),
+    OW_WILD_PROFILE_OFFSET(tiredSpeed),
+    OW_WILD_PROFILE_OFFSET(targetSelector),
+    OW_WILD_PROFILE_OFFSET(movementStyle),
+    OW_WILD_PROFILE_OFFSET(chillCooldown),
+    OW_WILD_PROFILE_OFFSET(attentiveCooldown),
+    OW_WILD_PROFILE_OFFSET(alertChance),
+    OW_WILD_PROFILE_OFFSET(alertTime),
+    OW_WILD_PROFILE_OFFSET(spawnDestination),
+    OW_WILD_PROFILE_OFFSET(chillBattle),
+    OW_WILD_PROFILE_OFFSET(alertBattle),
+    OW_WILD_PROFILE_OFFSET(attentiveBattle),
+    OW_WILD_PROFILE_OFFSET(tiredBattle),
+    OW_WILD_PROFILE_OFFSET(specialAction),
+    OW_WILD_PROFILE_OFFSET(hopAllowNonCardinal),
+    OW_WILD_PROFILE_OFFSET(hopMinDistance),
+    OW_WILD_PROFILE_OFFSET(hopMaxDistance),
+    OW_WILD_PROFILE_OFFSET(hopPause),
+    OW_WILD_PROFILE_OFFSET(teleportTime),
+    OW_WILD_PROFILE_OFFSET(teleportPause),
+    OW_WILD_PROFILE_OFFSET(alertSpecialAction),
+    OW_WILD_PROFILE_OFFSET(alertCallSpawnAmount),
+    OW_WILD_PROFILE_OFFSET(spawnDestinationMinDistance),
+    OW_WILD_PROFILE_OFFSET(spawnDestinationMaxDistance),
+    OW_WILD_PROFILE_OFFSET(ramAccelerationSteps),
+    OW_WILD_PROFILE_OFFSET(ramMaxSpeed),
+    OW_WILD_PROFILE_OFFSET(chillAllowedTile),
+    OW_WILD_PROFILE_OFFSET(attentiveAllowedTile),
+    OW_WILD_PROFILE_OFFSET(tiredAllowedTile),
+    OW_WILD_PROFILE_OFFSET(chillAllowedTile2),
+    OW_WILD_PROFILE_OFFSET(attentiveAllowedTile2),
+    OW_WILD_PROFILE_OFFSET(tiredAllowedTile2),
+    OW_WILD_PROFILE_OFFSET(chillTarget),
+    OW_WILD_PROFILE_OFFSET(attentiveHopAllowNonCardinal),
+    OW_WILD_PROFILE_OFFSET(attentiveHopMinDistance),
+    OW_WILD_PROFILE_OFFSET(attentiveHopMaxDistance),
+    OW_WILD_PROFILE_OFFSET(attentiveHopPause),
+    OW_WILD_PROFILE_OFFSET(attentiveTeleportTime),
+    OW_WILD_PROFILE_OFFSET(attentiveTeleportPause),
+    OW_WILD_PROFILE_OFFSET(attentiveRamAccelerationSteps),
+    OW_WILD_PROFILE_OFFSET(attentiveRamMaxSpeed),
+    OW_WILD_PROFILE_OFFSET(tiredHopAllowNonCardinal),
+    OW_WILD_PROFILE_OFFSET(tiredHopMinDistance),
+    OW_WILD_PROFILE_OFFSET(tiredHopMaxDistance),
+    OW_WILD_PROFILE_OFFSET(tiredHopPause),
+    OW_WILD_PROFILE_OFFSET(tiredTeleportTime),
+    OW_WILD_PROFILE_OFFSET(tiredTeleportPause),
+    OW_WILD_PROFILE_OFFSET(tiredRamAccelerationSteps),
+    OW_WILD_PROFILE_OFFSET(tiredRamMaxSpeed),
+    OW_WILD_PROFILE_OFFSET(alertCallSpawnState),
+};
+
+#undef OW_WILD_PROFILE_OFFSET
+
+static void OverworldWildBehaviorData_ApplyBehaviorOverrideMask(
+    OverworldWildBehaviorProfile *profile,
+    const OverworldWildBehaviorProfile *overrideProfile,
+    u32 mask,
+    u8 fieldIndex)
+{
+    u8 *profileBytes = (u8 *)profile;
+    const u8 *overrideBytes = (const u8 *)overrideProfile;
+
+    while (mask != 0 && fieldIndex < NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)) {
+        if (mask & 1u) {
+            u8 offset = sOverworldWildBehaviorOverrideFieldOffsets[fieldIndex];
+            profileBytes[offset] = overrideBytes[offset];
+        }
+        mask >>= 1;
+        fieldIndex++;
+    }
+}
+
+static void OverworldWildBehaviorData_ApplyBehaviorOverride(
+    OverworldWildBehaviorProfile *profile,
+    const OverworldWildBehaviorOverride *override)
+{
+    if (profile == NULL || override == NULL) {
+        return;
+    }
+
+    OverworldWildBehaviorData_ApplyBehaviorOverrideMask(profile, &override->profile, override->mask, 0);
+    OverworldWildBehaviorData_ApplyBehaviorOverrideMask(profile, &override->profile, override->mask2, 32);
+    OverworldWildBehaviorData_ApplyBehaviorOverrideMask(profile, &override->profile, override->mask3, 48);
+}
+
+static BOOL OverworldWildBehaviorData_IsValidBehaviorKind(u8 behavior)
+{
+    return behavior <= OW_WILD_BEHAVIOR_KIND_NO_VISUAL;
+}
+
+static BOOL OverworldWildBehaviorData_IsValidMovementStyle(u8 movementStyle)
+{
+    return movementStyle <= OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP;
+}
+
+static BOOL OverworldWildBehaviorData_IsValidAlertSpecialAction(u8 action)
+{
+    return action <= OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP;
+}
+
+static BOOL OverworldWildBehaviorData_ProfileUsesAlertCallForHelp(
+    const OverworldWildBehaviorProfile *profile)
+{
+    return profile != NULL
+        && profile->alertSpecialAction == OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP;
+}
+
+static u8 OverworldWildBehaviorData_GetAlertCallSpawnAmount(
+    const OverworldWildBehaviorProfile *profile)
+{
+    if (!OverworldWildBehaviorData_ProfileUsesAlertCallForHelp(profile)) {
+        return 0;
+    }
+    if (profile->alertCallSpawnAmount == 0) {
+        return 1;
+    }
+    if (profile->alertCallSpawnAmount > OW_WILD_SPAWNER_SWARM_MAX_EXTRA_SPAWNS) {
+        return OW_WILD_SPAWNER_SWARM_MAX_EXTRA_SPAWNS;
+    }
+    return profile->alertCallSpawnAmount;
+}
+
+static u8 OverworldWildBehaviorData_NormalizePhantomTeleportMoveFrames(u8 teleportTime)
+{
+    if (teleportTime == 0) {
+        return OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES;
+    }
+
+    return teleportTime;
+}
+
+static u8 OverworldWildBehaviorData_NormalizePhantomTeleportPauseFrames(u8 teleportPause)
+{
+    if (teleportPause == 0) {
+        return OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES;
+    }
+
+    return teleportPause;
+}
+
+static BOOL OverworldWildBehaviorData_BehaviorUsesAsleep(u8 behavior)
+{
+    return behavior == OW_WILD_BEHAVIOR_KIND_ASLEEP;
+}
+
+static void OverworldWildBehaviorData_NormalizeBehaviorProfile(
+    OverworldWildBehaviorProfile *profile)
+{
+    if (profile == NULL) {
+        return;
+    }
+
+    if (profile->attentiveSpeed == 0) {
+        profile->attentiveSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
+    }
+    if (profile->chillSpeed == 0) {
+        profile->chillSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
+    }
+    if (profile->tiredSpeed == 0) {
+        profile->tiredSpeed = profile->chillSpeed;
+    }
+    if (!OverworldWildBehaviorData_IsValidBehaviorKind(profile->chillState)) {
+        profile->chillState = OW_WILD_BEHAVIOR_KIND_IDLE;
+    }
+    if (!OverworldWildBehaviorData_IsValidMovementStyle(profile->chillAction)) {
+        profile->chillAction = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
+    }
+    if (!OverworldWildBehaviorData_IsValidMovementStyle(profile->movementStyle)) {
+        profile->movementStyle = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
+    }
+    if (!OverworldWildBehaviorData_IsValidMovementStyle(profile->specialAction)) {
+        profile->specialAction = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
+    }
+    if (!OverworldWildBehaviorData_IsValidAlertSpecialAction(profile->alertSpecialAction)) {
+        profile->alertSpecialAction = OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE;
+    }
+    profile->alertCallSpawnAmount = OverworldWildBehaviorData_GetAlertCallSpawnAmount(profile);
+    if (profile->alertCallSpawnState > OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_TIRED) {
+        profile->alertCallSpawnState = OW_WILD_BEHAVIOR_ALERT_CALL_SPAWN_STATE_ACTIVE;
+    }
+    if (profile->hopAllowNonCardinal > OW_WILD_BEHAVIOR_BOOL_YES) {
+        profile->hopAllowNonCardinal = OW_WILD_BEHAVIOR_BOOL_YES;
+    }
+    if (profile->hopMinDistance == 0) {
+        profile->hopMinDistance = 1;
+    }
+    if (profile->hopMaxDistance == 0) {
+        profile->hopMaxDistance = profile->hopMinDistance;
+    }
+    if (profile->hopMaxDistance < profile->hopMinDistance) {
+        profile->hopMaxDistance = profile->hopMinDistance;
+    }
+    if (profile->ramAccelerationSteps > OW_WILD_SPAWNER_MOVEMENT_RANGE) {
+        profile->ramAccelerationSteps = OW_WILD_SPAWNER_MOVEMENT_RANGE;
+    }
+    if (profile->ramMaxSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4) {
+        profile->ramMaxSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_4;
+    }
+    profile->teleportTime =
+        OverworldWildBehaviorData_NormalizePhantomTeleportMoveFrames(profile->teleportTime);
+    profile->teleportPause =
+        OverworldWildBehaviorData_NormalizePhantomTeleportPauseFrames(profile->teleportPause);
+    if (profile->chillTarget > OW_WILD_BEHAVIOR_TARGET_SWARM) {
+        profile->chillTarget = OW_WILD_BEHAVIOR_TARGET_NONE;
+    }
+    if (profile->targetSelector > OW_WILD_BEHAVIOR_TARGET_SWARM) {
+        profile->targetSelector = OW_WILD_BEHAVIOR_TARGET_NONE;
+    }
+    if (!OverworldWildBehaviorData_IsValidBehaviorKind(profile->attentiveState)) {
+        profile->attentiveState = OW_WILD_BEHAVIOR_KIND_NONE;
+    }
+    if (!OverworldWildBehaviorData_IsValidBehaviorKind(profile->tiredState)) {
+        profile->tiredState = OW_WILD_BEHAVIOR_KIND_NONE;
+    }
+    if (OverworldWildBehaviorData_BehaviorUsesAsleep(profile->chillState)) {
+        profile->tiredState = OW_WILD_BEHAVIOR_KIND_ASLEEP;
+        profile->stamina = 1;
+        profile->restTime = 0;
+        profile->alertness = 0;
+        profile->alertChance = 0;
+    } else if (OverworldWildBehaviorData_BehaviorUsesAsleep(profile->tiredState)) {
+        profile->stamina = 1;
+        profile->restTime = 0;
+    }
+    if ((profile->attentiveState != OW_WILD_BEHAVIOR_KIND_NONE
+            || profile->targetSelector != OW_WILD_BEHAVIOR_TARGET_NONE
+            || profile->movementStyle != OW_WILD_BEHAVIOR_LOCOMOTION_NONE
+            || profile->attentiveBattle != OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE)
+        && profile->tiredState != OW_WILD_BEHAVIOR_KIND_NONE
+        && profile->stamina == 0) {
+        profile->stamina = 1;
+    }
+    if (profile->tiredState != OW_WILD_BEHAVIOR_KIND_NONE
+        && !OverworldWildBehaviorData_BehaviorUsesAsleep(profile->tiredState)
+        && profile->restTime == 0) {
+        profile->restTime = 1;
+    }
+    if (profile->range == 0) {
+        profile->range = OW_WILD_SPAWNER_MOVEMENT_RANGE;
+    }
+    if (profile->jumpLevel > OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH) {
+        profile->jumpLevel = OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH;
+    }
+    if (profile->spawnState > OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP) {
+        profile->spawnState = OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR;
+    }
+    if (profile->alertState > OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH) {
+        profile->alertState = OW_WILD_BEHAVIOR_ALERT_STATE_NONE;
+    }
+    if (profile->alertEmote > OW_WILD_SPAWNER_BUBBLE_ID_SLEEP
+        && profile->alertEmote != OW_WILD_SPAWNER_BUBBLE_ID_NONE) {
+        profile->alertEmote = OW_WILD_SPAWNER_BUBBLE_ID_NONE;
+    }
+    if (profile->alertRange > OW_WILD_BEHAVIOR_ALERT_RANGE_TERRAIN_ONLY) {
+        profile->alertRange = OW_WILD_BEHAVIOR_ALERT_RANGE_NONE;
+    }
+    if (profile->spawnDestination > OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER) {
+        profile->spawnDestination = OW_WILD_SPAWN_DESTINATION_POOL;
+    }
+    if (profile->spawnDestinationMinDistance == 0) {
+        profile->spawnDestinationMinDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE;
+    }
+    if (profile->spawnDestinationMinDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
+        profile->spawnDestinationMinDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
+    }
+    if (profile->spawnDestinationMaxDistance == 0) {
+        profile->spawnDestinationMaxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
+    }
+    if (profile->spawnDestinationMaxDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
+        profile->spawnDestinationMaxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
+    }
+    if (profile->spawnDestinationMaxDistance < profile->spawnDestinationMinDistance) {
+        profile->spawnDestinationMaxDistance = profile->spawnDestinationMinDistance;
+    }
+    if (profile->chillBattle > OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH) {
+        profile->chillBattle = OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE;
+    }
+    if (profile->alertBattle > OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH) {
+        profile->alertBattle = OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE;
+    }
+    if (profile->attentiveBattle > OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH) {
+        profile->attentiveBattle = OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE;
+    }
+    if (profile->tiredBattle > OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH) {
+        profile->tiredBattle = OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE;
+    }
+}
+
+static BOOL OverworldWildBehaviorData_ResolveBehaviorClass(
+    const OverworldWildBehaviorDataOverlayEntry *entry,
+    const OverworldWildBehaviorContext *context,
+    u8 *behaviorClassOut)
+{
+    u8 behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+    int i;
+
+    if (behaviorClassOut == NULL) {
+        return FALSE;
+    }
+    *behaviorClassOut = behaviorClass;
+    if (context == NULL || !OverworldWildBehaviorData_IsBehaviorEntryValid(entry)) {
+        return FALSE;
+    }
+
+    for (i = 0; i < entry->classRuleCount; i++) {
+        if (OverworldWildBehaviorData_BehaviorMatchApplies(context, &entry->classRules[i].match)) {
+            behaviorClass = entry->classRules[i].behaviorClass;
+        }
+    }
+    for (i = 0; i < entry->speciesClassRuleCount; i++) {
+        if (entry->speciesClassRules[i].species == context->species) {
+            behaviorClass = entry->speciesClassRules[i].behaviorClass;
+        }
+    }
+
+    if (behaviorClass >= entry->classProfileCount) {
+        behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+    }
+    *behaviorClassOut = behaviorClass;
+    return TRUE;
+}
+
+static BOOL OverworldWildBehaviorData_ResolveBehaviorProfile(
+    const OverworldWildBehaviorDataOverlayEntry *entry,
+    const OverworldWildBehaviorContext *context,
+    const OverworldWildBehaviorProfile *fallbackProfile,
+    OverworldWildBehaviorProfile *profileOut)
+{
+    u8 behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+    int i;
+
+    if (profileOut == NULL) {
+        return FALSE;
+    }
+    if (fallbackProfile != NULL) {
+        *profileOut = *fallbackProfile;
+    }
+    if (context != NULL) {
+        behaviorClass = context->behaviorClass;
+    }
+    if (!OverworldWildBehaviorData_IsBehaviorEntryValid(entry)) {
+        return FALSE;
+    }
+
+    if (behaviorClass >= entry->classProfileCount) {
+        behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+    }
+    *profileOut = entry->classProfiles[behaviorClass];
+
+    if (context != NULL) {
+        for (i = 0; i < entry->overrideCount; i++) {
+            if (OverworldWildBehaviorData_BehaviorMatchApplies(
+                    context,
+                    &entry->overrides[i].match)) {
+                OverworldWildBehaviorData_ApplyBehaviorOverride(profileOut, &entry->overrides[i]);
+            }
+        }
+    }
+
+    OverworldWildBehaviorData_NormalizeBehaviorProfile(profileOut);
+    return TRUE;
+}
+
 static u32 OverworldWildBehaviorData_Crc32(const u8 *data, u32 size)
 {
     u32 crc = 0xFFFFFFFF;
@@ -888,6 +1326,8 @@ OverworldWildBehaviorDataOverlayEntry gOverworldWildBehaviorDataOverlayEntry
     sOverworldWildEncounterAreaDataIds,
     OW_WILD_ENCOUNTER_AREA_COUNT,
     OverworldWildBehaviorData_LoadFromOwbd,
+    OverworldWildBehaviorData_ResolveBehaviorClass,
+    OverworldWildBehaviorData_ResolveBehaviorProfile,
 };
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
