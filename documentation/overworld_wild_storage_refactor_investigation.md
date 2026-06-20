@@ -158,6 +158,13 @@ Risks:
 - Stock encounter readers may expect the existing `196` byte encounter layout, so compact encounter data is safest as an overworld-only resource unless every consumer migrates.
 - Headbutt tree data has special-case layout assumptions and at least one suspicious/inconsistent member, so migration needs a validator before it rewrites the archive shape.
 
+Implementation note from the experiment stack:
+
+- Headbutt tree members are the first in-place compression target. The compact builder preserves map-id member indexing and the fixed 4-byte header plus 18 encounter-slot offsets, then stores each tree as a count-prefixed coordinate list. This measured `27,408 -> 16,680` raw member bytes, saving `10,728` bytes before NARC container overhead.
+- The in-place headbutt archive migration also requires the stock overlay-1 Headbutt script matcher at `0x02204FE0` to understand the compact tail. The OW-wild reader is not the only consumer of `ARC_HEADBUTT_TREES`.
+- Route 34's headbutt header declared one special tree without a matching coordinate record; the compact builder rejects that class of mismatch, so the authored header was corrected to `15` normal trees and `0` special trees.
+- Encounter archive 37 remains legacy-compatible for now. It is likely still read by normal encounter code, so in-place compression should wait for either a proven complete reader migration or an overworld-only compact sidecar with a later legacy-removal gate.
+
 ### Option B: Overlay 150 As Data And Resolver Module
 
 Best use:

@@ -645,11 +645,21 @@ NARC_FILES += $(SCR_SEQ_NARC)
 HEADBUTT_DIR := $(BUILD)/headbutttrees
 HEADBUTT_NARC := $(BUILD_NARC)/headbutt.narc
 HEADBUTT_TARGET := $(FILESYS)/a/2/5/2
-HEADBUTT_DEPENDENCIES := armips/data/headbutt.s
+HEADBUTT_BUILDER := scripts/build_headbutt_tree_data.py
+HEADBUTT_DEPENDENCIES := armips/data/headbutt.s asm/include/species.inc $(HEADBUTT_BUILDER)
 
 $(HEADBUTT_NARC): $(HEADBUTT_DEPENDENCIES)
-	$(ARMIPS) $^
+	$(PYTHON_NO_VENV) $(HEADBUTT_BUILDER) build \
+		--input armips/data/headbutt.s \
+		--species-constants asm/include/species.inc \
+		--output-dir $(HEADBUTT_DIR)
 	$(NARCHIVE) create $@ $(HEADBUTT_DIR) -nf
+
+.PHONY: validate_headbutt_tree_data
+validate_headbutt_tree_data: $(HEADBUTT_DEPENDENCIES)
+	$(PYTHON_NO_VENV) $(HEADBUTT_BUILDER) validate \
+		--input armips/data/headbutt.s \
+		--species-constants asm/include/species.inc
 
 NARC_FILES += $(HEADBUTT_NARC)
 REQUIRED_DIRECTORIES += $(HEADBUTT_DIR)

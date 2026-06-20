@@ -77,7 +77,7 @@ PYTHON = $(PYTHON_NO_VENV)
 VENV_ACTIVATE =
 endif
 
-.PHONY: clean all dumprom report_overworld_wild_sizes check_overworld_wild_behavior_data
+.PHONY: clean all dumprom report_overworld_wild_sizes check_overworld_wild_behavior_data validate_headbutt_tree_data
 
 default: all
 
