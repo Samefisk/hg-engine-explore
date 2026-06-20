@@ -154,7 +154,7 @@ $(OW_WILD_BEHAVIOR_DATA_GENERATED): $(OW_WILD_BEHAVIOR_PROFILE_JSON) scripts/gen
 		--output $(OW_WILD_BEHAVIOR_DATA_GENERATED)
 
 .PHONY: check_overworld_wild_behavior_data
-check_overworld_wild_behavior_data: $(OW_WILD_BEHAVIOR_DATA_GENERATED)
+check_overworld_wild_behavior_data: $(OW_WILD_BEHAVIOR_PROFILE_JSON) scripts/generate_overworld_wild_behavior_data.py
 	$(PYTHON_NO_VENV) scripts/generate_overworld_wild_behavior_data.py \
 		--input $(OW_WILD_BEHAVIOR_PROFILE_JSON) \
 		--output $(OW_WILD_BEHAVIOR_DATA_GENERATED) \

@@ -14,6 +14,7 @@ import copy
 import datetime as _dt
 import gzip
 import hashlib
+import importlib.util
 import io
 import json
 import operator
@@ -77,6 +78,11 @@ BUILD_STATE = {
     "testNdsExists": TEST_NDS.exists(),
     "testNdsPath": str(TEST_NDS),
 }
+GENERATED_BEHAVIOR_INCLUDE = '#include "overworld_wild_behavior_profiles.generated.inc"'
+PROFILE_WRITE_DISABLED_REASON = (
+    "Behavior profiles are generated from data/overworld_wild_behavior/profiles.json; "
+    "profile editing is read-only until the JSON save flow lands"
+)
 DATA_SOURCE_FILES = (
     OVERLAY_SOURCE,
     BEHAVIOR_DATA_SOURCE,
@@ -1098,20 +1104,39 @@ def extract_braced_initializer(text: str, name: str) -> str:
 
 def read_behavior_data_source() -> str:
     source = BEHAVIOR_DATA_SOURCE.read_text()
-    include = '#include "overworld_wild_behavior_profiles.generated.inc"'
-    if include in source and BEHAVIOR_DATA_GENERATED_SOURCE.exists():
-        return source.replace(include, BEHAVIOR_DATA_GENERATED_SOURCE.read_text())
+    if GENERATED_BEHAVIOR_INCLUDE in source:
+        require_generated_behavior_data_current()
+        return source.replace(GENERATED_BEHAVIOR_INCLUDE, BEHAVIOR_DATA_GENERATED_SOURCE.read_text())
     return source
 
 
-def require_legacy_behavior_profile_write_target() -> None:
-    source = BEHAVIOR_DATA_SOURCE.read_text()
-    include = '#include "overworld_wild_behavior_profiles.generated.inc"'
-    if include in source:
-        raise ValueError(
-            "behavior profiles are generated from data/overworld_wild_behavior/profiles.json; "
-            "viewer profile save handlers are disabled for this compatibility step"
+def behavior_profile_json_authoritative() -> bool:
+    return GENERATED_BEHAVIOR_INCLUDE in BEHAVIOR_DATA_SOURCE.read_text()
+
+
+def generated_behavior_data_expected() -> str:
+    generator_path = ROOT / "scripts/generate_overworld_wild_behavior_data.py"
+    spec = importlib.util.spec_from_file_location("overworld_wild_behavior_data_generator", generator_path)
+    if spec is None or spec.loader is None:
+        raise ParseError(f"could not load behavior profile generator from {generator_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.emit_generated_c(module.load_profiles(BEHAVIOR_PROFILE_JSON))
+
+
+def require_generated_behavior_data_current() -> None:
+    if not BEHAVIOR_DATA_GENERATED_SOURCE.exists():
+        raise ParseError(f"{BEHAVIOR_DATA_GENERATED_SOURCE.relative_to(ROOT)} does not exist; regenerate behavior profiles")
+    if BEHAVIOR_DATA_GENERATED_SOURCE.read_text() != generated_behavior_data_expected():
+        raise ParseError(
+            f"{BEHAVIOR_DATA_GENERATED_SOURCE.relative_to(ROOT)} is stale; "
+            "run make check_overworld_wild_behavior_data or regenerate behavior profiles"
         )
+
+
+def require_legacy_behavior_profile_write_target() -> None:
+    if behavior_profile_json_authoritative():
+        raise ValueError(PROFILE_WRITE_DISABLED_REASON)
 
 
 def parse_initializer(src: str):
@@ -3080,6 +3105,8 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
         "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "source": data_source_metadata(),
         "profilesAvailable": False,
+        "profileWritesAvailable": False,
+        "profileWriteDisabledReason": PROFILE_WRITE_DISABLED_REASON,
         "profileError": profile_error_payload(profile_error),
         "fields": [],
         "counts": {
@@ -3255,10 +3282,13 @@ def build_data() -> dict:
             }
         )
 
+    profile_writes_available = not behavior_profile_json_authoritative()
     return {
         "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "source": data_source_metadata(),
         "profilesAvailable": True,
+        "profileWritesAvailable": profile_writes_available,
+        "profileWriteDisabledReason": "" if profile_writes_available else PROFILE_WRITE_DISABLED_REASON,
         "profileError": None,
         "fields": [{"key": field, "label": FIELD_LABELS[field]} for field in PROFILE_FIELDS],
         "counts": {
@@ -5204,6 +5234,26 @@ HTML = r"""<!doctype html>
       width: 15px;
       height: 15px;
       stroke: currentColor;
+    }
+
+    .profile-readonly-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 1px solid #f8d58b;
+      border-radius: 7px;
+      background: #fff8e6;
+      color: #7a4b00;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .profile-readonly-banner .route-encounter-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      flex: 0 0 auto;
     }
 
     .behavior-override-section {
@@ -10443,6 +10493,8 @@ HTML = r"""<!doctype html>
         spawnSettings: [],
         routes: [],
         profilesAvailable: true,
+        profileWritesAvailable: true,
+        profileWriteDisabledReason: "",
         profileError: null,
         ...data,
       };
@@ -11087,6 +11139,34 @@ HTML = r"""<!doctype html>
       `;
     }
 
+    function profileWritesAvailable() {
+      return appData?.profilesAvailable !== false && appData?.profileWritesAvailable !== false;
+    }
+
+    function profileWriteDisabledMessage() {
+      return appData?.profileWriteDisabledReason || "Profile editing is read-only for generated behavior data.";
+    }
+
+    function profileDisabledAttrs() {
+      return profileWritesAvailable() ? "" : ' disabled aria-disabled="true"';
+    }
+
+    function profileReadOnlyBanner() {
+      if (profileWritesAvailable()) return "";
+      return `
+        <div class="profile-readonly-banner">
+          ${encounterBadge("shield", "type-test", "Read-only")}
+          <span>${esc(profileWriteDisabledMessage())}</span>
+        </div>
+      `;
+    }
+
+    function guardProfileWriteAction() {
+      if (profileWritesAvailable()) return true;
+      setSaveStatus(profileWriteDisabledMessage(), "warning");
+      return false;
+    }
+
     function buildProfileOptionLookup() {
       const lookup = new Map();
       Object.entries(appData.editOptions || {}).forEach(([fieldKey, options]) => {
@@ -11122,7 +11202,7 @@ HTML = r"""<!doctype html>
         <label class="${esc(classes)}" title="${esc(hint)}">
           ${profileFieldBadge(fieldKey, label)}
           <span class="field-label">${esc(label)}</span>
-          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(fieldKey, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(hint)}">
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(fieldKey, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(hint)}"${profileDisabledAttrs()}>
         </label>
       `;
     }
@@ -11136,7 +11216,7 @@ HTML = r"""<!doctype html>
         <label class="field ${changed ? "changed" : ""}" title="${esc(label)}">
           ${profileFieldBadge(SPAWN_DESTINATION_TYPE_FIELD, label)}
           <span class="field-label">${esc(label)}</span>
-          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(SPAWN_DESTINATION_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(SPAWN_DESTINATION_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}">
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(SPAWN_DESTINATION_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(SPAWN_DESTINATION_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}"${profileDisabledAttrs()}>
         </label>
       `;
     }
@@ -11155,7 +11235,7 @@ HTML = r"""<!doctype html>
         <label class="field profile-suboption-field ${changed ? "changed" : ""}" title="${esc(label)}">
           ${profileFieldBadge("spawnDestinationDistance", label)}
           <span class="field-label">${esc(label)}</span>
-          <select class="profile-subselect" data-profile-spawn-destination-distance data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}">
+          <select class="profile-subselect" data-profile-spawn-destination-distance data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}"${profileDisabledAttrs()}>
             ${options.map(option => `
               <option value="${esc(option.distance)}"${option.distance === info.distance ? " selected" : ""}>${esc(option.distance)} tile${option.distance === 1 ? "" : "s"}</option>
             `).join("")}
@@ -11200,7 +11280,7 @@ HTML = r"""<!doctype html>
         <label class="field ${changed ? "changed" : ""}" title="${esc(label)}">
           ${profileFieldBadge(ALERT_RANGE_TYPE_FIELD, label)}
           <span class="field-label">${esc(label)}</span>
-          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(ALERT_RANGE_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(ALERT_RANGE_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}">
+          <input class="profile-combo" type="text" value="${esc(profileComboDisplay(ALERT_RANGE_TYPE_FIELD, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(ALERT_RANGE_TYPE_FIELD)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" title="${esc(label)}"${profileDisabledAttrs()}>
         </label>
       `;
     }
@@ -11216,7 +11296,7 @@ HTML = r"""<!doctype html>
         <label class="field profile-suboption-field ${changed ? "changed" : ""}" title="${esc(label)}">
           ${profileFieldBadge("alertRangeClose", label)}
           <span class="field-label">${esc(label)}</span>
-          <select class="profile-subselect" data-profile-alert-close-range data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}">
+          <select class="profile-subselect" data-profile-alert-close-range data-class-index="${esc(item.index)}" data-original="${esc(originalRaw)}" aria-label="${esc(label)}" title="${esc(label)}"${profileDisabledAttrs()}>
             <option value="0"${closeEnabled ? "" : " selected"}>No</option>
             <option value="1"${closeEnabled ? " selected" : ""}>Yes</option>
           </select>
@@ -11606,7 +11686,7 @@ HTML = r"""<!doctype html>
         return `
           <label class="field ${changed ? "changed" : ""}">
             <span class="field-label">${esc(field.label)}</span>
-            <input class="profile-combo" type="text" value="${esc(profileComboDisplay(field.key, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(field.key)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false">
+            <input class="profile-combo" type="text" value="${esc(profileComboDisplay(field.key, raw))}" data-class-index="${esc(item.index)}" data-field="${esc(field.key)}" data-original="${esc(originalRaw)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"${profileDisabledAttrs()}>
           </label>
         `;
       }).join("");
@@ -11663,19 +11743,23 @@ HTML = r"""<!doctype html>
     }
 
     function profileManagementActions(item) {
-      const renameDisabled = !item || item.canRename === false;
-      const deleteDisabled = !item || item.canDelete === false;
+      const writable = profileWritesAvailable();
+      const disabledTitle = profileWriteDisabledMessage();
+      const renameDisabled = !writable || !item || item.canRename === false;
+      const deleteDisabled = !writable || !item || item.canDelete === false;
       const deleteTitle = profileIsDefaultClass(item?.index)
         ? "Default profile cannot be deleted"
-        : deleteDisabled
+        : !writable
+          ? disabledTitle
+          : deleteDisabled
           ? "This profile is referenced by runtime code and cannot be deleted safely"
           : `Delete ${item.name}`;
       return `
         <span class="profile-management-actions" aria-label="Profile actions">
-          <button class="profile-management-button" type="button" data-action="create-profile" title="New profile from Default" aria-label="New profile from Default">
+          <button class="profile-management-button" type="button" data-action="create-profile" ${writable ? "" : "disabled"} title="${esc(writable ? "New profile from Default" : disabledTitle)}" aria-label="New profile from Default">
             ${interfaceIcon("plus")}
           </button>
-          <button class="profile-management-button" type="button" data-action="rename-profile" data-class-index="${esc(item?.index ?? "")}" ${renameDisabled ? "disabled" : ""} title="${renameDisabled ? "Default profile cannot be renamed" : `Rename ${esc(item.name)}`}" aria-label="Rename profile">
+          <button class="profile-management-button" type="button" data-action="rename-profile" data-class-index="${esc(item?.index ?? "")}" ${renameDisabled ? "disabled" : ""} title="${esc(!writable ? disabledTitle : renameDisabled ? "Default profile cannot be renamed" : `Rename ${item.name}`)}" aria-label="Rename profile">
             ${interfaceIcon("edit")}
           </button>
           <button class="profile-management-button danger" type="button" data-action="delete-profile" data-class-index="${esc(item?.index ?? "")}" ${deleteDisabled ? "disabled" : ""} title="${esc(deleteTitle)}" aria-label="Delete profile">
@@ -11686,8 +11770,9 @@ HTML = r"""<!doctype html>
     }
 
     function profileRowAddControl(item) {
+      const writable = profileWritesAvailable();
       return `
-        <button class="profile-row-add-button" type="button" data-action="quick-add-profile" data-class-index="${esc(item.index)}" aria-label="Add Pokemon to ${esc(item.name)}" title="Add Pokemon to ${esc(item.name)}">
+        <button class="profile-row-add-button" type="button" data-action="quick-add-profile" data-class-index="${esc(item.index)}" ${writable ? "" : "disabled"} aria-label="Add Pokemon to ${esc(item.name)}" title="${esc(writable ? `Add Pokemon to ${item.name}` : profileWriteDisabledMessage())}">
           ${interfaceIcon("plus")}
         </button>
       `;
@@ -11708,7 +11793,7 @@ HTML = r"""<!doctype html>
       const species = assignment.species;
       const active = species.symbol === selectedSymbol ? " active" : "";
       const changed = profileMemberEdits.has(species.symbol) ? " changed" : "";
-      const canRemove = !profileIsDefaultClass(classIndex);
+      const canRemove = profileWritesAvailable() && !profileIsDefaultClass(classIndex);
       return `
         <span class="profile-member-item${changed}" data-symbol="${esc(species.symbol)}">
           <button class="profile-member-chip${active}${changed}" type="button" data-symbol="${esc(species.symbol)}" aria-label="View ${esc(species.name)}" title="${esc(species.symbol)}">
@@ -11739,13 +11824,14 @@ HTML = r"""<!doctype html>
     }
 
     function profileAddControl(item) {
+      const writable = profileWritesAvailable();
       return `
         <form class="profile-add-control" data-profile-add-form>
           <span class="profile-add-species-wrap">
             ${encounterBadge("plus", "type-test", "Add Pokemon")}
-            <input class="profile-add-input" type="text" list="profileSpeciesOptions" placeholder="Add Pokemon" autocomplete="off" aria-label="Add Pokemon to ${esc(item.name)}">
+            <input class="profile-add-input" type="text" list="profileSpeciesOptions" placeholder="Add Pokemon" autocomplete="off" aria-label="Add Pokemon to ${esc(item.name)}"${profileDisabledAttrs()}>
           </span>
-          <button class="control profile-add-button" type="submit" title="Add Pokemon to ${esc(item.name)}">
+          <button class="control profile-add-button" type="submit" ${writable ? "" : "disabled"} title="${esc(writable ? `Add Pokemon to ${item.name}` : profileWriteDisabledMessage())}">
             ${interfaceIcon("plus")}
             <span>Add</span>
           </button>
@@ -11806,21 +11892,24 @@ HTML = r"""<!doctype html>
     }
 
     function profileBulkAssignControl(item) {
+      const writable = profileWritesAvailable();
       const selectedType = profileValidBulkType();
       const matches = profileBulkTypeMatches(selectedType);
       const assignable = profileBulkAssignableSpecies(item, selectedType);
       const selected = profileTypeOption(selectedType);
-      const title = selected ? `Assign ${selected.name} Pokemon to ${item.name}` : `Assign Pokemon by type to ${item.name}`;
+      const title = !writable
+        ? profileWriteDisabledMessage()
+        : selected ? `Assign ${selected.name} Pokemon to ${item.name}` : `Assign Pokemon by type to ${item.name}`;
       return `
         <div class="profile-bulk-assign">
           <label class="profile-bulk-select-wrap" title="Assign Pokemon by type">
             ${encounterBadge("target", "type-placement", "Assign by type")}
-            <select class="profile-bulk-type" data-profile-bulk-type aria-label="Pokemon type">
+            <select class="profile-bulk-type" data-profile-bulk-type aria-label="Pokemon type"${profileDisabledAttrs()}>
               ${profileBulkTypeOptionsHtml(selectedType)}
             </select>
           </label>
           <div class="profile-bulk-preview">${profileBulkPreviewHtml(matches, assignable)}</div>
-          <button class="control profile-bulk-assign-button primary-action" type="button" data-action="bulk-assign-type" data-class-index="${esc(item.index)}" ${assignable.length ? "" : "disabled"} title="${esc(title)}">
+          <button class="control profile-bulk-assign-button primary-action" type="button" data-action="bulk-assign-type" data-class-index="${esc(item.index)}" ${writable && assignable.length ? "" : "disabled"} title="${esc(title)}">
             ${interfaceIcon("plus")}
             <span>${esc(assignable.length ? `Assign ${assignable.length}` : "Assign")}</span>
           </button>
@@ -12019,29 +12108,32 @@ HTML = r"""<!doctype html>
     }
 
     function profileOverrideBuilderHtml() {
+      const writable = profileWritesAvailable();
       const draft = normalizeProfileOverrideDraft();
       const matches = draft.targetKind === "spawnPool"
         ? [draft.spawnPool].filter(Boolean)
         : profileBulkTypeMatches(draft.typeSymbol);
-      const title = draft.field && draft.value && draft.targetLabel
+      const title = !writable
+        ? profileWriteDisabledMessage()
+        : draft.field && draft.value && draft.targetLabel
         ? `Override ${draft.field.label} for ${draft.targetLabel}`
         : "Choose a type, field, and value";
       return `
         <div class="behavior-override-builder">
-          <select class="behavior-override-select" data-profile-override-target-kind aria-label="Override target kind" title="Override target kind">
+          <select class="behavior-override-select" data-profile-override-target-kind aria-label="Override target kind" title="Override target kind"${profileDisabledAttrs()}>
             ${profileOverrideTargetKindOptionsHtml(draft.targetKind)}
           </select>
-          <select class="behavior-override-select" data-profile-override-target aria-label="Override target" title="Override target">
+          <select class="behavior-override-select" data-profile-override-target aria-label="Override target" title="Override target"${profileDisabledAttrs()}>
             ${profileOverrideTargetOptionsHtml(draft)}
           </select>
-          <select class="behavior-override-select" data-profile-override-field aria-label="Override field" title="Override field">
+          <select class="behavior-override-select" data-profile-override-field aria-label="Override field" title="Override field"${profileDisabledAttrs()}>
             ${profileOverrideFieldOptionsHtml(draft.fieldKey)}
           </select>
-          <select class="behavior-override-select" data-profile-override-value aria-label="Override value" title="Override value">
+          <select class="behavior-override-select" data-profile-override-value aria-label="Override value" title="Override value"${profileDisabledAttrs()}>
             ${profileOverrideValueOptionsHtml(draft.fieldKey, draft.raw)}
           </select>
           <div class="behavior-override-preview">${profileOverridePreviewHtml(draft)}</div>
-          <button class="control primary-action behavior-override-add" type="button" data-action="add-profile-override" ${matches.length && draft.raw ? "" : "disabled"} title="${esc(title)}">
+          <button class="control primary-action behavior-override-add" type="button" data-action="add-profile-override" ${writable && matches.length && draft.raw ? "" : "disabled"} title="${esc(title)}">
             ${interfaceIcon("plus")}
             <span>Add rule</span>
           </button>
@@ -12050,6 +12142,7 @@ HTML = r"""<!doctype html>
     }
 
     function addProfileOverrideDraft() {
+      if (!guardProfileWriteAction()) return;
       const draft = normalizeProfileOverrideDraft();
       if ((draft.targetKind === "spawnPool" ? !draft.spawnPool : !draft.type) || !draft.field || !draft.value) {
         setSaveStatus("Choose a valid target, field, and value", "error");
@@ -12084,6 +12177,7 @@ HTML = r"""<!doctype html>
     }
 
     function removeProfileOverrideDraft(id) {
+      if (!guardProfileWriteAction()) return;
       profileOverrideEdits = profileOverrideEdits.filter(edit => edit.id !== id);
       markProfilePanelsDirty("rules");
       renderActiveProfilePanel(true);
@@ -12091,6 +12185,7 @@ HTML = r"""<!doctype html>
     }
 
     function toggleProfileOverrideRemoval(order) {
+      if (!guardProfileWriteAction()) return;
       const key = String(order);
       if (profileOverrideRemoveEdits.has(key)) {
         profileOverrideRemoveEdits.delete(key);
@@ -12128,7 +12223,7 @@ HTML = r"""<!doctype html>
                 <span>${esc(edit.targetName || edit.typeName)} -> ${esc(edit.fieldLabel)}: ${esc(edit.valueLabel)}</span>
                 <span class="meta">${esc(edit.targetKind === "spawnPool" ? "spawn pool" : `${edit.matchCount} Pokemon`)}</span>
               </div>
-              <button class="control subtle-action" type="button" data-action="remove-profile-override" data-override-id="${esc(edit.id)}" title="Remove pending override">Remove</button>
+              <button class="control subtle-action" type="button" data-action="remove-profile-override" data-override-id="${esc(edit.id)}" ${profileWritesAvailable() ? "" : "disabled"} title="${esc(profileWritesAvailable() ? "Remove pending override" : profileWriteDisabledMessage())}">Remove</button>
             </div>
           `).join("")}
         </div>
@@ -12143,7 +12238,7 @@ HTML = r"""<!doctype html>
             <div class="rule-top"><span>#${esc(rule.order)} ${esc(rule.summary)}</span><span>${esc((rule.behavior.maskLabels || rule.behavior.mask.labels || []).join(", "))}</span></div>
             <div class="muted">${esc(rule.behavior.maskRaw || rule.behavior.mask.raw)}${removing ? " · pending removal" : ""}</div>
           </div>
-          <button class="control subtle-action behavior-override-remove" type="button" data-action="toggle-remove-profile-override" data-override-order="${esc(rule.order)}" title="${removing ? "Undo override removal" : "Remove override"}" aria-label="${removing ? "Undo removing override" : "Remove override"} #${esc(rule.order)}">
+          <button class="control subtle-action behavior-override-remove" type="button" data-action="toggle-remove-profile-override" data-override-order="${esc(rule.order)}" ${profileWritesAvailable() ? "" : "disabled"} title="${esc(profileWritesAvailable() ? (removing ? "Undo override removal" : "Remove override") : profileWriteDisabledMessage())}" aria-label="${removing ? "Undo removing override" : "Remove override"} #${esc(rule.order)}">
             ${interfaceIcon(removing ? "plus" : "minus")}
           </button>
         </div>
@@ -14803,7 +14898,7 @@ HTML = r"""<!doctype html>
 
     function updateSaveControls() {
       const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding;
-      const profilesEditable = appData?.profilesAvailable !== false;
+      const profilesEditable = profileWritesAvailable();
       const hasProfileChanges = profilesEditable && (profileEdits.size > 0 || profileMemberEdits.size > 0 || profileOverrideChangeCount() > 0);
       const hasChanges = hasProfileChanges || encounterEdits.size > 0 || spawnSettingEdits.size > 0;
       const hasInvalid = (profilesEditable && invalidProfileComboCount() > 0) || invalidEncounterInputCount() > 0 || invalidSpawnSettingInputCount() > 0;
@@ -15447,29 +15542,32 @@ HTML = r"""<!doctype html>
 
     async function saveAllChanges() {
       if (isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding) return false;
-      const profilesEditable = appData?.profilesAvailable !== false;
+      const profilesEditable = profileWritesAvailable();
       if (!(profilesEditable && (profileEdits.size || profileMemberEdits.size || profileOverrideChangeCount())) && !encounterEdits.size && !spawnSettingEdits.size) return true;
       const saveProfiles = profilesEditable && profileEdits.size > 0;
       const saveProfileMembers = profilesEditable && profileMemberEdits.size > 0;
       const saveProfileOverrides = profilesEditable && profileOverrideChangeCount() > 0;
       const saveEncounters = encounterEdits.size > 0;
       const saveSpawnSettings = spawnSettingEdits.size > 0;
-      let saved = true;
+      let savedProfiles = true;
       if (saveProfiles) {
-        saved = await saveProfileChanges({ reload: false });
+        savedProfiles = await saveProfileChanges({ reload: false });
       }
-      if (saved && saveProfileMembers) {
-        saved = await saveProfileMembershipChanges({ reload: false });
+      if (savedProfiles && saveProfileMembers) {
+        savedProfiles = await saveProfileMembershipChanges({ reload: false });
       }
-      if (saved && saveProfileOverrides) {
-        saved = await saveProfileOverrideChanges({ reload: false });
+      if (savedProfiles && saveProfileOverrides) {
+        savedProfiles = await saveProfileOverrideChanges({ reload: false });
       }
-      if (saved && saveEncounters) {
-        saved = await saveEncounterChanges({ reload: false });
+      let savedEncounters = true;
+      if (saveEncounters) {
+        savedEncounters = await saveEncounterChanges({ reload: false });
       }
-      if (saved && saveSpawnSettings) {
-        saved = await saveSpawnSettingChanges({ reload: false });
+      let savedSpawnSettings = true;
+      if (saveSpawnSettings) {
+        savedSpawnSettings = await saveSpawnSettingChanges({ reload: false });
       }
+      const saved = savedProfiles && savedEncounters && savedSpawnSettings;
       if (saved && !profileEdits.size && !profileMemberEdits.size && !profileOverrideChangeCount() && !encounterEdits.size && !spawnSettingEdits.size) {
         await loadData({ keepStatus: true });
         const savedParts = [
@@ -15542,6 +15640,7 @@ HTML = r"""<!doctype html>
           <div class="profile-detail-overview" title="${esc(assigned.length)} Pokemon use this profile">
             ${profileIconStrip(assigned, item.index === 0 ? 48 : 96, item)}
           </div>
+          ${profileReadOnlyBanner()}
         </div>
       `;
       updateProfileIconSelection();
@@ -15562,6 +15661,7 @@ HTML = r"""<!doctype html>
       const assigned = profileAssignmentsForClass(item.index);
       els.profilesTab.innerHTML = `
         ${profileDatalistsHtml}
+        ${profileReadOnlyBanner()}
         <div class="profile-focus">
           <article class="card" data-class-index="${esc(item.index)}">
             <div class="card-head profile-focus-head">
@@ -15672,6 +15772,7 @@ HTML = r"""<!doctype html>
       const overrideRules = appData.variableOverrides || appData.maxSpeedOverrides || [];
       els.rulesTab.innerHTML = `
         <div class="rules">
+          ${profileReadOnlyBanner()}
           <section>
             <div class="pane-head" style="margin:-12px -12px 10px"><div class="pane-title">Class Rules</div><div class="count">${esc(appData.classRules.length)}</div></div>
             <div class="rule-list">
@@ -16305,6 +16406,7 @@ HTML = r"""<!doctype html>
 
     async function manageProfile(payload, options = {}) {
       if (isManagingProfiles) return false;
+      if (!guardProfileWriteAction()) return false;
       if (!discardPendingChangesForProfileManagement()) return false;
       isManagingProfiles = true;
       updateSaveControls();
@@ -16421,6 +16523,7 @@ HTML = r"""<!doctype html>
     }
 
     function renderProfileAddMenu(item) {
+      const writable = profileWritesAvailable();
       return `
         <form class="profile-add-menu-form" data-profile-add-form data-profile-add-class="${esc(item.index)}">
           <div class="profile-add-menu-title">
@@ -16429,11 +16532,11 @@ HTML = r"""<!doctype html>
           </div>
           <span class="profile-add-species-wrap">
             ${encounterBadge("plus", "type-test", "Add Pokemon")}
-            <input class="profile-add-input" type="text" list="profileSpeciesOptions" placeholder="Pokemon" autocomplete="off" aria-label="Add Pokemon to ${esc(item.name)}">
+            <input class="profile-add-input" type="text" list="profileSpeciesOptions" placeholder="Pokemon" autocomplete="off" aria-label="Add Pokemon to ${esc(item.name)}"${profileDisabledAttrs()}>
           </span>
           <div class="profile-add-menu-actions">
             <button class="control" type="button" data-action="close-profile-add-menu">Cancel</button>
-            <button class="control primary-action profile-add-button" type="submit" title="Add Pokemon to ${esc(item.name)}">
+            <button class="control primary-action profile-add-button" type="submit" ${writable ? "" : "disabled"} title="${esc(writable ? `Add Pokemon to ${item.name}` : profileWriteDisabledMessage())}">
               ${interfaceIcon("plus")}
               <span>Add</span>
             </button>
@@ -16464,6 +16567,7 @@ HTML = r"""<!doctype html>
     }
 
     function openProfileAddMenu(classIndex, anchorRect = null) {
+      if (!guardProfileWriteAction()) return;
       const item = profileClassByIndex(classIndex);
       if (!item) return;
       profileQuickAddClassIndex = String(item.index);
@@ -16477,6 +16581,7 @@ HTML = r"""<!doctype html>
     }
 
     function addPokemonToCurrentProfile(form) {
+      if (!guardProfileWriteAction()) return;
       const input = form.querySelector(".profile-add-input");
       const targetClassIndex = form.dataset.profileAddClass;
       const item = targetClassIndex !== undefined ? profileClassByIndex(targetClassIndex) : currentProfileClass();
@@ -16524,6 +16629,7 @@ HTML = r"""<!doctype html>
     }
 
     function removePokemonFromProfile(symbol, classIndex) {
+      if (!guardProfileWriteAction()) return;
       const item = profileClassByIndex(classIndex);
       const assignment = assignmentsBySymbol.get(symbol);
       const species = assignment?.species || profileSpeciesBySymbol.get(symbol);
@@ -16568,6 +16674,7 @@ HTML = r"""<!doctype html>
     }
 
     function assignPokemonTypeToProfile(classIndex, typeSymbol) {
+      if (!guardProfileWriteAction()) return;
       const item = profileClassByIndex(classIndex);
       const type = profileTypeOption(typeSymbol);
       if (!item || !type) {
