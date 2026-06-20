@@ -1022,9 +1022,10 @@ typedef struct OverworldWildHeadbuttCoord {
     s16 y;
 } OverworldWildHeadbuttCoord;
 
-typedef struct OverworldWildHeadbuttTree {
-    OverworldWildHeadbuttCoord coords[OW_WILD_HEADBUTT_COORDS_PER_TREE];
-} OverworldWildHeadbuttTree;
+typedef struct OverworldWildCompactHeadbuttTreeHeader {
+    u8 coordCount;
+    u8 reserved;
+} OverworldWildCompactHeadbuttTreeHeader;
 
 typedef struct OverworldWildHeadbuttLandingOffset {
     s8 dx;
@@ -11392,6 +11393,47 @@ static u32 OverworldWildSpawns_GetHeadbuttTreeDataOffset(void)
         + (OW_WILD_HEADBUTT_NORMAL_SLOTS + OW_WILD_HEADBUTT_SPECIAL_SLOTS) * sizeof(OverworldWildHeadbuttEncounterSlot);
 }
 
+static BOOL OverworldWildSpawns_LoadHeadbuttMember(
+    FieldSystem *fieldSystem,
+    u8 **member,
+    u32 *memberSize)
+{
+    void *narc;
+    u32 size;
+    u8 *data;
+
+    if (fieldSystem == NULL
+        || fieldSystem->location == NULL
+        || member == NULL
+        || memberSize == NULL) {
+        return FALSE;
+    }
+
+    narc = NARC_ctor(ARC_HEADBUTT_TREES, HEAPID_WORLD);
+    if (narc == NULL) {
+        return FALSE;
+    }
+
+    size = NARC_GetMemberSize(narc, fieldSystem->location->mapId);
+    if (size < sizeof(OverworldWildHeadbuttHeader)) {
+        NARC_dtor(narc);
+        return FALSE;
+    }
+
+    data = sys_AllocMemory(HEAPID_WORLD, size);
+    if (data == NULL) {
+        NARC_dtor(narc);
+        return FALSE;
+    }
+
+    NARC_ReadWholeMember(narc, fieldSystem->location->mapId, data);
+    NARC_dtor(narc);
+
+    *member = data;
+    *memberSize = size;
+    return TRUE;
+}
+
 static BOOL OverworldWildSpawns_IsWalkableLandTile(FieldSystem *fieldSystem, int x, int y)
 {
     u8 behavior;
@@ -12831,47 +12873,97 @@ static void OverworldWildSpawns_TryPickHeadbuttLanding(
     }
 }
 
-static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
+static BOOL OverworldWildSpawns_TryReadCompactHeadbuttTree(
+    const u8 **cursor,
+    u32 *remaining,
+    const OverworldWildHeadbuttCoord **coords,
+    u8 *coordCount)
 {
-    OverworldWildHeadbuttHeader header;
-    u32 treeDataOffset;
-    u32 candidateCount = 0;
-    u32 treeGroup;
+    const OverworldWildCompactHeadbuttTreeHeader *treeHeader;
+    u32 treeSize;
 
-    if (fieldSystem == NULL || fieldSystem->location == NULL) {
+    if (cursor == NULL
+        || *cursor == NULL
+        || remaining == NULL
+        || coords == NULL
+        || coordCount == NULL
+        || *remaining < sizeof(OverworldWildCompactHeadbuttTreeHeader)) {
         return FALSE;
     }
 
-    ArchiveDataLoadOfs(&header, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, 0, sizeof(header));
-    if (header.normalTreeCount == 0 && header.specialTreeCount == 0) {
+    treeHeader = (const OverworldWildCompactHeadbuttTreeHeader *)*cursor;
+    if (treeHeader->coordCount == 0
+        || treeHeader->coordCount > OW_WILD_HEADBUTT_COORDS_PER_TREE) {
         return FALSE;
+    }
+
+    treeSize = sizeof(OverworldWildCompactHeadbuttTreeHeader)
+        + treeHeader->coordCount * sizeof(OverworldWildHeadbuttCoord);
+    if (*remaining < treeSize) {
+        return FALSE;
+    }
+
+    *coordCount = treeHeader->coordCount;
+    *coords = (const OverworldWildHeadbuttCoord *)(*cursor
+        + sizeof(OverworldWildCompactHeadbuttTreeHeader));
+    *cursor += treeSize;
+    *remaining -= treeSize;
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
+{
+    u8 *member;
+    u32 memberSize;
+    const OverworldWildHeadbuttHeader *header;
+    const u8 *treeCursor;
+    u32 treeDataOffset;
+    u32 remaining;
+    u32 candidateCount = 0;
+    u32 treeGroup;
+    BOOL result = FALSE;
+
+    if (!OverworldWildSpawns_LoadHeadbuttMember(fieldSystem, &member, &memberSize)) {
+        return FALSE;
+    }
+
+    header = (const OverworldWildHeadbuttHeader *)member;
+    if (header->normalTreeCount == 0 && header->specialTreeCount == 0) {
+        result = FALSE;
+        goto done;
     }
 
     treeDataOffset = OverworldWildSpawns_GetHeadbuttTreeDataOffset();
+    if (memberSize < treeDataOffset) {
+        result = FALSE;
+        goto done;
+    }
+
+    treeCursor = member + treeDataOffset;
+    remaining = memberSize - treeDataOffset;
 
     for (treeGroup = 0; treeGroup < 2; treeGroup++) {
         u8 treeType = treeGroup == 0 ? OW_WILD_HEADBUTT_NORMAL_TREE : OW_WILD_HEADBUTT_SPECIAL_TREE;
-        u32 treeCount = treeType == OW_WILD_HEADBUTT_NORMAL_TREE ? header.normalTreeCount : header.specialTreeCount;
-        u32 treeOffset = treeDataOffset;
+        u32 treeCount = treeType == OW_WILD_HEADBUTT_NORMAL_TREE ? header->normalTreeCount : header->specialTreeCount;
         u32 treeIndex;
 
-        if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
-            treeOffset += header.normalTreeCount * sizeof(OverworldWildHeadbuttTree);
-        }
-
         for (treeIndex = 0; treeIndex < treeCount; treeIndex++) {
-            OverworldWildHeadbuttTree tree;
+            const OverworldWildHeadbuttCoord *coords;
+            u8 coordCount;
             u32 coordIndex;
 
-            ArchiveDataLoadOfs(&tree, ARC_HEADBUTT_TREES, fieldSystem->location->mapId,
-                treeOffset + treeIndex * sizeof(tree), sizeof(tree));
-            for (coordIndex = 0; coordIndex < OW_WILD_HEADBUTT_COORDS_PER_TREE; coordIndex++) {
-                int treeX = tree.coords[coordIndex].x;
-                int treeY = tree.coords[coordIndex].y;
+            if (!OverworldWildSpawns_TryReadCompactHeadbuttTree(
+                    &treeCursor,
+                    &remaining,
+                    &coords,
+                    &coordCount)) {
+                result = FALSE;
+                goto done;
+            }
 
-                if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
-                    continue;
-                }
+            for (coordIndex = 0; coordIndex < coordCount; coordIndex++) {
+                int treeX = coords[coordIndex].x;
+                int treeY = coords[coordIndex].y;
 
                 OverworldWildSpawns_TryPickHeadbuttLanding(
                     state,
@@ -12885,7 +12977,11 @@ static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(OverworldWildSpawnS
         }
     }
 
-    return candidateCount != 0;
+    result = candidateCount != 0;
+
+done:
+    sys_FreeMemoryEz(member);
+    return result;
 }
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
