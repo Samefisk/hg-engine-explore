@@ -2063,7 +2063,27 @@ def parse_encounter_area_maps(source: str, macros: dict[str, int] | None = None)
     try:
         entries = parse_initializer(extract_braced_initializer(source, "sOverworldWildEncounterAreas"))
     except ParseError:
-        return {}
+        entries = []
+    if not entries:
+        try:
+            map_entries = parse_initializer(
+                extract_braced_initializer(source, "sOverworldWildEncounterAreaMapIds")
+            )
+            data_entries = parse_initializer(
+                extract_braced_initializer(source, "sOverworldWildEncounterAreaDataIds")
+            )
+        except ParseError:
+            behavior_source = strip_c_comments(join_line_continuations(BEHAVIOR_DATA_SOURCE.read_text()))
+            try:
+                map_entries = parse_initializer(
+                    extract_braced_initializer(behavior_source, "sOverworldWildEncounterAreaMapIds")
+                )
+                data_entries = parse_initializer(
+                    extract_braced_initializer(behavior_source, "sOverworldWildEncounterAreaDataIds")
+                )
+            except ParseError:
+                return {}
+        entries = [[map_symbol, data_id] for map_symbol, data_id in zip(map_entries, data_entries)]
     areas: dict[int, list[dict]] = {}
     for entry in entries:
         if len(entry) != 2:

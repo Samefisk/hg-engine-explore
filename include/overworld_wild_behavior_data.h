@@ -5,7 +5,7 @@
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 18
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 19
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -233,6 +233,9 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     u16 speciesClassRuleCount;
     const OverworldWildBehaviorOverride *overrides;
     u16 overrideCount;
+    const u16 *encounterAreaMapIds;
+    const u8 *encounterAreaDataIds;
+    u16 encounterAreaCount;
 } OverworldWildBehaviorDataOverlayEntry;
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY \
