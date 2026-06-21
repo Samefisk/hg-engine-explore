@@ -27,6 +27,8 @@
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
 #define OW_WILD_HELPER_NELEMS(array) (sizeof(array) / sizeof((array)[0]))
+#define OverworldWildHelper_LoadHeadbuttDataByMapId(callbacks, context, mapId, offset, dest, size) \
+    OverworldWildHelper_LoadArchiveData(callbacks, context, ARC_HEADBUTT_TREES, mapId, offset, dest, size)
 
 typedef enum OverworldWildHelperFishingRodTable {
     OW_WILD_HELPER_FISHING_ROD_OLD,
@@ -376,10 +378,9 @@ static BOOL OverworldWildHelper_TryPickHeadbuttSpawnPosition(
     if (position == NULL
         || !callbacks->getPlayerState(context, &playerState)
         || !OverworldWildHelper_GetMapId(callbacks, context, &mapId)
-        || !OverworldWildHelper_LoadArchiveData(
+        || !OverworldWildHelper_LoadHeadbuttDataByMapId(
             callbacks,
             context,
-            ARC_HEADBUTT_TREES,
             mapId,
             0,
             &header,
@@ -411,10 +412,9 @@ static BOOL OverworldWildHelper_TryPickHeadbuttSpawnPosition(
             OverworldWildHelperHeadbuttTree tree;
             u32 coordIndex;
 
-            if (!OverworldWildHelper_LoadArchiveData(
+            if (!OverworldWildHelper_LoadHeadbuttDataByMapId(
                     callbacks,
                     context,
-                    ARC_HEADBUTT_TREES,
                     mapId,
                     treeOffset + treeIndex * sizeof(tree),
                     &tree,
@@ -506,10 +506,9 @@ static BOOL OverworldWildHelper_TryRollHeadbuttEncounter(
         u32 slotIndex = gf_rand() % slotCount;
         u16 species;
 
-        if (!OverworldWildHelper_LoadArchiveData(
+        if (!OverworldWildHelper_LoadHeadbuttDataByMapId(
                 callbacks,
                 context,
-                ARC_HEADBUTT_TREES,
                 mapId,
                 slotOffset + slotIndex * sizeof(slot),
                 &slot,
