@@ -186,15 +186,14 @@ $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN): $(OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES
 NARC_FILES += $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN)
 
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET := $(BUILD)/a028/9_18
-OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h include/config.h include/constants/maps.h $(BUILD_NARC)/encounters.narc $(OVERWORLD_WILD_BLOB_VALIDATOR) $(VENV_ACTIVATE)
-OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ := build/OverworldWildEncounterLookupData.o
+OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR := scripts/build_overworld_wild_encounter_data.py
+OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h include/config.h include/constants/maps.h $(BUILD_NARC)/encounters.narc $(OVERWORLD_WILD_BLOB_VALIDATOR) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR) $(VENV_ACTIVATE)
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN := build/OverworldWildEncounterLookupData.bin
 
 $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN): $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES)
 	@echo "writing overworld wild encounter lookup..."
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c data/OverworldWildEncounterLookupData.c -o $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ)
-	$(OBJCOPY) -O binary $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ) $@
+	$(PYTHON) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR) --source data/OverworldWildEncounterLookupData.c --maps-header include/constants/maps.h --encounter-narc $(BUILD_NARC)/encounters.narc --output $@
 	$(PYTHON) $(OVERWORLD_WILD_BLOB_VALIDATOR) --owed $@ --owed-source include/overworld_wild_behavior_data.h --encounter-narc $(BUILD_NARC)/encounters.narc
 
 NARC_FILES += $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN)
