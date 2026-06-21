@@ -23,7 +23,6 @@
 #define OW_WILD_HELPER_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE OW_WILD_HELPER_SPAWN_MAX_DISTANCE
 #define OW_WILD_HELPER_DESPAWN_DISTANCE 14
 #define OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE 3
-#define OW_WILD_HELPER_SHINY_ODDS 8192
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
 #define OW_WILD_HELPER_NELEMS(array) (sizeof(array) / sizeof((array)[0]))
@@ -780,13 +779,13 @@ static BOOL OverworldWildHelper_TryRollEncounter(
     return OverworldWildHelper_TryRollLandEncounter(&encounterData, encounter);
 }
 
-static BOOL OverworldWildHelper_RollShiny(BOOL shinyAlreadySpawned)
+static BOOL OverworldWildHelper_RollShiny(BOOL shinyAlreadySpawned, u16 shinyOddsDenominator)
 {
     if (shinyAlreadySpawned) {
         return FALSE;
     }
 
-    return (gf_rand() % OW_WILD_HELPER_SHINY_ODDS) == 0;
+    return (gf_rand() % shinyOddsDenominator) == 0;
 }
 
 static u32 OverworldWildHelper_RollPersonality(void)
@@ -816,6 +815,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
     int slot,
     const OverworldWildSpawnPosition *position,
     BOOL shinyAlreadySpawned,
+    u16 shinyOddsDenominator,
     OverworldWildRolledEncounter *encounter,
     int *savedShinySlot,
     BOOL *shiny)
@@ -845,7 +845,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
         }
 
         encounter->personality = OverworldWildHelper_RollPersonality();
-        *shiny = OverworldWildHelper_RollShiny(shinyAlreadySpawned);
+        *shiny = OverworldWildHelper_RollShiny(shinyAlreadySpawned, shinyOddsDenominator);
         if (*shiny) {
             encounter->personality = OverworldWildHelper_MakePersonalityShiny(encounter->personality);
         }
@@ -878,8 +878,8 @@ static BOOL OverworldWildHelper_CopyPreparedSpawn(
     prepared->encounter = *encounter;
     prepared->savedShinySlot = savedShinySlot;
     prepared->shiny = shiny;
-    prepared->reserved[0] = 0;
-    prepared->reserved[1] = 0;
+    prepared->shinyCounterEligible = FALSE;
+    prepared->reserved = 0;
     prepared->behaviorProfile = (OverworldWildBehaviorProfile){ 0 };
     prepared->startup = (OverworldWildSpawnStartup){ 0 };
     prepared->behaviorClass = 0;
@@ -892,6 +892,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
     OverworldWildSpawnTerrain terrain,
     int slot,
     BOOL shinyAlreadySpawned,
+    u16 shinyOddsDenominator,
     OverworldWildPreparedSpawn *prepared)
 {
     OverworldWildRolledEncounter encounter;
@@ -913,6 +914,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
             slot,
             &position,
             shinyAlreadySpawned,
+            shinyOddsDenominator,
             &encounter,
             &savedShinySlot,
             &shiny)) {

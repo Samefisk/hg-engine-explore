@@ -6,7 +6,7 @@
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 2
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 3
 
 #define OW_WILD_HELPER_DIRECTION_NONE 0xFF
 #define OW_WILD_HELPER_DIRECTION_UP 0
@@ -50,7 +50,8 @@ typedef struct OverworldWildPreparedSpawn {
     int savedShinySlot;
     u8 behaviorClass;
     u8 shiny;
-    u8 reserved[2];
+    u8 shinyCounterEligible;
+    u8 reserved;
 } OverworldWildPreparedSpawn;
 
 typedef struct OverworldWildHelperPlayerState {
@@ -128,6 +129,7 @@ typedef BOOL (*OverworldWildHelperTryPrepareSpawnFunc)(
     OverworldWildSpawnTerrain terrain,
     int slot,
     BOOL shinyAlreadySpawned,
+    u16 shinyOddsDenominator,
     OverworldWildPreparedSpawn *prepared);
 
 typedef BOOL (*OverworldWildHelperTryPrepareEncounterSpawnFunc)(

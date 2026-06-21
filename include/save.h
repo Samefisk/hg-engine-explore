@@ -85,6 +85,7 @@ typedef struct BerryPot {
 #define NUM_APRICORN_TREE 31
 
 #define MAX_BERRY_POT      4
+#define OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC 0x4F57
 
 struct SAVE_MISC_DATA
 {
@@ -100,7 +101,8 @@ struct SAVE_MISC_DATA
                 u8 favoriteMonIsEgg:1;
     /* 0x29B */ u8 extraChunksExist:1;
                 u8 unk_029B_1:4;
-    /* 0x29C */ u8 filer_029C[4];
+    /* 0x29C */ u16 overworldWildShinySpawnCounter;
+    /* 0x29E */ u16 overworldWildShinyCounterMagic;
     /* 0x2A0 */ MAIL_MESSAGE battleGreetingEC;
     /* 0x2A8 */ u32 unk_02A8[2][5];
     /* 0x2D0 */ u8 unk_02D0[5];

@@ -33,6 +33,8 @@ void LONG_CALL InitStoredMons(struct SAVE_MISC_DATA *saveMiscData)
 
 void LONG_CALL Sav2_Misc_init_new_fields(struct SAVE_MISC_DATA *saveMiscData)
 {
+    saveMiscData->overworldWildShinySpawnCounter = 0;
+    saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
     InitStoredMons(saveMiscData);
 }
 

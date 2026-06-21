@@ -17442,6 +17442,78 @@ static const OverworldWildHelperSpawnCallbacks sOverworldWildSpawnPrepCallbacks 
     OverworldWildSpawns_HelperApplyBehaviorTestSpecies,
 };
 
+static u16 OverworldWildSpawns_GetShinySpawnCounter(FieldSystem *fieldSystem)
+{
+    struct SAVE_MISC_DATA *saveMiscData;
+    u16 counter;
+
+    if (fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return 0;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL) {
+        return 0;
+    }
+
+    if (saveMiscData->overworldWildShinyCounterMagic != OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC) {
+        saveMiscData->overworldWildShinySpawnCounter = 0;
+        saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
+        return 0;
+    }
+
+    counter = saveMiscData->overworldWildShinySpawnCounter;
+    if (counter >= OVERWORLD_WILD_SHINY_BASE_ODDS) {
+        counter = OVERWORLD_WILD_SHINY_BASE_ODDS - 1;
+    }
+
+    return counter;
+}
+
+static void OverworldWildSpawns_SetShinySpawnCounter(FieldSystem *fieldSystem, u16 counter)
+{
+    struct SAVE_MISC_DATA *saveMiscData;
+
+    if (fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL) {
+        return;
+    }
+
+    if (counter >= OVERWORLD_WILD_SHINY_BASE_ODDS) {
+        counter = OVERWORLD_WILD_SHINY_BASE_ODDS - 1;
+    }
+
+    saveMiscData->overworldWildShinySpawnCounter = counter;
+    saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
+}
+
+static void OverworldWildSpawns_RecordShinySpawnCounter(
+    FieldSystem *fieldSystem,
+    BOOL shinyRollAllowed,
+    BOOL shiny)
+{
+    u16 counter;
+
+    if (!shinyRollAllowed) {
+        return;
+    }
+
+    if (shiny) {
+        OverworldWildSpawns_SetShinySpawnCounter(fieldSystem, 0);
+        return;
+    }
+
+    counter = OverworldWildSpawns_GetShinySpawnCounter(fieldSystem);
+    if (counter < OVERWORLD_WILD_SHINY_BASE_ODDS - 1) {
+        counter++;
+    }
+    OverworldWildSpawns_SetShinySpawnCounter(fieldSystem, counter);
+}
+
 static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
@@ -17474,11 +17546,17 @@ static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
             terrain,
             slot,
             state->shinySpawned,
+            OVERWORLD_WILD_SHINY_BASE_ODDS - OverworldWildSpawns_GetShinySpawnCounter(fieldSystem),
             prepared)) {
         return FALSE;
     }
 
-    return OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared);
+    if (!OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared)) {
+        return FALSE;
+    }
+
+    prepared->shinyCounterEligible = !state->shinySpawned && prepared->savedShinySlot < 0;
+    return TRUE;
 }
 
 static BOOL OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper(
@@ -17752,6 +17830,7 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         state->shinySpawned = TRUE;
         OverworldWildSpawns_TryPlayOverworldSE(state, SEQ_SE_PL_KIRAKIRA);
     }
+    OverworldWildSpawns_RecordShinySpawnCounter(fieldSystem, prepared->shinyCounterEligible, prepared->shiny);
     OverworldWildSpawns_StartSpawnStartup(state, fieldSystem, slot, &prepared->startup);
 
     return TRUE;
