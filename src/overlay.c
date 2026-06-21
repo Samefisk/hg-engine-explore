@@ -16,6 +16,7 @@ struct LinkedOverlayList gLinkedOverlayList[] =
     {OVERLAY_POKEWALKER, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_FIELD_EXTENSION, OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION},
     {OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA},
+    {OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, OVERLAY_OVERWORLD_WILD_HELPER},
     {OVERLAY_POKEDEX, OVERLAY_POKEDEX_EXTENSION},
 };
 
@@ -202,7 +203,12 @@ loadExtension:
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
             ovyId = gLinkedOverlayList[i].ext_id;
-            loadType = (ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA) ? 0 : 2;
+            /*
+             * The overworld wild helper may be called synchronously after the
+             * resident chain loads, so keep it off the async path.
+             */
+            loadType = (ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA
+                || ovyId == OVERLAY_OVERWORLD_WILD_HELPER) ? 0 : 2;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
             debug_printf("Trying to load linked overlay_%04d.bin.\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
