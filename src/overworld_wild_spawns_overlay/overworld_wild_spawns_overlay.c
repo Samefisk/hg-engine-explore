@@ -15,7 +15,6 @@
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/pokemon.h"
-#include "../../include/rtc.h"
 #include "../../include/script.h"
 #include "../../include/sound.h"
 #include "../../include/sprite.h"
@@ -115,24 +114,12 @@ typedef void (*OverworldWildHeadbuttLeafResourceDestroyFunc)(void *work);
 typedef void (*OverworldWildHeadbuttLeafTempDestroyFunc)(void *temp);
 typedef void (*OverworldWildHeadbuttLeafBurstFunc)(void *work, int param);
 
-#define OW_WILD_GRASS_SLOTS 12
-#define OW_WILD_SOUND_SLOTS 2
-#define OW_WILD_SURF_SLOTS 5
-#define OW_WILD_ROCK_SMASH_SLOTS 2
-#define OW_WILD_FISH_SLOTS 5
-#define OW_WILD_HEADBUTT_NORMAL_SLOTS 12
-#define OW_WILD_HEADBUTT_SPECIAL_SLOTS 6
-#define OW_WILD_HEADBUTT_COORDS_PER_TREE 6
-#define OW_WILD_HEADBUTT_NORMAL_TREE 0
-#define OW_WILD_HEADBUTT_SPECIAL_TREE 1
-#define OW_WILD_HEADBUTT_EMPTY_COORD -1
 #define OW_WILD_HEADBUTT_TREE_TOPS_MAX_LOCATIONS 512
 #define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 10
 #define OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN 10
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
 #define OW_WILD_FISHING_SPAWN_CHANCE_PERCENT 20
 #define OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN 4
-#define OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE 1
@@ -147,7 +134,6 @@ typedef void (*OverworldWildHeadbuttLeafBurstFunc)(void *work, int param);
 #define OW_WILD_PHANTOM_TELEPORT_FLICKER_OBJECT_ID_START 0xC0
 #define OW_WILD_PHANTOM_FLICKER_OBJECT_ID_START 0xD0
 #define OW_WILD_FOLLOWER_OBJECT_ID 253
-#define OW_WILD_SHINY_ODDS 8192
 #define OW_WILD_FLEE_GRACE_STEPS 3
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
@@ -711,12 +697,6 @@ typedef void (*OverworldWildHeadbuttLeafBurstFunc)(void *work, int param);
 #define OW_WILD_PAL_PARAM_SHINY 1
 #define OW_WILD_PAL_PARAM_ENABLE 2
 
-typedef enum OverworldWildFishingRodTable {
-    OW_WILD_FISHING_ROD_OLD,
-    OW_WILD_FISHING_ROD_GOOD,
-    OW_WILD_FISHING_ROD_SUPER,
-} OverworldWildFishingRodTable;
-
 typedef struct OverworldWildBehaviorPrimitives {
     u8 spawnLocomotion;
     u8 chillLocomotion;
@@ -1040,86 +1020,6 @@ static const OverworldWildEncounterLookupDataEntry *OverworldWildSpawns_GetLegac
 }
 
 
-typedef struct OverworldWildLandEncounterData {
-    u8 levels[OW_WILD_GRASS_SLOTS];
-    u16 morningSpecies[OW_WILD_GRASS_SLOTS];
-    u16 daySpecies[OW_WILD_GRASS_SLOTS];
-    u16 nightSpecies[OW_WILD_GRASS_SLOTS];
-} OverworldWildLandEncounterData;
-
-typedef struct OverworldWildEncounterDataSlot {
-    u8 minLevel;
-    u8 maxLevel;
-    u16 species;
-} OverworldWildEncounterDataSlot;
-
-typedef struct OverworldWildEncounterData {
-    u8 walkingRate;
-    u8 surfingRate;
-    u8 rockSmashRate;
-    u8 oldRodRate;
-    u8 goodRodRate;
-    u8 superRodRate;
-    u8 padding[2];
-    OverworldWildLandEncounterData landSlots;
-    u16 hoennSoundsSpecies[OW_WILD_SOUND_SLOTS];
-    u16 sinnohSoundsSpecies[OW_WILD_SOUND_SLOTS];
-    OverworldWildEncounterDataSlot surfSlots[OW_WILD_SURF_SLOTS];
-    OverworldWildEncounterDataSlot rockSmashSlots[OW_WILD_ROCK_SMASH_SLOTS];
-    OverworldWildEncounterDataSlot oldRodSlots[OW_WILD_FISH_SLOTS];
-    OverworldWildEncounterDataSlot goodRodSlots[OW_WILD_FISH_SLOTS];
-    OverworldWildEncounterDataSlot superRodSlots[OW_WILD_FISH_SLOTS];
-    u16 landSwarm;
-    u16 surfSwarm;
-    u16 nightFish;
-    u16 fishSwarm;
-} OverworldWildEncounterData;
-
-typedef struct OverworldWildRolledEncounter {
-    u32 personality;
-    u16 species;
-    u8 form;
-    u8 level;
-} OverworldWildRolledEncounter;
-
-typedef struct OverworldWildSpawnPosition {
-    int startX;
-    int startY;
-    u8 headbuttTreeType;
-} OverworldWildSpawnPosition;
-
-typedef struct OverworldWildSpawnStartup {
-    s16 targetX;
-    s16 targetY;
-    u8 locomotion;
-    u8 hopDirection;
-} OverworldWildSpawnStartup;
-
-typedef struct OverworldWildHeadbuttHeader {
-    u16 normalTreeCount;
-    u16 specialTreeCount;
-} OverworldWildHeadbuttHeader;
-
-typedef struct OverworldWildHeadbuttEncounterSlot {
-    u16 species;
-    u8 minLevel;
-    u8 maxLevel;
-} OverworldWildHeadbuttEncounterSlot;
-
-typedef struct OverworldWildHeadbuttCoord {
-    s16 x;
-    s16 y;
-} OverworldWildHeadbuttCoord;
-
-typedef struct OverworldWildHeadbuttTree {
-    OverworldWildHeadbuttCoord coords[OW_WILD_HEADBUTT_COORDS_PER_TREE];
-} OverworldWildHeadbuttTree;
-
-typedef struct OverworldWildHeadbuttLandingOffset {
-    s8 dx;
-    s8 dy;
-} OverworldWildHeadbuttLandingOffset;
-
 typedef struct OverworldWildHeadbuttTreeTopScan {
     int centerX;
     int centerY;
@@ -1180,6 +1080,12 @@ typedef struct OverworldWildBehaviorHopValidationContext {
     BOOL blockPlayerUnlessFinal;
 } OverworldWildBehaviorHopValidationContext;
 
+typedef struct OverworldWildSpawnPrepContext {
+    OverworldWildSpawnState *state;
+    FieldSystem *fieldSystem;
+    OverworldWildSpawnTerrain terrain;
+} OverworldWildSpawnPrepContext;
+
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
@@ -1187,14 +1093,6 @@ static void OverworldWildSpawns_OverlayOnFieldSystemReady(FieldSystem *fieldSyst
 static void OverworldWildSpawns_CleanupResidentData(void);
 static void OverworldWildSpawns_OverlayVisualTesterCommand(FieldSystem *fieldSystem, u16 command);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
-static BOOL OverworldWildSpawns_TryPickSpawnRunStart(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    OverworldWildSpawnTerrain terrain,
-    int targetX,
-    int targetY,
-    int *startX,
-    int *startY);
 static BOOL OverworldWildSpawns_TryStartSpawnRunStep(OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot);
 static void OverworldWildSpawns_StartSpawnHop(
     OverworldWildSpawnState *state,
@@ -1672,25 +1570,6 @@ static OverworldWildCanopyPathScratch *sOverworldWildCanopyPathScratch;
 #define sOverworldWildCanopyPathNodes (sOverworldWildCanopyPathScratch->nodes)
 #define sOverworldWildCanopyPathVisited (sOverworldWildCanopyPathScratch->visited)
 #define sOverworldWildMankeyHeadbuttTreeTopTargets (sOverworldWildCanopyPathScratch->mankeyTargets)
-
-static const u8 sGrassSlotWeights[OW_WILD_GRASS_SLOTS] = {
-    20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
-};
-
-static const u8 sSurfSlotWeights[OW_WILD_SURF_SLOTS] = {
-    60, 30, 5, 4, 1,
-};
-
-static const u8 sFishingSlotWeights[OW_WILD_FISH_SLOTS] = {
-    60, 30, 5, 4, 1,
-};
-
-static const OverworldWildHeadbuttLandingOffset sHeadbuttLandingOffsets[] = {
-    { 0, 1 },
-    { 0, -1 },
-    { -1, 0 },
-    { 1, 0 },
-};
 
 static const OverworldWildCoordOffset sCanopyLongJumpOffsets[] = {
     { 0, 1 },
@@ -11709,46 +11588,6 @@ static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
         && OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId);
 }
 
-static const u16 *OverworldWildSpawns_GetTimeOfDaySpeciesTable(const OverworldWildLandEncounterData *landSlots)
-{
-    if ((gf_rand() % 100) < OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT) {
-        switch (gf_rand() % 3) {
-        case 0:
-            return landSlots->morningSpecies;
-        case 1:
-            return landSlots->daySpecies;
-        case 2:
-        default:
-            return landSlots->nightSpecies;
-        }
-    }
-
-    switch (GF_RTC_GetTimeOfDayWildParam()) {
-    case TIMEOFDAY_WILD_MORN:
-        return landSlots->morningSpecies;
-    case TIMEOFDAY_WILD_NITE:
-        return landSlots->nightSpecies;
-    case TIMEOFDAY_WILD_DAY:
-    default:
-        return landSlots->daySpecies;
-    }
-}
-
-static u8 OverworldWildSpawns_RollWeightedSlot(const u8 *weights, u8 count)
-{
-    u32 roll = gf_rand() % 100;
-    u8 slot;
-
-    for (slot = 0; slot < count; slot++) {
-        if (roll < weights[slot]) {
-            return slot;
-        }
-        roll -= weights[slot];
-    }
-
-    return count - 1;
-}
-
 static BOOL OverworldWildSpawns_TryGetSpawnTerrain(FieldSystem *fieldSystem, int x, int y, OverworldWildSpawnTerrain *terrain)
 {
     u8 behavior;
@@ -11824,54 +11663,6 @@ static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem,
     return FALSE;
 }
 
-static BOOL OverworldWildSpawns_TryPickSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain requestedTerrain, OverworldWildSpawnPosition *position)
-{
-    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
-    u32 candidateCount = 0;
-    int x;
-    int y;
-    OverworldWildSpawnTerrain terrain;
-
-    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
-        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
-            int dx = x - playerX;
-            int dy = y - playerY;
-            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
-
-            if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
-                continue;
-            }
-            if (!OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, x, y, &terrain)) {
-                continue;
-            }
-            if (terrain != requestedTerrain) {
-                continue;
-            }
-            if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
-                continue;
-            }
-            if (OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
-                continue;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                position->startX = x;
-                position->startY = y;
-            }
-        }
-    }
-
-    return candidateCount != 0;
-}
-
-static u32 OverworldWildSpawns_GetHeadbuttTreeDataOffset(void)
-{
-    return sizeof(OverworldWildHeadbuttHeader)
-        + (OW_WILD_HEADBUTT_NORMAL_SLOTS + OW_WILD_HEADBUTT_SPECIAL_SLOTS) * sizeof(OverworldWildHeadbuttEncounterSlot);
-}
-
 static BOOL OverworldWildSpawns_IsWalkableLandTile(FieldSystem *fieldSystem, int x, int y)
 {
     u8 behavior;
@@ -11892,41 +11683,6 @@ static BOOL OverworldWildSpawns_IsWalkableLandTile(FieldSystem *fieldSystem, int
     }
 
     return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryPickWalkableLandSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
-{
-    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
-    u32 candidateCount = 0;
-    int x;
-    int y;
-
-    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
-        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
-            int dx = x - playerX;
-            int dy = y - playerY;
-            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
-
-            if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
-                continue;
-            }
-            if (!OverworldWildSpawns_IsWalkableLandTile(fieldSystem, x, y)) {
-                continue;
-            }
-            if (OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
-                continue;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                position->startX = x;
-                position->startY = y;
-            }
-        }
-    }
-
-    return candidateCount != 0;
 }
 
 static int OverworldWildSpawns_GetCanopyPathGridIndex(int originX, int originY, int x, int y)
@@ -12747,6 +12503,7 @@ static BOOL OverworldWildSpawns_TryPickSpawnRunStart(
         || startY == NULL) {
         return FALSE;
     }
+
     playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
     playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
     baseDx = targetX - playerX;
@@ -13016,146 +12773,6 @@ static BOOL OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand(
         state->movementCooldowns[slot] = 0;
     }
     return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryPickFishingSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
-{
-    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
-    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
-    u32 candidateCount = 0;
-    int x;
-    int y;
-
-    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
-        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
-            int dx = x - playerX;
-            int dy = y - playerY;
-            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
-
-            if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
-                continue;
-            }
-            if (!OverworldWildSpawns_IsFishingShoreTile(fieldSystem, x, y)) {
-                continue;
-            }
-            if (OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
-                continue;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                position->startX = x;
-                position->startY = y;
-            }
-        }
-    }
-
-    return candidateCount != 0;
-}
-
-static void OverworldWildSpawns_TryPickHeadbuttLanding(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    int treeX,
-    int treeY,
-    u8 treeType,
-    OverworldWildSpawnPosition *position,
-    u32 *candidateCount)
-{
-    u32 landingStart;
-    u32 landingAttempt;
-
-    if (state == NULL
-        || fieldSystem == NULL
-        || position == NULL
-        || candidateCount == NULL
-        || treeX == OW_WILD_HEADBUTT_EMPTY_COORD
-        || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
-        return;
-    }
-
-    landingStart = gf_rand() % NELEMS(sHeadbuttLandingOffsets);
-    for (landingAttempt = 0; landingAttempt < NELEMS(sHeadbuttLandingOffsets); landingAttempt++) {
-        const OverworldWildHeadbuttLandingOffset *landing =
-            &sHeadbuttLandingOffsets[(landingStart + landingAttempt) % NELEMS(sHeadbuttLandingOffsets)];
-        int spawnX = treeX + landing->dx;
-        int spawnY = treeY + landing->dy;
-        int distance = OverworldWildSpawns_DistanceFromPlayer(fieldSystem, spawnX, spawnY);
-
-        if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
-            continue;
-        }
-        if (!OverworldWildSpawns_IsWalkableLandTile(fieldSystem, spawnX, spawnY)) {
-            continue;
-        }
-        if (OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
-            continue;
-        }
-
-        (*candidateCount)++;
-        if ((gf_rand() % *candidateCount) == 0) {
-            position->startX = treeX;
-            position->startY = treeY;
-            position->headbuttTreeType = treeType;
-        }
-    }
-}
-
-static BOOL OverworldWildSpawns_TryPickHeadbuttSpawnPosition(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnPosition *position)
-{
-    OverworldWildHeadbuttHeader header;
-    u32 treeDataOffset;
-    u32 candidateCount = 0;
-    u32 treeGroup;
-
-    if (fieldSystem == NULL || fieldSystem->location == NULL) {
-        return FALSE;
-    }
-
-    ArchiveDataLoadOfs(&header, ARC_HEADBUTT_TREES, fieldSystem->location->mapId, 0, sizeof(header));
-    if (header.normalTreeCount == 0 && header.specialTreeCount == 0) {
-        return FALSE;
-    }
-
-    treeDataOffset = OverworldWildSpawns_GetHeadbuttTreeDataOffset();
-
-    for (treeGroup = 0; treeGroup < 2; treeGroup++) {
-        u8 treeType = treeGroup == 0 ? OW_WILD_HEADBUTT_NORMAL_TREE : OW_WILD_HEADBUTT_SPECIAL_TREE;
-        u32 treeCount = treeType == OW_WILD_HEADBUTT_NORMAL_TREE ? header.normalTreeCount : header.specialTreeCount;
-        u32 treeOffset = treeDataOffset;
-        u32 treeIndex;
-
-        if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
-            treeOffset += header.normalTreeCount * sizeof(OverworldWildHeadbuttTree);
-        }
-
-        for (treeIndex = 0; treeIndex < treeCount; treeIndex++) {
-            OverworldWildHeadbuttTree tree;
-            u32 coordIndex;
-
-            ArchiveDataLoadOfs(&tree, ARC_HEADBUTT_TREES, fieldSystem->location->mapId,
-                treeOffset + treeIndex * sizeof(tree), sizeof(tree));
-            for (coordIndex = 0; coordIndex < OW_WILD_HEADBUTT_COORDS_PER_TREE; coordIndex++) {
-                int treeX = tree.coords[coordIndex].x;
-                int treeY = tree.coords[coordIndex].y;
-
-                if (treeX == OW_WILD_HEADBUTT_EMPTY_COORD || treeY == OW_WILD_HEADBUTT_EMPTY_COORD) {
-                    continue;
-                }
-
-                OverworldWildSpawns_TryPickHeadbuttLanding(
-                    state,
-                    fieldSystem,
-                    treeX,
-                    treeY,
-                    treeType,
-                    position,
-                    &candidateCount);
-            }
-        }
-    }
-
-    return candidateCount != 0;
 }
 
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
@@ -16686,264 +16303,9 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
 }
 #endif
 
-static BOOL OverworldWildSpawns_TryRollHeadbuttEncounter(FieldSystem *fieldSystem, u8 treeType, OverworldWildRolledEncounter *encounter)
-{
-    int attempts;
-    u32 slotOffset = sizeof(OverworldWildHeadbuttHeader);
-    u8 slotCount = OW_WILD_HEADBUTT_NORMAL_SLOTS;
-
-    if (fieldSystem == NULL || fieldSystem->location == NULL) {
-        return FALSE;
-    }
-
-    if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
-        slotOffset += OW_WILD_HEADBUTT_NORMAL_SLOTS * sizeof(OverworldWildHeadbuttEncounterSlot);
-        slotCount = OW_WILD_HEADBUTT_SPECIAL_SLOTS;
-    }
-
-    for (attempts = 0; attempts < slotCount; attempts++) {
-        OverworldWildHeadbuttEncounterSlot slot;
-        u32 slotIndex = gf_rand() % slotCount;
-        u16 species;
-
-        ArchiveDataLoadOfs(&slot, ARC_HEADBUTT_TREES, fieldSystem->location->mapId,
-            slotOffset + slotIndex * sizeof(slot), sizeof(slot));
-
-        species = slot.species & OW_WILD_SPECIES_MASK;
-        if (species != SPECIES_NONE && slot.minLevel != 0) {
-            encounter->species = species;
-            encounter->form = slot.species >> OW_WILD_FORM_SHIFT;
-            encounter->level = slot.minLevel;
-            if (slot.maxLevel > slot.minLevel) {
-                encounter->level += gf_rand() % (slot.maxLevel - slot.minLevel + 1);
-            }
-            return TRUE;
-        }
-    }
-
-    if (treeType == OW_WILD_HEADBUTT_SPECIAL_TREE) {
-        return OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, OW_WILD_HEADBUTT_NORMAL_TREE, encounter);
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildSpawns_TryRollLandEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
-{
-    int attempts;
-    const u16 *speciesTable;
-
-    speciesTable = OverworldWildSpawns_GetTimeOfDaySpeciesTable(&encounterData->landSlots);
-
-    for (attempts = 0; attempts < OW_WILD_GRASS_SLOTS; attempts++) {
-        u8 slot = OverworldWildSpawns_RollWeightedSlot(sGrassSlotWeights, OW_WILD_GRASS_SLOTS);
-        u16 encodedSpecies = speciesTable[slot];
-        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
-
-        if (species != SPECIES_NONE && encounterData->landSlots.levels[slot] != 0) {
-            encounter->species = species;
-            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
-            encounter->level = encounterData->landSlots.levels[slot];
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildSpawns_TryRollSurfEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
-{
-    int attempts;
-
-    for (attempts = 0; attempts < OW_WILD_SURF_SLOTS; attempts++) {
-        u8 slot = OverworldWildSpawns_RollWeightedSlot(sSurfSlotWeights, OW_WILD_SURF_SLOTS);
-        u16 encodedSpecies = encounterData->surfSlots[slot].species;
-        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
-
-        if (species != SPECIES_NONE && encounterData->surfSlots[slot].minLevel != 0) {
-            u8 minLevel = encounterData->surfSlots[slot].minLevel;
-            u8 maxLevel = encounterData->surfSlots[slot].maxLevel;
-
-            encounter->species = species;
-            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
-            encounter->level = minLevel;
-            if (maxLevel > minLevel) {
-                encounter->level += gf_rand() % (maxLevel - minLevel + 1);
-            }
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static const OverworldWildEncounterDataSlot *OverworldWildSpawns_GetFishingSlots(
-    const OverworldWildEncounterData *encounterData,
-    OverworldWildFishingRodTable rodTable)
-{
-    switch (rodTable) {
-    case OW_WILD_FISHING_ROD_OLD:
-        return encounterData->oldRodSlots;
-    case OW_WILD_FISHING_ROD_GOOD:
-        return encounterData->goodRodSlots;
-    case OW_WILD_FISHING_ROD_SUPER:
-    default:
-        return encounterData->superRodSlots;
-    }
-}
-
-static u8 OverworldWildSpawns_GetFishingRate(const OverworldWildEncounterData *encounterData, OverworldWildFishingRodTable rodTable)
-{
-    switch (rodTable) {
-    case OW_WILD_FISHING_ROD_OLD:
-        return encounterData->oldRodRate;
-    case OW_WILD_FISHING_ROD_GOOD:
-        return encounterData->goodRodRate;
-    case OW_WILD_FISHING_ROD_SUPER:
-    default:
-        return encounterData->superRodRate;
-    }
-}
-
-static BOOL OverworldWildSpawns_FishingTableHasValidSlot(const OverworldWildEncounterDataSlot *slots)
-{
-    u8 slot;
-
-    for (slot = 0; slot < OW_WILD_FISH_SLOTS; slot++) {
-        if ((slots[slot].species & OW_WILD_SPECIES_MASK) != SPECIES_NONE && slots[slot].minLevel != 0) {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildSpawns_TryPickFishingRodTable(
-    const OverworldWildEncounterData *encounterData,
-    OverworldWildFishingRodTable *rodTable)
-{
-    u16 totalRate = 0;
-    u16 roll;
-    u8 rod;
-
-    for (rod = 0; rod < 3; rod++) {
-        OverworldWildFishingRodTable currentRod = (OverworldWildFishingRodTable)rod;
-        const OverworldWildEncounterDataSlot *slots = OverworldWildSpawns_GetFishingSlots(encounterData, currentRod);
-        u8 rate = OverworldWildSpawns_GetFishingRate(encounterData, currentRod);
-
-        if (rate != 0 && OverworldWildSpawns_FishingTableHasValidSlot(slots)) {
-            totalRate += rate;
-        }
-    }
-
-    if (totalRate == 0) {
-        return FALSE;
-    }
-
-    roll = gf_rand() % totalRate;
-    for (rod = 0; rod < 3; rod++) {
-        OverworldWildFishingRodTable currentRod = (OverworldWildFishingRodTable)rod;
-        const OverworldWildEncounterDataSlot *slots = OverworldWildSpawns_GetFishingSlots(encounterData, currentRod);
-        u8 rate = OverworldWildSpawns_GetFishingRate(encounterData, currentRod);
-
-        if (rate == 0 || !OverworldWildSpawns_FishingTableHasValidSlot(slots)) {
-            continue;
-        }
-        if (roll < rate) {
-            *rodTable = currentRod;
-            return TRUE;
-        }
-        roll -= rate;
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildSpawns_TryRollFishingEncounter(const OverworldWildEncounterData *encounterData, OverworldWildRolledEncounter *encounter)
-{
-    OverworldWildFishingRodTable rodTable;
-    const OverworldWildEncounterDataSlot *slots;
-    int attempts;
-
-    if (!OverworldWildSpawns_TryPickFishingRodTable(encounterData, &rodTable)) {
-        return FALSE;
-    }
-
-    slots = OverworldWildSpawns_GetFishingSlots(encounterData, rodTable);
-    for (attempts = 0; attempts < OW_WILD_FISH_SLOTS; attempts++) {
-        u8 slot = OverworldWildSpawns_RollWeightedSlot(sFishingSlotWeights, OW_WILD_FISH_SLOTS);
-        u16 encodedSpecies = slots[slot].species;
-        u16 species = encodedSpecies & OW_WILD_SPECIES_MASK;
-
-        if (species != SPECIES_NONE && slots[slot].minLevel != 0) {
-            u8 minLevel = slots[slot].minLevel;
-            u8 maxLevel = slots[slot].maxLevel;
-
-            encounter->species = species;
-            encounter->form = encodedSpecies >> OW_WILD_FORM_SHIFT;
-            encounter->level = minLevel;
-            if (maxLevel > minLevel) {
-                encounter->level += gf_rand() % (maxLevel - minLevel + 1);
-            }
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildSpawns_TryRollEncounter(FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, OverworldWildRolledEncounter *encounter)
-{
-    int encounterDataId;
-    OverworldWildEncounterData encounterData;
-
-    if (!OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId)) {
-        return FALSE;
-    }
-
-    ArchiveDataLoadOfs(&encounterData, ARC_ENCOUNTERS, encounterDataId, 0, sizeof(encounterData));
-
-    if (terrain == OW_WILD_SPAWN_TERRAIN_SURF) {
-        return OverworldWildSpawns_TryRollSurfEncounter(&encounterData, encounter);
-    }
-    if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
-        return OverworldWildSpawns_TryRollFishingEncounter(&encounterData, encounter);
-    }
-    return OverworldWildSpawns_TryRollLandEncounter(&encounterData, encounter);
-}
-
 static u32 OverworldWildSpawns_GetSpriteID(u16 species, u8 form)
 {
     return FollowingPokemon_GetSpriteID(species, form, 0);
-}
-
-static BOOL OverworldWildSpawns_RollShiny(OverworldWildSpawnState *state)
-{
-    if (state->shinySpawned) {
-        return FALSE;
-    }
-
-    return (gf_rand() % OW_WILD_SHINY_ODDS) == 0;
-}
-
-static u32 OverworldWildSpawns_RollPersonality(void)
-{
-    return gf_rand() | (gf_rand() << 16);
-}
-
-static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality)
-{
-    u32 shinyValue = SHINY_VALUE(OVERWORLD_WILD_BATTLE_SHINY_OTID, personality);
-
-    if (shinyValue >= SHINY_ODDS) {
-        if (shinyValue & 0xE000) {
-            personality ^= (shinyValue << 16) & 0xE0000000;
-        }
-        personality ^= shinyValue & 0x1FFF;
-        personality ^= gf_rand() % SHINY_ODDS;
-    }
-
-    return personality;
 }
 
 static u8 OverworldWildSpawns_GetLegacyMovementBehavior(const OverworldWildBehaviorProfile *profile)
@@ -17112,19 +16474,113 @@ static void OverworldWildSpawns_ApplyBehaviorTestSpecies(
 #endif
 }
 
-static BOOL OverworldWildSpawns_TryPickSpawnPositionForTerrain(
+static BOOL OverworldWildSpawns_TryPickSpawnPosition(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
-    OverworldWildSpawnTerrain terrain,
+    OverworldWildSpawnTerrain requestedTerrain,
     OverworldWildSpawnPosition *position)
 {
-    if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
-        return OverworldWildSpawns_TryPickHeadbuttSpawnPosition(state, fieldSystem, position);
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    u32 candidateCount = 0;
+    int x;
+    int y;
+
+    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
+        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
+            int dx = x - playerX;
+            int dy = y - playerY;
+            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
+            OverworldWildSpawnTerrain terrain;
+
+            if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+                || distance > OW_WILD_SPAWN_MAX_DISTANCE
+                || !OverworldWildSpawns_TryGetSpawnTerrain(fieldSystem, x, y, &terrain)
+                || terrain != requestedTerrain
+                || OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)
+                || OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
+                continue;
+            }
+
+            candidateCount++;
+            if ((gf_rand() % candidateCount) == 0) {
+                position->startX = x;
+                position->startY = y;
+            }
+        }
     }
-    if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
-        return OverworldWildSpawns_TryPickFishingSpawnPosition(state, fieldSystem, position);
+
+    return candidateCount != 0;
+}
+
+static BOOL OverworldWildSpawns_TryPickWalkableLandSpawnPosition(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnPosition *position)
+{
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    u32 candidateCount = 0;
+    int x;
+    int y;
+
+    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
+        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
+            int dx = x - playerX;
+            int dy = y - playerY;
+            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
+
+            if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+                || distance > OW_WILD_SPAWN_MAX_DISTANCE
+                || !OverworldWildSpawns_IsWalkableLandTile(fieldSystem, x, y)
+                || OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
+                continue;
+            }
+
+            candidateCount++;
+            if ((gf_rand() % candidateCount) == 0) {
+                position->startX = x;
+                position->startY = y;
+            }
+        }
     }
-    return OverworldWildSpawns_TryPickSpawnPosition(state, fieldSystem, terrain, position);
+
+    return candidateCount != 0;
+}
+
+static BOOL OverworldWildSpawns_TryPickFishingSpawnPosition(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnPosition *position)
+{
+    int playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    int playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    u32 candidateCount = 0;
+    int x;
+    int y;
+
+    for (y = playerY - OW_WILD_SPAWN_MAX_DISTANCE; y <= playerY + OW_WILD_SPAWN_MAX_DISTANCE; y++) {
+        for (x = playerX - OW_WILD_SPAWN_MAX_DISTANCE; x <= playerX + OW_WILD_SPAWN_MAX_DISTANCE; x++) {
+            int dx = x - playerX;
+            int dy = y - playerY;
+            int distance = OverworldWildSpawns_Max(OverworldWildSpawns_Abs(dx), OverworldWildSpawns_Abs(dy));
+
+            if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+                || distance > OW_WILD_SPAWN_MAX_DISTANCE
+                || !OverworldWildSpawns_IsFishingShoreTile(fieldSystem, x, y)
+                || OverworldWildSpawns_IsNearActiveSpawn(state, x, y, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
+                continue;
+            }
+
+            candidateCount++;
+            if ((gf_rand() % candidateCount) == 0) {
+                position->startX = x;
+                position->startY = y;
+            }
+        }
+    }
+
+    return candidateCount != 0;
 }
 
 static BOOL OverworldWildSpawns_TryPickCanopyHopperTreeTopSpawnPosition(
@@ -17162,13 +16618,10 @@ static BOOL OverworldWildSpawns_TryPickCanopyHopperTreeTopSpawnPosition(
             OverworldWildSpawns_Abs(treeX - playerX),
             OverworldWildSpawns_Abs(treeY - playerY));
 
-        if (distance < OW_WILD_SPAWN_MIN_DISTANCE || distance > OW_WILD_SPAWN_MAX_DISTANCE) {
-            continue;
-        }
-        if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, treeX, treeY)) {
-            continue;
-        }
-        if (OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
+        if (distance < OW_WILD_SPAWN_MIN_DISTANCE
+            || distance > OW_WILD_SPAWN_MAX_DISTANCE
+            || OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, treeX, treeY)
+            || OverworldWildSpawns_IsNearActiveSpawn(state, treeX, treeY, OW_WILD_SPAWN_MIN_MON_DISTANCE)) {
             continue;
         }
 
@@ -17192,32 +16645,16 @@ static BOOL OverworldWildSpawns_TryGetPlayerRelativeSpawnDestination(
 
     switch (destination) {
     case OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER:
-        *directionScale = 1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_TWO_TILES_FRONT_OF_PLAYER:
-        *directionScale = 1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_THREE_TILES_FRONT_OF_PLAYER:
-        *directionScale = 1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_FOUR_TILES_FRONT_OF_PLAYER:
-        *directionScale = 1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_FIVE_TILES_FRONT_OF_PLAYER:
         *directionScale = 1;
         return TRUE;
     case OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER:
-        *directionScale = -1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_TWO_TILES_BEHIND_PLAYER:
-        *directionScale = -1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_THREE_TILES_BEHIND_PLAYER:
-        *directionScale = -1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_FOUR_TILES_BEHIND_PLAYER:
-        *directionScale = -1;
-        return TRUE;
     case OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER:
         *directionScale = -1;
         return TRUE;
@@ -17344,11 +16781,7 @@ static BOOL OverworldWildSpawns_TryPickPlayerRelativeSpawnPosition(
         }
     }
 
-    if (candidateCount == 0) {
-        return FALSE;
-    }
-
-    return TRUE;
+    return candidateCount != 0;
 }
 
 static BOOL OverworldWildSpawns_TryPickNextToPlayerSpawnPosition(
@@ -17473,80 +16906,6 @@ static BOOL OverworldWildSpawns_TryApplySpawnDestination(
     }
 }
 
-static BOOL OverworldWildSpawns_TryPrepareSpawnEncounter(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem,
-    OverworldWildSpawnTerrain terrain,
-    int slot,
-    const OverworldWildSpawnPosition *position,
-    OverworldWildRolledEncounter *encounter,
-    int *savedShinySlot,
-    BOOL *shiny)
-{
-    *savedShinySlot = OverworldWildSpawns_FindSavedShiny(state, fieldSystem->location->mapId, terrain);
-    if (*savedShinySlot >= 0) {
-        OverworldWildSpawns_LoadSavedShinyEncounter(state, *savedShinySlot, encounter);
-        *shiny = TRUE;
-    } else {
-        if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
-            if (!OverworldWildSpawns_TryRollHeadbuttEncounter(fieldSystem, position->headbuttTreeType, encounter)) {
-                return FALSE;
-            }
-        } else if (!OverworldWildSpawns_TryRollEncounter(fieldSystem, terrain, encounter)) {
-            return FALSE;
-        }
-
-        encounter->personality = OverworldWildSpawns_RollPersonality();
-        *shiny = OverworldWildSpawns_RollShiny(state);
-        if (*shiny) {
-            encounter->personality = OverworldWildSpawns_MakePersonalityShiny(encounter->personality);
-        }
-    }
-
-    if (encounter->species == SPECIES_NONE || encounter->level == 0) {
-        return FALSE;
-    }
-
-    OverworldWildSpawns_ApplyBehaviorTestSpecies(terrain, slot, *savedShinySlot, encounter);
-    return TRUE;
-}
-
-static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveSpawnBehaviorProfile(
-    const OverworldWildRolledEncounter *encounter,
-    OverworldWildSpawnTerrain terrain,
-    BOOL shiny,
-    u8 *behaviorClass)
-{
-    OverworldWildBehaviorContext behaviorContext;
-
-    *behaviorClass = OverworldWildSpawns_GetBehaviorClassForSpawn(
-        encounter->species,
-        encounter->level,
-        terrain,
-        shiny);
-    behaviorContext = OverworldWildSpawns_BuildBehaviorContext(
-        NULL,
-        encounter->species,
-        encounter->level,
-        terrain,
-        shiny);
-    behaviorContext.behaviorClass = *behaviorClass;
-    return OverworldWildSpawns_ResolveBehaviorProfileForContext(&behaviorContext);
-}
-
-static u8 OverworldWildSpawns_GetSpawnLocomotion(const OverworldWildBehaviorProfile *profile)
-{
-    if (profile == NULL) {
-        return OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
-    }
-
-    if (profile->spawnState < NELEMS(sOverworldWildSpawnLocomotionBySpawnState)) {
-        return sOverworldWildSpawnLocomotionBySpawnState[profile->spawnState];
-    }
-
-    return OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
-}
-
 static void OverworldWildSpawns_PrepareSpawnHopStart(
     FieldSystem *fieldSystem,
     OverworldWildSpawnPosition *position,
@@ -17591,17 +16950,15 @@ static void OverworldWildSpawns_PrepareSpawnStartup(
     OverworldWildSpawnPosition *position,
     OverworldWildSpawnStartup *startup)
 {
-    u8 locomotion;
-
-    (void)terrain;
+    OverworldWildBehaviorPrimitives primitives =
+        OverworldWildSpawns_ResolveBehaviorPrimitives(profile);
 
     startup->targetX = (s16)position->startX;
     startup->targetY = (s16)position->startY;
     startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
     startup->hopDirection = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
 
-    locomotion = OverworldWildSpawns_GetSpawnLocomotion(profile);
-    if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN) {
+    if (primitives.spawnLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN) {
         if (OverworldWildSpawns_TryPickSpawnRunStart(
                 state,
                 fieldSystem,
@@ -17612,11 +16969,354 @@ static void OverworldWildSpawns_PrepareSpawnStartup(
                 &position->startY)) {
             startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN;
         }
-    } else if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN) {
+    } else if (primitives.spawnLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN) {
         OverworldWildSpawns_PrepareSpawnHopStart(fieldSystem, position, startup);
-    } else if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP) {
+    } else if (primitives.spawnLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP) {
         startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP;
     }
+}
+
+static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveSpawnBehaviorProfile(
+    const OverworldWildRolledEncounter *encounter,
+    OverworldWildSpawnTerrain terrain,
+    BOOL shiny,
+    u8 *behaviorClass)
+{
+    OverworldWildBehaviorContext behaviorContext;
+
+    *behaviorClass = OverworldWildSpawns_GetBehaviorClassForSpawn(
+        encounter->species,
+        encounter->level,
+        terrain,
+        shiny);
+    behaviorContext = OverworldWildSpawns_BuildBehaviorContext(
+        NULL,
+        encounter->species,
+        encounter->level,
+        terrain,
+        shiny);
+    behaviorContext.behaviorClass = *behaviorClass;
+    return OverworldWildSpawns_ResolveBehaviorProfileForContext(&behaviorContext);
+}
+
+static BOOL OverworldWildSpawns_FinalizePreparedSpawn(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnTerrain terrain,
+    OverworldWildPreparedSpawn *prepared)
+{
+    if (state == NULL
+        || fieldSystem == NULL
+        || prepared == NULL
+        || prepared->encounter.species == SPECIES_NONE
+        || prepared->encounter.level == 0) {
+        return FALSE;
+    }
+
+    prepared->behaviorProfile = OverworldWildSpawns_ResolveSpawnBehaviorProfile(
+        &prepared->encounter,
+        terrain,
+        prepared->shiny,
+        &prepared->behaviorClass);
+    if (!OverworldWildSpawns_TryApplySpawnDestination(
+            state,
+            fieldSystem,
+            &prepared->behaviorProfile,
+            &prepared->position)) {
+        return FALSE;
+    }
+    OverworldWildSpawns_PrepareSpawnStartup(
+        state,
+        fieldSystem,
+        terrain,
+        &prepared->behaviorProfile,
+        &prepared->position,
+        &prepared->startup);
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_HelperGetPlayerState(
+    void *context,
+    OverworldWildHelperPlayerState *playerState)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+    FieldSystem *fieldSystem;
+    LocalMapObject *playerObject;
+
+    if (prepContext == NULL
+        || prepContext->fieldSystem == NULL
+        || prepContext->fieldSystem->playerAvatar == NULL
+        || playerState == NULL) {
+        return FALSE;
+    }
+
+    fieldSystem = prepContext->fieldSystem;
+    playerState->playerX = GetPlayerXCoord(fieldSystem->playerAvatar);
+    playerState->playerY = GetPlayerYCoord(fieldSystem->playerAvatar);
+    playerState->objectX = playerState->playerX;
+    playerState->objectY = playerState->playerY;
+    playerState->facing = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE;
+    playerState->hasObject = FALSE;
+    playerState->reserved[0] = 0;
+    playerState->reserved[1] = 0;
+
+    playerObject = fieldSystem->playerAvatar->mapObject;
+    if (playerObject != NULL
+        && OverworldWildSpawns_IsCurrentMapObject(fieldSystem, playerObject)
+        && (playerObject->flags & MAPOBJECTFLAG_ACTIVE) != 0) {
+        playerState->objectX = MapObject_GetCurrentX(playerObject);
+        playerState->objectY = MapObject_GetCurrentY(playerObject);
+        playerState->facing = playerObject->curFacing;
+        playerState->hasObject = TRUE;
+    }
+
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_HelperTryGetSpawnTerrain(
+    void *context,
+    int x,
+    int y,
+    OverworldWildSpawnTerrain *terrain)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_TryGetSpawnTerrain(
+            prepContext->fieldSystem,
+            x,
+            y,
+            terrain);
+}
+
+static BOOL OverworldWildSpawns_HelperIsTileOccupied(void *context, int x, int y)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_IsTileOccupiedByObject(prepContext->fieldSystem, x, y);
+}
+
+static BOOL OverworldWildSpawns_HelperIsNearActiveSpawn(
+    void *context,
+    int x,
+    int y,
+    int radius)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_IsNearActiveSpawn(prepContext->state, x, y, radius);
+}
+
+static BOOL OverworldWildSpawns_HelperIsWalkableLandTile(void *context, int x, int y)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_IsWalkableLandTile(prepContext->fieldSystem, x, y);
+}
+
+static BOOL OverworldWildSpawns_HelperIsFishingShoreTile(void *context, int x, int y)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_IsFishingShoreTile(prepContext->fieldSystem, x, y);
+}
+
+static BOOL OverworldWildSpawns_HelperGetMapId(void *context, u16 *mapId)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    if (prepContext == NULL
+        || prepContext->fieldSystem == NULL
+        || prepContext->fieldSystem->location == NULL
+        || mapId == NULL) {
+        return FALSE;
+    }
+
+    *mapId = prepContext->fieldSystem->location->mapId;
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_HelperLoadArchiveData(
+    void *context,
+    int arcId,
+    int datId,
+    int offset,
+    void *dest,
+    int size)
+{
+    (void)context;
+
+    if (dest == NULL || size <= 0) {
+        return FALSE;
+    }
+
+    ArchiveDataLoadOfs(dest, arcId, datId, offset, size);
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_HelperTryGetEncounterDataId(
+    void *context,
+    int *encounterDataId)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    return prepContext != NULL
+        && OverworldWildSpawns_TryGetEncounterDataId(
+            prepContext->fieldSystem,
+            encounterDataId);
+}
+
+static int OverworldWildSpawns_HelperFindSavedShiny(
+    void *context,
+    OverworldWildSpawnTerrain terrain)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    if (prepContext == NULL
+        || prepContext->fieldSystem == NULL
+        || prepContext->fieldSystem->location == NULL) {
+        return -1;
+    }
+
+    return OverworldWildSpawns_FindSavedShiny(
+        prepContext->state,
+        prepContext->fieldSystem->location->mapId,
+        terrain);
+}
+
+static void OverworldWildSpawns_HelperLoadSavedShiny(
+    void *context,
+    int savedShinySlot,
+    OverworldWildRolledEncounter *encounter)
+{
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
+
+    if (prepContext == NULL || encounter == NULL) {
+        return;
+    }
+
+    OverworldWildSpawns_LoadSavedShinyEncounter(prepContext->state, savedShinySlot, encounter);
+}
+
+static void OverworldWildSpawns_HelperApplyBehaviorTestSpecies(
+    void *context,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    int savedShinySlot,
+    OverworldWildRolledEncounter *encounter)
+{
+    (void)context;
+
+    OverworldWildSpawns_ApplyBehaviorTestSpecies(
+        terrain,
+        slot,
+        savedShinySlot,
+        encounter);
+}
+
+static const OverworldWildHelperSpawnCallbacks sOverworldWildSpawnPrepCallbacks = {
+    OverworldWildSpawns_HelperGetPlayerState,
+    OverworldWildSpawns_HelperTryGetSpawnTerrain,
+    OverworldWildSpawns_HelperIsTileOccupied,
+    OverworldWildSpawns_HelperIsNearActiveSpawn,
+    OverworldWildSpawns_HelperIsWalkableLandTile,
+    OverworldWildSpawns_HelperIsFishingShoreTile,
+    OverworldWildSpawns_HelperGetMapId,
+    OverworldWildSpawns_HelperLoadArchiveData,
+    OverworldWildSpawns_HelperTryGetEncounterDataId,
+    OverworldWildSpawns_HelperFindSavedShiny,
+    OverworldWildSpawns_HelperLoadSavedShiny,
+    OverworldWildSpawns_HelperApplyBehaviorTestSpecies,
+};
+
+static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    OverworldWildPreparedSpawn *prepared)
+{
+    const OverworldWildHelperOverlayEntry *helperEntry;
+    OverworldWildSpawnPrepContext prepContext;
+
+    if (state == NULL
+        || fieldSystem == NULL
+        || slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || prepared == NULL) {
+        return FALSE;
+    }
+
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
+    if (helperEntry == NULL || helperEntry->tryPrepareSpawn == NULL) {
+        return FALSE;
+    }
+
+    prepContext.state = state;
+    prepContext.fieldSystem = fieldSystem;
+    prepContext.terrain = terrain;
+    if (!helperEntry->tryPrepareSpawn(
+            &sOverworldWildSpawnPrepCallbacks,
+            &prepContext,
+            terrain,
+            slot,
+            state->shinySpawned,
+            prepared)) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared);
+}
+
+static BOOL OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    const OverworldWildRolledEncounter *encounter,
+    BOOL shiny,
+    int savedShinySlot,
+    BOOL rollPersonality,
+    OverworldWildPreparedSpawn *prepared)
+{
+    const OverworldWildHelperOverlayEntry *helperEntry;
+    OverworldWildSpawnPrepContext prepContext;
+
+    if (state == NULL
+        || fieldSystem == NULL
+        || slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || encounter == NULL
+        || prepared == NULL) {
+        return FALSE;
+    }
+
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
+    if (helperEntry == NULL || helperEntry->tryPrepareEncounterSpawn == NULL) {
+        return FALSE;
+    }
+
+    prepContext.state = state;
+    prepContext.fieldSystem = fieldSystem;
+    prepContext.terrain = terrain;
+    if (!helperEntry->tryPrepareEncounterSpawn(
+            &sOverworldWildSpawnPrepCallbacks,
+            &prepContext,
+            terrain,
+            slot,
+            encounter,
+            shiny,
+            savedShinySlot,
+            rollPersonality,
+            prepared)) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared);
 }
 
 static void OverworldWildSpawns_ApplySpawnObjectSetup(
@@ -17754,43 +17454,36 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
     FieldSystem *fieldSystem,
     OverworldWildSpawnTerrain terrain,
     int slot,
-    OverworldWildSpawnPosition *position,
-    const OverworldWildRolledEncounter *encounter,
-    int savedShinySlot,
-    BOOL shiny)
+    const OverworldWildPreparedSpawn *prepared)
 {
-    OverworldWildSpawnStartup startup;
     LocalMapObject *object;
-    OverworldWildBehaviorProfile behaviorProfile;
     OverworldWildBehaviorPrimitives behaviorPrimitives;
     u32 spriteId;
     u16 slotMask;
-    u8 behaviorClass;
+    const OverworldWildRolledEncounter *encounter;
+    const OverworldWildBehaviorProfile *behaviorProfile;
 
-    if (position == NULL
-        || encounter == NULL
+    if (prepared == NULL
+        || prepared->encounter.species == SPECIES_NONE
+        || prepared->encounter.level == 0) {
+        return FALSE;
+    }
+
+    encounter = &prepared->encounter;
+    behaviorProfile = &prepared->behaviorProfile;
+    if (encounter == NULL
         || encounter->species == SPECIES_NONE
         || encounter->level == 0) {
         return FALSE;
     }
 
     spriteId = OverworldWildSpawns_GetSpriteID(encounter->species, encounter->form);
-    behaviorProfile = OverworldWildSpawns_ResolveSpawnBehaviorProfile(encounter, terrain, shiny, &behaviorClass);
-    if (!OverworldWildSpawns_TryApplySpawnDestination(
-            state,
-            fieldSystem,
-            &behaviorProfile,
-            position)) {
-        return FALSE;
-    }
-    OverworldWildSpawns_PrepareSpawnStartup(state, fieldSystem, terrain, &behaviorProfile, position, &startup);
-
     object = OverworldWildSpawns_CreateObject(
         fieldSystem,
-        position,
+        &prepared->position,
         spriteId,
-        shiny,
-        &behaviorProfile);
+        prepared->shiny,
+        behaviorProfile);
     if (object == NULL) {
         return FALSE;
     }
@@ -17800,11 +17493,11 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         object,
         encounter,
         spriteId,
-        shiny,
-        &behaviorProfile);
+        prepared->shiny,
+        behaviorProfile);
 
-    if (savedShinySlot >= 0) {
-        OverworldWildSpawns_ClearSavedShiny(state, savedShinySlot);
+    if (prepared->savedShinySlot >= 0) {
+        OverworldWildSpawns_ClearSavedShiny(state, prepared->savedShinySlot);
     }
 
     OverworldWildSpawns_InitSpawnSlotState(
@@ -17814,21 +17507,21 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         slot,
         object,
         encounter,
-        shiny,
-        behaviorClass);
-    behaviorPrimitives = OverworldWildSpawns_ResolveBehaviorPrimitives(&behaviorProfile);
+        prepared->shiny,
+        prepared->behaviorClass);
+    behaviorPrimitives = OverworldWildSpawns_ResolveBehaviorPrimitives(behaviorProfile);
     slotMask = OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
-    if (OverworldWildSpawns_ProfileUsesFrameDrivenChill(&behaviorProfile)
-        || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(&behaviorProfile)
+    if (OverworldWildSpawns_ProfileUsesFrameDrivenChill(behaviorProfile)
+        || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(behaviorProfile)
             && behaviorPrimitives.chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP)) {
         OW_WILD_RUNTIME(state)->movementFrameDrivenChillMask |= slotMask;
     } else {
         OW_WILD_RUNTIME(state)->movementFrameDrivenChillMask &= ~slotMask;
     }
-    if (OverworldWildSpawns_IsFrameDrivenActiveBehaviorClass(behaviorClass)
-        || (OverworldWildSpawns_IsPlayfulBacktrackBehaviorClass(behaviorClass)
+    if (OverworldWildSpawns_IsFrameDrivenActiveBehaviorClass(prepared->behaviorClass)
+        || (OverworldWildSpawns_IsPlayfulBacktrackBehaviorClass(prepared->behaviorClass)
             && behaviorPrimitives.attentiveTarget == OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT)
-        || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(&behaviorProfile)
+        || (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(behaviorProfile)
             && behaviorPrimitives.attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
             && behaviorPrimitives.attentiveTarget == OW_WILD_BEHAVIOR_TARGET_TREE_TOP)) {
         OW_WILD_RUNTIME(state)->movementFrameDrivenActiveMask |= slotMask;
@@ -17846,35 +17539,25 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         OW_WILD_RUNTIME(state)->movementActivePhantomMask &= ~slotMask;
     }
 
-    if (shiny) {
+    if (prepared->shiny) {
         state->shinySpawned = TRUE;
         OverworldWildSpawns_TryPlayOverworldSE(state, SEQ_SE_PL_KIRAKIRA);
     }
-    OverworldWildSpawns_StartSpawnStartup(state, fieldSystem, slot, &startup);
+    OverworldWildSpawns_StartSpawnStartup(state, fieldSystem, slot, &prepared->startup);
 
     return TRUE;
 }
 
 static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSystem *fieldSystem, OverworldWildSpawnTerrain terrain, int slot)
 {
-    OverworldWildRolledEncounter encounter;
-    OverworldWildSpawnPosition position = { 0 };
-    int savedShinySlot;
-    BOOL shiny;
+    OverworldWildPreparedSpawn prepared;
 
-    if (!OverworldWildSpawns_TryPickSpawnPositionForTerrain(state, fieldSystem, terrain, &position)) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_TryPrepareSpawnEncounter(
+    if (!OverworldWildSpawns_TryPrepareSpawnWithHelper(
             state,
             fieldSystem,
             terrain,
             slot,
-            &position,
-            &encounter,
-            &savedShinySlot,
-            &shiny)) {
+            &prepared)) {
         return FALSE;
     }
 
@@ -17883,10 +17566,7 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         fieldSystem,
         terrain,
         slot,
-        &position,
-        &encounter,
-        savedShinySlot,
-        shiny);
+        &prepared);
 }
 
 static void OverworldWildSpawns_ApplyHelpChildSpawnState(
@@ -17940,7 +17620,7 @@ static BOOL OverworldWildSpawns_TrySpawnHelpChildren(
     int parentSlot = slot;
     int childSlot;
     OverworldWildRolledEncounter encounter;
-    OverworldWildSpawnPosition position;
+    OverworldWildPreparedSpawn prepared;
     OverworldWildSpawnTerrain terrain;
     int spawnLimit = profile->alertCallSpawnAmount;
     int spawnedCount = 0;
@@ -17970,28 +17650,30 @@ static BOOL OverworldWildSpawns_TrySpawnHelpChildren(
 
     while (spawnedCount < spawnLimit
         && OW_WILD_RUNTIME(state)->movementSwarmSpawnedTotal < OW_WILD_SPAWNER_SWARM_MAX_EXTRA_SPAWNS) {
-        position.startX = 0;
-        position.startY = 0;
-        position.headbuttTreeType = 0;
-
-        if (!OverworldWildSpawns_TryGetFreeSlot(state, 0, OW_WILD_MAX_SPAWNS, &childSlot)
-            || !OverworldWildSpawns_TryPickSpawnPositionForTerrain(state, fieldSystem, terrain, &position)) {
+        if (!OverworldWildSpawns_TryGetFreeSlot(state, 0, OW_WILD_MAX_SPAWNS, &childSlot)) {
             break;
         }
 
-        encounter.personality = OverworldWildSpawns_RollPersonality();
+        encounter.personality = 0;
         encounter.species = state->spawns[parentSlot].species;
         encounter.form = state->spawns[parentSlot].form;
         encounter.level = state->spawns[parentSlot].level;
-        if (!OverworldWildSpawns_SpawnPreparedEncounter(
+        if (!OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper(
                 state,
                 fieldSystem,
                 terrain,
                 childSlot,
-                &position,
                 &encounter,
+                FALSE,
                 -1,
-                FALSE)) {
+                TRUE,
+                &prepared)
+            || !OverworldWildSpawns_SpawnPreparedEncounter(
+                state,
+                fieldSystem,
+                terrain,
+                childSlot,
+                &prepared)) {
             break;
         }
 

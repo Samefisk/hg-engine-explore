@@ -2,10 +2,11 @@
 #define OVERWORLD_WILD_HELPER_H
 
 #include "types.h"
+#include "overworld_wild_behavior_data.h"
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 1
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 2
 
 #define OW_WILD_HELPER_DIRECTION_NONE 0xFF
 #define OW_WILD_HELPER_DIRECTION_UP 0
@@ -20,6 +21,125 @@
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT 0x01
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED 0x02
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_FALLBACK 0x04
+
+typedef struct OverworldWildRolledEncounter {
+    u32 personality;
+    u16 species;
+    u8 form;
+    u8 level;
+} OverworldWildRolledEncounter;
+
+typedef struct OverworldWildSpawnPosition {
+    int startX;
+    int startY;
+    u8 headbuttTreeType;
+} OverworldWildSpawnPosition;
+
+typedef struct OverworldWildSpawnStartup {
+    s16 targetX;
+    s16 targetY;
+    u8 locomotion;
+    u8 hopDirection;
+} OverworldWildSpawnStartup;
+
+typedef struct OverworldWildPreparedSpawn {
+    OverworldWildSpawnPosition position;
+    OverworldWildRolledEncounter encounter;
+    OverworldWildSpawnStartup startup;
+    OverworldWildBehaviorProfile behaviorProfile;
+    int savedShinySlot;
+    u8 behaviorClass;
+    u8 shiny;
+    u8 reserved[2];
+} OverworldWildPreparedSpawn;
+
+typedef struct OverworldWildHelperPlayerState {
+    int playerX;
+    int playerY;
+    int objectX;
+    int objectY;
+    u8 facing;
+    u8 hasObject;
+    u8 reserved[2];
+} OverworldWildHelperPlayerState;
+
+typedef BOOL (*OverworldWildHelperGetPlayerStateFunc)(
+    void *context,
+    OverworldWildHelperPlayerState *playerState);
+typedef BOOL (*OverworldWildHelperTryGetSpawnTerrainFunc)(
+    void *context,
+    int x,
+    int y,
+    OverworldWildSpawnTerrain *terrain);
+typedef BOOL (*OverworldWildHelperTilePredicateFunc)(
+    void *context,
+    int x,
+    int y);
+typedef BOOL (*OverworldWildHelperNearActiveSpawnFunc)(
+    void *context,
+    int x,
+    int y,
+    int radius);
+typedef BOOL (*OverworldWildHelperGetMapIdFunc)(
+    void *context,
+    u16 *mapId);
+typedef BOOL (*OverworldWildHelperArchiveLoadFunc)(
+    void *context,
+    int arcId,
+    int datId,
+    int offset,
+    void *dest,
+    int size);
+typedef BOOL (*OverworldWildHelperTryGetEncounterDataIdFunc)(
+    void *context,
+    int *encounterDataId);
+typedef int (*OverworldWildHelperFindSavedShinyFunc)(
+    void *context,
+    OverworldWildSpawnTerrain terrain);
+typedef void (*OverworldWildHelperLoadSavedShinyFunc)(
+    void *context,
+    int savedShinySlot,
+    OverworldWildRolledEncounter *encounter);
+typedef void (*OverworldWildHelperApplyBehaviorTestSpeciesFunc)(
+    void *context,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    int savedShinySlot,
+    OverworldWildRolledEncounter *encounter);
+
+typedef struct OverworldWildHelperSpawnCallbacks {
+    OverworldWildHelperGetPlayerStateFunc getPlayerState;
+    OverworldWildHelperTryGetSpawnTerrainFunc tryGetSpawnTerrain;
+    OverworldWildHelperTilePredicateFunc isTileOccupied;
+    OverworldWildHelperNearActiveSpawnFunc isNearActiveSpawn;
+    OverworldWildHelperTilePredicateFunc isWalkableLandTile;
+    OverworldWildHelperTilePredicateFunc isFishingShoreTile;
+    OverworldWildHelperGetMapIdFunc getMapId;
+    OverworldWildHelperArchiveLoadFunc loadArchiveData;
+    OverworldWildHelperTryGetEncounterDataIdFunc tryGetEncounterDataId;
+    OverworldWildHelperFindSavedShinyFunc findSavedShiny;
+    OverworldWildHelperLoadSavedShinyFunc loadSavedShiny;
+    OverworldWildHelperApplyBehaviorTestSpeciesFunc applyBehaviorTestSpecies;
+} OverworldWildHelperSpawnCallbacks;
+
+typedef BOOL (*OverworldWildHelperTryPrepareSpawnFunc)(
+    const OverworldWildHelperSpawnCallbacks *callbacks,
+    void *context,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    BOOL shinyAlreadySpawned,
+    OverworldWildPreparedSpawn *prepared);
+
+typedef BOOL (*OverworldWildHelperTryPrepareEncounterSpawnFunc)(
+    const OverworldWildHelperSpawnCallbacks *callbacks,
+    void *context,
+    OverworldWildSpawnTerrain terrain,
+    int slot,
+    const OverworldWildRolledEncounter *encounter,
+    BOOL shiny,
+    int savedShinySlot,
+    BOOL rollPersonality,
+    OverworldWildPreparedSpawn *prepared);
 
 typedef struct OverworldWildHelperHopConfig {
     int objectX;
@@ -62,6 +182,8 @@ typedef struct OverworldWildHelperOverlayEntry {
     u32 magic;
     u16 version;
     u16 size;
+    OverworldWildHelperTryPrepareSpawnFunc tryPrepareSpawn;
+    OverworldWildHelperTryPrepareEncounterSpawnFunc tryPrepareEncounterSpawn;
     OverworldWildHelperPickHopFunc pickRandomBehaviorHop;
     OverworldWildHelperPickHopFunc planBehaviorHopStep;
 } OverworldWildHelperOverlayEntry;
