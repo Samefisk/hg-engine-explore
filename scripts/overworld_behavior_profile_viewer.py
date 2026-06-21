@@ -24,6 +24,7 @@ import re
 import select
 import shlex
 import signal
+import struct
 import subprocess
 import sys
 import threading
@@ -66,10 +67,24 @@ MONDATA_SOURCE = ROOT / "armips/data/mondata.s"
 ARMIPS_CONSTANTS = ROOT / "armips/include/constants.s"
 ARMIPS_CONFIG = ROOT / "armips/include/config.s"
 TEST_NDS = ROOT / "test.nds"
+DEFAULT_TEST_DSV = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test.dsv"
+TEST_DSV = Path(os.environ.get("HG_ENGINE_TEST_DSV", str(DEFAULT_TEST_DSV))).expanduser()
 BUILD_COMMAND = "./docker-makerom.cmd"
 BUILD_OUTPUT_LIMIT = 60000
 BUILD_STARTUP_TIMEOUT_SECONDS = 45
 BUILD_STARTUP_TIMEOUT_CODE = 124
+DSV_RAW_SAVE_SIZE = 0x80000
+SAVE_COPY_BASES = (0x0, 0x40000)
+SAVE_NORMAL_SLOT_SIZE = 0xFFA0
+SAVE_CHUNK_FOOTER_SIZE = 0x10
+SAVE_CHUNK_MAGIC = 0x20060623
+OVERWORLD_WILD_SHINY_BASE_ODDS = 8192
+OVERWORLD_WILD_SHINY_COUNTER_MAX = OVERWORLD_WILD_SHINY_BASE_ODDS - 1
+OVERWORLD_WILD_SHINY_COUNTER_MAGIC = 0x4F57
+# Sav2_Misc_get uses save-array id 9. Its block starts at 0x2064 and the
+# counter fields live at SAVE_MISC_DATA offsets 0x29C/0x29E.
+OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET = 0x2064 + 0x29C
+OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET = 0x2064 + 0x29E
 BUILD_LOCK = threading.Lock()
 BUILD_STATE_LOCK = threading.Lock()
 BUILD_STATE = {
@@ -4236,6 +4251,126 @@ def open_test_nds() -> dict:
     return {"opened": True, "path": str(TEST_NDS)}
 
 
+def crc16_ccitt_false(data: bytes | bytearray | memoryview) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else:
+                crc = (crc << 1) & 0xFFFF
+    return crc
+
+
+def shiny_counter_slot_footer(save_bytes: bytes | bytearray, copy_base: int) -> dict:
+    footer_offset = copy_base + SAVE_NORMAL_SLOT_SIZE - SAVE_CHUNK_FOOTER_SIZE
+    if footer_offset < 0 or footer_offset + SAVE_CHUNK_FOOTER_SIZE > len(save_bytes):
+        return {
+            "copyBase": copy_base,
+            "valid": False,
+            "error": "save copy is outside the raw save image",
+        }
+    count, size, magic, slot, crc = struct.unpack_from("<IIIHH", save_bytes, footer_offset)
+    crc_data = save_bytes[copy_base:footer_offset]
+    expected_crc = crc16_ccitt_false(crc_data)
+    valid = (
+        size == SAVE_NORMAL_SLOT_SIZE
+        and magic == SAVE_CHUNK_MAGIC
+        and slot == 0
+        and crc == expected_crc
+    )
+    return {
+        "copyBase": copy_base,
+        "valid": valid,
+        "count": count,
+        "size": size,
+        "magic": magic,
+        "slot": slot,
+        "crc": crc,
+        "expectedCrc": expected_crc,
+    }
+
+
+def load_test_dsv_bytes() -> tuple[Path, bytes, bytes]:
+    path = TEST_DSV
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist")
+    data = path.read_bytes()
+    if len(data) < DSV_RAW_SAVE_SIZE:
+        raise ValueError(f"{path} is too small to be a raw DS save")
+    return path, data[:DSV_RAW_SAVE_SIZE], data[DSV_RAW_SAVE_SIZE:]
+
+
+def choose_active_shiny_counter_copy(save_bytes: bytes | bytearray) -> dict:
+    copies = [shiny_counter_slot_footer(save_bytes, base) for base in SAVE_COPY_BASES]
+    valid_copies = [copy for copy in copies if copy.get("valid")]
+    if not valid_copies:
+        raise ValueError("could not find a valid normal save slot in test.dsv")
+    active = max(valid_copies, key=lambda copy: copy.get("count", 0))
+    return {"active": active, "copies": copies}
+
+
+def shiny_counter_payload() -> dict:
+    if not TEST_DSV.exists():
+        return {
+            "exists": False,
+            "path": str(TEST_DSV),
+            "counter": 0,
+            "denominator": OVERWORLD_WILD_SHINY_BASE_ODDS,
+            "magicOk": False,
+        }
+    path, save_bytes, extra_bytes = load_test_dsv_bytes()
+    del extra_bytes
+    selected = choose_active_shiny_counter_copy(save_bytes)
+    active = selected["active"]
+    base = active["copyBase"]
+    counter_offset = base + OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET
+    magic_offset = base + OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET
+    raw_counter = struct.unpack_from("<H", save_bytes, counter_offset)[0]
+    magic = struct.unpack_from("<H", save_bytes, magic_offset)[0]
+    magic_ok = magic == OVERWORLD_WILD_SHINY_COUNTER_MAGIC
+    counter = raw_counter if magic_ok else 0
+    counter = min(counter, OVERWORLD_WILD_SHINY_COUNTER_MAX)
+    return {
+        "exists": True,
+        "path": str(path),
+        "counter": counter,
+        "rawCounter": raw_counter,
+        "magic": magic,
+        "magicOk": magic_ok,
+        "denominator": OVERWORLD_WILD_SHINY_BASE_ODDS - counter,
+        "activeCopyBase": base,
+        "activeSaveCount": active.get("count"),
+        "copies": selected["copies"],
+    }
+
+
+def set_shiny_counter(counter: int) -> dict:
+    if not isinstance(counter, int):
+        raise ValueError("counter must be an integer")
+    if counter < 0 or counter > OVERWORLD_WILD_SHINY_COUNTER_MAX:
+        raise ValueError(f"counter must be between 0 and {OVERWORLD_WILD_SHINY_COUNTER_MAX}")
+    path, save_bytes, extra_bytes = load_test_dsv_bytes()
+    raw = bytearray(save_bytes)
+    selected = choose_active_shiny_counter_copy(raw)
+    active = selected["active"]
+    base = active["copyBase"]
+    counter_offset = base + OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET
+    magic_offset = base + OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET
+    struct.pack_into("<H", raw, counter_offset, counter)
+    struct.pack_into("<H", raw, magic_offset, OVERWORLD_WILD_SHINY_COUNTER_MAGIC)
+
+    footer_offset = base + SAVE_NORMAL_SLOT_SIZE - SAVE_CHUNK_FOOTER_SIZE
+    crc = crc16_ccitt_false(raw[base:footer_offset])
+    struct.pack_into("<H", raw, footer_offset + 0xE, crc)
+    path.write_bytes(bytes(raw) + extra_bytes)
+    return {
+        **shiny_counter_payload(),
+        "message": f"Shiny counter set to {counter}",
+    }
+
+
 def run_build(open_after: bool = False) -> dict:
     if not BUILD_LOCK.acquire(blocking=False):
         raise RuntimeError("Build already running")
@@ -5703,6 +5838,40 @@ HTML = r"""<!doctype html>
       border: 1px solid #e2e8f0;
       border-radius: 7px;
       background: #fff;
+    }
+
+    .shiny-counter-group {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .shiny-counter-pill {
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      border: 1px solid #facc15;
+      border-radius: 7px;
+      background: #fff7d1;
+      color: #713f12;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .shiny-counter-pill .muted {
+      color: #8a6a18;
+      font-weight: 750;
+    }
+
+    .shiny-counter-group .control {
+      min-width: 28px;
+      padding-inline: 7px;
+      border-color: #f3d36a;
+      background: #fffef7;
+      color: #713f12;
+      font-weight: 850;
     }
 
     .global-actions .control {
@@ -9656,6 +9825,18 @@ HTML = r"""<!doctype html>
               <span class="switch-label">Show log</span>
             </label>
           </div>
+          <div class="action-group shiny-counter-group" title="Debug saved shiny spawn counter in test.dsv">
+            <span class="shiny-counter-pill">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.1L19 10l-5.4 1.9L12 17l-1.6-5.1L5 10l5.4-1.9L12 3Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/><path d="M5 15l.6 1.6L7 17l-1.4.4L5 19l-.6-1.6L3 17l1.4-.4L5 15Z"/></svg></span>
+              <span id="shinyCounterValue">--</span>
+              <span id="shinyCounterRate" class="muted">1/8192</span>
+            </span>
+            <button id="refreshShinyCounter" class="control" type="button" title="Refresh shiny counter" aria-label="Refresh shiny counter">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></span>
+            </button>
+            <button id="resetShinyCounter" class="control" type="button" title="Set shiny counter to 0">0</button>
+            <button id="maxShinyCounter" class="control" type="button" title="Set shiny counter to 8191 so the next eligible spawn is shiny">8191</button>
+          </div>
         </div>
         <span id="saveStatus" class="save-status"></span>
         <button id="resetAllEdits" class="control subtle-action" type="button" title="Reset unsaved edits">
@@ -10012,6 +10193,7 @@ HTML = r"""<!doctype html>
     let isSavingSpawnSettings = false;
     let isManagingProfiles = false;
     let isBuilding = false;
+    let isSettingShinyCounter = false;
     let buildAfterSave = localStorage.getItem("owProfileBuildAfterSave") === "1";
     let runTestNdsAfterBuild = localStorage.getItem("owProfileRunTestAfterBuild") === "1";
     let autoShowBuildOutput = localStorage.getItem("owProfileAutoShowBuildOutput") !== "0";
@@ -10047,6 +10229,11 @@ HTML = r"""<!doctype html>
       openTestNds: document.getElementById("openTestNds"),
       runTestAfterBuild: document.getElementById("runTestAfterBuild"),
       showBuildOutput: document.getElementById("showBuildOutput"),
+      shinyCounterValue: document.getElementById("shinyCounterValue"),
+      shinyCounterRate: document.getElementById("shinyCounterRate"),
+      refreshShinyCounter: document.getElementById("refreshShinyCounter"),
+      resetShinyCounter: document.getElementById("resetShinyCounter"),
+      maxShinyCounter: document.getElementById("maxShinyCounter"),
       resetAllEdits: document.getElementById("resetAllEdits"),
       saveStatus: document.getElementById("saveStatus"),
       buildOutputPanel: document.getElementById("buildOutputPanel"),
@@ -14812,7 +14999,7 @@ HTML = r"""<!doctype html>
     }
 
     function updateSaveControls() {
-      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding;
+      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding || isSettingShinyCounter;
       const profilesEditable = appData?.profilesAvailable !== false;
       const hasProfileChanges = profilesEditable && (profileEdits.size > 0 || profileMemberEdits.size > 0 || profileOverrideChangeCount() > 0);
       const hasChanges = hasProfileChanges || encounterEdits.size > 0 || spawnSettingEdits.size > 0;
@@ -14821,6 +15008,74 @@ HTML = r"""<!doctype html>
       els.buildRom.disabled = busy;
       els.openTestNds.disabled = busy;
       els.resetAllEdits.disabled = busy || (!hasChanges && !hasInvalid);
+      els.refreshShinyCounter.disabled = isSettingShinyCounter;
+      els.resetShinyCounter.disabled = isSettingShinyCounter;
+      els.maxShinyCounter.disabled = isSettingShinyCounter;
+    }
+
+    function applyShinyCounterStatus(payload) {
+      if (!payload || !payload.exists) {
+        els.shinyCounterValue.textContent = "--";
+        els.shinyCounterRate.textContent = "No save";
+        return;
+      }
+      const counter = Number(payload.counter) || 0;
+      const denominator = Number(payload.denominator) || 8192;
+      els.shinyCounterValue.textContent = String(counter);
+      els.shinyCounterRate.textContent = `1/${denominator}`;
+      const suffix = payload.magicOk ? "" : " (not initialized)";
+      els.shinyCounterValue.title = `Saved shiny spawn counter${suffix}`;
+      els.shinyCounterRate.title = `Current shiny odds: 1 in ${denominator}${suffix}`;
+    }
+
+    async function loadShinyCounter(options = {}) {
+      try {
+        const response = await fetch(`/shiny-counter?ts=${Date.now()}`);
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        applyShinyCounterStatus(result);
+        if (options.report) {
+          const text = result.exists
+            ? `Shiny counter: ${result.counter} (1/${result.denominator})`
+            : "No test.dsv found";
+          setSaveStatus(text, result.exists ? "success" : "warning");
+        }
+        return result;
+      } catch (error) {
+        els.shinyCounterValue.textContent = "--";
+        els.shinyCounterRate.textContent = "Load failed";
+        if (options.report) {
+          setSaveStatus(`Shiny counter failed: ${error.message}`, "error");
+        }
+        return null;
+      }
+    }
+
+    async function setShinyCounter(counter) {
+      if (isSettingShinyCounter) return;
+      isSettingShinyCounter = true;
+      updateSaveControls();
+      setSaveStatus(`Setting shiny counter to ${counter}...`, "busy");
+      try {
+        const response = await fetch("/shiny-counter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ counter })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        applyShinyCounterStatus(result);
+        setSaveStatus(`${result.message || "Shiny counter updated"} (1/${result.denominator})`, "success");
+      } catch (error) {
+        setSaveStatus(`Shiny counter failed: ${error.message}`, "error");
+      } finally {
+        isSettingShinyCounter = false;
+        updateSaveControls();
+      }
     }
 
     async function saveProfileChanges(options = {}) {
@@ -15847,6 +16102,16 @@ HTML = r"""<!doctype html>
     els.classFilter.addEventListener("change", renderFilterResults);
     els.refresh.addEventListener("click", () => {
       loadData().catch(() => {});
+      loadShinyCounter().catch(() => {});
+    });
+    els.refreshShinyCounter.addEventListener("click", () => {
+      loadShinyCounter({ report: true }).catch(() => {});
+    });
+    els.resetShinyCounter.addEventListener("click", () => {
+      setShinyCounter(0);
+    });
+    els.maxShinyCounter.addEventListener("click", () => {
+      setShinyCounter(8191);
     });
     els.saveAllChanges.addEventListener("click", () => {
       saveAllChanges().then(saved => {
@@ -16836,6 +17101,7 @@ HTML = r"""<!doctype html>
     });
 
     loadData().then(() => {
+      loadShinyCounter().catch(() => {});
       pollBuildStatus();
     }).catch(error => {
       els.detailHead.innerHTML = `<div><h2>Could not load data</h2><div class="meta">${esc(error.message)}</div></div>`;
@@ -16926,6 +17192,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
             if path == "/build-status":
                 self.send_json(build_status_payload())
                 return
+            if path == "/shiny-counter":
+                self.send_json(shiny_counter_payload())
+                return
             self.send_bytes(b"not found\n", "text/plain; charset=utf-8", status=404)
         except Exception as exc:  # pragma: no cover - surfaced in browser during local use
             body = json.dumps({"error": str(exc)}, indent=2).encode()
@@ -16960,6 +17229,12 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 return
             if path == "/open-test-nds":
                 self.send_json(open_test_nds())
+                return
+            if path == "/shiny-counter":
+                payload = json.loads(body.decode() or "{}")
+                if "counter" not in payload:
+                    raise ValueError("counter is required")
+                self.send_json(set_shiny_counter(int(payload["counter"])))
                 return
             self.send_json({"error": "not found"}, status=404)
         except ValueError as exc:
