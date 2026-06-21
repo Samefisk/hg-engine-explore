@@ -12,6 +12,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/message.h"
 #include "../../include/overlay.h"
+#include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
@@ -1172,6 +1173,12 @@ typedef struct OverworldWildCanopyPathScratch {
     u32 visited[OW_WILD_SPAWNER_CANOPY_HOPPER_PATH_WORD_COUNT];
     u32 mankeyTargets[OW_WILD_SPAWNER_CANOPY_HOPPER_PATH_WORD_COUNT];
 } OverworldWildCanopyPathScratch;
+
+typedef struct OverworldWildBehaviorHopValidationContext {
+    FieldSystem *fieldSystem;
+    u8 allowedTile;
+    BOOL blockPlayerUnlessFinal;
+} OverworldWildBehaviorHopValidationContext;
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
@@ -12127,108 +12134,6 @@ static BOOL OverworldWildSpawns_TryGetBehaviorHopVector(
     return TRUE;
 }
 
-static void OverworldWildSpawns_AddHopPlanDirection(
-    s8 *stepXs,
-    s8 *stepYs,
-    int *directionCount,
-    int stepX,
-    int stepY)
-{
-    int i;
-
-    if (stepXs == NULL
-        || stepYs == NULL
-        || directionCount == NULL
-        || (stepX == 0 && stepY == 0)) {
-        return;
-    }
-
-    for (i = 0; i < *directionCount; i++) {
-        if (stepXs[i] == stepX && stepYs[i] == stepY) {
-            return;
-        }
-    }
-
-    if (*directionCount >= OW_WILD_SPAWNER_HOP_PLAN_MAX_DIRECTIONS) {
-        return;
-    }
-
-    stepXs[*directionCount] = (s8)stepX;
-    stepYs[*directionCount] = (s8)stepY;
-    (*directionCount)++;
-}
-
-static int OverworldWildSpawns_BuildHopPlanDirections(
-    int fromX,
-    int fromY,
-    int targetX,
-    int targetY,
-    const u8 *hintDirections,
-    int hintDirectionCount,
-    BOOL allowNonCardinal,
-    s8 *stepXs,
-    s8 *stepYs)
-{
-    int directionCount = 0;
-    int dx = targetX - fromX;
-    int dy = targetY - fromY;
-    u8 targetDirections[OW_WILD_SPAWNER_MOVEMENT_MAX_DIRECTIONS];
-    int targetDirectionCount;
-    int i;
-
-    if (allowNonCardinal && dx != 0 && dy != 0) {
-        OverworldWildSpawns_AddHopPlanDirection(
-            stepXs,
-            stepYs,
-            &directionCount,
-            dx > 0 ? 1 : -1,
-            dy > 0 ? 1 : -1);
-    }
-
-    targetDirectionCount = OverworldWildSpawns_DiagnosticBuildDirections(
-        dx,
-        dy,
-        targetDirections);
-    for (i = 0; i < targetDirectionCount; i++) {
-        OverworldWildSpawns_AddHopPlanDirection(
-            stepXs,
-            stepYs,
-            &directionCount,
-            OverworldWildSpawns_MovementDirectionDeltaX(targetDirections[i]),
-            OverworldWildSpawns_MovementDirectionDeltaY(targetDirections[i]));
-    }
-
-    for (i = 0; hintDirections != NULL && i < hintDirectionCount; i++) {
-        OverworldWildSpawns_AddHopPlanDirection(
-            stepXs,
-            stepYs,
-            &directionCount,
-            OverworldWildSpawns_MovementDirectionDeltaX(hintDirections[i]),
-            OverworldWildSpawns_MovementDirectionDeltaY(hintDirections[i]));
-    }
-
-    OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, 1, 0);
-    OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, -1, 0);
-    OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, 0, 1);
-    OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, 0, -1);
-
-    if (allowNonCardinal) {
-        OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, 1, 1);
-        OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, 1, -1);
-        OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, -1, 1);
-        OverworldWildSpawns_AddHopPlanDirection(stepXs, stepYs, &directionCount, -1, -1);
-    }
-
-    return directionCount;
-}
-
-static int OverworldWildSpawns_GetHopPlanDistance(int x, int y, int targetX, int targetY)
-{
-    return OverworldWildSpawns_Max(
-        OverworldWildSpawns_Abs(targetX - x),
-        OverworldWildSpawns_Abs(targetY - y));
-}
-
 static BOOL OverworldWildSpawns_IsBehaviorHopTargetOneHopAway(
     const OverworldWildBehaviorProfile *profile,
     u8 spotState,
@@ -12246,57 +12151,105 @@ static BOOL OverworldWildSpawns_IsBehaviorHopTargetOneHopAway(
         NULL);
 }
 
-static BOOL OverworldWildSpawns_HopPlanHasVisited(
-    const s16 *nodeXs,
-    const s16 *nodeYs,
-    int nodeCount,
-    int x,
-    int y)
+static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverlayEntry(void)
 {
-    int i;
+    const OverworldWildHelperOverlayEntry *entry;
 
-    for (i = 0; i < nodeCount; i++) {
-        if (nodeXs[i] == x && nodeYs[i] == y) {
-            return TRUE;
-        }
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_HELPER, 0)) {
+        return NULL;
     }
 
-    return FALSE;
+    entry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
+    if (entry == NULL
+        || entry->magic != OVERWORLD_WILD_HELPER_OVERLAY_MAGIC
+        || entry->version != OVERWORLD_WILD_HELPER_OVERLAY_VERSION
+        || entry->size < sizeof(*entry)) {
+        return NULL;
+    }
+
+    return entry;
 }
 
-static BOOL OverworldWildSpawns_IsHopPlanCandidate(
-    FieldSystem *fieldSystem,
+static void OverworldWildSpawns_BuildBehaviorHopHelperConfig(
     const OverworldWildBehaviorProfile *profile,
-    u8 allowedTile,
     u8 spotState,
-    int fromX,
-    int fromY,
-    int toX,
-    int toY,
+    int objectX,
+    int objectY,
     int targetX,
-    int targetY)
+    int targetY,
+    const u8 *directions,
+    int directionCount,
+    BOOL stopOneHopAway,
+    OverworldWildHelperHopConfig *config)
 {
-    if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-            profile,
+    int i;
+    int helperDirectionCount = directionCount;
+
+    if (config == NULL) {
+        return;
+    }
+
+    memset(config, 0, sizeof(*config));
+    config->objectX = objectX;
+    config->objectY = objectY;
+    config->targetX = targetX;
+    config->targetY = targetY;
+    config->minDistance = OverworldWildSpawns_GetBehaviorHopMinDistance(
+        profile,
+        spotState);
+    config->maxDistance = OverworldWildSpawns_GetBehaviorHopMaxDistance(
+        profile,
+        spotState);
+    config->allowNonCardinal =
+        OverworldWildSpawns_SelectStateMovementByte(
             spotState,
-            toX - fromX,
-            toY - fromY,
-            NULL,
-            NULL)) {
-        return FALSE;
+            profile->hopAllowNonCardinal,
+            profile->attentiveHopAllowNonCardinal,
+            profile->tiredHopAllowNonCardinal) == OW_WILD_BEHAVIOR_BOOL_YES;
+    config->stopOneHopAway = stopOneHopAway;
+
+    if (helperDirectionCount > OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS) {
+        helperDirectionCount = OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS;
     }
-    if (!OverworldWildSpawns_IsBehaviorAllowedMovementTile(
-            fieldSystem,
-            allowedTile,
-            toX,
-            toY)) {
-        return FALSE;
+    if (helperDirectionCount < 0 || directions == NULL) {
+        helperDirectionCount = 0;
     }
-    if ((toX != targetX || toY != targetY)
-        && OverworldWildSpawns_IsPlayerTile(fieldSystem, toX, toY)) {
+
+    config->directionCount = (u8)helperDirectionCount;
+    for (i = 0; i < helperDirectionCount; i++) {
+        config->directions[i] = directions[i];
+    }
+}
+
+static BOOL OverworldWildSpawns_ValidateBehaviorHopLanding(
+    int landingX,
+    int landingY,
+    int targetX,
+    int targetY,
+    void *context)
+{
+    OverworldWildBehaviorHopValidationContext *validationContext =
+        (OverworldWildBehaviorHopValidationContext *)context;
+
+    if (validationContext == NULL
+        || validationContext->fieldSystem == NULL
+        || !OverworldWildSpawns_IsBehaviorAllowedMovementTile(
+            validationContext->fieldSystem,
+            validationContext->allowedTile,
+            landingX,
+            landingY)) {
         return FALSE;
     }
 
+    if (validationContext->blockPlayerUnlessFinal
+        && (landingX != targetX || landingY != targetY)
+        && OverworldWildSpawns_IsPlayerTile(
+            validationContext->fieldSystem,
+            landingX,
+            landingY)) {
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -12404,27 +12357,14 @@ static BOOL OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
     int directionCount,
     BOOL stopOneHopAway)
 {
+    const OverworldWildHelperOverlayEntry *helperEntry;
+    OverworldWildHelperHopConfig config;
+    OverworldWildHelperHopResult result;
+    OverworldWildBehaviorHopValidationContext validationContext;
     LocalMapObject *object;
-    s16 nodeXs[OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT];
-    s16 nodeYs[OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT];
-    s16 firstXs[OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT];
-    s16 firstYs[OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT];
-    u8 nodeDepths[OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT];
-    int head = 0;
-    int tail = 0;
     int objectX;
     int objectY;
     u8 spotState;
-    u8 minDistance;
-    u8 maxDistance;
-    BOOL allowNonCardinal;
-    int bestFirstX = 0;
-    int bestFirstY = 0;
-    int bestTerminalX = 0;
-    int bestTerminalY = 0;
-    int bestDistance = 0x7FFF;
-    u8 bestDepth = 0xFF;
-    BOOL bestFound = FALSE;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -12442,174 +12382,43 @@ static BOOL OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
     objectX = MapObject_GetCurrentX(object);
     objectY = MapObject_GetCurrentY(object);
     spotState = state->movementSpotStates[slot];
-    minDistance = OverworldWildSpawns_GetBehaviorHopMinDistance(profile, spotState);
-    maxDistance = OverworldWildSpawns_GetBehaviorHopMaxDistance(profile, spotState);
-    allowNonCardinal = OverworldWildSpawns_SelectStateMovementByte(
-            spotState,
-            profile->hopAllowNonCardinal,
-            profile->attentiveHopAllowNonCardinal,
-            profile->tiredHopAllowNonCardinal) == OW_WILD_BEHAVIOR_BOOL_YES;
-
-    if ((stopOneHopAway
-            || !OverworldWildSpawns_IsBehaviorAllowedMovementTile(fieldSystem, allowedTile, targetX, targetY))
-        && (objectX != targetX || objectY != targetY)
-        && OverworldWildSpawns_IsBehaviorHopTargetOneHopAway(
-            profile,
-            spotState,
-            objectX,
-            objectY,
-            targetX,
-            targetY)) {
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
+    if (helperEntry == NULL || helperEntry->planBehaviorHopStep == NULL) {
         return FALSE;
     }
 
-    nodeXs[tail] = (s16)objectX;
-    nodeYs[tail] = (s16)objectY;
-    firstXs[tail] = (s16)objectX;
-    firstYs[tail] = (s16)objectY;
-    nodeDepths[tail] = 0;
-    tail++;
-
-    while (head < tail) {
-        int fromX = nodeXs[head];
-        int fromY = nodeYs[head];
-        int nodeDistance = OverworldWildSpawns_GetHopPlanDistance(
-            fromX,
-            fromY,
-            targetX,
-            targetY);
-        s8 stepXs[OW_WILD_SPAWNER_HOP_PLAN_MAX_DIRECTIONS];
-        s8 stepYs[OW_WILD_SPAWNER_HOP_PLAN_MAX_DIRECTIONS];
-        int planDirectionCount = OverworldWildSpawns_BuildHopPlanDirections(
-            fromX,
-            fromY,
-            targetX,
-            targetY,
-            directions,
-            directionCount,
-            allowNonCardinal,
-            stepXs,
-            stepYs);
-        int directionIndex;
-
-        if (nodeDepths[head] >= OW_WILD_SPAWNER_HOP_PLAN_MAX_HOPS) {
-            head++;
-            continue;
-        }
-
-        for (directionIndex = 0; directionIndex < planDirectionCount; directionIndex++) {
-            int stepX = stepXs[directionIndex];
-            int stepY = stepYs[directionIndex];
-            int distance;
-
-            for (distance = maxDistance; distance >= minDistance; distance--) {
-                int landingX = fromX + stepX * distance;
-                int landingY = fromY + stepY * distance;
-                int landingDistance = OverworldWildSpawns_GetHopPlanDistance(
-                    landingX,
-                    landingY,
-                    targetX,
-                    targetY);
-                int firstX = nodeDepths[head] == 0 ? landingX : firstXs[head];
-                int firstY = nodeDepths[head] == 0 ? landingY : firstYs[head];
-                BOOL landingIsTarget;
-                BOOL landingCanReachTarget;
-
-                if (landingDistance >= nodeDistance) {
-                    continue;
-                }
-                if (!OverworldWildSpawns_IsHopPlanCandidate(
-                        fieldSystem,
-                        profile,
-                        allowedTile,
-                        spotState,
-                        fromX,
-                        fromY,
-                        landingX,
-                        landingY,
-                        targetX,
-                        targetY)) {
-                    continue;
-                }
-
-                landingIsTarget = landingX == targetX && landingY == targetY;
-                landingCanReachTarget =
-                    !landingIsTarget
-                    && OverworldWildSpawns_IsBehaviorHopTargetOneHopAway(
-                        profile,
-                        spotState,
-                        landingX,
-                        landingY,
-                        targetX,
-                        targetY);
-
-                if (!bestFound
-                    || landingDistance < bestDistance
-                    || (landingDistance == bestDistance
-                        && nodeDepths[head] + 1 < bestDepth)) {
-                    bestFound = TRUE;
-                    bestFirstX = firstX;
-                    bestFirstY = firstY;
-                    bestTerminalX = firstX;
-                    bestTerminalY = firstY;
-                    bestDistance = landingDistance;
-                    bestDepth = nodeDepths[head] + 1;
-                }
-
-                if ((!stopOneHopAway && landingIsTarget)
-                    || (stopOneHopAway && landingCanReachTarget)) {
-                    return OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(
-                        state,
-                        fieldSystem,
-                        slot,
-                        profile,
-                        allowedTile,
-                        firstX,
-                        firstY,
-                        landingX,
-                        landingY);
-                }
-
-                if (stopOneHopAway && landingIsTarget) {
-                    continue;
-                }
-
-                if (nodeDepths[head] + 1 >= OW_WILD_SPAWNER_HOP_PLAN_MAX_HOPS
-                    || tail >= OW_WILD_SPAWNER_HOP_PLAN_NODE_COUNT
-                    || OverworldWildSpawns_HopPlanHasVisited(
-                        nodeXs,
-                        nodeYs,
-                        tail,
-                        landingX,
-                        landingY)) {
-                    continue;
-                }
-
-                nodeXs[tail] = (s16)landingX;
-                nodeYs[tail] = (s16)landingY;
-                firstXs[tail] = (s16)firstX;
-                firstYs[tail] = (s16)firstY;
-                nodeDepths[tail] = nodeDepths[head] + 1;
-                tail++;
-            }
-        }
-
-        head++;
-    }
-
-    if (!bestFound) {
+    OverworldWildSpawns_BuildBehaviorHopHelperConfig(
+        profile,
+        spotState,
+        objectX,
+        objectY,
+        targetX,
+        targetY,
+        directions,
+        directionCount,
+        stopOneHopAway,
+        &config);
+    validationContext.fieldSystem = fieldSystem;
+    validationContext.allowedTile = allowedTile;
+    validationContext.blockPlayerUnlessFinal = TRUE;
+    if (!helperEntry->planBehaviorHopStep(
+            &config,
+            OverworldWildSpawns_ValidateBehaviorHopLanding,
+            &validationContext,
+            &result)) {
         return FALSE;
     }
+
     return OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(
         state,
         fieldSystem,
         slot,
         profile,
         allowedTile,
-        bestFirstX,
-        bestFirstY,
-        bestTerminalX,
-        bestTerminalY);
+        result.landingX,
+        result.landingY,
+        result.finalTargetX,
+        result.finalTargetY);
 }
 
 static BOOL OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
@@ -12618,16 +12427,15 @@ static BOOL OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
     int slot,
     const OverworldWildBehaviorProfile *profile)
 {
+    const OverworldWildHelperOverlayEntry *helperEntry;
+    OverworldWildHelperHopConfig config;
+    OverworldWildHelperHopResult result;
+    OverworldWildBehaviorHopValidationContext validationContext;
     LocalMapObject *object;
-    u8 maxDistance;
     int objectX;
     int objectY;
-    int dx;
-    int dy;
-    int targetX = 0;
-    int targetY = 0;
-    u32 candidateCount = 0;
     u8 allowedTile;
+    u8 spotState;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -12645,58 +12453,47 @@ static BOOL OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
 
     objectX = MapObject_GetCurrentX(object);
     objectY = MapObject_GetCurrentY(object);
-    maxDistance = OverworldWildSpawns_GetBehaviorHopMaxDistance(
-        profile,
-        state->movementSpotStates[slot]);
+    spotState = state->movementSpotStates[slot];
     allowedTile = OverworldWildSpawns_GetAllowedTileForSpotState(
         profile,
-        state->movementSpotStates[slot]);
-    for (dy = -maxDistance; dy <= maxDistance; dy++) {
-        for (dx = -maxDistance; dx <= maxDistance; dx++) {
-            int candidateX;
-            int candidateY;
-
-            if (dx == 0 && dy == 0) {
-                continue;
-            }
-
-            candidateX = objectX + dx;
-            candidateY = objectY + dy;
-            if (!OverworldWildSpawns_TryGetBehaviorHopVector(
-                    profile,
-                    state->movementSpotStates[slot],
-                    dx,
-                    dy,
-                    NULL,
-                    NULL)
-                || !OverworldWildSpawns_IsBehaviorAllowedMovementTile(
-                    fieldSystem,
-                    allowedTile,
-                    candidateX,
-                    candidateY)) {
-                continue;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                targetX = candidateX;
-                targetY = candidateY;
-            }
-        }
-    }
-
-    if (candidateCount == 0) {
+        spotState);
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
+    if (helperEntry == NULL || helperEntry->pickRandomBehaviorHop == NULL) {
         return FALSE;
     }
 
-    return OverworldWildSpawns_TryStartBehaviorHopToTileCommand(
+    OverworldWildSpawns_BuildBehaviorHopHelperConfig(
+        profile,
+        spotState,
+        objectX,
+        objectY,
+        0,
+        0,
+        NULL,
+        0,
+        FALSE,
+        &config);
+    validationContext.fieldSystem = fieldSystem;
+    validationContext.allowedTile = allowedTile;
+    validationContext.blockPlayerUnlessFinal = FALSE;
+    if (!helperEntry->pickRandomBehaviorHop(
+            &config,
+            OverworldWildSpawns_ValidateBehaviorHopLanding,
+            &validationContext,
+            &result)) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(
         state,
         fieldSystem,
         slot,
         profile,
         allowedTile,
-        targetX,
-        targetY);
+        result.landingX,
+        result.landingY,
+        result.finalTargetX,
+        result.finalTargetY);
 }
 
 static BOOL OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(
