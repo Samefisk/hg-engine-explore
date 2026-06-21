@@ -39,11 +39,13 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
 BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
+SPAWNS_PUBLIC_HEADER = ROOT / "include/overworld_wild_spawns.h"
 SPAWNS_INTERNAL_HEADER = ROOT / "include/overworld_wild_spawns_internal.h"
 
 BLOB_BEHAVIOR_FIELD_INDEXES = {
@@ -104,10 +106,12 @@ BUILD_STATE = {
 }
 DATA_SOURCE_FILES = (
     OVERLAY_SOURCE,
+    HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
     SPECIES_HEADER,
     MAPS_HEADER,
+    SPAWNS_PUBLIC_HEADER,
     SPAWNS_INTERNAL_HEADER,
     ENEMY_PARTY_SOURCE,
     ARMIPS_SPECIES_INC,
@@ -122,9 +126,11 @@ DATA_SOURCE_FILES = (
 DEFINE_SOURCE_FILES = [
     SPECIES_HEADER,
     MAPS_HEADER,
+    SPAWNS_PUBLIC_HEADER,
     SPAWNS_INTERNAL_HEADER,
     BEHAVIOR_DATA_HEADER,
     OVERLAY_SOURCE,
+    HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     ENEMY_PARTY_SOURCE,
 ]
@@ -651,8 +657,8 @@ SPAWN_SETTING_GROUPS = [
             {"symbol": "OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN", "label": "Headbutt attempt cooldown", "min": 0, "max": 255, "source": OVERLAY_SOURCE},
             {"symbol": "OW_WILD_FISHING_SPAWN_CHANCE_PERCENT", "label": "Fishing spawn chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
             {"symbol": "OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN", "label": "Fishing attempt cooldown", "min": 0, "max": 255, "source": OVERLAY_SOURCE},
-            {"symbol": "OW_WILD_RANDOM_TIME_TABLE_CHANCE_PERCENT", "label": "Random time table chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
-            {"symbol": "OW_WILD_SHINY_ODDS", "label": "Shiny odds denominator", "min": 1, "max": 65535, "source": OVERLAY_SOURCE},
+            {"symbol": "OW_WILD_HELPER_RANDOM_TIME_TABLE_CHANCE_PERCENT", "label": "Random time table chance", "min": 0, "max": 100, "source": HELPER_SOURCE, "suffix": "%"},
+            {"symbol": "OVERWORLD_WILD_SHINY_BASE_ODDS", "label": "Base shiny odds denominator", "min": 1, "max": 65535, "source": SPAWNS_PUBLIC_HEADER},
         ],
     },
     {
@@ -3011,9 +3017,11 @@ def group_flags_for_species(
 def data_source_metadata() -> dict[str, str]:
     return {
         "overlay": str(OVERLAY_SOURCE.relative_to(ROOT)),
+        "helper": str(HELPER_SOURCE.relative_to(ROOT)),
         "behaviorData": str(BEHAVIOR_DATA_SOURCE.relative_to(ROOT)),
         "behaviorDataHeader": str(BEHAVIOR_DATA_HEADER.relative_to(ROOT)),
         "species": str(SPECIES_HEADER.relative_to(ROOT)),
+        "spawnPublic": str(SPAWNS_PUBLIC_HEADER.relative_to(ROOT)),
         "spawnInternal": str(SPAWNS_INTERNAL_HEADER.relative_to(ROOT)),
         "wildTest": str(ENEMY_PARTY_SOURCE.relative_to(ROOT)),
         "icons": str(POKEGRA_MK.relative_to(ROOT)),
