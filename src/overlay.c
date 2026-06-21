@@ -1,6 +1,7 @@
 #include "../include/types.h"
 #include "../include/debug.h"
 #include "../include/overlay.h"
+#include "../include/overworld_wild_spawns_internal.h"
 #include "../include/save.h"
 #include "../include/constants/file.h"
 
@@ -59,6 +60,10 @@ unloadSecond:
     table = GetLoadedOverlaysInRegion(GetOverlayLoadDestination(ovyId));
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
         if (table[i].active == TRUE && table[i].id == ovyId) {
+            if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
+                && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {
+                OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData();
+            }
             FreeOverlayAllocation(&table[i]);
             break;
         }

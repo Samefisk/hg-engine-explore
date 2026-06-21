@@ -38,12 +38,25 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
-BEHAVIOR_DATA_SOURCE = ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c"
+BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
 SPAWNS_INTERNAL_HEADER = ROOT / "include/overworld_wild_spawns_internal.h"
+
+BLOB_BEHAVIOR_FIELD_INDEXES = {
+    "sOverworldWildBehaviorClassProfiles": 1,
+    "sOverworldWildBehaviorClassRules": 2,
+    "sOverworldWildBehaviorSpeciesClassRules": 3,
+    "sOverworldWildBehaviorOverrides": 4,
+}
+OWBD_COUNT_DEFINES = {
+    "OWBD_CLASS_PROFILE_COUNT": "sOverworldWildBehaviorClassProfiles",
+    "OWBD_CLASS_RULE_COUNT": "sOverworldWildBehaviorClassRules",
+    "OWBD_SPECIES_CLASS_RULE_COUNT": "sOverworldWildBehaviorSpeciesClassRules",
+    "OWBD_OVERRIDE_COUNT": "sOverworldWildBehaviorOverrides",
+}
 ENEMY_PARTY_SOURCE = ROOT / "src/field/enemy_party.c"
 POKEGRA_MK = ROOT / "data/graphics/pokegra.mk"
 POKE_FORM_DATA = ROOT / "data/PokeFormDataTbl.c"
@@ -1074,7 +1087,10 @@ def resolve_ternary_expr(expr: str, values: dict[str, int]) -> str:
 def extract_braced_initializer(text: str, name: str) -> str:
     start = text.find(name)
     if start < 0:
-        raise ParseError(f"could not find {name}")
+        span = behavior_blob_field_span(text, name)
+        if span is None:
+            raise ParseError(f"could not find {name}")
+        return text[span[0] : span[1]]
     brace = text.find("{", start)
     if brace < 0:
         raise ParseError(f"could not find initializer for {name}")
@@ -3310,7 +3326,10 @@ def matching_brace_end(text: str, start: int) -> int:
 def initializer_brace_span(text: str, name: str) -> tuple[int, int]:
     start = text.find(name)
     if start < 0:
-        raise ParseError(f"could not find {name}")
+        span = behavior_blob_field_span(text, name)
+        if span is None:
+            raise ParseError(f"could not find {name}")
+        return span
     brace = text.find("{", start)
     if brace < 0:
         raise ParseError(f"could not find initializer for {name}")
@@ -3334,6 +3353,22 @@ def top_level_braced_spans(text: str, span: tuple[int, int]) -> list[tuple[int, 
                 entries.append((entry_start, idx + 1))
                 entry_start = -1
     return entries
+
+
+def behavior_blob_field_span(text: str, name: str) -> tuple[int, int] | None:
+    field_index = BLOB_BEHAVIOR_FIELD_INDEXES.get(name)
+    if field_index is None:
+        return None
+    blob_start = text.find("gOverworldWildBehaviorDataBlob")
+    if blob_start < 0:
+        return None
+    brace = text.find("{", blob_start)
+    if brace < 0:
+        return None
+    field_spans = top_level_braced_spans(text, (brace, matching_brace_end(text, brace)))
+    if field_index >= len(field_spans):
+        return None
+    return field_spans[field_index]
 
 
 def nested_profile_span(text: str, entry_span: tuple[int, int]) -> tuple[int, int]:
@@ -3519,6 +3554,37 @@ def replace_class_define_block(raw_source: str, symbols: list[str]) -> str:
     return raw_source[:block_start] + block + raw_source[block_end:]
 
 
+def replace_define_value(raw_source: str, symbol: str, value: int) -> str:
+    pattern = re.compile(rf"(?m)^(\s*#\s*define\s+{re.escape(symbol)}\s+)([0-9]+)(\s*(?://[^\n]*)?)$")
+    updated, count = pattern.subn(rf"\g<1>{value}\g<3>", raw_source, count=1)
+    if count != 1:
+        raise ParseError(f"could not find {symbol}")
+    return updated
+
+
+def behavior_blob_counts(raw_source: str) -> dict[str, int]:
+    source = strip_c_comments(join_line_continuations(raw_source))
+    counts = {}
+    for define, initializer_name in OWBD_COUNT_DEFINES.items():
+        entries = parse_initializer(extract_braced_initializer(source, initializer_name))
+        counts[define] = len(entries)
+    return counts
+
+
+def rewrite_behavior_blob_count_defines(raw_header: str, counts: dict[str, int]) -> str:
+    updated_header = raw_header
+    for define, count in counts.items():
+        updated_header = replace_define_value(updated_header, define, count)
+    return updated_header
+
+
+def write_behavior_data_source(raw_source: str) -> None:
+    counts = behavior_blob_counts(raw_source)
+    BEHAVIOR_DATA_SOURCE.write_text(raw_source)
+    BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(BEHAVIOR_DATA_HEADER.read_text(), counts))
+    invalidate_data_cache()
+
+
 def sanitize_class_symbol(name: str, existing_symbols: set[str], current_symbol: str | None = None) -> str:
     suffix = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").upper()
     if not suffix:
@@ -3602,8 +3668,7 @@ def apply_profile_management_change(body: bytes) -> dict:
         new_index = len(class_profiles)
         updated_source = replace_class_define_block(raw_behavior_data, class_symbols + [new_symbol])
         updated_source = append_profile_initializer(updated_source, raw_values(class_profiles[default_class]))
-        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-        invalidate_data_cache()
+        write_behavior_data_source(updated_source)
         membership_result = apply_profile_membership_changes(
             json.dumps({"changes": {symbol: new_index for symbol in pokemon}}).encode()
         )
@@ -3628,8 +3693,7 @@ def apply_profile_management_change(body: bytes) -> dict:
         class_symbols[class_index] = new_symbol
         updated_source = replace_class_define_block(raw_behavior_data, class_symbols)
         updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", new_symbol, updated_source)
-        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-        invalidate_data_cache()
+        write_behavior_data_source(updated_source)
         return {"saved": True, "message": f"Renamed profile to {humanize_symbol(new_symbol, CLASS_PREFIX)}", "classIndex": class_index, "symbol": new_symbol}
 
     if class_index == default_class:
@@ -3640,8 +3704,7 @@ def apply_profile_management_change(body: bytes) -> dict:
     updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", "OW_WILD_BEHAVIOR_CLASS_DEFAULT", raw_behavior_data)
     updated_source = replace_class_define_block(updated_source, class_symbols)
     updated_source = remove_profile_initializer(updated_source, class_index, len(class_profiles))
-    BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-    invalidate_data_cache()
+    write_behavior_data_source(updated_source)
     return {"saved": True, "message": f"Deleted {humanize_symbol(old_symbol, CLASS_PREFIX)}", "classIndex": default_class}
 
 
@@ -3826,8 +3889,7 @@ def apply_profile_changes(body: bytes) -> dict:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-        invalidate_data_cache()
+        write_behavior_data_source(updated_source)
     return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
 
 
@@ -3925,8 +3987,7 @@ def apply_profile_membership_changes(body: bytes) -> dict:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-        invalidate_data_cache()
+        write_behavior_data_source(updated_source)
     return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
 
 
@@ -4001,8 +4062,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
             changed = True
             updated_source = updated_source[:start] + replacement + updated_source[end:]
     if changed:
-        BEHAVIOR_DATA_SOURCE.write_text(updated_source)
-        invalidate_data_cache()
+        write_behavior_data_source(updated_source)
     total_changes = len(formatted_rules) + len(set(removals))
     label = "override change" if total_changes == 1 else "override changes"
     return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}

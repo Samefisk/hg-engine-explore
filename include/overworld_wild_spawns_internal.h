@@ -127,6 +127,7 @@ typedef struct OverworldWildSpawnsOverlayEntry {
     void (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
     void (*onFieldSystemReady)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
     void (*visualTesterCommand)(FieldSystem *fieldSystem, u16 command);
+    void (*cleanupResidentData)(void);
 } OverworldWildSpawnsOverlayEntry;
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)

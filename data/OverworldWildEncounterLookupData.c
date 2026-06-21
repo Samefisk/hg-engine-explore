@@ -1,22 +1,30 @@
-#include "../../include/config.h"
-#include "../../include/overworld_wild_behavior_data.h"
-#include "../../include/constants/maps.h"
+#include "../include/overworld_wild_behavior_data.h"
+
+#include "../include/config.h"
+#include "../include/constants/maps.h"
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
-#define OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT 150
+typedef struct OverworldWildEncounterLookupDataBlob {
+    OverworldWildEncounterLookupDataBlobHeader header;
+    u16 mapIds[OWED_ENCOUNTER_AREA_COUNT];
+    u8 dataIds[OWED_ENCOUNTER_AREA_COUNT];
+} OverworldWildEncounterLookupDataBlob;
 
-static const u16 sOverworldWildLegacyEncounterAreaMapIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT];
-static const u8 sOverworldWildLegacyEncounterAreaDataIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT];
+#define OWED_OFFSET(member) ((u32)__builtin_offsetof(OverworldWildEncounterLookupDataBlob, member))
 
-const OverworldWildEncounterLookupDataEntry gOverworldWildLegacyEncounterLookupDataEntry
-    __attribute__((section(".overworld_wild_behavior_data_entry"), used)) = {
-    sOverworldWildLegacyEncounterAreaMapIds,
-    sOverworldWildLegacyEncounterAreaDataIds,
-    OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT,
-};
-
-static const u16 sOverworldWildLegacyEncounterAreaMapIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT] = {
+const OverworldWildEncounterLookupDataBlob gOverworldWildEncounterLookupDataBlob = {
+    {
+        OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC,
+        OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION,
+        sizeof(OverworldWildEncounterLookupDataBlobHeader),
+        sizeof(OverworldWildEncounterLookupDataBlob),
+        OWED_OFFSET(mapIds),
+        OWED_OFFSET(dataIds),
+        OWED_ENCOUNTER_AREA_COUNT,
+        0,
+    },
+    {
     MAP_T20, MAP_R29, MAP_T21, MAP_R30,
     MAP_R31, MAP_T22, MAP_D15R0102, MAP_D15R0103,
     MAP_R32, MAP_D24R0101, MAP_D24, MAP_D24R0201,
@@ -55,9 +63,8 @@ static const u16 sOverworldWildLegacyEncounterAreaMapIds[OW_WILD_LEGACY_ENCOUNTE
     MAP_D45R0101, MAP_D45R0102, MAP_D01R0101, MAP_D43R0102,
     MAP_D43R0103, MAP_R02R0101, MAP_D46R0101, MAP_D03R0101,
     MAP_D03R0102, MAP_D03R0103,
-};
-
-static const u8 sOverworldWildLegacyEncounterAreaDataIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT] = {
+    },
+    {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14,
     15, 16, 17, 18, 18, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 28,
     29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
@@ -68,6 +75,7 @@ static const u8 sOverworldWildLegacyEncounterAreaDataIds[OW_WILD_LEGACY_ENCOUNTE
     104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117,
     118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131,
     132, 132, 133, 134, 135, 136, 137, 139, 140, 141,
+    },
 };
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
