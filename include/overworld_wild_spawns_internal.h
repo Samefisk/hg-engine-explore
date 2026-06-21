@@ -47,6 +47,7 @@ typedef struct OverworldWildSpawnState {
     void *mapObjectMan;
     void *mapObjects;
     FieldSystem *movementFieldSystem;
+    void *movementRuntimeState;
     u8 justSpawned;
     u8 spawnCooldown;
     u8 headbuttSpawnCooldown;
