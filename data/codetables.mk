@@ -171,7 +171,8 @@ NARC_FILES += $(BATTLETESTS_BIN)
 REQUIRED_DIRECTORIES += $(BATTLETESTS_OUTPUT_DIR)
 
 OVERWORLD_WILD_BEHAVIOR_DATA_TARGET := $(BUILD)/a028/9_17
-OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES := data/OverworldWildBehaviorData.c include/overworld_wild_behavior_data.h
+OVERWORLD_WILD_BLOB_VALIDATOR := scripts/validate_overworld_wild_blobs.py
+OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES := data/OverworldWildBehaviorData.c include/overworld_wild_behavior_data.h include/config.h include/constants/species.h $(OVERWORLD_WILD_BLOB_VALIDATOR) $(VENV_ACTIVATE)
 OVERWORLD_WILD_BEHAVIOR_DATA_OBJ := build/OverworldWildBehaviorData.o
 OVERWORLD_WILD_BEHAVIOR_DATA_BIN := build/OverworldWildBehaviorData.bin
 
@@ -179,11 +180,12 @@ $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN): $(OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES
 	@echo "writing overworld wild behavior data..."
 	$(CC) $(CFLAGS) -c data/OverworldWildBehaviorData.c -o $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ)
 	$(OBJCOPY) -O binary $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ) $@
+	$(PYTHON) $(OVERWORLD_WILD_BLOB_VALIDATOR) --owbd $@
 
 NARC_FILES += $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN)
 
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET := $(BUILD)/a028/9_18
-OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h
+OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h include/config.h include/constants/maps.h $(OVERWORLD_WILD_BLOB_VALIDATOR) $(VENV_ACTIVATE)
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ := build/OverworldWildEncounterLookupData.o
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN := build/OverworldWildEncounterLookupData.bin
 
@@ -191,5 +193,6 @@ $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN): $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPEND
 	@echo "writing overworld wild encounter lookup..."
 	$(CC) $(CFLAGS) -c data/OverworldWildEncounterLookupData.c -o $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ)
 	$(OBJCOPY) -O binary $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_OBJ) $@
+	$(PYTHON) $(OVERWORLD_WILD_BLOB_VALIDATOR) --owed $@
 
 NARC_FILES += $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN)

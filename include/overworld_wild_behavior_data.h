@@ -225,9 +225,6 @@ typedef struct OverworldWildBehaviorOverride {
 #define OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED
 
 typedef struct OverworldWildBehaviorDataOverlayEntry {
-    u32 magic;
-    u16 version;
-    u16 size;
     const OverworldWildBehaviorProfile *classProfiles;
     u16 classProfileCount;
     const OverworldWildBehaviorClassRule *classRules;

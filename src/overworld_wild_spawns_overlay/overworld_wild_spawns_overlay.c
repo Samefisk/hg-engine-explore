@@ -873,9 +873,6 @@ static void OverworldWildSpawns_CleanupResidentData(void)
     sOverworldWildBehaviorDataBlob = NULL;
     sOverworldWildBehaviorDataLoadAttempted = FALSE;
     sOverworldWildBehaviorDataEntry.classProfiles = NULL;
-    sOverworldWildBehaviorDataEntry.classRules = NULL;
-    sOverworldWildBehaviorDataEntry.speciesClassRules = NULL;
-    sOverworldWildBehaviorDataEntry.overrides = NULL;
 
     sys_FreeMemoryEz(sOverworldWildEncounterLookupDataBlob);
     sOverworldWildEncounterLookupDataBlob = NULL;
@@ -11572,10 +11569,6 @@ static BOOL OverworldWildSpawns_FindEncounterDataId(
     int *encounterDataId)
 {
     u32 i;
-
-    if (mapIds == NULL || dataIds == NULL) {
-        return FALSE;
-    }
 
     for (i = 0; i < count; i++) {
         if (mapIds[i] == mapId) {
