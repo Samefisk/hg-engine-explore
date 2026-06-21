@@ -4,8 +4,11 @@
 #include "types.h"
 
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
+#define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 18
+#define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
+#define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 1
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -235,7 +238,45 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     u16 overrideCount;
 } OverworldWildBehaviorDataOverlayEntry;
 
+typedef struct OverworldWildBehaviorDataBlobHeader {
+    u32 magic;
+    u16 version;
+    u16 headerSize;
+    u32 blobSize;
+    u32 classProfilesOffset;
+    u16 classProfileCount;
+    u16 classProfileSize;
+    u32 classRulesOffset;
+    u16 classRuleCount;
+    u16 classRuleSize;
+    u32 speciesClassRulesOffset;
+    u16 speciesClassRuleCount;
+    u16 speciesClassRuleSize;
+    u32 overridesOffset;
+    u16 overrideCount;
+    u16 overrideSize;
+} OverworldWildBehaviorDataBlobHeader;
+
+typedef struct OverworldWildEncounterLookupDataBlobHeader {
+    u32 magic;
+    u16 version;
+    u16 headerSize;
+    u32 blobSize;
+    u32 mapIdsOffset;
+    u32 dataIdsOffset;
+    u16 count;
+    u16 reserved;
+} OverworldWildEncounterLookupDataBlobHeader;
+
+typedef struct OverworldWildEncounterLookupDataEntry {
+    const u16 *mapIds;
+    const u8 *dataIds;
+    u16 count;
+} OverworldWildEncounterLookupDataEntry;
+
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY \
     ((const OverworldWildBehaviorDataOverlayEntry *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR)
+#define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY \
+    ((const OverworldWildEncounterLookupDataEntry *)OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR)
 
 #endif // OVERWORLD_WILD_BEHAVIOR_DATA_H

@@ -38,12 +38,19 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
-BEHAVIOR_DATA_SOURCE = ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c"
+BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
 SPAWNS_INTERNAL_HEADER = ROOT / "include/overworld_wild_spawns_internal.h"
+
+BLOB_BEHAVIOR_FIELD_INDEXES = {
+    "sOverworldWildBehaviorClassProfiles": 1,
+    "sOverworldWildBehaviorClassRules": 2,
+    "sOverworldWildBehaviorSpeciesClassRules": 3,
+    "sOverworldWildBehaviorOverrides": 4,
+}
 ENEMY_PARTY_SOURCE = ROOT / "src/field/enemy_party.c"
 POKEGRA_MK = ROOT / "data/graphics/pokegra.mk"
 POKE_FORM_DATA = ROOT / "data/PokeFormDataTbl.c"
@@ -1074,7 +1081,10 @@ def resolve_ternary_expr(expr: str, values: dict[str, int]) -> str:
 def extract_braced_initializer(text: str, name: str) -> str:
     start = text.find(name)
     if start < 0:
-        raise ParseError(f"could not find {name}")
+        span = behavior_blob_field_span(text, name)
+        if span is None:
+            raise ParseError(f"could not find {name}")
+        return text[span[0] : span[1]]
     brace = text.find("{", start)
     if brace < 0:
         raise ParseError(f"could not find initializer for {name}")
@@ -3310,7 +3320,10 @@ def matching_brace_end(text: str, start: int) -> int:
 def initializer_brace_span(text: str, name: str) -> tuple[int, int]:
     start = text.find(name)
     if start < 0:
-        raise ParseError(f"could not find {name}")
+        span = behavior_blob_field_span(text, name)
+        if span is None:
+            raise ParseError(f"could not find {name}")
+        return span
     brace = text.find("{", start)
     if brace < 0:
         raise ParseError(f"could not find initializer for {name}")
@@ -3334,6 +3347,22 @@ def top_level_braced_spans(text: str, span: tuple[int, int]) -> list[tuple[int, 
                 entries.append((entry_start, idx + 1))
                 entry_start = -1
     return entries
+
+
+def behavior_blob_field_span(text: str, name: str) -> tuple[int, int] | None:
+    field_index = BLOB_BEHAVIOR_FIELD_INDEXES.get(name)
+    if field_index is None:
+        return None
+    blob_start = text.find("gOverworldWildBehaviorDataBlob")
+    if blob_start < 0:
+        return None
+    brace = text.find("{", blob_start)
+    if brace < 0:
+        return None
+    field_spans = top_level_braced_spans(text, (brace, matching_brace_end(text, brace)))
+    if field_index >= len(field_spans):
+        return None
+    return field_spans[field_index]
 
 
 def nested_profile_span(text: str, entry_span: tuple[int, int]) -> tuple[int, int]:
