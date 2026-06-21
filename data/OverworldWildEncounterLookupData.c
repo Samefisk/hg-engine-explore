@@ -5,23 +5,18 @@
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
-typedef struct OverworldWildEncounterLookupDataBlob {
-    OverworldWildEncounterLookupDataBlobHeader header;
-    u16 mapIds[OWED_ENCOUNTER_AREA_COUNT];
-    u8 dataIds[OWED_ENCOUNTER_AREA_COUNT];
-} OverworldWildEncounterLookupDataBlob;
+typedef struct OverworldWildEncounterLookupSourceHeader {
+    u32 reserved;
+} OverworldWildEncounterLookupSourceHeader;
 
-#define OWED_OFFSET(member) ((u32)__builtin_offsetof(OverworldWildEncounterLookupDataBlob, member))
+typedef struct OverworldWildEncounterLookupDataBlob {
+    OverworldWildEncounterLookupSourceHeader header;
+    u16 mapIds[OWED_ENCOUNTER_AREA_COUNT];
+    u16 dataIds[OWED_ENCOUNTER_AREA_COUNT];
+} OverworldWildEncounterLookupDataBlob;
 
 const OverworldWildEncounterLookupDataBlob gOverworldWildEncounterLookupDataBlob = {
     {
-        OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC,
-        OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION,
-        sizeof(OverworldWildEncounterLookupDataBlobHeader),
-        sizeof(OverworldWildEncounterLookupDataBlob),
-        OWED_OFFSET(mapIds),
-        OWED_OFFSET(dataIds),
-        OWED_ENCOUNTER_AREA_COUNT,
         0,
     },
     {

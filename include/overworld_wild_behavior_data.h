@@ -8,12 +8,22 @@
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 18
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
-#define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 1
+#define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OWBD_CLASS_PROFILE_COUNT 8
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 110
 #define OWBD_OVERRIDE_COUNT 2
 #define OWED_ENCOUNTER_AREA_COUNT 150
+#define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
+
+#define OWED_SECTION_LAND_LEVELS (1u << 0)
+#define OWED_SECTION_LAND_MORNING (1u << 1)
+#define OWED_SECTION_LAND_DAY (1u << 2)
+#define OWED_SECTION_LAND_NIGHT (1u << 3)
+#define OWED_SECTION_SURF (1u << 4)
+#define OWED_SECTION_OLD_ROD (1u << 5)
+#define OWED_SECTION_GOOD_ROD (1u << 6)
+#define OWED_SECTION_SUPER_ROD (1u << 7)
 
 typedef enum OverworldWildSpawnTerrain {
     OW_WILD_SPAWN_TERRAIN_LAND,
@@ -263,12 +273,22 @@ typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
     u16 version;
     u16 headerSize;
-    u32 blobSize;
-    u32 mapIdsOffset;
-    u32 dataIdsOffset;
-    u16 count;
-    u16 reserved;
+    u16 recordCount;
+    u16 directoryEntrySize;
+    u32 directoryOffset;
+    u32 payloadOffset;
+    u32 totalSize;
+    u32 checksum;
+    u32 flags;
 } OverworldWildEncounterLookupDataBlobHeader;
+
+typedef struct OverworldWildEncounterLookupDirectoryEntry {
+    u16 mapId;
+    u16 dataId;
+    u32 offset;
+    u16 size;
+    u16 flags;
+} OverworldWildEncounterLookupDirectoryEntry;
 
 typedef struct OverworldWildEncounterLookupDataEntry {
     const u16 *mapIds;

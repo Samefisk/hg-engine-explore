@@ -118,6 +118,12 @@ typedef void (*OverworldWildHeadbuttLeafBurstFunc)(void *work, int param);
 #define OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT 10
 #define OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN 10
 #define OW_WILD_REFILL_COOLDOWN_STEPS 6
+#define OW_WILD_ENCOUNTER_DATA_SIZE 196
+#define OW_WILD_ENCOUNTER_DATA_OLD_ROD_RATE_OFFSET 3
+#define OW_WILD_ENCOUNTER_DATA_GOOD_ROD_RATE_OFFSET 4
+#define OW_WILD_ENCOUNTER_DATA_SUPER_ROD_RATE_OFFSET 5
+#define OW_WILD_SPARSE_RECORD_HEADER_SIZE 4
+#define OW_WILD_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET 24
 #define OW_WILD_FISHING_SPAWN_CHANCE_PERCENT 20
 #define OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN 4
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
@@ -709,6 +715,12 @@ typedef struct OverworldWildBehaviorPrimitives {
     u8 tiredReaction;
 } OverworldWildBehaviorPrimitives;
 
+typedef struct OverworldWildSparseEncounterSection {
+    u8 mask;
+    u8 targetOffset;
+    u8 size;
+} OverworldWildSparseEncounterSection;
+
 typedef struct OverworldWildBehaviorSlotCache {
     OverworldWildBehaviorProfile profile;
     u16 species;
@@ -862,7 +874,19 @@ static void *sOverworldWildBehaviorDataBlob;
 static u8 sOverworldWildBehaviorDataLoadAttempted;
 static OverworldWildBehaviorDataOverlayEntry sOverworldWildBehaviorDataEntry;
 static void *sOverworldWildEncounterLookupDataBlob;
+static u32 sOverworldWildEncounterLookupDataBlobSize;
 static u8 sOverworldWildEncounterLookupDataLoadAttempted;
+
+static const OverworldWildSparseEncounterSection sOverworldWildSparseEncounterSections[] = {
+    { OWED_SECTION_LAND_LEVELS, 8, 12 },
+    { OWED_SECTION_LAND_MORNING, 20, 24 },
+    { OWED_SECTION_LAND_DAY, 44, 24 },
+    { OWED_SECTION_LAND_NIGHT, 68, 24 },
+    { OWED_SECTION_SURF, 100, 20 },
+    { OWED_SECTION_OLD_ROD, 128, 20 },
+    { OWED_SECTION_GOOD_ROD, 148, 20 },
+    { OWED_SECTION_SUPER_ROD, 168, 20 },
+};
 
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
@@ -871,12 +895,6 @@ typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorSpeciesClassRule speciesClassRules[OWBD_SPECIES_CLASS_RULE_COUNT];
     OverworldWildBehaviorOverride overrides[OWBD_OVERRIDE_COUNT];
 } OverworldWildBehaviorDataBlob;
-
-typedef struct OverworldWildEncounterLookupDataBlob {
-    OverworldWildEncounterLookupDataBlobHeader header;
-    u16 mapIds[OWED_ENCOUNTER_AREA_COUNT];
-    u8 dataIds[OWED_ENCOUNTER_AREA_COUNT];
-} OverworldWildEncounterLookupDataBlob;
 
 static void OverworldWildSpawns_CleanupResidentData(void)
 {
@@ -887,10 +905,11 @@ static void OverworldWildSpawns_CleanupResidentData(void)
 
     sys_FreeMemoryEz(sOverworldWildEncounterLookupDataBlob);
     sOverworldWildEncounterLookupDataBlob = NULL;
+    sOverworldWildEncounterLookupDataBlobSize = 0;
     sOverworldWildEncounterLookupDataLoadAttempted = FALSE;
 }
 
-static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob)
+static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob, u32 *loadedSize)
 {
     void *narc;
     u32 size;
@@ -902,7 +921,7 @@ static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize
     }
 
     size = NARC_GetMemberSize(narc, memberId);
-    if (size != expectedSize) {
+    if (size == 0 || (expectedSize != 0 && size != expectedSize)) {
         NARC_dtor(narc);
         return FALSE;
     }
@@ -916,6 +935,9 @@ static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize
     NARC_ReadWholeMember(narc, memberId, loadedBlob);
     NARC_dtor(narc);
     *blob = loadedBlob;
+    if (loadedSize != NULL) {
+        *loadedSize = size;
+    }
     return TRUE;
 }
 
@@ -956,7 +978,8 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehav
         if (!OverworldWildSpawns_LoadCodeAddonBlob(
                 CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA,
                 sizeof(OverworldWildBehaviorDataBlob),
-                &sOverworldWildBehaviorDataBlob)
+                &sOverworldWildBehaviorDataBlob,
+                NULL)
             || !OverworldWildSpawns_DecodeBehaviorDataBlob()) {
             sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
             sOverworldWildBehaviorDataBlob = NULL;
@@ -970,35 +993,127 @@ static const OverworldWildBehaviorDataOverlayEntry *OverworldWildSpawns_GetBehav
     return &sOverworldWildBehaviorDataEntry;
 }
 
+static BOOL OverworldWildSpawns_IsEncounterLookupRangeValid(u32 offset, u32 size, u32 totalSize)
+{
+    return offset <= totalSize && size <= totalSize - offset;
+}
+
+static u32 OverworldWildSpawns_ComputeEncounterLookupChecksum(const u8 *blob, u32 size)
+{
+    u32 checksum = 0;
+    u32 i;
+
+    for (i = 0; i < size; i++) {
+        if (i >= OW_WILD_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET
+            && i < OW_WILD_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET + sizeof(u32)) {
+            continue;
+        }
+        checksum += blob[i];
+    }
+
+    return checksum;
+}
+
+static BOOL OverworldWildSpawns_IsSparseEncounterRecordValid(const u8 *record, u32 size)
+{
+    u32 recordOffset;
+    u32 i;
+
+    if (record == NULL || size < OW_WILD_SPARSE_RECORD_HEADER_SIZE) {
+        return FALSE;
+    }
+
+    recordOffset = OW_WILD_SPARSE_RECORD_HEADER_SIZE;
+    for (i = 0; i < NELEMS(sOverworldWildSparseEncounterSections); i++) {
+        const OverworldWildSparseEncounterSection *section =
+            &sOverworldWildSparseEncounterSections[i];
+        if ((record[3] & section->mask) == 0) {
+            continue;
+        }
+        if (!OverworldWildSpawns_IsEncounterLookupRangeValid(
+                recordOffset,
+                section->size,
+                size)) {
+            return FALSE;
+        }
+        recordOffset += section->size;
+    }
+
+    return recordOffset == size;
+}
+
 static BOOL OverworldWildSpawns_DecodeEncounterLookupDataBlob(void)
 {
-    const OverworldWildEncounterLookupDataBlob *blob;
     const OverworldWildEncounterLookupDataBlobHeader *header;
+    const u8 *base;
+    u32 directorySize;
+    u32 i;
 
-    blob = (const OverworldWildEncounterLookupDataBlob *)sOverworldWildEncounterLookupDataBlob;
-    header = &blob->header;
+    if (sOverworldWildEncounterLookupDataBlob == NULL
+        || sOverworldWildEncounterLookupDataBlobSize < sizeof(*header)) {
+        return FALSE;
+    }
+
+    base = (const u8 *)sOverworldWildEncounterLookupDataBlob;
+    header = (const OverworldWildEncounterLookupDataBlobHeader *)base;
+    directorySize = (u32)header->recordCount * (u32)header->directoryEntrySize;
+
     if (header->magic != OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC
         || header->version != OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION
         || header->headerSize != sizeof(OverworldWildEncounterLookupDataBlobHeader)
-        || header->blobSize != sizeof(OverworldWildEncounterLookupDataBlob)
-        || header->count != OWED_ENCOUNTER_AREA_COUNT) {
+        || header->recordCount != OWED_ENCOUNTER_AREA_COUNT
+        || header->directoryEntrySize != sizeof(OverworldWildEncounterLookupDirectoryEntry)
+        || header->totalSize != sOverworldWildEncounterLookupDataBlobSize
+        || header->flags != 0
+        || header->checksum != OverworldWildSpawns_ComputeEncounterLookupChecksum(
+            base,
+            sOverworldWildEncounterLookupDataBlobSize)
+        || header->directoryOffset < header->headerSize
+        || (header->directoryOffset & 3) != 0
+        || !OverworldWildSpawns_IsEncounterLookupRangeValid(
+            header->directoryOffset,
+            directorySize,
+            header->totalSize)
+        || header->payloadOffset != header->directoryOffset + directorySize
+        || header->payloadOffset > header->totalSize) {
         return FALSE;
+    }
+
+    for (i = 0; i < header->recordCount; i++) {
+        const OverworldWildEncounterLookupDirectoryEntry *entry =
+            (const OverworldWildEncounterLookupDirectoryEntry *)(base
+                + header->directoryOffset
+                + i * sizeof(*entry));
+        if (entry->flags != 0
+            || entry->size < OW_WILD_SPARSE_RECORD_HEADER_SIZE
+            || entry->offset < header->payloadOffset
+            || !OverworldWildSpawns_IsEncounterLookupRangeValid(
+                entry->offset,
+                entry->size,
+                header->totalSize)
+            || !OverworldWildSpawns_IsSparseEncounterRecordValid(
+                base + entry->offset,
+                entry->size)) {
+            return FALSE;
+        }
     }
 
     return TRUE;
 }
 
-static const OverworldWildEncounterLookupDataBlob *OverworldWildSpawns_GetEncounterLookupDataBlob(void)
+static const OverworldWildEncounterLookupDataBlobHeader *OverworldWildSpawns_GetEncounterLookupDataBlob(void)
 {
     if (!sOverworldWildEncounterLookupDataLoadAttempted) {
         sOverworldWildEncounterLookupDataLoadAttempted = TRUE;
         if (!OverworldWildSpawns_LoadCodeAddonBlob(
                 CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_LOOKUP,
-                sizeof(OverworldWildEncounterLookupDataBlob),
-                &sOverworldWildEncounterLookupDataBlob)
+                0,
+                &sOverworldWildEncounterLookupDataBlob,
+                &sOverworldWildEncounterLookupDataBlobSize)
             || !OverworldWildSpawns_DecodeEncounterLookupDataBlob()) {
             sys_FreeMemoryEz(sOverworldWildEncounterLookupDataBlob);
             sOverworldWildEncounterLookupDataBlob = NULL;
+            sOverworldWildEncounterLookupDataBlobSize = 0;
         }
     }
 
@@ -1006,7 +1121,7 @@ static const OverworldWildEncounterLookupDataBlob *OverworldWildSpawns_GetEncoun
         return NULL;
     }
 
-    return (const OverworldWildEncounterLookupDataBlob *)sOverworldWildEncounterLookupDataBlob;
+    return (const OverworldWildEncounterLookupDataBlobHeader *)sOverworldWildEncounterLookupDataBlob;
 }
 
 static const OverworldWildEncounterLookupDataEntry *OverworldWildSpawns_GetLegacyEncounterLookupDataEntry(void)
@@ -11526,42 +11641,53 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
 }
 #endif
 
-static BOOL OverworldWildSpawns_FindEncounterDataId(
-    const u16 *mapIds,
-    const u8 *dataIds,
-    u32 count,
+static const OverworldWildEncounterLookupDirectoryEntry *OverworldWildSpawns_FindEncounterLookupEntry(
+    const OverworldWildEncounterLookupDataBlobHeader *blob,
     u16 mapId,
-    int *encounterDataId)
+    int encounterDataId,
+    BOOL matchEncounterDataId)
 {
+    const u8 *base;
     u32 i;
 
-    for (i = 0; i < count; i++) {
-        if (mapIds[i] == mapId) {
-            *encounterDataId = dataIds[i];
-            return TRUE;
+    if (blob == NULL) {
+        return NULL;
+    }
+
+    base = (const u8 *)blob;
+    for (i = 0; i < blob->recordCount; i++) {
+        const OverworldWildEncounterLookupDirectoryEntry *entry =
+            (const OverworldWildEncounterLookupDirectoryEntry *)(base
+                + blob->directoryOffset
+                + i * sizeof(*entry));
+        if (entry->mapId == mapId
+            && (!matchEncounterDataId || entry->dataId == encounterDataId)) {
+            return entry;
         }
     }
 
-    return FALSE;
+    return NULL;
 }
 
 static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, int *encounterDataId)
 {
-    const OverworldWildEncounterLookupDataBlob *blob;
+    const OverworldWildEncounterLookupDataBlobHeader *blob;
+    const OverworldWildEncounterLookupDirectoryEntry *lookupEntry;
     const OverworldWildEncounterLookupDataEntry *entry;
+    u32 i;
 
     if (fieldSystem == NULL || fieldSystem->location == NULL || encounterDataId == NULL) {
         return FALSE;
     }
 
     blob = OverworldWildSpawns_GetEncounterLookupDataBlob();
-    if (blob != NULL
-        && OverworldWildSpawns_FindEncounterDataId(
-            blob->mapIds,
-            blob->dataIds,
-            OWED_ENCOUNTER_AREA_COUNT,
-            fieldSystem->location->mapId,
-            encounterDataId)) {
+    lookupEntry = OverworldWildSpawns_FindEncounterLookupEntry(
+        blob,
+        fieldSystem->location->mapId,
+        0,
+        FALSE);
+    if (lookupEntry != NULL) {
+        *encounterDataId = lookupEntry->dataId;
         return TRUE;
     }
 
@@ -11569,12 +11695,85 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
     if (entry == NULL) {
         return FALSE;
     }
-    return OverworldWildSpawns_FindEncounterDataId(
-        entry->mapIds,
-        entry->dataIds,
-        entry->count,
+    for (i = 0; i < entry->count; i++) {
+        if (entry->mapIds[i] == fieldSystem->location->mapId) {
+            *encounterDataId = entry->dataIds[i];
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryCopySparseEncounterRecord(
+    const OverworldWildEncounterLookupDataBlobHeader *blob,
+    const OverworldWildEncounterLookupDirectoryEntry *entry,
+    void *dest,
+    int size)
+{
+    const u8 *record;
+    u8 *destBytes;
+    u32 recordOffset;
+    u32 i;
+
+    if (blob == NULL
+        || entry == NULL
+        || dest == NULL
+        || size != OW_WILD_ENCOUNTER_DATA_SIZE) {
+        return FALSE;
+    }
+
+    record = (const u8 *)blob + entry->offset;
+    if (!OverworldWildSpawns_IsSparseEncounterRecordValid(record, entry->size)) {
+        return FALSE;
+    }
+
+    memset(dest, 0, size);
+    destBytes = (u8 *)dest;
+    destBytes[OW_WILD_ENCOUNTER_DATA_OLD_ROD_RATE_OFFSET] = record[0];
+    destBytes[OW_WILD_ENCOUNTER_DATA_GOOD_ROD_RATE_OFFSET] = record[1];
+    destBytes[OW_WILD_ENCOUNTER_DATA_SUPER_ROD_RATE_OFFSET] = record[2];
+
+    recordOffset = OW_WILD_SPARSE_RECORD_HEADER_SIZE;
+    for (i = 0; i < NELEMS(sOverworldWildSparseEncounterSections); i++) {
+        const OverworldWildSparseEncounterSection *section =
+            &sOverworldWildSparseEncounterSections[i];
+        if ((record[3] & section->mask) == 0) {
+            continue;
+        }
+        memcpy(
+            destBytes + section->targetOffset,
+            (void *)(record + recordOffset),
+            section->size);
+        recordOffset += section->size;
+    }
+
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_TryLoadEncounterDataFromLookup(
+    FieldSystem *fieldSystem,
+    int encounterDataId,
+    void *dest,
+    int size)
+{
+    const OverworldWildEncounterLookupDataBlobHeader *blob;
+    const OverworldWildEncounterLookupDirectoryEntry *entry;
+
+    if (fieldSystem == NULL
+        || fieldSystem->location == NULL
+        || encounterDataId < 0
+        || encounterDataId > 0xFFFF) {
+        return FALSE;
+    }
+
+    blob = OverworldWildSpawns_GetEncounterLookupDataBlob();
+    entry = OverworldWildSpawns_FindEncounterLookupEntry(
+        blob,
         fieldSystem->location->mapId,
-        encounterDataId);
+        encounterDataId,
+        TRUE);
+    return OverworldWildSpawns_TryCopySparseEncounterRecord(blob, entry, dest, size);
 }
 
 static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
@@ -17148,10 +17347,20 @@ static BOOL OverworldWildSpawns_HelperLoadArchiveData(
     void *dest,
     int size)
 {
-    (void)context;
+    OverworldWildSpawnPrepContext *prepContext = (OverworldWildSpawnPrepContext *)context;
 
     if (dest == NULL || size <= 0) {
         return FALSE;
+    }
+
+    if (arcId == ARC_ENCOUNTERS
+        && offset == 0
+        && OverworldWildSpawns_TryLoadEncounterDataFromLookup(
+            prepContext == NULL ? NULL : prepContext->fieldSystem,
+            datId,
+            dest,
+            size)) {
+        return TRUE;
     }
 
     ArchiveDataLoadOfs(dest, arcId, datId, offset, size);
