@@ -501,11 +501,6 @@
 #define OW_WILD_BEHAVIOR_GROUP_TYPE_TYPELESS (1u << 20)
 #define OW_WILD_BEHAVIOR_GROUP_TYPE_STELLAR (1u << 21)
 
-#define OWBD_CLASS_PROFILE_COUNT 8
-#define OWBD_CLASS_RULE_COUNT 2
-#define OWBD_SPECIES_CLASS_RULE_COUNT 110
-#define OWBD_OVERRIDE_COUNT 2
-
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
     OverworldWildBehaviorProfile classProfiles[OWBD_CLASS_PROFILE_COUNT];

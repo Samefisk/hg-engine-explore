@@ -3562,17 +3562,26 @@ def replace_define_value(raw_source: str, symbol: str, value: int) -> str:
     return updated
 
 
-def rewrite_behavior_blob_count_defines(raw_source: str) -> str:
+def behavior_blob_counts(raw_source: str) -> dict[str, int]:
     source = strip_c_comments(join_line_continuations(raw_source))
-    updated_source = raw_source
+    counts = {}
     for define, initializer_name in OWBD_COUNT_DEFINES.items():
         entries = parse_initializer(extract_braced_initializer(source, initializer_name))
-        updated_source = replace_define_value(updated_source, define, len(entries))
-    return updated_source
+        counts[define] = len(entries)
+    return counts
+
+
+def rewrite_behavior_blob_count_defines(raw_header: str, counts: dict[str, int]) -> str:
+    updated_header = raw_header
+    for define, count in counts.items():
+        updated_header = replace_define_value(updated_header, define, count)
+    return updated_header
 
 
 def write_behavior_data_source(raw_source: str) -> None:
-    BEHAVIOR_DATA_SOURCE.write_text(rewrite_behavior_blob_count_defines(raw_source))
+    counts = behavior_blob_counts(raw_source)
+    BEHAVIOR_DATA_SOURCE.write_text(raw_source)
+    BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(BEHAVIOR_DATA_HEADER.read_text(), counts))
     invalidate_data_cache()
 
 

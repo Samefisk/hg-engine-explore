@@ -847,12 +847,6 @@ static OverworldWildBehaviorDataOverlayEntry sOverworldWildBehaviorDataEntry;
 static void *sOverworldWildEncounterLookupDataBlob;
 static u8 sOverworldWildEncounterLookupDataLoadAttempted;
 
-#define OWBD_CLASS_PROFILE_COUNT 8
-#define OWBD_CLASS_RULE_COUNT 2
-#define OWBD_SPECIES_CLASS_RULE_COUNT 110
-#define OWBD_OVERRIDE_COUNT 2
-#define OWED_ENCOUNTER_AREA_COUNT 150
-
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
     OverworldWildBehaviorProfile classProfiles[OWBD_CLASS_PROFILE_COUNT];

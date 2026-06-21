@@ -5,8 +5,6 @@
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
-#define OWED_ENCOUNTER_AREA_COUNT 150
-
 typedef struct OverworldWildEncounterLookupDataBlob {
     OverworldWildEncounterLookupDataBlobHeader header;
     u16 mapIds[OWED_ENCOUNTER_AREA_COUNT];
