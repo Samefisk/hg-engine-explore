@@ -15,7 +15,7 @@
     "version": 1
   },
   "destination_index": 47,
-  "elapsed_seconds": 16.325,
+  "elapsed_seconds": 16.123,
   "expect_request_frame": 3,
   "final_nonblack_ok": true,
   "final_status": {

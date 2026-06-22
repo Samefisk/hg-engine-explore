@@ -85,12 +85,16 @@ map/tile".
 Overlay 149 is the visible-overworld-wild spawn overlay and is already a tight,
 large overlay. This feature does not add code or data to overlay 149.
 
-The reusable helper lives in overlay 131, the field extension overlay, behind a
-small fixed-address entry table. The always-built field-ready hook only calls
-that entry table to start the verifier task; the verifier poller and writable
-debug destination also live in overlay 131. Public callers can use
-`MapTeleport_Request`. No common script entry, destination UI, effect code,
-sound code, or overlay 149 code/data is added for teleportation.
+The reusable helper lives in overlay 131, the field extension overlay. The
+fixed-address entry table stays deliberately small: it exposes request,
+same-loaded-map land validation, and debug-task start. The random-loaded-land
+selector is exposed as the overlay-131 provider symbol
+`MapTeleport_TrySelectRandomLoadedLandTile`, and the public
+`MapTeleport_RequestRandomLoadedLandTile` wrapper combines that selector with
+`MapTeleport_Request`. This keeps a real hook path for future field/overworld
+triggers without spending the extra four bytes that a fourth entry-table
+function pointer would cost. No common script entry, destination UI, effect
+code, sound code, or overlay 149 code/data is added for teleportation.
 
 ## Validation Limits And Caller Contract
 
@@ -140,7 +144,9 @@ random-land verifier uses.
 1. Add `include/map_teleport.h` with the destination struct, result enum, and
    `MapTeleport_Request`.
 2. Add `src/field/map_teleport.c` in overlay 131, not overlay 149.
-3. Expose the helper through a fixed-address overlay entry table.
+3. Expose the request/validation/debug hooks through a fixed-address overlay
+   entry table, and expose the random-loaded-land selector as an overlay-131
+   provider symbol to avoid widening that table.
 4. Register the L+R verification request from the existing field-ready hook.
 5. Build the ROM and verify the writable debug destination across a matrix of
    known-good field `Location` coordinates: New Bark, Cherrygrove, Violet,
@@ -210,11 +216,13 @@ land, and event NARCs at runtime.
 
 For random landing membership, the host-side oracle scans only the same
 `[-32,+31]` window the ROM helper can sample after the entry warp. It reads the
-loaded destination map's matrix cells, uses the cell land-file permissions,
-rejects the same low-byte headbutt/surf behaviors rejected by the ROM helper,
-and excludes static event-blocked tiles. The ROM remains authoritative: the
-second-phase same-map request still calls `IsMetatileBlockedAt` and
-`GetMetatileBehaviorAt` before scheduling the warp.
+loaded destination map's matrix cells, uses the cell land-file permissions, and
+excludes static event-blocked tiles. The permission grid is only a host-side
+approximation of live metatile behavior, so the oracle rejects surf-style
+permission bytes but does not treat permission low byte `0x06` as definitive
+headbutt behavior. The ROM remains authoritative: the second-phase same-map
+request still calls `IsMetatileBlockedAt` and `GetMetatileBehaviorAt` before
+scheduling the warp.
 
 This is a space-conscious MVP tradeoff. It gives L+R meaningful random
 relocation on the selected map without storing whole-map or whole-route tile
@@ -241,9 +249,9 @@ Final focused random-land verification on this branch produced:
 - `passed_run_count`: 12
 - `failed_run_count`: 0
 - `unique_coordinate_count`: 12
-- `valid_random_tile_count`: 2726
+- `valid_random_tile_count`: 4074
 - `valid_random_tile_evidence.sha256`:
-  `791aba7d560b7ceb96f2aeb19b863ff8466506327dec8355f08ee62bbcd7c8dc`
+  `10f0542df7e1d5ff30185219a7f12190128b570eb82bb4a3690a836369087ab5`
 
 ## Runtime Verifier
 
@@ -280,6 +288,22 @@ The verifier exits successfully only when all of these are true:
 - every passed row has request or movement evidence, and
 - the built field overlay artifacts are below `0x5000` bytes, and
 - the overlay encounter-destination entry reports count 150.
+
+For review worktrees without `rom.nds` or DeSmuME available, the same script
+also supports a static audit:
+
+```bash
+scripts/headless-all-encounter-teleport-verifier.py \
+  --static-only \
+  --destinations documentation/verification/encounter_map_teleport_destinations.json \
+  --expect-count 150
+```
+
+That static audit parses the packed C destination table, compares all 150 rows
+against the compact JSON, checks the authoritative encounter-symbol order, and
+fails if any generated destination has `random_tile_count: 0`. The final static
+audit produced `packed_table_matches_json: true`,
+`zero_random_tile_count: 0`, and `passed: true`.
 
 Exact commands:
 
@@ -334,7 +358,7 @@ generator asserts those bounds before writing the C table and the indexed API
 decodes directly into caller-provided storage.
 
 Heavy derivation code, JSON artifacts, and the headless verifier stay outside
-the ROM. The compact destination audit JSON is 86,057 bytes and stores
+the ROM. The compact destination audit JSON is 86,671 bytes and stores
 count/hash/bounds evidence instead of full random-coordinate arrays for all 150
 maps.
 

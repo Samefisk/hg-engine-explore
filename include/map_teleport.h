@@ -129,11 +129,11 @@ static inline BOOL MapTeleport_IsLoadedLandTile(FieldSystem *fieldSystem, u16 x,
     return entry->isLoadedLandTile(fieldSystem, x, y);
 }
 
-BOOL MapTeleport_TrySelectRandomLoadedLandTile(
-    FieldSystem *fieldSystem,
-    MapTeleportDestination *destination);
 BOOL MapTeleport_TrySelectEncounterDestinationByIndex(
     u16 index,
+    MapTeleportDestination *destination);
+BOOL MapTeleport_TrySelectRandomLoadedLandTile(
+    FieldSystem *fieldSystem,
     MapTeleportDestination *destination);
 
 static inline MapTeleportResult

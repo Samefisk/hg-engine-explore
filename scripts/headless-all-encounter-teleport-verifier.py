@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,7 +58,6 @@ def ensure_repo_venv() -> None:
 ensure_repo_venv()
 
 import generate_encounter_map_teleport_destinations as generator  # type: ignore  # noqa: E402
-from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
 
 
 def import_script(path: Path, name: str) -> Any:
@@ -69,7 +69,15 @@ def import_script(path: Path, name: str) -> Any:
     return module
 
 
-headless = import_script(REPO_ROOT / "scripts/headless-overworld-test.py", "headless_overworld_test")
+if "--static-only" in sys.argv:
+    headless = None
+else:
+    from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
+
+    headless = import_script(
+        REPO_ROOT / "scripts/headless-overworld-test.py",
+        "headless_overworld_test",
+    )
 
 
 def repo_path(path: str | Path) -> Path:
@@ -262,6 +270,70 @@ def load_destinations(path: Path) -> list[dict[str, Any]]:
     if not isinstance(destinations, list):
         raise ValueError(f"{path} does not contain a destinations list")
     return destinations
+
+
+def packed_destination_word(destination: dict[str, Any]) -> int:
+    return (
+        (int(destination["map_id"]) << generator.PACKED_MAP_SHIFT)
+        | (int(destination["x"]) << generator.PACKED_X_SHIFT)
+        | (int(destination["y"]) << generator.PACKED_Y_SHIFT)
+    )
+
+
+def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, Any]:
+    source = (REPO_ROOT / "src/field/map_teleport_encounter_destinations.c").read_text()
+    table_rows = re.findall(
+        r"0x([0-9A-Fa-f]{8})u,\s*//\s*(MAP_\w+)\s+(\d+),(\d+)",
+        source,
+    )
+    mismatches: list[dict[str, Any]] = []
+    for index, destination in enumerate(destinations):
+        if index >= len(table_rows):
+            mismatches.append({"index": index, "reason": "missing packed C row"})
+            continue
+        packed_hex, symbol, x, y = table_rows[index]
+        expected = packed_destination_word(destination)
+        actual = int(packed_hex, 16)
+        if (
+            actual != expected
+            or symbol != destination["symbol"]
+            or int(x) != int(destination["x"])
+            or int(y) != int(destination["y"])
+        ):
+            mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "expected_packed": f"0x{expected:08X}",
+                    "actual_packed": f"0x{actual:08X}",
+                    "actual_symbol": symbol,
+                    "actual_x": int(x),
+                    "actual_y": int(y),
+                }
+            )
+    zero_random = [
+        {
+            "index": index,
+            "symbol": destination["symbol"],
+            "map_id": destination["map_id"],
+            "x": destination["x"],
+            "y": destination["y"],
+        }
+        for index, destination in enumerate(destinations)
+        if int(destination.get("random_tile_count", 0)) == 0
+    ]
+    return {
+        "c_table_count": len(table_rows),
+        "json_count": len(destinations),
+        "packed_table_matches_json": not mismatches
+        and len(table_rows) == len(destinations),
+        "packed_table_mismatches": mismatches,
+        "zero_random_tile_count": len(zero_random),
+        "zero_random_tile_destinations": zero_random,
+        "ok": len(table_rows) == len(destinations)
+        and not mismatches
+        and not zero_random,
+    }
 
 
 def authoritative_entries() -> list[tuple[str, int, int]]:
@@ -648,6 +720,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-interval", type=int, default=12)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
     parser.add_argument("--limit", type=int, help="Debug-only map limit; any value below expected count fails summary.")
+    parser.add_argument("--static-only", action="store_true")
     parser.add_argument("--worker-index", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--worker-output", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--worker-timeout-seconds", type=int, default=120)
@@ -657,6 +730,29 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+    destinations = load_destinations(repo_path(args.destinations))
+    authoritative = authoritative_entries()
+    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
+    destination_symbols = [destination["symbol"] for destination in destinations]
+    static_audit = static_destination_audit(destinations)
+    if args.static_only:
+        summary = {
+            "destinations": str(repo_path(args.destinations)),
+            "expected_count": args.expect_count,
+            "authoritative_count": len(authoritative),
+            "generated_destination_count": len(destinations),
+            "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
+            "static_destination_audit": static_audit,
+            "passed": (
+                len(authoritative) == args.expect_count
+                and len(destinations) == args.expect_count
+                and authoritative_symbols == destination_symbols
+                and static_audit["ok"]
+            ),
+        }
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0 if summary["passed"] else 1
 
     rom = repo_path(args.rom)
     if not rom.is_file():
@@ -671,11 +767,6 @@ def main() -> int:
         save_path = headless.find_dsv(args.dsv)
         raw_save = headless.extract_raw_save(save_path)
         save_kind = "dsv"
-
-    destinations = load_destinations(repo_path(args.destinations))
-    authoritative = authoritative_entries()
-    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
-    destination_symbols = [destination["symbol"] for destination in destinations]
 
     if args.worker_index is not None:
         if args.worker_output is None:
@@ -767,6 +858,7 @@ def main() -> int:
         "stale_match_rejected_count": stale_match_rejected,
         "all_passed_rows_have_evidence": all_passed_rows_have_evidence,
         "field_overlay_size": field_overlay_size,
+        "static_destination_audit": static_audit,
         "ready_frames": ready_frames,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
         "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
@@ -778,6 +870,7 @@ def main() -> int:
             and passed == expected_count
             and all_passed_rows_have_evidence
             and field_overlay_size["ok"]
+            and static_audit["ok"]
             and authoritative_symbols == destination_symbols
             and entry["magic"] == ENCOUNTER_DESTINATION_MAGIC
             and entry["version"] == ENCOUNTER_DESTINATION_VERSION

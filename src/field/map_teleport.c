@@ -23,8 +23,8 @@ typedef struct MapTeleportPlainWarpTaskEnv {
 
 typedef struct MapTeleportDebugTaskEnv {
     FieldSystem *fieldSystem;
-    BOOL randomizeAfterLoad;
     u16 randomizeMapId;
+    u8 randomizeAfterLoad;
     u8 wasHeld;
 } MapTeleportDebugTaskEnv;
 
@@ -273,15 +273,15 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
         && !sMapTeleportRequestPending
         && fieldSystem->location->mapId == env->randomizeMapId) {
         if (fieldSystem->taskman == NULL) {
-            if (MapTeleport_TrySelectRandomLoadedLandTile(fieldSystem, &randomDestination)) {
+            if (MapTeleport_TrySelectRandomLoadedLandTile(
+                    fieldSystem,
+                    &randomDestination)) {
                 result = MapTeleport_OverlayRequest(fieldSystem, &randomDestination);
-            } else {
-                result = MAP_TELEPORT_RESULT_INVALID_DESTINATION;
-            }
-            gMapTeleportDebugStatus.requestResult = result;
-            if (result == MAP_TELEPORT_RESULT_OK) {
-                env->randomizeAfterLoad = FALSE;
-                gMapTeleportDebugStatus.requestCount++;
+                gMapTeleportDebugStatus.requestResult = result;
+                if (result == MAP_TELEPORT_RESULT_OK) {
+                    env->randomizeAfterLoad = FALSE;
+                    gMapTeleportDebugStatus.requestCount++;
+                }
             }
         }
     }
@@ -304,6 +304,8 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
         destinationIndex = gMapTeleportDebugStatus.destinationIndex;
         if (destinationIndex >= OWED_ENCOUNTER_AREA_COUNT) {
             destinationIndex = gf_rand() % OWED_ENCOUNTER_AREA_COUNT;
+            gMapTeleportDebugStatus.destinationIndex =
+                MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
         }
         if (destinationIndex != MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE) {
             if (MapTeleport_TrySelectEncounterDestinationByIndex(
@@ -319,7 +321,6 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
     }
 
     result = MapTeleport_OverlayRequest(fieldSystem, destination);
-    gMapTeleportDebugStatus.destinationIndex = destinationIndex;
     gMapTeleportDebugStatus.requestResult = result;
     gMapTeleportDebugStatus.requestCount++;
     if (result == MAP_TELEPORT_RESULT_OK

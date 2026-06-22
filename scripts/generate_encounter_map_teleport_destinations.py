@@ -18,6 +18,7 @@ CELL_SIZE = 32
 HEADER_OFFSET = 0xF6BE0
 HEADER_SIZE = 24
 BAD_TILE_BEHAVIORS = {6, 16, 18, 21, 42}
+LOADED_WINDOW_BAD_PERMISSION_BEHAVIORS = BAD_TILE_BEHAVIORS - {6}
 FALLBACK_STAMPS = {
     "MAP_D24": "MAP_D24R0101",
     "MAP_D24R0201": "MAP_D24R0101",
@@ -220,7 +221,7 @@ def is_passable(permission: int) -> bool:
 
 
 def is_loaded_window_land_candidate(permission: int) -> bool:
-    return (permission & 0xFF) not in BAD_TILE_BEHAVIORS
+    return (permission & 0xFF) not in LOADED_WINDOW_BAD_PERMISSION_BEHAVIORS
 
 
 def find_stamps(
@@ -375,6 +376,54 @@ def collect_land_candidates(
             find_header_wildcard_stamps(matrix_narc, matrix_cache, header),
             "derived:header-wildcard",
         )
+    return sorted(candidates)
+
+
+def collect_loaded_map_candidates(
+    *,
+    map_id: int,
+    matrix_narc: ndspy.narc.NARC,
+    land_narc: ndspy.narc.NARC,
+    event_narc: ndspy.narc.NARC,
+    arm9: bytes,
+    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
+    permission_cache: dict[int, tuple[int, ...]],
+) -> list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]]:
+    header = read_header(arm9, map_id)
+    blocked = read_event_blocked_tiles(event_narc, header.event_file_id)
+    candidates = []
+    for stamp in find_header_wildcard_stamps(matrix_narc, matrix_cache, header):
+        if stamp.land_file_id >= len(land_narc.files):
+            continue
+        if stamp.land_file_id not in permission_cache:
+            permission_cache[stamp.land_file_id] = read_permission_grid(land_narc, stamp.land_file_id)
+        permissions = permission_cache[stamp.land_file_id]
+        for local_y in range(CELL_SIZE):
+            for local_x in range(CELL_SIZE):
+                world_x = stamp.matrix_x * CELL_SIZE + local_x
+                world_y = stamp.matrix_y * CELL_SIZE + local_y
+                if (world_x, world_y) in blocked:
+                    continue
+                permission = permissions[local_y * CELL_SIZE + local_x]
+                if not is_passable(permission):
+                    continue
+                center_distance = abs(local_x - 16) + abs(local_y - 16)
+                candidates.append(
+                    (
+                        0,
+                        center_distance,
+                        world_y,
+                        world_x,
+                        stamp.matrix_id,
+                        stamp.matrix_x,
+                        stamp.matrix_y,
+                        stamp.land_file_id,
+                        len(candidates),
+                        stamp,
+                        permission,
+                        "derived:loaded-header",
+                    )
+                )
     return sorted(candidates)
 
 
@@ -541,28 +590,66 @@ def choose_destination(
     permission_cache: dict[int, tuple[int, ...]],
     random_candidates: list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]],
 ) -> Destination | None:
-    if not random_candidates:
+    def try_candidate_list(
+        candidates: list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]],
+    ) -> Destination | None:
+        for candidate in candidates:
+            (
+                _neighbors,
+                _center,
+                y,
+                x,
+                _matrix_id,
+                _matrix_x,
+                _matrix_y,
+                _land_file_id,
+                _candidate_index,
+                stamp,
+                permission,
+                candidate_source,
+            ) = candidate
+            random_tiles = loaded_window_random_tile_candidates(
+                center_x=x,
+                center_y=y,
+                loaded_map_id=map_id,
+                fallback_map_id=source_map_id,
+                source=source,
+                matrix_narc=matrix_narc,
+                land_narc=land_narc,
+                event_narc=event_narc,
+                arm9=arm9,
+                matrix_cache=matrix_cache,
+                permission_cache=permission_cache,
+            )
+            if not random_tiles:
+                continue
+            destination_source = source
+            if candidate_source != "derived":
+                destination_source = f"{source}:{candidate_source.removeprefix('derived:')}"
+            return Destination(
+                symbol=symbol,
+                map_id=map_id,
+                data_id=data_id,
+                x=x,
+                y=y,
+                direction=1,
+                source=destination_source,
+                matrix_id=stamp.matrix_id,
+                matrix_x=stamp.matrix_x,
+                matrix_y=stamp.matrix_y,
+                matrix_value=stamp.matrix_value,
+                land_file_id=stamp.land_file_id,
+                permission=permission,
+                random_tiles=random_tiles,
+            )
         return None
-    (
-        _neighbors,
-        _center,
-        y,
-        x,
-        _matrix_id,
-        _matrix_x,
-        _matrix_y,
-        _land_file_id,
-        _candidate_index,
-        stamp,
-        permission,
-        candidate_source,
-    ) = random_candidates[0]
-    random_tiles = loaded_window_random_tile_candidates(
-        center_x=x,
-        center_y=y,
-        loaded_map_id=map_id,
-        fallback_map_id=source_map_id,
-        source=source,
+
+    destination = try_candidate_list(random_candidates)
+    if destination is not None:
+        return destination
+
+    loaded_candidates = collect_loaded_map_candidates(
+        map_id=map_id,
         matrix_narc=matrix_narc,
         land_narc=land_narc,
         event_narc=event_narc,
@@ -570,22 +657,7 @@ def choose_destination(
         matrix_cache=matrix_cache,
         permission_cache=permission_cache,
     )
-    return Destination(
-        symbol=symbol,
-        map_id=map_id,
-        data_id=data_id,
-        x=x,
-        y=y,
-        direction=1,
-        source=source if candidate_source == "derived" else f"{source}:header-wildcard",
-        matrix_id=stamp.matrix_id,
-        matrix_x=stamp.matrix_x,
-        matrix_y=stamp.matrix_y,
-        matrix_value=stamp.matrix_value,
-        land_file_id=stamp.land_file_id,
-        permission=permission,
-        random_tiles=random_tiles,
-    )
+    return try_candidate_list(loaded_candidates)
 
 
 def packed_destination_word(destination: Destination) -> int:
@@ -787,6 +859,16 @@ def main() -> int:
         raise RuntimeError(f"no safe destination candidates for: {', '.join(missing)}")
     if len(destinations) != expected_count:
         raise RuntimeError(f"generated {len(destinations)} destinations, expected {expected_count}")
+    missing_random = [
+        destination.symbol
+        for destination in destinations
+        if not destination.random_tiles
+    ]
+    if missing_random:
+        raise RuntimeError(
+            "no random loaded-window candidates for: "
+            + ", ".join(missing_random)
+        )
 
     write_c(destinations, args.c_output)
     write_json(destinations, args.json_output)

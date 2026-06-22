@@ -14,7 +14,7 @@
   },
   "destination_index": 1,
   "destinations": "documentation/verification/encounter_map_teleport_destinations.json",
-  "elapsed_seconds": 18.994,
+  "elapsed_seconds": 19.325,
   "failed_run_count": 0,
   "failures": [],
   "min_unique_coordinates": 2,
@@ -76,7 +76,7 @@
       "y": 376
     }
   ],
-  "valid_random_tile_count": 2726,
+  "valid_random_tile_count": 4074,
   "valid_random_tile_evidence": {
     "bounds": {
       "max_x": 623,
@@ -84,7 +84,7 @@
       "min_x": 560,
       "min_y": 367
     },
-    "count": 2726,
+    "count": 4074,
     "sample": [
       {
         "x": 560,
@@ -119,6 +119,6 @@
         "y": 374
       }
     ],
-    "sha256": "791aba7d560b7ceb96f2aeb19b863ff8466506327dec8355f08ee62bbcd7c8dc"
+    "sha256": "10f0542df7e1d5ff30185219a7f12190128b570eb82bb4a3690a836369087ab5"
   }
 }
