@@ -263,13 +263,15 @@ the last `MapTeleport_Request` result, a request counter, and the selected
 encounter destination index or deterministic-force sentinel.
 
 `scripts/headless-all-encounter-teleport-verifier.py` boots `test.nds` with the
-test save, forces each generated encounter-map destination by numeric index,
-presses L+R, waits for the debug status block to match the expected map/x/y,
-checks that the screenshot is nonblack, writes one JSONL result per map, and
-writes a summary JSON. Each destination is checked by a short-lived worker
-process with a fresh emulator/save import so a bad or busy transition cannot
-poison later rows. The deterministic exact-destination transition verifier uses
-the `0xFFFE` forced path so its expected final coordinate remains stable.
+test save, writes each generated encounter-map destination into the debug
+destination block, selects the deterministic `0xFFFE` forced path, presses L+R,
+waits for the debug status block to match the expected map/x/y, checks that the
+screenshot is nonblack, writes one JSONL result per map, and writes a summary
+JSON. Each destination is checked by a short-lived worker process with a fresh
+emulator/save import so a bad or busy transition cannot poison later rows. The
+runtime all-encounter verifier therefore proves exact destination warp coverage;
+the static audit below covers numeric table parity and zero random-candidate
+checks for all 150 generated rows.
 
 Final map/x/y and a nonblack screen are not enough by themselves, because a
 fresh save can already start at a destination. Each passed row must also have
