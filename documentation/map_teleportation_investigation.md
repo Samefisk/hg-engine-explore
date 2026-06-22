@@ -15,18 +15,21 @@ follow-mon state. Changing only the location would leave those structures
 desynchronized and risks loading an incomplete or stale map.
 
 The helper therefore queues a stock field warp task instead of adding a custom
-transition implementation. The script `warp` command calls the same family of
-transition tasks through `TaskManager_Jump`, which is fragile from a SysTask
-verification trigger because it requires the correct active task-manager node.
-The MVP uses the nearby vanilla entry `sub_020538C0(FieldSystem *, mapId,
-warpId, x, y, direction)`, which allocates the same warp task environment but
-queues it with `FieldSystem_CreateTask`. That keeps the trigger from deriving a
-task-manager pointer from live field internals.
+transition implementation. The script `warp` command (`176`) calls the same
+family of transition tasks through an existing `TaskManager *`, which is
+fragile from a SysTask verification trigger because it requires the correct
+active task-manager node. The helper therefore builds the same small env shape
+used by the script warp path (`state` plus `Location`) and schedules stock
+`Task_ScriptWarp` with `FieldSystem_CreateTask` once `fieldSystem->taskman` is
+idle. That uses the common warp loader without the Fly-style landing
+presentation used by `sub_020538C0`/`FlyAnimation` (`180`), so the L+R
+transition remains presentation-free.
 
-The decomp confirms that `sub_020538C0` builds a `Location` from its arguments
-and that `ScrCmd_180` passes `mapId, x, y` to it without coordinate conversion.
-Only `warpId != -1` makes the loader replace x/y from map warp events, so this
-helper uses `warpId = -1` for explicit tile destinations.
+The decomp confirms that the stock wrappers build a `Location` from their
+arguments and that script warp-style callers pass `mapId, x, y` without
+coordinate conversion. Only `warpId != -1` makes the loader replace x/y from
+map warp events, so this helper uses `warpId = -1` for explicit tile
+destinations.
 
 ## Coordinate Convention
 
@@ -69,6 +72,7 @@ The helper only queues a teleport when:
 - the `FieldSystem` is still the global live field system,
 - location, map events, and map matrix pointers are present,
 - no map teleport request is already pending,
+- the stock field task manager is idle,
 - the destination map id and direction are in valid ranges, and
 - same-map destinations pass a loaded collision/land check.
 
@@ -227,6 +231,19 @@ scripts/headless-all-encounter-teleport-verifier.py \
   --max-wait-frames 720 \
   --post-ready-wait-frames 180
 ```
+
+The L+R transition also has a focused aesthetic regression verifier:
+
+```bash
+scripts/headless-map-teleport-transition-verifier.py \
+  --rom test.nds \
+  --json documentation/verification/map_teleport_transition_verifier.json
+```
+
+It samples frames after the L+R request and fails if any sampled frame is a
+solid-white Fly-style transition frame. Before the plain `Task_ScriptWarp`
+scheduler, the old `sub_020538C0` path landed successfully but failed this
+check with `solid_white_frames: [60]`.
 
 Final verification on this branch produced:
 

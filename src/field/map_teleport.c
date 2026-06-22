@@ -11,13 +11,16 @@
 #define MAP_TELEPORT_DEBUG_KEYS (PAD_BUTTON_L | PAD_BUTTON_R)
 #define MAP_TELEPORT_TILE_HEADBUTT 6
 
-void LONG_CALL sub_020538C0(
+typedef struct MapTeleportPlainWarpTaskEnv {
+    u32 state;
+    Location location;
+} MapTeleportPlainWarpTaskEnv;
+
+TaskManager *LONG_CALL FieldSystem_CreateTask(
     FieldSystem *fieldSystem,
-    u32 mapId,
-    int warpId,
-    int x,
-    int y,
-    int direction);
+    TaskFunc taskFunc,
+    void *env);
+BOOL LONG_CALL Task_ScriptWarp(TaskManager *taskman);
 
 static BOOL sMapTeleportRequestPending;
 static SysTask *sMapTeleportDebugTask;
@@ -145,6 +148,22 @@ static void MapTeleport_UpdatePending(FieldSystem *fieldSystem)
     }
 }
 
+static void MapTeleport_StartPlainWarpTask(
+    FieldSystem *fieldSystem,
+    const MapTeleportDestination *destination)
+{
+    MapTeleportPlainWarpTaskEnv *env;
+
+    env = sys_AllocMemoryLo(11, sizeof(MapTeleportPlainWarpTaskEnv));
+    env->state = 0;
+    env->location.mapId = destination->mapId;
+    env->location.warpId = -1;
+    env->location.x = destination->x;
+    env->location.z = destination->y;
+    env->location.direction = destination->direction;
+    FieldSystem_CreateTask(fieldSystem, Task_ScriptWarp, env);
+}
+
 static MapTeleportResult MapTeleport_OverlayRequest(
     FieldSystem *fieldSystem,
     const MapTeleportDestination *destination)
@@ -162,6 +181,10 @@ static MapTeleportResult MapTeleport_OverlayRequest(
         return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
     }
 
+    if (fieldSystem->taskman != NULL) {
+        return MAP_TELEPORT_RESULT_FIELD_BUSY;
+    }
+
     if (destination->mapId == fieldSystem->location->mapId
         && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)) {
         return MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE;
@@ -170,13 +193,7 @@ static MapTeleportResult MapTeleport_OverlayRequest(
     sMapTeleportRequestPending = TRUE;
     sMapTeleportPendingFrames = MAP_TELEPORT_PENDING_TIMEOUT_FRAMES;
     sMapTeleportPendingDestination = *destination;
-    sub_020538C0(
-        fieldSystem,
-        destination->mapId,
-        -1,
-        destination->x,
-        destination->y,
-        destination->direction);
+    MapTeleport_StartPlainWarpTask(fieldSystem, destination);
     return MAP_TELEPORT_RESULT_OK;
 }
 

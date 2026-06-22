@@ -862,8 +862,9 @@ BattleSetup_New_Tutorial = 0x02051AAC | 1;
 BattleSetup_GetWildTransitionEffect = 0x020517E8 | 1;
 BattleSetup_GetWildBattleMusic = 0x020517FC | 1;
 Encounter_New = 0x020506BC | 1;
+FieldSystem_CreateTask = 0x020504F0 | 1;
 TaskManager_Call = 0x02050530 | 1;
-sub_020538C0 = 0x020538C0 | 1;
+Task_ScriptWarp = 0x0205380C | 1;
 Task_TutorialBattle = 0x0205128C | 1;
 
 GetItemAttrSub = 0x02077E48 | 1;
