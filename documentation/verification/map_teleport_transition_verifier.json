@@ -11,11 +11,12 @@
   "destination_entry": {
     "count": 150,
     "magic": 1297368388,
-    "size": 20,
+    "size": 12,
     "version": 1
   },
   "destination_index": 47,
-  "elapsed_seconds": 16.933,
+  "elapsed_seconds": 16.325,
+  "expect_request_frame": 3,
   "final_nonblack_ok": true,
   "final_status": {
     "destination_index": 65535,
@@ -39,6 +40,7 @@
     "frame": 3,
     "request_result": 0
   },
+  "request_frame_ok": true,
   "request_ok": true,
   "rom": "test.nds",
   "sample_count": 101,

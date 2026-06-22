@@ -74,6 +74,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--release-frames", type=int, default=30)
     parser.add_argument("--sample-frames", type=int, default=240)
     parser.add_argument("--sample-interval", type=int, default=3)
+    parser.add_argument("--expect-request-frame", type=int, default=3)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
     parser.add_argument("--solid-white-min-channel", type=int, default=240)
     parser.add_argument("--show-emulator-log", action="store_true")
@@ -274,6 +275,10 @@ def main() -> int:
         request_evidence is not None
         and request_evidence["request_result"] == verifier.MAP_TELEPORT_RESULT_OK
     )
+    request_frame_ok = (
+        request_evidence is not None
+        and request_evidence["frame"] == args.expect_request_frame
+    )
     total_sample_frames = args.trigger_frames + args.release_frames + args.sample_frames
     summary = {
         "rom": display_path(rom),
@@ -296,6 +301,8 @@ def main() -> int:
         "post_release_sample_frames": args.sample_frames,
         "total_sample_frames": total_sample_frames,
         "sample_interval": args.sample_interval,
+        "expect_request_frame": args.expect_request_frame,
+        "request_frame_ok": request_frame_ok,
         "solid_white_frame_count": len(solid_white_frames),
         "solid_white_frames": [sample["frame"] for sample in solid_white_frames],
         "solid_white_whole_frame_count": len(whole_solid_white_frames),
@@ -346,6 +353,7 @@ def main() -> int:
             and entry["magic"] == verifier.ENCOUNTER_DESTINATION_MAGIC
             and entry["count"] == verifier.DEFAULT_EXPECT_COUNT
             and request_ok
+            and request_frame_ok
             and landed
             and final_nonblack_ok
             and len(solid_white_frames) == 0

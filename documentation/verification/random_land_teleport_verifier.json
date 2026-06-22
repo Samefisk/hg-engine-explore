@@ -1,0 +1,124 @@
+{
+  "destination": {
+    "map_id": 33,
+    "primary_x": 592,
+    "primary_y": 399,
+    "symbol": "MAP_R29"
+  },
+  "destination_count": 150,
+  "destination_entry": {
+    "count": 150,
+    "magic": 1297368388,
+    "size": 12,
+    "version": 1
+  },
+  "destination_index": 1,
+  "destinations": "documentation/verification/encounter_map_teleport_destinations.json",
+  "elapsed_seconds": 18.994,
+  "failed_run_count": 0,
+  "failures": [],
+  "min_unique_coordinates": 2,
+  "passed": true,
+  "passed_run_count": 12,
+  "ready_frames": 1380,
+  "rom": "test.nds",
+  "runs": 12,
+  "save": "/Users/christofferandersen/Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv",
+  "save_kind": "dsv",
+  "unique_coordinate_count": 12,
+  "unique_coordinates": [
+    {
+      "x": 561,
+      "y": 405
+    },
+    {
+      "x": 568,
+      "y": 429
+    },
+    {
+      "x": 573,
+      "y": 421
+    },
+    {
+      "x": 595,
+      "y": 396
+    },
+    {
+      "x": 596,
+      "y": 419
+    },
+    {
+      "x": 609,
+      "y": 408
+    },
+    {
+      "x": 612,
+      "y": 427
+    },
+    {
+      "x": 617,
+      "y": 367
+    },
+    {
+      "x": 617,
+      "y": 420
+    },
+    {
+      "x": 622,
+      "y": 370
+    },
+    {
+      "x": 622,
+      "y": 371
+    },
+    {
+      "x": 623,
+      "y": 376
+    }
+  ],
+  "valid_random_tile_count": 2726,
+  "valid_random_tile_evidence": {
+    "bounds": {
+      "max_x": 623,
+      "max_y": 430,
+      "min_x": 560,
+      "min_y": 367
+    },
+    "count": 2726,
+    "sample": [
+      {
+        "x": 560,
+        "y": 367
+      },
+      {
+        "x": 560,
+        "y": 368
+      },
+      {
+        "x": 560,
+        "y": 369
+      },
+      {
+        "x": 560,
+        "y": 370
+      },
+      {
+        "x": 560,
+        "y": 371
+      },
+      {
+        "x": 560,
+        "y": 372
+      },
+      {
+        "x": 560,
+        "y": 373
+      },
+      {
+        "x": 560,
+        "y": 374
+      }
+    ],
+    "sha256": "791aba7d560b7ceb96f2aeb19b863ff8466506327dec8355f08ee62bbcd7c8dc"
+  }
+}

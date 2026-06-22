@@ -10,6 +10,15 @@
       "matrix_x": 21,
       "matrix_y": 12,
       "permission": 0,
+      "random_tile_count": 2915,
+      "random_tile_evidence": {
+        "count": 2915,
+        "max_x": 719,
+        "max_y": 431,
+        "min_x": 656,
+        "min_y": 368,
+        "sha256": "21435294b5e98d30c85a9545b8f54be22cc4b37f2abbb5724654d50179fb4f11"
+      },
       "source": "derived",
       "symbol": "MAP_T20",
       "x": 688,
@@ -25,6 +34,15 @@
       "matrix_x": 18,
       "matrix_y": 12,
       "permission": 2,
+      "random_tile_count": 2726,
+      "random_tile_evidence": {
+        "count": 2726,
+        "max_x": 623,
+        "max_y": 430,
+        "min_x": 560,
+        "min_y": 367,
+        "sha256": "791aba7d560b7ceb96f2aeb19b863ff8466506327dec8355f08ee62bbcd7c8dc"
+      },
       "source": "verified:derived",
       "symbol": "MAP_R29",
       "x": 592,
@@ -40,6 +58,15 @@
       "matrix_x": 17,
       "matrix_y": 12,
       "permission": 32768,
+      "random_tile_count": 2904,
+      "random_tile_evidence": {
+        "count": 2904,
+        "max_x": 598,
+        "max_y": 431,
+        "min_x": 535,
+        "min_y": 368,
+        "sha256": "c1898e76bbbec6fec7fe017f2fa787e325398d28f99c42e9484485b68ebcaa1a"
+      },
       "source": "verified:derived",
       "symbol": "MAP_T21",
       "x": 567,
@@ -55,6 +82,15 @@
       "matrix_x": 17,
       "matrix_y": 9,
       "permission": 2,
+      "random_tile_count": 3190,
+      "random_tile_evidence": {
+        "count": 3190,
+        "max_x": 591,
+        "max_y": 335,
+        "min_x": 528,
+        "min_y": 272,
+        "sha256": "ed812390f52e96be02a5bfed2d344d135a34210378202d64ef6755c12854ef9e"
+      },
       "source": "derived",
       "symbol": "MAP_R30",
       "x": 560,
@@ -70,6 +106,15 @@
       "matrix_x": 17,
       "matrix_y": 8,
       "permission": 1024,
+      "random_tile_count": 3208,
+      "random_tile_evidence": {
+        "count": 3208,
+        "max_x": 591,
+        "max_y": 303,
+        "min_x": 528,
+        "min_y": 240,
+        "sha256": "e67f2374cc0586cac4f8a1e37e05342452301e4ce74668475105de5c4964a01f"
+      },
       "source": "verified:derived",
       "symbol": "MAP_R31",
       "x": 560,
@@ -84,11 +129,20 @@
       "matrix_value": 73,
       "matrix_x": 15,
       "matrix_y": 8,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 2551,
+      "random_tile_evidence": {
+        "count": 2551,
+        "max_x": 527,
+        "max_y": 303,
+        "min_x": 464,
+        "min_y": 240,
+        "sha256": "b0c92d56dd0b2b2f164cc67195508fe28778078bf2783dbe76c45da8ca6f946e"
+      },
       "source": "derived",
       "symbol": "MAP_T22",
       "x": 496,
-      "y": 273
+      "y": 272
     },
     {
       "data_id": 6,
@@ -100,9 +154,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 8,
+      "random_tile_count": 1019,
+      "random_tile_evidence": {
+        "count": 1019,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "5f2cf9cdf1e76c99b05bd8b4ef77741777deee8fcdde3b8b0f7317f908295525"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D15R0102",
-      "x": 12,
+      "x": 13,
       "y": 16
     },
     {
@@ -115,9 +178,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 8,
+      "random_tile_count": 1004,
+      "random_tile_evidence": {
+        "count": 1004,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "4824fd89b63fe8dab0260566714a200a52462974d43ea88148039f41c056e41c"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D15R0103",
-      "x": 24,
+      "x": 22,
       "y": 15
     },
     {
@@ -130,9 +202,18 @@
       "matrix_x": 14,
       "matrix_y": 13,
       "permission": 0,
+      "random_tile_count": 3142,
+      "random_tile_evidence": {
+        "count": 3142,
+        "max_x": 495,
+        "max_y": 463,
+        "min_x": 432,
+        "min_y": 400,
+        "sha256": "43d5aa4a8c70d7d7685e8f0182b7ebc2a36814f2cd553afbcb2f1c9e628947c5"
+      },
       "source": "derived",
       "symbol": "MAP_R32",
-      "x": 463,
+      "x": 464,
       "y": 432
     },
     {
@@ -144,11 +225,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 2363,
+      "random_tile_evidence": {
+        "count": 2363,
+        "max_x": 464,
+        "max_y": 303,
+        "min_x": 401,
+        "min_y": 240,
+        "sha256": "1d4b44ed12e894f749d3f24dba60c165fe39a59ea8346b223350b81b1b3c9a96"
+      },
       "source": "derived",
       "symbol": "MAP_D24R0101",
       "x": 433,
-      "y": 273
+      "y": 272
     },
     {
       "data_id": 10,
@@ -159,11 +249,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 2370,
+      "random_tile_evidence": {
+        "count": 2370,
+        "max_x": 464,
+        "max_y": 303,
+        "min_x": 401,
+        "min_y": 240,
+        "sha256": "b51bb3ed20b3903616d65d8d8fbde9d3ae4e3506542fb760cb59c9dfcb361eb2"
+      },
       "source": "fallback:MAP_D24R0101",
       "symbol": "MAP_D24",
       "x": 433,
-      "y": 273
+      "y": 272
     },
     {
       "data_id": 10,
@@ -174,11 +273,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 2370,
+      "random_tile_evidence": {
+        "count": 2370,
+        "max_x": 464,
+        "max_y": 303,
+        "min_x": 401,
+        "min_y": 240,
+        "sha256": "b51bb3ed20b3903616d65d8d8fbde9d3ae4e3506542fb760cb59c9dfcb361eb2"
+      },
       "source": "fallback:MAP_D24R0101",
       "symbol": "MAP_D24R0201",
       "x": 433,
-      "y": 273
+      "y": 272
     },
     {
       "data_id": 11,
@@ -190,6 +298,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1014,
+      "random_tile_evidence": {
+        "count": 1014,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "187139141e36423b81114dff658e721a7c64c7b419ab8dbac084d1a0ae7de2b1"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D24R0202",
       "x": 16,
@@ -205,9 +322,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1012,
+      "random_tile_evidence": {
+        "count": 1012,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "616d849aa7047d4efd87c66168d2a7bcf2c4fc9d6e8e5f0a60034bdf1d21859c"
+      },
       "source": "derived",
       "symbol": "MAP_D24R0203",
-      "x": 15,
+      "x": 16,
       "y": 16
     },
     {
@@ -220,6 +346,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1014,
+      "random_tile_evidence": {
+        "count": 1014,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "5642fa36927a9b35e9f06ff84ed5348d083fd50df823f43546496936606e1952"
+      },
       "source": "derived",
       "symbol": "MAP_D24R0204",
       "x": 16,
@@ -235,6 +370,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1487,
+      "random_tile_evidence": {
+        "count": 1487,
+        "max_x": 31,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "67b84b9c201881d1a878db1c2484bdb7da1edc8e06a4ec6080bde18e4af9a07e"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D25R0101",
       "x": 16,
@@ -250,25 +394,43 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1434,
+      "random_tile_evidence": {
+        "count": 1434,
+        "max_x": 31,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "bfd08d9996659981dcfe8ce0078eda49468ee8fea43c9c243d80f4e15c3523c5"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D25R0102",
       "x": 16,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 16,
       "direction": 1,
-      "land_file_id": 485,
+      "land_file_id": 484,
       "map_id": 154,
       "matrix_id": 44,
-      "matrix_value": 485,
+      "matrix_value": 484,
       "matrix_x": 0,
-      "matrix_y": 1,
+      "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1463,
+      "random_tile_evidence": {
+        "count": 1463,
+        "max_x": 31,
+        "max_y": 46,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "27d520cffe59d04708c41dfc7e768e2a42694347c0c9502541f55de99d5e50c0"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D25R0103",
-      "x": 14,
-      "y": 48
+      "x": 16,
+      "y": 15
     },
     {
       "data_id": 17,
@@ -280,6 +442,15 @@
       "matrix_x": 14,
       "matrix_y": 14,
       "permission": 1024,
+      "random_tile_count": 3369,
+      "random_tile_evidence": {
+        "count": 3369,
+        "max_x": 495,
+        "max_y": 495,
+        "min_x": 432,
+        "min_y": 432,
+        "sha256": "7901f319eeccb22c15db37a4e4a90021045afcb2c4f228ab49c3342554062c59"
+      },
       "source": "derived",
       "symbol": "MAP_R33",
       "x": 464,
@@ -295,6 +466,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1021,
+      "random_tile_evidence": {
+        "count": 1021,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "073915fc14bd9560bd00a94c405e3c7f2897047f0987c97d5096236b1516dec1"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D26R0101",
       "x": 16,
@@ -310,6 +490,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1459,
+      "random_tile_evidence": {
+        "count": 1459,
+        "max_x": 47,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "908d120178b451205a4581a4d5529767316762c922f12a9bc1c3c7c520c853e1"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D26R0102",
       "x": 16,
@@ -325,10 +514,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 2568,
+      "random_tile_count": 580,
+      "random_tile_evidence": {
+        "count": 580,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "cfc0efa8ced935fecfbdc780861e5df8c2061890c0d275500efa35ad26f7ef30"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D26R0103",
       "x": 16,
-      "y": 12
+      "y": 16
     },
     {
       "data_id": 20,
@@ -340,10 +538,19 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 1032,
+      "random_tile_count": 569,
+      "random_tile_evidence": {
+        "count": 569,
+        "max_x": 53,
+        "max_y": 79,
+        "min_x": 16,
+        "min_y": 16,
+        "sha256": "f47f4c88e9b52dd37ad6cbf4251ece5fa063f8373bb5d3bd300cf3e55e3c9a21"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D36R0101",
-      "x": 49,
-      "y": 49
+      "x": 48,
+      "y": 48
     },
     {
       "data_id": 21,
@@ -355,6 +562,15 @@
       "matrix_x": 11,
       "matrix_y": 13,
       "permission": 22,
+      "random_tile_count": 2880,
+      "random_tile_evidence": {
+        "count": 2880,
+        "max_x": 399,
+        "max_y": 463,
+        "min_x": 336,
+        "min_y": 400,
+        "sha256": "f2b410c04b9eb64120ebe0842f4e45baed7acc15d9a6ab58453d5c26024125e3"
+      },
       "source": "derived",
       "symbol": "MAP_R34",
       "x": 368,
@@ -370,6 +586,15 @@
       "matrix_x": 11,
       "matrix_y": 8,
       "permission": 0,
+      "random_tile_count": 3247,
+      "random_tile_evidence": {
+        "count": 3247,
+        "max_x": 399,
+        "max_y": 303,
+        "min_x": 336,
+        "min_y": 240,
+        "sha256": "82533358969aee06ec4653b78b065860db8bbcc574ccb8aa92b8b2874ecca9d0"
+      },
       "source": "derived",
       "symbol": "MAP_R35",
       "x": 368,
@@ -385,10 +610,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1642,
+      "random_tile_evidence": {
+        "count": 1642,
+        "max_x": 79,
+        "max_y": 47,
+        "min_x": 24,
+        "min_y": 0,
+        "sha256": "6dbb4d068596f8f3c7cb4a4873ff351d11130b7ce62b87bc291da4759e553fea"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D22R0101",
       "x": 48,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 24,
@@ -400,6 +634,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1088,
+      "random_tile_evidence": {
+        "count": 1088,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "3a8d76d00d6c9139a8560a4de2b0be773d6b3fd516919e61d32b82886c332321"
+      },
       "source": "derived",
       "symbol": "MAP_D22R0102",
       "x": 16,
@@ -415,6 +658,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1089,
+      "random_tile_evidence": {
+        "count": 1089,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "6f2e4d2c6919b16dcc088f13e400fc65216d209ce1e0b5309ee9a1f2e44766ff"
+      },
       "source": "derived",
       "symbol": "MAP_D22R0103",
       "x": 16,
@@ -430,9 +682,18 @@
       "matrix_x": 11,
       "matrix_y": 7,
       "permission": 0,
+      "random_tile_count": 3295,
+      "random_tile_evidence": {
+        "count": 3295,
+        "max_x": 398,
+        "max_y": 271,
+        "min_x": 335,
+        "min_y": 208,
+        "sha256": "5326805e0e34eb204b24df9da3bffba4dc6530c7ad0faa40faf648ef76e74f7d"
+      },
       "source": "derived",
       "symbol": "MAP_R36",
-      "x": 366,
+      "x": 367,
       "y": 240
     },
     {
@@ -445,9 +706,18 @@
       "matrix_x": 12,
       "matrix_y": 6,
       "permission": 1024,
+      "random_tile_count": 2444,
+      "random_tile_evidence": {
+        "count": 2444,
+        "max_x": 433,
+        "max_y": 239,
+        "min_x": 370,
+        "min_y": 176,
+        "sha256": "812296ad6fa148e36ee165679a7b34da4be0f78fb7d8b5bbc288112b0891d4a6"
+      },
       "source": "derived",
       "symbol": "MAP_R37",
-      "x": 403,
+      "x": 402,
       "y": 208
     },
     {
@@ -460,6 +730,15 @@
       "matrix_x": 12,
       "matrix_y": 5,
       "permission": 1536,
+      "random_tile_count": 2673,
+      "random_tile_evidence": {
+        "count": 2673,
+        "max_x": 431,
+        "max_y": 207,
+        "min_x": 368,
+        "min_y": 144,
+        "sha256": "6d8984c167c6fe92a3402601bb3191a2dc4a6ed5626aa2618afa80170e26ffbb"
+      },
       "source": "derived",
       "symbol": "MAP_T27",
       "x": 400,
@@ -475,9 +754,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 3328,
+      "random_tile_count": 979,
+      "random_tile_evidence": {
+        "count": 979,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "ed6bb1806b075f059d11f89de226b62dd76c516f8822b35c82a99204273f6689"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D18R0101",
-      "x": 15,
+      "x": 16,
       "y": 16
     },
     {
@@ -490,6 +778,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1005,
+      "random_tile_evidence": {
+        "count": 1005,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "20e56a079ddef1d9176cac19f3d03275bc88ba318247c7b3df78693b90ab3907"
+      },
       "source": "derived",
       "symbol": "MAP_D18R0102",
       "x": 16,
@@ -505,6 +802,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1019,
+      "random_tile_evidence": {
+        "count": 1019,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "6fb54d8c622a7d57bcdc71f0eb6758eccabb5bf6e6198db7339bb4312009cbf2"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0102",
       "x": 16,
@@ -520,6 +826,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1019,
+      "random_tile_evidence": {
+        "count": 1019,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "d2acab4433e80a28c3bf27254b5720481d47c7198d2b67ec39aeb474faecb5da"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0103",
       "x": 16,
@@ -535,10 +850,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1014,
+      "random_tile_evidence": {
+        "count": 1014,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "42b3d88ad9eee48da46416badec5d452167981d3e12ee90b952890e29d8ff3ce"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0104",
       "x": 16,
-      "y": 18
+      "y": 17
     },
     {
       "data_id": 33,
@@ -550,6 +874,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1016,
+      "random_tile_evidence": {
+        "count": 1016,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "af4c7c5364e7cc3f8ad2f72617a01cd5be74cfac6fd4feb8f427db61bc238182"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0105",
       "x": 16,
@@ -565,6 +898,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1019,
+      "random_tile_evidence": {
+        "count": 1019,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "1f359e01c53ae5af302e9af08c0ad6f9176a88c7328b40fab840bb281dc8a70d"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0106",
       "x": 16,
@@ -579,11 +921,20 @@
       "matrix_value": 337,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 1014,
+      "random_tile_evidence": {
+        "count": 1014,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "83f353f98bd546fc5b8cb33aa0041bf02f14ce5031e7af0e8b357f9ce05e0010"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0107",
-      "x": 10,
-      "y": 29
+      "x": 11,
+      "y": 23
     },
     {
       "data_id": 36,
@@ -595,6 +946,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1016,
+      "random_tile_evidence": {
+        "count": 1016,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "5ce73034a9eadb6eeb44b056c7efc81d841cbbd329da95147c7b6a61c9d21005"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0108",
       "x": 16,
@@ -610,6 +970,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1012,
+      "random_tile_evidence": {
+        "count": 1012,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "a03f5f884d66dd0e561a41f60135175387cdec58e7f810225e6701cfb352ad2e"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0109",
       "x": 16,
@@ -625,6 +994,15 @@
       "matrix_x": 10,
       "matrix_y": 5,
       "permission": 0,
+      "random_tile_count": 2855,
+      "random_tile_evidence": {
+        "count": 2855,
+        "max_x": 367,
+        "max_y": 207,
+        "min_x": 304,
+        "min_y": 144,
+        "sha256": "0701436a17790f6b161f310da14a9039e259e9a15519278bc20f28c8b3803a29"
+      },
       "source": "derived",
       "symbol": "MAP_R38",
       "x": 336,
@@ -640,9 +1018,18 @@
       "matrix_x": 8,
       "matrix_y": 5,
       "permission": 1024,
+      "random_tile_count": 3641,
+      "random_tile_evidence": {
+        "count": 3641,
+        "max_x": 303,
+        "max_y": 207,
+        "min_x": 240,
+        "min_y": 144,
+        "sha256": "960dbc9cc1d12ff8bbb5dac66966a710b173e3e9752ff90a37cca1b47e056416"
+      },
       "source": "derived",
       "symbol": "MAP_R39",
-      "x": 271,
+      "x": 272,
       "y": 176
     },
     {
@@ -655,6 +1042,15 @@
       "matrix_x": 8,
       "matrix_y": 7,
       "permission": 1536,
+      "random_tile_count": 3392,
+      "random_tile_evidence": {
+        "count": 3392,
+        "max_x": 303,
+        "max_y": 271,
+        "min_x": 240,
+        "min_y": 208,
+        "sha256": "84e692fdd0701fa73f1f80433d324e34d6fd8e30d93ef7e73d080b7b68414612"
+      },
       "source": "derived",
       "symbol": "MAP_T26",
       "x": 272,
@@ -670,6 +1066,15 @@
       "matrix_x": 7,
       "matrix_y": 8,
       "permission": 33,
+      "random_tile_count": 2852,
+      "random_tile_evidence": {
+        "count": 2852,
+        "max_x": 271,
+        "max_y": 303,
+        "min_x": 208,
+        "min_y": 240,
+        "sha256": "adacfeaa16eae94ca42c6b8cbc0d6f997e2ecba787c4838f2875d66548441bae"
+      },
       "source": "derived",
       "symbol": "MAP_W40",
       "x": 240,
@@ -684,10 +1089,19 @@
       "matrix_value": 95,
       "matrix_x": 7,
       "matrix_y": 11,
-      "permission": 33,
+      "permission": 23,
+      "random_tile_count": 2885,
+      "random_tile_evidence": {
+        "count": 2885,
+        "max_x": 271,
+        "max_y": 399,
+        "min_x": 208,
+        "min_y": 336,
+        "sha256": "26c58dccce60c1eff0b4e3c0d8158570319effefcd959c5a71837e23113ead29"
+      },
       "source": "derived",
       "symbol": "MAP_W41",
-      "x": 239,
+      "x": 240,
       "y": 368
     },
     {
@@ -700,9 +1114,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2294,
+      "random_tile_evidence": {
+        "count": 2294,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "7fffb37ddffd9474cd7e6c002ba6a999fd379b9cb2d6ba0690d652206b1a43e6"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D40R0101",
-      "x": 17,
+      "x": 16,
       "y": 16
     },
     {
@@ -715,6 +1138,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2301,
+      "random_tile_evidence": {
+        "count": 2301,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "7792af30b4bd2e1289dbe5fabc6cc7e3a65fdb60f86bc162071fa5714ac87ab8"
+      },
       "source": "derived",
       "symbol": "MAP_D40R0102",
       "x": 16,
@@ -730,6 +1162,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2181,
+      "random_tile_evidence": {
+        "count": 2181,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "4b0794b8f2d92b127d8fa9002aee03bb369306e1cffa69686b2377d91fbec135"
+      },
       "source": "derived",
       "symbol": "MAP_D40R0104",
       "x": 16,
@@ -745,6 +1186,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 793,
+      "random_tile_evidence": {
+        "count": 793,
+        "max_x": 31,
+        "max_y": 46,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "6036913a38b6740fba240b146b20853fbcbd1e47036e8ddfa33c42df137e458b"
+      },
       "source": "derived",
       "symbol": "MAP_D40R0107",
       "x": 16,
@@ -759,11 +1209,20 @@
       "matrix_value": 75,
       "matrix_x": 5,
       "matrix_y": 11,
-      "permission": 1024,
+      "permission": 1313,
+      "random_tile_count": 3182,
+      "random_tile_evidence": {
+        "count": 3182,
+        "max_x": 208,
+        "max_y": 399,
+        "min_x": 145,
+        "min_y": 336,
+        "sha256": "d0db28c99c960cb8051e33563a3c72ce3ef3b0d7ded01495bd2e8a19216eb75d"
+      },
       "source": "derived",
       "symbol": "MAP_T24",
-      "x": 178,
-      "y": 369
+      "x": 177,
+      "y": 368
     },
     {
       "data_id": 52,
@@ -775,6 +1234,15 @@
       "matrix_x": 13,
       "matrix_y": 5,
       "permission": 0,
+      "random_tile_count": 2618,
+      "random_tile_evidence": {
+        "count": 2618,
+        "max_x": 463,
+        "max_y": 207,
+        "min_x": 400,
+        "min_y": 144,
+        "sha256": "74223a522ee5a7c6c13153cef976a45ee8fa35c4250fc93e351652c3299de4b0"
+      },
       "source": "derived",
       "symbol": "MAP_R42",
       "x": 432,
@@ -790,6 +1258,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1933,
+      "random_tile_evidence": {
+        "count": 1933,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "70bcab0725e2d2bc62cbe1f3ef140830761fbb1ecb5eefccf796277f88437b45"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D38R0101",
       "x": 16,
@@ -805,9 +1282,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2252,
+      "random_tile_evidence": {
+        "count": 2252,
+        "max_x": 47,
+        "max_y": 46,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "f66828b2e6ae0b774d251df8a751943069264af17dd9c07df020b37e20eead7c"
+      },
       "source": "derived",
       "symbol": "MAP_D38R0102",
-      "x": 15,
+      "x": 16,
       "y": 15
     },
     {
@@ -819,10 +1305,19 @@
       "matrix_value": 251,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 1947,
+      "random_tile_evidence": {
+        "count": 1947,
+        "max_x": 42,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "2c7a12ec08ae5e4b1c943c76abb3c55e37cdc6514fe9c8e133001741cd11c993"
+      },
       "source": "derived",
       "symbol": "MAP_D38R0103",
-      "x": 10,
+      "x": 11,
       "y": 16
     },
     {
@@ -835,6 +1330,15 @@
       "matrix_x": 0,
       "matrix_y": 1,
       "permission": 1536,
+      "random_tile_count": 2667,
+      "random_tile_evidence": {
+        "count": 2667,
+        "max_x": 47,
+        "max_y": 79,
+        "min_x": 0,
+        "min_y": 16,
+        "sha256": "c9039dd28e3df4575f098141d4a03de3f9d6ea5fb926d9987f1dab6c4647a328"
+      },
       "source": "derived",
       "symbol": "MAP_D38R0104",
       "x": 16,
@@ -850,24 +1354,42 @@
       "matrix_x": 16,
       "matrix_y": 3,
       "permission": 1024,
+      "random_tile_count": 2983,
+      "random_tile_evidence": {
+        "count": 2983,
+        "max_x": 557,
+        "max_y": 143,
+        "min_x": 494,
+        "min_y": 80,
+        "sha256": "08d03fca12f8c065e2ab95020f4e8b5960ab0a9e3c12c1beb0259efd9ebc5059"
+      },
       "source": "derived",
       "symbol": "MAP_R43",
-      "x": 525,
+      "x": 526,
       "y": 112
     },
     {
       "data_id": 58,
       "direction": 1,
-      "land_file_id": 93,
+      "land_file_id": 92,
       "map_id": 88,
       "matrix_id": 0,
       "matrix_value": 88,
-      "matrix_x": 16,
+      "matrix_x": 15,
       "matrix_y": 2,
       "permission": 1024,
+      "random_tile_count": 2271,
+      "random_tile_evidence": {
+        "count": 2271,
+        "max_x": 527,
+        "max_y": 111,
+        "min_x": 464,
+        "min_y": 48,
+        "sha256": "36a6be147a853aa4eadeea049cef1d7067d3dddcc57b160532b3a52d8eba2b95"
+      },
       "source": "derived",
       "symbol": "MAP_T29",
-      "x": 529,
+      "x": 496,
       "y": 80
     },
     {
@@ -880,9 +1402,18 @@
       "matrix_x": 17,
       "matrix_y": 5,
       "permission": 1024,
+      "random_tile_count": 3466,
+      "random_tile_evidence": {
+        "count": 3466,
+        "max_x": 591,
+        "max_y": 207,
+        "min_x": 528,
+        "min_y": 144,
+        "sha256": "7be017b9977c2ee84b6fb16513c572108b21498966404ebc73b01691f6cb29b0"
+      },
       "source": "derived",
       "symbol": "MAP_R44",
-      "x": 559,
+      "x": 560,
       "y": 176
     },
     {
@@ -895,6 +1426,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1568,
+      "random_tile_count": 2297,
+      "random_tile_evidence": {
+        "count": 2297,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "859071826434a8c92320c936179f44778cb8b346a8c432a2bf76ec2e9695510c"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D39R0101",
       "x": 16,
@@ -910,10 +1450,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1475,
+      "random_tile_evidence": {
+        "count": 1475,
+        "max_x": 31,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "52af7e2d3f87b1f97286a2da5c1927d20eb029a297d063e99def6393e4aa42a4"
+      },
       "source": "derived",
       "symbol": "MAP_D39R0102",
-      "x": 16,
-      "y": 9
+      "x": 13,
+      "y": 16
     },
     {
       "data_id": 62,
@@ -925,6 +1474,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1530,
+      "random_tile_evidence": {
+        "count": 1530,
+        "max_x": 47,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "a65442cc6d512cf20dcde2aecda5b917a5f733df01af626fca33c52f4bc836ef"
+      },
       "source": "derived",
       "symbol": "MAP_D39R0103",
       "x": 16,
@@ -940,6 +1498,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1019,
+      "random_tile_evidence": {
+        "count": 1019,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "698fdd3617c32770312aaf3abe4c4516ecadd5dda617076f255144ad63f82a40"
+      },
       "source": "derived",
       "symbol": "MAP_D39R0104",
       "x": 16,
@@ -955,6 +1522,15 @@
       "matrix_x": 20,
       "matrix_y": 5,
       "permission": 0,
+      "random_tile_count": 3857,
+      "random_tile_evidence": {
+        "count": 3857,
+        "max_x": 687,
+        "max_y": 207,
+        "min_x": 624,
+        "min_y": 144,
+        "sha256": "53a30b7b812ec59d42fc9d164098e897e1e0c86180c2736f2565847bddcb8bb9"
+      },
       "source": "derived",
       "symbol": "MAP_T30",
       "x": 656,
@@ -970,6 +1546,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1021,
+      "random_tile_evidence": {
+        "count": 1021,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "1ad86cd93944742b69003e59077bd107e55cccfb0910e14a68c25537658d03d5"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D44R0101",
       "x": 16,
@@ -985,9 +1570,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1613,
+      "random_tile_evidence": {
+        "count": 1613,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "7cf5057e702336f876ab05a80696d51f06eafa432550bc852f3eb594e73ef5f5"
+      },
       "source": "derived",
       "symbol": "MAP_D44R0102",
-      "x": 19,
+      "x": 16,
       "y": 16
     },
     {
@@ -1000,10 +1594,19 @@
       "matrix_x": 20,
       "matrix_y": 6,
       "permission": 3328,
+      "random_tile_count": 3931,
+      "random_tile_evidence": {
+        "count": 3931,
+        "max_x": 687,
+        "max_y": 239,
+        "min_x": 624,
+        "min_y": 176,
+        "sha256": "dd54181f56cc156ec14ec012fa0876e1411e483960610880437132e4cbe80841"
+      },
       "source": "derived",
       "symbol": "MAP_R45",
       "x": 656,
-      "y": 209
+      "y": 208
     },
     {
       "data_id": 68,
@@ -1015,6 +1618,15 @@
       "matrix_x": 19,
       "matrix_y": 11,
       "permission": 1024,
+      "random_tile_count": 3055,
+      "random_tile_evidence": {
+        "count": 3055,
+        "max_x": 655,
+        "max_y": 399,
+        "min_x": 592,
+        "min_y": 336,
+        "sha256": "9cbc93fdc312e91244c42422035f79e198cd08e34c1db826e2b86db75c996f76"
+      },
       "source": "derived",
       "symbol": "MAP_R46",
       "x": 624,
@@ -1030,6 +1642,15 @@
       "matrix_x": 0,
       "matrix_y": 1,
       "permission": 0,
+      "random_tile_count": 2270,
+      "random_tile_evidence": {
+        "count": 2270,
+        "max_x": 47,
+        "max_y": 63,
+        "min_x": 0,
+        "min_y": 16,
+        "sha256": "75c359155525b44a6edf60608052b59f4008856909e5d918a50540e3a666a494"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D42R0102",
       "x": 16,
@@ -1038,17 +1659,26 @@
     {
       "data_id": 70,
       "direction": 1,
-      "land_file_id": 595,
+      "land_file_id": 594,
       "map_id": 123,
       "matrix_id": 98,
-      "matrix_value": 595,
-      "matrix_x": 1,
+      "matrix_value": 594,
+      "matrix_x": 0,
       "matrix_y": 0,
       "permission": 2568,
+      "random_tile_count": 2068,
+      "random_tile_evidence": {
+        "count": 2068,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "bf0437644e36700d402901d2853952a4df37f548d7deb9fc21bd972c09bcbe81"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D42R0101",
-      "x": 48,
-      "y": 15
+      "x": 16,
+      "y": 16
     },
     {
       "data_id": 71,
@@ -1059,11 +1689,20 @@
       "matrix_value": 151,
       "matrix_x": 4,
       "matrix_y": 11,
-      "permission": 2,
+      "permission": 0,
+      "random_tile_count": 3284,
+      "random_tile_evidence": {
+        "count": 3284,
+        "max_x": 175,
+        "max_y": 399,
+        "min_x": 112,
+        "min_y": 336,
+        "sha256": "28229f77f602de6d3bde2b7695b14de52be5e4f5a6bff6a4a80e9a8f0575a046"
+      },
       "source": "derived",
       "symbol": "MAP_R47",
-      "x": 145,
-      "y": 367
+      "x": 144,
+      "y": 368
     },
     {
       "data_id": 74,
@@ -1075,6 +1714,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1533,
+      "random_tile_evidence": {
+        "count": 1533,
+        "max_x": 47,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "977efeaeb0defa23633cc194dc8db9c7f37cc356ab838fb2fb3d8291f8f2ded5"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D11R0101",
       "x": 16,
@@ -1090,10 +1738,19 @@
       "matrix_x": 2,
       "matrix_y": 0,
       "permission": 1024,
+      "random_tile_count": 512,
+      "random_tile_evidence": {
+        "count": 512,
+        "max_x": 63,
+        "max_y": 31,
+        "min_x": 48,
+        "min_y": 0,
+        "sha256": "8ed6bc05413e8a66bf5b58235e25c5f6ac76880c4699d1c4514561ccb13027ba"
+      },
       "source": "derived",
       "symbol": "MAP_D11R0102",
-      "x": 72,
-      "y": 21
+      "x": 80,
+      "y": 16
     },
     {
       "data_id": 76,
@@ -1104,10 +1761,19 @@
       "matrix_value": 454,
       "matrix_x": 0,
       "matrix_y": 1,
-      "permission": 0,
+      "permission": 1024,
+      "random_tile_count": 888,
+      "random_tile_evidence": {
+        "count": 888,
+        "max_x": 55,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 16,
+        "sha256": "34481c80bbf6dc9b051258423c841a4ad2e64c4243b3473c9e2b65b386b5e3f0"
+      },
       "source": "derived",
       "symbol": "MAP_D11R0103",
-      "x": 6,
+      "x": 24,
       "y": 48
     },
     {
@@ -1120,9 +1786,18 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 1536,
+      "random_tile_count": 764,
+      "random_tile_evidence": {
+        "count": 764,
+        "max_x": 63,
+        "max_y": 31,
+        "min_x": 16,
+        "min_y": 16,
+        "sha256": "b8f2c4b268c9f59a40432dd6f7f36160e9e0812663517376925d58bc1fb67b09"
+      },
       "source": "derived",
       "symbol": "MAP_D11R0104",
-      "x": 47,
+      "x": 48,
       "y": 48
     },
     {
@@ -1134,10 +1809,19 @@
       "matrix_value": 456,
       "matrix_x": 2,
       "matrix_y": 1,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 230,
+      "random_tile_evidence": {
+        "count": 230,
+        "max_x": 63,
+        "max_y": 31,
+        "min_x": 45,
+        "min_y": 16,
+        "sha256": "30fbd73b475e7ad40e2a8dd2d10462cebdbc2c9bfa33f9b05d741ac0605a6383"
+      },
       "source": "derived",
       "symbol": "MAP_D11R0105",
-      "x": 74,
+      "x": 77,
       "y": 48
     },
     {
@@ -1150,10 +1834,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1022,
+      "random_tile_evidence": {
+        "count": 1022,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "f9b5e887cb09478960a4918da59f792e943cab6ab07c9a7b81b366711fdb1308"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0105",
       "x": 16,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 80,
@@ -1165,10 +1858,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1533,
+      "random_tile_evidence": {
+        "count": 1533,
+        "max_x": 47,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "a4a21101676d9e97221eadfc69f037de5d3899af52e22fadccd50decf2ebfe2f"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0107",
       "x": 16,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 81,
@@ -1180,9 +1882,18 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2350,
+      "random_tile_evidence": {
+        "count": 2350,
+        "max_x": 48,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "32dc7fe9b1aba6a6c8ba4519f19581a18ac83ea7e0e2ba31e8a02946dc0d2ce1"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0108",
-      "x": 18,
+      "x": 17,
       "y": 16
     },
     {
@@ -1195,10 +1906,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1014,
+      "random_tile_evidence": {
+        "count": 1014,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "1738fa4f7c5c35c00c402c10195e25774a8d393705d69aa4fc3647098aacfdb2"
+      },
       "source": "derived",
       "symbol": "MAP_D50R0101",
       "x": 16,
-      "y": 14
+      "y": 15
     },
     {
       "data_id": 84,
@@ -1210,6 +1930,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1020,
+      "random_tile_evidence": {
+        "count": 1020,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "8f2a0a148239626b0cb313d1a2a107a3e649463a298b5b27bb4e45fba6ed910a"
+      },
       "source": "derived",
       "symbol": "MAP_D17R0112",
       "x": 16,
@@ -1225,6 +1954,15 @@
       "matrix_x": 25,
       "matrix_y": 8,
       "permission": 2,
+      "random_tile_count": 3804,
+      "random_tile_evidence": {
+        "count": 3804,
+        "max_x": 847,
+        "max_y": 303,
+        "min_x": 784,
+        "min_y": 240,
+        "sha256": "7969432652d917bb7d1885aea0666a7849c625515cde0288baa2648a91bb80a3"
+      },
       "source": "derived",
       "symbol": "MAP_T31",
       "x": 816,
@@ -1240,6 +1978,15 @@
       "matrix_x": 0,
       "matrix_y": 2,
       "permission": 0,
+      "random_tile_count": 2137,
+      "random_tile_evidence": {
+        "count": 2137,
+        "max_x": 47,
+        "max_y": 95,
+        "min_x": 0,
+        "min_y": 48,
+        "sha256": "30dbed17f3df14dd309a302f4d8311e8e5e2a351b288a0f02f0e5c9880a4d595"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D41R0101",
       "x": 16,
@@ -1255,10 +2002,19 @@
       "matrix_x": 2,
       "matrix_y": 2,
       "permission": 0,
+      "random_tile_count": 432,
+      "random_tile_evidence": {
+        "count": 432,
+        "max_x": 63,
+        "max_y": 63,
+        "min_x": 37,
+        "min_y": 48,
+        "sha256": "065b84d1ee1e172bf9ab7691aee2ba726bd4311c2d48c81bd3825bfd6d037919"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0102",
-      "x": 68,
-      "y": 86
+      "x": 69,
+      "y": 80
     },
     {
       "data_id": 87,
@@ -1270,10 +2026,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2214,
+      "random_tile_evidence": {
+        "count": 2214,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "1bce450d9921be1e93060c541df6a0c7c9c13f4396b3f0cf2ff964a768527d63"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0103",
       "x": 16,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 88,
@@ -1285,10 +2050,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1022,
+      "random_tile_evidence": {
+        "count": 1022,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "eb587fdcd9e2fc598af32e100463e022a717d5b4de963261b05b71bbed411bf9"
+      },
       "source": "derived",
       "symbol": "MAP_D41R0104",
       "x": 16,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 91,
@@ -1299,11 +2073,20 @@
       "matrix_value": 343,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
+      "permission": 1536,
+      "random_tile_count": 1023,
+      "random_tile_evidence": {
+        "count": 1023,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "3e0f884c7ad65e1ce0e9db34674528ec7de37341621419482a76168ef4808279"
+      },
       "source": "derived",
       "symbol": "MAP_SAF01",
       "x": 16,
-      "y": 18
+      "y": 15
     },
     {
       "data_id": 91,
@@ -1315,6 +2098,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 963,
+      "random_tile_evidence": {
+        "count": 963,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "2c6935ef35c79e1bc3d1799aef68807b1b78f41749614cc71a0a598ae0457345"
+      },
       "source": "derived",
       "symbol": "MAP_SAF02",
       "x": 16,
@@ -1330,6 +2122,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1023,
+      "random_tile_evidence": {
+        "count": 1023,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+      },
       "source": "derived",
       "symbol": "MAP_SAF03",
       "x": 16,
@@ -1345,10 +2146,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1023,
+      "random_tile_evidence": {
+        "count": 1023,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "3e0f884c7ad65e1ce0e9db34674528ec7de37341621419482a76168ef4808279"
+      },
       "source": "derived",
       "symbol": "MAP_SAF04",
-      "x": 15,
-      "y": 14
+      "x": 16,
+      "y": 15
     },
     {
       "data_id": 91,
@@ -1360,10 +2170,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 423,
+      "random_tile_evidence": {
+        "count": 423,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "9c0ac64280b503b06a091098d5eaa7278208611fdaada5ded384bcd585424e60"
+      },
       "source": "derived",
       "symbol": "MAP_SAF05",
-      "x": 50,
-      "y": 20
+      "x": 48,
+      "y": 16
     },
     {
       "data_id": 91,
@@ -1374,11 +2193,16 @@
       "matrix_value": 348,
       "matrix_x": 2,
       "matrix_y": 0,
-      "permission": 1536,
+      "permission": 0,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_SAF06",
-      "x": 79,
-      "y": 28
+      "x": 77,
+      "y": 20
     },
     {
       "data_id": 91,
@@ -1390,9 +2214,18 @@
       "matrix_x": 0,
       "matrix_y": 1,
       "permission": 1536,
+      "random_tile_count": 512,
+      "random_tile_evidence": {
+        "count": 512,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 16,
+        "sha256": "139246e3b11198882fe56f82568ba624fce01c7d1e951d9aa0decbef4c11fd3a"
+      },
       "source": "derived",
       "symbol": "MAP_SAF07",
-      "x": 14,
+      "x": 15,
       "y": 48
     },
     {
@@ -1405,6 +2238,15 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 1536,
+      "random_tile_count": 232,
+      "random_tile_evidence": {
+        "count": 232,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 16,
+        "min_y": 16,
+        "sha256": "4374c3c862d0eadfe562ab1074dc05eed02974a30737fa4c918d00a24e962aa4"
+      },
       "source": "derived",
       "symbol": "MAP_SAF08",
       "x": 48,
@@ -1420,10 +2262,15 @@
       "matrix_x": 2,
       "matrix_y": 1,
       "permission": 1536,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_SAF09",
-      "x": 83,
-      "y": 48
+      "x": 80,
+      "y": 46
     },
     {
       "data_id": 91,
@@ -1435,9 +2282,14 @@
       "matrix_x": 0,
       "matrix_y": 2,
       "permission": 0,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_SAF10",
-      "x": 26,
+      "x": 25,
       "y": 66
     },
     {
@@ -1450,6 +2302,11 @@
       "matrix_x": 1,
       "matrix_y": 2,
       "permission": 0,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_SAF11",
       "x": 48,
@@ -1465,9 +2322,14 @@
       "matrix_x": 2,
       "matrix_y": 2,
       "permission": 0,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_SAF12",
-      "x": 71,
+      "x": 72,
       "y": 66
     },
     {
@@ -1480,6 +2342,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1023,
+      "random_tile_evidence": {
+        "count": 1023,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+      },
       "source": "derived",
       "symbol": "MAP_SAF13",
       "x": 16,
@@ -1495,6 +2366,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 1023,
+      "random_tile_evidence": {
+        "count": 1023,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+      },
       "source": "derived",
       "symbol": "MAP_SAF14",
       "x": 16,
@@ -1510,6 +2390,15 @@
       "matrix_x": 44,
       "matrix_y": 8,
       "permission": 1536,
+      "random_tile_count": 3124,
+      "random_tile_evidence": {
+        "count": 3124,
+        "max_x": 1455,
+        "max_y": 303,
+        "min_x": 1392,
+        "min_y": 240,
+        "sha256": "71e0f3e666f06d373cb5910466f7be91002ac29d13188b5331625a6bacc2c634"
+      },
       "source": "derived",
       "symbol": "MAP_R12",
       "x": 1424,
@@ -1525,25 +2414,43 @@
       "matrix_x": 37,
       "matrix_y": 14,
       "permission": 33,
+      "random_tile_count": 2822,
+      "random_tile_evidence": {
+        "count": 2822,
+        "max_x": 1240,
+        "max_y": 495,
+        "min_x": 1177,
+        "min_y": 432,
+        "sha256": "7f4a73156d83014591678259ce3f7ce5de230805a7f5c5e822846b4c33540f32"
+      },
       "source": "derived",
       "symbol": "MAP_W19",
-      "x": 1213,
+      "x": 1209,
       "y": 464
     },
     {
       "data_id": 94,
       "direction": 1,
-      "land_file_id": 188,
+      "land_file_id": 207,
       "map_id": 92,
       "matrix_id": 0,
       "matrix_value": 92,
-      "matrix_x": 35,
+      "matrix_x": 34,
       "matrix_y": 15,
-      "permission": 1057,
+      "permission": 1047,
+      "random_tile_count": 2699,
+      "random_tile_evidence": {
+        "count": 2699,
+        "max_x": 1143,
+        "max_y": 527,
+        "min_x": 1080,
+        "min_y": 464,
+        "sha256": "2903884d97fdd5fa473ee3d947a70fe9fe4b40dfa2daec4420ba00b3fa4ef36d"
+      },
       "source": "derived",
       "symbol": "MAP_W20",
-      "x": 1145,
-      "y": 495
+      "x": 1112,
+      "y": 496
     },
     {
       "data_id": 95,
@@ -1555,25 +2462,43 @@
       "matrix_x": 32,
       "matrix_y": 11,
       "permission": 1024,
+      "random_tile_count": 3015,
+      "random_tile_evidence": {
+        "count": 3015,
+        "max_x": 1071,
+        "max_y": 399,
+        "min_x": 1008,
+        "min_y": 336,
+        "sha256": "0e368834ba3102ba2b9d3c864030028602224ad328187e902eedc7a000ef2e09"
+      },
       "source": "derived",
       "symbol": "MAP_T01",
       "x": 1040,
-      "y": 367
+      "y": 368
     },
     {
       "data_id": 96,
       "direction": 1,
-      "land_file_id": 118,
+      "land_file_id": 117,
       "map_id": 50,
       "matrix_id": 0,
       "matrix_value": 50,
-      "matrix_x": 32,
+      "matrix_x": 31,
       "matrix_y": 7,
       "permission": 1024,
+      "random_tile_count": 3491,
+      "random_tile_evidence": {
+        "count": 3491,
+        "max_x": 1039,
+        "max_y": 271,
+        "min_x": 976,
+        "min_y": 208,
+        "sha256": "b48651eed0d7a464982020d742fdc3a00b82d4b553694fe78fd13a333efaad05"
+      },
       "source": "derived",
       "symbol": "MAP_T02",
-      "x": 1040,
-      "y": 238
+      "x": 1008,
+      "y": 240
     },
     {
       "data_id": 97,
@@ -1585,6 +2510,15 @@
       "matrix_x": 40,
       "matrix_y": 3,
       "permission": 1024,
+      "random_tile_count": 3542,
+      "random_tile_evidence": {
+        "count": 3542,
+        "max_x": 1327,
+        "max_y": 143,
+        "min_x": 1264,
+        "min_y": 80,
+        "sha256": "f606ad6a24fa4a1f2c3e5df6941fa95c191bcc0c1a598ecc9f13a6ef049cb93b"
+      },
       "source": "derived",
       "symbol": "MAP_T04",
       "x": 1296,
@@ -1600,6 +2534,15 @@
       "matrix_x": 40,
       "matrix_y": 9,
       "permission": 32768,
+      "random_tile_count": 3060,
+      "random_tile_evidence": {
+        "count": 3060,
+        "max_x": 1328,
+        "max_y": 326,
+        "min_x": 1265,
+        "min_y": 263,
+        "sha256": "7c2d371f6bf8cc183482db93a595a63b5725a79c08f3ed8d10e11f55ce136780"
+      },
       "source": "verified:derived",
       "symbol": "MAP_T06",
       "x": 1297,
@@ -1615,6 +2558,15 @@
       "matrix_x": 38,
       "matrix_y": 7,
       "permission": 1536,
+      "random_tile_count": 2906,
+      "random_tile_evidence": {
+        "count": 2906,
+        "max_x": 1263,
+        "max_y": 271,
+        "min_x": 1200,
+        "min_y": 208,
+        "sha256": "034854c4815e49bfd14d1226f32feba6192dc59b8206615e89b461586b5bf577"
+      },
       "source": "derived",
       "symbol": "MAP_T07",
       "x": 1232,
@@ -1623,17 +2575,26 @@
     {
       "data_id": 100,
       "direction": 1,
-      "land_file_id": 184,
+      "land_file_id": 182,
       "map_id": 56,
       "matrix_id": 0,
       "matrix_value": 56,
       "matrix_x": 37,
-      "matrix_y": 13,
-      "permission": 0,
+      "matrix_y": 12,
+      "permission": 1024,
+      "random_tile_count": 2695,
+      "random_tile_evidence": {
+        "count": 2695,
+        "max_x": 1231,
+        "max_y": 435,
+        "min_x": 1168,
+        "min_y": 372,
+        "sha256": "763581f672d77fa9d107f8f41036ab21844593a6e4d75e4f158ae09cbcd294de"
+      },
       "source": "derived",
       "symbol": "MAP_T08",
       "x": 1200,
-      "y": 427
+      "y": 404
     },
     {
       "data_id": 101,
@@ -1644,11 +2605,20 @@
       "matrix_value": 57,
       "matrix_x": 32,
       "matrix_y": 15,
-      "permission": 0,
+      "permission": 1536,
+      "random_tile_count": 3313,
+      "random_tile_evidence": {
+        "count": 3313,
+        "max_x": 1065,
+        "max_y": 527,
+        "min_x": 1002,
+        "min_y": 464,
+        "sha256": "35f938564d86ab99336aa3480db9a1c0ada3d9807afecd7b278528b2c2461f70"
+      },
       "source": "derived",
       "symbol": "MAP_T09",
-      "x": 1046,
-      "y": 494
+      "x": 1034,
+      "y": 496
     },
     {
       "data_id": 102,
@@ -1660,6 +2630,15 @@
       "matrix_x": 2,
       "matrix_y": 10,
       "permission": 2,
+      "random_tile_count": 3054,
+      "random_tile_evidence": {
+        "count": 3054,
+        "max_x": 111,
+        "max_y": 367,
+        "min_x": 48,
+        "min_y": 304,
+        "sha256": "8087fd9255b62cf401869a61fd5efeaad8871e7eaadff48b4867225a9218f2b0"
+      },
       "source": "derived",
       "symbol": "MAP_R48",
       "x": 80,
@@ -1675,6 +2654,15 @@
       "matrix_x": 28,
       "matrix_y": 9,
       "permission": 0,
+      "random_tile_count": 3977,
+      "random_tile_evidence": {
+        "count": 3977,
+        "max_x": 943,
+        "max_y": 335,
+        "min_x": 880,
+        "min_y": 272,
+        "sha256": "663c76c753af31e2caabad0ef5d32ec3bc532fa6e2b724c595623c99cf6ec9fa"
+      },
       "source": "derived",
       "symbol": "MAP_R26",
       "x": 912,
@@ -1690,6 +2678,15 @@
       "matrix_x": 25,
       "matrix_y": 12,
       "permission": 3328,
+      "random_tile_count": 3179,
+      "random_tile_evidence": {
+        "count": 3179,
+        "max_x": 847,
+        "max_y": 431,
+        "min_x": 784,
+        "min_y": 368,
+        "sha256": "3057fd53da850e97566803f77e65939d486c4b5a4e62b2ac80a4ad21f8141644"
+      },
       "source": "derived",
       "symbol": "MAP_R27",
       "x": 816,
@@ -1705,10 +2702,19 @@
       "matrix_x": 26,
       "matrix_y": 8,
       "permission": 1024,
+      "random_tile_count": 3620,
+      "random_tile_evidence": {
+        "count": 3620,
+        "max_x": 879,
+        "max_y": 302,
+        "min_x": 816,
+        "min_y": 239,
+        "sha256": "ec25168df3b239503dc2794b740949f129d7ed2c7d4066e7ce8b2f9dc14fcf1e"
+      },
       "source": "derived",
       "symbol": "MAP_R28",
       "x": 848,
-      "y": 270
+      "y": 271
     },
     {
       "data_id": 106,
@@ -1719,10 +2725,19 @@
       "matrix_value": 389,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 2568,
+      "permission": 0,
+      "random_tile_count": 1017,
+      "random_tile_evidence": {
+        "count": 1017,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "7d771635a23d6f080c943dfd8b4b4d67003921d417d3837c1111e0b082413ab8"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D02R0101",
-      "x": 12,
+      "x": 16,
       "y": 16
     },
     {
@@ -1734,11 +2749,20 @@
       "matrix_value": 448,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 61,
+      "permission": 8,
+      "random_tile_count": 1017,
+      "random_tile_evidence": {
+        "count": 1017,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "df9ab2e032af81b571dd51553d474eee4b84de19dc129e8640196de26503ff27"
+      },
       "source": "derived",
       "symbol": "MAP_D02R0102",
-      "x": 3,
-      "y": 25
+      "x": 5,
+      "y": 16
     },
     {
       "data_id": 108,
@@ -1750,6 +2774,15 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2300,
+      "random_tile_evidence": {
+        "count": 2300,
+        "max_x": 63,
+        "max_y": 47,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "02d9f9d9ff8b2d963ba5e8577ec14c5fdd16b7d30dc97c745894eb17b205cc90"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D05R0101",
       "x": 48,
@@ -1765,10 +2798,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 2301,
+      "random_tile_evidence": {
+        "count": 2301,
+        "max_x": 63,
+        "max_y": 47,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "cd5fe7a666319797c465ea2dd7ea33421523a249e7083070690a63ae1f3a07df"
+      },
       "source": "derived",
       "symbol": "MAP_D05R0102",
       "x": 48,
-      "y": 17
+      "y": 16
     },
     {
       "data_id": 110,
@@ -1780,6 +2822,15 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2301,
+      "random_tile_evidence": {
+        "count": 2301,
+        "max_x": 63,
+        "max_y": 47,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "b6cb075341cdff5c52bd0e05d1694c8d7941a8a98ad0cf05e3bb5a205bc61833"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D43R0101",
       "x": 48,
@@ -1795,6 +2846,15 @@
       "matrix_x": 32,
       "matrix_y": 10,
       "permission": 0,
+      "random_tile_count": 3212,
+      "random_tile_evidence": {
+        "count": 3212,
+        "max_x": 1071,
+        "max_y": 367,
+        "min_x": 1008,
+        "min_y": 304,
+        "sha256": "2140c98cf1b789d465ca5bc2fe1d312f5750eb2265ba4c76779985713347fb00"
+      },
       "source": "derived",
       "symbol": "MAP_R01",
       "x": 1040,
@@ -1810,6 +2870,15 @@
       "matrix_x": 32,
       "matrix_y": 6,
       "permission": 0,
+      "random_tile_count": 2991,
+      "random_tile_evidence": {
+        "count": 2991,
+        "max_x": 1071,
+        "max_y": 239,
+        "min_x": 1008,
+        "min_y": 176,
+        "sha256": "ce1f33ce4341c02aeeb1f513f7860a6b41040f17e9e353947cc02314ad0db3ab"
+      },
       "source": "derived",
       "symbol": "MAP_R02",
       "x": 1040,
@@ -1825,6 +2894,15 @@
       "matrix_x": 36,
       "matrix_y": 3,
       "permission": 0,
+      "random_tile_count": 4093,
+      "random_tile_evidence": {
+        "count": 4093,
+        "max_x": 1199,
+        "max_y": 143,
+        "min_x": 1136,
+        "min_y": 80,
+        "sha256": "59f232df0e186895dbe76c4a93d2f3800f068039985651b9bded3c8d93faa118"
+      },
       "source": "derived",
       "symbol": "MAP_R03",
       "x": 1168,
@@ -1840,6 +2918,15 @@
       "matrix_x": 38,
       "matrix_y": 3,
       "permission": 1024,
+      "random_tile_count": 3947,
+      "random_tile_evidence": {
+        "count": 3947,
+        "max_x": 1263,
+        "max_y": 143,
+        "min_x": 1200,
+        "min_y": 80,
+        "sha256": "5326daf50589bc134b05994ee1e1629e8c0b61ccea96843d4c2a532e92746a34"
+      },
       "source": "derived",
       "symbol": "MAP_R04",
       "x": 1232,
@@ -1855,9 +2942,18 @@
       "matrix_x": 40,
       "matrix_y": 5,
       "permission": 1024,
+      "random_tile_count": 3051,
+      "random_tile_evidence": {
+        "count": 3051,
+        "max_x": 1327,
+        "max_y": 207,
+        "min_x": 1264,
+        "min_y": 144,
+        "sha256": "1b5c84e8a4ac926dba6c524353b7de7c0d661cc05e1d4179ff2313c8ad85e6a4"
+      },
       "source": "derived",
       "symbol": "MAP_R05",
-      "x": 1297,
+      "x": 1296,
       "y": 176
     },
     {
@@ -1870,9 +2966,18 @@
       "matrix_x": 40,
       "matrix_y": 8,
       "permission": 2,
+      "random_tile_count": 3105,
+      "random_tile_evidence": {
+        "count": 3105,
+        "max_x": 1326,
+        "max_y": 303,
+        "min_x": 1263,
+        "min_y": 240,
+        "sha256": "92008a72a42aaa33126d9d86df6c9dc40fbc771074e22bb6ff444778cbb76583"
+      },
       "source": "derived",
       "symbol": "MAP_R06",
-      "x": 1294,
+      "x": 1295,
       "y": 272
     },
     {
@@ -1885,6 +2990,15 @@
       "matrix_x": 39,
       "matrix_y": 7,
       "permission": 0,
+      "random_tile_count": 2891,
+      "random_tile_evidence": {
+        "count": 2891,
+        "max_x": 1295,
+        "max_y": 271,
+        "min_x": 1232,
+        "min_y": 208,
+        "sha256": "4e8609affe2245110902930a8119e7c64b6b966de6642051fb002fc5870aa6c3"
+      },
       "source": "derived",
       "symbol": "MAP_R07",
       "x": 1264,
@@ -1900,9 +3014,18 @@
       "matrix_x": 42,
       "matrix_y": 7,
       "permission": 0,
+      "random_tile_count": 3661,
+      "random_tile_evidence": {
+        "count": 3661,
+        "max_x": 1391,
+        "max_y": 271,
+        "min_x": 1328,
+        "min_y": 208,
+        "sha256": "fc92b3bec29ca6956a44470977220a0e52650d72508d3c458d411229fef84d42"
+      },
       "source": "derived",
       "symbol": "MAP_R08",
-      "x": 1359,
+      "x": 1360,
       "y": 240
     },
     {
@@ -1915,6 +3038,15 @@
       "matrix_x": 44,
       "matrix_y": 4,
       "permission": 0,
+      "random_tile_count": 3935,
+      "random_tile_evidence": {
+        "count": 3935,
+        "max_x": 1455,
+        "max_y": 175,
+        "min_x": 1392,
+        "min_y": 112,
+        "sha256": "a8a76da6aeae5d1dd8326f9639896137c866b0ce88c5531dd492a329da732334"
+      },
       "source": "derived",
       "symbol": "MAP_R09",
       "x": 1424,
@@ -1929,11 +3061,20 @@
       "matrix_value": 18,
       "matrix_x": 44,
       "matrix_y": 5,
-      "permission": 1024,
+      "permission": 0,
+      "random_tile_count": 3915,
+      "random_tile_evidence": {
+        "count": 3915,
+        "max_x": 1457,
+        "max_y": 211,
+        "min_x": 1394,
+        "min_y": 148,
+        "sha256": "001b38e0e883cf07e2ff120dabd226e3e15b80cf50dc480a207c18fb47347164"
+      },
       "source": "derived",
       "symbol": "MAP_R10",
-      "x": 1427,
-      "y": 167
+      "x": 1426,
+      "y": 180
     },
     {
       "data_id": 121,
@@ -1945,6 +3086,15 @@
       "matrix_x": 42,
       "matrix_y": 9,
       "permission": 1024,
+      "random_tile_count": 3063,
+      "random_tile_evidence": {
+        "count": 3063,
+        "max_x": 1391,
+        "max_y": 335,
+        "min_x": 1328,
+        "min_y": 272,
+        "sha256": "a1dba1f20d94ac25a94d2b40b8d01a30b2e42b988bd7c92d864dd72690954237"
+      },
       "source": "derived",
       "symbol": "MAP_R11",
       "x": 1360,
@@ -1953,17 +3103,26 @@
     {
       "data_id": 122,
       "direction": 1,
-      "land_file_id": 163,
+      "land_file_id": 161,
       "map_id": 21,
       "matrix_id": 0,
       "matrix_value": 21,
-      "matrix_x": 44,
+      "matrix_x": 42,
       "matrix_y": 11,
-      "permission": 3328,
+      "permission": 1024,
+      "random_tile_count": 2634,
+      "random_tile_evidence": {
+        "count": 2634,
+        "max_x": 1391,
+        "max_y": 399,
+        "min_x": 1328,
+        "min_y": 336,
+        "sha256": "eaa5abc69a05768d55290fa27f1409014ec84176e1a5f1bf19a7da215d4308ec"
+      },
       "source": "derived",
       "symbol": "MAP_R13",
-      "x": 1424,
-      "y": 367
+      "x": 1360,
+      "y": 368
     },
     {
       "data_id": 123,
@@ -1974,10 +3133,19 @@
       "matrix_value": 22,
       "matrix_x": 42,
       "matrix_y": 12,
-      "permission": 0,
+      "permission": 1024,
+      "random_tile_count": 3033,
+      "random_tile_evidence": {
+        "count": 3033,
+        "max_x": 1392,
+        "max_y": 431,
+        "min_x": 1329,
+        "min_y": 368,
+        "sha256": "f33c244209f4e8796565dc307779a662c975e66edffb72984155857a54febfeb"
+      },
       "source": "derived",
       "symbol": "MAP_R14",
-      "x": 1362,
+      "x": 1361,
       "y": 400
     },
     {
@@ -1990,6 +3158,15 @@
       "matrix_x": 39,
       "matrix_y": 13,
       "permission": 1024,
+      "random_tile_count": 2939,
+      "random_tile_evidence": {
+        "count": 2939,
+        "max_x": 1295,
+        "max_y": 463,
+        "min_x": 1232,
+        "min_y": 400,
+        "sha256": "5b17a3470a6417c61a8c87e04784029584d4e46c25b38d4401c98f3f6dc761d2"
+      },
       "source": "derived",
       "symbol": "MAP_R15",
       "x": 1264,
@@ -2005,10 +3182,19 @@
       "matrix_x": 35,
       "matrix_y": 8,
       "permission": 0,
+      "random_tile_count": 3717,
+      "random_tile_evidence": {
+        "count": 3717,
+        "max_x": 1167,
+        "max_y": 305,
+        "min_x": 1104,
+        "min_y": 242,
+        "sha256": "5c2b53d0f16f4bbd4c75df429c8005a68084496f17b3c3e060e9e2fc658d2715"
+      },
       "source": "derived",
       "symbol": "MAP_R16",
       "x": 1136,
-      "y": 275
+      "y": 274
     },
     {
       "data_id": 126,
@@ -2020,6 +3206,15 @@
       "matrix_x": 35,
       "matrix_y": 12,
       "permission": 1649,
+      "random_tile_count": 3129,
+      "random_tile_evidence": {
+        "count": 3129,
+        "max_x": 1167,
+        "max_y": 431,
+        "min_x": 1104,
+        "min_y": 368,
+        "sha256": "3fcc5fd42f50c9277f087bf3cea3e9c04f7dd959673a125659c02e5cadad5e6e"
+      },
       "source": "derived",
       "symbol": "MAP_R17",
       "x": 1136,
@@ -2035,10 +3230,19 @@
       "matrix_x": 35,
       "matrix_y": 13,
       "permission": 0,
+      "random_tile_count": 2768,
+      "random_tile_evidence": {
+        "count": 2768,
+        "max_x": 1167,
+        "max_y": 462,
+        "min_x": 1104,
+        "min_y": 399,
+        "sha256": "2818cf5465a8c37766b026dd7d91bdfb0d30268e6b521eba90335acb6c2aeed1"
+      },
       "source": "derived",
       "symbol": "MAP_R18",
       "x": 1136,
-      "y": 428
+      "y": 431
     },
     {
       "data_id": 128,
@@ -2050,10 +3254,19 @@
       "matrix_x": 32,
       "matrix_y": 13,
       "permission": 1047,
+      "random_tile_count": 2612,
+      "random_tile_evidence": {
+        "count": 2612,
+        "max_x": 1077,
+        "max_y": 457,
+        "min_x": 1014,
+        "min_y": 394,
+        "sha256": "cc349491026baa58edf1600b861e165e03c53d008a3957b9656eaeba211595b1"
+      },
       "source": "derived",
       "symbol": "MAP_W21",
       "x": 1046,
-      "y": 424
+      "y": 426
     },
     {
       "data_id": 129,
@@ -2065,10 +3278,19 @@
       "matrix_x": 30,
       "matrix_y": 8,
       "permission": 1024,
+      "random_tile_count": 3623,
+      "random_tile_evidence": {
+        "count": 3623,
+        "max_x": 1007,
+        "max_y": 302,
+        "min_x": 944,
+        "min_y": 239,
+        "sha256": "2127fabfd31c2878a95b6f915bb6d817e1742dcf30e3000f210d1aded5b18a79"
+      },
       "source": "derived",
       "symbol": "MAP_R22",
       "x": 976,
-      "y": 270
+      "y": 271
     },
     {
       "data_id": 130,
@@ -2080,10 +3302,19 @@
       "matrix_x": 41,
       "matrix_y": 2,
       "permission": 2,
+      "random_tile_count": 3717,
+      "random_tile_evidence": {
+        "count": 3717,
+        "max_x": 1364,
+        "max_y": 111,
+        "min_x": 1301,
+        "min_y": 48,
+        "sha256": "6aa51e079aa07bd52b35d7f9e80558bc126a89cb19a19979a5699477494d41a9"
+      },
       "source": "derived",
       "symbol": "MAP_R24",
-      "x": 1334,
-      "y": 79
+      "x": 1333,
+      "y": 80
     },
     {
       "data_id": 131,
@@ -2095,6 +3326,15 @@
       "matrix_x": 41,
       "matrix_y": 1,
       "permission": 0,
+      "random_tile_count": 3963,
+      "random_tile_evidence": {
+        "count": 3963,
+        "max_x": 1359,
+        "max_y": 79,
+        "min_x": 1296,
+        "min_y": 16,
+        "sha256": "292760ffa392c7bb31ecd3a63d42ac87ec7b5f4d9d68c8b2acd6e3f643b66191"
+      },
       "source": "derived",
       "symbol": "MAP_R25",
       "x": 1328,
@@ -2110,10 +3350,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1286,
+      "random_tile_evidence": {
+        "count": 1286,
+        "max_x": 63,
+        "max_y": 31,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "8d0ccf81e8317ab05380f3034d5eb57250a47f41b4801391f6adac642d7690dc"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D45R0101",
       "x": 48,
-      "y": 12
+      "y": 13
     },
     {
       "data_id": 132,
@@ -2125,6 +3374,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1022,
+      "random_tile_evidence": {
+        "count": 1022,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "afe54b0fb12a2a45fb3ad7fb9810762adb5f05f56e45ceb48e2a2a12f8c21738"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D45R0102",
       "x": 16,
@@ -2140,6 +3398,15 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2297,
+      "random_tile_evidence": {
+        "count": 2297,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "35fae77e0d32a0cf759338dd5d645359f529fc779f81471add4f823a78244dec"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D01R0101",
       "x": 16,
@@ -2148,32 +3415,50 @@
     {
       "data_id": 134,
       "direction": 1,
-      "land_file_id": 607,
+      "land_file_id": 606,
       "map_id": 178,
       "matrix_id": 162,
-      "matrix_value": 607,
-      "matrix_x": 1,
+      "matrix_value": 606,
+      "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
+      "permission": 1544,
+      "random_tile_count": 2298,
+      "random_tile_evidence": {
+        "count": 2298,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "09dbca7ef8ae6de0881c8c84cbb3daf4e05af41caf8b5686ccf4ce46941d7e8e"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D43R0102",
-      "x": 48,
+      "x": 16,
       "y": 16
     },
     {
       "data_id": 135,
       "direction": 1,
-      "land_file_id": 612,
+      "land_file_id": 611,
       "map_id": 179,
       "matrix_id": 163,
-      "matrix_value": 612,
-      "matrix_x": 0,
-      "matrix_y": 1,
+      "matrix_value": 611,
+      "matrix_x": 1,
+      "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 2213,
+      "random_tile_evidence": {
+        "count": 2213,
+        "max_x": 63,
+        "max_y": 47,
+        "min_x": 16,
+        "min_y": 0,
+        "sha256": "95fe696054ce5aef4b62f2a476ed85953fa85a88e4b8fd94bc7033774991548f"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D43R0103",
-      "x": 16,
-      "y": 48
+      "x": 48,
+      "y": 16
     },
     {
       "data_id": 136,
@@ -2185,6 +3470,11 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 0,
+      "random_tile_count": 0,
+      "random_tile_evidence": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
       "source": "derived",
       "symbol": "MAP_R02R0101",
       "x": 48,
@@ -2200,6 +3490,15 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 0,
+      "random_tile_count": 1310,
+      "random_tile_evidence": {
+        "count": 1310,
+        "max_x": 53,
+        "max_y": 79,
+        "min_x": 16,
+        "min_y": 16,
+        "sha256": "6c41c21ed4393c17c95bb9f725bbbb675a2f35426b4efea167d1dfb0bafd2518"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D46R0101",
       "x": 48,
@@ -2215,10 +3514,19 @@
       "matrix_x": 0,
       "matrix_y": 1,
       "permission": 0,
+      "random_tile_count": 2010,
+      "random_tile_evidence": {
+        "count": 2010,
+        "max_x": 47,
+        "max_y": 63,
+        "min_x": 0,
+        "min_y": 16,
+        "sha256": "a30acd8fc8c70d7e6765dcc734f273812837ca651885ed40654cbf9469b10b6c"
+      },
       "source": "derived:header-wildcard",
       "symbol": "MAP_D03R0101",
       "x": 16,
-      "y": 49
+      "y": 48
     },
     {
       "data_id": 140,
@@ -2230,10 +3538,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 1536,
+      "random_tile_count": 2298,
+      "random_tile_evidence": {
+        "count": 2298,
+        "max_x": 47,
+        "max_y": 47,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "35f4d3d78a9426995656bf5f9b2ea01e78900d357535112366bffe6d2e8d3095"
+      },
       "source": "derived",
       "symbol": "MAP_D03R0102",
-      "x": 15,
-      "y": 15
+      "x": 16,
+      "y": 16
     },
     {
       "data_id": 141,
@@ -2245,10 +3562,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
+      "random_tile_count": 1609,
+      "random_tile_evidence": {
+        "count": 1609,
+        "max_x": 38,
+        "max_y": 46,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "93dc54dd6db96da4cbdf132d789d002bff092e1cef90da30b4bb3ab01fd60855"
+      },
       "source": "derived",
       "symbol": "MAP_D03R0103",
-      "x": 6,
-      "y": 16
+      "x": 7,
+      "y": 15
     }
   ],
   "expected_count": 150

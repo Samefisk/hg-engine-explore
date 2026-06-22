@@ -49,8 +49,6 @@ typedef MapTeleportResult (*MapTeleportRequestFunc)(
 typedef BOOL (*MapTeleportLoadedLandTileFunc)(FieldSystem *fieldSystem, u16 x, u16 y);
 typedef void (*MapTeleportStartDebugTaskFunc)(FieldSystem *fieldSystem);
 typedef u16 (*MapTeleportEncounterDestinationCountFunc)(void);
-typedef const MapTeleportDestination *(*MapTeleportEncounterDestinationByIndexFunc)(u16 index);
-typedef const MapTeleportDestination *(*MapTeleportEncounterDestinationByMapIdFunc)(u16 mapId);
 
 typedef struct MapTeleportOverlayEntry {
     u32 magic;
@@ -81,8 +79,6 @@ typedef struct MapTeleportEncounterDestinationEntry {
     u16 size;
     u16 count;
     u16 reserved;
-    MapTeleportEncounterDestinationByIndexFunc byIndex;
-    MapTeleportEncounterDestinationByMapIdFunc byMapId;
 } MapTeleportEncounterDestinationEntry;
 
 #define MAP_TELEPORT_OVERLAY_ENTRY \
@@ -133,6 +129,25 @@ static inline BOOL MapTeleport_IsLoadedLandTile(FieldSystem *fieldSystem, u16 x,
     return entry->isLoadedLandTile(fieldSystem, x, y);
 }
 
+BOOL MapTeleport_TrySelectRandomLoadedLandTile(
+    FieldSystem *fieldSystem,
+    MapTeleportDestination *destination);
+BOOL MapTeleport_TrySelectEncounterDestinationByIndex(
+    u16 index,
+    MapTeleportDestination *destination);
+
+static inline MapTeleportResult
+MapTeleport_RequestRandomLoadedLandTile(FieldSystem *fieldSystem)
+{
+    MapTeleportDestination destination;
+
+    if (!MapTeleport_TrySelectRandomLoadedLandTile(fieldSystem, &destination)) {
+        return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
+    }
+
+    return MapTeleport_Request(fieldSystem, &destination);
+}
+
 static inline void MapTeleport_StartDebugTask(FieldSystem *fieldSystem)
 {
     const MapTeleportOverlayEntry *entry = MapTeleport_GetOverlayEntry();
@@ -175,39 +190,11 @@ static inline u16 MapTeleport_GetEncounterDestinationCount(void)
     const MapTeleportEncounterDestinationEntry *entry =
         MapTeleport_GetEncounterDestinationEntry();
 
-    if (entry == NULL || entry->byIndex == NULL) {
+    if (entry == NULL) {
         return 0;
     }
 
     return entry->count;
-}
-
-// Encounter destination lookup pointers may refer to overlay-local scratch
-// storage. Copy the value or call MapTeleport_Request before another lookup.
-static inline const MapTeleportDestination *
-MapTeleport_GetEncounterDestinationByIndex(u16 index)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MapTeleport_GetEncounterDestinationEntry();
-
-    if (entry == NULL || entry->byIndex == NULL) {
-        return NULL;
-    }
-
-    return entry->byIndex(index);
-}
-
-static inline const MapTeleportDestination *
-MapTeleport_GetEncounterDestinationByMapId(u16 mapId)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MapTeleport_GetEncounterDestinationEntry();
-
-    if (entry == NULL || entry->byMapId == NULL) {
-        return NULL;
-    }
-
-    return entry->byMapId(mapId);
 }
 
 #endif // MAP_TELEPORT_H

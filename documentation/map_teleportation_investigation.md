@@ -110,15 +110,30 @@ than the MVP needs. For cross-map calls, callers must pass a vetted destination:
 the target map must be complete and loadable, and the target field `Location`
 coordinate must be in-bounds, unoccupied, and known-safe land.
 
-The L+R debug path is writable on purpose. By default, pressing L+R now picks a
-random destination from the 150 generated encounter-map destinations and calls
-`MapTeleport_Request`.
+The random-land API is deliberately scoped to the current loaded map:
+`MapTeleport_TrySelectRandomLoadedLandTile` fills a
+`MapTeleportDestination` for a random loaded land tile, and
+`MapTeleport_RequestRandomLoadedLandTile` is the public request wrapper for
+future callers that only need "move me somewhere safe on this map". The current
+implementation samples 64 candidates from the runtime range `[-32,+31]` on both
+axes around the current `Location.x,z`, rejects the current tile, and asks the
+loaded field collision/behavior APIs whether the candidate is usable land. This
+is a bounded loaded-map helper, not a whole-route safe-tile sampler.
+
+The normal L+R debug path now uses two phases. First it chooses a random
+destination from the 150 generated encounter-map entries and warps to that
+map's vetted entry tile with plain `Task_ScriptWarp`. After the selected target
+map has loaded and the field task manager is idle, the debug task reuses the
+random loaded-land helper to request a second same-map warp inside the loaded
+map window. The after-load flag is stored in the debug task env so it survives
+the first warp, and it is only cleared after the second request succeeds.
 
 The exact-destination headless verifier still patches the writable debug
-destination, but it also writes
-`MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED` into the debug status block before
-pressing L+R. That force flag preserves deterministic all-150 verification
-without changing normal L+R behavior.
+destination and writes `MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED` before
+pressing L+R. That `0xFFFE` path remains deterministic and skips the second
+random-land phase. Numeric destination indexes force the selected encounter map
+but still run the after-load random-land phase, which is what the focused
+random-land verifier uses.
 
 ## Final Implementation Plan
 
@@ -163,9 +178,11 @@ The generated runtime table is checked in at
 `src/field/map_teleport_encounter_destinations.c`, and the audit JSON is
 checked in at `documentation/verification/encounter_map_teleport_destinations.json`.
 Future overworld callers can use
-`MapTeleport_GetEncounterDestinationByIndex`,
-`MapTeleport_GetEncounterDestinationByMapId`, and `MapTeleport_Request` to
-teleport to the vetted destination for an encounter map.
+`MapTeleport_TrySelectEncounterDestinationByIndex` and
+`MapTeleport_Request` to teleport to a vetted encounter-map entry, or use
+`MapTeleport_TrySelectRandomLoadedLandTile` /
+`MapTeleport_RequestRandomLoadedLandTile` when the current loaded map should
+choose the landing tile.
 
 Two authoritative maps have inconsistent static data:
 
@@ -180,6 +197,54 @@ maps are still emitted under their exact authoritative map IDs, are still
 counted toward 150, and must pass the runtime L+R verifier; the verifier fails
 hard if either fallback does not load as the exact requested map ID.
 
+## Random Land Verification
+
+The random-land verifier uses
+`documentation/verification/encounter_map_teleport_destinations.json` as the
+compact audit fixture for the 150 generated destinations. To avoid checking a
+multi-megabyte coordinate database into the repo, the JSON stores only the
+random loaded-window count, coordinate bounds, and SHA-256 hash for each
+destination. The focused verifier recomputes the bounded loaded-window
+membership for the requested map from the local ROM-derived header, matrix,
+land, and event NARCs at runtime.
+
+For random landing membership, the host-side oracle scans only the same
+`[-32,+31]` window the ROM helper can sample after the entry warp. It reads the
+loaded destination map's matrix cells, uses the cell land-file permissions,
+rejects the same low-byte headbutt/surf behaviors rejected by the ROM helper,
+and excludes static event-blocked tiles. The ROM remains authoritative: the
+second-phase same-map request still calls `IsMetatileBlockedAt` and
+`GetMetatileBehaviorAt` before scheduling the warp.
+
+This is a space-conscious MVP tradeoff. It gives L+R meaningful random
+relocation on the selected map without storing whole-map or whole-route tile
+tables in overlay 131. The public random-loaded-land API leaves room to broaden
+the selection strategy later if a future feature can afford a wider current-map
+search.
+
+Exact focused command:
+
+```bash
+scripts/headless-random-land-teleport-verifier.py \
+  --rom test.nds \
+  --map-symbol MAP_R29 \
+  --runs 12 \
+  --min-unique-coordinates 2 \
+  --destinations documentation/verification/encounter_map_teleport_destinations.json \
+  --json documentation/verification/random_land_teleport_verifier.json \
+  --jsonl documentation/verification/random_land_teleport_verifier.jsonl
+```
+
+Final focused random-land verification on this branch produced:
+
+- `passed`: true
+- `passed_run_count`: 12
+- `failed_run_count`: 0
+- `unique_coordinate_count`: 12
+- `valid_random_tile_count`: 2726
+- `valid_random_tile_evidence.sha256`:
+  `791aba7d560b7ceb96f2aeb19b863ff8466506327dec8355f08ee62bbcd7c8dc`
+
 ## Runtime Verifier
 
 The L+R debug path remains the verification trigger. Overlay 131 now exposes a
@@ -190,12 +255,13 @@ the last `MapTeleport_Request` result, a request counter, and the selected
 encounter destination index or deterministic-force sentinel.
 
 `scripts/headless-all-encounter-teleport-verifier.py` boots `test.nds` with the
-test save, patches the writable debug destination for each generated
-encounter-map destination, presses L+R, waits for the debug status block to
-match the expected map/x/y, checks that the screenshot is nonblack, writes one
-JSONL result per map, and writes a summary JSON. Each destination is checked by
-a short-lived worker process with a fresh emulator/save import so a bad or busy
-transition cannot poison later rows.
+test save, forces each generated encounter-map destination by numeric index,
+presses L+R, waits for the debug status block to match the expected map/x/y,
+checks that the screenshot is nonblack, writes one JSONL result per map, and
+writes a summary JSON. Each destination is checked by a short-lived worker
+process with a fresh emulator/save import so a bad or busy transition cannot
+poison later rows. The deterministic exact-destination transition verifier uses
+the `0xFFFE` forced path so its expected final coordinate remains stable.
 
 Final map/x/y and a nonblack screen are not enough by themselves, because a
 fresh save can already start at a destination. Each passed row must also have
@@ -247,15 +313,15 @@ landing frame on either screen fails the verifier. Before the plain
 `Task_ScriptWarp` scheduler, the old `sub_020538C0` path landed successfully
 but failed this check with `solid_white_frames: [60]`.
 
-Final verification on this branch produced:
+The focused transition verifier on this branch produced:
 
-- `expected_count`: 150
-- `authoritative_count`: 150
-- `generated_destination_count`: 150
-- `runtime_checked_count`: 150
-- `runtime_pass_count`: 150
-- `runtime_fail_count`: 0
 - `passed`: true
+- `request_evidence.frame`: 3
+- `request_evidence.request_result`: `MAP_TELEPORT_RESULT_OK`
+- `request_frame_ok`: true
+- `solid_white_whole_frame_count`: 0
+- `solid_white_top_frame_count`: 0
+- `solid_white_bottom_frame_count`: 0
 
 ## Space Impact
 
@@ -264,13 +330,15 @@ table and verifier-facing status/lookup entries live in overlay 131 with the
 existing map teleport helper. To keep overlay 131 below the `0x5000` boundary
 before overlay 149, the destination table is 150 packed `u32` records: 10 bits
 for map ID, 11 bits for x, 10 bits for y, and implicit south direction. The
-generator asserts those bounds before writing the C table and the lookup API
-decodes into overlay-local scratch storage.
+generator asserts those bounds before writing the C table and the indexed API
+decodes directly into caller-provided storage.
 
 Heavy derivation code, JSON artifacts, and the headless verifier stay outside
-the ROM. After the packed-table build, `build/output_field.bin` and
-`base/overlay/overlay_0131.bin` are 20,180 bytes (`0x4ED4`), below the
-20,480-byte (`0x5000`) limit; overlay 149 remains 44,928 bytes (`0xAF80`).
-The all-map verifier includes the field overlay size report in its JSON summary
-and fails the acceptance gate if any existing checked field overlay artifact is
-`>= 0x5000`.
+the ROM. The compact destination audit JSON is 86,057 bytes and stores
+count/hash/bounds evidence instead of full random-coordinate arrays for all 150
+maps.
+
+After the final Docker build, `build/output_field.bin` and
+`base/overlay/overlay_0131.bin` are 20,468 bytes (`0x4FF4`), 12 bytes below the
+20,480-byte (`0x5000`) limit. Overlay 149 remains unchanged at 44,928 bytes
+(`0xAF80`).
