@@ -34,6 +34,21 @@ MapTeleportDestination gMapTeleportDebugDestination
     MAP_TELEPORT_DIRECTION_SOUTH,
 };
 
+MapTeleportDebugStatus gMapTeleportDebugStatus
+    __attribute__((section(".map_teleport_debug_status"), used)) = {
+    MAP_TELEPORT_DEBUG_STATUS_MAGIC,
+    MAP_TELEPORT_DEBUG_STATUS_VERSION,
+    sizeof(MapTeleportDebugStatus),
+    MAP_NOTHING,
+    0,
+    0,
+    MAP_TELEPORT_DIRECTION_SOUTH,
+    MAP_TELEPORT_RESULT_INVALID_FIELD,
+    0,
+    FALSE,
+    0,
+};
+
 static BOOL MapTeleport_IsSurfBehavior(u8 behavior)
 {
     return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
@@ -67,6 +82,27 @@ static BOOL MapTeleport_IsFieldStructReady(FieldSystem *fieldSystem)
     }
 
     return TRUE;
+}
+
+static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
+{
+    gMapTeleportDebugStatus.magic = MAP_TELEPORT_DEBUG_STATUS_MAGIC;
+    gMapTeleportDebugStatus.version = MAP_TELEPORT_DEBUG_STATUS_VERSION;
+    gMapTeleportDebugStatus.size = sizeof(MapTeleportDebugStatus);
+    gMapTeleportDebugStatus.ready = ready;
+
+    if (!ready || fieldSystem == NULL || fieldSystem->location == NULL) {
+        gMapTeleportDebugStatus.mapId = MAP_NOTHING;
+        gMapTeleportDebugStatus.x = 0;
+        gMapTeleportDebugStatus.y = 0;
+        gMapTeleportDebugStatus.direction = MAP_TELEPORT_DIRECTION_SOUTH;
+        return;
+    }
+
+    gMapTeleportDebugStatus.mapId = fieldSystem->location->mapId;
+    gMapTeleportDebugStatus.x = fieldSystem->location->x;
+    gMapTeleportDebugStatus.y = fieldSystem->location->z;
+    gMapTeleportDebugStatus.direction = fieldSystem->location->direction;
 }
 
 static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
@@ -151,14 +187,17 @@ static BOOL MapTeleport_DebugKeysHeld(void)
 static void MapTeleport_DebugTask(SysTask *task, void *data)
 {
     FieldSystem *fieldSystem = (FieldSystem *)data;
+    MapTeleportResult result;
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
+        MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
         sMapTeleportDebugTask = NULL;
         sMapTeleportDebugFieldSystem = NULL;
         DestroySysTask(task);
         return;
     }
 
+    MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
     MapTeleport_UpdatePending(fieldSystem);
     if (!MapTeleport_DebugKeysHeld()) {
         sMapTeleportDebugWasHeld = FALSE;
@@ -170,15 +209,19 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
     }
 
     sMapTeleportDebugWasHeld = TRUE;
-    (void)MapTeleport_OverlayRequest(fieldSystem, &gMapTeleportDebugDestination);
+    result = MapTeleport_OverlayRequest(fieldSystem, &gMapTeleportDebugDestination);
+    gMapTeleportDebugStatus.requestResult = result;
+    gMapTeleportDebugStatus.requestCount++;
 }
 
 static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
 {
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
+        MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
         return;
     }
 
+    MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
     if (sMapTeleportDebugTask != NULL) {
         if (sMapTeleportDebugFieldSystem == fieldSystem) {
             return;

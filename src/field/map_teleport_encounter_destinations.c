@@ -1,0 +1,223 @@
+#include "../../include/map_teleport.h"
+
+#include "../../include/config.h"
+#include "../../include/constants/maps.h"
+#include "../../include/overworld_wild_behavior_data.h"
+
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+
+#define MAP_TELEPORT_ENCOUNTER_MAP_SHIFT 0
+#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000003FFu
+#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 10
+#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu
+#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 21
+#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu
+
+static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {
+    0x320AC03Cu, // MAP_T20 688,400
+    0x31E94021u, // MAP_R29 592,399
+    0x3208DC43u, // MAP_T21 567,400
+    0x2608C022u, // MAP_R30 560,304
+    0x2208C023u, // MAP_R31 560,272
+    0x2227C049u, // MAP_T22 496,273
+    0x0200309Bu, // MAP_D15R0102 12,16
+    0x01E0609Cu, // MAP_D15R0103 24,15
+    0x36073C24u, // MAP_R32 463,432
+    0x2226C471u, // MAP_D24R0101 433,273
+    0x2226C408u, // MAP_D24 433,273
+    0x2226C4DAu, // MAP_D24R0201 433,273
+    0x02004138u, // MAP_D24R0202 16,16
+    0x02003D39u, // MAP_D24R0203 15,16
+    0x0200413Au, // MAP_D24R0204 16,16
+    0x02004063u, // MAP_D25R0101 16,16
+    0x02204099u, // MAP_D25R0102 16,17
+    0x0600389Au, // MAP_D25R0103 14,48
+    0x3A074025u, // MAP_R33 464,464
+    0x02004072u, // MAP_D26R0101 16,16
+    0x020040B1u, // MAP_D26R0102 16,16
+    0x018040B5u, // MAP_D26R0103 16,12
+    0x0620C475u, // MAP_D36R0101 49,49
+    0x3605C026u, // MAP_R34 368,432
+    0x2205C027u, // MAP_R35 368,272
+    0x0220C060u, // MAP_D22R0101 48,17
+    0x020041E7u, // MAP_D22R0102 16,16
+    0x020041E8u, // MAP_D22R0103 16,16
+    0x1E05B828u, // MAP_R36 366,240
+    0x1A064C29u, // MAP_R37 403,208
+    0x1606404Eu, // MAP_T27 400,176
+    0x02003C07u, // MAP_D18R0101 15,16
+    0x020040D9u, // MAP_D18R0102 16,16
+    0x0200414Cu, // MAP_D17R0102 16,16
+    0x0200414Du, // MAP_D17R0103 16,16
+    0x0240414Eu, // MAP_D17R0104 16,18
+    0x0200414Fu, // MAP_D17R0105 16,16
+    0x02004150u, // MAP_D17R0106 16,16
+    0x03A02951u, // MAP_D17R0107 10,29
+    0x02004152u, // MAP_D17R0108 16,16
+    0x02004153u, // MAP_D17R0109 16,16
+    0x1605402Au, // MAP_R38 336,176
+    0x16043C2Bu, // MAP_R39 271,176
+    0x1E04404Du, // MAP_T26 272,240
+    0x2203C05Eu, // MAP_W40 240,272
+    0x2E03BC5Fu, // MAP_W41 239,368
+    0x02004479u, // MAP_D40R0101 17,16
+    0x020040F2u, // MAP_D40R0102 16,16
+    0x020040F3u, // MAP_D40R0104 16,16
+    0x01E040F4u, // MAP_D40R0107 16,15
+    0x2E22C84Bu, // MAP_T24 178,369
+    0x1606C02Cu, // MAP_R42 432,176
+    0x02004077u, // MAP_D38R0101 16,16
+    0x01E03CFAu, // MAP_D38R0102 15,15
+    0x020028FBu, // MAP_D38R0103 10,16
+    0x060040FCu, // MAP_D38R0104 16,48
+    0x0E08342Du, // MAP_R43 525,112
+    0x0A084458u, // MAP_T29 529,80
+    0x1608BC2Eu, // MAP_R44 559,176
+    0x02004078u, // MAP_D39R0101 16,16
+    0x012040EDu, // MAP_D39R0102 16,9
+    0x020040EEu, // MAP_D39R0103 16,16
+    0x020040EFu, // MAP_D39R0104 16,16
+    0x160A4059u, // MAP_T30 656,176
+    0x0200407Du, // MAP_D44R0101 16,16
+    0x02004CFDu, // MAP_D44R0102 19,16
+    0x1A2A402Fu, // MAP_R45 656,209
+    0x2E09C030u, // MAP_R46 624,368
+    0x060040B0u, // MAP_D42R0102 16,48
+    0x01E0C07Bu, // MAP_D42R0101 48,15
+    0x2DE24497u, // MAP_R47 145,367
+    0x02004092u, // MAP_D11R0101 16,16
+    0x02A121C5u, // MAP_D11R0102 72,21
+    0x060019C6u, // MAP_D11R0103 6,48
+    0x0600BDC7u, // MAP_D11R0104 47,48
+    0x060129C8u, // MAP_D11R0105 74,48
+    0x022041CEu, // MAP_D41R0105 16,17
+    0x022041D0u, // MAP_D41R0107 16,17
+    0x020049D1u, // MAP_D41R0108 18,16
+    0x01C04156u, // MAP_D50R0101 16,14
+    0x02004155u, // MAP_D17R0112 16,16
+    0x220CC05Au, // MAP_T31 816,272
+    0x0A00407Au, // MAP_D41R0101 16,80
+    0x0AC111CBu, // MAP_D41R0102 68,86
+    0x022041CCu, // MAP_D41R0103 16,17
+    0x022041CDu, // MAP_D41R0104 16,17
+    0x02404157u, // MAP_SAF01 16,18
+    0x02004158u, // MAP_SAF02 16,16
+    0x02004159u, // MAP_SAF03 16,16
+    0x01C03D5Au, // MAP_SAF04 15,14
+    0x0280C95Bu, // MAP_SAF05 50,20
+    0x03813D5Cu, // MAP_SAF06 79,28
+    0x0600395Du, // MAP_SAF07 14,48
+    0x0600C15Eu, // MAP_SAF08 48,48
+    0x06014D5Fu, // MAP_SAF09 83,48
+    0x08406960u, // MAP_SAF10 26,66
+    0x0A00C161u, // MAP_SAF11 48,80
+    0x08411D62u, // MAP_SAF12 71,66
+    0x02004163u, // MAP_SAF13 16,16
+    0x02004164u, // MAP_SAF14 16,16
+    0x22164014u, // MAP_R12 1424,272
+    0x3A12F45Bu, // MAP_W19 1213,464
+    0x3DF1E45Cu, // MAP_W20 1145,495
+    0x2DF04031u, // MAP_T01 1040,367
+    0x1DD04032u, // MAP_T02 1040,238
+    0x0E144034u, // MAP_T04 1296,112
+    0x24F44436u, // MAP_T06 1297,295
+    0x1E134037u, // MAP_T07 1232,240
+    0x3572C038u, // MAP_T08 1200,427
+    0x3DD05839u, // MAP_T09 1046,494
+    0x2A014098u, // MAP_R48 80,336
+    0x260E401Eu, // MAP_R26 912,304
+    0x320CC01Fu, // MAP_R27 816,400
+    0x21CD4020u, // MAP_R28 848,270
+    0x0200306Bu, // MAP_D02R0101 12,16
+    0x03200DC0u, // MAP_D02R0102 3,25
+    0x0200C06Cu, // MAP_D05R0101 48,16
+    0x0220C1C4u, // MAP_D05R0102 48,17
+    0x0200C07Cu, // MAP_D43R0101 48,16
+    0x2A104009u, // MAP_R01 1040,336
+    0x1A10400Au, // MAP_R02 1040,208
+    0x0E12400Bu, // MAP_R03 1168,112
+    0x0E13400Cu, // MAP_R04 1232,112
+    0x1614440Du, // MAP_R05 1297,176
+    0x2214380Eu, // MAP_R06 1294,272
+    0x1E13C00Fu, // MAP_R07 1264,240
+    0x1E153C10u, // MAP_R08 1359,240
+    0x12164011u, // MAP_R09 1424,144
+    0x14F64C12u, // MAP_R10 1427,167
+    0x26154013u, // MAP_R11 1360,304
+    0x2DF64015u, // MAP_R13 1424,367
+    0x32154816u, // MAP_R14 1362,400
+    0x3613C017u, // MAP_R15 1264,432
+    0x2271C018u, // MAP_R16 1136,275
+    0x3211C019u, // MAP_R17 1136,400
+    0x3591C01Au, // MAP_R18 1136,428
+    0x3510585Du, // MAP_W21 1046,424
+    0x21CF401Bu, // MAP_R22 976,270
+    0x09F4D81Cu, // MAP_R24 1334,79
+    0x0614C01Du, // MAP_R25 1328,48
+    0x0180C07Eu, // MAP_D45R0101 48,12
+    0x0200412Au, // MAP_D45R0102 16,16
+    0x0200406Au, // MAP_D01R0101 16,16
+    0x0200C0B2u, // MAP_D43R0102 48,16
+    0x060040B3u, // MAP_D43R0103 16,48
+    0x0600C19Eu, // MAP_R02R0101 48,48
+    0x0600C093u, // MAP_D46R0101 48,48
+    0x06204091u, // MAP_D03R0101 16,49
+    0x01E03DC2u, // MAP_D03R0102 15,15
+    0x020019C3u, // MAP_D03R0103 6,16
+};
+
+static MapTeleportDestination sMapTeleportEncounterDestinationScratch;
+
+static u16 MapTeleport_EncounterDestinationPackedMapId(u32 packed)
+{
+    return (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)
+        & MAP_TELEPORT_ENCOUNTER_MAP_MASK);
+}
+
+static const MapTeleportDestination *MapTeleport_EncounterDestinationFromPacked(u32 packed)
+{
+    sMapTeleportEncounterDestinationScratch.mapId =
+        MapTeleport_EncounterDestinationPackedMapId(packed);
+    sMapTeleportEncounterDestinationScratch.x =
+        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_X_SHIFT) & MAP_TELEPORT_ENCOUNTER_X_MASK);
+    sMapTeleportEncounterDestinationScratch.y =
+        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_Y_SHIFT) & MAP_TELEPORT_ENCOUNTER_Y_MASK);
+    sMapTeleportEncounterDestinationScratch.direction = MAP_TELEPORT_DIRECTION_SOUTH;
+    return &sMapTeleportEncounterDestinationScratch;
+}
+
+static const MapTeleportDestination *MapTeleport_EncounterDestinationByIndex(u16 index)
+{
+    if (index >= OWED_ENCOUNTER_AREA_COUNT) {
+        return NULL;
+    }
+
+    return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[index]);
+}
+
+static const MapTeleportDestination *MapTeleport_EncounterDestinationByMapId(u16 mapId)
+{
+    u16 i;
+
+    for (i = 0; i < OWED_ENCOUNTER_AREA_COUNT; i++) {
+        if (MapTeleport_EncounterDestinationPackedMapId(
+                sMapTeleportEncounterDestinations[i]) == mapId) {
+            return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[i]);
+        }
+    }
+
+    return NULL;
+}
+
+const MapTeleportEncounterDestinationEntry gMapTeleportEncounterDestinationEntry
+    __attribute__((section(".map_teleport_encounter_destination_entry"), used)) = {
+    MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC,
+    MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION,
+    sizeof(MapTeleportEncounterDestinationEntry),
+    OWED_ENCOUNTER_AREA_COUNT,
+    0,
+    MapTeleport_EncounterDestinationByIndex,
+    MapTeleport_EncounterDestinationByMapId,
+};
+
+#endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS
