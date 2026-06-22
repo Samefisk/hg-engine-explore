@@ -25,6 +25,11 @@ ENCOUNTER_DESTINATION_ENTRY_ADDR = 0x023C8034
 ENCOUNTER_DESTINATION_MAGIC = 0x4D544544
 ENCOUNTER_DESTINATION_VERSION = 1
 DEFAULT_EXPECT_COUNT = 150
+FIELD_OVERLAY_MAX_SIZE = 0x5000
+FIELD_OVERLAY_SIZE_PATHS = (
+    Path("base/overlay/overlay_0131.bin"),
+    Path("build/output_field.bin"),
+)
 MAP_TELEPORT_RESULT_OK = 0
 MAP_TELEPORT_RESULT_NAMES = {
     0: "OK",
@@ -69,6 +74,33 @@ def repo_path(path: str | Path) -> Path:
     if path.is_absolute():
         return path
     return REPO_ROOT / path
+
+
+def field_overlay_size_report() -> dict[str, Any]:
+    checked: list[dict[str, Any]] = []
+    existing_sizes: list[int] = []
+    for path in FIELD_OVERLAY_SIZE_PATHS:
+        absolute = repo_path(path)
+        exists = absolute.is_file()
+        size = absolute.stat().st_size if exists else None
+        checked.append(
+            {
+                "path": str(absolute),
+                "exists": exists,
+                "size": size,
+                "max_size": FIELD_OVERLAY_MAX_SIZE,
+                "ok": exists and size is not None and size < FIELD_OVERLAY_MAX_SIZE,
+            }
+        )
+        if size is not None:
+            existing_sizes.append(size)
+
+    ok = bool(existing_sizes) and all(size < FIELD_OVERLAY_MAX_SIZE for size in existing_sizes)
+    return {
+        "max_size": FIELD_OVERLAY_MAX_SIZE,
+        "ok": ok,
+        "checked": checked,
+    }
 
 
 def read_u16(emu: DeSmuME, address: int) -> int:
@@ -172,6 +204,43 @@ def request_count_changed(before: int, after: int) -> bool:
     return before != after
 
 
+def status_matches_destination(destination: dict[str, Any], status: dict[str, int]) -> bool:
+    return (
+        status["map_id"] == int(destination["map_id"])
+        and status["x"] == int(destination["x"])
+        and status["y"] == int(destination["y"])
+    )
+
+
+def result_evidence(
+    destination: dict[str, Any],
+    status_before: dict[str, int],
+    status: dict[str, int],
+) -> dict[str, Any]:
+    request_seen = request_count_changed(
+        status_before["request_count"],
+        status["request_count"],
+    )
+    request_result_ok = request_seen and status["request_result"] == MAP_TELEPORT_RESULT_OK
+    started_at_destination = status_matches_destination(destination, status_before)
+    ended_at_destination = status_matches_destination(destination, status)
+    location_changed_to_destination = ended_at_destination and not started_at_destination
+    if request_result_ok:
+        pass_evidence_kind = "request_ok"
+    elif location_changed_to_destination:
+        pass_evidence_kind = "location_changed_to_destination"
+    else:
+        pass_evidence_kind = "none"
+    return {
+        "request_seen": request_seen,
+        "request_result_ok": request_result_ok,
+        "started_at_destination": started_at_destination,
+        "ended_at_destination": ended_at_destination,
+        "location_changed_to_destination": location_changed_to_destination,
+        "pass_evidence_kind": pass_evidence_kind,
+    }
+
+
 def nonblack_pixel_count(emu: DeSmuME) -> int:
     image = emu.screenshot().convert("RGB")
     pixels = image.getdata()
@@ -201,6 +270,7 @@ def result_failure_reason(
     status: dict[str, int],
     nonblack_pixels: int,
     min_nonblack_pixels: int,
+    evidence: dict[str, Any],
 ) -> str | None:
     ready_failure = debug_status_failure_reason(status_before)
     if ready_failure is not None:
@@ -208,11 +278,7 @@ def result_failure_reason(
     status_failure = debug_status_failure_reason(status)
     if status_failure is not None:
         return status_failure
-    request_seen = request_count_changed(
-        status_before["request_count"],
-        status["request_count"],
-    )
-    if request_seen and status["request_result"] != MAP_TELEPORT_RESULT_OK:
+    if evidence["request_seen"] and status["request_result"] != MAP_TELEPORT_RESULT_OK:
         return (
             "teleport request rejected: "
             f"{request_result_name(status['request_result'])} ({status['request_result']})"
@@ -223,6 +289,10 @@ def result_failure_reason(
         return f"position mismatch: got {status['x']},{status['y']}"
     if nonblack_pixels < min_nonblack_pixels:
         return f"screenshot looked black/unloaded: {nonblack_pixels} nonblack pixels"
+    if evidence["pass_evidence_kind"] == "none":
+        if evidence["started_at_destination"]:
+            return "teleport request was not observed and initial location already matched destination"
+        return "teleport request was not observed and location did not move to destination"
     return None
 
 
@@ -319,15 +389,25 @@ def run_destination(
     frames_waited = 0
     pixels = 0
     failure_reason: str | None = None
+    ready_attempts = 0
 
     try:
-        emu, ready_frames, entry, status_before, ready_failure = (
-            open_ready_emulator(args, rom, raw_save)
-        )
-        if ready_failure is not None:
+        if args.ready_boot_attempts <= 0:
+            raise ValueError("ready boot attempts must be greater than zero")
+        for ready_attempts in range(1, args.ready_boot_attempts + 1):
+            emu, ready_frames, entry, status_before, ready_failure = (
+                open_ready_emulator(args, rom, raw_save)
+            )
             observed = status_before
+            if ready_failure is None:
+                break
             failure_reason = f"initial field state not ready: {ready_failure}"
-        else:
+            emu.destroy()
+            emu = None
+
+        if emu is not None and failure_reason is not None:
+            failure_reason = None
+        if emu is not None:
             write_destination(emu, destination)
             headless.hold_combo(emu, "L+R", args.trigger_frames, args.release_frames)
             observed, frames_waited = wait_for_request_outcome(
@@ -338,7 +418,8 @@ def run_destination(
             )
             headless.cycle(emu, args.release_frames)
             observed = read_status(emu)
-        pixels = nonblack_pixel_count(emu)
+            pixels = nonblack_pixel_count(emu)
+        evidence = result_evidence(destination, status_before, observed)
         if failure_reason is None:
             failure_reason = result_failure_reason(
                 destination,
@@ -346,8 +427,10 @@ def run_destination(
                 observed,
                 pixels,
                 args.min_nonblack_pixels,
+                evidence,
             )
     except Exception as exc:
+        evidence = result_evidence(destination, status_before, observed)
         failure_reason = f"verifier error: {type(exc).__name__}: {exc}"
         if emu is not None:
             try:
@@ -358,6 +441,7 @@ def run_destination(
                 pixels = nonblack_pixel_count(emu)
             except Exception:
                 pixels = 0
+            evidence = result_evidence(destination, status_before, observed)
     finally:
         if emu is not None:
             emu.destroy()
@@ -379,6 +463,8 @@ def run_destination(
         "nonblack_pixels": pixels,
         "passed": failure_reason is None,
         "failure_reason": failure_reason,
+        "ready_attempts": ready_attempts,
+        **evidence,
     }
     return result, entry, ready_frames
 
@@ -417,6 +503,7 @@ def worker_command(
     append_required_arg(command, "--load-frames", args.load_frames)
     append_required_arg(command, "--post-ready-wait-frames", args.post_ready_wait_frames)
     append_required_arg(command, "--ready-timeout-frames", args.ready_timeout_frames)
+    append_required_arg(command, "--ready-boot-attempts", args.ready_boot_attempts)
     append_required_arg(command, "--trigger-frames", args.trigger_frames)
     append_required_arg(command, "--release-frames", args.release_frames)
     append_required_arg(command, "--max-wait-frames", args.max_wait_frames)
@@ -491,6 +578,8 @@ def verifier_error_result(
     destination: dict[str, Any],
     failure_reason: str,
 ) -> dict[str, Any]:
+    status_before = empty_status()
+    observed = empty_status()
     return {
         "index": index,
         "symbol": destination["symbol"],
@@ -502,14 +591,15 @@ def verifier_error_result(
             "direction": destination["direction"],
             "source": destination["source"],
         },
-        "status_before": empty_status(),
-        "observed": empty_status(),
+        "status_before": status_before,
+        "observed": observed,
         "frames_waited": 0,
         "nonblack_pixels": 0,
         "passed": False,
         "failure_reason": failure_reason,
         "ready_frames": 0,
         "ready_wait_frames": 0,
+        **result_evidence(destination, status_before, observed),
     }
 
 
@@ -541,6 +631,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--load-frames", type=int, default=360)
     parser.add_argument("--post-ready-wait-frames", type=int, default=120)
     parser.add_argument("--ready-timeout-frames", type=int, default=240)
+    parser.add_argument("--ready-boot-attempts", type=int, default=3)
     parser.add_argument("--trigger-frames", type=int, default=30)
     parser.add_argument("--release-frames", type=int, default=30)
     parser.add_argument("--max-wait-frames", type=int, default=360)
@@ -628,6 +719,27 @@ def main() -> int:
 
     passed = sum(1 for result in results if result["passed"])
     failures = [result for result in results if not result["passed"]]
+    passed_with_request_ok = sum(
+        1 for result in results
+        if result["passed"] and result.get("pass_evidence_kind") == "request_ok"
+    )
+    passed_with_location_change = sum(
+        1 for result in results
+        if result["passed"]
+        and result.get("pass_evidence_kind") == "location_changed_to_destination"
+    )
+    passed_without_evidence = sum(
+        1 for result in results
+        if result["passed"] and result.get("pass_evidence_kind") == "none"
+    )
+    stale_match_rejected = sum(
+        1 for result in failures
+        if result.get("started_at_destination")
+        and not result.get("request_result_ok")
+        and result.get("ended_at_destination")
+    )
+    all_passed_rows_have_evidence = passed_without_evidence == 0
+    field_overlay_size = field_overlay_size_report()
     summary = {
         "rom": str(rom),
         "save": str(save_path),
@@ -639,6 +751,12 @@ def main() -> int:
         "runtime_checked_count": len(results),
         "runtime_pass_count": passed,
         "runtime_fail_count": len(failures),
+        "passed_with_request_ok_count": passed_with_request_ok,
+        "passed_with_location_change_count": passed_with_location_change,
+        "passed_without_evidence_count": passed_without_evidence,
+        "stale_match_rejected_count": stale_match_rejected,
+        "all_passed_rows_have_evidence": all_passed_rows_have_evidence,
+        "field_overlay_size": field_overlay_size,
         "ready_frames": ready_frames,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
         "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
@@ -648,6 +766,8 @@ def main() -> int:
             and len(destinations) == expected_count
             and len(results) == expected_count
             and passed == expected_count
+            and all_passed_rows_have_evidence
+            and field_overlay_size["ok"]
             and authoritative_symbols == destination_symbols
             and entry["magic"] == ENCOUNTER_DESTINATION_MAGIC
             and entry["version"] == ENCOUNTER_DESTINATION_VERSION

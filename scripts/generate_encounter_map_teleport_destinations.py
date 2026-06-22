@@ -27,6 +27,15 @@ VERIFIED_DESTINATIONS = {
     "MAP_T06": (1297, 295),
     "MAP_T21": (567, 400),
 }
+PACKED_MAP_BITS = 10
+PACKED_X_BITS = 11
+PACKED_Y_BITS = 10
+PACKED_MAP_SHIFT = 0
+PACKED_X_SHIFT = PACKED_MAP_SHIFT + PACKED_MAP_BITS
+PACKED_Y_SHIFT = PACKED_X_SHIFT + PACKED_X_BITS
+PACKED_MAP_LIMIT = 1 << PACKED_MAP_BITS
+PACKED_X_LIMIT = 1 << PACKED_X_BITS
+PACKED_Y_LIMIT = 1 << PACKED_Y_BITS
 
 
 @dataclass(frozen=True)
@@ -427,6 +436,22 @@ def choose_destination(
     )
 
 
+def packed_destination_word(destination: Destination) -> int:
+    if destination.direction != 1:
+        raise ValueError(f"{destination.symbol} direction must stay implicit south")
+    if not (0 <= destination.map_id < PACKED_MAP_LIMIT):
+        raise ValueError(f"{destination.symbol} map id {destination.map_id} does not fit packed row")
+    if not (0 <= destination.x < PACKED_X_LIMIT):
+        raise ValueError(f"{destination.symbol} x {destination.x} does not fit packed row")
+    if not (0 <= destination.y < PACKED_Y_LIMIT):
+        raise ValueError(f"{destination.symbol} y {destination.y} does not fit packed row")
+    return (
+        (destination.map_id << PACKED_MAP_SHIFT)
+        | (destination.x << PACKED_X_SHIFT)
+        | (destination.y << PACKED_Y_SHIFT)
+    )
+
+
 def write_c(destinations: list[Destination], output: Path) -> None:
     lines = [
         '#include "../../include/map_teleport.h"',
@@ -437,17 +462,43 @@ def write_c(destinations: list[Destination], output: Path) -> None:
         "",
         "#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS",
         "",
-        "static const MapTeleportDestination sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {",
+        "#define MAP_TELEPORT_ENCOUNTER_MAP_SHIFT 0",
+        "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000003FFu",
+        "#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 10",
+        "#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu",
+        "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 21",
+        "#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu",
+        "",
+        "static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {",
     ]
     for destination in destinations:
+        packed = packed_destination_word(destination)
         lines.append(
-            "    { "
-            f"{destination.symbol}, {destination.x}, {destination.y}, "
-            "MAP_TELEPORT_DIRECTION_SOUTH },"
+            f"    0x{packed:08X}u, // {destination.symbol} {destination.x},{destination.y}"
         )
     lines.extend(
         [
             "};",
+            "",
+            "static MapTeleportDestination sMapTeleportEncounterDestinationScratch;",
+            "",
+            "static u16 MapTeleport_EncounterDestinationPackedMapId(u32 packed)",
+            "{",
+            "    return (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)",
+            "        & MAP_TELEPORT_ENCOUNTER_MAP_MASK);",
+            "}",
+            "",
+            "static const MapTeleportDestination *MapTeleport_EncounterDestinationFromPacked(u32 packed)",
+            "{",
+            "    sMapTeleportEncounterDestinationScratch.mapId =",
+            "        MapTeleport_EncounterDestinationPackedMapId(packed);",
+            "    sMapTeleportEncounterDestinationScratch.x =",
+            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_X_SHIFT) & MAP_TELEPORT_ENCOUNTER_X_MASK);",
+            "    sMapTeleportEncounterDestinationScratch.y =",
+            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_Y_SHIFT) & MAP_TELEPORT_ENCOUNTER_Y_MASK);",
+            "    sMapTeleportEncounterDestinationScratch.direction = MAP_TELEPORT_DIRECTION_SOUTH;",
+            "    return &sMapTeleportEncounterDestinationScratch;",
+            "}",
             "",
             "static const MapTeleportDestination *MapTeleport_EncounterDestinationByIndex(u16 index)",
             "{",
@@ -455,7 +506,7 @@ def write_c(destinations: list[Destination], output: Path) -> None:
             "        return NULL;",
             "    }",
             "",
-            "    return &sMapTeleportEncounterDestinations[index];",
+            "    return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[index]);",
             "}",
             "",
             "static const MapTeleportDestination *MapTeleport_EncounterDestinationByMapId(u16 mapId)",
@@ -463,8 +514,9 @@ def write_c(destinations: list[Destination], output: Path) -> None:
             "    u16 i;",
             "",
             "    for (i = 0; i < OWED_ENCOUNTER_AREA_COUNT; i++) {",
-            "        if (sMapTeleportEncounterDestinations[i].mapId == mapId) {",
-            "            return &sMapTeleportEncounterDestinations[i];",
+            "        if (MapTeleport_EncounterDestinationPackedMapId(",
+            "                sMapTeleportEncounterDestinations[i]) == mapId) {",
+            "            return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[i]);",
             "        }",
             "    }",
             "",

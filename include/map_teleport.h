@@ -180,6 +180,8 @@ static inline u16 MapTeleport_GetEncounterDestinationCount(void)
     return entry->count;
 }
 
+// Encounter destination lookup pointers may refer to overlay-local scratch
+// storage. Copy the value or call MapTeleport_Request before another lookup.
 static inline const MapTeleportDestination *
 MapTeleport_GetEncounterDestinationByIndex(u16 index)
 {

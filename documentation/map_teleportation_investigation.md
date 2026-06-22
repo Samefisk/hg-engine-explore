@@ -184,13 +184,24 @@ encounter-map destination, presses L+R, waits for the debug status block to
 match the expected map/x/y, checks that the screenshot is nonblack, writes one
 JSONL result per map, and writes a summary JSON. Each destination is checked by
 a short-lived worker process with a fresh emulator/save import so a bad or busy
-transition cannot poison later rows. It exits successfully only when all of
-these are true:
+transition cannot poison later rows.
+
+Final map/x/y and a nonblack screen are not enough by themselves, because a
+fresh save can already start at a destination. Each passed row must also have
+one of two evidence paths: the debug request counter changed and the last
+request result is `MAP_TELEPORT_RESULT_OK`, or the initial ready location did
+not already match the target and the final location changed exactly to the
+target. If the initial location already matched the target and no OK request was
+observed, the row fails as a stale match.
+
+The verifier exits successfully only when all of these are true:
 
 - authoritative encounter count is 150,
 - generated destination count is 150,
 - runtime checked count is 150,
 - runtime pass count is 150, and
+- every passed row has request or movement evidence, and
+- the built field overlay artifacts are below `0x5000` bytes, and
 - the overlay encounter-destination entry reports count 150.
 
 Exact commands:
@@ -224,8 +235,16 @@ Final verification on this branch produced:
 
 This version still adds no code or data to overlay 149. The all-map destination
 table and verifier-facing status/lookup entries live in overlay 131 with the
-existing map teleport helper. The destination table is 150
-`MapTeleportDestination` records, about 1200 bytes, plus a small lookup entry
-and linear search helper. Heavy derivation code, JSON artifacts, and the
-headless verifier stay outside the ROM. The built overlay 149 size after this
-change is 44,928 bytes.
+existing map teleport helper. To keep overlay 131 below the `0x5000` boundary
+before overlay 149, the destination table is 150 packed `u32` records: 10 bits
+for map ID, 11 bits for x, 10 bits for y, and implicit south direction. The
+generator asserts those bounds before writing the C table and the lookup API
+decodes into overlay-local scratch storage.
+
+Heavy derivation code, JSON artifacts, and the headless verifier stay outside
+the ROM. After the packed-table build, `build/output_field.bin` and
+`base/overlay/overlay_0131.bin` are 20,180 bytes (`0x4ED4`), below the
+20,480-byte (`0x5000`) limit; overlay 149 remains 44,928 bytes (`0xAF80`).
+The all-map verifier includes the field overlay size report in its JSON summary
+and fails the acceptance gate if any existing checked field overlay artifact is
+`>= 0x5000`.
