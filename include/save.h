@@ -85,6 +85,9 @@ typedef struct BerryPot {
 #define NUM_APRICORN_TREE 31
 
 #define MAX_BERRY_POT      4
+#define OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC_V1 0x4F57
+#define OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC 0x4F58
+#define OVERWORLD_WILD_SAVED_SHINY_BYTES 12
 
 struct SAVE_MISC_DATA
 {
@@ -94,13 +97,15 @@ struct SAVE_MISC_DATA
     /* 0x050 */ struct Gymmick gymmick;
     /* 0x270 */ u16 rivalName[8]; // 7 + 1
     /* 0x280 */ u8 unk_0280[8]; // 3 chunks of size (4, 2, 2)
-    /* 0x288 */ u8 filler_0288[0x10];
+    /* 0x288 */ u8 overworldWildSavedShinies[OVERWORLD_WILD_SAVED_SHINY_BYTES];
+    /* 0x294 */ u8 filler_0294[4];
     /* 0x298 */ u16 favoriteMonSpecies;
     /* 0x29A */ u8 favoriteMonForm:7;
                 u8 favoriteMonIsEgg:1;
     /* 0x29B */ u8 extraChunksExist:1;
                 u8 unk_029B_1:4;
-    /* 0x29C */ u8 filer_029C[4];
+    /* 0x29C */ u16 overworldWildShinySpawnCounter;
+    /* 0x29E */ u16 overworldWildShinyCounterMagic;
     /* 0x2A0 */ MAIL_MESSAGE battleGreetingEC;
     /* 0x2A8 */ u32 unk_02A8[2][5];
     /* 0x2D0 */ u8 unk_02D0[5];

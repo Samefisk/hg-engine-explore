@@ -8,6 +8,7 @@ struct BattleStruct;
 struct BattleSystem;
 
 #define OVERWORLD_WILD_BATTLE_SHINY_OTID 0
+#define OVERWORLD_WILD_SHINY_BASE_ODDS 8192
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem);
 void OverworldWildSpawns_OnFieldSystemReady(FieldSystem *fieldSystem);

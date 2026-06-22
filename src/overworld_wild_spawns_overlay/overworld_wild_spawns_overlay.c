@@ -126,6 +126,14 @@ typedef void (*OverworldWildHeadbuttLeafBurstFunc)(void *work, int param);
 #define OW_WILD_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET 24
 #define OW_WILD_FISHING_SPAWN_CHANCE_PERCENT 20
 #define OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN 4
+#define OW_WILD_PITY_SHINY_ROLL_ATTEMPTS 24
+#define OW_WILD_PITY_GRASS_SLOTS 12
+#define OW_WILD_PITY_SURF_SLOTS 5
+#define OW_WILD_PITY_FISH_SLOTS 5
+#define OW_WILD_PITY_HEADBUTT_NORMAL_SLOTS 12
+#define OW_WILD_PITY_HEADBUTT_SPECIAL_SLOTS 6
+#define OW_WILD_PITY_SPECIES_MASK 0x7FF
+#define OW_WILD_PITY_FORM_SHIFT 11
 #define OW_WILD_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE 1
@@ -721,6 +729,47 @@ typedef struct OverworldWildSparseEncounterSection {
     u8 size;
 } OverworldWildSparseEncounterSection;
 
+typedef struct OverworldWildPityLandEncounterData {
+    u8 levels[OW_WILD_PITY_GRASS_SLOTS];
+    u16 morningSpecies[OW_WILD_PITY_GRASS_SLOTS];
+    u16 daySpecies[OW_WILD_PITY_GRASS_SLOTS];
+    u16 nightSpecies[OW_WILD_PITY_GRASS_SLOTS];
+} OverworldWildPityLandEncounterData;
+
+typedef struct OverworldWildPityEncounterDataSlot {
+    u8 minLevel;
+    u8 maxLevel;
+    u16 species;
+} OverworldWildPityEncounterDataSlot;
+
+typedef struct OverworldWildPityEncounterData {
+    u8 walkingRate;
+    u8 surfingRate;
+    u8 rockSmashRate;
+    u8 oldRodRate;
+    u8 goodRodRate;
+    u8 superRodRate;
+    u8 padding[2];
+    OverworldWildPityLandEncounterData landSlots;
+    u16 hoennSoundsSpecies[2];
+    u16 sinnohSoundsSpecies[2];
+    OverworldWildPityEncounterDataSlot surfSlots[OW_WILD_PITY_SURF_SLOTS];
+    OverworldWildPityEncounterDataSlot rockSmashSlots[2];
+    OverworldWildPityEncounterDataSlot oldRodSlots[OW_WILD_PITY_FISH_SLOTS];
+    OverworldWildPityEncounterDataSlot goodRodSlots[OW_WILD_PITY_FISH_SLOTS];
+    OverworldWildPityEncounterDataSlot superRodSlots[OW_WILD_PITY_FISH_SLOTS];
+    u16 landSwarm;
+    u16 surfSwarm;
+    u16 nightFish;
+    u16 fishSwarm;
+} OverworldWildPityEncounterData;
+
+typedef struct OverworldWildPityHeadbuttEncounterSlot {
+    u16 species;
+    u8 minLevel;
+    u8 maxLevel;
+} OverworldWildPityHeadbuttEncounterSlot;
+
 typedef struct OverworldWildBehaviorSlotCache {
     OverworldWildBehaviorProfile profile;
     u16 species;
@@ -907,6 +956,13 @@ static void OverworldWildSpawns_CleanupResidentData(void)
     sOverworldWildEncounterLookupDataBlob = NULL;
     sOverworldWildEncounterLookupDataBlobSize = 0;
     sOverworldWildEncounterLookupDataLoadAttempted = FALSE;
+
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
+    }
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
+    }
 }
 
 static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob, u32 *loadedSize)
@@ -1126,9 +1182,13 @@ static const OverworldWildEncounterLookupDataBlobHeader *OverworldWildSpawns_Get
 
 static const OverworldWildEncounterLookupDataEntry *OverworldWildSpawns_GetLegacyEncounterLookupDataEntry(void)
 {
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)
-        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 0)) {
-        return NULL;
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+            UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
+        }
+        if (!HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 0)) {
+            return NULL;
+        }
     }
 
     return OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY;
@@ -1204,10 +1264,11 @@ typedef struct OverworldWildSpawnPrepContext {
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_OverlayCleanupPendingBattle(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
-static void OverworldWildSpawns_OverlayOnFieldSystemReady(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 static void OverworldWildSpawns_CleanupResidentData(void);
 static void OverworldWildSpawns_OverlayVisualTesterCommand(FieldSystem *fieldSystem, u16 command);
 static void OverworldWildSpawns_ClearSlot(OverworldWildSpawnState *state, int slot, BOOL deleteObject);
+static BOOL OverworldWildSpawns_TryCreatePityShinyReservation(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
+static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality);
 static BOOL OverworldWildSpawns_TryStartSpawnRunStep(OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot);
 static void OverworldWildSpawns_StartSpawnHop(
     OverworldWildSpawnState *state,
@@ -1655,7 +1716,6 @@ static void *sOverworldWildMankeyTreeTopLateDrawEffects[OW_WILD_MAX_SPAWNS];
 const OverworldWildSpawnsOverlayEntry gOverworldWildSpawnsOverlayEntry __attribute__((section(".overworld_wild_spawns_entry"), used)) = {
     OverworldWildSpawns_OverlayOnPlayerStep,
     OverworldWildSpawns_OverlayCleanupPendingBattle,
-    OverworldWildSpawns_OverlayOnFieldSystemReady,
     OverworldWildSpawns_OverlayVisualTesterCommand,
     OverworldWildSpawns_CleanupResidentData,
 };
@@ -1999,15 +2059,86 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
         && OverworldWildSpawns_IsSpawnObjectId(spawn->object->id);
 }
 
+static void OverworldWildSpawns_PersistSavedShinies(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem)
+{
+#ifdef ALLOW_SAVE_CHANGES
+    struct SAVE_MISC_DATA *saveMiscData;
+
+    if (state == NULL || fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL
+        || sizeof(saveMiscData->overworldWildSavedShinies) < sizeof(state->savedShinies)) {
+        return;
+    }
+
+    memcpy(
+        saveMiscData->overworldWildSavedShinies,
+        state->savedShinies,
+        sizeof(state->savedShinies));
+#else
+    (void)state;
+    (void)fieldSystem;
+#endif
+}
+
+static void OverworldWildSpawns_LoadSavedShinies(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem)
+{
+#ifdef ALLOW_SAVE_CHANGES
+    struct SAVE_MISC_DATA *saveMiscData;
+    int i;
+
+    if (state == NULL
+        || state->savedShiniesLoaded
+        || fieldSystem == NULL
+        || fieldSystem->savedata == NULL) {
+        return;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL
+        || sizeof(saveMiscData->overworldWildSavedShinies) < sizeof(state->savedShinies)) {
+        return;
+    }
+
+    if (saveMiscData->overworldWildShinyCounterMagic != OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC) {
+        if (saveMiscData->overworldWildShinyCounterMagic != OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC_V1) {
+            saveMiscData->overworldWildShinySpawnCounter = 0;
+        }
+        saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
+        memset(saveMiscData->overworldWildSavedShinies, 0, sizeof(saveMiscData->overworldWildSavedShinies));
+    }
+
+    memcpy(
+        state->savedShinies,
+        saveMiscData->overworldWildSavedShinies,
+        sizeof(state->savedShinies));
+    for (i = 0; i < OW_WILD_MAX_SAVED_SHINIES; i++) {
+        if ((state->savedShinies[i].terrainAndActive & OW_WILD_SAVED_SHINY_ACTIVE) != 0
+            && (state->savedShinies[i].mapId == MAP_NOTHING
+                || (state->savedShinies[i].speciesAndForm & OW_WILD_SPECIES_MASK) == SPECIES_NONE
+                || state->savedShinies[i].level == 0)) {
+            state->savedShinies[i].terrainAndActive = 0;
+        }
+    }
+
+    state->savedShiniesLoaded = TRUE;
+#else
+    (void)state;
+    (void)fieldSystem;
+#endif
+}
+
 static void OverworldWildSpawns_ClearSavedShiny(OverworldWildSpawnState *state, int slot)
 {
-    state->savedShinies[slot].personality = 0;
-    state->savedShinies[slot].mapId = MAP_NOTHING;
-    state->savedShinies[slot].species = SPECIES_NONE;
-    state->savedShinies[slot].form = 0;
-    state->savedShinies[slot].level = 0;
-    state->savedShinies[slot].terrain = 0;
-    state->savedShinies[slot].active = FALSE;
+    state->savedShinies[slot].terrainAndActive = 0;
+    OverworldWildSpawns_PersistSavedShinies(state, state->movementFieldSystem);
 }
 
 static void OverworldWildSpawns_TrySaveShinyReservation(OverworldWildSpawnState *state, const OverworldWildSpawn *spawn)
@@ -2022,14 +2153,14 @@ static void OverworldWildSpawns_TrySaveShinyReservation(OverworldWildSpawnState 
     }
 
     for (i = 0; i < OW_WILD_MAX_SAVED_SHINIES; i++) {
-        if (!state->savedShinies[i].active) {
+        if ((state->savedShinies[i].terrainAndActive & OW_WILD_SAVED_SHINY_ACTIVE) == 0) {
             state->savedShinies[i].mapId = spawn->mapId;
-            state->savedShinies[i].personality = spawn->personality;
-            state->savedShinies[i].species = spawn->species;
-            state->savedShinies[i].form = spawn->form;
+            state->savedShinies[i].speciesAndForm =
+                spawn->species | (spawn->form << OW_WILD_FORM_SHIFT);
             state->savedShinies[i].level = spawn->level;
-            state->savedShinies[i].terrain = spawn->terrain;
-            state->savedShinies[i].active = TRUE;
+            state->savedShinies[i].terrainAndActive =
+                OW_WILD_SAVED_SHINY_ACTIVE | (spawn->terrain & OW_WILD_SAVED_SHINY_TERRAIN_MASK);
+            OverworldWildSpawns_PersistSavedShinies(state, state->movementFieldSystem);
             return;
         }
     }
@@ -2040,9 +2171,9 @@ static int OverworldWildSpawns_FindSavedShiny(OverworldWildSpawnState *state, u1
     int i;
 
     for (i = 0; i < OW_WILD_MAX_SAVED_SHINIES; i++) {
-        if (state->savedShinies[i].active
+        if ((state->savedShinies[i].terrainAndActive & OW_WILD_SAVED_SHINY_ACTIVE) != 0
             && state->savedShinies[i].mapId == mapId
-            && state->savedShinies[i].terrain == terrain) {
+            && (state->savedShinies[i].terrainAndActive & OW_WILD_SAVED_SHINY_TERRAIN_MASK) == terrain) {
             return i;
         }
     }
@@ -2052,9 +2183,10 @@ static int OverworldWildSpawns_FindSavedShiny(OverworldWildSpawnState *state, u1
 
 static void OverworldWildSpawns_LoadSavedShinyEncounter(OverworldWildSpawnState *state, int slot, OverworldWildRolledEncounter *encounter)
 {
-    encounter->personality = state->savedShinies[slot].personality;
-    encounter->species = state->savedShinies[slot].species;
-    encounter->form = state->savedShinies[slot].form;
+    encounter->personality = OverworldWildSpawns_MakePersonalityShiny(
+        gf_rand() | (gf_rand() << 16));
+    encounter->species = state->savedShinies[slot].speciesAndForm & OW_WILD_SPECIES_MASK;
+    encounter->form = state->savedShinies[slot].speciesAndForm >> OW_WILD_FORM_SHIFT;
     encounter->level = state->savedShinies[slot].level;
 }
 
@@ -11752,7 +11884,7 @@ static BOOL OverworldWildSpawns_TryCopySparseEncounterRecord(
 }
 
 static BOOL OverworldWildSpawns_TryLoadEncounterDataFromLookup(
-    FieldSystem *fieldSystem,
+    u16 mapId,
     int encounterDataId,
     void *dest,
     int size)
@@ -11760,8 +11892,7 @@ static BOOL OverworldWildSpawns_TryLoadEncounterDataFromLookup(
     const OverworldWildEncounterLookupDataBlobHeader *blob;
     const OverworldWildEncounterLookupDirectoryEntry *entry;
 
-    if (fieldSystem == NULL
-        || fieldSystem->location == NULL
+    if (mapId == MAP_NOTHING
         || encounterDataId < 0
         || encounterDataId > 0xFFFF) {
         return FALSE;
@@ -11770,10 +11901,27 @@ static BOOL OverworldWildSpawns_TryLoadEncounterDataFromLookup(
     blob = OverworldWildSpawns_GetEncounterLookupDataBlob();
     entry = OverworldWildSpawns_FindEncounterLookupEntry(
         blob,
-        fieldSystem->location->mapId,
+        mapId,
         encounterDataId,
         TRUE);
     return OverworldWildSpawns_TryCopySparseEncounterRecord(blob, entry, dest, size);
+}
+
+static BOOL OverworldWildSpawns_TryLoadCurrentEncounterDataFromLookup(
+    FieldSystem *fieldSystem,
+    int encounterDataId,
+    void *dest,
+    int size)
+{
+    if (fieldSystem == NULL || fieldSystem->location == NULL) {
+        return FALSE;
+    }
+
+    return OverworldWildSpawns_TryLoadEncounterDataFromLookup(
+        fieldSystem->location->mapId,
+        encounterDataId,
+        dest,
+        size);
 }
 
 static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
@@ -12110,9 +12258,13 @@ static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverl
 {
     const OverworldWildHelperOverlayEntry *entry;
 
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
-        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_HELPER, 0)) {
-        return NULL;
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+            UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
+        }
+        if (!HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_HELPER, 0)) {
+            return NULL;
+        }
     }
 
     entry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
@@ -17355,8 +17507,9 @@ static BOOL OverworldWildSpawns_HelperLoadArchiveData(
 
     if (arcId == ARC_ENCOUNTERS
         && offset == 0
-        && OverworldWildSpawns_TryLoadEncounterDataFromLookup(
-            prepContext == NULL ? NULL : prepContext->fieldSystem,
+        && prepContext != NULL
+        && OverworldWildSpawns_TryLoadCurrentEncounterDataFromLookup(
+            prepContext->fieldSystem,
             datId,
             dest,
             size)) {
@@ -17442,6 +17595,365 @@ static const OverworldWildHelperSpawnCallbacks sOverworldWildSpawnPrepCallbacks 
     OverworldWildSpawns_HelperApplyBehaviorTestSpecies,
 };
 
+static u16 OverworldWildSpawns_GetShinySpawnCounter(FieldSystem *fieldSystem)
+{
+    struct SAVE_MISC_DATA *saveMiscData;
+    u16 counter;
+
+    if (fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return 0;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL) {
+        return 0;
+    }
+
+    if (saveMiscData->overworldWildShinyCounterMagic != OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC) {
+        if (saveMiscData->overworldWildShinyCounterMagic != OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC_V1) {
+            saveMiscData->overworldWildShinySpawnCounter = 0;
+        }
+        saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
+        memset(saveMiscData->overworldWildSavedShinies, 0, sizeof(saveMiscData->overworldWildSavedShinies));
+    }
+
+    counter = saveMiscData->overworldWildShinySpawnCounter;
+    if (counter >= OVERWORLD_WILD_SHINY_BASE_ODDS) {
+        counter = OVERWORLD_WILD_SHINY_BASE_ODDS - 1;
+    }
+
+    return counter;
+}
+
+static void OverworldWildSpawns_SetShinySpawnCounter(FieldSystem *fieldSystem, u16 counter)
+{
+    struct SAVE_MISC_DATA *saveMiscData;
+
+    if (fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return;
+    }
+
+    saveMiscData = Sav2_Misc_get(fieldSystem->savedata);
+    if (saveMiscData == NULL) {
+        return;
+    }
+
+    saveMiscData->overworldWildShinySpawnCounter = counter;
+    saveMiscData->overworldWildShinyCounterMagic = OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC;
+}
+
+static void OverworldWildSpawns_RecordShinySpawnCounter(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    BOOL shinyRollAllowed,
+    BOOL shiny)
+{
+    u16 counter;
+
+    if (shiny) {
+        OverworldWildSpawns_SetShinySpawnCounter(fieldSystem, 0);
+        return;
+    }
+
+    if (!shinyRollAllowed) {
+        return;
+    }
+
+    counter = OverworldWildSpawns_GetShinySpawnCounter(fieldSystem);
+    if ((counter >= OVERWORLD_WILD_SHINY_BASE_ODDS - 1
+            || (gf_rand() % (OVERWORLD_WILD_SHINY_BASE_ODDS - counter)) == 0)
+        && OverworldWildSpawns_TryCreatePityShinyReservation(state, fieldSystem)) {
+        OverworldWildSpawns_SetShinySpawnCounter(fieldSystem, 0);
+        return;
+    }
+
+    if (counter < OVERWORLD_WILD_SHINY_BASE_ODDS - 1) {
+        counter++;
+    }
+    OverworldWildSpawns_SetShinySpawnCounter(fieldSystem, counter);
+}
+
+static OverworldWildSpawnTerrain OverworldWildSpawns_RollPityShinyTerrain(void)
+{
+    u8 roll = gf_rand() % 100;
+
+    if (roll < 40) {
+        return OW_WILD_SPAWN_TERRAIN_LAND;
+    }
+    if (roll < 80) {
+        return OW_WILD_SPAWN_TERRAIN_SURF;
+    }
+    if (roll < 90) {
+        return OW_WILD_SPAWN_TERRAIN_HEADBUTT;
+    }
+    return OW_WILD_SPAWN_TERRAIN_FISHING;
+}
+
+static u32 OverworldWildSpawns_MakePersonalityShiny(u32 personality)
+{
+    u32 shinyValue = SHINY_VALUE(OVERWORLD_WILD_BATTLE_SHINY_OTID, personality);
+
+    if (shinyValue >= SHINY_ODDS) {
+        if (shinyValue & 0xE000) {
+            personality ^= (shinyValue << 16) & 0xE0000000;
+        }
+        personality ^= shinyValue & 0x1FFF;
+        personality ^= gf_rand() % SHINY_ODDS;
+    }
+
+    return personality;
+}
+
+static const OverworldWildEncounterLookupDirectoryEntry *OverworldWildSpawns_RollEncounterLookupEntry(void)
+{
+    const OverworldWildEncounterLookupDataBlobHeader *blob =
+        OverworldWildSpawns_GetEncounterLookupDataBlob();
+    const u8 *base;
+
+    if (blob == NULL || blob->recordCount == 0) {
+        return NULL;
+    }
+
+    base = (const u8 *)blob;
+    return (const OverworldWildEncounterLookupDirectoryEntry *)(base
+        + blob->directoryOffset
+        + (gf_rand() % blob->recordCount) * sizeof(OverworldWildEncounterLookupDirectoryEntry));
+}
+
+static BOOL OverworldWildSpawns_TrySetPityEncounter(
+    OverworldWildRolledEncounter *encounter,
+    u16 encodedSpecies,
+    u8 minLevel,
+    u8 maxLevel)
+{
+    u16 species = encodedSpecies & OW_WILD_PITY_SPECIES_MASK;
+
+    if (species == SPECIES_NONE || minLevel == 0) {
+        return FALSE;
+    }
+
+    encounter->species = species;
+    encounter->form = encodedSpecies >> OW_WILD_PITY_FORM_SHIFT;
+    encounter->level = minLevel;
+    if (maxLevel > minLevel) {
+        encounter->level += gf_rand() % (maxLevel - minLevel + 1);
+    }
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_TryRollPityLandEncounter(
+    const OverworldWildPityEncounterData *encounterData,
+    OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+
+    for (attempts = 0; attempts < OW_WILD_PITY_GRASS_SLOTS; attempts++) {
+        u8 slot = gf_rand() % OW_WILD_PITY_GRASS_SLOTS;
+        u16 encodedSpecies;
+
+        switch (gf_rand() % 3) {
+        case 0:
+            encodedSpecies = encounterData->landSlots.morningSpecies[slot];
+            break;
+        case 1:
+            encodedSpecies = encounterData->landSlots.daySpecies[slot];
+            break;
+        default:
+            encodedSpecies = encounterData->landSlots.nightSpecies[slot];
+            break;
+        }
+
+        if (OverworldWildSpawns_TrySetPityEncounter(
+                encounter,
+                encodedSpecies,
+                encounterData->landSlots.levels[slot],
+                encounterData->landSlots.levels[slot])) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollPitySlotEncounter(
+    const OverworldWildPityEncounterDataSlot *slots,
+    u8 count,
+    OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+
+    for (attempts = 0; attempts < count; attempts++) {
+        const OverworldWildPityEncounterDataSlot *slot = &slots[gf_rand() % count];
+
+        if (OverworldWildSpawns_TrySetPityEncounter(
+                encounter,
+                slot->species,
+                slot->minLevel,
+                slot->maxLevel)) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollPityFishingEncounter(
+    const OverworldWildPityEncounterData *encounterData,
+    OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+
+    for (attempts = 0; attempts < OW_WILD_PITY_FISH_SLOTS * 3; attempts++) {
+        const OverworldWildPityEncounterDataSlot *slots;
+
+        switch (gf_rand() % 3) {
+        case 0:
+            if (encounterData->oldRodRate == 0) {
+                continue;
+            }
+            slots = encounterData->oldRodSlots;
+            break;
+        case 1:
+            if (encounterData->goodRodRate == 0) {
+                continue;
+            }
+            slots = encounterData->goodRodSlots;
+            break;
+        default:
+            if (encounterData->superRodRate == 0) {
+                continue;
+            }
+            slots = encounterData->superRodSlots;
+            break;
+        }
+
+        slots = &slots[gf_rand() % OW_WILD_PITY_FISH_SLOTS];
+        if (OverworldWildSpawns_TrySetPityEncounter(
+                encounter,
+                slots->species,
+                slots->minLevel,
+                slots->maxLevel)) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollPityHeadbuttEncounter(
+    u16 mapId,
+    OverworldWildRolledEncounter *encounter)
+{
+    int attempts;
+    u8 slotCount = OW_WILD_PITY_HEADBUTT_NORMAL_SLOTS + OW_WILD_PITY_HEADBUTT_SPECIAL_SLOTS;
+
+    for (attempts = 0; attempts < slotCount; attempts++) {
+        OverworldWildPityHeadbuttEncounterSlot slot;
+        u32 slotIndex = gf_rand() % slotCount;
+        u32 slotOffset = sizeof(u16) * 2
+            + slotIndex * sizeof(OverworldWildPityHeadbuttEncounterSlot);
+
+        ArchiveDataLoadOfs(
+            &slot,
+            ARC_HEADBUTT_TREES,
+            mapId,
+            slotOffset,
+            sizeof(slot));
+        if (OverworldWildSpawns_TrySetPityEncounter(
+                encounter,
+                slot.species,
+                slot.minLevel,
+                slot.maxLevel)) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldWildSpawns_TryRollPityEncounter(
+    u16 mapId,
+    int encounterDataId,
+    OverworldWildSpawnTerrain terrain,
+    OverworldWildRolledEncounter *encounter)
+{
+    OverworldWildPityEncounterData encounterData;
+
+    if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
+        return OverworldWildSpawns_TryRollPityHeadbuttEncounter(mapId, encounter);
+    }
+
+    if (!OverworldWildSpawns_TryLoadEncounterDataFromLookup(
+            mapId,
+            encounterDataId,
+            &encounterData,
+            sizeof(encounterData))) {
+        return FALSE;
+    }
+
+    if (terrain == OW_WILD_SPAWN_TERRAIN_SURF) {
+        return OverworldWildSpawns_TryRollPitySlotEncounter(
+            encounterData.surfSlots,
+            OW_WILD_PITY_SURF_SLOTS,
+            encounter);
+    }
+    if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
+        return OverworldWildSpawns_TryRollPityFishingEncounter(&encounterData, encounter);
+    }
+    return OverworldWildSpawns_TryRollPityLandEncounter(&encounterData, encounter);
+}
+
+static BOOL OverworldWildSpawns_TryCreatePityShinyReservation(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem)
+{
+    u8 attempt;
+    int savedSlot;
+
+    if (state == NULL || fieldSystem == NULL) {
+        return FALSE;
+    }
+
+    for (savedSlot = 0; savedSlot < OW_WILD_MAX_SAVED_SHINIES; savedSlot++) {
+        if ((state->savedShinies[savedSlot].terrainAndActive & OW_WILD_SAVED_SHINY_ACTIVE) == 0) {
+            break;
+        }
+    }
+    if (savedSlot >= OW_WILD_MAX_SAVED_SHINIES) {
+        return FALSE;
+    }
+
+    for (attempt = 0; attempt < OW_WILD_PITY_SHINY_ROLL_ATTEMPTS; attempt++) {
+        const OverworldWildEncounterLookupDirectoryEntry *lookupEntry =
+            OverworldWildSpawns_RollEncounterLookupEntry();
+        OverworldWildSpawnTerrain terrain = OverworldWildSpawns_RollPityShinyTerrain();
+        OverworldWildRolledEncounter encounter = { 0 };
+
+        if (lookupEntry == NULL) {
+            return FALSE;
+        }
+
+        if (!OverworldWildSpawns_TryRollPityEncounter(
+                lookupEntry->mapId,
+                lookupEntry->dataId,
+                terrain,
+                &encounter)) {
+            continue;
+        }
+
+        state->savedShinies[savedSlot].mapId = lookupEntry->mapId;
+        state->savedShinies[savedSlot].speciesAndForm =
+            encounter.species | (encounter.form << OW_WILD_FORM_SHIFT);
+        state->savedShinies[savedSlot].level = encounter.level;
+        state->savedShinies[savedSlot].terrainAndActive =
+            OW_WILD_SAVED_SHINY_ACTIVE | (terrain & OW_WILD_SAVED_SHINY_TERRAIN_MASK);
+        OverworldWildSpawns_PersistSavedShinies(state, fieldSystem);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
@@ -17450,7 +17962,7 @@ static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
     OverworldWildPreparedSpawn *prepared)
 {
     const OverworldWildHelperOverlayEntry *helperEntry;
-    OverworldWildSpawnPrepContext prepContext;
+    OverworldWildSpawnPrepContext prepContext = { 0 };
 
     if (state == NULL
         || fieldSystem == NULL
@@ -17474,11 +17986,17 @@ static BOOL OverworldWildSpawns_TryPrepareSpawnWithHelper(
             terrain,
             slot,
             state->shinySpawned,
+            OVERWORLD_WILD_SHINY_BASE_ODDS,
             prepared)) {
         return FALSE;
     }
 
-    return OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared);
+    if (!OverworldWildSpawns_FinalizePreparedSpawn(state, fieldSystem, terrain, prepared)) {
+        return FALSE;
+    }
+
+    prepared->shinyCounterEligible = !state->shinySpawned && prepared->savedShinySlot < 0;
+    return TRUE;
 }
 
 static BOOL OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper(
@@ -17493,7 +18011,7 @@ static BOOL OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper(
     OverworldWildPreparedSpawn *prepared)
 {
     const OverworldWildHelperOverlayEntry *helperEntry;
-    OverworldWildSpawnPrepContext prepContext;
+    OverworldWildSpawnPrepContext prepContext = { 0 };
 
     if (state == NULL
         || fieldSystem == NULL
@@ -17678,6 +18196,7 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         return FALSE;
     }
 
+    state->movementFieldSystem = fieldSystem;
     encounter = &prepared->encounter;
     behaviorProfile = &prepared->behaviorProfile;
     if (encounter == NULL
@@ -17752,6 +18271,7 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         state->shinySpawned = TRUE;
         OverworldWildSpawns_TryPlayOverworldSE(state, SEQ_SE_PL_KIRAKIRA);
     }
+    OverworldWildSpawns_RecordShinySpawnCounter(state, fieldSystem, prepared->shinyCounterEligible, prepared->shiny);
     OverworldWildSpawns_StartSpawnStartup(state, fieldSystem, slot, &prepared->startup);
 
     return TRUE;
@@ -18606,6 +19126,8 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     return OverworldWildSpawns_IsEnabledMap(fieldSystem);
 #endif
 
+    OverworldWildSpawns_LoadSavedShinies(state, fieldSystem);
+
     if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
         OverworldWildSpawns_CloseSoundTester();
         OverworldWildSpawns_CloseVisualTester();
@@ -18654,27 +19176,6 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 
     OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
     return TRUE;
-}
-
-static void OverworldWildSpawns_OverlayOnFieldSystemReady(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
-{
-    if (state == NULL
-        || fieldSystem == NULL
-        || OverworldWildSpawns_EnsureRuntimeState(state) == NULL) {
-        return;
-    }
-
-    OverworldWildSpawns_EnsureSoundTesterTask(state, fieldSystem);
-    if (!OverworldWildSpawns_UpdateMapState(fieldSystem, state)) {
-        return;
-    }
-
-    OverworldWildSpawns_ClearDetachedPendingBattle(state);
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK && OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-    if (OverworldWildSpawns_HasFrameMovementWork(state)) {
-        OverworldWildSpawns_EnsureFrameMovementTask(state, fieldSystem);
-    }
-#endif
 }
 
 static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)

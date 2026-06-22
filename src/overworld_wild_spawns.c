@@ -9,11 +9,13 @@
 #include "../include/battle.h"
 #include "../include/map_events_internal.h"
 #include "../include/overlay.h"
+#include "../include/task.h"
 
 #define OW_WILD_BATTLE_OUTCOME_PLAYER_FLED 5
 #define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_HP_SLOT_COUNT 10
+#define OW_WILD_FIELD_READY_DELAY_FRAMES 90
 #define OW_WILD_DISABLE_PLAYER_STEP_HOOK 0
 #define OW_WILD_PLAYER_STEP_DIAGNOSTIC_LOAD_ONLY 0
 #define OW_WILD_MANKEY_TREE_TOP_DRAW_CALLBACK ((void (*)(LocalMapObject *))0x021F7895)
@@ -47,6 +49,19 @@ static u8 sBattleShinyOverrideValue;
 static u32 sBattleHpPersonality;
 static u32 sBattlePersonalityOverrideValue;
 extern u32 space_for_setmondata;
+
+static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
+{
+    if (sOverworldWildSpawnState.battleGraceSteps-- != 0) {
+        return;
+    }
+
+    OverworldWildSpawns_OnPlayerStep((FieldSystem *)data);
+    if (sOverworldWildSpawnState.justSpawned) {
+        DestroySysTask(task);
+    }
+}
+
 static void OverworldWildSpawns_SetMankeyTreeTopSpriteDepth(void *sprite)
 {
     if (sprite == NULL) {
@@ -64,18 +79,12 @@ static void OverworldWildSpawns_SetMankeyTreeTopRenderDataDepth(
     }
 
     OverworldWildSpawns_SetMankeyTreeTopSpriteDepth(renderData->primarySprite);
-    if (renderData->secondarySprite != renderData->primarySprite) {
-        OverworldWildSpawns_SetMankeyTreeTopSpriteDepth(renderData->secondarySprite);
-    }
+    OverworldWildSpawns_SetMankeyTreeTopSpriteDepth(renderData->secondarySprite);
 }
 
 void OverworldWildSpawns_MankeyTreeTopDrawWrapper(LocalMapObject *mapObject)
 {
     OverworldWildMapObjectRenderData *renderData;
-
-    if (mapObject == NULL) {
-        return;
-    }
 
     renderData = (OverworldWildMapObjectRenderData *)mapObject->unk108;
     OverworldWildSpawns_SetMankeyTreeTopRenderDataDepth(renderData);
@@ -86,7 +95,7 @@ void OverworldWildSpawns_MankeyTreeTopDrawWrapper(LocalMapObject *mapObject)
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
 {
     if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
-        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 2)) {
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0)) {
         return NULL;
     }
 
@@ -101,7 +110,7 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
 #else
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
 
-    if (entry == NULL || entry->onPlayerStep == NULL) {
+    if (entry == NULL) {
         return FALSE;
     }
 
@@ -119,16 +128,8 @@ void OverworldWildSpawns_OnFieldSystemReady(FieldSystem *fieldSystem)
 #if OW_WILD_DISABLE_PLAYER_STEP_HOOK
     (void)fieldSystem;
 #else
-    const OverworldWildSpawnsOverlayEntry *entry;
-
-    if (fieldSystem == NULL) {
-        return;
-    }
-
-    entry = OverworldWildSpawns_GetOverlayEntry();
-    if (entry != NULL && entry->onFieldSystemReady != NULL) {
-        entry->onFieldSystemReady(fieldSystem, &sOverworldWildSpawnState);
-    }
+    sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
+    CreateSysTask(OverworldWildSpawns_FieldReadyTask, fieldSystem, OW_WILD_FIELD_READY_DELAY_FRAMES);
 #endif
 }
 
@@ -200,8 +201,6 @@ static void OverworldWildSpawns_ClearSavedHp(u32 personality)
     int slot = OverworldWildSpawns_FindSavedHpSlot(personality);
 
     if (slot >= 0) {
-        sSavedHp[slot].personality = 0;
-        sSavedHp[slot].hp = 0;
         sSavedHp[slot].active = FALSE;
     }
 }
@@ -313,7 +312,7 @@ static void OverworldWildSpawns_TryRecordFledBattleHp(struct BattleSystem *bsys,
 
 BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL *shiny)
 {
-    if (personality == NULL || shiny == NULL || !sBattlePersonalityOverrideActive) {
+    if (!sBattlePersonalityOverrideActive) {
         return FALSE;
     }
 
@@ -337,7 +336,7 @@ void OverworldWildSpawns_CleanupPendingBattle(FieldSystem *fieldSystem, u16 batt
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
     u32 battlePersonality = sBattleHpPersonality;
 
-    if (entry != NULL && entry->cleanupPendingBattle != NULL) {
+    if (entry != NULL) {
         entry->cleanupPendingBattle(fieldSystem, &sOverworldWildSpawnState, battleResult);
     } else {
         sOverworldWildSpawnState.pendingPersonality = 0;
