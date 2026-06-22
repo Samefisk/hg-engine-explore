@@ -240,10 +240,12 @@ scripts/headless-map-teleport-transition-verifier.py \
   --json documentation/verification/map_teleport_transition_verifier.json
 ```
 
-It samples frames after the L+R request and fails if any sampled frame is a
-solid-white Fly-style transition frame. Before the plain `Task_ScriptWarp`
-scheduler, the old `sub_020538C0` path landed successfully but failed this
-check with `solid_white_frames: [60]`.
+It samples from the initial L+R key-down through hold, release, and the
+post-release transition window. Each sampled screenshot is checked as a whole
+frame and as separate top and bottom DS screens, so a Fly-style solid-white
+landing frame on either screen fails the verifier. Before the plain
+`Task_ScriptWarp` scheduler, the old `sub_020538C0` path landed successfully
+but failed this check with `solid_white_frames: [60]`.
 
 Final verification on this branch produced:
 

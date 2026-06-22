@@ -80,8 +80,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def frame_metrics(image: Any, args: argparse.Namespace) -> dict[str, Any]:
-    image = image.convert("RGB")
+def pixel_metrics(image: Any, args: argparse.Namespace) -> dict[str, Any]:
     pixels = list(image.getdata())
     total = len(pixels)
     red = sum(pixel[0] for pixel in pixels) / total
@@ -99,6 +98,25 @@ def frame_metrics(image: Any, args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def frame_metrics(image: Any, args: argparse.Namespace) -> dict[str, Any]:
+    image = image.convert("RGB")
+    width, height = image.size
+    split_y = height // 2
+    whole = pixel_metrics(image, args)
+    top = pixel_metrics(image.crop((0, 0, width, split_y)), args)
+    bottom = pixel_metrics(image.crop((0, split_y, width, height)), args)
+    return {
+        "whole": whole,
+        "top": top,
+        "bottom": bottom,
+        "solid_white": (
+            whole["solid_white"]
+            or top["solid_white"]
+            or bottom["solid_white"]
+        ),
+    }
+
+
 def save_frame(
     screenshot_dir: Path | None,
     frame: int,
@@ -112,6 +130,14 @@ def save_frame(
     return str(path)
 
 
+def sample_phase(frame: int, args: argparse.Namespace) -> str:
+    if frame < args.trigger_frames:
+        return "hold"
+    if frame < args.trigger_frames + args.release_frames:
+        return "release"
+    return "post_release"
+
+
 def sample_transition(
     args: argparse.Namespace,
     emu: Any,
@@ -121,45 +147,47 @@ def sample_transition(
     samples: list[dict[str, Any]] = []
     request_evidence: dict[str, Any] | None = None
     screenshot_dir = repo_path(args.screenshot_dir) if args.screenshot_dir else None
+    key_mask = headless.combo_key_mask("L+R")
+    total_frames = args.trigger_frames + args.release_frames + args.sample_frames
 
-    headless.hold_combo(emu, "L+R", args.trigger_frames, args.release_frames)
-    status = verifier.read_status(emu)
-    if verifier.request_count_changed(status_before["request_count"], status["request_count"]):
-        request_evidence = {
-            "frame": 0,
-            "request_result": status["request_result"],
-            "destination_index": status["destination_index"],
-        }
-
-    for frame in range(args.sample_frames + 1):
-        if frame % args.sample_interval == 0:
-            status = verifier.read_status(emu)
-            image = emu.screenshot()
-            metrics = frame_metrics(image, args)
-            path = save_frame(screenshot_dir, frame, image)
-            if (
-                request_evidence is None
-                and verifier.request_count_changed(
-                    status_before["request_count"],
-                    status["request_count"],
+    if args.trigger_frames > 0:
+        emu.input.keypad_add_key(key_mask)
+    try:
+        for frame in range(total_frames + 1):
+            if frame % args.sample_interval == 0:
+                status = verifier.read_status(emu)
+                image = emu.screenshot()
+                metrics = frame_metrics(image, args)
+                path = save_frame(screenshot_dir, frame, image)
+                if (
+                    request_evidence is None
+                    and verifier.request_count_changed(
+                        status_before["request_count"],
+                        status["request_count"],
+                    )
+                ):
+                    request_evidence = {
+                        "frame": frame,
+                        "request_result": status["request_result"],
+                        "destination_index": status["destination_index"],
+                    }
+                samples.append(
+                    {
+                        "frame": frame,
+                        "keys_held": frame < args.trigger_frames,
+                        "phase": sample_phase(frame, args),
+                        "status": status,
+                        "path": path,
+                        **metrics,
+                    }
                 )
-            ):
-                request_evidence = {
-                    "frame": frame,
-                    "request_result": status["request_result"],
-                    "destination_index": status["destination_index"],
-                }
-            samples.append(
-                {
-                    "frame": frame,
-                    "status": status,
-                    "path": path,
-                    **metrics,
-                }
-            )
 
-        if frame < args.sample_frames:
-            headless.cycle(emu, 1)
+            if frame < total_frames:
+                headless.cycle(emu, 1)
+                if frame + 1 == args.trigger_frames:
+                    emu.input.keypad_rm_key(key_mask)
+    finally:
+        emu.input.keypad_rm_key(key_mask)
 
     return samples, verifier.read_status(emu), request_evidence
 
@@ -227,14 +255,26 @@ def main() -> int:
                 emu.destroy()
 
     solid_white_frames = [sample for sample in samples if sample["solid_white"]]
+    whole_solid_white_frames = [
+        sample for sample in samples if sample["whole"]["solid_white"]
+    ]
+    top_solid_white_frames = [
+        sample for sample in samples if sample["top"]["solid_white"]
+    ]
+    bottom_solid_white_frames = [
+        sample for sample in samples if sample["bottom"]["solid_white"]
+    ]
     landed = verifier.status_matches_destination(destination, final_status)
     final_nonblack_ok = (
-        samples[-1]["nonblack_pixels"] >= args.min_nonblack_pixels if samples else False
+        samples[-1]["whole"]["nonblack_pixels"] >= args.min_nonblack_pixels
+        if samples
+        else False
     )
     request_ok = (
         request_evidence is not None
         and request_evidence["request_result"] == verifier.MAP_TELEPORT_RESULT_OK
     )
+    total_sample_frames = args.trigger_frames + args.release_frames + args.sample_frames
     summary = {
         "rom": display_path(rom),
         "save": display_path(save_path),
@@ -251,10 +291,51 @@ def main() -> int:
         "status_before": status_before,
         "request_evidence": request_evidence,
         "final_status": final_status,
-        "sample_frames": args.sample_frames,
+        "trigger_frames": args.trigger_frames,
+        "release_frames": args.release_frames,
+        "post_release_sample_frames": args.sample_frames,
+        "total_sample_frames": total_sample_frames,
         "sample_interval": args.sample_interval,
         "solid_white_frame_count": len(solid_white_frames),
         "solid_white_frames": [sample["frame"] for sample in solid_white_frames],
+        "solid_white_whole_frame_count": len(whole_solid_white_frames),
+        "solid_white_whole_frames": [
+            sample["frame"] for sample in whole_solid_white_frames
+        ],
+        "solid_white_top_frame_count": len(top_solid_white_frames),
+        "solid_white_top_frames": [
+            sample["frame"] for sample in top_solid_white_frames
+        ],
+        "solid_white_bottom_frame_count": len(bottom_solid_white_frames),
+        "solid_white_bottom_frames": [
+            sample["frame"] for sample in bottom_solid_white_frames
+        ],
+        "whole_solid_white_frame_count": len(whole_solid_white_frames),
+        "whole_solid_white_frames": [
+            sample["frame"] for sample in whole_solid_white_frames
+        ],
+        "top_solid_white_frame_count": len(top_solid_white_frames),
+        "top_solid_white_frames": [
+            sample["frame"] for sample in top_solid_white_frames
+        ],
+        "bottom_solid_white_frame_count": len(bottom_solid_white_frames),
+        "bottom_solid_white_frames": [
+            sample["frame"] for sample in bottom_solid_white_frames
+        ],
+        "white_detection": {
+            "whole": {
+                "passed": len(whole_solid_white_frames) == 0,
+                "frames": [sample["frame"] for sample in whole_solid_white_frames],
+            },
+            "top": {
+                "passed": len(top_solid_white_frames) == 0,
+                "frames": [sample["frame"] for sample in top_solid_white_frames],
+            },
+            "bottom": {
+                "passed": len(bottom_solid_white_frames) == 0,
+                "frames": [sample["frame"] for sample in bottom_solid_white_frames],
+            },
+        },
         "sample_count": len(samples),
         "landed": landed,
         "request_ok": request_ok,
