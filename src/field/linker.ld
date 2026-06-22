@@ -17,6 +17,10 @@ SECTIONS {
                 . = ALIGN(4);
                 KEEP(*(.map_teleport_debug_destination))
                 . = ALIGN(4);
+                KEEP(*(.map_teleport_debug_status))
+                . = ALIGN(4);
+                KEEP(*(.map_teleport_encounter_destination_entry))
+                . = ALIGN(4);
                 *(.init)
                 *(.text)
                 *(.ctors)
