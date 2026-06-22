@@ -13,7 +13,9 @@
 #define OW_WILD_HEADBUTT_SLOT_START (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS)
 #define OW_WILD_FISH_SLOT_START (OW_WILD_HEADBUTT_SLOT_START + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
-#define OW_WILD_MAX_SAVED_SHINIES 10
+#define OW_WILD_MAX_SAVED_SHINIES 2
+#define OW_WILD_SAVED_SHINY_ACTIVE 0x80
+#define OW_WILD_SAVED_SHINY_TERRAIN_MASK 0x7F
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
 #define OW_WILD_CANOPY_HOP_MOVEMENT_LIST_WORDS 72
@@ -31,13 +33,10 @@ typedef struct OverworldWildSpawn {
 } OverworldWildSpawn;
 
 typedef struct OverworldWildSavedShiny {
-    u32 personality;
     u16 mapId;
-    u16 species;
-    u8 form;
+    u16 speciesAndForm;
     u8 level;
-    u8 terrain;
-    u8 active;
+    u8 terrainAndActive;
 } OverworldWildSavedShiny;
 
 typedef struct OverworldWildSpawnState {
@@ -62,6 +61,7 @@ typedef struct OverworldWildSpawnState {
     u8 pendingLevel;
     u8 pendingShiny;
     u8 shinySpawned;
+    u8 savedShiniesLoaded;
     s8 pendingSlot;
     s8 movementQueuedBattleSlot;
     u8 movementSpotStates[OW_WILD_MAX_SPAWNS];
@@ -126,7 +126,6 @@ typedef struct OverworldWildSpawnState {
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
     void (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
-    void (*onFieldSystemReady)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
     void (*visualTesterCommand)(FieldSystem *fieldSystem, u16 command);
     void (*cleanupResidentData)(void);
 } OverworldWildSpawnsOverlayEntry;

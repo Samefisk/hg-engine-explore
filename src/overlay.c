@@ -14,9 +14,6 @@ struct LinkedOverlayList gLinkedOverlayList[] =
     {OVERLAY_HALL_OF_FAME_PC, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEATHLON, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEWALKER, OVERLAY_FIELD_EXTENSION},
-    {OVERLAY_FIELD_EXTENSION, OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION},
-    {OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA},
-    {OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, OVERLAY_OVERWORLD_WILD_HELPER},
     {OVERLAY_POKEDEX, OVERLAY_POKEDEX_EXTENSION},
 };
 
@@ -31,6 +28,27 @@ u8 gOverlayPriorityList[][2] =
 {
     {OVERLAY_POKEDEX, OVERLAY_BATTLECONTROLLER_BEFOREMOVE},
 };
+
+static BOOL IsOverworldWildOverlay(u32 ovyId)
+{
+    return ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
+        || ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA
+        || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
+}
+
+static void UnloadColdOverworldWildOverlaysFor(u32 ovyId)
+{
+    if (IsOverworldWildOverlay(ovyId)) {
+        return;
+    }
+
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
+    }
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
+    }
+}
 
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
 inline static void PrintLoadedOverlays(u32 ovyId)
@@ -118,6 +136,8 @@ u32 LONG_CALL HandleLoadOverlay(u32 ovyId, u32 loadType) {
 #endif // DEBUG_PRINT_OVERLAY_LOADS
 
 loadExtension:
+    UnloadColdOverworldWildOverlaysFor(ovyId);
+
     for (i = 0; i < NELEMS(gOverlayPriorityList); i++)
     {
         if (gOverlayPriorityList[i][0] == ovyId)
@@ -203,12 +223,7 @@ loadExtension:
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
             ovyId = gLinkedOverlayList[i].ext_id;
-            /*
-             * The overworld wild helper may be called synchronously after the
-             * resident chain loads, so keep it off the async path.
-             */
-            loadType = (ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA
-                || ovyId == OVERLAY_OVERWORLD_WILD_HELPER) ? 0 : 2;
+            loadType = 2;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
             debug_printf("Trying to load linked overlay_%04d.bin.\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS

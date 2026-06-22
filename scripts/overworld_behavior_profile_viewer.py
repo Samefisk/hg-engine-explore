@@ -69,8 +69,18 @@ MONDATA_SOURCE = ROOT / "armips/data/mondata.s"
 ARMIPS_CONSTANTS = ROOT / "armips/include/constants.s"
 ARMIPS_CONFIG = ROOT / "armips/include/config.s"
 TEST_NDS = ROOT / "test.nds"
-DEFAULT_TEST_DSV = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test.dsv"
-TEST_DSV = Path(os.environ.get("HG_ENGINE_TEST_DSV", str(DEFAULT_TEST_DSV))).expanduser()
+DESMUME_TEST_DSV = Path.home() / "Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv"
+DELTA_TEST_DSV = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test.dsv"
+
+
+def default_test_dsv_path() -> Path:
+    for candidate in (DESMUME_TEST_DSV, DELTA_TEST_DSV):
+        if candidate.exists():
+            return candidate
+    return DESMUME_TEST_DSV
+
+
+TEST_DSV = Path(os.environ.get("HG_ENGINE_TEST_DSV", str(default_test_dsv_path()))).expanduser()
 BUILD_COMMAND = "./docker-makerom.cmd"
 BUILD_OUTPUT_LIMIT = 60000
 BUILD_STARTUP_TIMEOUT_SECONDS = 45
@@ -82,11 +92,21 @@ SAVE_CHUNK_FOOTER_SIZE = 0x10
 SAVE_CHUNK_MAGIC = 0x20060623
 OVERWORLD_WILD_SHINY_BASE_ODDS = 8192
 OVERWORLD_WILD_SHINY_COUNTER_MAX = OVERWORLD_WILD_SHINY_BASE_ODDS - 1
-OVERWORLD_WILD_SHINY_COUNTER_MAGIC = 0x4F57
-# Sav2_Misc_get uses save-array id 9. Its block starts at 0x2064 and the
-# counter fields live at SAVE_MISC_DATA offsets 0x29C/0x29E.
-OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET = 0x2064 + 0x29C
-OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET = 0x2064 + 0x29E
+OVERWORLD_WILD_SHINY_COUNTER_MAGIC_V1 = 0x4F57
+OVERWORLD_WILD_SHINY_COUNTER_MAGIC = 0x4F58
+# Sav2_Misc_get uses save-array id 9. The current runtime save header places
+# that block at 0x2614; the counter fields live at SAVE_MISC_DATA offsets
+# 0x29C/0x29E. Keep this paired with the runtime save-array layout.
+OVERWORLD_WILD_SHINY_MISC_SAVE_OFFSET = 0x2614
+OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET = OVERWORLD_WILD_SHINY_MISC_SAVE_OFFSET + 0x29C
+OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET = OVERWORLD_WILD_SHINY_MISC_SAVE_OFFSET + 0x29E
+OVERWORLD_WILD_SAVED_SHINIES_SAVE_OFFSET = OVERWORLD_WILD_SHINY_MISC_SAVE_OFFSET + 0x288
+OVERWORLD_WILD_SAVED_SHINY_SIZE = 6
+OVERWORLD_WILD_MAX_SAVED_SHINIES = 2
+OVERWORLD_WILD_SAVED_SHINY_ACTIVE = 0x80
+OVERWORLD_WILD_SAVED_SHINY_TERRAIN_MASK = 0x7F
+OVERWORLD_WILD_SPECIES_MASK = 0x7FF
+OVERWORLD_WILD_FORM_SHIFT = 11
 BUILD_LOCK = threading.Lock()
 BUILD_STATE_LOCK = threading.Lock()
 BUILD_STATE = {
@@ -4319,6 +4339,37 @@ def choose_active_shiny_counter_copy(save_bytes: bytes | bytearray) -> dict:
     return {"active": active, "copies": copies}
 
 
+def reserved_shinies_from_save(save_bytes: bytes | bytearray, copy_base: int, magic_ok: bool) -> list[dict]:
+    if not magic_ok:
+        return []
+    result: list[dict] = []
+    for index in range(OVERWORLD_WILD_MAX_SAVED_SHINIES):
+        offset = (
+            copy_base
+            + OVERWORLD_WILD_SAVED_SHINIES_SAVE_OFFSET
+            + index * OVERWORLD_WILD_SAVED_SHINY_SIZE
+        )
+        if offset + OVERWORLD_WILD_SAVED_SHINY_SIZE > len(save_bytes):
+            break
+        map_id, species_and_form = struct.unpack_from("<HH", save_bytes, offset)
+        level = save_bytes[offset + 4]
+        terrain_and_active = save_bytes[offset + 5]
+        species = species_and_form & OVERWORLD_WILD_SPECIES_MASK
+        if not (terrain_and_active & OVERWORLD_WILD_SAVED_SHINY_ACTIVE) or species == 0 or level == 0:
+            continue
+        result.append(
+            {
+                "slot": index + 1,
+                "mapId": map_id,
+                "species": species,
+                "form": species_and_form >> OVERWORLD_WILD_FORM_SHIFT,
+                "level": level,
+                "terrain": terrain_and_active & OVERWORLD_WILD_SAVED_SHINY_TERRAIN_MASK,
+            }
+        )
+    return result
+
+
 def shiny_counter_payload() -> dict:
     if not TEST_DSV.exists():
         return {
@@ -4327,6 +4378,7 @@ def shiny_counter_payload() -> dict:
             "counter": 0,
             "denominator": OVERWORLD_WILD_SHINY_BASE_ODDS,
             "magicOk": False,
+            "reservedShinies": [],
         }
     path, save_bytes, extra_bytes = load_test_dsv_bytes()
     del extra_bytes
@@ -4338,7 +4390,8 @@ def shiny_counter_payload() -> dict:
     raw_counter = struct.unpack_from("<H", save_bytes, counter_offset)[0]
     magic = struct.unpack_from("<H", save_bytes, magic_offset)[0]
     magic_ok = magic == OVERWORLD_WILD_SHINY_COUNTER_MAGIC
-    counter = raw_counter if magic_ok else 0
+    legacy_magic = magic == OVERWORLD_WILD_SHINY_COUNTER_MAGIC_V1
+    counter = raw_counter if magic_ok or legacy_magic else 0
     counter = min(counter, OVERWORLD_WILD_SHINY_COUNTER_MAX)
     return {
         "exists": True,
@@ -4347,7 +4400,9 @@ def shiny_counter_payload() -> dict:
         "rawCounter": raw_counter,
         "magic": magic,
         "magicOk": magic_ok,
+        "legacyMagic": legacy_magic,
         "denominator": OVERWORLD_WILD_SHINY_BASE_ODDS - counter,
+        "reservedShinies": reserved_shinies_from_save(save_bytes, base, magic_ok),
         "activeCopyBase": base,
         "activeSaveCount": active.get("count"),
         "copies": selected["copies"],
@@ -4366,8 +4421,11 @@ def set_shiny_counter(counter: int) -> dict:
     base = active["copyBase"]
     counter_offset = base + OVERWORLD_WILD_SHINY_COUNTER_SAVE_OFFSET
     magic_offset = base + OVERWORLD_WILD_SHINY_MAGIC_SAVE_OFFSET
+    reserved_offset = base + OVERWORLD_WILD_SAVED_SHINIES_SAVE_OFFSET
+    reserved_size = OVERWORLD_WILD_SAVED_SHINY_SIZE * OVERWORLD_WILD_MAX_SAVED_SHINIES
     struct.pack_into("<H", raw, counter_offset, counter)
     struct.pack_into("<H", raw, magic_offset, OVERWORLD_WILD_SHINY_COUNTER_MAGIC)
+    raw[reserved_offset:reserved_offset + reserved_size] = b"\0" * reserved_size
 
     footer_offset = base + SAVE_NORMAL_SLOT_SIZE - SAVE_CHUNK_FOOTER_SIZE
     crc = crc16_ccitt_false(raw[base:footer_offset])
@@ -5880,6 +5938,243 @@ HTML = r"""<!doctype html>
       background: #fffef7;
       color: #713f12;
       font-weight: 850;
+    }
+
+    .reserved-shiny-list {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex-wrap: wrap;
+      min-width: 0;
+      max-width: min(460px, 42vw);
+    }
+
+    .reserved-shiny-empty {
+      color: #9a7a21;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+
+    .reserved-shiny-chip {
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      max-width: 142px;
+      padding: 0 6px;
+      border: 1px solid #f3d36a;
+      border-radius: 7px;
+      background: #fffef7;
+      color: #713f12;
+      font-size: 11px;
+      font-weight: 850;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .reserved-shiny-chip:hover,
+    .reserved-shiny-chip:focus-visible {
+      border-color: #facc15;
+      background: #fef3c7;
+      box-shadow: 0 0 0 2px rgba(250, 204, 21, .18);
+      outline: none;
+    }
+
+    .reserved-shiny-chip .encounter-badge {
+      flex: 0 0 auto;
+    }
+
+    .reserved-shiny-chip .mon-icon {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+    }
+
+    .reserved-shiny-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .reserved-shiny-level {
+      color: #8a6a18;
+      font-size: 10px;
+      flex: 0 0 auto;
+    }
+
+    .reserved-shiny-dialog {
+      width: min(640px, calc(100vw - 24px));
+      max-height: min(86dvh, 720px);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      padding: 0;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+    }
+
+    .reserved-shiny-dialog::backdrop {
+      background: rgba(15, 23, 42, 0.18);
+    }
+
+    .reserved-shiny-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      max-height: inherit;
+      overflow: hidden;
+    }
+
+    .reserved-shiny-head {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .reserved-shiny-head .mon-icon {
+      width: 42px;
+      height: 42px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .reserved-shiny-title {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .reserved-shiny-title strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .reserved-shiny-title span,
+    .reserved-shiny-help {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .reserved-shiny-entries {
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .reserved-shiny-entry {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      padding: 6px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      box-shadow: inset 3px 0 0 #facc15;
+    }
+
+    .reserved-shiny-entry:last-child {
+      border-bottom: 0;
+    }
+
+    .reserved-shiny-entry.source-grass {
+      background: #f4fdf8;
+      box-shadow: inset 3px 0 0 #22c55e;
+    }
+
+    .reserved-shiny-entry.source-surf,
+    .reserved-shiny-entry.source-fishing {
+      background: #eff9ff;
+      box-shadow: inset 3px 0 0 #38bdf8;
+    }
+
+    .reserved-shiny-entry.source-headbutt {
+      background: #edf7ef;
+      box-shadow: inset 3px 0 0 #064e3b;
+    }
+
+    .reserved-shiny-entry.source-shiny {
+      background: #fffbeb;
+      box-shadow: inset 3px 0 0 #facc15;
+    }
+
+    .reserved-shiny-entry-source {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .reserved-shiny-entry-source .route-encounter-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+    }
+
+    .reserved-shiny-entry-source .mon-icon {
+      width: 24px;
+      height: 24px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .reserved-shiny-entry-meta {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .reserved-shiny-entry-meta strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .reserved-shiny-entry-meta span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .reserved-shiny-entry-value {
+      min-width: 54px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1px solid #dbe5f0;
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .reserved-shiny-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .reserved-shiny-actions .control {
+      width: auto;
+      min-width: 78px;
     }
 
     .global-actions .control {
@@ -9837,13 +10132,14 @@ HTML = r"""<!doctype html>
             <span class="shiny-counter-pill">
               <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.1L19 10l-5.4 1.9L12 17l-1.6-5.1L5 10l5.4-1.9L12 3Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/><path d="M5 15l.6 1.6L7 17l-1.4.4L5 19l-.6-1.6L3 17l1.4-.4L5 15Z"/></svg></span>
               <span id="shinyCounterValue">--</span>
-              <span id="shinyCounterRate" class="muted">1/8192</span>
+              <span id="shinyCounterRate" class="muted">pity 1/8192</span>
             </span>
             <button id="refreshShinyCounter" class="control" type="button" title="Refresh shiny counter" aria-label="Refresh shiny counter">
               <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></span>
             </button>
             <button id="resetShinyCounter" class="control" type="button" title="Set shiny counter to 0">0</button>
-            <button id="maxShinyCounter" class="control" type="button" title="Set shiny counter to 8191 so the next eligible spawn is shiny">8191</button>
+            <button id="maxShinyCounter" class="control" type="button" title="Set shiny counter to 8191 so the next eligible spawn forces a pity shiny reservation">8191</button>
+            <span id="reservedShinyList" class="reserved-shiny-list" title="Reserved pity shinies"></span>
           </div>
         </div>
         <span id="saveStatus" class="save-status"></span>
@@ -9908,6 +10204,7 @@ HTML = r"""<!doctype html>
   <div id="profileComboMenu" class="profile-combo-menu" hidden></div>
   <dialog id="routeSwapDialog" class="route-swap-dialog"></dialog>
   <dialog id="spawnSettingDialog" class="spawn-setting-dialog"></dialog>
+  <dialog id="reservedShinyDialog" class="reserved-shiny-dialog"></dialog>
 
   <script>
     let appData = null;
@@ -10202,6 +10499,7 @@ HTML = r"""<!doctype html>
     let isManagingProfiles = false;
     let isBuilding = false;
     let isSettingShinyCounter = false;
+    let lastShinyCounterPayload = null;
     let buildAfterSave = localStorage.getItem("owProfileBuildAfterSave") === "1";
     let runTestNdsAfterBuild = localStorage.getItem("owProfileRunTestAfterBuild") === "1";
     let autoShowBuildOutput = localStorage.getItem("owProfileAutoShowBuildOutput") !== "0";
@@ -10242,6 +10540,7 @@ HTML = r"""<!doctype html>
       refreshShinyCounter: document.getElementById("refreshShinyCounter"),
       resetShinyCounter: document.getElementById("resetShinyCounter"),
       maxShinyCounter: document.getElementById("maxShinyCounter"),
+      reservedShinyList: document.getElementById("reservedShinyList"),
       resetAllEdits: document.getElementById("resetAllEdits"),
       saveStatus: document.getElementById("saveStatus"),
       buildOutputPanel: document.getElementById("buildOutputPanel"),
@@ -10251,7 +10550,8 @@ HTML = r"""<!doctype html>
       profileAddMenu: document.getElementById("profileAddMenu"),
       profileComboMenu: document.getElementById("profileComboMenu"),
       routeSwapDialog: document.getElementById("routeSwapDialog"),
-      spawnSettingDialog: document.getElementById("spawnSettingDialog")
+      spawnSettingDialog: document.getElementById("spawnSettingDialog"),
+      reservedShinyDialog: document.getElementById("reservedShinyDialog")
     };
 
     els.buildAfterSave.checked = buildAfterSave;
@@ -15021,19 +15321,189 @@ HTML = r"""<!doctype html>
       els.maxShinyCounter.disabled = isSettingShinyCounter;
     }
 
+    function reservedShinySpecies(value) {
+      return appData?.speciesByValue?.[String(value)]
+        || appData?.speciesByValue?.[Number(value)]
+        || { value, symbol: `SPECIES_${value}`, name: `Species ${value}` };
+    }
+
+    function reservedShinyRouteInfo(mapId) {
+      if (!appData?.routes) return { label: `Map ${mapId}`, route: null, map: null };
+      const route = appData.routes.find(candidate =>
+        Array.isArray(candidate.maps)
+          && candidate.maps.some(map => Number(map.value) === Number(mapId))
+      );
+      if (!route) return { label: `Map ${mapId}`, route: null, map: null };
+      const map = route.maps.find(entry => Number(entry.value) === Number(mapId));
+      return {
+        label: map?.name ? `${route.name} / ${map.name}` : route.name,
+        route,
+        map
+      };
+    }
+
+    function reservedShinyRouteName(mapId) {
+      return reservedShinyRouteInfo(mapId).label;
+    }
+
+    function reservedShinyTerrainInfo(value) {
+      const terrain = appData?.labels?.terrains?.[String(value)]
+        || appData?.labels?.terrains?.[Number(value)];
+      const symbol = terrain?.symbol || "";
+      if (symbol.includes("LAND")) return { icon: "leaf", typeClass: "type-grass", sourceClass: "grass", symbol, label: terrain?.name || "Land" };
+      if (symbol.includes("SURF")) return { icon: "waves", typeClass: "type-surf", sourceClass: "surf", symbol, label: terrain?.name || "Surf" };
+      if (symbol.includes("FISHING")) return { icon: "fish", typeClass: "type-rod", sourceClass: "fishing", symbol, label: terrain?.name || "Fishing" };
+      if (symbol.includes("HEADBUTT")) return { icon: "tree", typeClass: "type-headbutt", sourceClass: "headbutt", symbol, label: terrain?.name || "Headbutt" };
+      return { icon: "swarm", typeClass: "type-shiny", sourceClass: "shiny", symbol, label: terrain?.name || `Terrain ${value}` };
+    }
+
+    function reservedShinyDetailEntry(iconHtml, sourceClass, title, subtitle, valueHtml) {
+      return `
+        <div class="reserved-shiny-entry source-${esc(sourceClass || "shiny")}">
+          <span class="reserved-shiny-entry-source">${iconHtml}</span>
+          <span class="reserved-shiny-entry-meta">
+            <strong>${esc(title)}</strong>
+            <span>${esc(subtitle)}</span>
+          </span>
+          <span class="reserved-shiny-entry-value">${valueHtml}</span>
+        </div>
+      `;
+    }
+
+    function reservedShinyDetailIcon(icon, typeClass, label) {
+      return encounterBadge(icon, typeClass, label);
+    }
+
+    function closeReservedShinyDetail() {
+      if (!els.reservedShinyDialog) return;
+      if (els.reservedShinyDialog.open) {
+        els.reservedShinyDialog.close();
+      }
+      els.reservedShinyDialog.innerHTML = "";
+    }
+
+    function openReservedShinyDetail(slot) {
+      if (!els.reservedShinyDialog) return;
+      const entries = lastShinyCounterPayload?.reservedShinies || [];
+      const entry = entries.find(candidate => String(candidate.slot) === String(slot));
+      if (!entry) return;
+      const species = reservedShinySpecies(entry.species);
+      const terrain = reservedShinyTerrainInfo(entry.terrain);
+      const routeInfo = reservedShinyRouteInfo(entry.mapId);
+      const name = routeSpeciesShortSymbol(species.symbol || species.name || `SPECIES_${entry.species}`);
+      const displayName = species.name || name;
+      const formText = Number(entry.form) ? `Form ${entry.form}` : "Base form";
+      const mapLabel = routeInfo.map?.name || routeInfo.label;
+      const routeLabel = routeInfo.route?.name || routeInfo.label;
+      const locationSubtitle = mapLabel === routeLabel
+        ? `Map ${entry.mapId}`
+        : `${mapLabel} · Map ${entry.mapId}`;
+      const denominator = Number(lastShinyCounterPayload?.denominator) || 8192;
+      const terrainIcon = reservedShinyDetailIcon(terrain.icon, terrain.typeClass, terrain.label);
+      const shinyIcon = reservedShinyDetailIcon("swarm", "type-shiny", "Pity shiny");
+      const speciesIcon = iconTag(species, "mon-icon");
+      const rows = [
+        reservedShinyDetailEntry(
+          shinyIcon,
+          "shiny",
+          "Reservation",
+          "Pity shiny queue slot",
+          `#${esc(entry.slot)}`
+        ),
+        reservedShinyDetailEntry(
+          speciesIcon,
+          terrain.sourceClass,
+          displayName,
+          `Species #${entry.species} · ${formText}`,
+          `Lv ${esc(entry.level)}`
+        ),
+        reservedShinyDetailEntry(
+          terrainIcon,
+          terrain.sourceClass,
+          routeLabel,
+          locationSubtitle,
+          esc(terrain.label)
+        ),
+        reservedShinyDetailEntry(
+          terrainIcon,
+          terrain.sourceClass,
+          "Spawn pool",
+          `Terrain #${entry.terrain}`,
+          esc(terrain.label)
+        ),
+        reservedShinyDetailEntry(
+          shinyIcon,
+          "shiny",
+          "Current pity odds",
+          "Normal shiny roll stays 1/8192",
+          `1/${esc(denominator)}`
+        )
+      ].join("");
+      els.reservedShinyDialog.innerHTML = `
+        <form class="reserved-shiny-card" method="dialog">
+          <div class="reserved-shiny-head">
+            ${speciesIcon}
+            <div class="reserved-shiny-title">
+              <strong>Reserved ${esc(name)}</strong>
+              <span>${esc(routeInfo.label)} · ${esc(terrain.label)} · Lv ${esc(entry.level)}</span>
+            </div>
+          </div>
+          <div class="reserved-shiny-entries">${rows}</div>
+          <div class="reserved-shiny-help">
+            This pity reservation is consumed by the next matching overworld spawn. The queue resets when a reserved shiny is spawned.
+          </div>
+          <div class="reserved-shiny-actions">
+            <button class="control" type="button" data-reserved-shiny-action="close">Close</button>
+          </div>
+        </form>
+      `;
+      els.reservedShinyDialog.showModal();
+    }
+
+    function renderReservedShinies(payload) {
+      if (!els.reservedShinyList) return;
+      const entries = payload?.reservedShinies || [];
+      if (!payload?.exists) {
+        els.reservedShinyList.innerHTML = "";
+        return;
+      }
+      if (!entries.length) {
+        els.reservedShinyList.innerHTML = `<span class="reserved-shiny-empty">No reserved</span>`;
+        return;
+      }
+      els.reservedShinyList.innerHTML = entries.map(entry => {
+        const species = reservedShinySpecies(entry.species);
+        const terrain = reservedShinyTerrainInfo(entry.terrain);
+        const name = routeSpeciesShortSymbol(species.symbol || species.name || `SPECIES_${entry.species}`);
+        const routeName = reservedShinyRouteName(entry.mapId);
+        const title = `Reserved pity shiny #${entry.slot}: ${species.name || name}, Lv ${entry.level}, ${terrain.label}, ${routeName}`;
+        return `
+          <button class="reserved-shiny-chip" type="button" data-reserved-shiny-slot="${esc(entry.slot)}" title="${esc(title)}">
+            ${encounterBadge(terrain.icon, terrain.typeClass, terrain.label)}
+            ${iconTag(species, "mon-icon")}
+            <span class="reserved-shiny-name">${esc(name)}</span>
+            <span class="reserved-shiny-level">Lv ${esc(entry.level)}</span>
+          </button>
+        `;
+      }).join("");
+    }
+
     function applyShinyCounterStatus(payload) {
+      lastShinyCounterPayload = payload || null;
       if (!payload || !payload.exists) {
         els.shinyCounterValue.textContent = "--";
         els.shinyCounterRate.textContent = "No save";
+        renderReservedShinies(payload);
         return;
       }
       const counter = Number(payload.counter) || 0;
       const denominator = Number(payload.denominator) || 8192;
       els.shinyCounterValue.textContent = String(counter);
-      els.shinyCounterRate.textContent = `1/${denominator}`;
-      const suffix = payload.magicOk ? "" : " (not initialized)";
+      els.shinyCounterRate.textContent = `pity 1/${denominator}`;
+      const suffix = payload.magicOk ? "" : (payload.legacyMagic ? " (legacy format)" : " (not initialized)");
       els.shinyCounterValue.title = `Saved shiny spawn counter${suffix}`;
-      els.shinyCounterRate.title = `Current shiny odds: 1 in ${denominator}${suffix}`;
+      els.shinyCounterRate.title = `Pity shiny roll: 1 in ${denominator}. Normal shiny roll remains 1 in 8192${suffix}`;
+      renderReservedShinies(payload);
     }
 
     async function loadShinyCounter(options = {}) {
@@ -15046,14 +15516,16 @@ HTML = r"""<!doctype html>
         applyShinyCounterStatus(result);
         if (options.report) {
           const text = result.exists
-            ? `Shiny counter: ${result.counter} (1/${result.denominator})`
+            ? `Shiny counter: ${result.counter} (pity 1/${result.denominator})`
             : "No test.dsv found";
           setSaveStatus(text, result.exists ? "success" : "warning");
         }
         return result;
       } catch (error) {
+        lastShinyCounterPayload = null;
         els.shinyCounterValue.textContent = "--";
         els.shinyCounterRate.textContent = "Load failed";
+        renderReservedShinies({ exists: false });
         if (options.report) {
           setSaveStatus(`Shiny counter failed: ${error.message}`, "error");
         }
@@ -15077,7 +15549,7 @@ HTML = r"""<!doctype html>
           throw new Error(result.error || `HTTP ${response.status}`);
         }
         applyShinyCounterStatus(result);
-        setSaveStatus(`${result.message || "Shiny counter updated"} (1/${result.denominator})`, "success");
+        setSaveStatus(`${result.message || "Shiny counter updated"} (pity 1/${result.denominator})`, "success");
       } catch (error) {
         setSaveStatus(`Shiny counter failed: ${error.message}`, "error");
       } finally {
@@ -16080,6 +16552,9 @@ HTML = r"""<!doctype html>
         }
         visibleSpeciesLimit = LIST_PAGE_SIZE;
         render();
+        if (lastShinyCounterPayload) {
+          renderReservedShinies(lastShinyCounterPayload);
+        }
         if (!options.keepStatus) {
           setEncounterSaveStatus("");
         }
@@ -16120,6 +16595,26 @@ HTML = r"""<!doctype html>
     });
     els.maxShinyCounter.addEventListener("click", () => {
       setShinyCounter(8191);
+    });
+    els.reservedShinyList.addEventListener("click", event => {
+      const button = event.target.closest("[data-reserved-shiny-slot]");
+      if (!button) return;
+      event.preventDefault();
+      openReservedShinyDetail(button.dataset.reservedShinySlot);
+    });
+    els.reservedShinyDialog.addEventListener("click", event => {
+      if (event.target === els.reservedShinyDialog) {
+        closeReservedShinyDetail();
+        return;
+      }
+      const button = event.target.closest("[data-reserved-shiny-action='close']");
+      if (!button) return;
+      event.preventDefault();
+      closeReservedShinyDetail();
+    });
+    els.reservedShinyDialog.addEventListener("cancel", event => {
+      event.preventDefault();
+      closeReservedShinyDetail();
     });
     els.saveAllChanges.addEventListener("click", () => {
       saveAllChanges().then(saved => {
