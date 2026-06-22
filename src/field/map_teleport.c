@@ -21,6 +21,7 @@ void LONG_CALL sub_020538C0(
 
 static BOOL sMapTeleportRequestPending;
 static SysTask *sMapTeleportDebugTask;
+static FieldSystem *sMapTeleportDebugFieldSystem;
 static u8 sMapTeleportDebugWasHeld;
 static u16 sMapTeleportPendingFrames;
 static MapTeleportDestination sMapTeleportPendingDestination;
@@ -153,10 +154,12 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
         sMapTeleportDebugTask = NULL;
+        sMapTeleportDebugFieldSystem = NULL;
         DestroySysTask(task);
         return;
     }
 
+    MapTeleport_UpdatePending(fieldSystem);
     if (!MapTeleport_DebugKeysHeld()) {
         sMapTeleportDebugWasHeld = FALSE;
         return;
@@ -177,7 +180,13 @@ static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
     }
 
     if (sMapTeleportDebugTask != NULL) {
+        if (sMapTeleportDebugFieldSystem == fieldSystem) {
+            return;
+        }
+
         DestroySysTask(sMapTeleportDebugTask);
+        sMapTeleportDebugTask = NULL;
+        sMapTeleportDebugFieldSystem = NULL;
     }
 
     sMapTeleportDebugWasHeld = MapTeleport_DebugKeysHeld();
@@ -185,6 +194,9 @@ static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
         MapTeleport_DebugTask,
         fieldSystem,
         MAP_TELEPORT_DEBUG_TASK_PRIORITY);
+    if (sMapTeleportDebugTask != NULL) {
+        sMapTeleportDebugFieldSystem = fieldSystem;
+    }
 }
 
 const MapTeleportOverlayEntry gMapTeleportOverlayEntry
