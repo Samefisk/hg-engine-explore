@@ -21,6 +21,9 @@ DEBUG_STATUS_ADDR = 0x023C801C
 DEBUG_STATUS_MAGIC = 0x4D545053
 DEBUG_STATUS_VERSION = 1
 DEBUG_STATUS_SIZE = 24
+DEBUG_DESTINATION_INDEX_ADDR = DEBUG_STATUS_ADDR + 22
+DEBUG_DESTINATION_INDEX_FORCED = 0xFFFE
+DEBUG_DESTINATION_INDEX_NONE = 0xFFFF
 ENCOUNTER_DESTINATION_ENTRY_ADDR = 0x023C8034
 ENCOUNTER_DESTINATION_MAGIC = 0x4D544544
 ENCOUNTER_DESTINATION_VERSION = 1
@@ -143,6 +146,7 @@ def read_status(emu: DeSmuME) -> dict[str, int]:
         "request_result": read_u16(emu, DEBUG_STATUS_ADDR + 16),
         "request_count": read_u16(emu, DEBUG_STATUS_ADDR + 18),
         "ready": read_u16(emu, DEBUG_STATUS_ADDR + 20),
+        "destination_index": read_u16(emu, DEBUG_DESTINATION_INDEX_ADDR),
     }
 
 
@@ -162,6 +166,10 @@ def write_destination(emu: DeSmuME, destination: dict[str, Any]) -> None:
     write_u16(emu, DEBUG_DESTINATION_ADDR + 6, int(destination["direction"]))
 
 
+def force_debug_destination(emu: DeSmuME) -> None:
+    write_u16(emu, DEBUG_DESTINATION_INDEX_ADDR, DEBUG_DESTINATION_INDEX_FORCED)
+
+
 def empty_status() -> dict[str, int]:
     return {
         "magic": 0,
@@ -174,6 +182,7 @@ def empty_status() -> dict[str, int]:
         "request_result": 0,
         "request_count": 0,
         "ready": 0,
+        "destination_index": DEBUG_DESTINATION_INDEX_NONE,
     }
 
 
@@ -409,6 +418,7 @@ def run_destination(
             failure_reason = None
         if emu is not None:
             write_destination(emu, destination)
+            force_debug_destination(emu)
             headless.hold_combo(emu, "L+R", args.trigger_frames, args.release_frames)
             observed, frames_waited = wait_for_request_outcome(
                 args,

@@ -106,9 +106,15 @@ than the MVP needs. For cross-map calls, callers must pass a vetted destination:
 the target map must be complete and loadable, and the target field `Location`
 coordinate must be in-bounds, unoccupied, and known-safe land.
 
-The L+R debug destination is writable on purpose. The default is New Bark
-(`MAP_T20`, `0x02B7`, `0x018D`, south), and the headless matrix patches that
-struct to verify multiple distinct known-good outdoor destinations.
+The L+R debug path is writable on purpose. By default, pressing L+R now picks a
+random destination from the 150 generated encounter-map destinations and calls
+`MapTeleport_Request`.
+
+The exact-destination headless verifier still patches the writable debug
+destination, but it also writes
+`MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED` into the debug status block before
+pressing L+R. That force flag preserves deterministic all-150 verification
+without changing normal L+R behavior.
 
 ## Final Implementation Plan
 
@@ -176,7 +182,8 @@ The L+R debug path remains the verification trigger. Overlay 131 now exposes a
 small fixed debug status block at `0x023C801C` beside the writable debug
 destination at `0x023C8014`. The status block records magic/version/size,
 whether the live field system is ready, the current field `location` map/x/y,
-the last `MapTeleport_Request` result, and a request counter.
+the last `MapTeleport_Request` result, a request counter, and the selected
+encounter destination index or deterministic-force sentinel.
 
 `scripts/headless-all-encounter-teleport-verifier.py` boots `test.nds` with the
 test save, patches the writable debug destination for each generated

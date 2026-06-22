@@ -46,7 +46,7 @@ MapTeleportDebugStatus gMapTeleportDebugStatus
     MAP_TELEPORT_RESULT_INVALID_FIELD,
     0,
     FALSE,
-    0,
+    MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE,
 };
 
 static BOOL MapTeleport_IsSurfBehavior(u8 behavior)
@@ -96,6 +96,7 @@ static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
         gMapTeleportDebugStatus.x = 0;
         gMapTeleportDebugStatus.y = 0;
         gMapTeleportDebugStatus.direction = MAP_TELEPORT_DIRECTION_SOUTH;
+        gMapTeleportDebugStatus.destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
         return;
     }
 
@@ -187,7 +188,10 @@ static BOOL MapTeleport_DebugKeysHeld(void)
 static void MapTeleport_DebugTask(SysTask *task, void *data)
 {
     FieldSystem *fieldSystem = (FieldSystem *)data;
+    const MapTeleportDestination *destination;
     MapTeleportResult result;
+    u16 count;
+    u16 destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
         MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
@@ -209,7 +213,22 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
     }
 
     sMapTeleportDebugWasHeld = TRUE;
-    result = MapTeleport_OverlayRequest(fieldSystem, &gMapTeleportDebugDestination);
+    if (gMapTeleportDebugStatus.destinationIndex
+        == MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED) {
+        destination = &gMapTeleportDebugDestination;
+        destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED;
+    } else {
+        count = MapTeleport_GetEncounterDestinationCount();
+        if (count != 0) {
+            destinationIndex = gf_rand() % count;
+            destination = MapTeleport_GetEncounterDestinationByIndex(destinationIndex);
+        } else {
+            destination = NULL;
+        }
+    }
+
+    result = MapTeleport_OverlayRequest(fieldSystem, destination);
+    gMapTeleportDebugStatus.destinationIndex = destinationIndex;
     gMapTeleportDebugStatus.requestResult = result;
     gMapTeleportDebugStatus.requestCount++;
 }

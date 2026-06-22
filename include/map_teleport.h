@@ -12,6 +12,8 @@ typedef struct FieldSystem FieldSystem;
 #define MAP_TELEPORT_DEBUG_STATUS_ADDR 0x023C801C
 #define MAP_TELEPORT_DEBUG_STATUS_MAGIC 0x4D545053
 #define MAP_TELEPORT_DEBUG_STATUS_VERSION 1
+#define MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED 0xFFFE
+#define MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE 0xFFFF
 #define MAP_TELEPORT_ENCOUNTER_DESTINATION_ENTRY_ADDR 0x023C8034
 #define MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC 0x4D544544
 #define MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION 1
@@ -70,7 +72,7 @@ typedef struct MapTeleportDebugStatus {
     u16 requestResult;
     u16 requestCount;
     u16 ready;
-    u16 reserved;
+    u16 destinationIndex;
 } MapTeleportDebugStatus;
 
 typedef struct MapTeleportEncounterDestinationEntry {
