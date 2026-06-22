@@ -12,6 +12,11 @@ SECTIONS {
                 FILL (0xABCD)
 
                 __text_start = . ;
+                . = ALIGN(4);
+                KEEP(*(.map_teleport_entry))
+                . = ALIGN(4);
+                KEEP(*(.map_teleport_debug_destination))
+                . = ALIGN(4);
                 *(.init)
                 *(.text)
                 *(.ctors)

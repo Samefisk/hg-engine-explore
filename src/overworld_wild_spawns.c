@@ -7,6 +7,7 @@
 #include "../include/constants/file.h"
 #include "../include/constants/species.h"
 #include "../include/battle.h"
+#include "../include/map_teleport.h"
 #include "../include/map_events_internal.h"
 #include "../include/overlay.h"
 #include "../include/task.h"
@@ -56,6 +57,7 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         return;
     }
 
+    MapTeleport_StartDebugTask((FieldSystem *)data);
     OverworldWildSpawns_OnPlayerStep((FieldSystem *)data);
     if (sOverworldWildSpawnState.justSpawned) {
         DestroySysTask(task);
@@ -108,8 +110,9 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     (void)fieldSystem;
     return FALSE;
 #else
-    const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
+    const OverworldWildSpawnsOverlayEntry *entry;
 
+    entry = OverworldWildSpawns_GetOverlayEntry();
     if (entry == NULL) {
         return FALSE;
     }
