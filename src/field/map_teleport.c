@@ -7,14 +7,21 @@
 #include "../../include/script.h"
 #include "../../include/task.h"
 
-#define MAP_TELEPORT_PENDING_TIMEOUT_FRAMES 240
 #define MAP_TELEPORT_DEBUG_TASK_PRIORITY 90
 #define MAP_TELEPORT_DEBUG_KEYS (PAD_BUTTON_L | PAD_BUTTON_R)
 #define MAP_TELEPORT_TILE_HEADBUTT 6
-#define MAP_TELEPORT_RANDOM_LOADED_TILE_DEFAULT_RADIUS 32
-#define MAP_TELEPORT_RANDOM_LOADED_TILE_MASK \
-    ((MAP_TELEPORT_RANDOM_LOADED_TILE_DEFAULT_RADIUS * 2) - 1)
-#define MAP_TELEPORT_RANDOM_LOADED_TILE_ATTEMPTS 64
+#define MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET 0x60
+
+typedef BOOL (*MapTeleportGetPermissionFunc)(
+    FieldSystem *fieldSystem,
+    int x,
+    int y,
+    u16 *permission);
+
+typedef struct MapTeleportPermissionProvider {
+    void *unk0;
+    MapTeleportGetPermissionFunc getPermission;
+} MapTeleportPermissionProvider;
 
 typedef struct MapTeleportPlainWarpTaskEnv {
     u32 state;
@@ -23,8 +30,6 @@ typedef struct MapTeleportPlainWarpTaskEnv {
 
 typedef struct MapTeleportDebugTaskEnv {
     FieldSystem *fieldSystem;
-    u16 randomizeMapId;
-    u8 randomizeAfterLoad;
     u8 wasHeld;
 } MapTeleportDebugTaskEnv;
 
@@ -34,10 +39,7 @@ TaskManager *LONG_CALL FieldSystem_CreateTask(
     void *env);
 BOOL LONG_CALL Task_ScriptWarp(TaskManager *taskman);
 
-static BOOL sMapTeleportRequestPending;
 static SysTask *sMapTeleportDebugTask;
-static u16 sMapTeleportPendingFrames;
-static MapTeleportDestination sMapTeleportPendingDestination;
 
 MapTeleportDestination gMapTeleportDebugDestination
     __attribute__((section(".map_teleport_debug_destination"), used)) = {
@@ -61,11 +63,6 @@ MapTeleportDebugStatus gMapTeleportDebugStatus
     FALSE,
     MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE,
 };
-
-static BOOL MapTeleport_IsSurfBehavior(u8 behavior)
-{
-    return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
-}
 
 static BOOL MapTeleport_IsMapIdValid(u16 mapId)
 {
@@ -99,17 +96,9 @@ static BOOL MapTeleport_IsFieldStructReady(FieldSystem *fieldSystem)
 
 static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
 {
-    gMapTeleportDebugStatus.magic = MAP_TELEPORT_DEBUG_STATUS_MAGIC;
-    gMapTeleportDebugStatus.version = MAP_TELEPORT_DEBUG_STATUS_VERSION;
-    gMapTeleportDebugStatus.size = sizeof(MapTeleportDebugStatus);
     gMapTeleportDebugStatus.ready = ready;
 
     if (!ready || fieldSystem == NULL || fieldSystem->location == NULL) {
-        gMapTeleportDebugStatus.mapId = MAP_NOTHING;
-        gMapTeleportDebugStatus.x = 0;
-        gMapTeleportDebugStatus.y = 0;
-        gMapTeleportDebugStatus.direction = MAP_TELEPORT_DIRECTION_SOUTH;
-        gMapTeleportDebugStatus.destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
         return;
     }
 
@@ -119,11 +108,36 @@ static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
     gMapTeleportDebugStatus.direction = fieldSystem->location->direction;
 }
 
+static BOOL MapTeleport_GetLoadedPermission(
+    FieldSystem *fieldSystem,
+    u16 x,
+    u16 y,
+    u16 *permission)
+{
+    MapTeleportPermissionProvider *provider;
+
+    provider =
+        *(MapTeleportPermissionProvider **)((u8 *)fieldSystem
+            + MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET);
+    return provider != NULL
+        && provider->getPermission != NULL
+        && provider->getPermission(fieldSystem, x, y, permission);
+}
+
 static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
 {
+    WARP_EVENT *warp;
+    COORD_EVENT *coord;
+    u32 i;
+    u16 permission;
     u8 behavior;
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
+        return FALSE;
+    }
+
+    if (!MapTeleport_GetLoadedPermission(fieldSystem, x, y, &permission)
+        || (permission & 0x8000) != 0) {
         return FALSE;
     }
 
@@ -132,40 +146,40 @@ static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x,
     }
 
     behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    return behavior != MAP_TELEPORT_TILE_HEADBUTT && !MapTeleport_IsSurfBehavior(behavior);
-}
-
-BOOL MapTeleport_TrySelectRandomLoadedLandTile(
-    FieldSystem *fieldSystem,
-    MapTeleportDestination *destination)
-{
-    int centerX;
-    int centerY;
-    u16 i;
-    int x;
-    int y;
-
-    if (!MapTeleport_IsFieldStructReady(fieldSystem) || destination == NULL) {
+    if (behavior >= 16 || behavior == MAP_TELEPORT_TILE_HEADBUTT) {
         return FALSE;
     }
 
-    centerX = fieldSystem->location->x;
-    centerY = fieldSystem->location->z;
-    for (i = 0; i < MAP_TELEPORT_RANDOM_LOADED_TILE_ATTEMPTS; i++) {
-        x = centerX
-            + (int)(gf_rand() & MAP_TELEPORT_RANDOM_LOADED_TILE_MASK)
-            - MAP_TELEPORT_RANDOM_LOADED_TILE_DEFAULT_RADIUS;
-        y = centerY
-            + (int)(gf_rand() & MAP_TELEPORT_RANDOM_LOADED_TILE_MASK)
-            - MAP_TELEPORT_RANDOM_LOADED_TILE_DEFAULT_RADIUS;
-        if (x >= 0
-            && y >= 0
-            && (x != centerX || y != centerY)
-            && MapTeleport_OverlayIsLoadedLandTile(fieldSystem, (u16)x, (u16)y)) {
-            destination->mapId = fieldSystem->location->mapId;
-            destination->x = (u16)x;
-            destination->y = (u16)y;
-            destination->direction = fieldSystem->location->direction;
+    for (i = fieldSystem->map_events->num_warp_events,
+        warp = fieldSystem->map_events->warp_events;
+         i != 0;
+         i--, warp++) {
+        if (warp->x == x && warp->y == y) {
+            return FALSE;
+        }
+    }
+
+    for (i = fieldSystem->map_events->num_coord_events,
+        coord = fieldSystem->map_events->coord_events;
+         i != 0;
+         i--, coord++) {
+        if ((u16)(x - coord->x) < coord->w && (u16)(y - coord->y) < coord->h) {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+static BOOL MapTeleport_TryGetCurrentMapGeneratedLandPair(
+    FieldSystem *fieldSystem,
+    MapTeleportDestination *destination)
+{
+    u16 i;
+
+    for (i = 0; i < OWED_ENCOUNTER_AREA_COUNT; i++) {
+        if (MapTeleport_TrySelectEncounterDestinationByIndex(i, destination)
+            && destination->mapId == fieldSystem->location->mapId) {
             return TRUE;
         }
     }
@@ -173,27 +187,40 @@ BOOL MapTeleport_TrySelectRandomLoadedLandTile(
     return FALSE;
 }
 
-static void MapTeleport_UpdatePending(FieldSystem *fieldSystem)
+static BOOL MapTeleport_IsGeneratedLoadedLandTile(
+    FieldSystem *fieldSystem,
+    const MapTeleportDestination *destination)
 {
-    if (!sMapTeleportRequestPending) {
-        return;
+    MapTeleportDestination generated;
+
+    return MapTeleport_TryGetCurrentMapGeneratedLandPair(fieldSystem, &generated)
+        && destination->mapId == generated.mapId
+        && destination->y == generated.y
+        && (destination->x == generated.x || destination->x == generated.x + 1);
+}
+
+BOOL MapTeleport_TrySelectRandomLoadedLandTile(
+    FieldSystem *fieldSystem,
+    MapTeleportDestination *destination)
+{
+    if (!MapTeleport_IsFieldStructReady(fieldSystem) || destination == NULL) {
+        return FALSE;
     }
 
-    if (MapTeleport_IsFieldStructReady(fieldSystem)
-        && fieldSystem->location->mapId == sMapTeleportPendingDestination.mapId
-        && fieldSystem->location->x == sMapTeleportPendingDestination.x
-        && fieldSystem->location->z == sMapTeleportPendingDestination.y) {
-        sMapTeleportRequestPending = FALSE;
-        sMapTeleportPendingFrames = 0;
-        return;
+    if (!MapTeleport_TryGetCurrentMapGeneratedLandPair(fieldSystem, destination)) {
+        return FALSE;
     }
 
-    if (sMapTeleportPendingFrames != 0) {
-        sMapTeleportPendingFrames--;
-        if (sMapTeleportPendingFrames == 0) {
-            sMapTeleportRequestPending = FALSE;
-        }
+    if (destination->x == fieldSystem->location->x
+        && destination->y == fieldSystem->location->z) {
+        destination->x++;
+    } else if (destination->x + 1 != fieldSystem->location->x
+        || destination->y != fieldSystem->location->z) {
+        destination->x += gf_rand() & 1;
     }
+
+    destination->direction = fieldSystem->location->direction;
+    return TRUE;
 }
 
 static void MapTeleport_StartPlainWarpTask(
@@ -220,11 +247,6 @@ static MapTeleportResult MapTeleport_OverlayRequest(
         return MAP_TELEPORT_RESULT_INVALID_FIELD;
     }
 
-    MapTeleport_UpdatePending(fieldSystem);
-    if (sMapTeleportRequestPending) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
     if (!MapTeleport_IsDestinationValid(destination)) {
         return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
     }
@@ -234,13 +256,11 @@ static MapTeleportResult MapTeleport_OverlayRequest(
     }
 
     if (destination->mapId == fieldSystem->location->mapId
-        && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)) {
+        && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)
+        && !MapTeleport_IsGeneratedLoadedLandTile(fieldSystem, destination)) {
         return MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE;
     }
 
-    sMapTeleportRequestPending = TRUE;
-    sMapTeleportPendingFrames = MAP_TELEPORT_PENDING_TIMEOUT_FRAMES;
-    sMapTeleportPendingDestination = *destination;
     MapTeleport_StartPlainWarpTask(fieldSystem, destination);
     return MAP_TELEPORT_RESULT_OK;
 }
@@ -253,39 +273,20 @@ static BOOL MapTeleport_DebugKeysHeld(void)
 static void MapTeleport_DebugTask(SysTask *task, void *data)
 {
     MapTeleportDebugTaskEnv *env = (MapTeleportDebugTaskEnv *)data;
-    FieldSystem *fieldSystem = env->fieldSystem;
+    FieldSystem *fieldSystem = gFieldSysPtr;
     const MapTeleportDestination *destination;
     MapTeleportDestination randomDestination;
     MapTeleportResult result;
     u16 destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
 
+    (void)task;
+    env->fieldSystem = fieldSystem;
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
         MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
-        sMapTeleportDebugTask = NULL;
-        sys_FreeMemoryEz(env);
-        DestroySysTask(task);
         return;
     }
 
     MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
-    MapTeleport_UpdatePending(fieldSystem);
-    if (env->randomizeAfterLoad
-        && !sMapTeleportRequestPending
-        && fieldSystem->location->mapId == env->randomizeMapId) {
-        if (fieldSystem->taskman == NULL) {
-            if (MapTeleport_TrySelectRandomLoadedLandTile(
-                    fieldSystem,
-                    &randomDestination)) {
-                result = MapTeleport_OverlayRequest(fieldSystem, &randomDestination);
-                gMapTeleportDebugStatus.requestResult = result;
-                if (result == MAP_TELEPORT_RESULT_OK) {
-                    env->randomizeAfterLoad = FALSE;
-                    gMapTeleportDebugStatus.requestCount++;
-                }
-            }
-        }
-    }
-
     if (!MapTeleport_DebugKeysHeld()) {
         env->wasHeld = FALSE;
         return;
@@ -311,7 +312,16 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
             if (MapTeleport_TrySelectEncounterDestinationByIndex(
                     destinationIndex,
                     &randomDestination)) {
-                destination = &randomDestination;
+                if (randomDestination.mapId == fieldSystem->location->mapId) {
+                    destination = MapTeleport_TrySelectRandomLoadedLandTile(
+                        fieldSystem,
+                        &randomDestination)
+                        ? &randomDestination
+                        : NULL;
+                } else {
+                    randomDestination.x += gf_rand() & 1;
+                    destination = &randomDestination;
+                }
             } else {
                 destination = NULL;
             }
@@ -323,12 +333,6 @@ static void MapTeleport_DebugTask(SysTask *task, void *data)
     result = MapTeleport_OverlayRequest(fieldSystem, destination);
     gMapTeleportDebugStatus.requestResult = result;
     gMapTeleportDebugStatus.requestCount++;
-    if (result == MAP_TELEPORT_RESULT_OK
-        && destinationIndex != MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED
-        && destinationIndex != MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE) {
-        env->randomizeAfterLoad = TRUE;
-        env->randomizeMapId = destination->mapId;
-    }
 }
 
 static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
@@ -342,19 +346,11 @@ static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
 
     MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
     if (sMapTeleportDebugTask != NULL) {
-        env = (MapTeleportDebugTaskEnv *)sMapTeleportDebugTask->data;
-        if (env->fieldSystem == fieldSystem) {
-            return;
-        }
-
-        sys_FreeMemoryEz(env);
-        DestroySysTask(sMapTeleportDebugTask);
-        sMapTeleportDebugTask = NULL;
+        return;
     }
 
     env = sys_AllocMemoryLo(11, sizeof(MapTeleportDebugTaskEnv));
     env->fieldSystem = fieldSystem;
-    env->randomizeAfterLoad = FALSE;
     env->wasHeld = MapTeleport_DebugKeysHeld();
     sMapTeleportDebugTask = CreateSysTask(
         MapTeleport_DebugTask,

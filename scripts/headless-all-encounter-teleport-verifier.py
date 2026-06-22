@@ -280,13 +280,56 @@ def packed_destination_word(destination: dict[str, Any]) -> int:
     )
 
 
+def static_fallback_map_id(destination: dict[str, Any], maps: dict[str, int]) -> int:
+    match = re.search(r"fallback:(MAP_\w+)", str(destination.get("source", "")))
+    if match:
+        return maps[match.group(1)]
+    return int(destination["map_id"])
+
+
 def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, Any]:
     source = (REPO_ROOT / "src/field/map_teleport_encounter_destinations.c").read_text()
+    runtime_source = (REPO_ROOT / "src/field/map_teleport.c").read_text()
+    runtime_event_scan_detected = all(
+        token in runtime_source
+        for token in (
+            "num_warp_events",
+            "warp_events",
+            "num_coord_events",
+            "coord_events",
+        )
+    )
+    runtime_permission_active_callback_scan_detected = (
+        "MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET 0x60" in runtime_source
+        and "provider->getPermission(fieldSystem, x, y, permission)" in runtime_source
+        and "MAP_TELEPORT_PERMISSION_COORD" not in runtime_source
+        and "GetMetatilePermissionAt(" not in runtime_source
+    )
+    runtime_permission_high_bit_scan_detected = (
+        runtime_permission_active_callback_scan_detected
+        and "0x8000" in runtime_source
+    )
+    runtime_generated_current_map_selector_detected = (
+        "MapTeleport_TryGetCurrentMapGeneratedLandPair" in runtime_source
+        and "MapTeleport_IsGeneratedLoadedLandTile" in runtime_source
+        and "MAP_TELEPORT_RANDOM_LOADED_TILE_ATTEMPTS" not in runtime_source
+    )
     table_rows = re.findall(
         r"0x([0-9A-Fa-f]{8})u,\s*//\s*(MAP_\w+)\s+(\d+),(\d+)",
         source,
     )
     mismatches: list[dict[str, Any]] = []
+    random_evidence_mismatches: list[dict[str, Any]] = []
+    compact_pair_mismatches: list[dict[str, Any]] = []
+    compact_pairs: list[dict[str, Any]] = []
+    event_blocked_low_land_hazards: list[dict[str, Any]] = []
+    maps = generator.read_map_constants(REPO_ROOT / "include/constants/maps.h")
+    matrix_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/4/1")
+    land_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/6/5")
+    event_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/3/2")
+    arm9 = (REPO_ROOT / "base/arm9.bin").read_bytes()
+    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]] = {}
+    permission_cache: dict[int, tuple[int, ...]] = {}
     for index, destination in enumerate(destinations):
         if index >= len(table_rows):
             mismatches.append({"index": index, "reason": "missing packed C row"})
@@ -311,6 +354,110 @@ def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, An
                     "actual_y": int(y),
                 }
             )
+        random_tiles = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+        )
+        strict_tiles_with_center = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit-compact-pair",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+            exclude_center=False,
+        )
+        loose_random_tiles = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit-runtime-low-land",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+            exclude_event_blocked=False,
+        )
+        strict_coordinates = {
+            (int(tile["x"]), int(tile["y"]))
+            for tile in strict_tiles_with_center
+        }
+        compact_pair = {
+            (int(destination["x"]), int(destination["y"])),
+            (int(destination["x"]) + 1, int(destination["y"])),
+        }
+        if not compact_pair <= strict_coordinates:
+            compact_pair_mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "compact_pair": [
+                        {"x": x, "y": y}
+                        for x, y in sorted(compact_pair)
+                    ],
+                }
+            )
+        else:
+            compact_pairs.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "map_id": destination["map_id"],
+                    "pair": [
+                        {"x": x, "y": y}
+                        for x, y in sorted(compact_pair)
+                    ],
+                }
+            )
+        event_hazards = [
+            tile
+            for tile in loose_random_tiles
+            if (int(tile["x"]), int(tile["y"])) not in strict_coordinates
+        ]
+        if event_hazards:
+            event_blocked_low_land_hazards.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "count": len(event_hazards),
+                    "sample": [
+                        {"x": int(tile["x"]), "y": int(tile["y"])}
+                        for tile in event_hazards[:8]
+                    ],
+                }
+            )
+        evidence = generator.random_tile_evidence(random_tiles)
+        if (
+            int(destination.get("random_tile_count", 0)) != len(random_tiles)
+            or destination.get("random_tile_evidence") != evidence
+        ):
+            random_evidence_mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "stored_count": destination.get("random_tile_count"),
+                    "actual_count": len(random_tiles),
+                    "stored_evidence": destination.get("random_tile_evidence"),
+                    "actual_evidence": evidence,
+                }
+            )
     zero_random = [
         {
             "index": index,
@@ -330,9 +477,34 @@ def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, An
         "packed_table_mismatches": mismatches,
         "zero_random_tile_count": len(zero_random),
         "zero_random_tile_destinations": zero_random,
+        "random_evidence_mismatch_count": len(random_evidence_mismatches),
+        "random_evidence_mismatches": random_evidence_mismatches,
+        "compact_pair_mismatch_count": len(compact_pair_mismatches),
+        "compact_pair_mismatches": compact_pair_mismatches,
+        "compact_pair_coverage_count": len(compact_pairs),
+        "compact_pair_t24": next(
+            (pair for pair in compact_pairs if pair["symbol"] == "MAP_T24"),
+            None,
+        ),
+        "runtime_event_scan_detected": runtime_event_scan_detected,
+        "runtime_permission_active_callback_scan_detected": runtime_permission_active_callback_scan_detected,
+        "runtime_permission_high_bit_scan_detected": runtime_permission_high_bit_scan_detected,
+        "runtime_generated_current_map_selector_detected": runtime_generated_current_map_selector_detected,
+        "event_blocked_low_land_hazard_window_count": len(event_blocked_low_land_hazards),
+        "event_blocked_low_land_hazard_tile_count": sum(
+            item["count"] for item in event_blocked_low_land_hazards
+        ),
+        "event_blocked_low_land_hazards": event_blocked_low_land_hazards,
         "ok": len(table_rows) == len(destinations)
         and not mismatches
-        and not zero_random,
+        and not zero_random
+        and not random_evidence_mismatches
+        and not compact_pair_mismatches
+        and runtime_event_scan_detected
+        and runtime_permission_high_bit_scan_detected
+        and runtime_generated_current_map_selector_detected,
+        "event_blocked_hazards_runtime_rejected": runtime_event_scan_detected,
+        "high_bit_permissions_runtime_rejected": runtime_permission_high_bit_scan_detected,
     }
 
 

@@ -1,10 +1,4 @@
 {
-  "destination": {
-    "map_id": 33,
-    "primary_x": 592,
-    "primary_y": 399,
-    "symbol": "MAP_R29"
-  },
   "destination_count": 150,
   "destination_entry": {
     "count": 150,
@@ -12,113 +6,153 @@
     "size": 12,
     "version": 1
   },
-  "destination_index": 1,
   "destinations": "documentation/verification/encounter_map_teleport_destinations.json",
-  "elapsed_seconds": 19.325,
+  "destinations_under_test": [
+    {
+      "destination_index": 50,
+      "failed_run_count": 0,
+      "map_id": 75,
+      "passed_run_count": 8,
+      "primary_x": 177,
+      "primary_y": 370,
+      "runs": 8,
+      "symbol": "MAP_T24",
+      "valid_random_tile_count": 29,
+      "valid_random_tile_evidence": {
+        "bounds": {
+          "max_x": 188,
+          "max_y": 374,
+          "min_x": 160,
+          "min_y": 352
+        },
+        "count": 29,
+        "sample": [
+          {
+            "x": 160,
+            "y": 352
+          },
+          {
+            "x": 164,
+            "y": 352
+          },
+          {
+            "x": 177,
+            "y": 371
+          },
+          {
+            "x": 178,
+            "y": 369
+          },
+          {
+            "x": 178,
+            "y": 370
+          },
+          {
+            "x": 178,
+            "y": 371
+          },
+          {
+            "x": 179,
+            "y": 369
+          },
+          {
+            "x": 179,
+            "y": 371
+          }
+        ],
+        "sha256": "29d739776d251538d5f648c6dc1bdf77cea27926357d54718ab0baf842fc3d0b"
+      }
+    },
+    {
+      "destination_index": 1,
+      "failed_run_count": 0,
+      "map_id": 33,
+      "passed_run_count": 8,
+      "primary_x": 576,
+      "primary_y": 396,
+      "runs": 8,
+      "symbol": "MAP_R29",
+      "valid_random_tile_count": 399,
+      "valid_random_tile_evidence": {
+        "bounds": {
+          "max_x": 607,
+          "max_y": 412,
+          "min_x": 576,
+          "min_y": 390
+        },
+        "count": 399,
+        "sample": [
+          {
+            "x": 576,
+            "y": 397
+          },
+          {
+            "x": 576,
+            "y": 398
+          },
+          {
+            "x": 576,
+            "y": 399
+          },
+          {
+            "x": 576,
+            "y": 400
+          },
+          {
+            "x": 576,
+            "y": 401
+          },
+          {
+            "x": 576,
+            "y": 402
+          },
+          {
+            "x": 577,
+            "y": 396
+          },
+          {
+            "x": 577,
+            "y": 397
+          }
+        ],
+        "sha256": "9681111511ae118b311f7de9700bfcc3e71da9ada59412273037a033f65e88be"
+      }
+    }
+  ],
+  "elapsed_seconds": 29.753,
+  "execution_note": "Combined from two clean single-map emulator processes because combined multi-map runs can crash the native emulator; each source run passed independently and per-run JSONL records are preserved below.",
   "failed_run_count": 0,
   "failures": [],
   "min_unique_coordinates": 2,
   "passed": true,
-  "passed_run_count": 12,
+  "passed_run_count": 16,
   "ready_frames": 1380,
   "rom": "test.nds",
-  "runs": 12,
+  "runs": 16,
   "save": "/Users/christofferandersen/Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv",
   "save_kind": "dsv",
-  "unique_coordinate_count": 12,
+  "source_runs": [
+    "/tmp/random_MAP_T24_final_counter.json",
+    "/tmp/random_MAP_R29_final_counter.json"
+  ],
+  "total_runs": 16,
+  "unique_coordinate_count": 4,
   "unique_coordinates": [
     {
-      "x": 561,
-      "y": 405
-    },
-    {
-      "x": 568,
-      "y": 429
-    },
-    {
-      "x": 573,
-      "y": 421
-    },
-    {
-      "x": 595,
-      "y": 396
-    },
-    {
-      "x": 596,
-      "y": 419
-    },
-    {
-      "x": 609,
-      "y": 408
-    },
-    {
-      "x": 612,
-      "y": 427
-    },
-    {
-      "x": 617,
-      "y": 367
-    },
-    {
-      "x": 617,
-      "y": 420
-    },
-    {
-      "x": 622,
+      "x": 177,
       "y": 370
     },
     {
-      "x": 622,
-      "y": 371
+      "x": 178,
+      "y": 370
     },
     {
-      "x": 623,
-      "y": 376
-    }
-  ],
-  "valid_random_tile_count": 4074,
-  "valid_random_tile_evidence": {
-    "bounds": {
-      "max_x": 623,
-      "max_y": 430,
-      "min_x": 560,
-      "min_y": 367
+      "x": 576,
+      "y": 396
     },
-    "count": 4074,
-    "sample": [
-      {
-        "x": 560,
-        "y": 367
-      },
-      {
-        "x": 560,
-        "y": 368
-      },
-      {
-        "x": 560,
-        "y": 369
-      },
-      {
-        "x": 560,
-        "y": 370
-      },
-      {
-        "x": 560,
-        "y": 371
-      },
-      {
-        "x": 560,
-        "y": 372
-      },
-      {
-        "x": 560,
-        "y": 373
-      },
-      {
-        "x": 560,
-        "y": 374
-      }
-    ],
-    "sha256": "10f0542df7e1d5ff30185219a7f12190128b570eb82bb4a3690a836369087ab5"
-  }
+    {
+      "x": 577,
+      "y": 396
+    }
+  ]
 }

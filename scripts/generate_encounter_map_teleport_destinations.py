@@ -17,8 +17,8 @@ import ndspy.narc
 CELL_SIZE = 32
 HEADER_OFFSET = 0xF6BE0
 HEADER_SIZE = 24
-BAD_TILE_BEHAVIORS = {6, 16, 18, 21, 42}
-LOADED_WINDOW_BAD_PERMISSION_BEHAVIORS = BAD_TILE_BEHAVIORS - {6}
+BAD_TILE_BEHAVIORS = {6}
+RANDOM_TILE_PREDICATE = "same_loaded_cell_passable_low_land_non_headbutt_no_warp_coord_event_v3"
 FALLBACK_STAMPS = {
     "MAP_D24": "MAP_D24R0101",
     "MAP_D24R0201": "MAP_D24R0101",
@@ -29,7 +29,7 @@ VERIFIED_DESTINATIONS = {
     "MAP_T06": (1297, 295),
     "MAP_T21": (567, 400),
 }
-PACKED_MAP_BITS = 10
+PACKED_MAP_BITS = 9
 PACKED_X_BITS = 11
 PACKED_Y_BITS = 10
 PACKED_MAP_SHIFT = 0
@@ -217,11 +217,16 @@ def read_event_blocked_tiles(event_narc: ndspy.narc.NARC, event_file_id: int) ->
 
 
 def is_passable(permission: int) -> bool:
-    return (permission & 0x8000) == 0 and (permission & 0xFF) not in BAD_TILE_BEHAVIORS
+    behavior = permission & 0xFF
+    return (
+        (permission & 0x8000) == 0
+        and behavior < 16
+        and behavior not in BAD_TILE_BEHAVIORS
+    )
 
 
 def is_loaded_window_land_candidate(permission: int) -> bool:
-    return (permission & 0xFF) not in LOADED_WINDOW_BAD_PERMISSION_BEHAVIORS
+    return is_passable(permission)
 
 
 def find_stamps(
@@ -440,29 +445,43 @@ def loaded_window_random_tile_candidates(
     arm9: bytes,
     matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
     permission_cache: dict[int, tuple[int, ...]],
+    exclude_event_blocked: bool = True,
+    exclude_center: bool = True,
 ) -> tuple[dict[str, int | str], ...]:
     def collect_for_map(map_id: int, candidate_source: str) -> dict[tuple[int, int], dict[str, int | str]]:
         header = read_header(arm9, map_id)
         if header.matrix_id not in matrix_cache:
             matrix_cache[header.matrix_id] = read_matrix(matrix_narc, header.matrix_id)
         width, height, values, land_values = matrix_cache[header.matrix_id]
-        blocked = read_event_blocked_tiles(event_narc, header.event_file_id)
+        blocked = (
+            read_event_blocked_tiles(event_narc, header.event_file_id)
+            if exclude_event_blocked
+            else set()
+        )
         tiles: dict[tuple[int, int], dict[str, int | str]] = {}
-        min_x = max(0, center_x - RUNTIME_RANDOM_RADIUS)
-        min_y = max(0, center_y - RUNTIME_RANDOM_RADIUS)
-        max_x = center_x + RUNTIME_RANDOM_MAX_OFFSET
-        max_y = center_y + RUNTIME_RANDOM_MAX_OFFSET
+        center_matrix_x = center_x // CELL_SIZE
+        center_matrix_y = center_y // CELL_SIZE
+        min_x = max(center_matrix_x * CELL_SIZE, center_x - RUNTIME_RANDOM_RADIUS)
+        min_y = max(center_matrix_y * CELL_SIZE, center_y - RUNTIME_RANDOM_RADIUS)
+        max_x = min(
+            center_matrix_x * CELL_SIZE + CELL_SIZE - 1,
+            center_x + RUNTIME_RANDOM_MAX_OFFSET,
+        )
+        max_y = min(
+            center_matrix_y * CELL_SIZE + CELL_SIZE - 1,
+            center_y + RUNTIME_RANDOM_MAX_OFFSET,
+        )
 
         for y in range(min_y, max_y + 1):
             matrix_y = y // CELL_SIZE
-            if matrix_y >= height:
+            if matrix_y != center_matrix_y or matrix_y >= height:
                 continue
             local_y = y % CELL_SIZE
             for x in range(min_x, max_x + 1):
-                if x == center_x and y == center_y:
+                if exclude_center and x == center_x and y == center_y:
                     continue
                 matrix_x = x // CELL_SIZE
-                if matrix_x >= width or (x, y) in blocked:
+                if matrix_x != center_matrix_x or matrix_x >= width or (x, y) in blocked:
                     continue
                 cell_index = matrix_y * width + matrix_x
                 land_file_id = land_values[cell_index]
@@ -676,6 +695,71 @@ def packed_destination_word(destination: Destination) -> int:
     )
 
 
+def choose_compact_random_pair(
+    random_tiles: tuple[dict[str, int | str], ...],
+) -> tuple[dict[str, int | str], dict[str, int | str]]:
+    coordinates = {
+        (int(tile["x"]), int(tile["y"]))
+        for tile in random_tiles
+    }
+    by_coordinate = {
+        (int(tile["x"]), int(tile["y"])): tile
+        for tile in random_tiles
+    }
+    for x, y in sorted(coordinates):
+        if (x + 1, y) in coordinates:
+            return by_coordinate[(x, y)], by_coordinate[(x + 1, y)]
+    raise RuntimeError("random candidate set has no horizontal compact pair")
+
+
+def compact_cross_map_destination(
+    destination: Destination,
+    *,
+    source_map_id: int,
+    source: str,
+    matrix_narc: ndspy.narc.NARC,
+    land_narc: ndspy.narc.NARC,
+    event_narc: ndspy.narc.NARC,
+    arm9: bytes,
+    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
+    permission_cache: dict[int, tuple[int, ...]],
+) -> Destination:
+    base_tile, _alternate_tile = choose_compact_random_pair(destination.random_tiles)
+    x = int(base_tile["x"])
+    y = int(base_tile["y"])
+    random_tiles = loaded_window_random_tile_candidates(
+        center_x=x,
+        center_y=y,
+        loaded_map_id=destination.map_id,
+        fallback_map_id=source_map_id,
+        source=f"{source}:compact-pair-center",
+        matrix_narc=matrix_narc,
+        land_narc=land_narc,
+        event_narc=event_narc,
+        arm9=arm9,
+        matrix_cache=matrix_cache,
+        permission_cache=permission_cache,
+    )
+    if not random_tiles:
+        raise RuntimeError(f"compact pair center {destination.symbol} {x},{y} has no random candidates")
+    return Destination(
+        symbol=destination.symbol,
+        map_id=destination.map_id,
+        data_id=destination.data_id,
+        x=x,
+        y=y,
+        direction=destination.direction,
+        source=f"{destination.source}:compact-pair",
+        matrix_id=int(base_tile["matrix_id"]),
+        matrix_x=int(base_tile["matrix_x"]),
+        matrix_y=int(base_tile["matrix_y"]),
+        matrix_value=int(base_tile["matrix_value"]),
+        land_file_id=int(base_tile["land_file_id"]),
+        permission=int(base_tile["permission"]),
+        random_tiles=random_tiles,
+    )
+
+
 def write_c(destinations: list[Destination], output: Path) -> None:
     lines = [
         '#include "../../include/map_teleport.h"',
@@ -687,10 +771,10 @@ def write_c(destinations: list[Destination], output: Path) -> None:
         "#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS",
         "",
         "#define MAP_TELEPORT_ENCOUNTER_MAP_SHIFT 0",
-        "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000003FFu",
-        "#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 10",
+        "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000001FFu",
+        "#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 9",
             "#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu",
-            "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 21",
+            "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 20",
             "#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu",
             "",
             "static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {",
@@ -757,6 +841,7 @@ def write_json(destinations: list[Destination], output: Path) -> None:
         json.dumps(
             {
                 "expected_count": len(destinations),
+                "random_tile_predicate": RANDOM_TILE_PREDICATE,
                 "destinations": [json_destination(destination) for destination in destinations],
             },
             indent=2,
@@ -835,6 +920,21 @@ def main() -> int:
                 permission_cache=permission_cache,
                 random_candidates=random_candidates,
             )
+            if not destination.random_tiles:
+                destination = choose_destination(
+                    symbol=symbol,
+                    map_id=map_id,
+                    data_id=data_id,
+                    source=f"verified-alternate:{source}",
+                    source_map_id=source_map_id,
+                    matrix_narc=matrix_narc,
+                    land_narc=land_narc,
+                    event_narc=event_narc,
+                    arm9=arm9,
+                    matrix_cache=matrix_cache,
+                    permission_cache=permission_cache,
+                    random_candidates=random_candidates,
+                )
         else:
             destination = choose_destination(
                 symbol=symbol,
@@ -853,6 +953,17 @@ def main() -> int:
         if destination is None:
             missing.append(symbol)
         else:
+            destination = compact_cross_map_destination(
+                destination,
+                source_map_id=source_map_id,
+                source=source,
+                matrix_narc=matrix_narc,
+                land_narc=land_narc,
+                event_narc=event_narc,
+                arm9=arm9,
+                matrix_cache=matrix_cache,
+                permission_cache=permission_cache,
+            )
             destinations.append(destination)
 
     if missing:

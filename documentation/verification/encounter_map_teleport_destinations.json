@@ -9,20 +9,20 @@
       "matrix_value": 60,
       "matrix_x": 21,
       "matrix_y": 12,
-      "permission": 0,
-      "random_tile_count": 3983,
+      "permission": 1024,
+      "random_tile_count": 411,
       "random_tile_evidence": {
-        "count": 3983,
-        "max_x": 719,
-        "max_y": 431,
-        "min_x": 656,
-        "min_y": 368,
-        "sha256": "d65243884230458fbc6232d2e14bc08ee9bc5b39bbf3ad44689307b028998fe3"
+        "count": 411,
+        "max_x": 703,
+        "max_y": 414,
+        "min_x": 672,
+        "min_y": 384,
+        "sha256": "19127e35c2b7454cb20a22970bea0b3ea8ac0ef58935d62dd837876ee89aeddc"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T20",
-      "x": 688,
-      "y": 400
+      "x": 672,
+      "y": 394
     },
     {
       "data_id": 1,
@@ -33,20 +33,20 @@
       "matrix_value": 33,
       "matrix_x": 18,
       "matrix_y": 12,
-      "permission": 2,
-      "random_tile_count": 4074,
+      "permission": 1024,
+      "random_tile_count": 399,
       "random_tile_evidence": {
-        "count": 4074,
-        "max_x": 623,
-        "max_y": 430,
-        "min_x": 560,
-        "min_y": 367,
-        "sha256": "10f0542df7e1d5ff30185219a7f12190128b570eb82bb4a3690a836369087ab5"
+        "count": 399,
+        "max_x": 607,
+        "max_y": 412,
+        "min_x": 576,
+        "min_y": 390,
+        "sha256": "9681111511ae118b311f7de9700bfcc3e71da9ada59412273037a033f65e88be"
       },
-      "source": "verified:derived",
+      "source": "verified:derived:compact-pair",
       "symbol": "MAP_R29",
-      "x": 592,
-      "y": 399
+      "x": 576,
+      "y": 396
     },
     {
       "data_id": 2,
@@ -57,20 +57,20 @@
       "matrix_value": 67,
       "matrix_x": 17,
       "matrix_y": 12,
-      "permission": 32768,
-      "random_tile_count": 3945,
+      "permission": 0,
+      "random_tile_count": 447,
       "random_tile_evidence": {
-        "count": 3945,
-        "max_x": 598,
-        "max_y": 431,
-        "min_x": 535,
-        "min_y": 368,
-        "sha256": "5ad99c35843d7435871adc72a895c46aeb97a1e70121069072f7b3aba83353f1"
+        "count": 447,
+        "max_x": 575,
+        "max_y": 411,
+        "min_x": 544,
+        "min_y": 384,
+        "sha256": "6f483beee8c6704885f403310f9de3867b0e71670af3c0df484506f51babf3eb"
       },
-      "source": "verified:derived",
+      "source": "verified:derived:compact-pair",
       "symbol": "MAP_T21",
-      "x": 567,
-      "y": 400
+      "x": 544,
+      "y": 384
     },
     {
       "data_id": 3,
@@ -82,19 +82,19 @@
       "matrix_x": 17,
       "matrix_y": 9,
       "permission": 2,
-      "random_tile_count": 4094,
+      "random_tile_count": 463,
       "random_tile_evidence": {
-        "count": 4094,
-        "max_x": 591,
-        "max_y": 335,
-        "min_x": 528,
-        "min_y": 272,
-        "sha256": "2e85189a12c948f8241ef136497f4ad5273ce57637c9fe0e414516caec5ba054"
+        "count": 463,
+        "max_x": 572,
+        "max_y": 319,
+        "min_x": 546,
+        "min_y": 288,
+        "sha256": "b3946deceea399492e3d5fd14e189f07df234da96e1e16a5da5bbaa4d1e4b435"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R30",
-      "x": 560,
-      "y": 304
+      "x": 546,
+      "y": 298
     },
     {
       "data_id": 4,
@@ -105,20 +105,20 @@
       "matrix_value": 35,
       "matrix_x": 17,
       "matrix_y": 8,
-      "permission": 1024,
-      "random_tile_count": 4072,
+      "permission": 3584,
+      "random_tile_count": 267,
       "random_tile_evidence": {
-        "count": 4072,
-        "max_x": 591,
-        "max_y": 303,
-        "min_x": 528,
-        "min_y": 240,
-        "sha256": "84380476ef39b676e3205628b9d86ae3d371e06c5d02a573573fa20649a4b774"
+        "count": 267,
+        "max_x": 571,
+        "max_y": 287,
+        "min_x": 544,
+        "min_y": 256,
+        "sha256": "d4d0af141bd17d6368c63c07bf2f69a6e1ca5e0ce2b96d62e01fedf2c4f48810"
       },
-      "source": "verified:derived",
+      "source": "verified:derived:compact-pair",
       "symbol": "MAP_R31",
-      "x": 560,
-      "y": 272
+      "x": 546,
+      "y": 256
     },
     {
       "data_id": 5,
@@ -130,19 +130,19 @@
       "matrix_x": 15,
       "matrix_y": 8,
       "permission": 0,
-      "random_tile_count": 3897,
+      "random_tile_count": 502,
       "random_tile_evidence": {
-        "count": 3897,
-        "max_x": 527,
-        "max_y": 303,
-        "min_x": 464,
-        "min_y": 240,
-        "sha256": "d5cf3113bb8736b8c517cfa477eb71469ca43b2f14646f62d4a39579cebd0334"
+        "count": 502,
+        "max_x": 511,
+        "max_y": 282,
+        "min_x": 480,
+        "min_y": 256,
+        "sha256": "7faef304d59435d4090e5cf6a92de2ba6c935fa4b227cd82c785703ed20c00f5"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T22",
-      "x": 496,
-      "y": 272
+      "x": 480,
+      "y": 258
     },
     {
       "data_id": 6,
@@ -154,19 +154,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 8,
-      "random_tile_count": 1019,
+      "random_tile_count": 304,
       "random_tile_evidence": {
-        "count": 1019,
+        "count": 304,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 29,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "5f2cf9cdf1e76c99b05bd8b4ef77741777deee8fcdde3b8b0f7317f908295525"
+        "sha256": "b54a4676f3573626e289359e89469a6bde316beba604e67a259c14f856d0f930"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D15R0102",
-      "x": 13,
-      "y": 16
+      "x": 0,
+      "y": 9
     },
     {
       "data_id": 7,
@@ -178,19 +178,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 8,
-      "random_tile_count": 1004,
+      "random_tile_count": 158,
       "random_tile_evidence": {
-        "count": 1004,
+        "count": 158,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 28,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "4824fd89b63fe8dab0260566714a200a52462974d43ea88148039f41c056e41c"
+        "sha256": "9ba7aae79369978bb6863bcd690b1bd23eed2ba64cddbf0ff0981975f5c0f36e"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D15R0103",
       "x": 22,
-      "y": 15
+      "y": 10
     },
     {
       "data_id": 8,
@@ -201,20 +201,20 @@
       "matrix_value": 36,
       "matrix_x": 14,
       "matrix_y": 13,
-      "permission": 0,
-      "random_tile_count": 3903,
+      "permission": 1024,
+      "random_tile_count": 173,
       "random_tile_evidence": {
-        "count": 3903,
-        "max_x": 495,
-        "max_y": 463,
-        "min_x": 432,
-        "min_y": 400,
-        "sha256": "5d45ad906505bf559f279ca189ff17a4a0c263ffbc9be065ed910cbe6a3eb532"
+        "count": 173,
+        "max_x": 478,
+        "max_y": 447,
+        "min_x": 456,
+        "min_y": 416,
+        "sha256": "e284d5d98eea29a56f3dc6be6edd4d92430a7f1ff2ba221c53d9b023e308db76"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R32",
-      "x": 464,
-      "y": 432
+      "x": 456,
+      "y": 416
     },
     {
       "data_id": 9,
@@ -225,20 +225,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 0,
-      "random_tile_count": 3907,
+      "permission": 1536,
+      "random_tile_count": 322,
       "random_tile_evidence": {
-        "count": 3907,
-        "max_x": 464,
-        "max_y": 303,
-        "min_x": 401,
-        "min_y": 240,
-        "sha256": "7f1004cb9ad04248cfe732bf156c1321f1863967a43368ba53aafb9f2ccad410"
+        "count": 322,
+        "max_x": 447,
+        "max_y": 287,
+        "min_x": 416,
+        "min_y": 256,
+        "sha256": "e1cea9aca970bb9bf28e7626554182c69912eeea6b0f873f34ecaf4ecc914820"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D24R0101",
-      "x": 433,
-      "y": 272
+      "x": 416,
+      "y": 264
     },
     {
       "data_id": 10,
@@ -249,20 +249,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 0,
-      "random_tile_count": 3917,
+      "permission": 1536,
+      "random_tile_count": 323,
       "random_tile_evidence": {
-        "count": 3917,
-        "max_x": 464,
-        "max_y": 303,
-        "min_x": 401,
-        "min_y": 240,
-        "sha256": "5b97fcfbfdffffe1dc4d001d73d8923615061ed22051ce6b1e81227db709c106"
+        "count": 323,
+        "max_x": 447,
+        "max_y": 287,
+        "min_x": 416,
+        "min_y": 256,
+        "sha256": "b236731525e7661974581c3e64bbbd87cd075067172fa2eab7626b80298f08c6"
       },
-      "source": "fallback:MAP_D24R0101",
+      "source": "fallback:MAP_D24R0101:compact-pair",
       "symbol": "MAP_D24",
-      "x": 433,
-      "y": 272
+      "x": 416,
+      "y": 264
     },
     {
       "data_id": 10,
@@ -273,20 +273,20 @@
       "matrix_value": 113,
       "matrix_x": 13,
       "matrix_y": 8,
-      "permission": 0,
-      "random_tile_count": 3917,
+      "permission": 1536,
+      "random_tile_count": 323,
       "random_tile_evidence": {
-        "count": 3917,
-        "max_x": 464,
-        "max_y": 303,
-        "min_x": 401,
-        "min_y": 240,
-        "sha256": "5b97fcfbfdffffe1dc4d001d73d8923615061ed22051ce6b1e81227db709c106"
+        "count": 323,
+        "max_x": 447,
+        "max_y": 287,
+        "min_x": 416,
+        "min_y": 256,
+        "sha256": "b236731525e7661974581c3e64bbbd87cd075067172fa2eab7626b80298f08c6"
       },
-      "source": "fallback:MAP_D24R0101",
+      "source": "fallback:MAP_D24R0101:compact-pair",
       "symbol": "MAP_D24R0201",
-      "x": 433,
-      "y": 272
+      "x": 416,
+      "y": 264
     },
     {
       "data_id": 11,
@@ -298,67 +298,67 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1014,
+      "random_tile_count": 918,
       "random_tile_evidence": {
-        "count": 1014,
+        "count": 918,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "187139141e36423b81114dff658e721a7c64c7b419ab8dbac084d1a0ae7de2b1"
+        "sha256": "aee7dd6a098efd23901f2f876ee0666d0f61282b4a67e2dbeb7e6c3f134e8f11"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D24R0202",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 19
     },
     {
       "data_id": 12,
       "direction": 1,
-      "land_file_id": 313,
+      "land_file_id": 468,
       "map_id": 313,
-      "matrix_id": 255,
-      "matrix_value": 313,
+      "matrix_id": 35,
+      "matrix_value": 468,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1012,
+      "random_tile_count": 858,
       "random_tile_evidence": {
-        "count": 1012,
+        "count": 858,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "616d849aa7047d4efd87c66168d2a7bcf2c4fc9d6e8e5f0a60034bdf1d21859c"
+        "sha256": "0dd7a5aa1bd77b93ff43bca8ab7fe9c41776875b9ffd29663da840a812b81a2f"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D24R0203",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 17
     },
     {
       "data_id": 13,
       "direction": 1,
-      "land_file_id": 314,
+      "land_file_id": 467,
       "map_id": 314,
-      "matrix_id": 256,
-      "matrix_value": 314,
+      "matrix_id": 34,
+      "matrix_value": 467,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 1014,
+      "permission": 0,
+      "random_tile_count": 918,
       "random_tile_evidence": {
-        "count": 1014,
+        "count": 918,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "5642fa36927a9b35e9f06ff84ed5348d083fd50df823f43546496936606e1952"
+        "sha256": "aee7dd6a098efd23901f2f876ee0666d0f61282b4a67e2dbeb7e6c3f134e8f11"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D24R0204",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 19
     },
     {
       "data_id": 14,
@@ -370,19 +370,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1487,
+      "random_tile_count": 805,
       "random_tile_evidence": {
-        "count": 1487,
+        "count": 805,
         "max_x": 31,
-        "max_y": 47,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "67b84b9c201881d1a878db1c2484bdb7da1edc8e06a4ec6080bde18e4af9a07e"
+        "sha256": "27a23740e1b2156dd9c177dcb892d56a459ce9985491755e2fb1c52311a03407"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D25R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 7
     },
     {
       "data_id": 15,
@@ -394,19 +394,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1436,
+      "random_tile_count": 594,
       "random_tile_evidence": {
-        "count": 1436,
+        "count": 594,
         "max_x": 31,
-        "max_y": 47,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "d2a992c6cb51be3b946593996d817caf8ee60a5ad9b0127ca9f91b75835d3a32"
+        "sha256": "a17e429398263d7f4033bd5554d1738971957e9986d0ba52a074261c8fd18800"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D25R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 1
     },
     {
       "data_id": 16,
@@ -418,19 +418,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1463,
+      "random_tile_count": 735,
       "random_tile_evidence": {
-        "count": 1463,
+        "count": 735,
         "max_x": 31,
-        "max_y": 46,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "27d520cffe59d04708c41dfc7e768e2a42694347c0c9502541f55de99d5e50c0"
+        "sha256": "c407839e3b98482e5eb56d330cef841146911136bd2a1eb6230cb8feca505b12"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D25R0103",
-      "x": 16,
-      "y": 15
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 17,
@@ -442,19 +442,19 @@
       "matrix_x": 14,
       "matrix_y": 14,
       "permission": 1024,
-      "random_tile_count": 4062,
+      "random_tile_count": 286,
       "random_tile_evidence": {
-        "count": 4062,
-        "max_x": 495,
-        "max_y": 495,
-        "min_x": 432,
-        "min_y": 432,
-        "sha256": "c0411716df0e3ff2c7a948dc520b06f583f550474dd3f210afe698a418056acb"
+        "count": 286,
+        "max_x": 473,
+        "max_y": 476,
+        "min_x": 448,
+        "min_y": 448,
+        "sha256": "c193ac97a65c878158422091543441d32faab10c3946d8bdf14f435d5e3ee550"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R33",
-      "x": 464,
-      "y": 464
+      "x": 448,
+      "y": 468
     },
     {
       "data_id": 18,
@@ -466,19 +466,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1021,
+      "random_tile_count": 915,
       "random_tile_evidence": {
-        "count": 1021,
+        "count": 915,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "073915fc14bd9560bd00a94c405e3c7f2897047f0987c97d5096236b1516dec1"
+        "sha256": "20bc9110bbb827912158cd2fce086ad36e44c9a65c1e5c9c099e6c6ff3c63bb2"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D26R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 18,
@@ -489,20 +489,20 @@
       "matrix_value": 488,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1459,
+      "permission": 256,
+      "random_tile_count": 634,
       "random_tile_evidence": {
-        "count": 1459,
-        "max_x": 47,
+        "count": 634,
+        "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "908d120178b451205a4581a4d5529767316762c922f12a9bc1c3c7c520c853e1"
+        "sha256": "eeaefcfb8cd81b9402c315e500bbf78a6e9da0b32f2291aaffd7eb9c1506f69c"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D26R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 19,
@@ -513,20 +513,20 @@
       "matrix_value": 490,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 2568,
-      "random_tile_count": 580,
+      "permission": 256,
+      "random_tile_count": 280,
       "random_tile_evidence": {
-        "count": 580,
+        "count": 280,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "cfc0efa8ced935fecfbdc780861e5df8c2061890c0d275500efa35ad26f7ef30"
+        "sha256": "4b302d63a5bf54ddd2b22b96aa2644df054ef9156460b0421bfabd0b8b003f2c"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D26R0103",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 20,
@@ -538,43 +538,43 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 1032,
-      "random_tile_count": 2462,
+      "random_tile_count": 135,
       "random_tile_evidence": {
-        "count": 2462,
-        "max_x": 63,
-        "max_y": 79,
-        "min_x": 16,
-        "min_y": 16,
-        "sha256": "947c8f38fd3db1700ac2a60b02cf2ff7afe005a5e5eeb84118dca0672e7ebd2b"
+        "count": 135,
+        "max_x": 53,
+        "max_y": 63,
+        "min_x": 32,
+        "min_y": 32,
+        "sha256": "55b20c5ec556f321db38cea0dcea42d23609ea6f197800401d69bc75db0054de"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D36R0101",
-      "x": 48,
-      "y": 48
+      "x": 32,
+      "y": 32
     },
     {
       "data_id": 21,
       "direction": 1,
-      "land_file_id": 36,
+      "land_file_id": 37,
       "map_id": 38,
       "matrix_id": 0,
       "matrix_value": 38,
       "matrix_x": 11,
-      "matrix_y": 13,
-      "permission": 22,
-      "random_tile_count": 3689,
+      "matrix_y": 14,
+      "permission": 3336,
+      "random_tile_count": 77,
       "random_tile_evidence": {
-        "count": 3689,
-        "max_x": 399,
-        "max_y": 463,
-        "min_x": 336,
-        "min_y": 400,
-        "sha256": "d312feda75d31bc00c28c040f90ae3aa8b841d882b0688d1f52252c6c66ab543"
+        "count": 77,
+        "max_x": 383,
+        "max_y": 476,
+        "min_x": 352,
+        "min_y": 448,
+        "sha256": "1f9c3c4ba41c59b564320aa016aac5d14fcaebe8f54f928de676e31064600c55"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R34",
-      "x": 368,
-      "y": 432
+      "x": 354,
+      "y": 448
     },
     {
       "data_id": 22,
@@ -586,19 +586,19 @@
       "matrix_x": 11,
       "matrix_y": 8,
       "permission": 0,
-      "random_tile_count": 3983,
+      "random_tile_count": 415,
       "random_tile_evidence": {
-        "count": 3983,
-        "max_x": 399,
-        "max_y": 303,
-        "min_x": 336,
-        "min_y": 240,
-        "sha256": "9ee29bfada7c86de17862280d845c0fd9084d30ea32b460b3017f81296a3ad2b"
+        "count": 415,
+        "max_x": 383,
+        "max_y": 287,
+        "min_x": 356,
+        "min_y": 256,
+        "sha256": "2878159cdc2cf707e853b53be4350efa0ed3a8517b6dbbcb92873890d4bec0ae"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R35",
-      "x": 368,
-      "y": 272
+      "x": 356,
+      "y": 275
     },
     {
       "data_id": 23,
@@ -610,67 +610,67 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 1536,
-      "random_tile_count": 2997,
+      "random_tile_count": 499,
       "random_tile_evidence": {
-        "count": 2997,
-        "max_x": 79,
-        "max_y": 47,
-        "min_x": 16,
+        "count": 499,
+        "max_x": 63,
+        "max_y": 31,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "ad9155845ecda557b1ddcf97bfcc5766dbcf31df63d05cbadb1ce55e09e47d2d"
+        "sha256": "3b57c19ebe94ba5b4b491b4734f18a50c26830df1a6fd3a514d0bd9aa2273c7c"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D22R0101",
-      "x": 48,
-      "y": 16
+      "x": 32,
+      "y": 20
     },
     {
       "data_id": 24,
       "direction": 1,
-      "land_file_id": 487,
+      "land_file_id": 451,
       "map_id": 487,
-      "matrix_id": 45,
-      "matrix_value": 487,
+      "matrix_id": 27,
+      "matrix_value": 451,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2298,
+      "random_tile_count": 306,
       "random_tile_evidence": {
-        "count": 2298,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 306,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "8b54f1660ae71e7e01c6f3f9837d08d2c00db168e46f646a0782ac07ac1002f3"
+        "sha256": "b9bfee370b51fa5fe59ec6204ed9ecb9a6dc51c4804d223117e600dae573bee6"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D22R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 24,
       "direction": 1,
-      "land_file_id": 488,
+      "land_file_id": 451,
       "map_id": 488,
-      "matrix_id": 46,
-      "matrix_value": 488,
+      "matrix_id": 27,
+      "matrix_value": 451,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2301,
+      "random_tile_count": 306,
       "random_tile_evidence": {
-        "count": 2301,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 306,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "4cf67004d983b7d64e6ad3413f468d7b69643fcb1249409f65a951df332a8078"
+        "sha256": "b9bfee370b51fa5fe59ec6204ed9ecb9a6dc51c4804d223117e600dae573bee6"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D22R0103",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 25,
@@ -681,20 +681,20 @@
       "matrix_value": 40,
       "matrix_x": 11,
       "matrix_y": 7,
-      "permission": 0,
-      "random_tile_count": 4093,
+      "permission": 3,
+      "random_tile_count": 645,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 398,
-        "max_y": 271,
-        "min_x": 335,
-        "min_y": 208,
-        "sha256": "7fee971d00c18a2fd9f3ff8e9c3f2f4eebed31dd820fdb1c3888aec1d8545bea"
+        "count": 645,
+        "max_x": 383,
+        "max_y": 255,
+        "min_x": 352,
+        "min_y": 224,
+        "sha256": "245caa078427594f19f70a09ede5a80e5d8c214ac23319b26fdf54d84ff60e67"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R36",
-      "x": 367,
-      "y": 240
+      "x": 352,
+      "y": 224
     },
     {
       "data_id": 26,
@@ -706,19 +706,19 @@
       "matrix_x": 12,
       "matrix_y": 6,
       "permission": 1024,
-      "random_tile_count": 4072,
+      "random_tile_count": 435,
       "random_tile_evidence": {
-        "count": 4072,
-        "max_x": 433,
-        "max_y": 239,
-        "min_x": 370,
-        "min_y": 176,
-        "sha256": "5936438d388debed5505990381b2e5903f72c5069e5ae88c820cc4b62865322a"
+        "count": 435,
+        "max_x": 407,
+        "max_y": 223,
+        "min_x": 386,
+        "min_y": 192,
+        "sha256": "a06c7e60fb8dbba92bc46d006f0688b6c3b5f5af50975203e6cb705af889c366"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R37",
-      "x": 402,
-      "y": 208
+      "x": 386,
+      "y": 196
     },
     {
       "data_id": 27,
@@ -729,20 +729,20 @@
       "matrix_value": 78,
       "matrix_x": 12,
       "matrix_y": 5,
-      "permission": 1536,
-      "random_tile_count": 3982,
+      "permission": 256,
+      "random_tile_count": 687,
       "random_tile_evidence": {
-        "count": 3982,
-        "max_x": 431,
-        "max_y": 207,
-        "min_x": 368,
-        "min_y": 144,
-        "sha256": "e7a48cdc4e8d3e53e9d2625536df28c52779002fb371fe6813b01ca24db04091"
+        "count": 687,
+        "max_x": 415,
+        "max_y": 191,
+        "min_x": 384,
+        "min_y": 160,
+        "sha256": "910a54a3cd003b796a4b02b9391af7ba91c1ef28052a17dae7f957af97fab262"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T27",
-      "x": 400,
-      "y": 176
+      "x": 384,
+      "y": 160
     },
     {
       "data_id": 28,
@@ -753,236 +753,236 @@
       "matrix_value": 449,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 3328,
-      "random_tile_count": 979,
+      "permission": 8,
+      "random_tile_count": 197,
       "random_tile_evidence": {
-        "count": 979,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "ed6bb1806b075f059d11f89de226b62dd76c516f8822b35c82a99204273f6689"
+        "count": 197,
+        "max_x": 25,
+        "max_y": 26,
+        "min_x": 5,
+        "min_y": 6,
+        "sha256": "8863b78a20012ddaf40ce1c662e0c3519b729fab88fed14e2da3b97c5b608247"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D18R0101",
-      "x": 16,
-      "y": 16
+      "x": 5,
+      "y": 6
     },
     {
       "data_id": 29,
       "direction": 1,
-      "land_file_id": 217,
+      "land_file_id": 450,
       "map_id": 217,
-      "matrix_id": 72,
-      "matrix_value": 217,
+      "matrix_id": 26,
+      "matrix_value": 450,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1005,
+      "permission": 1544,
+      "random_tile_count": 270,
       "random_tile_evidence": {
-        "count": 1005,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "20e56a079ddef1d9176cac19f3d03275bc88ba318247c7b3df78693b90ab3907"
+        "count": 270,
+        "max_x": 25,
+        "max_y": 26,
+        "min_x": 5,
+        "min_y": 6,
+        "sha256": "0597aad3f59a5aa620388b3dd81d50eb52da649a1f236b217b3d84e9571e393b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D18R0102",
-      "x": 16,
-      "y": 16
+      "x": 5,
+      "y": 10
     },
     {
       "data_id": 30,
       "direction": 1,
-      "land_file_id": 332,
+      "land_file_id": 437,
       "map_id": 332,
-      "matrix_id": 225,
-      "matrix_value": 332,
+      "matrix_id": 16,
+      "matrix_value": 437,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1019,
+      "permission": 8,
+      "random_tile_count": 229,
       "random_tile_evidence": {
-        "count": 1019,
-        "max_x": 31,
-        "max_y": 31,
+        "count": 229,
+        "max_x": 26,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "6fb54d8c622a7d57bcdc71f0eb6758eccabb5bf6e6198db7339bb4312009cbf2"
+        "sha256": "909622376d67c54209f7d1750e6c26bd36b123cf1517b0c5854a74ce4999981e"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0102",
-      "x": 16,
-      "y": 16
+      "x": 4,
+      "y": 7
     },
     {
       "data_id": 31,
       "direction": 1,
-      "land_file_id": 333,
+      "land_file_id": 438,
       "map_id": 333,
-      "matrix_id": 226,
-      "matrix_value": 333,
+      "matrix_id": 17,
+      "matrix_value": 438,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1019,
+      "permission": 8,
+      "random_tile_count": 249,
       "random_tile_evidence": {
-        "count": 1019,
-        "max_x": 31,
-        "max_y": 31,
+        "count": 249,
+        "max_x": 24,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "d2acab4433e80a28c3bf27254b5720481d47c7198d2b67ec39aeb474faecb5da"
+        "sha256": "354889453c3f738f4778a112b3e7caa0298263e46bcc82ca238a5c18a9b07cbd"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0103",
-      "x": 16,
-      "y": 16
+      "x": 1,
+      "y": 8
     },
     {
       "data_id": 32,
       "direction": 1,
-      "land_file_id": 334,
+      "land_file_id": 439,
       "map_id": 334,
-      "matrix_id": 227,
-      "matrix_value": 334,
+      "matrix_id": 18,
+      "matrix_value": 439,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1014,
+      "permission": 2315,
+      "random_tile_count": 192,
       "random_tile_evidence": {
-        "count": 1014,
+        "count": 192,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "42b3d88ad9eee48da46416badec5d452167981d3e12ee90b952890e29d8ff3ce"
+        "sha256": "1cf65b936d89b88a97e2cfb21d8c7018ef5699b2f97c9cb7203e4303c3d479a5"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0104",
-      "x": 16,
-      "y": 17
+      "x": 2,
+      "y": 1
     },
     {
       "data_id": 33,
       "direction": 1,
-      "land_file_id": 335,
+      "land_file_id": 440,
       "map_id": 335,
-      "matrix_id": 228,
-      "matrix_value": 335,
+      "matrix_id": 19,
+      "matrix_value": 440,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1016,
+      "permission": 8,
+      "random_tile_count": 205,
       "random_tile_evidence": {
-        "count": 1016,
-        "max_x": 31,
-        "max_y": 31,
+        "count": 205,
+        "max_x": 29,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "af4c7c5364e7cc3f8ad2f72617a01cd5be74cfac6fd4feb8f427db61bc238182"
+        "sha256": "1fd2f275bcebfc39c475317b5bb9dc6253ba3d22c5f52665b64eacc0a0acb585"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0105",
-      "x": 16,
-      "y": 16
+      "x": 9,
+      "y": 7
     },
     {
       "data_id": 34,
       "direction": 1,
-      "land_file_id": 336,
+      "land_file_id": 441,
       "map_id": 336,
-      "matrix_id": 229,
-      "matrix_value": 336,
+      "matrix_id": 20,
+      "matrix_value": 441,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1019,
+      "permission": 5387,
+      "random_tile_count": 216,
       "random_tile_evidence": {
-        "count": 1019,
-        "max_x": 31,
-        "max_y": 31,
+        "count": 216,
+        "max_x": 29,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "1f359e01c53ae5af302e9af08c0ad6f9176a88c7328b40fab840bb281dc8a70d"
+        "sha256": "0b52b8f6f77786162e85184b2d0a9ee162377c1d0655476f354a9ba27646e2ea"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0106",
-      "x": 16,
-      "y": 16
+      "x": 2,
+      "y": 1
     },
     {
       "data_id": 35,
       "direction": 1,
-      "land_file_id": 337,
+      "land_file_id": 442,
       "map_id": 337,
-      "matrix_id": 230,
-      "matrix_value": 337,
+      "matrix_id": 21,
+      "matrix_value": 442,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1014,
+      "permission": 8,
+      "random_tile_count": 233,
       "random_tile_evidence": {
-        "count": 1014,
+        "count": 233,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 28,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "83f353f98bd546fc5b8cb33aa0041bf02f14ce5031e7af0e8b357f9ce05e0010"
+        "sha256": "62d0e67602994457a2e063ea4488b5a5d322315d5b428553c7c7e5be65e0220d"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0107",
-      "x": 11,
-      "y": 23
+      "x": 0,
+      "y": 16
     },
     {
       "data_id": 36,
       "direction": 1,
-      "land_file_id": 338,
+      "land_file_id": 443,
       "map_id": 338,
-      "matrix_id": 231,
-      "matrix_value": 338,
+      "matrix_id": 22,
+      "matrix_value": 443,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1016,
+      "permission": 8,
+      "random_tile_count": 206,
       "random_tile_evidence": {
-        "count": 1016,
-        "max_x": 31,
-        "max_y": 31,
+        "count": 206,
+        "max_x": 24,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "5ce73034a9eadb6eeb44b056c7efc81d841cbbd329da95147c7b6a61c9d21005"
+        "sha256": "828af044c6aced1b66bb0f777a174df4f26a9a98977dea21fff87704894f4ac7"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0108",
-      "x": 16,
-      "y": 16
+      "x": 1,
+      "y": 8
     },
     {
       "data_id": 37,
       "direction": 1,
-      "land_file_id": 339,
+      "land_file_id": 444,
       "map_id": 339,
-      "matrix_id": 232,
-      "matrix_value": 339,
+      "matrix_id": 23,
+      "matrix_value": 444,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 1012,
+      "permission": 8,
+      "random_tile_count": 172,
       "random_tile_evidence": {
-        "count": 1012,
+        "count": 172,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 28,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "a03f5f884d66dd0e561a41f60135175387cdec58e7f810225e6701cfb352ad2e"
+        "sha256": "48fa30c1b956e68b3ae2294f9c104a35fb7ae9e772dc27ed45faf64cfbd47311"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0109",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 9
     },
     {
       "data_id": 38,
@@ -994,19 +994,19 @@
       "matrix_x": 10,
       "matrix_y": 5,
       "permission": 0,
-      "random_tile_count": 4093,
+      "random_tile_count": 387,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 367,
-        "max_y": 207,
-        "min_x": 304,
-        "min_y": 144,
-        "sha256": "66c3e4e50a44aa3759b3842bd6a04c28013ce51c242514bbbac5020a02f19cf0"
+        "count": 387,
+        "max_x": 351,
+        "max_y": 181,
+        "min_x": 320,
+        "min_y": 161,
+        "sha256": "687e1acbac6455606eee35b5eb0de4b5a27938db402b4585eff01d6fb8033f7b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R38",
-      "x": 336,
-      "y": 176
+      "x": 320,
+      "y": 161
     },
     {
       "data_id": 39,
@@ -1018,19 +1018,19 @@
       "matrix_x": 8,
       "matrix_y": 5,
       "permission": 1024,
-      "random_tile_count": 4093,
+      "random_tile_count": 620,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 303,
-        "max_y": 207,
-        "min_x": 240,
-        "min_y": 144,
-        "sha256": "deb6858683fcc80938ccf57b861c0d3ca312ffb9f7ca7d996ed8f2c5283dda13"
+        "count": 620,
+        "max_x": 287,
+        "max_y": 191,
+        "min_x": 257,
+        "min_y": 161,
+        "sha256": "734c2e0cd53a2716f5c58a73a6d433cbafa347b40bab9a2b2ba607768091d0ca"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R39",
-      "x": 272,
-      "y": 176
+      "x": 257,
+      "y": 190
     },
     {
       "data_id": 40,
@@ -1041,20 +1041,20 @@
       "matrix_value": 77,
       "matrix_x": 8,
       "matrix_y": 7,
-      "permission": 1536,
-      "random_tile_count": 3997,
+      "permission": 0,
+      "random_tile_count": 459,
       "random_tile_evidence": {
-        "count": 3997,
-        "max_x": 303,
-        "max_y": 271,
-        "min_x": 240,
-        "min_y": 208,
-        "sha256": "0f992006a26b45ccfa2fce89584d4c32a09cc0175765c86d06066c4d094cf434"
+        "count": 459,
+        "max_x": 287,
+        "max_y": 255,
+        "min_x": 256,
+        "min_y": 224,
+        "sha256": "6d653400bcd1d9ac62426d294f109739bb7439b115e63f5fa9f452d4e865632c"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T26",
-      "x": 272,
-      "y": 240
+      "x": 261,
+      "y": 233
     },
     {
       "data_id": 41,
@@ -1065,44 +1065,44 @@
       "matrix_value": 94,
       "matrix_x": 7,
       "matrix_y": 8,
-      "permission": 33,
-      "random_tile_count": 2945,
+      "permission": 0,
+      "random_tile_count": 231,
       "random_tile_evidence": {
-        "count": 2945,
-        "max_x": 271,
-        "max_y": 303,
-        "min_x": 208,
-        "min_y": 240,
-        "sha256": "530ca84338e7a371237cfd4c7aff8799fd46e02735a23f713736b6fe33fc1b45"
+        "count": 231,
+        "max_x": 255,
+        "max_y": 277,
+        "min_x": 224,
+        "min_y": 256,
+        "sha256": "93da694c185abe0dc71733acfc441690db7de9b2b61c26fcefaecfbcd9528f10"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_W40",
-      "x": 240,
-      "y": 272
+      "x": 224,
+      "y": 259
     },
     {
       "data_id": 42,
       "direction": 1,
-      "land_file_id": 67,
+      "land_file_id": 64,
       "map_id": 95,
       "matrix_id": 0,
       "matrix_value": 95,
-      "matrix_x": 7,
-      "matrix_y": 11,
-      "permission": 23,
-      "random_tile_count": 2885,
+      "matrix_x": 6,
+      "matrix_y": 10,
+      "permission": 3593,
+      "random_tile_count": 24,
       "random_tile_evidence": {
-        "count": 2885,
-        "max_x": 271,
-        "max_y": 399,
-        "min_x": 208,
-        "min_y": 336,
-        "sha256": "26c58dccce60c1eff0b4e3c0d8158570319effefcd959c5a71837e23113ead29"
+        "count": 24,
+        "max_x": 220,
+        "max_y": 321,
+        "min_x": 192,
+        "min_y": 320,
+        "sha256": "73711386eeecea9611e928085fd07650fbefde2bfc7601af02ba0b689aca5d59"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_W41",
-      "x": 240,
-      "y": 368
+      "x": 198,
+      "y": 321
     },
     {
       "data_id": 43,
@@ -1114,91 +1114,91 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2294,
+      "random_tile_count": 944,
       "random_tile_evidence": {
-        "count": 2294,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 944,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "7fffb37ddffd9474cd7e6c002ba6a999fd379b9cb2d6ba0690d652206b1a43e6"
+        "sha256": "58d253aa30dec4c82c807da7b42c0c29cfbd0ac25145fe34f1a2e09de11b482b"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D40R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 44,
       "direction": 1,
-      "land_file_id": 242,
+      "land_file_id": 554,
       "map_id": 242,
-      "matrix_id": 69,
-      "matrix_value": 242,
+      "matrix_id": 142,
+      "matrix_value": 554,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2301,
+      "random_tile_count": 834,
       "random_tile_evidence": {
-        "count": 2301,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 834,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "7792af30b4bd2e1289dbe5fabc6cc7e3a65fdb60f86bc162071fa5714ac87ab8"
+        "sha256": "e3cda470ae25e7e40a24bb976c845ebf5951d979776452daef3f797f4ef4b751"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D40R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 46,
       "direction": 1,
-      "land_file_id": 243,
+      "land_file_id": 561,
       "map_id": 243,
-      "matrix_id": 70,
-      "matrix_value": 243,
+      "matrix_id": 143,
+      "matrix_value": 561,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2181,
+      "random_tile_count": 104,
       "random_tile_evidence": {
-        "count": 2181,
-        "max_x": 47,
-        "max_y": 47,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "4b0794b8f2d92b127d8fa9002aee03bb369306e1cffa69686b2377d91fbec135"
+        "count": 104,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 1,
+        "min_y": 12,
+        "sha256": "f4b0e0bea54f0e7ffdba092a6540389dd240032e3583b0ce4a44014d2483e6b7"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D40R0104",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 31
     },
     {
       "data_id": 48,
       "direction": 1,
-      "land_file_id": 244,
+      "land_file_id": 567,
       "map_id": 244,
-      "matrix_id": 100,
-      "matrix_value": 244,
+      "matrix_id": 144,
+      "matrix_value": 567,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 793,
+      "permission": 2568,
+      "random_tile_count": 40,
       "random_tile_evidence": {
-        "count": 793,
+        "count": 40,
         "max_x": 31,
-        "max_y": 46,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "6036913a38b6740fba240b146b20853fbcbd1e47036e8ddfa33c42df137e458b"
+        "sha256": "49b81dcb617717c00d3a9d304a45d0328d9cab5a7e87c2f399d8346850753710"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D40R0107",
-      "x": 16,
-      "y": 15
+      "x": 24,
+      "y": 28
     },
     {
       "data_id": 51,
@@ -1209,20 +1209,20 @@
       "matrix_value": 75,
       "matrix_x": 5,
       "matrix_y": 11,
-      "permission": 1313,
-      "random_tile_count": 3242,
+      "permission": 1024,
+      "random_tile_count": 29,
       "random_tile_evidence": {
-        "count": 3242,
-        "max_x": 208,
-        "max_y": 399,
-        "min_x": 145,
-        "min_y": 336,
-        "sha256": "7516090f95af9d69ff21748496e12f755fd9e5c01bc4baffb0ad00f0e1469f47"
+        "count": 29,
+        "max_x": 188,
+        "max_y": 374,
+        "min_x": 160,
+        "min_y": 352,
+        "sha256": "29d739776d251538d5f648c6dc1bdf77cea27926357d54718ab0baf842fc3d0b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T24",
       "x": 177,
-      "y": 368
+      "y": 370
     },
     {
       "data_id": 52,
@@ -1234,19 +1234,19 @@
       "matrix_x": 13,
       "matrix_y": 5,
       "permission": 0,
-      "random_tile_count": 3861,
+      "random_tile_count": 165,
       "random_tile_evidence": {
-        "count": 3861,
-        "max_x": 463,
-        "max_y": 207,
-        "min_x": 400,
-        "min_y": 144,
-        "sha256": "176c49593efc7013d8c48befc9574e775b1d48425d9033ad10b672c8cdc87792"
+        "count": 165,
+        "max_x": 445,
+        "max_y": 186,
+        "min_x": 416,
+        "min_y": 160,
+        "sha256": "4a3dc187c9e04ff35f33c5c0fbe03d4a1e8f06275601c03c2b4f21dbb89ac3fd"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R42",
-      "x": 432,
-      "y": 176
+      "x": 426,
+      "y": 174
     },
     {
       "data_id": 53,
@@ -1257,92 +1257,92 @@
       "matrix_value": 516,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1935,
+      "permission": 2,
+      "random_tile_count": 577,
       "random_tile_evidence": {
-        "count": 1935,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 577,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "32f1e1ae7ac5a09a3c709ae07a131ee7eda80136fbdfdc1be5f194b15dd28176"
+        "sha256": "9518da08f1bd0f7cb1baedcdcafd861c43b2a85d990c9c0220573fdc0981bf3a"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D38R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 54,
       "direction": 1,
-      "land_file_id": 250,
+      "land_file_id": 522,
       "map_id": 250,
-      "matrix_id": 89,
-      "matrix_value": 250,
+      "matrix_id": 63,
+      "matrix_value": 522,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2252,
+      "random_tile_count": 764,
       "random_tile_evidence": {
-        "count": 2252,
-        "max_x": 47,
-        "max_y": 46,
+        "count": 764,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "f66828b2e6ae0b774d251df8a751943069264af17dd9c07df020b37e20eead7c"
+        "sha256": "908d8988966d0544900274324f7eb6eae93b81558cc80cfeca9692a7eb10f3e1"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D38R0102",
-      "x": 16,
-      "y": 15
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 55,
       "direction": 1,
-      "land_file_id": 251,
+      "land_file_id": 531,
       "map_id": 251,
-      "matrix_id": 90,
-      "matrix_value": 251,
+      "matrix_id": 64,
+      "matrix_value": 531,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1948,
+      "permission": 256,
+      "random_tile_count": 728,
       "random_tile_evidence": {
-        "count": 1948,
-        "max_x": 42,
-        "max_y": 47,
+        "count": 728,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "955960bcb9fca01ae069d43b7b43e61a7296ea8eca371d625b6c88b706adde59"
+        "sha256": "17de7ef255eebaaea32174f6e743d398175a1078fafb69b26481b15b86c72678"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D38R0103",
-      "x": 11,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 56,
       "direction": 1,
-      "land_file_id": 252,
+      "land_file_id": 537,
       "map_id": 252,
-      "matrix_id": 90,
-      "matrix_value": 252,
+      "matrix_id": 65,
+      "matrix_value": 537,
       "matrix_x": 0,
       "matrix_y": 1,
-      "permission": 1536,
-      "random_tile_count": 2669,
+      "permission": 256,
+      "random_tile_count": 375,
       "random_tile_evidence": {
-        "count": 2669,
-        "max_x": 47,
-        "max_y": 79,
-        "min_x": 0,
-        "min_y": 16,
-        "sha256": "ec26bda579345702e222cb40037611d20fd51fd9f9ff265b173170a2ea07fbe8"
+        "count": 375,
+        "max_x": 31,
+        "max_y": 63,
+        "min_x": 1,
+        "min_y": 32,
+        "sha256": "e39a6ddbcdadeb31c90f7c137679c64e0a1408e658c4bc3dcbcc48bbd2080acc"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D38R0104",
-      "x": 16,
-      "y": 48
+      "x": 0,
+      "y": 32
     },
     {
       "data_id": 57,
@@ -1353,20 +1353,20 @@
       "matrix_value": 45,
       "matrix_x": 16,
       "matrix_y": 3,
-      "permission": 1024,
-      "random_tile_count": 3924,
+      "permission": 0,
+      "random_tile_count": 379,
       "random_tile_evidence": {
-        "count": 3924,
-        "max_x": 557,
-        "max_y": 143,
-        "min_x": 494,
-        "min_y": 80,
-        "sha256": "6c692815a4a78a31991c2238f3bf1eea41e6db7858175bda0184b193477bf91b"
+        "count": 379,
+        "max_x": 543,
+        "max_y": 127,
+        "min_x": 512,
+        "min_y": 96,
+        "sha256": "43a27c40b80e4876d54e5f3028fcd6d8b335bf6bbb5aaebb2bd1b18a697e77f7"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R43",
-      "x": 526,
-      "y": 112
+      "x": 512,
+      "y": 96
     },
     {
       "data_id": 58,
@@ -1378,19 +1378,19 @@
       "matrix_x": 15,
       "matrix_y": 2,
       "permission": 1024,
-      "random_tile_count": 3213,
+      "random_tile_count": 130,
       "random_tile_evidence": {
-        "count": 3213,
-        "max_x": 527,
-        "max_y": 111,
-        "min_x": 464,
-        "min_y": 48,
-        "sha256": "c8dd0c7aebc4b0a70531e2280076ef8971c388443b3c88c610d27da07b1275a3"
+        "count": 130,
+        "max_x": 511,
+        "max_y": 94,
+        "min_x": 488,
+        "min_y": 72,
+        "sha256": "e5748c5100c3ab9fff969739ec99a5140b9a900f032871d86b3d24375ac2943f"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T29",
-      "x": 496,
-      "y": 80
+      "x": 488,
+      "y": 72
     },
     {
       "data_id": 59,
@@ -1401,116 +1401,116 @@
       "matrix_value": 46,
       "matrix_x": 17,
       "matrix_y": 5,
-      "permission": 1024,
-      "random_tile_count": 3862,
+      "permission": 0,
+      "random_tile_count": 322,
       "random_tile_evidence": {
-        "count": 3862,
-        "max_x": 591,
-        "max_y": 207,
-        "min_x": 528,
-        "min_y": 144,
-        "sha256": "a407cd1ea2dbdcc1543af465dc571d776b7d5b578c177f11097ed2695076421c"
+        "count": 322,
+        "max_x": 575,
+        "max_y": 189,
+        "min_x": 544,
+        "min_y": 160,
+        "sha256": "0fc412d7c118d85dff66571629d5b9b38c35b3b3a310eafe3d0b671c47b38f27"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R44",
-      "x": 560,
+      "x": 544,
       "y": 176
     },
     {
       "data_id": 60,
       "direction": 1,
-      "land_file_id": 541,
+      "land_file_id": 543,
       "map_id": 120,
       "matrix_id": 132,
-      "matrix_value": 541,
+      "matrix_value": 543,
       "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 1568,
-      "random_tile_count": 2297,
+      "matrix_y": 1,
+      "permission": 0,
+      "random_tile_count": 711,
       "random_tile_evidence": {
-        "count": 2297,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 711,
+        "max_x": 31,
+        "max_y": 63,
         "min_x": 0,
-        "min_y": 0,
-        "sha256": "859071826434a8c92320c936179f44778cb8b346a8c432a2bf76ec2e9695510c"
+        "min_y": 32,
+        "sha256": "21f3e50d69a0176f1b7f624598bcdc3fdc50a407fd314970a4623b741045e9cc"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D39R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 32
     },
     {
       "data_id": 61,
       "direction": 1,
-      "land_file_id": 237,
+      "land_file_id": 545,
       "map_id": 237,
-      "matrix_id": 150,
-      "matrix_value": 237,
+      "matrix_id": 133,
+      "matrix_value": 545,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1475,
+      "random_tile_count": 601,
       "random_tile_evidence": {
-        "count": 1475,
+        "count": 601,
         "max_x": 31,
-        "max_y": 47,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "52af7e2d3f87b1f97286a2da5c1927d20eb029a297d063e99def6393e4aa42a4"
+        "sha256": "e6864ea31e40cd7292dcd55e50bc083debfa376ffae6329a46d0e1063573b100"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D39R0102",
-      "x": 13,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 62,
       "direction": 1,
-      "land_file_id": 238,
+      "land_file_id": 547,
       "map_id": 238,
-      "matrix_id": 273,
-      "matrix_value": 238,
+      "matrix_id": 134,
+      "matrix_value": 547,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1530,
+      "random_tile_count": 461,
       "random_tile_evidence": {
-        "count": 1530,
-        "max_x": 47,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "a65442cc6d512cf20dcde2aecda5b917a5f733df01af626fca33c52f4bc836ef"
-      },
-      "source": "derived",
-      "symbol": "MAP_D39R0103",
-      "x": 16,
-      "y": 16
-    },
-    {
-      "data_id": 63,
-      "direction": 1,
-      "land_file_id": 239,
-      "map_id": 239,
-      "matrix_id": 127,
-      "matrix_value": 239,
-      "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1019,
-      "random_tile_evidence": {
-        "count": 1019,
+        "count": 461,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "698fdd3617c32770312aaf3abe4c4516ecadd5dda617076f255144ad63f82a40"
+        "sha256": "3ec938fd854349f370c32751d886312156a963a7cfeb193307cf92529cb603c4"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
+      "symbol": "MAP_D39R0103",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "data_id": 63,
+      "direction": 1,
+      "land_file_id": 549,
+      "map_id": 239,
+      "matrix_id": 135,
+      "matrix_value": 549,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 0,
+      "random_tile_count": 795,
+      "random_tile_evidence": {
+        "count": 795,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "0b56e59279530628990e11778a0b2f4375f69605443c93ab2accf1a490f82759"
+      },
+      "source": "derived:compact-pair",
       "symbol": "MAP_D39R0104",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 65,
@@ -1522,19 +1522,19 @@
       "matrix_x": 20,
       "matrix_y": 5,
       "permission": 0,
-      "random_tile_count": 3860,
+      "random_tile_count": 411,
       "random_tile_evidence": {
-        "count": 3860,
-        "max_x": 687,
-        "max_y": 207,
-        "min_x": 624,
-        "min_y": 144,
-        "sha256": "0a6d6097895729518e65a13c0b3f34296d329ab3be4822836cd5676f25829c44"
+        "count": 411,
+        "max_x": 671,
+        "max_y": 191,
+        "min_x": 640,
+        "min_y": 160,
+        "sha256": "8746da9e77dd3f948554d1cd4a48dfc5f42fb809f3a56b44002138e158f9e218"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T30",
-      "x": 656,
-      "y": 176
+      "x": 640,
+      "y": 164
     },
     {
       "data_id": 66,
@@ -1546,43 +1546,43 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1021,
+      "random_tile_count": 942,
       "random_tile_evidence": {
-        "count": 1021,
+        "count": 942,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "1ad86cd93944742b69003e59077bd107e55cccfb0910e14a68c25537658d03d5"
+        "sha256": "635d9c30666f45fe0df351a86ee96cb12b3641bc4c894710e84e6d31289df290"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D44R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 66,
       "direction": 1,
-      "land_file_id": 253,
+      "land_file_id": 615,
       "map_id": 253,
-      "matrix_id": 91,
-      "matrix_value": 253,
+      "matrix_id": 146,
+      "matrix_value": 615,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1615,
+      "permission": 256,
+      "random_tile_count": 412,
       "random_tile_evidence": {
-        "count": 1615,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 412,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "8e22f4a69083cc1fcd7613e69ae8985f8334c1875cb5f8cb386bd485a7ff5a2d"
+        "sha256": "95fb785fa409f081b1c9b60cec7880dc70e1d028d8bc5b4b6106a9281747d055"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D44R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 67,
@@ -1593,20 +1593,20 @@
       "matrix_value": 47,
       "matrix_x": 20,
       "matrix_y": 6,
-      "permission": 3328,
-      "random_tile_count": 3931,
+      "permission": 1024,
+      "random_tile_count": 327,
       "random_tile_evidence": {
-        "count": 3931,
-        "max_x": 687,
-        "max_y": 239,
-        "min_x": 624,
-        "min_y": 176,
-        "sha256": "dd54181f56cc156ec14ec012fa0876e1411e483960610880437132e4cbe80841"
+        "count": 327,
+        "max_x": 671,
+        "max_y": 223,
+        "min_x": 640,
+        "min_y": 192,
+        "sha256": "37af8adf8418354de310b8189713b73bab2169a22bc1bedbb1eb3c1f8ee6cb21"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R45",
-      "x": 656,
-      "y": 208
+      "x": 648,
+      "y": 199
     },
     {
       "data_id": 68,
@@ -1617,20 +1617,20 @@
       "matrix_value": 48,
       "matrix_x": 19,
       "matrix_y": 11,
-      "permission": 1024,
-      "random_tile_count": 4051,
+      "permission": 1536,
+      "random_tile_count": 364,
       "random_tile_evidence": {
-        "count": 4051,
-        "max_x": 655,
-        "max_y": 399,
-        "min_x": 592,
-        "min_y": 336,
-        "sha256": "3a5812c4f66cc8fbf025229d039f17e310cf96e537629f7b414f4a4cbb07478f"
+        "count": 364,
+        "max_x": 629,
+        "max_y": 380,
+        "min_x": 612,
+        "min_y": 352,
+        "sha256": "cd80894cb5507f77caddf53e80d1f91812b206622652e4cb79d4bfb2d0589343"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R46",
-      "x": 624,
-      "y": 368
+      "x": 612,
+      "y": 352
     },
     {
       "data_id": 69,
@@ -1642,19 +1642,19 @@
       "matrix_x": 0,
       "matrix_y": 1,
       "permission": 0,
-      "random_tile_count": 2270,
+      "random_tile_count": 1023,
       "random_tile_evidence": {
-        "count": 2270,
-        "max_x": 47,
+        "count": 1023,
+        "max_x": 31,
         "max_y": 63,
         "min_x": 0,
-        "min_y": 16,
-        "sha256": "75c359155525b44a6edf60608052b59f4008856909e5d918a50540e3a666a494"
+        "min_y": 32,
+        "sha256": "07866e700696859c8e4e759b0ded666093bf6078ff097ce0129a4880832105e4"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D42R0102",
-      "x": 16,
-      "y": 48
+      "x": 0,
+      "y": 32
     },
     {
       "data_id": 70,
@@ -1665,20 +1665,20 @@
       "matrix_value": 594,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 2568,
-      "random_tile_count": 2068,
+      "permission": 0,
+      "random_tile_count": 592,
       "random_tile_evidence": {
-        "count": 2068,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 592,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "bf0437644e36700d402901d2853952a4df37f548d7deb9fc21bd972c09bcbe81"
+        "sha256": "9135388dbb82b53d1489938a34ec50d4272eb41afb0472a2d6132a36ab04a7ea"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D42R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 71,
@@ -1689,20 +1689,20 @@
       "matrix_value": 151,
       "matrix_x": 4,
       "matrix_y": 11,
-      "permission": 0,
-      "random_tile_count": 3551,
+      "permission": 3072,
+      "random_tile_count": 47,
       "random_tile_evidence": {
-        "count": 3551,
-        "max_x": 175,
-        "max_y": 399,
-        "min_x": 112,
-        "min_y": 336,
-        "sha256": "ce8a9fe2c02f8731d5eea17aa9f376b277332f6cfa3bf25dc3357fec7b16facf"
+        "count": 47,
+        "max_x": 149,
+        "max_y": 383,
+        "min_x": 128,
+        "min_y": 352,
+        "sha256": "686406fae0c443791e15ca85c0d830aa0f85517f2213724578532fa9b308eb1b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R47",
-      "x": 144,
-      "y": 368
+      "x": 130,
+      "y": 352
     },
     {
       "data_id": 74,
@@ -1714,235 +1714,235 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1533,
+      "random_tile_count": 908,
       "random_tile_evidence": {
-        "count": 1533,
-        "max_x": 47,
+        "count": 908,
+        "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "977efeaeb0defa23633cc194dc8db9c7f37cc356ab838fb2fb3d8291f8f2ded5"
+        "sha256": "267d13afa79d9fbd0ed5551b779253b5692c34f7115d1e24085f948a91971605"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D11R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 75,
       "direction": 1,
-      "land_file_id": 453,
+      "land_file_id": 424,
       "map_id": 453,
-      "matrix_id": 27,
-      "matrix_value": 453,
-      "matrix_x": 2,
+      "matrix_id": 82,
+      "matrix_value": 424,
+      "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1024,
-      "random_tile_count": 512,
+      "permission": 0,
+      "random_tile_count": 640,
       "random_tile_evidence": {
-        "count": 512,
-        "max_x": 63,
+        "count": 640,
+        "max_x": 31,
         "max_y": 31,
-        "min_x": 48,
+        "min_x": 0,
         "min_y": 0,
-        "sha256": "8ed6bc05413e8a66bf5b58235e25c5f6ac76880c4699d1c4514561ccb13027ba"
+        "sha256": "f30c455d6388c0805ea082516f6ce94a00d696758493cd83793c97f9524c9c1e"
       },
-      "source": "derived",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_D11R0102",
-      "x": 80,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 76,
       "direction": 1,
-      "land_file_id": 454,
+      "land_file_id": 426,
       "map_id": 454,
-      "matrix_id": 27,
-      "matrix_value": 454,
+      "matrix_id": 83,
+      "matrix_value": 426,
       "matrix_x": 0,
-      "matrix_y": 1,
-      "permission": 1024,
-      "random_tile_count": 888,
+      "matrix_y": 0,
+      "permission": 0,
+      "random_tile_count": 371,
       "random_tile_evidence": {
-        "count": 888,
-        "max_x": 55,
+        "count": 371,
+        "max_x": 31,
         "max_y": 31,
         "min_x": 0,
-        "min_y": 16,
-        "sha256": "34481c80bbf6dc9b051258423c841a4ad2e64c4243b3473c9e2b65b386b5e3f0"
+        "min_y": 0,
+        "sha256": "7a3dcdabf265dd3291a1ed3bcaec833cc1c3597ad8cd9a09b12b36567813930c"
       },
-      "source": "derived",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_D11R0103",
-      "x": 24,
-      "y": 48
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 77,
       "direction": 1,
-      "land_file_id": 455,
+      "land_file_id": 428,
       "map_id": 455,
-      "matrix_id": 27,
-      "matrix_value": 455,
-      "matrix_x": 1,
-      "matrix_y": 1,
-      "permission": 1536,
-      "random_tile_count": 764,
+      "matrix_id": 84,
+      "matrix_value": 428,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 0,
+      "random_tile_count": 521,
       "random_tile_evidence": {
-        "count": 764,
-        "max_x": 63,
+        "count": 521,
+        "max_x": 31,
         "max_y": 31,
-        "min_x": 16,
-        "min_y": 16,
-        "sha256": "b8f2c4b268c9f59a40432dd6f7f36160e9e0812663517376925d58bc1fb67b09"
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "167ca3096c1f647dc6c159fa39c3c558d44423cfd7bfab781f48b2a498ca283d"
       },
-      "source": "derived",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_D11R0104",
-      "x": 48,
-      "y": 48
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 78,
       "direction": 1,
-      "land_file_id": 456,
+      "land_file_id": 430,
       "map_id": 456,
-      "matrix_id": 27,
-      "matrix_value": 456,
-      "matrix_x": 2,
-      "matrix_y": 1,
-      "permission": 0,
-      "random_tile_count": 230,
+      "matrix_id": 85,
+      "matrix_value": 430,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 8,
+      "random_tile_count": 325,
       "random_tile_evidence": {
-        "count": 230,
-        "max_x": 63,
+        "count": 325,
+        "max_x": 31,
         "max_y": 31,
-        "min_x": 45,
-        "min_y": 16,
-        "sha256": "30fbd73b475e7ad40e2a8dd2d10462cebdbc2c9bfa33f9b05d741ac0605a6383"
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "4d456bea5f34bbe6c12d46fa392c5c680996457ad5890931629570e1fb6e78a0"
       },
-      "source": "derived",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_D11R0105",
-      "x": 77,
-      "y": 48
+      "x": 0,
+      "y": 21
     },
     {
       "data_id": 79,
       "direction": 1,
-      "land_file_id": 462,
+      "land_file_id": 583,
       "map_id": 462,
-      "matrix_id": 30,
-      "matrix_value": 462,
+      "matrix_id": 269,
+      "matrix_value": 583,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1022,
+      "random_tile_count": 602,
       "random_tile_evidence": {
-        "count": 1022,
+        "count": 602,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "f9b5e887cb09478960a4918da59f792e943cab6ab07c9a7b81b366711fdb1308"
+        "sha256": "81e79eab18cdb04206e87f0266685ce1870b9495a5cedd3fc99e56c3bcd5ff56"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D41R0105",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 25
     },
     {
       "data_id": 80,
       "direction": 1,
-      "land_file_id": 464,
+      "land_file_id": 588,
       "map_id": 464,
-      "matrix_id": 32,
-      "matrix_value": 464,
+      "matrix_id": 271,
+      "matrix_value": 588,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1533,
+      "random_tile_count": 162,
       "random_tile_evidence": {
-        "count": 1533,
-        "max_x": 47,
+        "count": 162,
+        "max_x": 31,
         "max_y": 31,
-        "min_x": 0,
+        "min_x": 1,
         "min_y": 0,
-        "sha256": "a4a21101676d9e97221eadfc69f037de5d3899af52e22fadccd50decf2ebfe2f"
+        "sha256": "be6f24228b6ad5aae07beec61aa3eaaa12670fb8d21ddcf6770a2368cd1a1102"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D41R0107",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 31
     },
     {
       "data_id": 81,
       "direction": 1,
-      "land_file_id": 465,
+      "land_file_id": 590,
       "map_id": 465,
-      "matrix_id": 110,
-      "matrix_value": 465,
+      "matrix_id": 272,
+      "matrix_value": 590,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 2350,
+      "permission": 524,
+      "random_tile_count": 600,
       "random_tile_evidence": {
-        "count": 2350,
-        "max_x": 48,
-        "max_y": 47,
-        "min_x": 0,
+        "count": 600,
+        "max_x": 24,
+        "max_y": 31,
+        "min_x": 1,
         "min_y": 0,
-        "sha256": "32dc7fe9b1aba6a6c8ba4519f19581a18ac83ea7e0e2ba31e8a02946dc0d2ce1"
+        "sha256": "a397fa1464bdc5bf43f6494cd5a56d9f0b0f61a4e3fee3d29bff218ad5aff991"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D41R0108",
-      "x": 17,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 83,
       "direction": 1,
-      "land_file_id": 342,
+      "land_file_id": 642,
       "map_id": 342,
-      "matrix_id": 235,
-      "matrix_value": 342,
+      "matrix_id": 184,
+      "matrix_value": 642,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1014,
+      "random_tile_count": 723,
       "random_tile_evidence": {
-        "count": 1014,
+        "count": 723,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "1738fa4f7c5c35c00c402c10195e25774a8d393705d69aa4fc3647098aacfdb2"
+        "sha256": "092ece826bca9ff20c7ffe952e7c0408d94cc2334ad9c068b40ff10635f78109"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D50R0101",
-      "x": 16,
-      "y": 15
+      "x": 0,
+      "y": 1
     },
     {
       "data_id": 84,
       "direction": 1,
-      "land_file_id": 341,
+      "land_file_id": 448,
       "map_id": 341,
-      "matrix_id": 234,
-      "matrix_value": 341,
+      "matrix_id": 183,
+      "matrix_value": 448,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1020,
+      "permission": 8,
+      "random_tile_count": 54,
       "random_tile_evidence": {
-        "count": 1020,
+        "count": 54,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 27,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "8f2a0a148239626b0cb313d1a2a107a3e649463a298b5b27bb4e45fba6ed910a"
+        "sha256": "94bbe52339782373762c81c5bda83c754e9bf56da8f452a080cea9988f777892"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D17R0112",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 17
     },
     {
       "data_id": 85,
@@ -1953,20 +1953,20 @@
       "matrix_value": 90,
       "matrix_x": 25,
       "matrix_y": 8,
-      "permission": 2,
-      "random_tile_count": 4044,
+      "permission": 0,
+      "random_tile_count": 307,
       "random_tile_evidence": {
-        "count": 4044,
-        "max_x": 847,
-        "max_y": 303,
-        "min_x": 784,
-        "min_y": 240,
-        "sha256": "4e8f4bdd9eab554f168b009c5820172d2351682f345d5794619fd5f2a333c391"
+        "count": 307,
+        "max_x": 831,
+        "max_y": 283,
+        "min_x": 800,
+        "min_y": 256,
+        "sha256": "eccadd07254c5821bc18acba5743a54b049d3e3ec58692df76b9e3b8f9a76579"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T31",
-      "x": 816,
-      "y": 272
+      "x": 800,
+      "y": 277
     },
     {
       "data_id": 86,
@@ -1978,211 +1978,211 @@
       "matrix_x": 0,
       "matrix_y": 2,
       "permission": 0,
-      "random_tile_count": 2137,
+      "random_tile_count": 633,
       "random_tile_evidence": {
-        "count": 2137,
-        "max_x": 47,
+        "count": 633,
+        "max_x": 31,
         "max_y": 95,
         "min_x": 0,
-        "min_y": 48,
-        "sha256": "30dbed17f3df14dd309a302f4d8311e8e5e2a351b288a0f02f0e5c9880a4d595"
+        "min_y": 64,
+        "sha256": "a03280165819e7745130c003329b8c09e3e42bd3d8a8c0041dc7a778be610712"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D41R0101",
-      "x": 16,
-      "y": 80
+      "x": 0,
+      "y": 64
     },
     {
       "data_id": 87,
       "direction": 1,
-      "land_file_id": 459,
+      "land_file_id": 574,
       "map_id": 459,
-      "matrix_id": 27,
-      "matrix_value": 459,
-      "matrix_x": 2,
-      "matrix_y": 2,
-      "permission": 0,
-      "random_tile_count": 432,
-      "random_tile_evidence": {
-        "count": 432,
-        "max_x": 63,
-        "max_y": 63,
-        "min_x": 37,
-        "min_y": 48,
-        "sha256": "065b84d1ee1e172bf9ab7691aee2ba726bd4311c2d48c81bd3825bfd6d037919"
-      },
-      "source": "derived",
-      "symbol": "MAP_D41R0102",
-      "x": 69,
-      "y": 80
-    },
-    {
-      "data_id": 87,
-      "direction": 1,
-      "land_file_id": 460,
-      "map_id": 460,
-      "matrix_id": 28,
-      "matrix_value": 460,
+      "matrix_id": 266,
+      "matrix_value": 574,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2300,
+      "random_tile_count": 368,
       "random_tile_evidence": {
-        "count": 2300,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 368,
+        "max_x": 31,
+        "max_y": 31,
+        "min_x": 0,
+        "min_y": 3,
+        "sha256": "bddcafac10973de0e5534665de2e1183e22d35bb38579c1b73db1d94fed21aee"
+      },
+      "source": "derived:loaded-header:compact-pair",
+      "symbol": "MAP_D41R0102",
+      "x": 0,
+      "y": 3
+    },
+    {
+      "data_id": 87,
+      "direction": 1,
+      "land_file_id": 578,
+      "map_id": 460,
+      "matrix_id": 267,
+      "matrix_value": 578,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 8,
+      "random_tile_count": 543,
+      "random_tile_evidence": {
+        "count": 543,
+        "max_x": 28,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "9eabd6359c5a583c2a499de916e718f6b2f8810d6af9ffc9114c25da391e152e"
+        "sha256": "a78bca4e0cb3cf42b4b01d70ace28bb656a73b07ca438830ea5e639ff83fc096"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D41R0103",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 88,
       "direction": 1,
-      "land_file_id": 461,
+      "land_file_id": 582,
       "map_id": 461,
-      "matrix_id": 29,
-      "matrix_value": 461,
+      "matrix_id": 268,
+      "matrix_value": 582,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1022,
+      "random_tile_count": 950,
       "random_tile_evidence": {
-        "count": 1022,
+        "count": 950,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "eb587fdcd9e2fc598af32e100463e022a717d5b4de963261b05b71bbed411bf9"
+        "sha256": "cc9895c7b4cad7a2255cb0519ad0bc20543860804affee3f1884e23aae7994a7"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D41R0104",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 11
     },
     {
       "data_id": 91,
       "direction": 1,
-      "land_file_id": 343,
+      "land_file_id": 652,
       "map_id": 343,
-      "matrix_id": 236,
-      "matrix_value": 343,
+      "matrix_id": 197,
+      "matrix_value": 652,
       "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 1023,
-      "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "3e0f884c7ad65e1ce0e9db34674528ec7de37341621419482a76168ef4808279"
-      },
-      "source": "derived",
-      "symbol": "MAP_SAF01",
-      "x": 16,
-      "y": 15
-    },
-    {
-      "data_id": 91,
-      "direction": 1,
-      "land_file_id": 344,
-      "map_id": 344,
-      "matrix_id": 237,
-      "matrix_value": 344,
-      "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 963,
-      "random_tile_evidence": {
-        "count": 963,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "2c6935ef35c79e1bc3d1799aef68807b1b78f41749614cc71a0a598ae0457345"
-      },
-      "source": "derived",
-      "symbol": "MAP_SAF02",
-      "x": 16,
-      "y": 16
-    },
-    {
-      "data_id": 91,
-      "direction": 1,
-      "land_file_id": 345,
-      "map_id": 345,
-      "matrix_id": 238,
-      "matrix_value": 345,
-      "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 1023,
-      "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
-      },
-      "source": "derived",
-      "symbol": "MAP_SAF03",
-      "x": 16,
-      "y": 16
-    },
-    {
-      "data_id": 91,
-      "direction": 1,
-      "land_file_id": 346,
-      "map_id": 346,
-      "matrix_id": 239,
-      "matrix_value": 346,
-      "matrix_x": 0,
-      "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 1023,
-      "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "3e0f884c7ad65e1ce0e9db34674528ec7de37341621419482a76168ef4808279"
-      },
-      "source": "derived",
-      "symbol": "MAP_SAF04",
-      "x": 16,
-      "y": 15
-    },
-    {
-      "data_id": 91,
-      "direction": 1,
-      "land_file_id": 347,
-      "map_id": 347,
-      "matrix_id": 230,
-      "matrix_value": 347,
-      "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 424,
+      "random_tile_count": 731,
       "random_tile_evidence": {
-        "count": 424,
+        "count": 731,
+        "max_x": 30,
+        "max_y": 30,
+        "min_x": 1,
+        "min_y": 1,
+        "sha256": "6366511075bf14abd9fe8c922fd0d94cb8a5a7bf9d4b1d0340bc1777f0a9dcf6"
+      },
+      "source": "derived:compact-pair",
+      "symbol": "MAP_SAF01",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "data_id": 91,
+      "direction": 1,
+      "land_file_id": 653,
+      "map_id": 344,
+      "matrix_id": 198,
+      "matrix_value": 653,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 0,
+      "random_tile_count": 735,
+      "random_tile_evidence": {
+        "count": 735,
         "max_x": 31,
         "max_y": 31,
-        "min_x": 16,
+        "min_x": 0,
         "min_y": 0,
-        "sha256": "11a7f27ab4fe958dc5a3d90b9b02cf2e20f51952e989e6814697c4ec4e20fe9f"
+        "sha256": "e01fdabbbb1de714df3cae7bc554ea5e2dd1675d5c03a8616f9b83be2dd3363d"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
+      "symbol": "MAP_SAF02",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "data_id": 91,
+      "direction": 1,
+      "land_file_id": 654,
+      "map_id": 345,
+      "matrix_id": 199,
+      "matrix_value": 654,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 0,
+      "random_tile_count": 724,
+      "random_tile_evidence": {
+        "count": 724,
+        "max_x": 30,
+        "max_y": 30,
+        "min_x": 1,
+        "min_y": 1,
+        "sha256": "fd29bde83049d5e33031240894238730caae1b0e38ab946393b178defac2854c"
+      },
+      "source": "derived:compact-pair",
+      "symbol": "MAP_SAF03",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "data_id": 91,
+      "direction": 1,
+      "land_file_id": 655,
+      "map_id": 346,
+      "matrix_id": 200,
+      "matrix_value": 655,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 2,
+      "random_tile_count": 435,
+      "random_tile_evidence": {
+        "count": 435,
+        "max_x": 27,
+        "max_y": 27,
+        "min_x": 4,
+        "min_y": 4,
+        "sha256": "c8fe8ddd2b7a65bcc13b02036e41401192ad7926498ab36fbc9816f97d3298c2"
+      },
+      "source": "derived:compact-pair",
+      "symbol": "MAP_SAF04",
+      "x": 4,
+      "y": 4
+    },
+    {
+      "data_id": 91,
+      "direction": 1,
+      "land_file_id": 656,
+      "map_id": 347,
+      "matrix_id": 201,
+      "matrix_value": 656,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 1536,
+      "random_tile_count": 338,
+      "random_tile_evidence": {
+        "count": 338,
+        "max_x": 31,
+        "max_y": 29,
+        "min_x": 0,
+        "min_y": 0,
+        "sha256": "c024099deeeb4d877f8cd3b6e5ef25c0b0be486eae79b4410bb7c3c1181bfabc"
+      },
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF05",
-      "x": 48,
-      "y": 16
+      "x": 0,
+      "y": 6
     },
     {
       "data_id": 91,
@@ -2193,68 +2193,68 @@
       "matrix_value": 657,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1024,
-      "random_tile_count": 797,
+      "permission": 0,
+      "random_tile_count": 537,
       "random_tile_evidence": {
-        "count": 797,
+        "count": 537,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "14fa8f79d5716bac2fba77a8bdee8a4b30ca0d367248bcb5d0412d6432c1033f"
+        "sha256": "06f5a9292c656eb88de605f9556eabed8e09b5fc6496467d6ca8e20b999bd348"
       },
-      "source": "derived:loaded-header",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF06",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 17
     },
     {
       "data_id": 91,
       "direction": 1,
-      "land_file_id": 349,
+      "land_file_id": 658,
       "map_id": 349,
-      "matrix_id": 230,
-      "matrix_value": 349,
+      "matrix_id": 203,
+      "matrix_value": 658,
       "matrix_x": 0,
-      "matrix_y": 1,
-      "permission": 1536,
-      "random_tile_count": 512,
+      "matrix_y": 0,
+      "permission": 1024,
+      "random_tile_count": 481,
       "random_tile_evidence": {
-        "count": 512,
+        "count": 481,
+        "max_x": 29,
+        "max_y": 29,
+        "min_x": 2,
+        "min_y": 2,
+        "sha256": "3511696609fe42f363a09383e0c896fe221518dfb56d4aa323e3c304ca62f6e3"
+      },
+      "source": "derived:loaded-header:compact-pair",
+      "symbol": "MAP_SAF07",
+      "x": 2,
+      "y": 12
+    },
+    {
+      "data_id": 91,
+      "direction": 1,
+      "land_file_id": 659,
+      "map_id": 350,
+      "matrix_id": 204,
+      "matrix_value": 659,
+      "matrix_x": 0,
+      "matrix_y": 0,
+      "permission": 1024,
+      "random_tile_count": 458,
+      "random_tile_evidence": {
+        "count": 458,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
-        "min_y": 16,
-        "sha256": "139246e3b11198882fe56f82568ba624fce01c7d1e951d9aa0decbef4c11fd3a"
+        "min_y": 0,
+        "sha256": "57e38887a40f18407f42ee6508e096d784d99f4e588b7d3dbb318a1c7d8da40c"
       },
-      "source": "derived",
-      "symbol": "MAP_SAF07",
-      "x": 15,
-      "y": 48
-    },
-    {
-      "data_id": 91,
-      "direction": 1,
-      "land_file_id": 350,
-      "map_id": 350,
-      "matrix_id": 230,
-      "matrix_value": 350,
-      "matrix_x": 1,
-      "matrix_y": 1,
-      "permission": 1536,
-      "random_tile_count": 232,
-      "random_tile_evidence": {
-        "count": 232,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 16,
-        "min_y": 16,
-        "sha256": "4374c3c862d0eadfe562ab1074dc05eed02974a30737fa4c918d00a24e962aa4"
-      },
-      "source": "derived",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF08",
-      "x": 48,
-      "y": 48
+      "x": 0,
+      "y": 11
     },
     {
       "data_id": 91,
@@ -2265,20 +2265,20 @@
       "matrix_value": 660,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 2,
-      "random_tile_count": 835,
+      "permission": 4622,
+      "random_tile_count": 347,
       "random_tile_evidence": {
-        "count": 835,
+        "count": 347,
         "max_x": 31,
-        "max_y": 31,
+        "max_y": 30,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "e6d63461be7b9e685619d9a86e6fe5b410b8e8924c3f23def5de0d44f4869726"
+        "sha256": "be0efa29d2e53922fc823ccfe28fac7bea7d0962ff68bf94a7e5b50fd21f1046"
       },
-      "source": "derived:loaded-header",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF09",
-      "x": 16,
-      "y": 16
+      "x": 2,
+      "y": 2
     },
     {
       "data_id": 91,
@@ -2290,19 +2290,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1023,
+      "random_tile_count": 563,
       "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+        "count": 563,
+        "max_x": 29,
+        "max_y": 29,
+        "min_x": 2,
+        "min_y": 2,
+        "sha256": "da608016a38995208f9016939f8e683c2b147f98d4e9a5e9709930e571bfa16b"
       },
-      "source": "derived:loaded-header",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF10",
-      "x": 16,
-      "y": 16
+      "x": 2,
+      "y": 12
     },
     {
       "data_id": 91,
@@ -2313,20 +2313,20 @@
       "matrix_value": 662,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 2,
-      "random_tile_count": 1023,
+      "permission": 0,
+      "random_tile_count": 395,
       "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "3856ddbd4b79f3823bf740a699ba5a476485c96f7759a01298dde78ece1a2de9"
+        "count": 395,
+        "max_x": 27,
+        "max_y": 27,
+        "min_x": 4,
+        "min_y": 4,
+        "sha256": "3d29b87b8c2d81b45af99db7452fcb107808607b66538f0a2a4a91d32abe924d"
       },
-      "source": "derived:loaded-header",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF11",
-      "x": 16,
-      "y": 17
+      "x": 4,
+      "y": 4
     },
     {
       "data_id": 91,
@@ -2337,28 +2337,28 @@
       "matrix_value": 663,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1313,
-      "random_tile_count": 1023,
+      "permission": 1024,
+      "random_tile_count": 95,
       "random_tile_evidence": {
-        "count": 1023,
-        "max_x": 31,
-        "max_y": 31,
-        "min_x": 0,
-        "min_y": 0,
-        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+        "count": 95,
+        "max_x": 25,
+        "max_y": 24,
+        "min_x": 5,
+        "min_y": 4,
+        "sha256": "8f6e5d7c6a04b4be260cbc90cb5ac7b6196521bab0433d7e147bd759b025e235"
       },
-      "source": "derived:loaded-header",
+      "source": "derived:loaded-header:compact-pair",
       "symbol": "MAP_SAF12",
-      "x": 16,
-      "y": 16
+      "x": 5,
+      "y": 17
     },
     {
       "data_id": 91,
       "direction": 1,
-      "land_file_id": 355,
+      "land_file_id": 664,
       "map_id": 355,
-      "matrix_id": 241,
-      "matrix_value": 355,
+      "matrix_id": 209,
+      "matrix_value": 664,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
@@ -2369,23 +2369,23 @@
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+        "sha256": "1dcaae3e1769483ea2f6cacc3fd11249d4e0bf13fbd591cb93536c0f61c7bbda"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_SAF13",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 91,
       "direction": 1,
-      "land_file_id": 356,
+      "land_file_id": 665,
       "map_id": 356,
-      "matrix_id": 240,
-      "matrix_value": 356,
+      "matrix_id": 210,
+      "matrix_value": 665,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
+      "permission": 0,
       "random_tile_count": 1023,
       "random_tile_evidence": {
         "count": 1023,
@@ -2393,12 +2393,12 @@
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "34bbeda64ed0000705d341c54b862153a7b9629deb99217db68232987098c0a1"
+        "sha256": "1dcaae3e1769483ea2f6cacc3fd11249d4e0bf13fbd591cb93536c0f61c7bbda"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_SAF14",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 92,
@@ -2409,20 +2409,20 @@
       "matrix_value": 20,
       "matrix_x": 44,
       "matrix_y": 8,
-      "permission": 1536,
-      "random_tile_count": 3567,
+      "permission": 3850,
+      "random_tile_count": 257,
       "random_tile_evidence": {
-        "count": 3567,
-        "max_x": 1455,
-        "max_y": 303,
-        "min_x": 1392,
-        "min_y": 240,
-        "sha256": "5ff6a85aeae9436210e1f6ab283b0625f09cdb1464dfae97d9d44607bfd45a08"
+        "count": 257,
+        "max_x": 1438,
+        "max_y": 287,
+        "min_x": 1408,
+        "min_y": 256,
+        "sha256": "02a037e930f373a88c6f769e544057caf10440548e37099efe99aa65c6fb8e5e"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R12",
-      "x": 1424,
-      "y": 272
+      "x": 1410,
+      "y": 257
     },
     {
       "data_id": 93,
@@ -2433,20 +2433,20 @@
       "matrix_value": 91,
       "matrix_x": 37,
       "matrix_y": 14,
-      "permission": 33,
-      "random_tile_count": 3145,
+      "permission": 0,
+      "random_tile_count": 67,
       "random_tile_evidence": {
-        "count": 3145,
-        "max_x": 1240,
-        "max_y": 495,
-        "min_x": 1177,
-        "min_y": 432,
-        "sha256": "34c0244820d4e57d73322dd1dce01acce66c95ff77b8f6000406ee69d960d43c"
+        "count": 67,
+        "max_x": 1215,
+        "max_y": 463,
+        "min_x": 1184,
+        "min_y": 448,
+        "sha256": "290d3a432a4a279723cda289ead50dc97b9f5895095fec25e1f1ccba8e24abaa"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_W19",
-      "x": 1209,
-      "y": 464
+      "x": 1184,
+      "y": 455
     },
     {
       "data_id": 94,
@@ -2457,20 +2457,20 @@
       "matrix_value": 92,
       "matrix_x": 34,
       "matrix_y": 15,
-      "permission": 1047,
-      "random_tile_count": 2700,
+      "permission": 4608,
+      "random_tile_count": 29,
       "random_tile_evidence": {
-        "count": 2700,
-        "max_x": 1143,
-        "max_y": 527,
-        "min_x": 1080,
-        "min_y": 464,
-        "sha256": "2f992b62d644ea1850e4d94c3c314375e8dc0c58d1a28d9cf695ee9470e6fcdd"
+        "count": 29,
+        "max_x": 1116,
+        "max_y": 482,
+        "min_x": 1088,
+        "min_y": 480,
+        "sha256": "a80e9667e9fb0d3f5c345ddd9a93f255d4d5eea681a9fddc189a1b7927e9ad24"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_W20",
-      "x": 1112,
-      "y": 496
+      "x": 1090,
+      "y": 480
     },
     {
       "data_id": 95,
@@ -2482,19 +2482,19 @@
       "matrix_x": 32,
       "matrix_y": 11,
       "permission": 1024,
-      "random_tile_count": 3917,
+      "random_tile_count": 487,
       "random_tile_evidence": {
-        "count": 3917,
-        "max_x": 1071,
-        "max_y": 399,
-        "min_x": 1008,
-        "min_y": 336,
-        "sha256": "95fd1a1a0cd0d139b80cafe883326a2af16608bc4a97b44472b0bd6bcabf7f4a"
+        "count": 487,
+        "max_x": 1055,
+        "max_y": 383,
+        "min_x": 1024,
+        "min_y": 352,
+        "sha256": "99b1cd94d6946510c47f7e2ecf1835d50e177803a3120de9bf9e549ef42eaf52"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T01",
-      "x": 1040,
-      "y": 368
+      "x": 1024,
+      "y": 357
     },
     {
       "data_id": 96,
@@ -2506,19 +2506,19 @@
       "matrix_x": 31,
       "matrix_y": 7,
       "permission": 1024,
-      "random_tile_count": 4056,
+      "random_tile_count": 97,
       "random_tile_evidence": {
-        "count": 4056,
-        "max_x": 1039,
-        "max_y": 271,
-        "min_x": 976,
-        "min_y": 208,
-        "sha256": "63fd725b8536c26ec2598d32913080b9c6614829831d6f7d02f4e4504171bb78"
+        "count": 97,
+        "max_x": 1023,
+        "max_y": 255,
+        "min_x": 1008,
+        "min_y": 224,
+        "sha256": "50ddb561671ebffc2fdd32e59b1753db3e068926f0202c0c03a05f96759a0627"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T02",
       "x": 1008,
-      "y": 240
+      "y": 235
     },
     {
       "data_id": 97,
@@ -2530,19 +2530,19 @@
       "matrix_x": 40,
       "matrix_y": 3,
       "permission": 1024,
-      "random_tile_count": 3808,
+      "random_tile_count": 339,
       "random_tile_evidence": {
-        "count": 3808,
-        "max_x": 1327,
-        "max_y": 143,
-        "min_x": 1264,
-        "min_y": 80,
-        "sha256": "0c543a15195280f169470a4b033cb89ce5db92f7928c116c491253b38e77c194"
+        "count": 339,
+        "max_x": 1311,
+        "max_y": 127,
+        "min_x": 1280,
+        "min_y": 96,
+        "sha256": "f9698e7caf1d386a12eafbab09021b65328fea5111048a2c586766cefaa1a4ba"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T04",
-      "x": 1296,
-      "y": 112
+      "x": 1280,
+      "y": 109
     },
     {
       "data_id": 98,
@@ -2553,20 +2553,20 @@
       "matrix_value": 54,
       "matrix_x": 40,
       "matrix_y": 9,
-      "permission": 32768,
-      "random_tile_count": 3558,
+      "permission": 0,
+      "random_tile_count": 466,
       "random_tile_evidence": {
-        "count": 3558,
-        "max_x": 1328,
-        "max_y": 326,
-        "min_x": 1265,
-        "min_y": 263,
-        "sha256": "5ab8a89363a78216240ee070b3948b0a0bab26586c7f1bf6452044dec4ec2820"
+        "count": 466,
+        "max_x": 1311,
+        "max_y": 319,
+        "min_x": 1280,
+        "min_y": 288,
+        "sha256": "2e819fba01c03a1133321dd58e0f198cab8b11047da421a6723addf22fe3a3c7"
       },
-      "source": "verified:derived",
+      "source": "verified:derived:compact-pair",
       "symbol": "MAP_T06",
-      "x": 1297,
-      "y": 295
+      "x": 1280,
+      "y": 292
     },
     {
       "data_id": 99,
@@ -2577,20 +2577,20 @@
       "matrix_value": 55,
       "matrix_x": 38,
       "matrix_y": 7,
-      "permission": 1536,
-      "random_tile_count": 4088,
+      "permission": 1024,
+      "random_tile_count": 422,
       "random_tile_evidence": {
-        "count": 4088,
-        "max_x": 1263,
-        "max_y": 271,
-        "min_x": 1200,
-        "min_y": 208,
-        "sha256": "0e2aa90d38283e5dce9295c74ea212b94253f68c4592235bc5670d47afb697a4"
+        "count": 422,
+        "max_x": 1247,
+        "max_y": 255,
+        "min_x": 1216,
+        "min_y": 226,
+        "sha256": "7ea49ed2eb5efef466ed8bd66d9a24f51730fb8cb242ea979fe1954b1ae6bfeb"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T07",
-      "x": 1232,
-      "y": 240
+      "x": 1216,
+      "y": 226
     },
     {
       "data_id": 100,
@@ -2602,19 +2602,19 @@
       "matrix_x": 37,
       "matrix_y": 12,
       "permission": 1024,
-      "random_tile_count": 3938,
+      "random_tile_count": 251,
       "random_tile_evidence": {
-        "count": 3938,
-        "max_x": 1231,
-        "max_y": 435,
-        "min_x": 1168,
-        "min_y": 372,
-        "sha256": "0c966f38ae0c47d4a791489b47af7abbb5a0005479e955be17372393aaaaf73a"
+        "count": 251,
+        "max_x": 1215,
+        "max_y": 415,
+        "min_x": 1194,
+        "min_y": 384,
+        "sha256": "07cbfcb3c0d26a00079cfdae275c5579ed38441775791d91d15d32b9ddf99a8b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T08",
-      "x": 1200,
-      "y": 404
+      "x": 1194,
+      "y": 405
     },
     {
       "data_id": 101,
@@ -2625,20 +2625,20 @@
       "matrix_value": 57,
       "matrix_x": 32,
       "matrix_y": 15,
-      "permission": 1536,
-      "random_tile_count": 3319,
+      "permission": 0,
+      "random_tile_count": 313,
       "random_tile_evidence": {
-        "count": 3319,
-        "max_x": 1065,
-        "max_y": 527,
-        "min_x": 1002,
-        "min_y": 464,
-        "sha256": "fb2646f566007f8e128185edaa1e0d2c17bdb4c74471f6c116b389289c7e5f95"
+        "count": 313,
+        "max_x": 1055,
+        "max_y": 508,
+        "min_x": 1024,
+        "min_y": 480,
+        "sha256": "d229737873ec64bf19e35740655ecfc7b3356d473bb2e8dd956eb1e30e924624"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_T09",
-      "x": 1034,
-      "y": 496
+      "x": 1024,
+      "y": 492
     },
     {
       "data_id": 102,
@@ -2649,20 +2649,20 @@
       "matrix_value": 152,
       "matrix_x": 2,
       "matrix_y": 10,
-      "permission": 2,
-      "random_tile_count": 3791,
+      "permission": 1024,
+      "random_tile_count": 202,
       "random_tile_evidence": {
-        "count": 3791,
-        "max_x": 111,
-        "max_y": 367,
-        "min_x": 48,
-        "min_y": 304,
-        "sha256": "5a6e5889bf682feade281bab02e140b824774dc318e0a29bbe1bcce17398ed81"
+        "count": 202,
+        "max_x": 92,
+        "max_y": 346,
+        "min_x": 64,
+        "min_y": 320,
+        "sha256": "acb77dd26bd27ed6fd84a3fc88d1a304aca2910169b7c59654d5f07835913214"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R48",
-      "x": 80,
-      "y": 336
+      "x": 71,
+      "y": 337
     },
     {
       "data_id": 103,
@@ -2673,20 +2673,20 @@
       "matrix_value": 30,
       "matrix_x": 28,
       "matrix_y": 9,
-      "permission": 0,
-      "random_tile_count": 4093,
+      "permission": 1024,
+      "random_tile_count": 207,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 943,
-        "max_y": 335,
-        "min_x": 880,
-        "min_y": 272,
-        "sha256": "0cb15b38c1061e8b1bf811de5729fead5875ed18e106dea37c3fa0dcc533b3dd"
+        "count": 207,
+        "max_x": 925,
+        "max_y": 319,
+        "min_x": 903,
+        "min_y": 297,
+        "sha256": "721a7a2fd514a5856ed63fc76076cd0a97755e83f452c7eca9a90146590efcde"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R26",
-      "x": 912,
-      "y": 304
+      "x": 903,
+      "y": 303
     },
     {
       "data_id": 104,
@@ -2697,20 +2697,20 @@
       "matrix_value": 31,
       "matrix_x": 25,
       "matrix_y": 12,
-      "permission": 3328,
-      "random_tile_count": 3283,
+      "permission": 2,
+      "random_tile_count": 179,
       "random_tile_evidence": {
-        "count": 3283,
-        "max_x": 847,
-        "max_y": 431,
-        "min_x": 784,
-        "min_y": 368,
-        "sha256": "ef886a0d1a19bdf83c5ca56cf0b5cada10797db3620a6954ffd6876c2fe95d71"
+        "count": 179,
+        "max_x": 831,
+        "max_y": 402,
+        "min_x": 800,
+        "min_y": 384,
+        "sha256": "1a1c1af14a358d59bdd0a30be822b997d7a84c7a260af758d4b381845fcf6fd2"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R27",
-      "x": 816,
-      "y": 400
+      "x": 800,
+      "y": 395
     },
     {
       "data_id": 105,
@@ -2721,20 +2721,20 @@
       "matrix_value": 32,
       "matrix_x": 26,
       "matrix_y": 8,
-      "permission": 1024,
-      "random_tile_count": 4033,
+      "permission": 1536,
+      "random_tile_count": 331,
       "random_tile_evidence": {
-        "count": 4033,
-        "max_x": 879,
-        "max_y": 302,
-        "min_x": 816,
-        "min_y": 239,
-        "sha256": "0d78e60726d26dc60472308625b8084abf83bf4eded5435885968e96f63d953a"
+        "count": 331,
+        "max_x": 863,
+        "max_y": 283,
+        "min_x": 832,
+        "min_y": 261,
+        "sha256": "e8323336cd3b3dd59f8a341a471da431369b09c43445c6f317c01b296b032314"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R28",
-      "x": 848,
-      "y": 271
+      "x": 832,
+      "y": 266
     },
     {
       "data_id": 106,
@@ -2746,43 +2746,43 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1017,
+      "random_tile_count": 737,
       "random_tile_evidence": {
-        "count": 1017,
+        "count": 737,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "7d771635a23d6f080c943dfd8b4b4d67003921d417d3837c1111e0b082413ab8"
+        "sha256": "752791ea1bbe09f568f6297ecddf8467bddeee57691d036997c64481d4f310f0"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D02R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 7
     },
     {
       "data_id": 107,
       "direction": 1,
-      "land_file_id": 448,
+      "land_file_id": 390,
       "map_id": 448,
-      "matrix_id": 183,
-      "matrix_value": 448,
+      "matrix_id": 4,
+      "matrix_value": 390,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 8,
-      "random_tile_count": 1017,
+      "permission": 0,
+      "random_tile_count": 885,
       "random_tile_evidence": {
-        "count": 1017,
+        "count": 885,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "df9ab2e032af81b571dd51553d474eee4b84de19dc129e8640196de26503ff27"
+        "sha256": "4e997d3de94ae3e135d26cd9edc708de0b1acef9d6e398bde2abe13aef486ea4"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D02R0102",
-      "x": 5,
-      "y": 16
+      "x": 0,
+      "y": 9
     },
     {
       "data_id": 108,
@@ -2794,43 +2794,43 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2300,
+      "random_tile_count": 784,
       "random_tile_evidence": {
-        "count": 2300,
+        "count": 784,
         "max_x": 63,
-        "max_y": 47,
-        "min_x": 16,
+        "max_y": 31,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "02d9f9d9ff8b2d963ba5e8577ec14c5fdd16b7d30dc97c745894eb17b205cc90"
+        "sha256": "4e2b6ff5f6904d9c5b313e388aca838f9b2e70f9e8f3a74e4441531c974f163e"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D05R0101",
-      "x": 48,
-      "y": 16
+      "x": 32,
+      "y": 0
     },
     {
       "data_id": 109,
       "direction": 1,
-      "land_file_id": 452,
+      "land_file_id": 412,
       "map_id": 452,
-      "matrix_id": 27,
-      "matrix_value": 452,
+      "matrix_id": 7,
+      "matrix_value": 412,
       "matrix_x": 1,
       "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 2301,
+      "permission": 0,
+      "random_tile_count": 702,
       "random_tile_evidence": {
-        "count": 2301,
+        "count": 702,
         "max_x": 63,
-        "max_y": 47,
-        "min_x": 16,
+        "max_y": 31,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "cd5fe7a666319797c465ea2dd7ea33421523a249e7083070690a63ae1f3a07df"
+        "sha256": "fc552bea60ad28ac1d99406843a412be3d0cc47662184a26b50a7b100bcc3447"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D05R0102",
-      "x": 48,
-      "y": 16
+      "x": 32,
+      "y": 0
     },
     {
       "data_id": 110,
@@ -2842,19 +2842,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2301,
+      "random_tile_count": 766,
       "random_tile_evidence": {
-        "count": 2301,
+        "count": 766,
         "max_x": 63,
-        "max_y": 47,
-        "min_x": 16,
+        "max_y": 31,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "b6cb075341cdff5c52bd0e05d1694c8d7941a8a98ad0cf05e3bb5a205bc61833"
+        "sha256": "33a2cc87fa82fcefb5c6d67bc91e28987498c736bf1dc3449c6ed54fae330567"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D43R0101",
-      "x": 48,
-      "y": 16
+      "x": 32,
+      "y": 0
     },
     {
       "data_id": 111,
@@ -2865,20 +2865,20 @@
       "matrix_value": 9,
       "matrix_x": 32,
       "matrix_y": 10,
-      "permission": 0,
-      "random_tile_count": 4095,
+      "permission": 1024,
+      "random_tile_count": 477,
       "random_tile_evidence": {
-        "count": 4095,
-        "max_x": 1071,
-        "max_y": 367,
-        "min_x": 1008,
-        "min_y": 304,
-        "sha256": "c32c152b1c17e00b0364b1fbec00452d0943379018d5210c41d279bb905d9fc2"
+        "count": 477,
+        "max_x": 1051,
+        "max_y": 351,
+        "min_x": 1028,
+        "min_y": 320,
+        "sha256": "364ead87f63787fde3e0a61141236ed8f300f3eecc8583d67845afb6ce349e72"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R01",
-      "x": 1040,
-      "y": 336
+      "x": 1027,
+      "y": 320
     },
     {
       "data_id": 112,
@@ -2889,20 +2889,20 @@
       "matrix_value": 10,
       "matrix_x": 32,
       "matrix_y": 6,
-      "permission": 0,
-      "random_tile_count": 4091,
+      "permission": 1024,
+      "random_tile_count": 612,
       "random_tile_evidence": {
-        "count": 4091,
-        "max_x": 1071,
-        "max_y": 239,
-        "min_x": 1008,
-        "min_y": 176,
-        "sha256": "6d9647bfd782395d706d6ecda38daf3362b04a0591da59aed27804ce98aec9ad"
+        "count": 612,
+        "max_x": 1053,
+        "max_y": 223,
+        "min_x": 1024,
+        "min_y": 193,
+        "sha256": "c10363ea9c21b27843ae396f72258ff4d70fabeee68d427ef8e956b45f7f0d2c"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R02",
-      "x": 1040,
-      "y": 208
+      "x": 1024,
+      "y": 210
     },
     {
       "data_id": 113,
@@ -2914,19 +2914,19 @@
       "matrix_x": 36,
       "matrix_y": 3,
       "permission": 0,
-      "random_tile_count": 4093,
+      "random_tile_count": 293,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 1199,
-        "max_y": 143,
-        "min_x": 1136,
-        "min_y": 80,
-        "sha256": "59f232df0e186895dbe76c4a93d2f3800f068039985651b9bded3c8d93faa118"
+        "count": 293,
+        "max_x": 1174,
+        "max_y": 124,
+        "min_x": 1152,
+        "min_y": 103,
+        "sha256": "75e33fa081156853ffc3a0b1d66cbf90912adf4702829409421b8aad7b23acd3"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R03",
-      "x": 1168,
-      "y": 112
+      "x": 1152,
+      "y": 119
     },
     {
       "data_id": 114,
@@ -2938,19 +2938,19 @@
       "matrix_x": 38,
       "matrix_y": 3,
       "permission": 1024,
-      "random_tile_count": 4095,
+      "random_tile_count": 363,
       "random_tile_evidence": {
-        "count": 4095,
-        "max_x": 1263,
-        "max_y": 143,
-        "min_x": 1200,
-        "min_y": 80,
-        "sha256": "f342e8d763097ed9cb7e74a24c7c06d202e28fd60b274265807e10f6952ba7f5"
+        "count": 363,
+        "max_x": 1247,
+        "max_y": 124,
+        "min_x": 1216,
+        "min_y": 106,
+        "sha256": "4c2b52d8c6366abcf533bea48af340f8f838281736bd7cdc2b5a10576ed0a19e"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R04",
-      "x": 1232,
-      "y": 112
+      "x": 1216,
+      "y": 108
     },
     {
       "data_id": 115,
@@ -2961,20 +2961,20 @@
       "matrix_value": 13,
       "matrix_x": 40,
       "matrix_y": 5,
-      "permission": 1024,
-      "random_tile_count": 4091,
+      "permission": 0,
+      "random_tile_count": 332,
       "random_tile_evidence": {
-        "count": 4091,
-        "max_x": 1327,
-        "max_y": 207,
-        "min_x": 1264,
-        "min_y": 144,
-        "sha256": "c71d12dc3198544f408c24d6b665ab1cf3b2dc52c89a129497ae9c03efade741"
+        "count": 332,
+        "max_x": 1309,
+        "max_y": 189,
+        "min_x": 1291,
+        "min_y": 160,
+        "sha256": "28907a06d535d21e593421a911a6cc7684fea74d7f40008c333b572b8747c6de"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R05",
-      "x": 1296,
-      "y": 176
+      "x": 1290,
+      "y": 183
     },
     {
       "data_id": 116,
@@ -2985,20 +2985,20 @@
       "matrix_value": 14,
       "matrix_x": 40,
       "matrix_y": 8,
-      "permission": 2,
-      "random_tile_count": 3903,
+      "permission": 1024,
+      "random_tile_count": 541,
       "random_tile_evidence": {
-        "count": 3903,
-        "max_x": 1326,
-        "max_y": 303,
-        "min_x": 1263,
-        "min_y": 240,
-        "sha256": "92a01acdfec2f337b1a27c232e80670c3f3ce760bda814460def9a82c6d5ecc1"
+        "count": 541,
+        "max_x": 1311,
+        "max_y": 287,
+        "min_x": 1280,
+        "min_y": 256,
+        "sha256": "f820e81d59f04baa2139acdb412c9869b95e2ae4e036223be87753f77ec18951"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R06",
-      "x": 1295,
-      "y": 272
+      "x": 1280,
+      "y": 261
     },
     {
       "data_id": 117,
@@ -3010,19 +3010,19 @@
       "matrix_x": 39,
       "matrix_y": 7,
       "permission": 0,
-      "random_tile_count": 4093,
+      "random_tile_count": 302,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 1295,
-        "max_y": 271,
-        "min_x": 1232,
-        "min_y": 208,
-        "sha256": "a48d78ca0a69fbd75ece54d8bc6293f2e140051cdc06e88075196bc3f9d057ff"
+        "count": 302,
+        "max_x": 1273,
+        "max_y": 250,
+        "min_x": 1248,
+        "min_y": 226,
+        "sha256": "345ba17cba9f71493fa0db48ed4046c48127ac45e9d75e455e23fdee966b940b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R07",
-      "x": 1264,
-      "y": 240
+      "x": 1248,
+      "y": 238
     },
     {
       "data_id": 118,
@@ -3033,20 +3033,20 @@
       "matrix_value": 16,
       "matrix_x": 42,
       "matrix_y": 7,
-      "permission": 0,
-      "random_tile_count": 4093,
+      "permission": 1024,
+      "random_tile_count": 394,
       "random_tile_evidence": {
-        "count": 4093,
-        "max_x": 1391,
-        "max_y": 271,
-        "min_x": 1328,
-        "min_y": 208,
-        "sha256": "487e3ae817bb5a994e86e0d52a0087f16d9500dda8212cf20c008d14707e70a1"
+        "count": 394,
+        "max_x": 1375,
+        "max_y": 249,
+        "min_x": 1344,
+        "min_y": 231,
+        "sha256": "b14b135d7e3671f6520760c201a93fa1292a2680f3c0269d362427bf59fa4f50"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R08",
-      "x": 1360,
-      "y": 240
+      "x": 1344,
+      "y": 238
     },
     {
       "data_id": 119,
@@ -3057,20 +3057,20 @@
       "matrix_value": 17,
       "matrix_x": 44,
       "matrix_y": 4,
-      "permission": 0,
-      "random_tile_count": 3935,
+      "permission": 1024,
+      "random_tile_count": 312,
       "random_tile_evidence": {
-        "count": 3935,
-        "max_x": 1455,
-        "max_y": 175,
-        "min_x": 1392,
-        "min_y": 112,
-        "sha256": "a8a76da6aeae5d1dd8326f9639896137c866b0ce88c5531dd492a329da732334"
+        "count": 312,
+        "max_x": 1439,
+        "max_y": 159,
+        "min_x": 1408,
+        "min_y": 128,
+        "sha256": "d7eb0a46bf5cc5372bbc378f391a0ebacc22d8f391aa5f905d3d51c460fed8d1"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R09",
-      "x": 1424,
-      "y": 144
+      "x": 1408,
+      "y": 140
     },
     {
       "data_id": 120,
@@ -3081,19 +3081,19 @@
       "matrix_value": 18,
       "matrix_x": 44,
       "matrix_y": 5,
-      "permission": 0,
-      "random_tile_count": 3915,
+      "permission": 2,
+      "random_tile_count": 168,
       "random_tile_evidence": {
-        "count": 3915,
-        "max_x": 1457,
-        "max_y": 211,
-        "min_x": 1394,
-        "min_y": 148,
-        "sha256": "001b38e0e883cf07e2ff120dabd226e3e15b80cf50dc480a207c18fb47347164"
+        "count": 168,
+        "max_x": 1439,
+        "max_y": 188,
+        "min_x": 1408,
+        "min_y": 160,
+        "sha256": "bf49f40738214846a70cce0aef78e79664ba41062ee1e0d958ac9cd3d1ff3817"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R10",
-      "x": 1426,
+      "x": 1408,
       "y": 180
     },
     {
@@ -3106,19 +3106,19 @@
       "matrix_x": 42,
       "matrix_y": 9,
       "permission": 1024,
-      "random_tile_count": 3974,
+      "random_tile_count": 418,
       "random_tile_evidence": {
-        "count": 3974,
-        "max_x": 1391,
-        "max_y": 335,
-        "min_x": 1328,
-        "min_y": 272,
-        "sha256": "edbf2a5aed35852132bbdddc2d888af8413179faf58d65f0baff0fcd531afebc"
+        "count": 418,
+        "max_x": 1375,
+        "max_y": 317,
+        "min_x": 1344,
+        "min_y": 288,
+        "sha256": "06bdc52320c3c7bc186f99260abf4c1e70caad87f0ce2045c672f560be5a81e5"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R11",
-      "x": 1360,
-      "y": 304
+      "x": 1344,
+      "y": 302
     },
     {
       "data_id": 122,
@@ -3130,18 +3130,18 @@
       "matrix_x": 42,
       "matrix_y": 11,
       "permission": 1024,
-      "random_tile_count": 3593,
+      "random_tile_count": 206,
       "random_tile_evidence": {
-        "count": 3593,
-        "max_x": 1391,
-        "max_y": 399,
-        "min_x": 1328,
-        "min_y": 336,
-        "sha256": "e15dfc464cf553309d2210de308b643b9ec6adbcfb4ac4409d72fe86ecc7723d"
+        "count": 206,
+        "max_x": 1375,
+        "max_y": 383,
+        "min_x": 1344,
+        "min_y": 368,
+        "sha256": "b31ccc58641a11762ce0f192a6ec67db41a727fa043fd9e179044f210ea1ddec"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R13",
-      "x": 1360,
+      "x": 1344,
       "y": 368
     },
     {
@@ -3153,20 +3153,20 @@
       "matrix_value": 22,
       "matrix_x": 42,
       "matrix_y": 12,
-      "permission": 1024,
-      "random_tile_count": 3389,
+      "permission": 2,
+      "random_tile_count": 454,
       "random_tile_evidence": {
-        "count": 3389,
-        "max_x": 1392,
-        "max_y": 431,
-        "min_x": 1329,
-        "min_y": 368,
-        "sha256": "ba3d5fc1c3cb31edddd0b5a0e3e9e4f74df99fab5df493f2c0fdcf02fcd389ae"
+        "count": 454,
+        "max_x": 1375,
+        "max_y": 415,
+        "min_x": 1344,
+        "min_y": 384,
+        "sha256": "52b51cf88b9c4a09f4e08513fc075518386562705e1f293a72ff8c0b5c4aa49c"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R14",
-      "x": 1361,
-      "y": 400
+      "x": 1344,
+      "y": 385
     },
     {
       "data_id": 124,
@@ -3178,19 +3178,19 @@
       "matrix_x": 39,
       "matrix_y": 13,
       "permission": 1024,
-      "random_tile_count": 4061,
+      "random_tile_count": 425,
       "random_tile_evidence": {
-        "count": 4061,
-        "max_x": 1295,
-        "max_y": 463,
-        "min_x": 1232,
-        "min_y": 400,
-        "sha256": "3c9f5f08547f231a877391624de2535a3af4b2cfeac31d8db399fad02b17fbb5"
+        "count": 425,
+        "max_x": 1279,
+        "max_y": 438,
+        "min_x": 1248,
+        "min_y": 420,
+        "sha256": "882598747f36eed0aadb5dd943fb1eebfd253525ff6588cf130efb8a6ed7928b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R15",
-      "x": 1264,
-      "y": 432
+      "x": 1248,
+      "y": 420
     },
     {
       "data_id": 125,
@@ -3202,43 +3202,43 @@
       "matrix_x": 35,
       "matrix_y": 8,
       "permission": 0,
-      "random_tile_count": 4018,
+      "random_tile_count": 213,
       "random_tile_evidence": {
-        "count": 4018,
-        "max_x": 1167,
-        "max_y": 305,
-        "min_x": 1104,
-        "min_y": 242,
-        "sha256": "e076644031c1bfa87bfac81339c8dec64e5b34459d25d0ea44e0932d3a7f7cea"
+        "count": 213,
+        "max_x": 1151,
+        "max_y": 287,
+        "min_x": 1130,
+        "min_y": 274,
+        "sha256": "a23d308eb2d6d573c674b57374cd4393e4cc70e888e17ddc9ba90a61e312a41c"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R16",
-      "x": 1136,
+      "x": 1130,
       "y": 274
     },
     {
       "data_id": 126,
       "direction": 1,
-      "land_file_id": 179,
+      "land_file_id": 176,
       "map_id": 25,
       "matrix_id": 0,
       "matrix_value": 25,
       "matrix_x": 35,
-      "matrix_y": 12,
-      "permission": 1649,
-      "random_tile_count": 3288,
+      "matrix_y": 9,
+      "permission": 2,
+      "random_tile_count": 195,
       "random_tile_evidence": {
-        "count": 3288,
-        "max_x": 1167,
-        "max_y": 431,
-        "min_x": 1104,
-        "min_y": 368,
-        "sha256": "f57254027840688a09b3f4dd26061903ee8229b8da461a9eaad86927b40556cc"
+        "count": 195,
+        "max_x": 1151,
+        "max_y": 300,
+        "min_x": 1120,
+        "min_y": 288,
+        "sha256": "25c0d2e2e1482822f322f3bf1af981f13802a890a812584b30f3d0ca41bd2444"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R17",
-      "x": 1136,
-      "y": 400
+      "x": 1120,
+      "y": 289
     },
     {
       "data_id": 127,
@@ -3250,18 +3250,18 @@
       "matrix_x": 35,
       "matrix_y": 13,
       "permission": 0,
-      "random_tile_count": 3150,
+      "random_tile_count": 241,
       "random_tile_evidence": {
-        "count": 3150,
-        "max_x": 1167,
-        "max_y": 462,
-        "min_x": 1104,
-        "min_y": 399,
-        "sha256": "ca75c04fac03b4e37ca4b699ff1108014589fb2f9994f2c96265f8b2bb1865b4"
+        "count": 241,
+        "max_x": 1143,
+        "max_y": 431,
+        "min_x": 1120,
+        "min_y": 416,
+        "sha256": "128340cd3117a51e0f3090de6d0075e03bf330324c6d05e7629086fd58f88ed3"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R18",
-      "x": 1136,
+      "x": 1121,
       "y": 431
     },
     {
@@ -3273,20 +3273,20 @@
       "matrix_value": 93,
       "matrix_x": 32,
       "matrix_y": 13,
-      "permission": 1047,
-      "random_tile_count": 2684,
+      "permission": 12,
+      "random_tile_count": 73,
       "random_tile_evidence": {
-        "count": 2684,
-        "max_x": 1077,
-        "max_y": 457,
-        "min_x": 1014,
-        "min_y": 394,
-        "sha256": "65d038d306ebf2d25327f3a5ee8c993ce9776c891463875b72a09920f40221b7"
+        "count": 73,
+        "max_x": 1055,
+        "max_y": 419,
+        "min_x": 1024,
+        "min_y": 416,
+        "sha256": "e87fd1b7efab50eee5390c844987125b6d67fb983a4a0fcf19d294c82140b14b"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_W21",
-      "x": 1046,
-      "y": 426
+      "x": 1026,
+      "y": 416
     },
     {
       "data_id": 129,
@@ -3298,19 +3298,19 @@
       "matrix_x": 30,
       "matrix_y": 8,
       "permission": 1024,
-      "random_tile_count": 4011,
+      "random_tile_count": 461,
       "random_tile_evidence": {
-        "count": 4011,
-        "max_x": 1007,
-        "max_y": 302,
-        "min_x": 944,
-        "min_y": 239,
-        "sha256": "242c486ff997a1b064fcec6f441c6d96cc7c1cbb24e9f2bc6db2e8cd338f3e71"
+        "count": 461,
+        "max_x": 991,
+        "max_y": 286,
+        "min_x": 960,
+        "min_y": 256,
+        "sha256": "c841e8870492b7882f09f1707174dd89e4ff7cca154f5d5e79de6d8e327a4215"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R22",
-      "x": 976,
-      "y": 271
+      "x": 960,
+      "y": 263
     },
     {
       "data_id": 130,
@@ -3321,20 +3321,20 @@
       "matrix_value": 28,
       "matrix_x": 41,
       "matrix_y": 2,
-      "permission": 2,
-      "random_tile_count": 3799,
+      "permission": 4101,
+      "random_tile_count": 307,
       "random_tile_evidence": {
-        "count": 3799,
-        "max_x": 1364,
-        "max_y": 111,
-        "min_x": 1301,
-        "min_y": 48,
-        "sha256": "0707007a76e797f6b64aefd4cc3c19697827955191c7fa3b428053740b2d5298"
+        "count": 307,
+        "max_x": 1343,
+        "max_y": 95,
+        "min_x": 1312,
+        "min_y": 64,
+        "sha256": "a03335f84357926b17c53553b973fa75bf64f2150c11b07b0a5714789ce33aca"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R24",
-      "x": 1333,
-      "y": 80
+      "x": 1314,
+      "y": 64
     },
     {
       "data_id": 131,
@@ -3345,20 +3345,20 @@
       "matrix_value": 29,
       "matrix_x": 41,
       "matrix_y": 1,
-      "permission": 0,
-      "random_tile_count": 4016,
+      "permission": 1024,
+      "random_tile_count": 456,
       "random_tile_evidence": {
-        "count": 4016,
-        "max_x": 1359,
-        "max_y": 79,
-        "min_x": 1296,
-        "min_y": 16,
-        "sha256": "f1d245e426c3caf648052bf95e9b5fad80ffc572e8e083eb907d19e7b7a5e479"
+        "count": 456,
+        "max_x": 1343,
+        "max_y": 63,
+        "min_x": 1315,
+        "min_y": 40,
+        "sha256": "25d5182cc5acc61486d2bd6dea0d7786494d3a6d2f23f99bbb8f78a3efdeef59"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R25",
-      "x": 1328,
-      "y": 48
+      "x": 1315,
+      "y": 42
     },
     {
       "data_id": 132,
@@ -3369,20 +3369,20 @@
       "matrix_value": 620,
       "matrix_x": 1,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1286,
+      "permission": 258,
+      "random_tile_count": 338,
       "random_tile_evidence": {
-        "count": 1286,
+        "count": 338,
         "max_x": 63,
         "max_y": 31,
-        "min_x": 16,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "8d0ccf81e8317ab05380f3034d5eb57250a47f41b4801391f6adac642d7690dc"
+        "sha256": "91d752a8ab53b7c32ae49f2422b9efefc5745cc9a6eefd217ff1caa23998f5df"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D45R0101",
-      "x": 48,
-      "y": 13
+      "x": 32,
+      "y": 0
     },
     {
       "data_id": 132,
@@ -3393,20 +3393,20 @@
       "matrix_value": 621,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 0,
-      "random_tile_count": 1022,
+      "permission": 5,
+      "random_tile_count": 935,
       "random_tile_evidence": {
-        "count": 1022,
+        "count": 935,
         "max_x": 31,
         "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "afe54b0fb12a2a45fb3ad7fb9810762adb5f05f56e45ceb48e2a2a12f8c21738"
+        "sha256": "dc63ac3cb21b686fc855cda9ac4d475f0775331b7f16f2d5f6fe426af32ec723"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D45R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 133,
@@ -3418,19 +3418,19 @@
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2297,
+      "random_tile_count": 962,
       "random_tile_evidence": {
-        "count": 2297,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 962,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "35fae77e0d32a0cf759338dd5d645359f529fc779f81471add4f823a78244dec"
+        "sha256": "252e0945546e455297c29c1c06fa44558b35e54c47142f3e709f37a434fefe79"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D01R0101",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 9
     },
     {
       "data_id": 134,
@@ -3441,20 +3441,20 @@
       "matrix_value": 606,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1544,
-      "random_tile_count": 2298,
+      "permission": 0,
+      "random_tile_count": 662,
       "random_tile_evidence": {
-        "count": 2298,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 662,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "09dbca7ef8ae6de0881c8c84cbb3daf4e05af41caf8b5686ccf4ce46941d7e8e"
+        "sha256": "efb69602fbb424627f3429b9fc1f9b93981c80f561a45bd0bb3218e3fe661550"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D43R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 135,
@@ -3466,19 +3466,19 @@
       "matrix_x": 1,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 2213,
+      "random_tile_count": 730,
       "random_tile_evidence": {
-        "count": 2213,
+        "count": 730,
         "max_x": 63,
-        "max_y": 47,
-        "min_x": 16,
+        "max_y": 31,
+        "min_x": 32,
         "min_y": 0,
-        "sha256": "95fe696054ce5aef4b62f2a476ed85953fa85a88e4b8fd94bc7033774991548f"
+        "sha256": "21a216abfc6e424e599808686fb9c78d53e99bddec42873540cde2f7cc769b22"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D43R0103",
-      "x": 48,
-      "y": 16
+      "x": 32,
+      "y": 0
     },
     {
       "data_id": 136,
@@ -3489,20 +3489,20 @@
       "matrix_value": 414,
       "matrix_x": 32,
       "matrix_y": 4,
-      "permission": 1024,
-      "random_tile_count": 4091,
+      "permission": 2,
+      "random_tile_count": 355,
       "random_tile_evidence": {
-        "count": 4091,
-        "max_x": 1071,
-        "max_y": 171,
-        "min_x": 1008,
-        "min_y": 108,
-        "sha256": "578bac7c93af43be1545d11284bdec18b7bf612bc0202adf69740e0fe499b976"
+        "count": 355,
+        "max_x": 1053,
+        "max_y": 159,
+        "min_x": 1026,
+        "min_y": 128,
+        "sha256": "2303777d4fc02e44616c487e275ab2c49b84c6a5579b03d2868ca8d47e00b2b8"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_R02R0101",
-      "x": 1040,
-      "y": 140
+      "x": 1026,
+      "y": 128
     },
     {
       "data_id": 137,
@@ -3514,19 +3514,19 @@
       "matrix_x": 1,
       "matrix_y": 1,
       "permission": 0,
-      "random_tile_count": 3069,
+      "random_tile_count": 281,
       "random_tile_evidence": {
-        "count": 3069,
-        "max_x": 63,
-        "max_y": 79,
-        "min_x": 16,
-        "min_y": 16,
-        "sha256": "8ad66dd96818d8c4b2daf0d43f31f1156a37fe2a034b83a1cebacfe8b9e6df69"
+        "count": 281,
+        "max_x": 52,
+        "max_y": 63,
+        "min_x": 32,
+        "min_y": 32,
+        "sha256": "2c4b9e1c4fdba11dda4eca852c66809ed303b79a6cc3ce7050ca52a9fd8651e7"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D46R0101",
-      "x": 48,
-      "y": 48
+      "x": 32,
+      "y": 32
     },
     {
       "data_id": 139,
@@ -3537,69 +3537,70 @@
       "matrix_value": 397,
       "matrix_x": 0,
       "matrix_y": 1,
-      "permission": 0,
-      "random_tile_count": 2010,
+      "permission": 1544,
+      "random_tile_count": 720,
       "random_tile_evidence": {
-        "count": 2010,
-        "max_x": 47,
+        "count": 720,
+        "max_x": 31,
         "max_y": 63,
         "min_x": 0,
-        "min_y": 16,
-        "sha256": "a30acd8fc8c70d7e6765dcc734f273812837ca651885ed40654cbf9469b10b6c"
+        "min_y": 32,
+        "sha256": "b313462c2f11e79e685b183aa47830ed26260d685e50b01e5796b8140c738fc6"
       },
-      "source": "derived:header-wildcard",
+      "source": "derived:header-wildcard:compact-pair",
       "symbol": "MAP_D03R0101",
-      "x": 16,
-      "y": 48
+      "x": 0,
+      "y": 33
     },
     {
       "data_id": 140,
       "direction": 1,
-      "land_file_id": 450,
+      "land_file_id": 399,
       "map_id": 450,
-      "matrix_id": 26,
-      "matrix_value": 450,
+      "matrix_id": 79,
+      "matrix_value": 399,
       "matrix_x": 0,
       "matrix_y": 0,
-      "permission": 1536,
-      "random_tile_count": 2298,
+      "permission": 0,
+      "random_tile_count": 593,
       "random_tile_evidence": {
-        "count": 2298,
-        "max_x": 47,
-        "max_y": 47,
+        "count": 593,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "35f4d3d78a9426995656bf5f9b2ea01e78900d357535112366bffe6d2e8d3095"
+        "sha256": "8034aff617de031f2be57ebcb6be8e425c3fe42e8937c616cb2fc67ed423a016"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D03R0102",
-      "x": 16,
-      "y": 16
+      "x": 0,
+      "y": 0
     },
     {
       "data_id": 141,
       "direction": 1,
-      "land_file_id": 451,
+      "land_file_id": 403,
       "map_id": 451,
-      "matrix_id": 27,
-      "matrix_value": 451,
+      "matrix_id": 80,
+      "matrix_value": 403,
       "matrix_x": 0,
       "matrix_y": 0,
       "permission": 0,
-      "random_tile_count": 1610,
+      "random_tile_count": 520,
       "random_tile_evidence": {
-        "count": 1610,
-        "max_x": 38,
-        "max_y": 46,
+        "count": 520,
+        "max_x": 31,
+        "max_y": 31,
         "min_x": 0,
         "min_y": 0,
-        "sha256": "ae4fb2999fdaab9c56f131d8c2bce764c0c279d74df47bfa785d230851969783"
+        "sha256": "a62ce8b5c4b4f22ba075688a65079a11ec6302f6256bb971f135d2ef59878692"
       },
-      "source": "derived",
+      "source": "derived:compact-pair",
       "symbol": "MAP_D03R0103",
-      "x": 7,
-      "y": 15
+      "x": 0,
+      "y": 0
     }
   ],
-  "expected_count": 150
+  "expected_count": 150,
+  "random_tile_predicate": "same_loaded_cell_passable_low_land_non_headbutt_no_warp_coord_event_v3"
 }

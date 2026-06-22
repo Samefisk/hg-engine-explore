@@ -4,8 +4,8 @@
   "destination": {
     "map_id": 242,
     "symbol": "MAP_D40R0102",
-    "x": 16,
-    "y": 16
+    "x": 0,
+    "y": 0
   },
   "destination_count": 150,
   "destination_entry": {
@@ -15,7 +15,7 @@
     "version": 1
   },
   "destination_index": 47,
-  "elapsed_seconds": 16.123,
+  "elapsed_seconds": 16.13,
   "expect_request_frame": 3,
   "final_nonblack_ok": true,
   "final_status": {
@@ -28,8 +28,8 @@
     "request_result": 2,
     "size": 24,
     "version": 1,
-    "x": 16,
-    "y": 16
+    "x": 0,
+    "y": 0
   },
   "landed": true,
   "passed": true,

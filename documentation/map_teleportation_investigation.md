@@ -106,38 +106,51 @@ field `Location.y`, and `direction`, subject to cheap safety checks:
 - direction must be north, south, west, or east,
 - the live field system must be present, and
 - if the destination is on the currently loaded map, the helper verifies that
-  the target tile is not blocked and is not a surf or headbutt tile.
+  the target tile is not blocked and uses a low normal-land behavior below
+  the surf/special range, excluding headbutt.
 
 The helper does not load arbitrary destination maps just to inspect collision
 before warping. Doing so would add more map-loading surface area and code size
 than the MVP needs. For cross-map calls, callers must pass a vetted destination:
 the target map must be complete and loadable, and the target field `Location`
-coordinate must be in-bounds, unoccupied, and known-safe land.
+coordinate must be in-bounds and known-safe land.
 
 The random-land API is deliberately scoped to the current loaded map:
 `MapTeleport_TrySelectRandomLoadedLandTile` fills a
 `MapTeleportDestination` for a random loaded land tile, and
 `MapTeleport_RequestRandomLoadedLandTile` is the public request wrapper for
 future callers that only need "move me somewhere safe on this map". The current
-implementation samples 64 candidates from the runtime range `[-32,+31]` on both
-axes around the current `Location.x,z`, rejects the current tile, and asks the
-loaded field collision/behavior APIs whether the candidate is usable land. This
-is a bounded loaded-map helper, not a whole-route safe-tile sampler.
+implementation is conservative and table-backed for encounter maps: it scans the
+existing 150-row generated encounter table for the current loaded map ID, then
+chooses one member of that row's audited strict horizontal pair. If the current
+map has no generated encounter row, the helper returns `FALSE` rather than
+falling back to broad live-cell sampling. That avoids T24-style live-helper
+drift onto static `0x8000` permission tiles while keeping the public hook
+available for the supported encounter-map surface.
 
-The normal L+R debug path now uses two phases. First it chooses a random
-destination from the 150 generated encounter-map entries and warps to that
-map's vetted entry tile with plain `Task_ScriptWarp`. After the selected target
-map has loaded and the field task manager is idle, the debug task reuses the
-random loaded-land helper to request a second same-map warp inside the loaded
-map window. The after-load flag is stored in the debug task env so it survives
-the first warp, and it is only cleared after the second request succeeds.
+The selector currently validates generated terrain/event evidence, not dynamic
+object occupancy. That keeps overlay 131 under the `0x5000` acceptance ceiling
+while still fixing the reported water, void/out-of-bounds,
+one-way-ledge/special-behavior, and blocked-terrain failure modes. A future
+caller that needs NPC/follower exclusion can layer that check on top of
+`MapTeleport_TrySelectRandomLoadedLandTile` or broaden the provider when there
+is overlay budget for it.
+
+The normal L+R debug path uses one plain `Task_ScriptWarp`. It chooses a random
+destination from the 150 generated encounter-map entries, then flips one random
+bit to choose one member of that map's generated strict horizontal pair. The
+pair is selected before the warp because the target map is not loaded yet and
+the earlier after-load overlay-task state proved too fragile across map reloads.
+Numeric destination indexes use the same compact-pair path for cross-map
+coverage. If a numeric-index press already starts on the selected map, the debug
+path calls `MapTeleport_TrySelectRandomLoadedLandTile` instead, so repeated
+forced-index verifier runs exercise the public current-map helper while still
+remaining inside the generated strict pair.
 
 The exact-destination headless verifier still patches the writable debug
 destination and writes `MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED` before
-pressing L+R. That `0xFFFE` path remains deterministic and skips the second
-random-land phase. Numeric destination indexes force the selected encounter map
-but still run the after-load random-land phase, which is what the focused
-random-land verifier uses.
+pressing L+R. That `0xFFFE` path remains deterministic and bypasses the compact
+pair selector.
 
 ## Final Implementation Plan
 
@@ -169,10 +182,13 @@ For each map it derives field `Location.x,z` coordinates from matrix cells and
 are preferred across all matrices. Header-matrix wildcard cells are used only
 when exact stamps do not yield a safe static candidate, which covers a small
 set of interiors whose header matrix cells are land IDs rather than map IDs.
-Candidate tiles reject high-bit blocked permissions and the same low-byte
-headbutt/surf behaviors that the runtime same-map check rejects:
-`6, 16, 18, 21, 42`. Warps and trigger rectangles from the target event file
-are excluded when event data exists.
+Candidate tiles reject high-bit blocked permissions and require a low behavior
+byte below `16`, excluding headbutt behavior `6`. That keeps standard low
+normal-land and grass-like terrain eligible while excluding surf/water, one-way
+ledges, and other higher-numbered special traversal surfaces. Warps and trigger
+rectangles from the target event file are excluded when event data exists. Static
+and active object occupancy are intentionally not part of this predicate; the
+host generator and runtime helper agree on warp/coord-event exclusion.
 
 A few destinations are runtime-verified fixed coordinates because the static
 permission grid alone chooses a bad loaded tile or marks a proven runtime tile
@@ -183,9 +199,12 @@ rows.
 The generated runtime table is checked in at
 `src/field/map_teleport_encounter_destinations.c`, and the audit JSON is
 checked in at `documentation/verification/encounter_map_teleport_destinations.json`.
-Future overworld callers can use
-`MapTeleport_TrySelectEncounterDestinationByIndex` and
-`MapTeleport_Request` to teleport to a vetted encounter-map entry, or use
+The table stores one packed base coordinate per encounter map. The generator
+fails unless that base coordinate and `x + 1` form a strict horizontal land pair
+under the same predicate; the static audit reports 150/150 pair coverage and
+the `MAP_T24` pair `(177,370)` / `(178,370)`. Future overworld callers can use
+`MapTeleport_TrySelectEncounterDestinationByIndex` and `MapTeleport_Request` to
+teleport to a vetted encounter-map entry, or use
 `MapTeleport_TrySelectRandomLoadedLandTile` /
 `MapTeleport_RequestRandomLoadedLandTile` when the current loaded map should
 choose the landing tile.
@@ -215,52 +234,68 @@ membership for the requested map from the local ROM-derived header, matrix,
 land, and event NARCs at runtime.
 
 For random landing membership, the host-side oracle scans only the same
-`[-32,+31]` window the ROM helper can sample after the entry warp. It reads the
-loaded destination map's matrix cells, uses the cell land-file permissions, and
-excludes static event-blocked tiles. The permission grid is only a host-side
-approximation of live metatile behavior, so the oracle rejects surf-style
-permission bytes but does not treat permission low byte `0x06` as definitive
-headbutt behavior. The ROM remains authoritative: the second-phase same-map
-request still calls `IsMetatileBlockedAt` and `GetMetatileBehaviorAt` before
-scheduling the warp.
+`[-32,+31]` window the ROM helper can sample and clamps the scan to the same
+32x32 matrix cell as the center tile. It reads that loaded destination cell's
+land-file permissions, rejects high-bit blocked permissions, excludes static
+warp/coord-event tiles, and stores the predicate label
+`same_loaded_cell_passable_low_land_non_headbutt_no_warp_coord_event_v3` in the
+compact JSON. The public current-map random helper uses that generated evidence
+directly for encounter maps. The lower-level loaded-tile validator also
+dispatches through the live field permission provider at `fieldSystem + 0x60`
+with raw tile coordinates and rejects high-bit permissions, then calls
+`IsMetatileBlockedAt`, `GetMetatileBehaviorAt`, and current-map
+warp/coord-event scans. The direct `0x02054824` permission implementation was
+not used because it can bypass the active field callback that the stock helpers
+use, and the broad live sampler was removed after T24 showed it could still pick
+static high-bit permission tiles.
 
-This is a space-conscious MVP tradeoff. It gives L+R meaningful random
-relocation on the selected map without storing whole-map or whole-route tile
-tables in overlay 131. The public random-loaded-land API leaves room to broaden
-the selection strategy later if a future feature can afford a wider current-map
-search.
+This is a space-conscious MVP tradeoff. Cross-map L+R gets meaningful random
+land relocation on the selected map without storing whole-map or whole-route
+tile tables in overlay 131, and it avoids the connection-cell mismatch that can
+admit water, padding, high-bit blocked tiles, or non-walkable terrain. The
+public random-loaded-land API remains available for same-map and future
+overworld triggers on generated encounter maps; it can be broadened later if a
+future feature can afford a wider, fully audited current-map search.
 
 Exact focused command:
 
 ```bash
 scripts/headless-random-land-teleport-verifier.py \
   --rom test.nds \
-  --map-symbol MAP_R29 \
-  --runs 12 \
+  --map-symbol MAP_T24 \
+  --runs 8 \
   --min-unique-coordinates 2 \
   --destinations documentation/verification/encounter_map_teleport_destinations.json \
-  --json documentation/verification/random_land_teleport_verifier.json \
-  --jsonl documentation/verification/random_land_teleport_verifier.jsonl
+  --json /tmp/random_MAP_T24_final_counter.json \
+  --jsonl /tmp/random_MAP_T24_final_counter.jsonl
 ```
 
 Final focused random-land verification on this branch produced:
 
 - `passed`: true
-- `passed_run_count`: 12
+- `passed_run_count`: 16
 - `failed_run_count`: 0
-- `unique_coordinate_count`: 12
-- `valid_random_tile_count`: 4074
-- `valid_random_tile_evidence.sha256`:
-  `10f0542df7e1d5ff30185219a7f12190128b570eb82bb4a3690a836369087ab5`
+- `unique_coordinate_count`: 4
+- destination coverage: `MAP_T24` and `MAP_R29`, each run in a fresh emulator
+  process with 8/8 passing runs
+- observed strict compact land pairs: `MAP_T24` `(177,370)` / `(178,370)` and
+  `MAP_R29` `(576,396)` / `(577,396)`
 
 ## Runtime Verifier
 
-The L+R debug path remains the verification trigger. Overlay 131 now exposes a
+The L+R debug path remains the verification trigger. Overlay 131 exposes a
 small fixed debug status block at `0x023C801C` beside the writable debug
 destination at `0x023C8014`. The status block records magic/version/size,
 whether the live field system is ready, the current field `location` map/x/y,
 the last `MapTeleport_Request` result, a request counter, and the selected
-encounter destination index or deterministic-force sentinel.
+encounter destination index or deterministic-force sentinel. The debug task
+publishes `requestResult` before incrementing `requestCount`, so a sampled count
+advance cannot observe the previous result. Random-land acceptance does not
+depend solely on counters because overlay reloads can reset them; that verifier
+uses relocation, map/index, strict host classification, and non-stale screen
+evidence. The transition verifier intentionally uses the request counter/result
+pair for the deterministic `0xFFFE` exact path, where the request evidence is
+visible before the overlay reload clears the later status.
 
 `scripts/headless-all-encounter-teleport-verifier.py` boots `test.nds` with the
 test save, writes each generated encounter-map destination into the debug
@@ -302,10 +337,16 @@ scripts/headless-all-encounter-teleport-verifier.py \
 ```
 
 That static audit parses the packed C destination table, compares all 150 rows
-against the compact JSON, checks the authoritative encounter-symbol order, and
-fails if any generated destination has `random_tile_count: 0`. The final static
-audit produced `packed_table_matches_json: true`,
-`zero_random_tile_count: 0`, and `passed: true`.
+against the compact JSON, checks the authoritative encounter-symbol order,
+recomputes the compact random-tile count/hash/bounds from ROM-derived
+matrix/land/event data, proves every row has a generated strict horizontal
+pair, and fails if any generated destination has `random_tile_count: 0`, stale
+random-tile evidence, or a runtime predicate mismatch. The final static audit
+produced `packed_table_matches_json: true`, `zero_random_tile_count: 0`,
+`compact_pair_coverage_count: 150`, `compact_pair_mismatch_count: 0`,
+`compact_pair_t24.pair: [(177,370), (178,370)]`,
+`runtime_permission_active_callback_scan_detected: true`,
+`runtime_generated_current_map_selector_detected: true`, and `passed: true`.
 
 Exact commands:
 
@@ -360,11 +401,11 @@ generator asserts those bounds before writing the C table and the indexed API
 decodes directly into caller-provided storage.
 
 Heavy derivation code, JSON artifacts, and the headless verifier stay outside
-the ROM. The compact destination audit JSON is 86,671 bytes and stores
+the ROM. The compact destination audit JSON is 88,390 bytes and stores
 count/hash/bounds evidence instead of full random-coordinate arrays for all 150
 maps.
 
 After the final Docker build, `build/output_field.bin` and
-`base/overlay/overlay_0131.bin` are 20,468 bytes (`0x4FF4`), 12 bytes below the
+`base/overlay/overlay_0131.bin` are 20,326 bytes (`0x4F66`), 154 bytes below the
 20,480-byte (`0x5000`) limit. Overlay 149 remains unchanged at 44,928 bytes
 (`0xAF80`).

@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("documentation/verification/encounter_map_teleport_destinations.json"),
     )
-    parser.add_argument("--map-symbol", default=DEFAULT_MAP_SYMBOL)
+    parser.add_argument("--map-symbol", dest="map_symbols", action="append")
     parser.add_argument("--runs", type=int, default=12)
     parser.add_argument("--min-unique-coordinates", type=int, default=2)
     parser.add_argument(
@@ -90,31 +90,65 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def destination_random_tiles(destination: dict[str, Any]) -> list[dict[str, Any]]:
-    tiles = destination.get("random_tiles")
-    if isinstance(tiles, list) and tiles:
-        return tiles
+class RandomTileOracle:
+    def __init__(self) -> None:
+        generator = verifier.generator
+        self.generator = generator
+        self.maps = generator.read_map_constants(repo_path("include/constants/maps.h"))
+        self.matrix_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/4/1"))
+        self.land_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/6/5"))
+        self.event_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/3/2"))
+        self.arm9 = repo_path("base/arm9.bin").read_bytes()
+        self.matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]] = {}
+        self.permission_cache: dict[int, tuple[int, ...]] = {}
 
-    generator = verifier.generator
-    matrix_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/4/1"))
-    land_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/6/5"))
-    event_narc = generator.ndspy.narc.NARC.fromFile(repo_path("base/root/a/0/3/2"))
-    arm9 = repo_path("base/arm9.bin").read_bytes()
-    return list(
-        generator.loaded_window_random_tile_candidates(
-            center_x=int(destination["x"]),
-            center_y=int(destination["y"]),
-            loaded_map_id=int(destination["map_id"]),
-            fallback_map_id=int(destination["map_id"]),
-            source="verifier",
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache={},
-            permission_cache={},
+    def tiles_for_center(
+        self,
+        destination: dict[str, Any],
+        center_x: int,
+        center_y: int,
+        source: str,
+        exclude_center: bool = True,
+    ) -> list[dict[str, Any]]:
+        return list(
+            self.generator.loaded_window_random_tile_candidates(
+                center_x=center_x,
+                center_y=center_y,
+                loaded_map_id=int(destination["map_id"]),
+                fallback_map_id=verifier.static_fallback_map_id(destination, self.maps),
+                source=source,
+                matrix_narc=self.matrix_narc,
+                land_narc=self.land_narc,
+                event_narc=self.event_narc,
+                arm9=self.arm9,
+                matrix_cache=self.matrix_cache,
+                permission_cache=self.permission_cache,
+                exclude_center=exclude_center,
+            )
         )
-    )
+
+    def entry_tiles(self, destination: dict[str, Any]) -> list[dict[str, Any]]:
+        return self.tiles_for_center(
+            destination,
+            int(destination["x"]),
+            int(destination["y"]),
+            "verifier-entry",
+        )
+
+    def strict_tiles_for_center(
+        self,
+        destination: dict[str, Any],
+        center_x: int,
+        center_y: int,
+        source: str,
+    ) -> list[dict[str, Any]]:
+        return self.tiles_for_center(
+            destination,
+            center_x,
+            center_y,
+            source,
+            exclude_center=False,
+        )
 
 
 def coordinate_evidence(tiles: list[dict[str, Any]]) -> dict[str, Any]:
@@ -135,6 +169,36 @@ def coordinate_evidence(tiles: list[dict[str, Any]]) -> dict[str, Any]:
         }
         evidence["sample"] = [{"x": x, "y": y} for x, y in coordinates[:8]]
     return evidence
+
+
+def host_land_classification(
+    coordinate: tuple[int, int],
+    tile_by_coordinate: dict[tuple[int, int], dict[str, Any]],
+) -> dict[str, Any]:
+    tile = tile_by_coordinate.get(coordinate)
+    classification: dict[str, Any] = {
+        "strict_loaded_cell_land": tile is not None,
+        "predicate": (
+            "same loaded 32x32 matrix cell as this run's selection center, "
+            "in ROM random window, warp/coord-event-unblocked, permission high bit clear, "
+            "behavior < 16, non-headbutt"
+        ),
+    }
+    if tile is not None:
+        permission = int(tile["permission"])
+        classification.update(
+            {
+                "permission": f"0x{permission:04X}",
+                "behavior": permission & 0xFF,
+                "matrix_id": tile["matrix_id"],
+                "matrix_x": tile["matrix_x"],
+                "matrix_y": tile["matrix_y"],
+                "matrix_value": tile["matrix_value"],
+                "land_file_id": tile["land_file_id"],
+                "source": tile["source"],
+            }
+        )
+    return classification
 
 
 def find_destination(
@@ -160,21 +224,25 @@ def wait_for_random_outcome(
 ) -> tuple[dict[str, int], int]:
     frames_waited = 0
     observed = verifier.read_status(emu)
-    entry_coordinate = (int(destination["x"]), int(destination["y"]))
+    before_coordinate = (status_before["x"], status_before["y"])
     while frames_waited <= args.max_wait_frames:
         request_seen = verifier.request_count_changed(
             status_before["request_count"],
             observed["request_count"],
         )
-        request_delta = (
-            (observed["request_count"] - status_before["request_count"]) & 0xFFFF
-        )
-        if request_seen and observed["request_result"] != verifier.MAP_TELEPORT_RESULT_OK:
+        if (
+            request_seen
+            and observed["request_result"] == verifier.MAP_TELEPORT_RESULT_OK
+            and observed["ready"] != 0
+            and observed["map_id"] == int(destination["map_id"])
+            and (observed["x"], observed["y"]) != before_coordinate
+            and (observed["x"], observed["y"]) in valid_coordinates
+        ):
             return observed, frames_waited
         if (
             observed["ready"] != 0
             and observed["map_id"] == int(destination["map_id"])
-            and (observed["x"], observed["y"]) != entry_coordinate
+            and (observed["x"], observed["y"]) != before_coordinate
             and (observed["x"], observed["y"]) in valid_coordinates
         ):
             return observed, frames_waited
@@ -193,14 +261,13 @@ def run_random_tile_sequence(
     raw_save: bytes,
     index: int,
     destination: dict[str, Any],
-    valid_tiles: list[dict[str, Any]],
+    oracle: RandomTileOracle,
 ) -> tuple[list[dict[str, Any]], dict[str, int], int]:
     emu = None
     entry = verifier.empty_destination_entry()
     ready_frames = 0
     status_before = verifier.empty_status()
     ready_failure = "emulator was not opened"
-    valid_coordinates = {(int(tile["x"]), int(tile["y"])) for tile in valid_tiles}
     results: list[dict[str, Any]] = []
 
     with headless.silence_native_output(not args.show_emulator_log):
@@ -219,6 +286,39 @@ def run_random_tile_sequence(
             for run in range(args.runs):
                 write_forced_index(emu, index)
                 status_before = verifier.read_status(emu)
+                entry_coordinate = (int(destination["x"]), int(destination["y"]))
+                before_coordinate = (status_before["x"], status_before["y"])
+                if status_before["map_id"] == int(destination["map_id"]):
+                    selection_center = before_coordinate
+                    selection_center_source = "status_before"
+                    compact_coordinates: set[tuple[int, int]] = set()
+                else:
+                    selection_center = entry_coordinate
+                    selection_center_source = "destination_entry"
+                    compact_coordinates = {
+                        entry_coordinate,
+                        (entry_coordinate[0] + 1, entry_coordinate[1]),
+                    }
+                valid_tiles = oracle.tiles_for_center(
+                    destination,
+                    selection_center[0],
+                    selection_center[1],
+                    f"verifier-run-{run}",
+                )
+                strict_tiles = oracle.strict_tiles_for_center(
+                    destination,
+                    selection_center[0],
+                    selection_center[1],
+                    f"verifier-run-{run}-strict",
+                )
+                valid_coordinates = {
+                    (int(tile["x"]), int(tile["y"]))
+                    for tile in valid_tiles
+                } | compact_coordinates
+                tile_by_coordinate = {
+                    (int(tile["x"]), int(tile["y"])): tile
+                    for tile in strict_tiles
+                }
                 headless.hold_combo(emu, "L+R", args.trigger_frames, args.release_frames)
                 observed, frames_waited = wait_for_random_outcome(
                     args,
@@ -237,9 +337,9 @@ def run_random_tile_sequence(
                     (observed["request_count"] - status_before["request_count"]) & 0xFFFF
                 )
                 coordinate = (observed["x"], observed["y"])
+                host_classification = host_land_classification(coordinate, tile_by_coordinate)
                 failure_reason = None
-                entry_coordinate = (int(destination["x"]), int(destination["y"]))
-                relocated = coordinate != entry_coordinate
+                relocated_from_before = coordinate != before_coordinate
                 if (
                     request_seen
                     and observed["request_result"] != verifier.MAP_TELEPORT_RESULT_OK
@@ -250,9 +350,9 @@ def run_random_tile_sequence(
                     )
                 elif observed["map_id"] != int(destination["map_id"]):
                     failure_reason = f"map mismatch: got {observed['map_id']}"
-                elif not relocated:
-                    failure_reason = "final coordinate stayed on the entry tile"
-                elif coordinate not in valid_coordinates:
+                elif not relocated_from_before:
+                    failure_reason = "teleport request or coordinate relocation was not observed"
+                elif not host_classification["strict_loaded_cell_land"]:
                     failure_reason = f"coordinate was not in generated random tile set: {coordinate}"
                 elif pixels < args.min_nonblack_pixels:
                     failure_reason = f"screenshot looked black/unloaded: {pixels} nonblack pixels"
@@ -270,11 +370,43 @@ def run_random_tile_sequence(
                         "nonblack_pixels": pixels,
                         "request_seen": request_seen,
                         "request_delta": request_delta,
+                        "runtime_request_result_name": verifier.request_result_name(
+                            observed["request_result"]
+                        ),
+                        "request_or_relocation_observed": request_seen
+                        or relocated_from_before,
+                        "counter_observability_limit": (
+                            "request_count may reset across overlay reload; "
+                            "stale runs are rejected unless the final coordinate "
+                            "differs from the pre-trigger status"
+                        ),
+                        "host_land_classification": host_classification,
+                        "valid_random_tile_count": len(valid_tiles),
+                        "valid_random_tile_evidence": coordinate_evidence(valid_tiles),
+                        "compact_cross_map_coordinates": [
+                            {"x": x, "y": y}
+                            for x, y in sorted(compact_coordinates)
+                        ],
+                        "forced_destination_index_written": index,
+                        "random_selection_center": {
+                            "x": selection_center[0],
+                            "y": selection_center[1],
+                            "source": selection_center_source,
+                        },
+                        "pre_trigger_coordinate": {
+                            "x": before_coordinate[0],
+                            "y": before_coordinate[1],
+                        },
+                        "coordinate_delta_from_pre_trigger": {
+                            "dx": observed["x"] - before_coordinate[0],
+                            "dy": observed["y"] - before_coordinate[1],
+                        },
                         "entry_coordinate": {
                             "x": entry_coordinate[0],
                             "y": entry_coordinate[1],
                         },
-                        "relocated_from_entry": relocated,
+                        "relocated_from_entry": coordinate != entry_coordinate,
+                        "relocated_from_status_before": relocated_from_before,
                         "passed": failure_reason is None,
                         "failure_reason": failure_reason,
                     }
@@ -311,18 +443,41 @@ def main() -> int:
         save_kind = "dsv"
 
     destinations = verifier.load_destinations(repo_path(args.destinations))
-    index, destination = find_destination(destinations, args.map_symbol)
-    valid_tiles = destination_random_tiles(destination)
     started_at = time.monotonic()
+    symbols = args.map_symbols or [DEFAULT_MAP_SYMBOL]
+    oracle = RandomTileOracle()
+    all_results: list[dict[str, Any]] = []
+    destination_summaries: list[dict[str, Any]] = []
+    entry = verifier.empty_destination_entry()
+    ready_frames = 0
 
-    results, entry, ready_frames = run_random_tile_sequence(
-        args,
-        rom,
-        raw_save,
-        index,
-        destination,
-        valid_tiles,
-    )
+    for symbol in symbols:
+        index, destination = find_destination(destinations, symbol)
+        valid_tiles = oracle.entry_tiles(destination)
+        results, entry, ready_frames = run_random_tile_sequence(
+            args,
+            rom,
+            raw_save,
+            index,
+            destination,
+            oracle,
+        )
+        all_results.extend(results)
+        destination_summaries.append(
+            {
+                "symbol": destination["symbol"],
+                "map_id": destination["map_id"],
+                "destination_index": index,
+                "primary_x": destination["x"],
+                "primary_y": destination["y"],
+                "valid_random_tile_count": len(valid_tiles),
+                "valid_random_tile_evidence": coordinate_evidence(valid_tiles),
+                "runs": len(results),
+                "passed_run_count": sum(1 for result in results if result["passed"]),
+                "failed_run_count": sum(1 for result in results if not result["passed"]),
+            }
+        )
+    results = all_results
     unique_coordinates = sorted(
         {
             (int(result["coordinate"]["x"]), int(result["coordinate"]["y"]))
@@ -337,16 +492,9 @@ def main() -> int:
         "save_kind": save_kind,
         "destinations": display_path(repo_path(args.destinations)),
         "destination_count": len(destinations),
-        "destination_index": index,
-        "destination": {
-            "symbol": destination["symbol"],
-            "map_id": destination["map_id"],
-            "primary_x": destination["x"],
-            "primary_y": destination["y"],
-        },
-        "valid_random_tile_evidence": coordinate_evidence(valid_tiles),
-        "valid_random_tile_count": len(valid_tiles),
+        "destinations_under_test": destination_summaries,
         "runs": args.runs,
+        "total_runs": len(results),
         "passed_run_count": len(results) - len(failures),
         "failed_run_count": len(failures),
         "unique_coordinates": [
@@ -362,7 +510,10 @@ def main() -> int:
             len(destinations) == verifier.DEFAULT_EXPECT_COUNT
             and entry["magic"] == verifier.ENCOUNTER_DESTINATION_MAGIC
             and entry["count"] == verifier.DEFAULT_EXPECT_COUNT
-            and len(valid_tiles) >= args.min_unique_coordinates
+            and all(
+                destination["valid_random_tile_count"] >= args.min_unique_coordinates
+                for destination in destination_summaries
+            )
             and len(failures) == 0
             and len(unique_coordinates) >= args.min_unique_coordinates
         ),
