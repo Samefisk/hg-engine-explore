@@ -2,10 +2,10 @@
   "bottom_solid_white_frame_count": 0,
   "bottom_solid_white_frames": [],
   "destination": {
-    "map_id": 242,
-    "symbol": "MAP_D40R0102",
-    "x": 0,
-    "y": 0
+    "map_id": 33,
+    "symbol": "MAP_R29",
+    "x": 591,
+    "y": 400
   },
   "destination_count": 150,
   "destination_entry": {
@@ -14,23 +14,37 @@
     "size": 12,
     "version": 1
   },
-  "destination_index": 47,
-  "elapsed_seconds": 16.13,
+  "destination_index": 1,
+  "elapsed_seconds": 16.677,
   "expect_request_frame": 3,
   "final_nonblack_ok": true,
   "final_status": {
     "destination_index": 65535,
     "direction": 1,
     "magic": 1297371219,
-    "map_id": 242,
+    "map_id": 33,
     "ready": 1,
-    "request_count": 0,
-    "request_result": 2,
+    "request_count": 1,
+    "request_result": 0,
     "size": 24,
     "version": 1,
-    "x": 0,
-    "y": 0
+    "x": 591,
+    "y": 400
   },
+  "final_top_black_ratio_ok": true,
+  "final_top_metrics": {
+    "black_ratio": 0.0023,
+    "max_channel": 248,
+    "mean_rgb": [
+      120.687,
+      169.891,
+      116.434
+    ],
+    "min_channel": 0,
+    "nonblack_pixels": 49037,
+    "solid_white": false
+  },
+  "final_top_nonblack_ok": true,
   "landed": true,
   "passed": true,
   "post_release_sample_frames": 240,

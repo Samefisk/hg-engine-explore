@@ -135,6 +135,8 @@ BOOL MapTeleport_TrySelectEncounterDestinationByIndex(
 BOOL MapTeleport_TrySelectRandomLoadedLandTile(
     FieldSystem *fieldSystem,
     MapTeleportDestination *destination);
+extern u16 gMapTeleportRuntimeRequestResult;
+extern u16 gMapTeleportRuntimeRequestCount;
 
 static inline MapTeleportResult
 MapTeleport_RequestRandomLoadedLandTile(FieldSystem *fieldSystem)

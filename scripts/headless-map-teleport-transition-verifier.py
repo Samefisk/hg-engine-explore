@@ -15,7 +15,7 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DESTINATION_INDEX = 47
+DEFAULT_DESTINATION_INDEX = 1
 
 
 def import_script(path: Path, name: str) -> Any:
@@ -76,6 +76,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-interval", type=int, default=3)
     parser.add_argument("--expect-request-frame", type=int, default=3)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
+    parser.add_argument("--min-top-nonblack-pixels", type=int, default=12000)
+    parser.add_argument("--max-top-black-ratio", type=float, default=0.45)
     parser.add_argument("--solid-white-min-channel", type=int, default=240)
     parser.add_argument("--show-emulator-log", action="store_true")
     return parser.parse_args()
@@ -90,11 +92,13 @@ def pixel_metrics(image: Any, args: argparse.Namespace) -> dict[str, Any]:
     min_channel = min(min(pixel) for pixel in pixels)
     max_channel = max(max(pixel) for pixel in pixels)
     nonblack_pixels = sum(1 for r, g, b in pixels if r + g + b > 24)
+    black_pixels = total - nonblack_pixels
     return {
         "mean_rgb": [round(red, 3), round(green, 3), round(blue, 3)],
         "min_channel": min_channel,
         "max_channel": max_channel,
         "nonblack_pixels": nonblack_pixels,
+        "black_ratio": round(black_pixels / total, 4),
         "solid_white": min_channel >= args.solid_white_min_channel,
     }
 
@@ -271,6 +275,16 @@ def main() -> int:
         if samples
         else False
     )
+    final_top_nonblack_ok = (
+        samples[-1]["top"]["nonblack_pixels"] >= args.min_top_nonblack_pixels
+        if samples
+        else False
+    )
+    final_top_black_ratio_ok = (
+        samples[-1]["top"]["black_ratio"] <= args.max_top_black_ratio
+        if samples
+        else False
+    )
     request_ok = (
         request_evidence is not None
         and request_evidence["request_result"] == verifier.MAP_TELEPORT_RESULT_OK
@@ -347,6 +361,9 @@ def main() -> int:
         "landed": landed,
         "request_ok": request_ok,
         "final_nonblack_ok": final_nonblack_ok,
+        "final_top_nonblack_ok": final_top_nonblack_ok,
+        "final_top_black_ratio_ok": final_top_black_ratio_ok,
+        "final_top_metrics": samples[-1]["top"] if samples else None,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
         "passed": (
             len(destinations) == verifier.DEFAULT_EXPECT_COUNT
@@ -356,6 +373,8 @@ def main() -> int:
             and request_frame_ok
             and landed
             and final_nonblack_ok
+            and final_top_nonblack_ok
+            and final_top_black_ratio_ok
             and len(solid_white_frames) == 0
         ),
     }

@@ -32,14 +32,22 @@ VERIFIED_DESTINATIONS = {
 PACKED_MAP_BITS = 9
 PACKED_X_BITS = 11
 PACKED_Y_BITS = 10
+PACKED_WARP_BITS = 2
 PACKED_MAP_SHIFT = 0
 PACKED_X_SHIFT = PACKED_MAP_SHIFT + PACKED_MAP_BITS
 PACKED_Y_SHIFT = PACKED_X_SHIFT + PACKED_X_BITS
+PACKED_WARP_SHIFT = PACKED_Y_SHIFT + PACKED_Y_BITS
 PACKED_MAP_LIMIT = 1 << PACKED_MAP_BITS
 PACKED_X_LIMIT = 1 << PACKED_X_BITS
 PACKED_Y_LIMIT = 1 << PACKED_Y_BITS
+PACKED_WARP_LIMIT = 1 << PACKED_WARP_BITS
 RUNTIME_RANDOM_RADIUS = 32
 RUNTIME_RANDOM_MAX_OFFSET = RUNTIME_RANDOM_RADIUS - 1
+VERIFIED_WARP_ANCHORS = {
+    "MAP_D41R0101": 0,
+    "MAP_D42R0102": 2,
+    "MAP_D45R0102": 0,
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,7 @@ class Destination:
     matrix_value: int
     land_file_id: int
     permission: int
+    warp_id: int | None = None
     random_tiles: tuple[dict[str, int | str], ...] = ()
 
 
@@ -206,7 +215,11 @@ def read_event_blocked_tiles(event_narc: ndspy.narc.NARC, event_file_id: int) ->
         count = struct.unpack_from("<I", data, offset)[0]
         offset += 4
         for _ in range(count):
-            x, y, width, height, _script = struct.unpack_from("<HHHHI", data, offset)
+            _script, x, y, width, height, _z, _value, _var = struct.unpack_from(
+                "<HhhHHHHH",
+                data,
+                offset,
+            )
             offset += 0x10
             for tile_y in range(y, y + height):
                 for tile_x in range(x, x + width):
@@ -680,6 +693,7 @@ def choose_destination(
 
 
 def packed_destination_word(destination: Destination) -> int:
+    warp_code = 0 if destination.warp_id is None else destination.warp_id + 1
     if destination.direction != 1:
         raise ValueError(f"{destination.symbol} direction must stay implicit south")
     if not (0 <= destination.map_id < PACKED_MAP_LIMIT):
@@ -688,15 +702,20 @@ def packed_destination_word(destination: Destination) -> int:
         raise ValueError(f"{destination.symbol} x {destination.x} does not fit packed row")
     if not (0 <= destination.y < PACKED_Y_LIMIT):
         raise ValueError(f"{destination.symbol} y {destination.y} does not fit packed row")
+    if not (0 <= warp_code < PACKED_WARP_LIMIT):
+        raise ValueError(f"{destination.symbol} warp id {destination.warp_id} does not fit packed row")
     return (
         (destination.map_id << PACKED_MAP_SHIFT)
         | (destination.x << PACKED_X_SHIFT)
         | (destination.y << PACKED_Y_SHIFT)
+        | (warp_code << PACKED_WARP_SHIFT)
     )
 
 
 def choose_compact_random_pair(
     random_tiles: tuple[dict[str, int | str], ...],
+    *,
+    prefer_nonzero_permission: bool = False,
 ) -> tuple[dict[str, int | str], dict[str, int | str]]:
     coordinates = {
         (int(tile["x"]), int(tile["y"]))
@@ -706,9 +725,27 @@ def choose_compact_random_pair(
         (int(tile["x"]), int(tile["y"])): tile
         for tile in random_tiles
     }
-    for x, y in sorted(coordinates):
+
+    pairs = []
+    for x, y in coordinates:
         if (x + 1, y) in coordinates:
-            return by_coordinate[(x, y)], by_coordinate[(x + 1, y)]
+            local_x = x % CELL_SIZE
+            local_y = y % CELL_SIZE
+            primary = by_coordinate[(x, y)]
+            alternate = by_coordinate[(x + 1, y)]
+            nonzero_permission = (
+                int(primary["permission"]) != 0
+                and int(alternate["permission"]) != 0
+            )
+            pairs.append((
+                0 if (prefer_nonzero_permission and nonzero_permission) else 1,
+                abs(local_x - 15) + abs(local_y - 16),
+                y,
+                x,
+            ))
+
+    for _nonzero_rank, _distance, y, x in sorted(pairs):
+        return by_coordinate[(x, y)], by_coordinate[(x + 1, y)]
     raise RuntimeError("random candidate set has no horizontal compact pair")
 
 
@@ -724,7 +761,10 @@ def compact_cross_map_destination(
     matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
     permission_cache: dict[int, tuple[int, ...]],
 ) -> Destination:
-    base_tile, _alternate_tile = choose_compact_random_pair(destination.random_tiles)
+    base_tile, _alternate_tile = choose_compact_random_pair(
+        destination.random_tiles,
+        prefer_nonzero_permission="header-wildcard" in destination.source,
+    )
     x = int(base_tile["x"])
     y = int(base_tile["y"])
     random_tiles = loaded_window_random_tile_candidates(
@@ -756,6 +796,7 @@ def compact_cross_map_destination(
         matrix_value=int(base_tile["matrix_value"]),
         land_file_id=int(base_tile["land_file_id"]),
         permission=int(base_tile["permission"]),
+        warp_id=VERIFIED_WARP_ANCHORS.get(destination.symbol),
         random_tiles=random_tiles,
     )
 
@@ -774,8 +815,10 @@ def write_c(destinations: list[Destination], output: Path) -> None:
         "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000001FFu",
         "#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 9",
             "#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu",
-            "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 20",
+        "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 20",
             "#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu",
+            "#define MAP_TELEPORT_ENCOUNTER_WARP_SHIFT 30",
+            "#define MAP_TELEPORT_ENCOUNTER_WARP_MASK 0x00000003u",
             "",
             "static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {",
         ]
@@ -806,7 +849,10 @@ def write_c(destinations: list[Destination], output: Path) -> None:
             "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_X_SHIFT) & MAP_TELEPORT_ENCOUNTER_X_MASK);",
             "    destination->y =",
             "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_Y_SHIFT) & MAP_TELEPORT_ENCOUNTER_Y_MASK);",
-            "    destination->direction = MAP_TELEPORT_DIRECTION_SOUTH;",
+            "    destination->direction =",
+            "        MAP_TELEPORT_DIRECTION_SOUTH",
+            "        | (u16)(((packed >> MAP_TELEPORT_ENCOUNTER_WARP_SHIFT)",
+            "            & MAP_TELEPORT_ENCOUNTER_WARP_MASK) << 8);",
             "",
             "    return TRUE;",
             "}",

@@ -273,10 +273,13 @@ def load_destinations(path: Path) -> list[dict[str, Any]]:
 
 
 def packed_destination_word(destination: dict[str, Any]) -> int:
+    warp_id = destination.get("warp_id")
+    warp_code = 0 if warp_id is None else int(warp_id) + 1
     return (
         (int(destination["map_id"]) << generator.PACKED_MAP_SHIFT)
         | (int(destination["x"]) << generator.PACKED_X_SHIFT)
         | (int(destination["y"]) << generator.PACKED_Y_SHIFT)
+        | (warp_code << generator.PACKED_WARP_SHIFT)
     )
 
 
@@ -309,10 +312,25 @@ def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, An
         runtime_permission_active_callback_scan_detected
         and "0x8000" in runtime_source
     )
-    runtime_generated_current_map_selector_detected = (
-        "MapTeleport_TryGetCurrentMapGeneratedLandPair" in runtime_source
-        and "MapTeleport_IsGeneratedLoadedLandTile" in runtime_source
-        and "MAP_TELEPORT_RANDOM_LOADED_TILE_ATTEMPTS" not in runtime_source
+    runtime_direct_encounter_selector_detected = (
+        "gMapTeleportPendingRandomLoadedLandMapId" not in runtime_source
+        and "randomDestination.x += gf_rand() & 1" in runtime_source
+        and "MAP_TELEPORT_WARP_ID_MASK" in runtime_source
+        and "destination->mapId != fieldSystem->location->mapId" not in runtime_source
+    )
+    runtime_current_map_helper_detected = (
+        "MapTeleport_TrySelectRandomLoadedLandTile" in runtime_source
+        and "MapTeleport_OverlayIsLoadedLandTileWithPermission(" in runtime_source
+        and "permission != 0" in runtime_source
+        and "MapTeleport_IsGeneratedLoadedLandTile" not in runtime_source
+        and "MapTeleport_TryGetCurrentMapGeneratedLandPair" not in runtime_source
+    )
+    runtime_same_cell_clamp_detected = (
+        "centerX = fieldSystem->location->x" in runtime_source
+        and "centerY = fieldSystem->location->z" in runtime_source
+        and "centerX & ~31" in runtime_source
+        and "centerY & ~31" in runtime_source
+        and "+ 32" in runtime_source
     )
     table_rows = re.findall(
         r"0x([0-9A-Fa-f]{8})u,\s*//\s*(MAP_\w+)\s+(\d+),(\d+)",
@@ -489,7 +507,9 @@ def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, An
         "runtime_event_scan_detected": runtime_event_scan_detected,
         "runtime_permission_active_callback_scan_detected": runtime_permission_active_callback_scan_detected,
         "runtime_permission_high_bit_scan_detected": runtime_permission_high_bit_scan_detected,
-        "runtime_generated_current_map_selector_detected": runtime_generated_current_map_selector_detected,
+        "runtime_direct_encounter_selector_detected": runtime_direct_encounter_selector_detected,
+        "runtime_current_map_helper_detected": runtime_current_map_helper_detected,
+        "runtime_same_cell_clamp_detected": runtime_same_cell_clamp_detected,
         "event_blocked_low_land_hazard_window_count": len(event_blocked_low_land_hazards),
         "event_blocked_low_land_hazard_tile_count": sum(
             item["count"] for item in event_blocked_low_land_hazards
@@ -502,9 +522,12 @@ def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, An
         and not compact_pair_mismatches
         and runtime_event_scan_detected
         and runtime_permission_high_bit_scan_detected
-        and runtime_generated_current_map_selector_detected,
+        and runtime_direct_encounter_selector_detected
+        and runtime_current_map_helper_detected
+        and runtime_same_cell_clamp_detected,
         "event_blocked_hazards_runtime_rejected": runtime_event_scan_detected,
         "high_bit_permissions_runtime_rejected": runtime_permission_high_bit_scan_detected,
+        "same_cell_runtime_selector_clamp_detected": runtime_same_cell_clamp_detected,
     }
 
 
