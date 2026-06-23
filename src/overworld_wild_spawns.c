@@ -49,6 +49,8 @@ static u8 sBattleHpRecorded;
 static u8 sBattleShinyOverrideValue;
 static u32 sBattleHpPersonality;
 static u32 sBattlePersonalityOverrideValue;
+u16 gMapTeleportRuntimeRequestResult = MAP_TELEPORT_RESULT_INVALID_FIELD;
+u16 gMapTeleportRuntimeRequestCount;
 extern u32 space_for_setmondata;
 
 static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)

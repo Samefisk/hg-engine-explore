@@ -1,0 +1,105 @@
+{
+  "bottom_solid_white_frame_count": 0,
+  "bottom_solid_white_frames": [],
+  "destination": {
+    "map_id": 33,
+    "symbol": "MAP_R29",
+    "x": 591,
+    "y": 400
+  },
+  "destination_count": 150,
+  "destination_entry": {
+    "count": 150,
+    "magic": 1297368388,
+    "size": 12,
+    "version": 1
+  },
+  "destination_index": 1,
+  "elapsed_seconds": 16.677,
+  "expect_request_frame": 3,
+  "final_nonblack_ok": true,
+  "final_status": {
+    "destination_index": 65535,
+    "direction": 1,
+    "magic": 1297371219,
+    "map_id": 33,
+    "ready": 1,
+    "request_count": 1,
+    "request_result": 0,
+    "size": 24,
+    "version": 1,
+    "x": 591,
+    "y": 400
+  },
+  "final_top_black_ratio_ok": true,
+  "final_top_metrics": {
+    "black_ratio": 0.0023,
+    "max_channel": 248,
+    "mean_rgb": [
+      120.687,
+      169.891,
+      116.434
+    ],
+    "min_channel": 0,
+    "nonblack_pixels": 49037,
+    "solid_white": false
+  },
+  "final_top_nonblack_ok": true,
+  "landed": true,
+  "passed": true,
+  "post_release_sample_frames": 240,
+  "release_frames": 30,
+  "request_evidence": {
+    "destination_index": 65534,
+    "frame": 3,
+    "request_result": 0
+  },
+  "request_frame_ok": true,
+  "request_ok": true,
+  "rom": "test.nds",
+  "sample_count": 101,
+  "sample_interval": 3,
+  "save": "test.dsv",
+  "save_kind": "dsv",
+  "solid_white_bottom_frame_count": 0,
+  "solid_white_bottom_frames": [],
+  "solid_white_frame_count": 0,
+  "solid_white_frames": [],
+  "solid_white_top_frame_count": 0,
+  "solid_white_top_frames": [],
+  "solid_white_whole_frame_count": 0,
+  "solid_white_whole_frames": [],
+  "status_before": {
+    "destination_index": 65535,
+    "direction": 2,
+    "magic": 1297371219,
+    "map_id": 67,
+    "ready": 1,
+    "request_count": 0,
+    "request_result": 2,
+    "size": 24,
+    "version": 1,
+    "x": 567,
+    "y": 400
+  },
+  "top_solid_white_frame_count": 0,
+  "top_solid_white_frames": [],
+  "total_sample_frames": 300,
+  "trigger_frames": 30,
+  "white_detection": {
+    "bottom": {
+      "frames": [],
+      "passed": true
+    },
+    "top": {
+      "frames": [],
+      "passed": true
+    },
+    "whole": {
+      "frames": [],
+      "passed": true
+    }
+  },
+  "whole_solid_white_frame_count": 0,
+  "whole_solid_white_frames": []
+}

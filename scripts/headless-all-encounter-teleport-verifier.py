@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,9 @@ DEBUG_STATUS_ADDR = 0x023C801C
 DEBUG_STATUS_MAGIC = 0x4D545053
 DEBUG_STATUS_VERSION = 1
 DEBUG_STATUS_SIZE = 24
+DEBUG_DESTINATION_INDEX_ADDR = DEBUG_STATUS_ADDR + 22
+DEBUG_DESTINATION_INDEX_FORCED = 0xFFFE
+DEBUG_DESTINATION_INDEX_NONE = 0xFFFF
 ENCOUNTER_DESTINATION_ENTRY_ADDR = 0x023C8034
 ENCOUNTER_DESTINATION_MAGIC = 0x4D544544
 ENCOUNTER_DESTINATION_VERSION = 1
@@ -54,7 +58,6 @@ def ensure_repo_venv() -> None:
 ensure_repo_venv()
 
 import generate_encounter_map_teleport_destinations as generator  # type: ignore  # noqa: E402
-from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
 
 
 def import_script(path: Path, name: str) -> Any:
@@ -66,7 +69,15 @@ def import_script(path: Path, name: str) -> Any:
     return module
 
 
-headless = import_script(REPO_ROOT / "scripts/headless-overworld-test.py", "headless_overworld_test")
+if "--static-only" in sys.argv:
+    headless = None
+else:
+    from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
+
+    headless = import_script(
+        REPO_ROOT / "scripts/headless-overworld-test.py",
+        "headless_overworld_test",
+    )
 
 
 def repo_path(path: str | Path) -> Path:
@@ -143,6 +154,7 @@ def read_status(emu: DeSmuME) -> dict[str, int]:
         "request_result": read_u16(emu, DEBUG_STATUS_ADDR + 16),
         "request_count": read_u16(emu, DEBUG_STATUS_ADDR + 18),
         "ready": read_u16(emu, DEBUG_STATUS_ADDR + 20),
+        "destination_index": read_u16(emu, DEBUG_DESTINATION_INDEX_ADDR),
     }
 
 
@@ -162,6 +174,10 @@ def write_destination(emu: DeSmuME, destination: dict[str, Any]) -> None:
     write_u16(emu, DEBUG_DESTINATION_ADDR + 6, int(destination["direction"]))
 
 
+def force_debug_destination(emu: DeSmuME) -> None:
+    write_u16(emu, DEBUG_DESTINATION_INDEX_ADDR, DEBUG_DESTINATION_INDEX_FORCED)
+
+
 def empty_status() -> dict[str, int]:
     return {
         "magic": 0,
@@ -174,6 +190,7 @@ def empty_status() -> dict[str, int]:
         "request_result": 0,
         "request_count": 0,
         "ready": 0,
+        "destination_index": DEBUG_DESTINATION_INDEX_NONE,
     }
 
 
@@ -253,6 +270,265 @@ def load_destinations(path: Path) -> list[dict[str, Any]]:
     if not isinstance(destinations, list):
         raise ValueError(f"{path} does not contain a destinations list")
     return destinations
+
+
+def packed_destination_word(destination: dict[str, Any]) -> int:
+    warp_id = destination.get("warp_id")
+    warp_code = 0 if warp_id is None else int(warp_id) + 1
+    return (
+        (int(destination["map_id"]) << generator.PACKED_MAP_SHIFT)
+        | (int(destination["x"]) << generator.PACKED_X_SHIFT)
+        | (int(destination["y"]) << generator.PACKED_Y_SHIFT)
+        | (warp_code << generator.PACKED_WARP_SHIFT)
+    )
+
+
+def static_fallback_map_id(destination: dict[str, Any], maps: dict[str, int]) -> int:
+    match = re.search(r"fallback:(MAP_\w+)", str(destination.get("source", "")))
+    if match:
+        return maps[match.group(1)]
+    return int(destination["map_id"])
+
+
+def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, Any]:
+    source = (REPO_ROOT / "src/field/map_teleport_encounter_destinations.c").read_text()
+    runtime_source = (REPO_ROOT / "src/field/map_teleport.c").read_text()
+    runtime_event_scan_detected = all(
+        token in runtime_source
+        for token in (
+            "num_warp_events",
+            "warp_events",
+            "num_coord_events",
+            "coord_events",
+        )
+    )
+    runtime_permission_active_callback_scan_detected = (
+        "MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET 0x60" in runtime_source
+        and "provider->getPermission(fieldSystem, x, y, permission)" in runtime_source
+        and "MAP_TELEPORT_PERMISSION_COORD" not in runtime_source
+        and "GetMetatilePermissionAt(" not in runtime_source
+    )
+    runtime_permission_high_bit_scan_detected = (
+        runtime_permission_active_callback_scan_detected
+        and "0x8000" in runtime_source
+    )
+    runtime_direct_encounter_selector_detected = (
+        "gMapTeleportPendingRandomLoadedLandMapId" not in runtime_source
+        and "randomDestination.x += gf_rand() & 1" in runtime_source
+        and "MAP_TELEPORT_WARP_ID_MASK" in runtime_source
+        and "destination->mapId != fieldSystem->location->mapId" not in runtime_source
+    )
+    runtime_current_map_helper_detected = (
+        "MapTeleport_TrySelectRandomLoadedLandTile" in runtime_source
+        and "MapTeleport_OverlayIsLoadedLandTileWithPermission(" in runtime_source
+        and "permission != 0" in runtime_source
+        and "MapTeleport_IsGeneratedLoadedLandTile" not in runtime_source
+        and "MapTeleport_TryGetCurrentMapGeneratedLandPair" not in runtime_source
+    )
+    runtime_same_cell_clamp_detected = (
+        "centerX = fieldSystem->location->x" in runtime_source
+        and "centerY = fieldSystem->location->z" in runtime_source
+        and "centerX & ~31" in runtime_source
+        and "centerY & ~31" in runtime_source
+        and "+ 32" in runtime_source
+    )
+    table_rows = re.findall(
+        r"0x([0-9A-Fa-f]{8})u,\s*//\s*(MAP_\w+)\s+(\d+),(\d+)",
+        source,
+    )
+    mismatches: list[dict[str, Any]] = []
+    random_evidence_mismatches: list[dict[str, Any]] = []
+    compact_pair_mismatches: list[dict[str, Any]] = []
+    compact_pairs: list[dict[str, Any]] = []
+    event_blocked_low_land_hazards: list[dict[str, Any]] = []
+    maps = generator.read_map_constants(REPO_ROOT / "include/constants/maps.h")
+    matrix_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/4/1")
+    land_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/6/5")
+    event_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/3/2")
+    arm9 = (REPO_ROOT / "base/arm9.bin").read_bytes()
+    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]] = {}
+    permission_cache: dict[int, tuple[int, ...]] = {}
+    for index, destination in enumerate(destinations):
+        if index >= len(table_rows):
+            mismatches.append({"index": index, "reason": "missing packed C row"})
+            continue
+        packed_hex, symbol, x, y = table_rows[index]
+        expected = packed_destination_word(destination)
+        actual = int(packed_hex, 16)
+        if (
+            actual != expected
+            or symbol != destination["symbol"]
+            or int(x) != int(destination["x"])
+            or int(y) != int(destination["y"])
+        ):
+            mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "expected_packed": f"0x{expected:08X}",
+                    "actual_packed": f"0x{actual:08X}",
+                    "actual_symbol": symbol,
+                    "actual_x": int(x),
+                    "actual_y": int(y),
+                }
+            )
+        random_tiles = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+        )
+        strict_tiles_with_center = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit-compact-pair",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+            exclude_center=False,
+        )
+        loose_random_tiles = generator.loaded_window_random_tile_candidates(
+            center_x=int(destination["x"]),
+            center_y=int(destination["y"]),
+            loaded_map_id=int(destination["map_id"]),
+            fallback_map_id=static_fallback_map_id(destination, maps),
+            source="static-audit-runtime-low-land",
+            matrix_narc=matrix_narc,
+            land_narc=land_narc,
+            event_narc=event_narc,
+            arm9=arm9,
+            matrix_cache=matrix_cache,
+            permission_cache=permission_cache,
+            exclude_event_blocked=False,
+        )
+        strict_coordinates = {
+            (int(tile["x"]), int(tile["y"]))
+            for tile in strict_tiles_with_center
+        }
+        compact_pair = {
+            (int(destination["x"]), int(destination["y"])),
+            (int(destination["x"]) + 1, int(destination["y"])),
+        }
+        if not compact_pair <= strict_coordinates:
+            compact_pair_mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "compact_pair": [
+                        {"x": x, "y": y}
+                        for x, y in sorted(compact_pair)
+                    ],
+                }
+            )
+        else:
+            compact_pairs.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "map_id": destination["map_id"],
+                    "pair": [
+                        {"x": x, "y": y}
+                        for x, y in sorted(compact_pair)
+                    ],
+                }
+            )
+        event_hazards = [
+            tile
+            for tile in loose_random_tiles
+            if (int(tile["x"]), int(tile["y"])) not in strict_coordinates
+        ]
+        if event_hazards:
+            event_blocked_low_land_hazards.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "count": len(event_hazards),
+                    "sample": [
+                        {"x": int(tile["x"]), "y": int(tile["y"])}
+                        for tile in event_hazards[:8]
+                    ],
+                }
+            )
+        evidence = generator.random_tile_evidence(random_tiles)
+        if (
+            int(destination.get("random_tile_count", 0)) != len(random_tiles)
+            or destination.get("random_tile_evidence") != evidence
+        ):
+            random_evidence_mismatches.append(
+                {
+                    "index": index,
+                    "symbol": destination["symbol"],
+                    "stored_count": destination.get("random_tile_count"),
+                    "actual_count": len(random_tiles),
+                    "stored_evidence": destination.get("random_tile_evidence"),
+                    "actual_evidence": evidence,
+                }
+            )
+    zero_random = [
+        {
+            "index": index,
+            "symbol": destination["symbol"],
+            "map_id": destination["map_id"],
+            "x": destination["x"],
+            "y": destination["y"],
+        }
+        for index, destination in enumerate(destinations)
+        if int(destination.get("random_tile_count", 0)) == 0
+    ]
+    return {
+        "c_table_count": len(table_rows),
+        "json_count": len(destinations),
+        "packed_table_matches_json": not mismatches
+        and len(table_rows) == len(destinations),
+        "packed_table_mismatches": mismatches,
+        "zero_random_tile_count": len(zero_random),
+        "zero_random_tile_destinations": zero_random,
+        "random_evidence_mismatch_count": len(random_evidence_mismatches),
+        "random_evidence_mismatches": random_evidence_mismatches,
+        "compact_pair_mismatch_count": len(compact_pair_mismatches),
+        "compact_pair_mismatches": compact_pair_mismatches,
+        "compact_pair_coverage_count": len(compact_pairs),
+        "compact_pair_t24": next(
+            (pair for pair in compact_pairs if pair["symbol"] == "MAP_T24"),
+            None,
+        ),
+        "runtime_event_scan_detected": runtime_event_scan_detected,
+        "runtime_permission_active_callback_scan_detected": runtime_permission_active_callback_scan_detected,
+        "runtime_permission_high_bit_scan_detected": runtime_permission_high_bit_scan_detected,
+        "runtime_direct_encounter_selector_detected": runtime_direct_encounter_selector_detected,
+        "runtime_current_map_helper_detected": runtime_current_map_helper_detected,
+        "runtime_same_cell_clamp_detected": runtime_same_cell_clamp_detected,
+        "event_blocked_low_land_hazard_window_count": len(event_blocked_low_land_hazards),
+        "event_blocked_low_land_hazard_tile_count": sum(
+            item["count"] for item in event_blocked_low_land_hazards
+        ),
+        "event_blocked_low_land_hazards": event_blocked_low_land_hazards,
+        "ok": len(table_rows) == len(destinations)
+        and not mismatches
+        and not zero_random
+        and not random_evidence_mismatches
+        and not compact_pair_mismatches
+        and runtime_event_scan_detected
+        and runtime_permission_high_bit_scan_detected
+        and runtime_direct_encounter_selector_detected
+        and runtime_current_map_helper_detected
+        and runtime_same_cell_clamp_detected,
+        "event_blocked_hazards_runtime_rejected": runtime_event_scan_detected,
+        "high_bit_permissions_runtime_rejected": runtime_permission_high_bit_scan_detected,
+        "same_cell_runtime_selector_clamp_detected": runtime_same_cell_clamp_detected,
+    }
 
 
 def authoritative_entries() -> list[tuple[str, int, int]]:
@@ -409,6 +685,7 @@ def run_destination(
             failure_reason = None
         if emu is not None:
             write_destination(emu, destination)
+            force_debug_destination(emu)
             headless.hold_combo(emu, "L+R", args.trigger_frames, args.release_frames)
             observed, frames_waited = wait_for_request_outcome(
                 args,
@@ -638,6 +915,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-interval", type=int, default=12)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
     parser.add_argument("--limit", type=int, help="Debug-only map limit; any value below expected count fails summary.")
+    parser.add_argument("--static-only", action="store_true")
     parser.add_argument("--worker-index", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--worker-output", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--worker-timeout-seconds", type=int, default=120)
@@ -647,6 +925,29 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+    destinations = load_destinations(repo_path(args.destinations))
+    authoritative = authoritative_entries()
+    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
+    destination_symbols = [destination["symbol"] for destination in destinations]
+    static_audit = static_destination_audit(destinations)
+    if args.static_only:
+        summary = {
+            "destinations": str(repo_path(args.destinations)),
+            "expected_count": args.expect_count,
+            "authoritative_count": len(authoritative),
+            "generated_destination_count": len(destinations),
+            "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
+            "static_destination_audit": static_audit,
+            "passed": (
+                len(authoritative) == args.expect_count
+                and len(destinations) == args.expect_count
+                and authoritative_symbols == destination_symbols
+                and static_audit["ok"]
+            ),
+        }
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0 if summary["passed"] else 1
 
     rom = repo_path(args.rom)
     if not rom.is_file():
@@ -661,11 +962,6 @@ def main() -> int:
         save_path = headless.find_dsv(args.dsv)
         raw_save = headless.extract_raw_save(save_path)
         save_kind = "dsv"
-
-    destinations = load_destinations(repo_path(args.destinations))
-    authoritative = authoritative_entries()
-    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
-    destination_symbols = [destination["symbol"] for destination in destinations]
 
     if args.worker_index is not None:
         if args.worker_output is None:
@@ -757,6 +1053,7 @@ def main() -> int:
         "stale_match_rejected_count": stale_match_rejected,
         "all_passed_rows_have_evidence": all_passed_rows_have_evidence,
         "field_overlay_size": field_overlay_size,
+        "static_destination_audit": static_audit,
         "ready_frames": ready_frames,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
         "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
@@ -768,6 +1065,7 @@ def main() -> int:
             and passed == expected_count
             and all_passed_rows_have_evidence
             and field_overlay_size["ok"]
+            and static_audit["ok"]
             and authoritative_symbols == destination_symbols
             and entry["magic"] == ENCOUNTER_DESTINATION_MAGIC
             and entry["version"] == ENCOUNTER_DESTINATION_VERSION
