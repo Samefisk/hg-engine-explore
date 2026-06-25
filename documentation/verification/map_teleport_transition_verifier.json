@@ -1,36 +1,48 @@
 {
+  "black_frame_count": 5,
+  "black_frames": [
+    6,
+    9,
+    12,
+    15,
+    18
+  ],
+  "black_transition_ok": true,
   "bottom_solid_white_frame_count": 0,
   "bottom_solid_white_frames": [],
   "destination": {
-    "map_id": 242,
-    "symbol": "MAP_D40R0102",
-    "x": 16,
-    "y": 16
+    "map_id": 250,
+    "symbol": "MAP_D38R0102",
+    "x": 0,
+    "y": 1023
   },
-  "destination_count": 150,
+  "destination_count": 123,
   "destination_entry": {
-    "count": 150,
+    "count": 123,
     "magic": 1297368388,
     "size": 20,
     "version": 1
   },
   "destination_index": 47,
-  "elapsed_seconds": 16.933,
+  "elapsed_seconds": 16.093,
+  "expected_count": 123,
   "final_nonblack_ok": true,
   "final_status": {
     "destination_index": 65535,
     "direction": 1,
     "magic": 1297371219,
-    "map_id": 242,
+    "map_id": 250,
     "ready": 1,
     "request_count": 0,
     "request_result": 2,
     "size": 24,
     "version": 1,
-    "x": 16,
-    "y": 16
+    "x": 35,
+    "y": 81
   },
   "landed": true,
+  "max_black_nonblack_pixels": 64,
+  "min_black_frames": 2,
   "passed": true,
   "post_release_sample_frames": 240,
   "release_frames": 30,

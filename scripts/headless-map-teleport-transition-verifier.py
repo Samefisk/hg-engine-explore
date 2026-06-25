@@ -75,6 +75,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-frames", type=int, default=240)
     parser.add_argument("--sample-interval", type=int, default=3)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
+    parser.add_argument("--min-black-frames", type=int, default=2)
+    parser.add_argument("--max-black-nonblack-pixels", type=int, default=64)
     parser.add_argument("--solid-white-min-channel", type=int, default=240)
     parser.add_argument("--show-emulator-log", action="store_true")
     return parser.parse_args()
@@ -215,7 +217,11 @@ def main() -> int:
         raw_save = headless.extract_raw_save(save_path)
         save_kind = "dsv"
 
-    destinations = verifier.load_destinations(repo_path(args.destinations))
+    destination_payload = verifier.load_destination_payload(repo_path(args.destinations))
+    destinations = destination_payload["destinations"]
+    expected_count = int(
+        destination_payload.get("expected_count", verifier.DEFAULT_EXPECT_COUNT)
+    )
     if args.destination_index < 0 or args.destination_index >= len(destinations):
         raise IndexError(f"destination index {args.destination_index} outside destination table")
     destination = destinations[args.destination_index]
@@ -264,12 +270,18 @@ def main() -> int:
     bottom_solid_white_frames = [
         sample for sample in samples if sample["bottom"]["solid_white"]
     ]
+    black_frames = [
+        sample
+        for sample in samples
+        if sample["whole"]["nonblack_pixels"] <= args.max_black_nonblack_pixels
+    ]
     landed = verifier.status_matches_destination(destination, final_status)
     final_nonblack_ok = (
         samples[-1]["whole"]["nonblack_pixels"] >= args.min_nonblack_pixels
         if samples
         else False
     )
+    black_transition_ok = len(black_frames) >= args.min_black_frames
     request_ok = (
         request_evidence is not None
         and request_evidence["request_result"] == verifier.MAP_TELEPORT_RESULT_OK
@@ -280,6 +292,7 @@ def main() -> int:
         "save": display_path(save_path),
         "save_kind": save_kind,
         "destination_count": len(destinations),
+        "expected_count": expected_count,
         "destination_index": args.destination_index,
         "destination": {
             "symbol": destination["symbol"],
@@ -296,6 +309,10 @@ def main() -> int:
         "post_release_sample_frames": args.sample_frames,
         "total_sample_frames": total_sample_frames,
         "sample_interval": args.sample_interval,
+        "min_black_frames": args.min_black_frames,
+        "max_black_nonblack_pixels": args.max_black_nonblack_pixels,
+        "black_frame_count": len(black_frames),
+        "black_frames": [sample["frame"] for sample in black_frames],
         "solid_white_frame_count": len(solid_white_frames),
         "solid_white_frames": [sample["frame"] for sample in solid_white_frames],
         "solid_white_whole_frame_count": len(whole_solid_white_frames),
@@ -340,14 +357,16 @@ def main() -> int:
         "landed": landed,
         "request_ok": request_ok,
         "final_nonblack_ok": final_nonblack_ok,
+        "black_transition_ok": black_transition_ok,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
         "passed": (
-            len(destinations) == verifier.DEFAULT_EXPECT_COUNT
+            len(destinations) == expected_count
             and entry["magic"] == verifier.ENCOUNTER_DESTINATION_MAGIC
-            and entry["count"] == verifier.DEFAULT_EXPECT_COUNT
+            and entry["count"] == expected_count
             and request_ok
             and landed
             and final_nonblack_ok
+            and black_transition_ok
             and len(solid_white_frames) == 0
         ),
     }
