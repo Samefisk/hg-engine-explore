@@ -1,5 +1,6 @@
 #include "../include/types.h"
 #include "../include/debug.h"
+#include "../include/map_teleport.h"
 #include "../include/overlay.h"
 #include "../include/overworld_wild_spawns_internal.h"
 #include "../include/save.h"
@@ -21,12 +22,6 @@ struct LinkedOverlayList gLinkedOverlayList[] =
 u8 gCleanupOverlayList[][4] =
 {
     {OVERLAY_BATTLE_EXTENSION, OVERLAY_BATTLECONTROLLER_BEFOREMOVE, OVERLAY_SERVERBEFOREACT, OVERLAY_BATTLECONTROLLER_MOVEEND},
-};
-
-// if the first one is being loaded, attempt to unload the remaining ones first.  the first one takes priority over the others.
-u8 gOverlayPriorityList[][2] =
-{
-    {OVERLAY_POKEDEX, OVERLAY_BATTLECONTROLLER_BEFOREMOVE},
 };
 
 static BOOL IsOverworldWildOverlay(u32 ovyId)
@@ -138,15 +133,13 @@ u32 LONG_CALL HandleLoadOverlay(u32 ovyId, u32 loadType) {
 loadExtension:
     UnloadColdOverworldWildOverlaysFor(ovyId);
 
-    for (i = 0; i < NELEMS(gOverlayPriorityList); i++)
-    {
-        if (gOverlayPriorityList[i][0] == ovyId)
-        {
+    if (ovyId == OVERLAY_BATTLE_EXTENSION) {
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
-            debug_printf("Overlay %d has priority over overlay %d--unloading the latter...\n", ovyId, gOverlayPriorityList[i][1]);
+        debug_printf("Overlay %d has priority over field overlays--unloading them...\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-            UnloadOverlayByID(gOverlayPriorityList[i][1]);
-        }
+        *(u32 *)MAP_TELEPORT_OVERLAY_ENTRY_ADDR = 0;
+        UnloadOverlayByID(OVERLAY_FIELD_EXTENSION);
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
     }
 
     if (!CanOverlayBeLoaded(ovyId)) {

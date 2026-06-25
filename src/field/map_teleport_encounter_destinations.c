@@ -2,196 +2,168 @@
 
 #include "../../include/config.h"
 #include "../../include/constants/maps.h"
-#include "../../include/overworld_wild_behavior_data.h"
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
 #define MAP_TELEPORT_ENCOUNTER_MAP_SHIFT 0
-#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000001FFu
-#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 9
-#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu
-#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 20
-#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu
-#define MAP_TELEPORT_ENCOUNTER_WARP_SHIFT 30
-#define MAP_TELEPORT_ENCOUNTER_WARP_MASK 0x00000003u
+#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x03FFu
+#define MAP_TELEPORT_ENCOUNTER_WARP_SHIFT 10
+#define MAP_TELEPORT_ENCOUNTER_WARP_MASK 0x003Fu
+#define MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT 123
 
-static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {
-    0x18F55E3Cu, // MAP_T20 687,399
-    0x19049E21u, // MAP_R29 591,400
-    0x19045E43u, // MAP_T21 559,400
-    0x12F45E22u, // MAP_R30 559,303
-    0x11045C23u, // MAP_R31 558,272
-    0x1103DC49u, // MAP_T22 494,272
-    0x00F0189Bu, // MAP_D15R0102 12,15
-    0x00F02E9Cu, // MAP_D15R0103 23,15
-    0x1AF39E24u, // MAP_R32 463,431
-    0x11135E71u, // MAP_D24R0101 431,273
-    0x11135E08u, // MAP_D24 431,273
-    0x11135EDAu, // MAP_D24R0201 431,273
-    0x00F01338u, // MAP_D24R0202 9,15
-    0x01101F39u, // MAP_D24R0203 15,17
-    0x00F01F3Au, // MAP_D24R0204 15,15
-    0x01900C63u, // MAP_D25R0101 6,25
-    0x00C01E99u, // MAP_D25R0102 15,12
-    0x0120249Au, // MAP_D25R0103 18,18
-    0x1CF39E25u, // MAP_R33 463,463
-    0x00801E72u, // MAP_D26R0101 15,8
-    0x01301CB1u, // MAP_D26R0102 14,19
-    0x00F01EB5u, // MAP_D26R0103 15,15
-    0x03006275u, // MAP_D36R0101 49,48
-    0x1CF2E026u, // MAP_R34 368,463
-    0x10F2DE27u, // MAP_R35 367,271
-    0x01105E60u, // MAP_D22R0101 47,17
-    0x01000DE7u, // MAP_D22R0102 6,16
-    0x01000DE8u, // MAP_D22R0103 6,16
-    0x0EF2DC28u, // MAP_R36 366,239
-    0x0CF32429u, // MAP_R37 402,207
-    0x0AF31E4Eu, // MAP_T27 399,175
-    0x00F01E07u, // MAP_D18R0101 15,15
-    0x00F01ED9u, // MAP_D18R0102 15,15
-    0x01001D4Cu, // MAP_D17R0102 14,16
-    0x01001B4Du, // MAP_D17R0103 13,16
-    0x00F01F4Eu, // MAP_D17R0104 15,15
-    0x00F01B4Fu, // MAP_D17R0105 13,15
-    0x00F02150u, // MAP_D17R0106 16,15
-    0x00F01551u, // MAP_D17R0107 10,15
-    0x00F01952u, // MAP_D17R0108 12,15
-    0x01001153u, // MAP_D17R0109 8,16
-    0x0AF29E2Au, // MAP_R38 335,175
-    0x0AF21E2Bu, // MAP_R39 271,175
-    0x0EF21C4Du, // MAP_T26 270,239
-    0x1101DC5Eu, // MAP_W40 238,272
-    0x14119C5Fu, // MAP_W41 206,321
-    0x01001479u, // MAP_D40R0101 10,16
-    0x01001AF2u, // MAP_D40R0102 13,16
-    0x010034F3u, // MAP_D40R0104 26,16
-    0x01B032F4u, // MAP_D40R0107 25,27
-    0x1721624Bu, // MAP_T24 177,370
-    0x0AF35E2Cu, // MAP_R42 431,175
-    0x01001277u, // MAP_D38R0101 9,16
-    0x01001EFAu, // MAP_D38R0102 15,16
-    0x01001CFBu, // MAP_D38R0103 14,16
-    0x02F020FCu, // MAP_D38R0104 16,47
-    0x06F41A2Du, // MAP_R43 525,111
-    0x04F3DE58u, // MAP_T29 495,79
-    0x0AF45E2Eu, // MAP_R44 559,175
-    0x02F02078u, // MAP_D39R0101 16,47
-    0x01101CEDu, // MAP_D39R0102 14,17
-    0x00F01EEEu, // MAP_D39R0103 15,15
-    0x01101EEFu, // MAP_D39R0104 15,17
-    0x0AF51E59u, // MAP_T30 655,175
-    0x0090107Du, // MAP_D44R0101 8,9
-    0x00E01EFDu, // MAP_D44R0102 15,14
-    0x0D051C2Fu, // MAP_R45 654,208
-    0x16F4DE30u, // MAP_R46 623,367
-    0xC2F01EB0u, // MAP_D42R0102 15,47
-    0x01001C7Bu, // MAP_D42R0101 14,16
-    0x16F12097u, // MAP_R47 144,367
-    0x00A01692u, // MAP_D11R0101 11,10
-    0x00F01FC5u, // MAP_D11R0102 15,15
-    0x00E01FC6u, // MAP_D11R0103 15,14
-    0x01101DC7u, // MAP_D11R0104 14,17
-    0x010023C8u, // MAP_D11R0105 17,16
-    0x01401FCEu, // MAP_D41R0105 15,20
-    0x01001DD0u, // MAP_D41R0107 14,16
-    0x01001FD1u, // MAP_D41R0108 15,16
-    0x01001F56u, // MAP_D50R0101 15,16
-    0x00F00955u, // MAP_D17R0112 4,15
-    0x10F65E5Au, // MAP_T31 815,271
-    0x44F01E7Au, // MAP_D41R0101 15,79
-    0x00F01FCBu, // MAP_D41R0102 15,15
-    0x00F01FCCu, // MAP_D41R0103 15,15
-    0x00F01FCDu, // MAP_D41R0104 15,15
-    0x01001F57u, // MAP_SAF01 15,16
-    0x01001958u, // MAP_SAF02 12,16
-    0x00F01F59u, // MAP_SAF03 15,15
-    0x01001F5Au, // MAP_SAF04 15,16
-    0x00F0215Bu, // MAP_SAF05 16,15
-    0x00E01F5Cu, // MAP_SAF06 15,14
-    0x00F01F5Du, // MAP_SAF07 15,15
-    0x01001D5Eu, // MAP_SAF08 14,16
-    0x00F01F5Fu, // MAP_SAF09 15,15
-    0x00F01F60u, // MAP_SAF10 15,15
-    0x01101D61u, // MAP_SAF11 14,17
-    0x01301D62u, // MAP_SAF12 14,19
-    0x00F01F63u, // MAP_SAF13 15,15
-    0x00F01F64u, // MAP_SAF14 15,15
-    0x10FB1E14u, // MAP_R12 1423,271
-    0x1CD9725Bu, // MAP_W19 1209,461
-    0x1E089E5Cu, // MAP_W20 1103,480
-    0x16F81E31u, // MAP_T01 1039,367
-    0x0EB7E032u, // MAP_T02 1008,235
-    0x06FA1E34u, // MAP_T04 1295,111
-    0x130A1E36u, // MAP_T06 1295,304
-    0x0EF99E37u, // MAP_T07 1231,239
-    0x19495C38u, // MAP_T08 1198,404
-    0x1F281639u, // MAP_T09 1035,498
-    0x14F09E98u, // MAP_R48 79,335
-    0x12F71E1Eu, // MAP_R26 911,303
-    0x18F65E1Fu, // MAP_R27 815,399
-    0x11069C20u, // MAP_R28 846,272
-    0x0100186Bu, // MAP_D02R0101 12,16
-    0x01001FC0u, // MAP_D02R0102 15,16
-    0x00905C6Cu, // MAP_D05R0101 46,9
-    0x01005DC4u, // MAP_D05R0102 46,16
-    0x01004E7Cu, // MAP_D43R0101 39,16
-    0x14F81E09u, // MAP_R01 1039,335
-    0x0CF81E0Au, // MAP_R02 1039,207
-    0x06F91E0Bu, // MAP_R03 1167,111
-    0x06F99E0Cu, // MAP_R04 1231,111
-    0x0B1A1E0Du, // MAP_R05 1295,177
-    0x10FA1C0Eu, // MAP_R06 1294,271
-    0x0EF9DE0Fu, // MAP_R07 1263,239
-    0x0EFA9E10u, // MAP_R08 1359,239
-    0x08FB1E11u, // MAP_R09 1423,143
-    0x0A8B2412u, // MAP_R10 1426,168
-    0x12FA9E13u, // MAP_R11 1359,303
-    0x170A9C15u, // MAP_R13 1358,368
-    0x18FAA216u, // MAP_R14 1361,399
-    0x1AF9DE17u, // MAP_R15 1263,431
-    0x1128DC18u, // MAP_R16 1134,274
-    0x12A8E419u, // MAP_R17 1138,298
-    0x1AF8DC1Au, // MAP_R18 1134,431
-    0x1A381C5Du, // MAP_W21 1038,419
-    0x11179E1Bu, // MAP_R22 975,273
-    0x04FA6A1Cu, // MAP_R24 1333,79
-    0x02FA5E1Du, // MAP_R25 1327,47
-    0x00E0687Eu, // MAP_D45R0101 52,14
-    0x40A0192Au, // MAP_D45R0102 12,10
-    0x00600A6Au, // MAP_D01R0101 5,6
-    0x01101EB2u, // MAP_D43R0102 15,17
-    0x01405EB3u, // MAP_D43R0103 47,20
-    0x08C81D9Eu, // MAP_R02R0101 1038,140
-    0x03005693u, // MAP_D46R0101 43,48
-    0x02A01E91u, // MAP_D03R0101 15,42
-    0x01201FC2u, // MAP_D03R0102 15,18
-    0x01001FC3u, // MAP_D03R0103 15,16
+static const u16 sMapTeleportEncounterDestinations[MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT] = {
+    0x003Cu, // MAP_T20 warp-id 0 via map 61 warp 0 at 4,14
+    0x0021u, // MAP_R29 warp-id 0 via map 134 warp 0 at 5,12
+    0x0443u, // MAP_T21 warp-id 1 via map 68 warp 0 at 4,11
+    0x0422u, // MAP_R30 warp-id 1 via map 127 warp 0 at 4,8
+    0x0023u, // MAP_R31 warp-id 0 via map 97 warp 1 at 10,7
+    0x0049u, // MAP_T22 warp-id 0 via map 97 warp 0 at 1,7
+    0x009Bu, // MAP_D15R0102 warp-id 0 via map 110 warp 1 at 10,15
+    0x009Cu, // MAP_D15R0103 warp-id 0 via map 155 warp 3 at 15,27
+    0x0024u, // MAP_R32 warp-id 0 via map 98 warp 0 at 10,7
+    0x0871u, // MAP_D24R0101 warp-id 2 via map 98 warp 1 at 1,7
+    0x0138u, // MAP_D24R0202 warp-id 0 via map 113 warp 4 at 436,266
+    0x013Au, // MAP_D24R0204 warp-id 0 via map 113 warp 5 at 436,309
+    0x0063u, // MAP_D25R0101 warp-id 0 via map 36 warp 2 at 462,430
+    0x0099u, // MAP_D25R0102 warp-id 0 via map 99 warp 1 at 4,25
+    0x109Au, // MAP_D25R0103 warp-id 4 via map 99 warp 4 at 5,3
+    0x0025u, // MAP_R33 warp-id 0 via map 99 warp 2 at 27,93
+    0x0072u, // MAP_D26R0101 warp-id 0 via map 74 warp 7 at 433,454
+    0x00B1u, // MAP_D26R0102 warp-id 0 via map 114 warp 1 at 11,6
+    0x00B5u, // MAP_D26R0103 warp-id 0 via map 177 warp 1 at 27,20
+    0x0075u, // MAP_D36R0101 warp-id 0 via map 100 warp 1 at 1,7
+    0x0026u, // MAP_R34 warp-id 0 via map 171 warp 0 at 5,2
+    0x0027u, // MAP_R35 warp-id 0 via map 101 warp 1 at 5,2
+    0x0060u, // MAP_D22R0101 warp-id 0 via map 102 warp 1 at 25,2
+    0x0828u, // MAP_R36 warp-id 2 via map 103 warp 0 at 5,2
+    0x004Eu, // MAP_T27 warp-id 0 via map 7 warp 0 at 15,26
+    0x0007u, // MAP_D18R0101 warp-id 0 via map 78 warp 0 at 376,149
+    0x00D9u, // MAP_D18R0102 warp-id 0 via map 7 warp 1 at 22,16
+    0x014Cu, // MAP_D17R0102 warp-id 0 via map 111 warp 1 at 9,8
+    0x014Du, // MAP_D17R0103 warp-id 0 via map 332 warp 1 at 15,25
+    0x014Eu, // MAP_D17R0104 warp-id 0 via map 333 warp 1 at 24,8
+    0x014Fu, // MAP_D17R0105 warp-id 0 via map 334 warp 1 at 6,8
+    0x0150u, // MAP_D17R0106 warp-id 0 via map 335 warp 3 at 13,25
+    0x0151u, // MAP_D17R0107 warp-id 0 via map 336 warp 1 at 6,19
+    0x0152u, // MAP_D17R0108 warp-id 0 via map 337 warp 1 at 15,26
+    0x0D53u, // MAP_D17R0109 warp-id 3 via map 337 warp 2 at 12,16
+    0x002Au, // MAP_R38 warp-id 0 via map 172 warp 1 at 1,7
+    0x002Bu, // MAP_R39 warp-id 0 via map 214 warp 0 at 6,10
+    0x0C4Du, // MAP_T26 warp-id 3 via map 115 warp 0 at 8,17
+    0x005Eu, // MAP_W40 warp-id 0 via map 366 warp 0 at 5,12
+    0x085Fu, // MAP_W41 warp-id 2 via map 121 warp 0 at 37,25
+    0x0C79u, // MAP_D40R0101 warp-id 3 via map 95 warp 0 at 208,341
+    0x14F2u, // MAP_D40R0102 warp-id 5 via map 121 warp 1 at 51,22
+    0x00F3u, // MAP_D40R0104 warp-id 0 via map 242 warp 4 at 31,49
+    0x00F4u, // MAP_D40R0107 warp-id 0 via map 243 warp 5 at 31,43
+    0x004Bu, // MAP_T24 warp-id 0 via map 139 warp 0 at 13,19
+    0x082Cu, // MAP_R42 warp-id 2 via map 119 warp 0 at 20,46
+    0x0077u, // MAP_D38R0101 warp-id 0 via map 44 warp 2 at 436,171
+    0x00FAu, // MAP_D38R0102 warp-id 0 via map 119 warp 4 at 34,31
+    0x00FBu, // MAP_D38R0103 warp-id 0 via map 119 warp 9 at 45,2
+    0x00FCu, // MAP_D38R0104 warp-id 0 via map 119 warp 10 at 45,44
+    0x002Du, // MAP_R43 warp-id 0 via map 142 warp 1 at 5,2
+    0x0058u, // MAP_T29 warp-id 0 via map 294 warp 0 at 4,8
+    0x002Eu, // MAP_R44 warp-id 0 via map 120 warp 0 at 11,58
+    0x0078u, // MAP_D39R0101 warp-id 0 via map 46 warp 0 at 633,169
+    0x00EDu, // MAP_D39R0102 warp-id 0 via map 120 warp 2 at 55,7
+    0x00EEu, // MAP_D39R0103 warp-id 0 via map 237 warp 2 at 25,8
+    0x00EFu, // MAP_D39R0104 warp-id 0 via map 238 warp 2 at 16,17
+    0x0059u, // MAP_T30 warp-id 0 via map 120 warp 1 at 55,40
+    0x007Du, // MAP_D44R0101 warp-id 0 via map 89 warp 2 at 672,132
+    0x00FDu, // MAP_D44R0102 warp-id 0 via map 125 warp 1 at 6,5
+    0x002Fu, // MAP_R45 warp-id 0 via map 123 warp 1 at 60,4
+    0x0030u, // MAP_R46 warp-id 0 via map 134 warp 1 at 5,2
+    0x00B0u, // MAP_D42R0102 warp-id 0 via map 35 warp 2 at 565,269
+    0x047Bu, // MAP_D42R0101 warp-id 1 via map 47 warp 0 at 650,198
+    0x0097u, // MAP_R47 warp-id 0 via map 279 warp 1 at 18,46
+    0x0092u, // MAP_D11R0101 warp-id 0 via map 92 warp 0 at 1127,501
+    0x01C5u, // MAP_D11R0102 warp-id 0 via map 146 warp 2 at 52,20
+    0x01C6u, // MAP_D11R0103 warp-id 0 via map 453 warp 2 at 32,22
+    0x01C7u, // MAP_D11R0104 warp-id 0 via map 454 warp 4 at 43,12
+    0x01C8u, // MAP_D11R0105 warp-id 0 via map 455 warp 4 at 44,22
+    0x01CEu, // MAP_D41R0105 warp-id 0 via map 122 warp 1 at 15,12
+    0x01D0u, // MAP_D41R0107 warp-id 0 via map 459 warp 6 at 14,39
+    0x01D1u, // MAP_D41R0108 warp-id 0 via map 464 warp 1 at 13,1
+    0x0156u, // MAP_D50R0101 warp-id 0 via map 151 warp 1 at 130,385
+    0x0155u, // MAP_D17R0112 warp-id 0 via map 339 warp 6 at 12,17
+    0x005Au, // MAP_T31 warp-id 0 via map 122 warp 0 at 40,61
+    0x007Au, // MAP_D41R0101 warp-id 0 via map 90 warp 0 at 811,260
+    0x01CBu, // MAP_D41R0102 warp-id 0 via map 463 warp 1 at 20,1
+    0x09CCu, // MAP_D41R0103 warp-id 2 via map 122 warp 3 at 51,46
+    0x01CDu, // MAP_D41R0104 warp-id 0 via map 122 warp 2 at 34,47
+    0x0014u, // MAP_R12 warp-id 0 via map 425 warp 1 at 10,7
+    0x005Bu, // MAP_W19 warp-id 0 via map 424 warp 1 at 5,12
+    0x005Cu, // MAP_W20 warp-id 0 via map 146 warp 0 at 55,28
+    0x0031u, // MAP_T01 warp-id 0 via map 503 warp 0 at 5,10
+    0x0032u, // MAP_T02 warp-id 0 via map 496 warp 0 at 5,47
+    0x1C34u, // MAP_T04 warp-id 7 via map 145 warp 0 at 49,42
+    0x0436u, // MAP_T06 warp-id 1 via map 358 warp 0 at 8,19
+    0x0037u, // MAP_T07 warp-id 0 via map 370 warp 0 at 12,12
+    0x0038u, // MAP_T08 warp-id 0 via map 392 warp 0 at 1,7
+    0x0039u, // MAP_T09 warp-id 0 via map 508 warp 0 at 8,19
+    0x001Eu, // MAP_R26 warp-id 0 via map 296 warp 0 at 4,8
+    0x001Fu, // MAP_R27 warp-id 0 via map 126 warp 0 at 30,22
+    0x0020u, // MAP_R28 warp-id 0 via map 299 warp 3 at 1,8
+    0x006Bu, // MAP_D02R0101 warp-id 0 via map 11 warp 0 at 1172,102
+    0x01C0u, // MAP_D02R0102 warp-id 0 via map 107 warp 2 at 17,4
+    0x046Cu, // MAP_D05R0101 warp-id 1 via map 18 warp 0 at 1419,163
+    0x01C4u, // MAP_D05R0102 warp-id 0 via map 108 warp 2 at 8,34
+    0x047Cu, // MAP_D43R0101 warp-id 1 via map 178 warp 0 at 7,31
+    0x0009u, // MAP_R01 warp-id 0 via map 527 warp 0 at 5,12
+    0x080Au, // MAP_R02 warp-id 2 via map 418 warp 1 at 5,12
+    0x000Bu, // MAP_R03 warp-id 0 via map 107 warp 0 at 4,4
+    0x000Cu, // MAP_R04 warp-id 0 via map 107 warp 1 at 22,23
+    0x000Du, // MAP_R05 warp-id 0 via map 391 warp 1 at 5,2
+    0x000Eu, // MAP_R06 warp-id 0 via map 389 warp 0 at 5,12
+    0x000Fu, // MAP_R07 warp-id 0 via map 493 warp 1 at 1,7
+    0x0010u, // MAP_R08 warp-id 0 via map 390 warp 1 at 10,7
+    0x0012u, // MAP_R10 warp-id 0 via map 108 warp 1 at 46,10
+    0x0813u, // MAP_R11 warp-id 2 via map 106 warp 0 at 4,6
+    0x0017u, // MAP_R15 warp-id 0 via map 392 warp 1 at 10,7
+    0x0018u, // MAP_R16 warp-id 0 via map 421 warp 1 at 1,7
+    0x001Au, // MAP_R18 warp-id 0 via map 423 warp 0 at 1,7
+    0x001Bu, // MAP_R22 warp-id 0 via map 299 warp 2 at 21,8
+    0x001Du, // MAP_R25 warp-id 0 via map 440 warp 0 at 7,11
+    0x007Eu, // MAP_D45R0101 warp-id 0 via map 31 warp 0 at 740,396
+    0x012Au, // MAP_D45R0102 warp-id 0 via map 126 warp 2 at 27,11
+    0x006Au, // MAP_D01R0101 warp-id 0 via map 19 warp 2 at 1354,302
+    0x00B2u, // MAP_D43R0102 warp-id 0 via map 124 warp 1 at 19,7
+    0x00B3u, // MAP_D43R0103 warp-id 0 via map 58 warp 0 at 912,218
+    0x119Eu, // MAP_R02R0101 warp-id 4 via map 106 warp 7 at 37,10
+    0x0093u, // MAP_D46R0101 warp-id 0 via map 419 warp 1 at 5,2
+    0x0091u, // MAP_D03R0101 warp-id 0 via map 52 warp 7 at 1290,107
+    0x0DC2u, // MAP_D03R0102 warp-id 3 via map 145 warp 1 at 55,11
+    0x05C3u, // MAP_D03R0103 warp-id 1 via map 145 warp 2 at 55,22
 };
 
-BOOL MapTeleport_TrySelectEncounterDestinationByIndex(
-    u16 index,
-    MapTeleportDestination *destination)
-{
-    u32 packed;
+static MapTeleportDestination sMapTeleportEncounterDestinationScratch;
 
-    if (destination == NULL || index >= OWED_ENCOUNTER_AREA_COUNT) {
-        return FALSE;
+static u16 MapTeleport_EncounterDestinationPackedMapId(u16 packed)
+{
+    return (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)
+        & MAP_TELEPORT_ENCOUNTER_MAP_MASK);
+}
+
+static const MapTeleportDestination *MapTeleport_EncounterDestinationFromPacked(u16 packed)
+{
+    sMapTeleportEncounterDestinationScratch.mapId =
+        MapTeleport_EncounterDestinationPackedMapId(packed);
+    sMapTeleportEncounterDestinationScratch.x =
+        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_WARP_SHIFT)
+            & MAP_TELEPORT_ENCOUNTER_WARP_MASK);
+    sMapTeleportEncounterDestinationScratch.y = MAP_TELEPORT_DESTINATION_WARP_ID_Y;
+    sMapTeleportEncounterDestinationScratch.direction = MAP_TELEPORT_DIRECTION_SOUTH;
+    return &sMapTeleportEncounterDestinationScratch;
+}
+
+static const MapTeleportDestination *MapTeleport_EncounterDestinationByIndex(u16 index)
+{
+    if (index >= MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT) {
+        return NULL;
     }
 
-    packed = sMapTeleportEncounterDestinations[index];
-    destination->mapId =
-        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)
-            & MAP_TELEPORT_ENCOUNTER_MAP_MASK);
-    destination->x =
-        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_X_SHIFT) & MAP_TELEPORT_ENCOUNTER_X_MASK);
-    destination->y =
-        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_Y_SHIFT) & MAP_TELEPORT_ENCOUNTER_Y_MASK);
-    destination->direction =
-        MAP_TELEPORT_DIRECTION_SOUTH
-        | (u16)(((packed >> MAP_TELEPORT_ENCOUNTER_WARP_SHIFT)
-            & MAP_TELEPORT_ENCOUNTER_WARP_MASK) << 8);
-
-    return TRUE;
+    return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[index]);
 }
 
 const MapTeleportEncounterDestinationEntry gMapTeleportEncounterDestinationEntry
@@ -199,8 +171,10 @@ const MapTeleportEncounterDestinationEntry gMapTeleportEncounterDestinationEntry
     MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC,
     MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION,
     sizeof(MapTeleportEncounterDestinationEntry),
-    OWED_ENCOUNTER_AREA_COUNT,
+    MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT,
     0,
+    MapTeleport_EncounterDestinationByIndex,
+    NULL,
 };
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS

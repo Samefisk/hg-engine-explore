@@ -17,6 +17,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import operator
 import os
 import pty
@@ -29,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import wave
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -47,6 +49,20 @@ MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
 SPAWNS_PUBLIC_HEADER = ROOT / "include/overworld_wild_spawns.h"
 SPAWNS_INTERNAL_HEADER = ROOT / "include/overworld_wild_spawns_internal.h"
+SNDSEQ_HEADER = ROOT / "include/constants/sndseq.h"
+SDAT_INFO_BLOCK = ROOT / "build/sdat/InfoBlock.json"
+SDAT_SEQ_DIR = ROOT / "build/sdat/Files/SEQ"
+SDAT_BANK_DIR = ROOT / "build/sdat/Files/BANK"
+SDAT_WAVARC_DIR = ROOT / "build/sdat/Files/WAVARC"
+MOVE_ANIM_DIR = ROOT / "armips/move/move_anim"
+MOVES_DATA_SOURCE = ROOT / "armips/data/moves.s"
+SOUND_RENDER_SAMPLE_RATE = 44100
+SOUND_RENDER_MAX_SECONDS = 16.0
+MOVE_SOUND_FRAME_RATE = 60.0
+MOVE_SOUND_MAX_SECONDS = 16.0
+MOVE_SOUND_WAITSTATE_FRAMES = 12
+MOVE_SOUND_WAITPARTICLE_FRAMES = 20
+SSEQ_TICKS_PER_QUARTER = 48
 
 BLOB_BEHAVIOR_FIELD_INDEXES = {
     "sOverworldWildBehaviorClassProfiles": 1,
@@ -4437,6 +4453,1110 @@ def set_shiny_counter(counter: int) -> dict:
     }
 
 
+def sound_effect_constants() -> dict[str, int]:
+    constants: dict[str, int] = {}
+    if not SNDSEQ_HEADER.exists():
+        return constants
+    for match in re.finditer(
+        r"^\s*#define\s+(SEQ_SE_[A-Za-z0-9_]+)\s+(\d+)\s*$",
+        SNDSEQ_HEADER.read_text(),
+        flags=re.MULTILINE,
+    ):
+        constants[match.group(1)] = int(match.group(2))
+    return constants
+
+
+def sound_effect_group_map(info_block: dict) -> dict[int, list[str]]:
+    by_id: dict[int, list[str]] = {}
+    for group in info_block.get("groupInfo", []):
+        name = group.get("name")
+        if not name:
+            continue
+        for entry in group.get("subGroup", []):
+            try:
+                seq_id = int(entry.get("entry"))
+            except (TypeError, ValueError):
+                continue
+            by_id.setdefault(seq_id, []).append(name)
+    return by_id
+
+
+@lru_cache(maxsize=1)
+def move_metadata_by_id() -> dict[int, dict]:
+    moves: dict[int, dict] = {}
+    if not MOVES_DATA_SOURCE.exists():
+        return moves
+    constants: dict[str, int] = {}
+    if (ROOT / "include/constants/moves.h").exists():
+        for match in re.finditer(
+            r"^\s*#define\s+(MOVE_[A-Za-z0-9_]+)\s+(\d+)\s*$",
+            (ROOT / "include/constants/moves.h").read_text(),
+            flags=re.MULTILINE,
+        ):
+            constants[match.group(1)] = int(match.group(2))
+    for match in re.finditer(
+        r'^\s*movedata\s+(MOVE_[A-Za-z0-9_]+),\s*"([^"]+)"',
+        MOVES_DATA_SOURCE.read_text(),
+        flags=re.MULTILINE,
+    ):
+        symbol, name = match.groups()
+        move_id = constants.get(symbol)
+        if move_id is None:
+            continue
+        moves[move_id] = {"id": move_id, "symbol": symbol, "name": name}
+    return moves
+
+
+@lru_cache(maxsize=1)
+def move_sound_effect_aliases() -> dict[int, list[dict]]:
+    aliases: dict[int, list[dict]] = {}
+    moves = move_metadata_by_id()
+    if not MOVE_ANIM_DIR.exists():
+        return aliases
+    command_re = re.compile(r"^\s*(playse|playsepan|playsepanmod|repeatse|waitse|stopse)\s+(.+?)\s*$", re.MULTILINE)
+    constants = sound_effect_constants()
+    for path in sorted(MOVE_ANIM_DIR.glob("*.s")):
+        try:
+            move_id = int(path.stem)
+        except ValueError:
+            continue
+        move = moves.get(move_id)
+        if not move:
+            continue
+        text = re.sub(r"//.*", "", path.read_text())
+        for command, raw_args in command_re.findall(text):
+            args = [part.strip() for part in raw_args.split(",") if part.strip()]
+            if not args:
+                continue
+            raw_seq = args[0]
+            if raw_seq.isdigit():
+                seq_id = int(raw_seq)
+            else:
+                seq_id = constants.get(raw_seq)
+                if seq_id is None:
+                    continue
+            aliases.setdefault(seq_id, []).append({
+                "moveId": move_id,
+                "moveName": move["name"],
+                "moveSymbol": move["symbol"],
+                "scriptFile": str(path.relative_to(ROOT)),
+                "command": command,
+                "args": args,
+                "commandText": f"{command} {', '.join(args)}",
+            })
+    for seq_id, rows in aliases.items():
+        seen: set[tuple[int, str, str]] = set()
+        deduped = []
+        for row in rows:
+            key = (row["moveId"], row["command"], row["commandText"])
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(row)
+        aliases[seq_id] = deduped
+    return aliases
+
+
+def is_extra_sound_sequence_info(name: str, bank: str, file_name: str) -> bool:
+    if not name or name.endswith("_END") or file_name == "SEQ_DUMMY.sseq":
+        return False
+    if name.startswith("SEQ_SE_"):
+        return False
+    return name.startswith("SEQ_ME_") or bank.startswith("BANK_SE_")
+
+
+def sound_effect_metadata_payload() -> dict:
+    constants = sound_effect_constants()
+    info_block: dict = {}
+    seq_info: list[dict] = []
+    groups_by_id: dict[int, list[str]] = {}
+    move_aliases_by_seq_id = move_sound_effect_aliases()
+    if SDAT_INFO_BLOCK.exists():
+        info_block = json.loads(SDAT_INFO_BLOCK.read_text())
+        seq_info = info_block.get("seqInfo", [])
+        groups_by_id = sound_effect_group_map(info_block)
+
+    first_id = constants.get("SEQ_SE_PL_W012")
+    end_id = constants.get("SEQ_SE_END")
+    initial_id = constants.get("SEQ_SE_DP_SELECT")
+    rows: list[dict] = []
+    included_ids: set[int] = set()
+
+    def is_move_sound_effect_name(name: str) -> bool:
+        return bool(
+            re.match(r"^SEQ_SE_(?:PL|DP|GS)_W\d", name)
+            or name in {
+                "SEQ_SE_PL_FIRE",
+                "SEQ_SE_PL_WATER",
+                "SEQ_SE_PL_ELECTRO",
+                "SEQ_SE_PL_WHIP",
+            }
+        )
+
+    def row_for_sequence(seq_id: int, name: str, info: dict, *, is_sound_effect: bool) -> dict:
+        file_name = info.get("fileName") or f"{name}.sseq"
+        seq_path = SDAT_SEQ_DIR / file_name
+        short_name = name.removeprefix("SEQ_SE_") if name.startswith("SEQ_SE_") else name.removeprefix("SEQ_")
+        return {
+            "id": seq_id,
+            "name": name,
+            "shortName": short_name,
+            "fileName": file_name,
+            "bank": info.get("bnk") or "",
+            "player": info.get("ply") or "",
+            "volume": info.get("vol"),
+            "channelPriority": info.get("cpr"),
+            "playerPriority": info.get("ppr"),
+            "groups": groups_by_id.get(seq_id, []),
+            "hasSseq": seq_path.exists(),
+            "sseqBytes": seq_path.stat().st_size if seq_path.exists() else None,
+            "isSoundEffect": is_sound_effect,
+            "isMoveSoundEffect": is_move_sound_effect_name(name) or bool(move_aliases_by_seq_id.get(seq_id)),
+            "moveAliases": move_aliases_by_seq_id.get(seq_id, []),
+            "inTesterRange": (
+                first_id is not None
+                and end_id is not None
+                and first_id <= seq_id < end_id
+            ),
+        }
+
+    def is_extra_sound_sequence(seq_id: int, info: dict) -> bool:
+        name = info.get("name") or ""
+        bank = info.get("bnk") or ""
+        file_name = info.get("fileName") or ""
+        if seq_id in included_ids or name.startswith("SEQ_SE_"):
+            return False
+        return is_extra_sound_sequence_info(name, bank, file_name)
+
+    for name, seq_id in sorted(constants.items(), key=lambda item: (item[1], item[0])):
+        if name == "SEQ_SE_END":
+            continue
+        info = seq_info[seq_id] if 0 <= seq_id < len(seq_info) else {}
+        rows.append(row_for_sequence(seq_id, name, info, is_sound_effect=True))
+        included_ids.add(seq_id)
+
+    for seq_id, info in enumerate(seq_info):
+        if is_extra_sound_sequence(seq_id, info):
+            rows.append(row_for_sequence(seq_id, info["name"], info, is_sound_effect=False))
+
+    return {
+        "effects": sorted(rows, key=lambda row: (row["id"], row["name"])),
+        "count": len(rows),
+        "source": str(SNDSEQ_HEADER.relative_to(ROOT)),
+        "infoBlock": str(SDAT_INFO_BLOCK.relative_to(ROOT)) if SDAT_INFO_BLOCK.exists() else None,
+        "tester": {
+            "first": first_id,
+            "end": end_id,
+            "initial": initial_id,
+        },
+    }
+
+
+ADPCM_INDEX_TABLE = (-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8)
+ADPCM_STEP_TABLE = (
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31,
+    34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130,
+    143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
+    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411,
+    1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026,
+    4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442,
+    11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623,
+    27086, 29794, 32767,
+)
+
+
+@lru_cache(maxsize=1)
+def sdat_info_block() -> dict:
+    if not SDAT_INFO_BLOCK.exists():
+        raise FileNotFoundError(f"{SDAT_INFO_BLOCK.relative_to(ROOT)} is missing")
+    return json.loads(SDAT_INFO_BLOCK.read_text())
+
+
+@lru_cache(maxsize=1)
+def sdat_bank_info_by_name() -> dict[str, dict]:
+    return {
+        entry.get("name"): entry
+        for entry in sdat_info_block().get("bankInfo", [])
+        if entry.get("name")
+    }
+
+
+@lru_cache(maxsize=64)
+def load_sseq_events(file_name: str) -> list:
+    import ndspy.soundSequence as sound_sequence
+
+    path = SDAT_SEQ_DIR / file_name
+    if not path.exists():
+        raise FileNotFoundError(f"{path.relative_to(ROOT)} is missing")
+    sequence = sound_sequence.SSEQ.fromFile(path)
+    sequence.parse()
+    return sequence.events
+
+
+@lru_cache(maxsize=64)
+def load_sbnk(bank_name: str):
+    import ndspy.soundBank as sound_bank
+
+    bank_info = sdat_bank_info_by_name().get(bank_name)
+    file_name = (bank_info or {}).get("fileName") or f"{bank_name}.sbnk"
+    path = SDAT_BANK_DIR / file_name
+    if not path.exists():
+        raise FileNotFoundError(f"{path.relative_to(ROOT)} is missing")
+    return sound_bank.SBNK.fromFile(path)
+
+
+@lru_cache(maxsize=128)
+def load_wavarc(archive_name: str) -> tuple:
+    import ndspy.soundWave as sound_wave
+    import ndspy.soundWaveArchive as sound_wave_archive
+
+    swar_path = SDAT_WAVARC_DIR / f"{archive_name}.swar"
+    if swar_path.exists():
+        return tuple(sound_wave_archive.SWAR.fromFile(swar_path).waves)
+
+    archive_dir = SDAT_WAVARC_DIR / archive_name
+    if not archive_dir.exists():
+        raise FileNotFoundError(f"Wave archive {archive_name} is missing")
+
+    waves = []
+    for swav_path in sorted(archive_dir.glob("*.swav")):
+        waves.append(sound_wave.SWAV.fromFile(swav_path))
+    return tuple(waves)
+
+
+@lru_cache(maxsize=512)
+def decoded_swav_sample(archive_name: str, wave_id: int) -> tuple[tuple[int, ...], int, bool, int]:
+    waves = load_wavarc(archive_name)
+    if wave_id < 0 or wave_id >= len(waves):
+        raise IndexError(f"{archive_name} does not contain SWAV {wave_id}")
+    swav = waves[wave_id]
+    samples = decode_swav_samples(swav)
+    loop_start = swav_word_offset_to_sample_offset(swav, int(swav.loopOffset))
+    return tuple(samples), int(swav.sampleRate), bool(swav.isLooped), loop_start
+
+
+def decode_swav_samples(swav) -> list[int]:
+    wave_type = int(swav.waveType)
+    if wave_type == 0:
+        samples = [max(-32768, min(32767, (byte if byte < 128 else byte - 256) << 8)) for byte in swav.data]
+    elif wave_type == 1:
+        sample_count = len(swav.data) // 2
+        samples = list(struct.unpack(f"<{sample_count}h", swav.data[: sample_count * 2]))
+    elif wave_type == 2:
+        samples = decode_adpcm_samples(swav.data)
+    else:
+        raise ValueError(f"Unsupported SWAV wave type {wave_type}")
+    logical_length = swav_word_offset_to_sample_offset(swav, int(swav.totalLength))
+    return samples[:logical_length] if logical_length > 0 else samples
+
+
+def swav_word_offset_to_sample_offset(swav, word_offset: int) -> int:
+    word_offset = max(0, int(word_offset))
+    wave_type = int(swav.waveType)
+    if wave_type == 0:
+        return word_offset * 4
+    if wave_type == 1:
+        return word_offset * 2
+    if wave_type == 2:
+        return 0 if word_offset == 0 else 1 + (word_offset - 1) * 8
+    return word_offset
+
+
+def decode_adpcm_samples(data: bytes) -> list[int]:
+    if len(data) < 4:
+        return []
+    predictor = struct.unpack_from("<h", data, 0)[0]
+    step_index = max(0, min(88, data[2]))
+    samples = [predictor]
+    for byte in data[4:]:
+        for nibble in (byte & 0x0F, byte >> 4):
+            step = ADPCM_STEP_TABLE[step_index]
+            diff = step >> 3
+            if nibble & 1:
+                diff += step >> 2
+            if nibble & 2:
+                diff += step >> 1
+            if nibble & 4:
+                diff += step
+            predictor = predictor - diff if nibble & 8 else predictor + diff
+            predictor = max(-32768, min(32767, predictor))
+            step_index = max(0, min(88, step_index + ADPCM_INDEX_TABLE[nibble]))
+            samples.append(predictor)
+    return samples
+
+
+def note_definition_for_pitch(instrument, pitch: int):
+    if instrument is None:
+        return None
+    if hasattr(instrument, "noteDefinition"):
+        return instrument.noteDefinition
+    if hasattr(instrument, "noteDefinitions"):
+        index = max(0, min(len(instrument.noteDefinitions) - 1, pitch - instrument.firstPitch))
+        return instrument.noteDefinitions[index]
+    if hasattr(instrument, "regions"):
+        for region in instrument.regions:
+            if pitch <= region.lastPitch:
+                return region.noteDefinition
+        return instrument.regions[-1].noteDefinition if instrument.regions else None
+    return None
+
+
+def sseq_track_event_slices(events: list) -> list[list]:
+    import ndspy.soundSequence as sound_sequence
+
+    event_index_by_id = {id(event): index for index, event in enumerate(events)}
+    starts: list[int] = []
+    index = 0
+    if events and isinstance(events[0], sound_sequence.DefineTracksSequenceEvent):
+        index = 1
+    while index < len(events) and isinstance(events[index], sound_sequence.BeginTrackSequenceEvent):
+        target = event_index_by_id.get(id(events[index].firstEvent))
+        if target is not None:
+            starts.append(target)
+        index += 1
+    if index < len(events) and not isinstance(events[index], sound_sequence.RawDataSequenceEvent):
+        starts.append(index)
+    if not starts:
+        return []
+    starts = sorted(set(starts))
+    slices: list[list] = []
+    for start in starts:
+        slices.append(expand_sseq_track_events(events, start, event_index_by_id))
+    return slices
+
+
+def expand_sseq_track_events(events: list, start: int, event_index_by_id: dict[int, int]) -> list:
+    import ndspy.soundSequence as sound_sequence
+
+    expanded = []
+    call_stack: list[int] = []
+    loop_stack: list[tuple[int, int]] = []
+    pc = start
+    steps = 0
+    elapsed_ticks = 0
+    max_steps = 20000
+    max_ticks = int(SOUND_RENDER_MAX_SECONDS * 240 * SSEQ_TICKS_PER_QUARTER / 60)
+    loop_visits: dict[int, int] = {}
+    while 0 <= pc < len(events) and steps < max_steps and elapsed_ticks <= max_ticks:
+        event = events[pc]
+        steps += 1
+        if isinstance(event, sound_sequence.RawDataSequenceEvent):
+            break
+        expanded.append(event)
+        if isinstance(event, sound_sequence.BeginLoopSequenceEvent):
+            loop_count = int(event.loopCount)
+            loop_stack.append((pc + 1, loop_count if loop_count > 0 else 32))
+            pc += 1
+        elif isinstance(event, sound_sequence.EndLoopSequenceEvent):
+            if loop_stack:
+                loop_start, remaining = loop_stack[-1]
+                if remaining > 1:
+                    loop_stack[-1] = (loop_start, remaining - 1)
+                    pc = loop_start
+                else:
+                    loop_stack.pop()
+                    pc += 1
+            else:
+                pc += 1
+        elif isinstance(event, sound_sequence.RestSequenceEvent):
+            elapsed_ticks += int(event.duration)
+            pc += 1
+        elif isinstance(event, sound_sequence.CallSequenceEvent):
+            target = event_index_by_id.get(id(event.destination))
+            if target is None:
+                pc += 1
+            else:
+                call_stack.append(pc + 1)
+                pc = target
+        elif isinstance(event, sound_sequence.ReturnSequenceEvent):
+            if not call_stack:
+                break
+            pc = call_stack.pop()
+        elif isinstance(event, sound_sequence.JumpSequenceEvent):
+            target = event_index_by_id.get(id(event.destination))
+            if target is None:
+                pc += 1
+            else:
+                loop_visits[target] = loop_visits.get(target, 0) + 1
+                if loop_visits[target] > 24:
+                    break
+                pc = target
+        elif isinstance(event, sound_sequence.EndTrackSequenceEvent):
+            break
+        else:
+            pc += 1
+    return expanded
+
+
+def first_sseq_tempo(events: list) -> int:
+    import ndspy.soundSequence as sound_sequence
+
+    for event in events:
+        if isinstance(event, sound_sequence.TempoSequenceEvent):
+            return max(1, int(event.value))
+    return 120
+
+
+def ticks_to_samples(ticks: int, tempo: int) -> int:
+    seconds = max(0, ticks) * 60.0 / (max(1, tempo) * SSEQ_TICKS_PER_QUARTER)
+    return int(round(seconds * SOUND_RENDER_SAMPLE_RATE))
+
+
+def frames_to_samples(frames: int | float) -> int:
+    seconds = max(0.0, float(frames)) / MOVE_SOUND_FRAME_RATE
+    return int(round(seconds * SOUND_RENDER_SAMPLE_RATE))
+
+
+def sseq_global_tempo_points(track_slices: list[list], initial_tempo: int) -> list[tuple[int, int]]:
+    import ndspy.soundSequence as sound_sequence
+
+    points: list[tuple[int, int]] = [(0, max(1, int(initial_tempo)))]
+    for track_events in track_slices:
+        cursor = 0
+        tempo = max(1, int(initial_tempo))
+        note_wait = False
+        for event in track_events:
+            if isinstance(event, sound_sequence.TempoSequenceEvent):
+                tempo = max(1, int(event.value))
+                points.append((cursor, tempo))
+            elif isinstance(event, sound_sequence.RestSequenceEvent):
+                cursor += ticks_to_samples(int(event.duration), tempo)
+            elif isinstance(event, sound_sequence.NoteSequenceEvent):
+                if note_wait:
+                    cursor += ticks_to_samples(int(event.duration), tempo)
+            elif isinstance(event, sound_sequence.MonoPolySequenceEvent):
+                note_wait = bool(int(event.value))
+            elif isinstance(event, sound_sequence.EndTrackSequenceEvent):
+                break
+    points.sort(key=lambda item: item[0])
+    deduped: list[tuple[int, int]] = []
+    for sample_offset, tempo in points:
+        if deduped and deduped[-1][0] == sample_offset:
+            deduped[-1] = (sample_offset, tempo)
+        else:
+            deduped.append((sample_offset, tempo))
+    return deduped
+
+
+def tempo_at_sample(points: list[tuple[int, int]], sample_offset: int, fallback: int) -> int:
+    tempo = max(1, int(fallback))
+    for point_sample, point_tempo in points:
+        if point_sample > sample_offset:
+            break
+        tempo = max(1, int(point_tempo))
+    return tempo
+
+
+def signed8(value: int) -> int:
+    value = int(value) & 0xFF
+    return value - 0x100 if value & 0x80 else value
+
+
+def deterministic_random_value(event) -> int:
+    return int(round((int(event.randMin) + int(event.randMax)) / 2))
+
+
+def pitch_at_sample(pitch_points: list[tuple[int, float]], sample_index: int, point_index: int) -> tuple[float, int]:
+    while point_index + 1 < len(pitch_points) and sample_index >= pitch_points[point_index + 1][0]:
+        point_index += 1
+    return pitch_points[point_index][1], point_index
+
+
+def render_psg_note(note_def, pitch: float, duration_samples: int, pitch_points: list[tuple[int, float]] | None = None) -> list[int]:
+    import ndspy.soundBank as sound_bank
+
+    if duration_samples <= 0:
+        duration_samples = int(0.08 * SOUND_RENDER_SAMPLE_RATE)
+    pitch_points = pitch_points or [(0, pitch)]
+    if note_def.type == sound_bank.NoteType.PSG_WHITE_NOISE:
+        seed = (int(round(pitch * 256)) * 1103515245 + duration_samples) & 0x7FFFFFFF
+        out = []
+        for index in range(duration_samples):
+            seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+            fade = max(0.0, 1.0 - index / max(1, duration_samples))
+            out.append(int(((seed & 0xFFFF) - 32768) * 0.42 * fade))
+        return out
+
+    duty_options = (0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.0)
+    duty = duty_options[int(note_def.dutyCycle) & 7]
+    out = []
+    phase = 0.0
+    point_index = 0
+    for index in range(duration_samples):
+        current_pitch, point_index = pitch_at_sample(pitch_points, index, point_index)
+        frequency = 440.0 * (2 ** ((current_pitch - 69) / 12))
+        phase = (phase + frequency / SOUND_RENDER_SAMPLE_RATE) % 1.0
+        fade = max(0.0, 1.0 - index / max(1, duration_samples))
+        out.append(int((18000 if phase < duty else -18000) * fade))
+    return out
+
+
+def render_pcm_note(
+    note_def,
+    wave_archives: list[str],
+    pitch: float,
+    duration_samples: int,
+    pitch_points: list[tuple[int, float]] | None = None,
+) -> list[int]:
+    archive_index = int(note_def.waveArchiveIDID)
+    if archive_index < 0 or archive_index >= len(wave_archives) or not wave_archives[archive_index]:
+        raise ValueError(f"Instrument uses missing wave archive slot {archive_index}")
+    archive_name = wave_archives[archive_index]
+    source, source_rate, is_looped, loop_start = decoded_swav_sample(archive_name, int(note_def.waveID))
+    if not source:
+        return []
+
+    pitch_points = pitch_points or [(0, pitch)]
+    initial_pitch = pitch_points[0][1]
+    initial_pitch_ratio = 2 ** ((initial_pitch - int(note_def.pitch)) / 12)
+    initial_source_step = max(0.01, source_rate * initial_pitch_ratio / SOUND_RENDER_SAMPLE_RATE)
+    source_duration = int(len(source) / initial_source_step)
+    release_samples = int(0.018 * SOUND_RENDER_SAMPLE_RATE)
+    if is_looped:
+        out_len = max(duration_samples + release_samples, int(0.035 * SOUND_RENDER_SAMPLE_RATE))
+    else:
+        out_len = min(source_duration, max(1, duration_samples + release_samples))
+    out_len = min(out_len, int(SOUND_RENDER_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE))
+
+    out = []
+    source_pos = 0.0
+    loop_start = max(0, min(len(source) - 1, int(loop_start)))
+    point_index = 0
+    for output_index in range(out_len):
+        index = int(source_pos)
+        if index >= len(source):
+            if is_looped and loop_start < len(source) - 2:
+                loop_len = max(1, len(source) - loop_start)
+                index = loop_start + ((index - loop_start) % loop_len)
+                source_pos = float(index)
+            else:
+                break
+        next_index = min(index + 1, len(source) - 1)
+        frac = source_pos - index
+        out.append(int(source[index] * (1.0 - frac) + source[next_index] * frac))
+        current_pitch, point_index = pitch_at_sample(pitch_points, output_index, point_index)
+        pitch_ratio = 2 ** ((current_pitch - int(note_def.pitch)) / 12)
+        source_step = max(0.01, source_rate * pitch_ratio / SOUND_RENDER_SAMPLE_RATE)
+        source_pos += source_step
+    return out
+
+
+def clamp_pan(value: int) -> int:
+    return max(0, min(127, int(value)))
+
+
+def combine_pan(track_pan: int, note_pan: int) -> int:
+    return clamp_pan(int(track_pan) + int(note_pan) - 64)
+
+
+def stereo_pan_gains(pan: int) -> tuple[float, float]:
+    position = clamp_pan(pan) / 127.0
+    return math.cos(position * math.pi / 2.0), math.sin(position * math.pi / 2.0)
+
+
+def mix_note_into(
+    mix_left: list[float],
+    mix_right: list[float],
+    start: int,
+    samples: list[int],
+    gain: float,
+    pan: int,
+    control_points: list[tuple[int, float, int]] | None = None,
+) -> None:
+    if not samples:
+        return
+    control_points = control_points or [(0, gain, pan)]
+    needed = start + len(samples)
+    if needed > len(mix_left):
+        mix_left.extend([0.0] * (needed - len(mix_left)))
+    if needed > len(mix_right):
+        mix_right.extend([0.0] * (needed - len(mix_right)))
+    release = min(len(samples), int(0.012 * SOUND_RENDER_SAMPLE_RATE))
+    control_index = 0
+    for index, sample in enumerate(samples):
+        while control_index + 1 < len(control_points) and index >= control_points[control_index + 1][0]:
+            control_index += 1
+        _, current_gain, current_pan = control_points[control_index]
+        left_gain, right_gain = stereo_pan_gains(current_pan)
+        envelope = 1.0
+        if release and index >= len(samples) - release:
+            envelope = (len(samples) - index) / release
+        value = sample * current_gain * envelope
+        mix_left[start + index] += value * left_gain
+        mix_right[start + index] += value * right_gain
+
+
+def stereo_samples_to_wav(mix_left: list[float], mix_right: list[float], *, max_seconds: float = SOUND_RENDER_MAX_SECONDS) -> bytes:
+    max_len = int(max_seconds * SOUND_RENDER_SAMPLE_RATE)
+    mix_left = mix_left[:max_len]
+    mix_right = mix_right[:max_len]
+    length = max(len(mix_left), len(mix_right))
+    if len(mix_left) < length:
+        mix_left.extend([0.0] * (length - len(mix_left)))
+    if len(mix_right) < length:
+        mix_right.extend([0.0] * (length - len(mix_right)))
+    peak = max(1.0, max(abs(value) for value in mix_left + mix_right))
+    scale = min(1.0, 30000.0 / peak)
+    pcm = bytearray()
+    for left_value, right_value in zip(mix_left, mix_right):
+        left_sample = int(max(-32768, min(32767, left_value * scale)))
+        right_sample = int(max(-32768, min(32767, right_value * scale)))
+        pcm.extend(struct.pack("<hh", left_sample, right_sample))
+
+    out = io.BytesIO()
+    with wave.open(out, "wb") as wav:
+        wav.setnchannels(2)
+        wav.setsampwidth(2)
+        wav.setframerate(SOUND_RENDER_SAMPLE_RATE)
+        wav.writeframes(bytes(pcm))
+    return out.getvalue()
+
+
+def rendered_wav_to_stereo_samples(data: bytes) -> tuple[list[float], list[float]]:
+    with wave.open(io.BytesIO(data), "rb") as wav:
+        channels = wav.getnchannels()
+        sample_width = wav.getsampwidth()
+        frame_rate = wav.getframerate()
+        frames = wav.readframes(wav.getnframes())
+    if sample_width != 2:
+        raise ValueError("Rendered sound uses an unsupported sample width")
+    raw = struct.unpack("<" + "h" * (len(frames) // 2), frames)
+    if channels == 1:
+        left = [float(value) for value in raw]
+        right = left.copy()
+    elif channels == 2:
+        left = [float(raw[index]) for index in range(0, len(raw), 2)]
+        right = [float(raw[index]) for index in range(1, len(raw), 2)]
+    else:
+        raise ValueError("Rendered sound uses an unsupported channel count")
+    if frame_rate != SOUND_RENDER_SAMPLE_RATE:
+        raise ValueError("Rendered sound uses an unexpected sample rate")
+    return left, right
+
+
+def external_pan_to_ds_pan(value: int) -> int:
+    value = max(-117, min(117, int(value)))
+    return int(round((value + 117) * 127 / 234))
+
+
+def mix_stereo_clip_into(
+    mix_left: list[float],
+    mix_right: list[float],
+    start: int,
+    clip_left: list[float],
+    clip_right: list[float],
+    pan: int = 0,
+    stop_sample: int | None = None,
+) -> None:
+    if not clip_left and not clip_right:
+        return
+    length = max(len(clip_left), len(clip_right))
+    if stop_sample is not None:
+        length = min(length, max(0, stop_sample - start))
+    if length <= 0:
+        return
+    needed = start + length
+    if needed > len(mix_left):
+        mix_left.extend([0.0] * (needed - len(mix_left)))
+    if needed > len(mix_right):
+        mix_right.extend([0.0] * (needed - len(mix_right)))
+    left_gain, right_gain = stereo_pan_gains(external_pan_to_ds_pan(pan))
+    for index in range(length):
+        left_value = clip_left[index] if index < len(clip_left) else 0.0
+        right_value = clip_right[index] if index < len(clip_right) else 0.0
+        mix_left[start + index] += left_value * left_gain
+        mix_right[start + index] += right_value * right_gain
+
+
+def note_pitch_points(
+    track_events: list,
+    start_index: int,
+    base_pitch: float,
+    start_tempo: int,
+    pitch_bend: int,
+    pitch_bend_range: int,
+    duration_samples: int,
+    note_wait: bool = False,
+) -> list[tuple[int, float]]:
+    import ndspy.soundSequence as sound_sequence
+
+    points: list[tuple[int, float]] = [(0, base_pitch + (pitch_bend * pitch_bend_range / 128.0))]
+    elapsed = duration_samples if note_wait else 0
+    tempo = start_tempo
+    current_bend = pitch_bend
+    current_range = pitch_bend_range
+    current_note_wait = note_wait
+    for event in track_events[start_index + 1:]:
+        if elapsed >= duration_samples:
+            break
+        if isinstance(event, sound_sequence.RestSequenceEvent):
+            elapsed += ticks_to_samples(int(event.duration), tempo)
+        elif isinstance(event, sound_sequence.NoteSequenceEvent):
+            if current_note_wait:
+                elapsed += ticks_to_samples(int(event.duration), tempo)
+        elif isinstance(event, sound_sequence.TempoSequenceEvent):
+            tempo = max(1, int(event.value))
+        elif isinstance(event, sound_sequence.MonoPolySequenceEvent):
+            current_note_wait = bool(int(event.value))
+        elif isinstance(event, sound_sequence.RandomSequenceEvent):
+            if event.subType == 0xC4:
+                current_bend = signed8(deterministic_random_value(event))
+                points.append((min(elapsed, duration_samples), base_pitch + (current_bend * current_range / 128.0)))
+            elif event.subType == 0xC5:
+                current_range = max(0, deterministic_random_value(event))
+                points.append((min(elapsed, duration_samples), base_pitch + (current_bend * current_range / 128.0)))
+        elif isinstance(event, sound_sequence.PortamentoRangeSequenceEvent):
+            current_range = max(0, int(event.value))
+            points.append((min(elapsed, duration_samples), base_pitch + (current_bend * current_range / 128.0)))
+        elif isinstance(event, sound_sequence.PortamentoSequenceEvent):
+            current_bend = signed8(int(event.value))
+            points.append((min(elapsed, duration_samples), base_pitch + (current_bend * current_range / 128.0)))
+        elif isinstance(event, sound_sequence.EndTrackSequenceEvent):
+            break
+    deduped: list[tuple[int, float]] = []
+    for sample_offset, pitch in points:
+        if deduped and deduped[-1][0] == sample_offset:
+            deduped[-1] = (sample_offset, pitch)
+        else:
+            deduped.append((sample_offset, pitch))
+    return deduped
+
+
+def note_control_points(
+    track_events: list,
+    start_index: int,
+    start_tempo: int,
+    base_gain: float,
+    track_volume: int,
+    expression: int,
+    pan: int,
+    note_pan: int,
+    duration_samples: int,
+    note_wait: bool = False,
+) -> list[tuple[int, float, int]]:
+    import ndspy.soundSequence as sound_sequence
+
+    def gain_for(volume: int, expr: int) -> float:
+        return base_gain * max(0.0, min(1.0, volume / 127.0)) * max(0.0, min(1.0, expr / 127.0))
+
+    points: list[tuple[int, float, int]] = [(0, gain_for(track_volume, expression), combine_pan(pan, note_pan))]
+    elapsed = duration_samples if note_wait else 0
+    tempo = start_tempo
+    current_volume = track_volume
+    current_expression = expression
+    current_pan = pan
+    current_note_wait = note_wait
+    for event in track_events[start_index + 1:]:
+        if elapsed >= duration_samples:
+            break
+        if isinstance(event, sound_sequence.RestSequenceEvent):
+            elapsed += ticks_to_samples(int(event.duration), tempo)
+        elif isinstance(event, sound_sequence.NoteSequenceEvent):
+            if current_note_wait:
+                elapsed += ticks_to_samples(int(event.duration), tempo)
+        elif isinstance(event, sound_sequence.TempoSequenceEvent):
+            tempo = max(1, int(event.value))
+        elif isinstance(event, sound_sequence.MonoPolySequenceEvent):
+            current_note_wait = bool(int(event.value))
+        elif isinstance(event, sound_sequence.RandomSequenceEvent):
+            random_value = deterministic_random_value(event)
+            if event.subType == 0xC0:
+                current_pan = random_value
+                points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+            elif event.subType == 0xC1:
+                current_volume = random_value
+                points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+            elif event.subType == 0xD5:
+                current_expression = random_value
+                points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+        elif isinstance(event, sound_sequence.TrackVolumeSequenceEvent):
+            current_volume = int(event.value)
+            points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+        elif isinstance(event, sound_sequence.ExpressionSequenceEvent):
+            current_expression = int(event.value)
+            points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+        elif isinstance(event, sound_sequence.PanSequenceEvent):
+            current_pan = int(event.value)
+            points.append((min(elapsed, duration_samples), gain_for(current_volume, current_expression), combine_pan(current_pan, note_pan)))
+        elif isinstance(event, sound_sequence.EndTrackSequenceEvent):
+            break
+    deduped: list[tuple[int, float, int]] = []
+    for sample_offset, gain, point_pan in points:
+        if deduped and deduped[-1][0] == sample_offset:
+            deduped[-1] = (sample_offset, gain, point_pan)
+        else:
+            deduped.append((sample_offset, gain, point_pan))
+    return deduped
+
+
+@lru_cache(maxsize=256)
+def render_sound_effect_wav(seq_id: int) -> bytes:
+    import ndspy.soundBank as sound_bank
+    import ndspy.soundSequence as sound_sequence
+
+    seq_info = sdat_info_block().get("seqInfo", [])
+    if seq_id < 0 or seq_id >= len(seq_info) or not seq_info[seq_id]:
+        raise KeyError(f"No SDAT sequence info for sound effect {seq_id}")
+
+    info = seq_info[seq_id]
+    name = info.get("name") or ""
+    if not name.startswith("SEQ_SE_") and not is_extra_sound_sequence_info(name, info.get("bnk") or "", info.get("fileName") or ""):
+        raise ValueError(f"{name or seq_id} is not included in the sound-effect tester")
+    events = load_sseq_events(info["fileName"])
+    bank_name = info.get("bnk") or ""
+    bank = load_sbnk(bank_name)
+    bank_info = sdat_bank_info_by_name().get(bank_name, {})
+    wave_archives = [name for name in bank_info.get("wa", [])]
+    sequence_gain = max(0.0, min(1.2, (float(info.get("vol") or 100) / 127.0) * 0.75))
+    mix_left: list[float] = []
+    mix_right: list[float] = []
+    global_tempo = first_sseq_tempo(events)
+    track_slices = sseq_track_event_slices(events)
+    global_tempo_points = sseq_global_tempo_points(track_slices, global_tempo)
+
+    for track_events in track_slices:
+        tempo = global_tempo
+        instrument_id = 0
+        track_volume = 127
+        global_volume = 127
+        expression = 127
+        pan = 64
+        pitch_bend = 0
+        pitch_bend_range = 2
+        transpose = 0
+        note_wait = False
+        cursor = 0
+        for event_index, event in enumerate(track_events):
+            if isinstance(event, sound_sequence.TempoSequenceEvent):
+                tempo = max(1, int(event.value))
+            elif isinstance(event, sound_sequence.InstrumentSwitchSequenceEvent):
+                instrument_id = int(event.instrumentID)
+            elif isinstance(event, sound_sequence.TrackVolumeSequenceEvent):
+                track_volume = int(event.value)
+            elif isinstance(event, sound_sequence.GlobalVolumeSequenceEvent):
+                global_volume = int(event.value)
+            elif isinstance(event, sound_sequence.ExpressionSequenceEvent):
+                expression = int(event.value)
+            elif isinstance(event, sound_sequence.PanSequenceEvent):
+                pan = int(event.value)
+            elif isinstance(event, sound_sequence.TransposeSequenceEvent):
+                transpose = signed8(int(event.value))
+            elif isinstance(event, sound_sequence.PortamentoRangeSequenceEvent):
+                pitch_bend_range = max(0, int(event.value))
+            elif isinstance(event, sound_sequence.PortamentoSequenceEvent):
+                pitch_bend = signed8(int(event.value))
+            elif isinstance(event, sound_sequence.MonoPolySequenceEvent):
+                note_wait = bool(int(event.value))
+            elif isinstance(event, sound_sequence.RandomSequenceEvent):
+                random_value = deterministic_random_value(event)
+                if event.subType == 0xC0:
+                    pan = random_value
+                elif event.subType == 0xC1:
+                    track_volume = random_value
+                elif event.subType == 0xC2:
+                    global_volume = random_value
+                elif event.subType == 0xC3:
+                    transpose = signed8(random_value)
+                elif event.subType == 0xC4:
+                    pitch_bend = signed8(random_value)
+                elif event.subType == 0xC5:
+                    pitch_bend_range = max(0, random_value)
+                elif event.subType == 0xD5:
+                    expression = random_value
+            elif isinstance(event, sound_sequence.RestSequenceEvent):
+                tempo = tempo_at_sample(global_tempo_points, cursor, tempo)
+                cursor += ticks_to_samples(int(event.duration), tempo)
+            elif isinstance(event, sound_sequence.NoteSequenceEvent):
+                tempo = tempo_at_sample(global_tempo_points, cursor, tempo)
+                duration = ticks_to_samples(int(event.duration), tempo)
+                if duration <= 0:
+                    continue
+                if instrument_id >= len(bank.instruments):
+                    continue
+                base_pitch = max(0, min(127, int(event.pitch) + transpose))
+                pitch_points = note_pitch_points(
+                    track_events,
+                    event_index,
+                    base_pitch,
+                    tempo,
+                    pitch_bend,
+                    pitch_bend_range,
+                    duration,
+                    note_wait,
+                )
+                effective_pitch = pitch_points[0][1]
+                note_def = note_definition_for_pitch(bank.instruments[instrument_id], base_pitch)
+                if note_def is None:
+                    continue
+                if note_def.type == sound_bank.NoteType.PCM:
+                    samples = render_pcm_note(note_def, wave_archives, effective_pitch, duration, pitch_points)
+                else:
+                    samples = render_psg_note(note_def, effective_pitch, duration, pitch_points)
+                base_gain = (
+                    sequence_gain
+                    * max(0.0, min(1.0, global_volume / 127.0))
+                    * max(0.0, min(1.0, event.velocity / 127.0))
+                )
+                control_points = note_control_points(
+                    track_events,
+                    event_index,
+                    tempo,
+                    base_gain,
+                    track_volume,
+                    expression,
+                    pan,
+                    int(getattr(note_def, "pan", 64)),
+                    len(samples),
+                    note_wait,
+                )
+                mix_note_into(mix_left, mix_right, cursor, samples, base_gain, combine_pan(pan, int(getattr(note_def, "pan", 64))), control_points)
+                if note_wait:
+                    cursor += duration
+
+    if not mix_left and not mix_right:
+        raise ValueError(f"Sound effect {seq_id} did not render any audio")
+
+    return stereo_samples_to_wav(mix_left, mix_right)
+
+
+def move_sound_parse_value(raw: str, constants: dict[str, int]) -> int | None:
+    raw = raw.strip().strip(",")
+    named_values = {"PAN_LEFT": -117, "PAN_RIGHT": 117, "PAN_CENTER": 0}
+    if raw in named_values:
+        return named_values[raw]
+    if raw in constants:
+        return constants[raw]
+    try:
+        return int(raw, 0)
+    except ValueError:
+        return None
+
+
+def move_sound_command_schedule(move_id: int) -> tuple[list[dict], list[dict]]:
+    path = MOVE_ANIM_DIR / f"{int(move_id):03d}.s"
+    if not path.exists():
+        path = MOVE_ANIM_DIR / f"{int(move_id)}.s"
+    if not path.exists():
+        raise KeyError(f"No move animation script for move {move_id}")
+
+    constants = sound_effect_constants()
+    text = re.sub(r"//.*", "", path.read_text())
+    lines = [line.strip() for line in text.splitlines()]
+    schedule: list[dict] = []
+    stops: list[dict] = []
+    loop_stack: list[dict] = []
+    cursor_frames = 0
+    pc = 0
+    steps = 0
+    max_steps = 5000
+
+    def parse_args(line: str) -> tuple[str, list[int | None]]:
+        match = re.match(r"^([A-Za-z0-9_]+)\s*(.*)$", line)
+        if not match:
+            return "", []
+        command, raw_args = match.groups()
+        args = [move_sound_parse_value(part, constants) for part in raw_args.split(",") if part.strip()]
+        return command, args
+
+    while pc < len(lines) and steps < max_steps:
+        steps += 1
+        command, args = parse_args(lines[pc])
+        if not command or command.startswith(".") or command.endswith(":"):
+            pc += 1
+            continue
+
+        if command == "wait" and args and args[0] is not None:
+            cursor_frames += max(0, int(args[0]))
+        elif command == "waitstate":
+            cursor_frames += MOVE_SOUND_WAITSTATE_FRAMES
+        elif command == "waitparticle":
+            cursor_frames += MOVE_SOUND_WAITPARTICLE_FRAMES
+        elif command == "loop" and args and args[0] is not None:
+            loop_stack.append({"start": pc + 1, "remaining": max(0, int(args[0]))})
+        elif command == "doloop" and loop_stack:
+            current_loop = loop_stack[-1]
+            if current_loop["remaining"] > 1:
+                current_loop["remaining"] -= 1
+                pc = int(current_loop["start"])
+                continue
+            loop_stack.pop()
+        elif command in {"playse", "playsepan", "playsepanmod"} and args and args[0] is not None:
+            pan = 0
+            if command == "playsepan" and len(args) > 1 and args[1] is not None:
+                pan = int(args[1])
+            elif command == "playsepanmod" and len(args) > 2:
+                start_pan = int(args[1] or 0)
+                end_pan = int(args[2] or start_pan)
+                pan = int(round((start_pan + end_pan) / 2))
+            schedule.append({"seqId": int(args[0]), "pan": pan, "frame": cursor_frames, "command": command})
+        elif command == "repeatse" and len(args) >= 4 and args[0] is not None:
+            seq_id = int(args[0])
+            pan = int(args[1] or 0)
+            spacing = max(0, int(args[2] or 0))
+            repeat = max(0, int(args[3] or 0))
+            for index in range(repeat):
+                schedule.append({
+                    "seqId": seq_id,
+                    "pan": pan,
+                    "frame": cursor_frames + spacing * index,
+                    "command": command,
+                })
+        elif command == "waitse" and len(args) >= 3 and args[0] is not None:
+            schedule.append({
+                "seqId": int(args[0]),
+                "pan": int(args[1] or 0),
+                "frame": cursor_frames + max(0, int(args[2] or 0)),
+                "command": command,
+            })
+        elif command == "stopse" and args and args[0] is not None:
+            stops.append({"seqId": int(args[0]), "frame": cursor_frames})
+        elif command == "end" and schedule:
+            break
+        pc += 1
+
+    if schedule:
+        first_frame = min(item["frame"] for item in schedule)
+        if first_frame > 0:
+            for item in schedule:
+                item["frame"] = max(0, int(item["frame"]) - first_frame)
+            for stop in stops:
+                stop["frame"] = max(0, int(stop["frame"]) - first_frame)
+
+    return schedule, stops
+
+
+@lru_cache(maxsize=128)
+def render_move_sound_effect_wav(move_id: int) -> bytes:
+    schedule, stops = move_sound_command_schedule(move_id)
+    if not schedule:
+        raise ValueError(f"Move {move_id} does not schedule sound effects")
+
+    stop_samples_by_seq: dict[int, list[int]] = {}
+    for stop in stops:
+        stop_samples_by_seq.setdefault(int(stop["seqId"]), []).append(frames_to_samples(stop["frame"]))
+    for stop_samples in stop_samples_by_seq.values():
+        stop_samples.sort()
+
+    rendered_cache: dict[int, tuple[list[float], list[float]]] = {}
+    mix_left: list[float] = []
+    mix_right: list[float] = []
+    max_start = int(MOVE_SOUND_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE)
+    for item in sorted(schedule, key=lambda row: row["frame"]):
+        start = frames_to_samples(item["frame"])
+        if start > max_start:
+            continue
+        seq_id = int(item["seqId"])
+        if seq_id not in rendered_cache:
+            rendered_cache[seq_id] = rendered_wav_to_stereo_samples(render_sound_effect_wav(seq_id))
+        stop_sample = next((sample for sample in stop_samples_by_seq.get(seq_id, []) if sample > start), None)
+        clip_left, clip_right = rendered_cache[seq_id]
+        mix_stereo_clip_into(mix_left, mix_right, start, clip_left, clip_right, int(item["pan"]), stop_sample)
+
+    if not mix_left and not mix_right:
+        raise ValueError(f"Move {move_id} did not render any audio")
+    return stereo_samples_to_wav(mix_left, mix_right, max_seconds=MOVE_SOUND_MAX_SECONDS)
+
+
 def run_build(open_after: bool = False) -> dict:
     if not BUILD_LOCK.acquire(blocking=False):
         raise RuntimeError("Build already running")
@@ -4501,6 +5621,17 @@ def run_build_job(open_after: bool) -> None:
         )
     finally:
         BUILD_LOCK.release()
+
+
+def restart_server_soon() -> dict:
+    def restart() -> None:
+        time.sleep(0.25)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    threading.Thread(target=restart, daemon=True).start()
+    return {"ok": True, "message": "Restarting server"}
 
 
 def start_build_job(open_after: bool = False) -> dict:
@@ -6465,6 +7596,189 @@ HTML = r"""<!doctype html>
       display: none;
     }
 
+    .sound-search {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .sound-filter-row {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .sound-filter.active {
+      border-color: #0f766e;
+      background: var(--accent-soft);
+      color: #0f766e;
+    }
+
+    .sound-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px;
+    }
+
+    .sound-row {
+      width: 100%;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      display: grid;
+      grid-template-columns: 62px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 8px;
+      cursor: pointer;
+    }
+
+    .sound-row:hover,
+    .sound-row:focus-visible,
+    .sound-row.active {
+      border-color: #99f6e4;
+      background: #ecfdf5;
+      outline: 0;
+    }
+
+    .sound-row-id {
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .sound-row-name,
+    .sound-detail-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    .sound-row-meta,
+    .sound-meta,
+    .sound-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .sound-row-pill,
+    .sound-chip {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .sound-detail-panel {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .sound-detail-card {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .sound-detail-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .sound-detail-title {
+      font-size: 20px;
+      line-height: 1.15;
+    }
+
+    .sound-detail-actions,
+    .sound-step-actions,
+    .sound-audio-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .sound-detail-actions .control,
+    .sound-step-actions .control,
+    .sound-audio-actions .control {
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 9px;
+      white-space: nowrap;
+    }
+
+    .sound-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sound-field {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      padding: 8px;
+    }
+
+    .sound-field-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    .sound-field-value {
+      margin-top: 3px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    .sound-waveform {
+      width: 100%;
+      height: 96px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: linear-gradient(180deg, #f8fafc, #eef2f7);
+    }
+
+    .sound-audio-import {
+      display: none;
+    }
+
+    .sound-status {
+      min-height: 18px;
+    }
+
     .field.changed {
       background: #fff8e6;
     }
@@ -7969,7 +9283,7 @@ HTML = r"""<!doctype html>
         width: 100%;
         flex: none;
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
       .workspace-tab {
@@ -8580,6 +9894,20 @@ HTML = r"""<!doctype html>
         border-top: 1px solid var(--line);
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .sound-detail-head,
+      .sound-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sound-row {
+        grid-template-columns: 54px minmax(0, 1fr);
+      }
+
+      .sound-row-pill {
+        grid-column: 2;
+        justify-self: start;
+      }
     }
 
     @media (min-width: 701px) and (max-width: 900px), (min-width: 701px) and (max-width: 1180px) and (orientation: portrait) {
@@ -8637,7 +9965,8 @@ HTML = r"""<!doctype html>
       }
 
       #speciesList,
-      #routeList {
+      #routeList,
+      #soundList {
         max-height: min(36dvh, 340px);
       }
 
@@ -10087,6 +11416,7 @@ HTML = r"""<!doctype html>
         <nav class="workspace-tabs" aria-label="Editor tabs">
           <button class="workspace-tab active" data-view="profiles" type="button">Overworld Behaviour Profiles</button>
           <button class="workspace-tab" data-view="encounters" type="button">Route Encounters</button>
+          <button class="workspace-tab" data-view="sounds" type="button">Sound Effects</button>
         </nav>
         <div id="source" class="source"></div>
       </div>
@@ -10127,6 +11457,12 @@ HTML = r"""<!doctype html>
               <span class="switch-track" aria-hidden="true"></span>
               <span class="switch-label">Show log</span>
             </label>
+          </div>
+          <div class="action-group">
+            <button id="restartServer" class="control" type="button" title="Restart this web server">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></span>
+              <span>Restart server</span>
+            </button>
           </div>
           <div class="action-group shiny-counter-group" title="Debug saved shiny spawn counter in test.dsv">
             <span class="shiny-counter-pill">
@@ -10199,6 +11535,61 @@ HTML = r"""<!doctype html>
         <div id="routeEditor" class="route-editor scroll"></div>
       </section>
     </main>
+    <main id="soundsView" class="view">
+      <section class="pane">
+        <div class="pane-head">
+          <div class="pane-title">Sound Effects</div>
+          <div id="soundCount" class="count"></div>
+        </div>
+        <div class="sound-search">
+          <input id="soundSearch" class="control" type="search" placeholder="Search id, name, bank, group">
+          <button id="soundRefresh" class="control" type="button">Refresh</button>
+          <div class="sound-filter-row" aria-label="Sound effect filters">
+            <button class="control sound-filter active" type="button" data-sound-filter="tester">Tester range</button>
+            <button class="control sound-filter" type="button" data-sound-filter="moves">Moves</button>
+            <button class="control sound-filter" type="button" data-sound-filter="field">Field</button>
+            <button class="control sound-filter" type="button" data-sound-filter="battle">Battle</button>
+            <button class="control sound-filter" type="button" data-sound-filter="basic">Basic</button>
+            <button class="control sound-filter" type="button" data-sound-filter="extra">Extra</button>
+            <button class="control sound-filter" type="button" data-sound-filter="all">All</button>
+          </div>
+        </div>
+        <div id="soundList" class="scroll sound-list"></div>
+      </section>
+      <section class="pane detail sound-detail-panel">
+        <div id="soundDetail" class="sound-detail-card"></div>
+        <div class="sound-detail-card">
+          <div class="sound-audio-actions">
+            <button id="soundPlay" class="control primary-action" type="button" title="Render and play the selected sound effect">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></span>
+              <span>Play</span>
+            </button>
+            <button id="soundPlayRaw" class="control" type="button" title="Play the selected raw SSEQ without move animation timing">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="8 5 18 12 8 19 8 5"/></svg></span>
+              <span>SEQ</span>
+            </button>
+            <button id="soundAudition" class="control" type="button" title="Play an approximate generated preview, not the real DS sound">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v4h4l5 5V5L6 10H2Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a8 8 0 0 1 0 10"/></svg></span>
+              <span>Approx</span>
+            </button>
+            <button id="soundStop" class="control" type="button" title="Stop playback">
+              <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
+              <span>Stop</span>
+            </button>
+            <button id="soundPrevious" class="control" type="button" title="Previous sound">-1</button>
+            <button id="soundNext" class="control" type="button" title="Next sound">+1</button>
+            <button id="soundPreviousLarge" class="control" type="button" title="Previous 16 sounds">-16</button>
+            <button id="soundNextLarge" class="control" type="button" title="Next 16 sounds">+16</button>
+            <label class="control" title="Optional: load alternate WAV/MP3/OGG files named by id or sequence name">
+              <span>Import alternate audio</span>
+              <input id="soundAudioFiles" class="sound-audio-import" type="file" accept="audio/*,.wav,.ogg,.mp3" multiple>
+            </label>
+          </div>
+          <canvas id="soundWaveform" class="sound-waveform" width="960" height="160" aria-hidden="true"></canvas>
+          <div id="soundStatus" class="sound-status"></div>
+        </div>
+      </section>
+    </main>
   </div>
   <div id="profileAddMenu" class="profile-add-menu" hidden></div>
   <div id="profileComboMenu" class="profile-combo-menu" hidden></div>
@@ -10209,7 +11600,7 @@ HTML = r"""<!doctype html>
   <script>
     let appData = null;
     let activeView = localStorage.getItem("owWorkspaceView") || "profiles";
-    if (!["profiles", "encounters"].includes(activeView)) activeView = "profiles";
+    if (!["profiles", "encounters", "sounds"].includes(activeView)) activeView = "profiles";
     let selectedSymbol = null;
     let selectedClassIndex = null;
     let selectedRouteId = null;
@@ -10498,8 +11889,20 @@ HTML = r"""<!doctype html>
     let isSavingSpawnSettings = false;
     let isManagingProfiles = false;
     let isBuilding = false;
+    let isRestartingServer = false;
     let isSettingShinyCounter = false;
     let lastShinyCounterPayload = null;
+    let soundEffectsPayload = null;
+    let soundEffects = [];
+    let filteredSoundEffects = [];
+    let selectedSoundEffectId = Number(localStorage.getItem("owSelectedSoundEffectId") || "1500");
+    let soundFilter = localStorage.getItem("owSoundFilter") || "tester";
+    if (!["tester", "moves", "field", "battle", "basic", "extra", "all"].includes(soundFilter)) soundFilter = "tester";
+    let soundAudioFiles = new Map();
+    let soundAudioElement = null;
+    let soundAudioUrl = null;
+    let soundAudioContext = null;
+    let soundPlaybackNodes = [];
     let buildAfterSave = localStorage.getItem("owProfileBuildAfterSave") === "1";
     let runTestNdsAfterBuild = localStorage.getItem("owProfileRunTestAfterBuild") === "1";
     let autoShowBuildOutput = localStorage.getItem("owProfileAutoShowBuildOutput") !== "0";
@@ -10521,6 +11924,7 @@ HTML = r"""<!doctype html>
       rulesTab: document.getElementById("rulesTab"),
       profilesView: document.getElementById("profilesView"),
       encountersView: document.getElementById("encountersView"),
+      soundsView: document.getElementById("soundsView"),
       routeSearch: document.getElementById("routeSearch"),
       routeSpawnTypeFilters: document.getElementById("routeSpawnTypeFilters"),
       routeCount: document.getElementById("routeCount"),
@@ -10529,12 +11933,29 @@ HTML = r"""<!doctype html>
       routeDetailHead: document.getElementById("routeDetailHead"),
       routeSpeciesDatalistHost: document.getElementById("routeSpeciesDatalistHost"),
       routeEditor: document.getElementById("routeEditor"),
+      soundSearch: document.getElementById("soundSearch"),
+      soundRefresh: document.getElementById("soundRefresh"),
+      soundCount: document.getElementById("soundCount"),
+      soundList: document.getElementById("soundList"),
+      soundDetail: document.getElementById("soundDetail"),
+      soundPlay: document.getElementById("soundPlay"),
+      soundPlayRaw: document.getElementById("soundPlayRaw"),
+      soundAudition: document.getElementById("soundAudition"),
+      soundStop: document.getElementById("soundStop"),
+      soundPrevious: document.getElementById("soundPrevious"),
+      soundNext: document.getElementById("soundNext"),
+      soundPreviousLarge: document.getElementById("soundPreviousLarge"),
+      soundNextLarge: document.getElementById("soundNextLarge"),
+      soundAudioFiles: document.getElementById("soundAudioFiles"),
+      soundWaveform: document.getElementById("soundWaveform"),
+      soundStatus: document.getElementById("soundStatus"),
       saveAllChanges: document.getElementById("saveAllChanges"),
       buildAfterSave: document.getElementById("buildAfterSave"),
       buildRom: document.getElementById("buildRom"),
       openTestNds: document.getElementById("openTestNds"),
       runTestAfterBuild: document.getElementById("runTestAfterBuild"),
       showBuildOutput: document.getElementById("showBuildOutput"),
+      restartServer: document.getElementById("restartServer"),
       shinyCounterValue: document.getElementById("shinyCounterValue"),
       shinyCounterRate: document.getElementById("shinyCounterRate"),
       refreshShinyCounter: document.getElementById("refreshShinyCounter"),
@@ -10803,6 +12224,12 @@ HTML = r"""<!doctype html>
     }
 
     function workspaceSourceText() {
+      if (activeView === "sounds" && soundEffectsPayload) {
+        const source = soundEffectsPayload.infoBlock
+          ? `${soundEffectsPayload.source} + ${soundEffectsPayload.infoBlock}`
+          : soundEffectsPayload.source;
+        return `${source} | ${soundEffectsPayload.count} effects`;
+      }
       if (!appData) return "";
       const updated = new Date(appData.generatedAt).toLocaleString();
       const source = activeView === "encounters"
@@ -10817,8 +12244,467 @@ HTML = r"""<!doctype html>
       });
       els.profilesView.classList.toggle("active", activeView === "profiles");
       els.encountersView.classList.toggle("active", activeView === "encounters");
+      els.soundsView.classList.toggle("active", activeView === "sounds");
       els.profileControls.hidden = activeView !== "profiles";
       els.source.textContent = workspaceSourceText();
+      if (activeView === "sounds" && !soundEffectsPayload) {
+        loadSoundEffects().catch(error => {
+          els.soundStatus.textContent = error.message;
+        });
+      }
+    }
+
+    function soundStatus(message) {
+      els.soundStatus.textContent = message || "";
+    }
+
+    async function loadSoundEffects() {
+      soundStatus("Loading sound effects...");
+      const response = await fetch("/sound-effects", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || `Sound effects request failed (${response.status})`);
+      }
+      soundEffectsPayload = payload;
+      soundEffects = payload.effects || [];
+      if (!soundEffects.some(effect => effect.id === selectedSoundEffectId)) {
+        selectedSoundEffectId = payload.tester?.initial || soundEffects[0]?.id || 0;
+      }
+      renderSoundFilters();
+      renderSoundEffects();
+      soundStatus("");
+      els.source.textContent = workspaceSourceText();
+    }
+
+    function renderSoundFilters() {
+      document.querySelectorAll("[data-sound-filter]").forEach(button => {
+        const active = button.dataset.soundFilter === soundFilter;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function soundEffectMatchesFilter(effect) {
+      const bank = String(effect.bank || "").toUpperCase();
+      const groups = (effect.groups || []).join(" ").toUpperCase();
+      if (soundFilter === "all") return true;
+      if (soundFilter === "tester") return !!effect.inTesterRange;
+      if (soundFilter === "moves") return !!effect.isMoveSoundEffect;
+      if (soundFilter === "field") return bank.includes("FIELD") || groups.includes("FIELD");
+      if (soundFilter === "battle") return bank.includes("BATTLE") || groups.includes("BATTLE");
+      if (soundFilter === "basic") return bank === "BANK_BASIC";
+      if (soundFilter === "extra") return !effect.isSoundEffect;
+      return true;
+    }
+
+    function soundSearchText(effect) {
+      const moveAliases = effect.moveAliases || [];
+      return [
+        effect.id,
+        effect.name,
+        effect.shortName,
+        effect.fileName,
+        effect.bank,
+        effect.player,
+        ...moveAliases.flatMap(alias => [alias.moveName, alias.moveSymbol, alias.scriptFile, alias.command]),
+        effect.isMoveSoundEffect ? "move" : "",
+        effect.isSoundEffect ? "sound effect" : "extra sequence",
+        ...(effect.groups || []),
+      ].join(" ").toLowerCase();
+    }
+
+    function filteredSoundEffectRows() {
+      const query = els.soundSearch.value.trim().toLowerCase();
+      return soundEffects.filter(effect => {
+        if (query) return soundSearchText(effect).includes(query);
+        return soundEffectMatchesFilter(effect);
+      });
+    }
+
+    function soundEffectById(id) {
+      return soundEffects.find(effect => Number(effect.id) === Number(id)) || null;
+    }
+
+    function selectedSoundEffect() {
+      return soundEffectById(selectedSoundEffectId) || filteredSoundEffects[0] || soundEffects[0] || null;
+    }
+
+    function soundGroupLabel(effect) {
+      const name = String(effect.name || "");
+      const bank = String(effect.bank || "");
+      if (effect.isMoveSoundEffect) return "Move";
+      if (!effect.isSoundEffect && name.startsWith("SEQ_ME_")) return "ME";
+      if (!effect.isSoundEffect && bank === "BANK_GAMEBOY") return "Game Boy";
+      if (!effect.isSoundEffect && bank.startsWith("BANK_SE_")) return bank.replace(/^BANK_SE_/, "");
+      if (effect.bank === "BANK_BASIC") return "Basic";
+      const groups = effect.groups || [];
+      if (groups.some(group => group.includes("FIELD"))) return "Field";
+      if (groups.some(group => group.includes("BATTLE"))) return "Battle";
+      if (groups.length) return groups[0].replace(/^GROUP_SE_/, "");
+      return effect.bank || "SE";
+    }
+
+    function soundMoveAliasLabel(effect, limit = 2) {
+      const aliases = effect.moveAliases || [];
+      if (!aliases.length) return "";
+      const names = [];
+      aliases.forEach(alias => {
+        if (alias.moveName && !names.includes(alias.moveName)) names.push(alias.moveName);
+      });
+      if (names.length <= limit) return names.join(", ");
+      return `${names.slice(0, limit).join(", ")} +${names.length - limit}`;
+    }
+
+    function soundMoveAliasChips(effect, limit = 8) {
+      const aliases = effect.moveAliases || [];
+      const names = [];
+      aliases.forEach(alias => {
+        if (alias.moveName && !names.includes(alias.moveName)) names.push(alias.moveName);
+      });
+      const visible = names.slice(0, limit).map(name => `<span class="sound-chip">${esc(name)}</span>`).join("");
+      const hidden = names.length > limit ? `<span class="sound-chip">+${esc(names.length - limit)} moves</span>` : "";
+      return visible + hidden;
+    }
+
+    function soundMovePreviewButtons(effect, limit = 8) {
+      const aliases = effect.moveAliases || [];
+      const moves = [];
+      aliases.forEach(alias => {
+        if (!alias.moveId || moves.some(move => Number(move.moveId) === Number(alias.moveId))) return;
+        moves.push(alias);
+      });
+      const visible = moves.slice(0, limit).map(alias => `
+        <button class="control" type="button" data-move-preview-id="${esc(alias.moveId)}" title="${esc(alias.commandText || alias.command || "Move preview")}">
+          ${esc(alias.moveName || alias.moveSymbol || `Move ${alias.moveId}`)}
+        </button>
+      `).join("");
+      const hidden = moves.length > limit ? `<span class="sound-chip">+${esc(moves.length - limit)} moves</span>` : "";
+      return visible + hidden;
+    }
+
+    function renderSoundRow(effect) {
+      const active = Number(effect.id) === Number(selectedSoundEffectId);
+      const meta = [effect.bank, effect.player].filter(Boolean).join(" · ");
+      const moveLabel = soundMoveAliasLabel(effect);
+      const displayName = moveLabel || effect.shortName || effect.name;
+      const detailName = moveLabel ? `${effect.shortName || effect.name} · ${meta || effect.fileName || ""}` : (meta || effect.fileName || "");
+      return `
+        <button class="sound-row ${active ? "active" : ""}" type="button" data-sound-id="${esc(effect.id)}">
+          <span class="sound-row-id">${esc(effect.id)}</span>
+          <span>
+            <span class="sound-row-name">${esc(displayName)}</span>
+            <span class="sound-row-meta">${esc(detailName)}</span>
+          </span>
+          <span class="sound-row-pill">${esc(soundGroupLabel(effect))}</span>
+        </button>
+      `;
+    }
+
+    function soundField(label, value) {
+      return `
+        <div class="sound-field">
+          <div class="sound-field-label">${esc(label)}</div>
+          <div class="sound-field-value" title="${esc(value ?? "")}">${esc(value ?? "--")}</div>
+        </div>
+      `;
+    }
+
+    function importedAudioForEffect(effect) {
+      if (!effect) return null;
+      const keys = [
+        String(effect.id),
+        String(effect.id).padStart(4, "0"),
+        String(effect.name || "").toUpperCase(),
+        String(effect.shortName || "").toUpperCase(),
+        String(effect.fileName || "").replace(/\.[^.]+$/, "").toUpperCase(),
+      ];
+      for (const key of keys) {
+        if (soundAudioFiles.has(key)) return soundAudioFiles.get(key);
+      }
+      return null;
+    }
+
+    function renderSoundDetail() {
+      const effect = selectedSoundEffect();
+      if (!effect) {
+        els.soundDetail.innerHTML = `<div class="empty">No sound effects loaded</div>`;
+        drawSoundWaveform(null);
+        return;
+      }
+      const groups = (effect.groups || []).map(group => `<span class="sound-chip">${esc(group)}</span>`).join("");
+      const moveAliasChips = soundMoveAliasChips(effect);
+      const movePreviewButtons = soundMovePreviewButtons(effect);
+      const moveAliasText = (effect.moveAliases || []).map(alias => `${alias.moveName} (${alias.moveSymbol}, ${alias.commandText || alias.command})`).join(", ");
+      els.soundDetail.innerHTML = `
+        <div class="sound-detail-head">
+          <div>
+            <div class="sound-detail-title">${esc(soundMoveAliasLabel(effect, 4) || effect.name)}</div>
+            <div class="sound-meta">ID ${esc(effect.id)} · ${esc(effect.fileName || "no sequence file")} · ${effect.hasSseq ? `${esc(effect.sseqBytes)} bytes` : "missing SSEQ"}</div>
+          </div>
+          <div class="sound-detail-actions">
+            ${effect.inTesterRange ? `<span class="sound-chip">Tester range</span>` : ""}
+            ${effect.isMoveSoundEffect ? `<span class="sound-chip">Move</span>` : ""}
+            ${effect.isSoundEffect ? `<span class="sound-chip">SEQ_SE</span>` : `<span class="sound-chip">Extra sequence</span>`}
+            ${effect.hasSseq ? `<span class="sound-chip">On-demand WAV</span>` : `<span class="sound-chip">Missing sequence</span>`}
+          </div>
+        </div>
+        <div class="sound-grid">
+          ${soundField("Bank", effect.bank || "--")}
+          ${soundField("Player", effect.player || "--")}
+          ${soundField("Volume", effect.volume ?? "--")}
+          ${soundField("Priority", [effect.channelPriority, effect.playerPriority].filter(value => value != null).join(" / ") || "--")}
+          ${moveAliasText ? soundField("Move aliases", moveAliasText) : ""}
+        </div>
+        <div class="sound-step-actions">${moveAliasChips || groups || `<span class="sound-chip">Ungrouped</span>`}</div>
+        ${movePreviewButtons ? `<div class="sound-step-actions">${movePreviewButtons}</div>` : ""}
+      `;
+      els.soundPlay.disabled = !effect.hasSseq;
+      els.soundPlayRaw.disabled = !effect.hasSseq;
+      drawSoundWaveform(effect);
+    }
+
+    function renderSoundEffects() {
+      filteredSoundEffects = filteredSoundEffectRows();
+      els.soundCount.textContent = `${filteredSoundEffects.length} / ${soundEffects.length}`;
+      if (!filteredSoundEffects.some(effect => Number(effect.id) === Number(selectedSoundEffectId))) {
+        selectedSoundEffectId = filteredSoundEffects[0]?.id || soundEffects[0]?.id || 0;
+      }
+      els.soundList.innerHTML = filteredSoundEffects.length
+        ? filteredSoundEffects.map(renderSoundRow).join("")
+        : `<div class="empty">No sound effects match</div>`;
+      renderSoundDetail();
+    }
+
+    function selectSoundEffect(id, options = {}) {
+      const effect = soundEffectById(id);
+      if (!effect) return;
+      selectedSoundEffectId = effect.id;
+      localStorage.setItem("owSelectedSoundEffectId", String(effect.id));
+      renderSoundEffects();
+      const row = els.soundList.querySelector(`[data-sound-id="${CSS.escape(String(effect.id))}"]`);
+      if (row && options.scroll !== false) row.scrollIntoView({ block: "nearest" });
+    }
+
+    function stepSoundEffect(delta) {
+      if (!filteredSoundEffects.length) return;
+      const currentIndex = Math.max(0, filteredSoundEffects.findIndex(effect => Number(effect.id) === Number(selectedSoundEffectId)));
+      const nextIndex = (currentIndex + delta + filteredSoundEffects.length * 100) % filteredSoundEffects.length;
+      selectSoundEffect(filteredSoundEffects[nextIndex].id);
+      if (selectedSoundEffect()?.hasSseq) {
+        playSelectedSoundEffect();
+      }
+    }
+
+    function shouldIgnoreSoundKeyTarget(target) {
+      if (!target) return false;
+      if (target.isContentEditable) return true;
+      return !!target.closest("input, textarea, select");
+    }
+
+    function handleSoundKeyNavigation(event) {
+      if (activeView !== "sounds" || shouldIgnoreSoundKeyTarget(event.target)) return false;
+      if (event.altKey || event.ctrlKey || event.metaKey) return false;
+      const stepByKey = {
+        ArrowDown: 1,
+        ArrowRight: 1,
+        ArrowUp: -1,
+        ArrowLeft: -1,
+        PageDown: 16,
+        PageUp: -16,
+      };
+      const delta = stepByKey[event.key];
+      if (!delta || !filteredSoundEffects.length) return false;
+      event.preventDefault();
+      stepSoundEffect(delta);
+      return true;
+    }
+
+    function stopSoundPlayback() {
+      if (soundAudioElement) {
+        soundAudioElement.pause();
+        soundAudioElement.currentTime = 0;
+      }
+      if (soundAudioUrl) {
+        URL.revokeObjectURL(soundAudioUrl);
+        soundAudioUrl = null;
+      }
+      soundPlaybackNodes.forEach(node => {
+        try {
+          if (typeof node.stop === "function") node.stop();
+          if (typeof node.disconnect === "function") node.disconnect();
+        } catch (error) {
+          void error;
+        }
+      });
+      soundPlaybackNodes = [];
+    }
+
+    function waveformForEffect(effect) {
+      if (!effect) return [];
+      const id = Number(effect.id) || 0;
+      const name = String(effect.name || "");
+      const count = 24;
+      return Array.from({ length: count }, (_, index) => {
+        const seed = (id * 17 + index * 31 + name.charCodeAt(index % Math.max(1, name.length))) % 97;
+        return 0.18 + (seed / 97) * 0.76;
+      });
+    }
+
+    function drawSoundWaveform(effect) {
+      const canvas = els.soundWaveform;
+      const ctx = canvas.getContext("2d");
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+      const values = waveformForEffect(effect);
+      if (!values.length) return;
+      const barWidth = width / values.length;
+      ctx.fillStyle = "#0f766e";
+      values.forEach((value, index) => {
+        const barHeight = Math.max(8, value * height * 0.78);
+        const x = index * barWidth + 3;
+        const y = (height - barHeight) / 2;
+        ctx.fillRect(x, y, Math.max(2, barWidth - 6), barHeight);
+      });
+    }
+
+    function synthProfileForEffect(effect) {
+      const name = String(effect.name || "").toUpperCase();
+      const bank = String(effect.bank || "").toUpperCase();
+      const id = Number(effect.id) || 0;
+      const base = 180 + (id % 36) * 18;
+      const waveform = bank === "BANK_BASIC" ? "square" : bank.includes("FIELD") ? "triangle" : "sawtooth";
+      const duration = name.includes("DUMMY") ? 0.12 : name.includes("KIRAKIRA") ? 0.7 : name.includes("WATER") ? 0.5 : 0.34;
+      const pulses = name.includes("KIRAKIRA") ? 5 : name.includes("TIMER") || name.includes("PINPON") ? 3 : 2;
+      return { base, waveform, duration, pulses };
+    }
+
+    function playSyntheticSound(effect) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) {
+        soundStatus("AudioContext is not available in this browser.");
+        return;
+      }
+      if (!soundAudioContext) soundAudioContext = new AudioContext();
+      stopSoundPlayback();
+      const ctx = soundAudioContext;
+      const profile = synthProfileForEffect(effect);
+      const master = ctx.createGain();
+      master.gain.value = Math.min(0.42, Math.max(0.08, (Number(effect.volume) || 90) / 255));
+      master.connect(ctx.destination);
+      soundPlaybackNodes.push(master);
+      const start = ctx.currentTime + 0.015;
+      for (let i = 0; i < profile.pulses; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const pulseStart = start + i * (profile.duration / profile.pulses);
+        const pulseDuration = profile.duration / (profile.pulses + 0.8);
+        osc.type = profile.waveform;
+        osc.frequency.setValueAtTime(profile.base * (1 + i * 0.16), pulseStart);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(40, profile.base * (0.8 + (i % 2) * 0.24)), pulseStart + pulseDuration);
+        gain.gain.setValueAtTime(0.001, pulseStart);
+        gain.gain.exponentialRampToValueAtTime(0.9, pulseStart + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, pulseStart + pulseDuration);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(pulseStart);
+        osc.stop(pulseStart + pulseDuration + 0.02);
+        soundPlaybackNodes.push(osc, gain);
+      }
+      soundStatus(`Approximate preview for ${effect.name}; this is not the real DS sound.`);
+    }
+
+    function selectedMovePreviewAlias(effect) {
+      return (effect?.moveAliases || []).find(alias => alias.moveId) || null;
+    }
+
+    async function playSoundUrl(url, label) {
+      stopSoundPlayback();
+      soundStatus(`Rendering ${label}...`);
+      const renderAbortController = new AbortController();
+      const renderTimeout = setTimeout(() => renderAbortController.abort(), 20000);
+      try {
+        const response = await fetch(url, {
+          cache: "no-store",
+          signal: renderAbortController.signal,
+        });
+        if (!response.ok) {
+          let message = `Sound render failed (${response.status})`;
+          try {
+            const payload = await response.json();
+            if (payload.error) message = payload.error;
+          } catch (error) {
+            void error;
+          }
+          throw new Error(message);
+        }
+        const audioBlob = await response.blob();
+        soundAudioUrl = URL.createObjectURL(audioBlob);
+        soundAudioElement = new Audio(soundAudioUrl);
+        soundAudioElement.preload = "auto";
+        soundAudioElement.addEventListener("ended", () => {
+          soundStatus(`Finished ${label}.`);
+        }, { once: true });
+        await soundAudioElement.play();
+        soundStatus(`Playing ${label}.`);
+      } catch (error) {
+        const message = error.name === "AbortError"
+          ? "Render timed out. This sound is probably too long for the tester."
+          : error.message;
+        soundStatus(`Could not play ${label}: ${message}`);
+      } finally {
+        clearTimeout(renderTimeout);
+      }
+    }
+
+    async function playMoveSoundEffect(moveId, label) {
+      await playSoundUrl(`/move-sound-effects/${encodeURIComponent(moveId)}.wav`, `${label} move preview`);
+    }
+
+    async function playSelectedRawSoundEffect() {
+      const effect = selectedSoundEffect();
+      if (!effect) return;
+      await playSoundUrl(`/sound-effects/${encodeURIComponent(effect.id)}.wav`, `${effect.name} SEQ`);
+    }
+
+    async function playSelectedSoundEffect() {
+      const effect = selectedSoundEffect();
+      if (!effect) return;
+      const moveAlias = selectedMovePreviewAlias(effect);
+      if (moveAlias) {
+        await playMoveSoundEffect(moveAlias.moveId, moveAlias.moveName || effect.name);
+        return;
+      }
+      await playSelectedRawSoundEffect();
+    }
+
+    function auditionSelectedSoundEffect() {
+      const effect = selectedSoundEffect();
+      if (!effect) return;
+      playSyntheticSound(effect);
+    }
+
+    function soundAudioKey(fileName) {
+      return String(fileName || "").replace(/\.[^.]+$/, "").toUpperCase();
+    }
+
+    function importSoundAudioFiles(files) {
+      let count = 0;
+      Array.from(files || []).forEach(file => {
+        const key = soundAudioKey(file.name);
+        if (!key) return;
+        soundAudioFiles.set(key, file);
+        count++;
+      });
+      soundStatus(`${count} audio file${count === 1 ? "" : "s"} loaded.`);
+      renderSoundDetail();
     }
 
     function routeEditKey(routeId, path) {
@@ -15297,7 +17183,7 @@ HTML = r"""<!doctype html>
         els.saveStatus.classList.add(`status-${kind}`);
       } else if (text.includes("failed") || text.includes("invalid")) {
         els.saveStatus.classList.add("status-error");
-      } else if (text.includes("saving") || text.includes("building") || text.includes("opening")) {
+      } else if (text.includes("saving") || text.includes("building") || text.includes("opening") || text.includes("restarting")) {
         els.saveStatus.classList.add("status-busy");
       } else if (text.includes("pending")) {
         els.saveStatus.classList.add("status-warning");
@@ -15307,7 +17193,7 @@ HTML = r"""<!doctype html>
     }
 
     function updateSaveControls() {
-      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding || isSettingShinyCounter;
+      const busy = isSavingProfiles || isSavingProfileMemberships || isSavingProfileOverrides || isSavingEncounters || isSavingSpawnSettings || isManagingProfiles || isBuilding || isRestartingServer || isSettingShinyCounter;
       const profilesEditable = appData?.profilesAvailable !== false;
       const hasProfileChanges = profilesEditable && (profileEdits.size > 0 || profileMemberEdits.size > 0 || profileOverrideChangeCount() > 0);
       const hasChanges = hasProfileChanges || encounterEdits.size > 0 || spawnSettingEdits.size > 0;
@@ -15315,6 +17201,7 @@ HTML = r"""<!doctype html>
       els.saveAllChanges.disabled = busy || !hasChanges || hasInvalid;
       els.buildRom.disabled = busy;
       els.openTestNds.disabled = busy;
+      els.restartServer.disabled = busy;
       els.resetAllEdits.disabled = busy || (!hasChanges && !hasInvalid);
       els.refreshShinyCounter.disabled = isSettingShinyCounter;
       els.resetShinyCounter.disabled = isSettingShinyCounter;
@@ -15824,6 +17711,48 @@ HTML = r"""<!doctype html>
         setSaveStatus(`Open failed: ${error.message}`);
       } finally {
         isBuilding = false;
+        updateSaveControls();
+      }
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function waitForServerReady(timeoutMs = 15000) {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        try {
+          const response = await fetch(`/build-status?restartProbe=${Date.now()}`, { cache: "no-store" });
+          if (response.ok) return true;
+        } catch (error) {
+          void error;
+        }
+        await sleep(350);
+      }
+      return false;
+    }
+
+    async function restartServerAction() {
+      if (isRestartingServer) return;
+      isRestartingServer = true;
+      updateSaveControls();
+      setSaveStatus("Restarting server...", "busy");
+      try {
+        const response = await fetch("/restart-server", { method: "POST" });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        await sleep(650);
+        const ready = await waitForServerReady();
+        if (!ready) {
+          throw new Error("server did not come back in time");
+        }
+        window.location.reload();
+      } catch (error) {
+        isRestartingServer = false;
+        setSaveStatus(`Restart failed: ${error.message}`, "error");
         updateSaveControls();
       }
     }
@@ -16472,8 +18401,11 @@ HTML = r"""<!doctype html>
     function renderActiveWorkspace() {
       if (activeView === "profiles") {
         renderProfilesWorkspace();
-      } else {
+      } else if (activeView === "encounters") {
         renderEncounters();
+      } else {
+        renderSoundFilters();
+        renderSoundEffects();
       }
     }
 
@@ -16629,6 +18561,9 @@ HTML = r"""<!doctype html>
     els.openTestNds.addEventListener("click", () => {
       openTestNdsAction();
     });
+    els.restartServer.addEventListener("click", () => {
+      restartServerAction();
+    });
     els.resetAllEdits.addEventListener("click", resetAllEdits);
     document.addEventListener("click", event => {
       const button = event.target.closest("[data-action='create-profile'], [data-action='rename-profile'], [data-action='delete-profile']");
@@ -16668,6 +18603,51 @@ HTML = r"""<!doctype html>
       buildOutputManuallyHidden = true;
       setBuildOutputVisible(false);
     });
+    els.soundSearch.addEventListener("input", renderSoundEffects);
+    els.soundRefresh.addEventListener("click", () => {
+      loadSoundEffects().catch(error => {
+        soundStatus(error.message);
+      });
+    });
+    document.querySelectorAll("[data-sound-filter]").forEach(button => {
+      button.addEventListener("click", () => {
+        soundFilter = button.dataset.soundFilter;
+        localStorage.setItem("owSoundFilter", soundFilter);
+        renderSoundFilters();
+        renderSoundEffects();
+      });
+    });
+    els.soundList.addEventListener("click", event => {
+      const row = event.target.closest("[data-sound-id]");
+      if (!row) return;
+      selectSoundEffect(Number(row.dataset.soundId), { scroll: false });
+    });
+    els.soundList.addEventListener("dblclick", event => {
+      const row = event.target.closest("[data-sound-id]");
+      if (!row) return;
+      selectSoundEffect(Number(row.dataset.soundId), { scroll: false });
+      playSelectedSoundEffect();
+    });
+    els.soundDetail.addEventListener("click", event => {
+      const button = event.target.closest("[data-move-preview-id]");
+      if (!button) return;
+      const moveId = Number(button.dataset.movePreviewId);
+      const effect = selectedSoundEffect();
+      const alias = (effect?.moveAliases || []).find(row => Number(row.moveId) === moveId);
+      playMoveSoundEffect(moveId, alias?.moveName || `Move ${moveId}`);
+    });
+    els.soundPlay.addEventListener("click", playSelectedSoundEffect);
+    els.soundPlayRaw.addEventListener("click", playSelectedRawSoundEffect);
+    els.soundAudition.addEventListener("click", auditionSelectedSoundEffect);
+    els.soundStop.addEventListener("click", () => {
+      stopSoundPlayback();
+      soundStatus("Playback stopped.");
+    });
+    els.soundPrevious.addEventListener("click", () => stepSoundEffect(-1));
+    els.soundNext.addEventListener("click", () => stepSoundEffect(1));
+    els.soundPreviousLarge.addEventListener("click", () => stepSoundEffect(-16));
+    els.soundNextLarge.addEventListener("click", () => stepSoundEffect(16));
+    els.soundAudioFiles.addEventListener("change", () => importSoundAudioFiles(els.soundAudioFiles.files));
     els.routeSearch.addEventListener("input", scheduleRouteFilterRender);
     els.routeSpawnTypeFilters.addEventListener("click", event => {
       const button = event.target.closest("[data-spawn-filter]");
@@ -16997,6 +18977,7 @@ HTML = r"""<!doctype html>
       closeProfileComboMenu();
     });
     document.addEventListener("keydown", event => {
+      if (handleSoundKeyNavigation(event)) return;
       if (event.key === "Escape" && !els.profileAddMenu.hidden) {
         closeProfileAddMenu();
       }
@@ -17663,6 +19644,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
             if path in ("/", "/index.html"):
                 self.send_bytes(HTML.encode(), "text/html; charset=utf-8")
                 return
+            if path == "/favicon.ico":
+                self.send_bytes(b"", "image/x-icon", status=204, cache_control="public, max-age=86400")
+                return
             icon_match = re.fullmatch(r"/icons/(\d+)\.png", path)
             if icon_match:
                 icon_path = cached_icon_paths().get(int(icon_match.group(1), 10))
@@ -17698,6 +19682,27 @@ class ViewerHandler(BaseHTTPRequestHandler):
             if path == "/shiny-counter":
                 self.send_json(shiny_counter_payload())
                 return
+            sound_audio_match = re.fullmatch(r"/sound-effects/(\d+)\.wav", path)
+            if sound_audio_match:
+                seq_id = int(sound_audio_match.group(1), 10)
+                self.send_bytes(
+                    render_sound_effect_wav(seq_id),
+                    "audio/wav",
+                    cache_control="no-cache",
+                )
+                return
+            move_sound_audio_match = re.fullmatch(r"/move-sound-effects/(\d+)\.wav", path)
+            if move_sound_audio_match:
+                move_id = int(move_sound_audio_match.group(1), 10)
+                self.send_bytes(
+                    render_move_sound_effect_wav(move_id),
+                    "audio/wav",
+                    cache_control="no-cache",
+                )
+                return
+            if path == "/sound-effects":
+                self.send_json(sound_effect_metadata_payload())
+                return
             self.send_bytes(b"not found\n", "text/plain; charset=utf-8", status=404)
         except Exception as exc:  # pragma: no cover - surfaced in browser during local use
             body = json.dumps({"error": str(exc)}, indent=2).encode()
@@ -17732,6 +19737,9 @@ class ViewerHandler(BaseHTTPRequestHandler):
                 return
             if path == "/open-test-nds":
                 self.send_json(open_test_nds())
+                return
+            if path == "/restart-server":
+                self.send_json(restart_server_soon())
                 return
             if path == "/shiny-counter":
                 payload = json.loads(body.decode() or "{}")

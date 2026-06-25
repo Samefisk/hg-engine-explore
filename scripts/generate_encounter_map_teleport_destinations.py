@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Generate vetted teleport destinations for every encounter-bearing map."""
+"""Generate warp-backed teleport destinations for encounter-bearing maps."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import struct
@@ -14,40 +13,15 @@ from pathlib import Path
 import ndspy.narc
 
 
-CELL_SIZE = 32
 HEADER_OFFSET = 0xF6BE0
 HEADER_SIZE = 24
-BAD_TILE_BEHAVIORS = {6}
-RANDOM_TILE_PREDICATE = "same_loaded_cell_passable_low_land_non_headbutt_no_warp_coord_event_v3"
-FALLBACK_STAMPS = {
-    "MAP_D24": "MAP_D24R0101",
-    "MAP_D24R0201": "MAP_D24R0101",
-}
-VERIFIED_DESTINATIONS = {
-    "MAP_R29": (592, 399),
-    "MAP_R31": (560, 272),
-    "MAP_T06": (1297, 295),
-    "MAP_T21": (567, 400),
-}
-PACKED_MAP_BITS = 9
-PACKED_X_BITS = 11
-PACKED_Y_BITS = 10
-PACKED_WARP_BITS = 2
+PACKED_MAP_BITS = 10
+PACKED_WARP_BITS = 6
 PACKED_MAP_SHIFT = 0
-PACKED_X_SHIFT = PACKED_MAP_SHIFT + PACKED_MAP_BITS
-PACKED_Y_SHIFT = PACKED_X_SHIFT + PACKED_X_BITS
-PACKED_WARP_SHIFT = PACKED_Y_SHIFT + PACKED_Y_BITS
+PACKED_WARP_SHIFT = PACKED_MAP_SHIFT + PACKED_MAP_BITS
 PACKED_MAP_LIMIT = 1 << PACKED_MAP_BITS
-PACKED_X_LIMIT = 1 << PACKED_X_BITS
-PACKED_Y_LIMIT = 1 << PACKED_Y_BITS
 PACKED_WARP_LIMIT = 1 << PACKED_WARP_BITS
-RUNTIME_RANDOM_RADIUS = 32
-RUNTIME_RANDOM_MAX_OFFSET = RUNTIME_RANDOM_RADIUS - 1
-VERIFIED_WARP_ANCHORS = {
-    "MAP_D41R0101": 0,
-    "MAP_D42R0102": 2,
-    "MAP_D45R0102": 0,
-}
+WARP_ID_Y_SENTINEL = 0x03FF
 
 
 @dataclass(frozen=True)
@@ -59,12 +33,20 @@ class MapHeader:
 
 
 @dataclass(frozen=True)
-class Stamp:
-    matrix_id: int
-    matrix_x: int
-    matrix_y: int
-    matrix_value: int
-    land_file_id: int
+class WarpEvent:
+    index: int
+    x: int
+    y: int
+    dest_header: int
+    dest_anchor: int
+    height: int
+
+
+@dataclass(frozen=True)
+class IncomingWarp:
+    source_map_id: int
+    source_event_file_id: int
+    warp: WarpEvent
 
 
 @dataclass(frozen=True)
@@ -82,8 +64,16 @@ class Destination:
     matrix_value: int
     land_file_id: int
     permission: int
-    warp_id: int | None = None
-    random_tiles: tuple[dict[str, int | str], ...] = ()
+    event_file_id: int = -1
+    warp_index: int = -1
+    warp_dest_header: int = -1
+    warp_dest_anchor: int = -1
+    warp_height: int = 0
+    source_map_id: int = -1
+    source_event_file_id: int = -1
+    source_warp_index: int = -1
+    source_warp_x: int = -1
+    source_warp_y: int = -1
 
 
 def read_define(source: str, name: str) -> int:
@@ -156,24 +146,6 @@ def read_authoritative_maps(
     return entries
 
 
-def read_matrix(matrix_narc: ndspy.narc.NARC, matrix_id: int) -> tuple[int, int, tuple[int, ...], tuple[int, ...]]:
-    data = matrix_narc.files[matrix_id]
-    width = data[0]
-    height = data[1]
-    name_len = data[4]
-    offset = 5 + name_len
-    cell_count = width * height
-    values = struct.unpack_from(f"<{cell_count}H", data, offset)
-    remaining = len(data) - offset
-    if remaining == cell_count * 5:
-        land_values = struct.unpack_from(f"<{cell_count}H", data, offset + cell_count * 3)
-    elif remaining == cell_count * 2:
-        land_values = values
-    else:
-        raise ValueError(f"matrix {matrix_id} has unexpected size layout")
-    return width, height, values, land_values
-
-
 def read_header(arm9: bytes, map_id: int) -> MapHeader:
     offset = HEADER_OFFSET + map_id * HEADER_SIZE
     if offset + HEADER_SIZE > len(arm9):
@@ -187,20 +159,12 @@ def read_header(arm9: bytes, map_id: int) -> MapHeader:
     )
 
 
-def read_permission_grid(land_narc: ndspy.narc.NARC, land_file_id: int) -> tuple[int, ...]:
-    data = land_narc.files[land_file_id]
-    permission_len = struct.unpack_from("<I", data, 0)[0]
-    if permission_len != CELL_SIZE * CELL_SIZE * 2:
-        raise ValueError(f"land file {land_file_id} has permission length {permission_len:#x}")
-    return struct.unpack_from(f"<{CELL_SIZE * CELL_SIZE}H", data, 0x14)
-
-
-def read_event_blocked_tiles(event_narc: ndspy.narc.NARC, event_file_id: int) -> set[tuple[int, int]]:
+def read_event_warps(event_narc: ndspy.narc.NARC, event_file_id: int) -> list[WarpEvent]:
     if event_file_id >= len(event_narc.files):
-        return set()
+        return []
     data = event_narc.files[event_file_id]
     offset = 0
-    blocked: set[tuple[int, int]] = set()
+    warps: list[WarpEvent] = []
     try:
         count = struct.unpack_from("<I", data, offset)[0]
         offset += 4 + count * 0x14
@@ -208,596 +172,114 @@ def read_event_blocked_tiles(event_narc: ndspy.narc.NARC, event_file_id: int) ->
         offset += 4 + count * 0x20
         count = struct.unpack_from("<I", data, offset)[0]
         offset += 4
-        for _ in range(count):
-            x, y, _dest_header, _dest_anchor, _height = struct.unpack_from("<HHHHI", data, offset)
+        for index in range(count):
+            x, y, dest_header, dest_anchor, height = struct.unpack_from("<HHHHI", data, offset)
             offset += 0x0C
-            blocked.add((x, y))
-        count = struct.unpack_from("<I", data, offset)[0]
-        offset += 4
-        for _ in range(count):
-            _script, x, y, width, height, _z, _value, _var = struct.unpack_from(
-                "<HhhHHHHH",
-                data,
-                offset,
-            )
-            offset += 0x10
-            for tile_y in range(y, y + height):
-                for tile_x in range(x, x + width):
-                    blocked.add((tile_x, tile_y))
-    except struct.error:
-        return blocked
-    return blocked
-
-
-def is_passable(permission: int) -> bool:
-    behavior = permission & 0xFF
-    return (
-        (permission & 0x8000) == 0
-        and behavior < 16
-        and behavior not in BAD_TILE_BEHAVIORS
-    )
-
-
-def is_loaded_window_land_candidate(permission: int) -> bool:
-    return is_passable(permission)
-
-
-def find_stamps(
-    matrix_narc: ndspy.narc.NARC,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    map_id: int,
-    header: MapHeader,
-    allow_header_wildcard: bool = True,
-) -> list[Stamp]:
-    matrix_ids = [header.matrix_id]
-    matrix_ids.extend(index for index in range(len(matrix_narc.files)) if index != header.matrix_id)
-    stamps: list[Stamp] = []
-    for matrix_id in matrix_ids:
-        if matrix_id not in matrix_cache:
-            matrix_cache[matrix_id] = read_matrix(matrix_narc, matrix_id)
-        width, _height, values, land_values = matrix_cache[matrix_id]
-        for index, value in enumerate(values):
-            if value == map_id:
-                stamps.append(
-                    Stamp(
-                        matrix_id=matrix_id,
-                        matrix_x=index % width,
-                        matrix_y=index // width,
-                        matrix_value=value,
-                        land_file_id=land_values[index],
-                    )
-                )
-    if stamps or header.matrix_id == 0 or not allow_header_wildcard:
-        return stamps
-
-    matrix_id = header.matrix_id
-    if matrix_id not in matrix_cache:
-        matrix_cache[matrix_id] = read_matrix(matrix_narc, matrix_id)
-    width, _height, values, land_values = matrix_cache[matrix_id]
-    for index, value in enumerate(values):
-        stamps.append(
-            Stamp(
-                matrix_id=matrix_id,
-                matrix_x=index % width,
-                matrix_y=index // width,
-                matrix_value=value,
-                land_file_id=land_values[index],
-            )
-        )
-    return stamps
-
-
-def find_header_wildcard_stamps(
-    matrix_narc: ndspy.narc.NARC,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    header: MapHeader,
-) -> list[Stamp]:
-    if header.matrix_id == 0:
-        return []
-    matrix_id = header.matrix_id
-    if matrix_id not in matrix_cache:
-        matrix_cache[matrix_id] = read_matrix(matrix_narc, matrix_id)
-    width, _height, values, land_values = matrix_cache[matrix_id]
-    return [
-        Stamp(
-            matrix_id=matrix_id,
-            matrix_x=index % width,
-            matrix_y=index // width,
-            matrix_value=value,
-            land_file_id=land_values[index],
-        )
-        for index, value in enumerate(values)
-    ]
-
-
-def candidate_dict(
-    *,
-    x: int,
-    y: int,
-    source: str,
-    stamp: Stamp,
-    permission: int,
-) -> dict[str, int | str]:
-    return {
-        "x": x,
-        "y": y,
-        "source": source,
-        "matrix_id": stamp.matrix_id,
-        "matrix_x": stamp.matrix_x,
-        "matrix_y": stamp.matrix_y,
-        "matrix_value": stamp.matrix_value,
-        "land_file_id": stamp.land_file_id,
-        "permission": permission,
-    }
-
-
-def collect_land_candidates(
-    *,
-    source_map_id: int,
-    source: str,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
-    arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-) -> list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]]:
-    header = read_header(arm9, source_map_id)
-    blocked = read_event_blocked_tiles(event_narc, header.event_file_id)
-    candidates = []
-    stamps = find_stamps(
-        matrix_narc,
-        matrix_cache,
-        source_map_id,
-        header,
-        allow_header_wildcard=False,
-    )
-
-    def collect_candidates(candidate_stamps: list[Stamp], candidate_source: str) -> None:
-        for stamp in candidate_stamps:
-            if stamp.land_file_id >= len(land_narc.files):
-                continue
-            if stamp.land_file_id not in permission_cache:
-                permission_cache[stamp.land_file_id] = read_permission_grid(land_narc, stamp.land_file_id)
-            permissions = permission_cache[stamp.land_file_id]
-            for local_y in range(CELL_SIZE):
-                for local_x in range(CELL_SIZE):
-                    world_x = stamp.matrix_x * CELL_SIZE + local_x
-                    world_y = stamp.matrix_y * CELL_SIZE + local_y
-                    if (world_x, world_y) in blocked:
-                        continue
-                    permission = permissions[local_y * CELL_SIZE + local_x]
-                    if not is_passable(permission):
-                        continue
-                    neighbors = 0
-                    center_distance = abs(local_x - 16) + abs(local_y - 16)
-                    candidates.append(
-                        (
-                            -neighbors,
-                            center_distance,
-                            world_y,
-                            world_x,
-                            stamp.matrix_id,
-                            stamp.matrix_x,
-                            stamp.matrix_y,
-                            stamp.land_file_id,
-                            len(candidates),
-                            stamp,
-                            permission,
-                            candidate_source,
-                        )
-                    )
-
-    collect_candidates(stamps, "derived")
-    if not candidates:
-        collect_candidates(
-            find_header_wildcard_stamps(matrix_narc, matrix_cache, header),
-            "derived:header-wildcard",
-        )
-    return sorted(candidates)
-
-
-def collect_loaded_map_candidates(
-    *,
-    map_id: int,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
-    arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-) -> list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]]:
-    header = read_header(arm9, map_id)
-    blocked = read_event_blocked_tiles(event_narc, header.event_file_id)
-    candidates = []
-    for stamp in find_header_wildcard_stamps(matrix_narc, matrix_cache, header):
-        if stamp.land_file_id >= len(land_narc.files):
-            continue
-        if stamp.land_file_id not in permission_cache:
-            permission_cache[stamp.land_file_id] = read_permission_grid(land_narc, stamp.land_file_id)
-        permissions = permission_cache[stamp.land_file_id]
-        for local_y in range(CELL_SIZE):
-            for local_x in range(CELL_SIZE):
-                world_x = stamp.matrix_x * CELL_SIZE + local_x
-                world_y = stamp.matrix_y * CELL_SIZE + local_y
-                if (world_x, world_y) in blocked:
-                    continue
-                permission = permissions[local_y * CELL_SIZE + local_x]
-                if not is_passable(permission):
-                    continue
-                center_distance = abs(local_x - 16) + abs(local_y - 16)
-                candidates.append(
-                    (
-                        0,
-                        center_distance,
-                        world_y,
-                        world_x,
-                        stamp.matrix_id,
-                        stamp.matrix_x,
-                        stamp.matrix_y,
-                        stamp.land_file_id,
-                        len(candidates),
-                        stamp,
-                        permission,
-                        "derived:loaded-header",
-                    )
-                )
-    return sorted(candidates)
-
-
-def loaded_window_random_tile_candidates(
-    *,
-    center_x: int,
-    center_y: int,
-    loaded_map_id: int,
-    fallback_map_id: int,
-    source: str,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
-    arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-    exclude_event_blocked: bool = True,
-    exclude_center: bool = True,
-) -> tuple[dict[str, int | str], ...]:
-    def collect_for_map(map_id: int, candidate_source: str) -> dict[tuple[int, int], dict[str, int | str]]:
-        header = read_header(arm9, map_id)
-        if header.matrix_id not in matrix_cache:
-            matrix_cache[header.matrix_id] = read_matrix(matrix_narc, header.matrix_id)
-        width, height, values, land_values = matrix_cache[header.matrix_id]
-        blocked = (
-            read_event_blocked_tiles(event_narc, header.event_file_id)
-            if exclude_event_blocked
-            else set()
-        )
-        tiles: dict[tuple[int, int], dict[str, int | str]] = {}
-        center_matrix_x = center_x // CELL_SIZE
-        center_matrix_y = center_y // CELL_SIZE
-        min_x = max(center_matrix_x * CELL_SIZE, center_x - RUNTIME_RANDOM_RADIUS)
-        min_y = max(center_matrix_y * CELL_SIZE, center_y - RUNTIME_RANDOM_RADIUS)
-        max_x = min(
-            center_matrix_x * CELL_SIZE + CELL_SIZE - 1,
-            center_x + RUNTIME_RANDOM_MAX_OFFSET,
-        )
-        max_y = min(
-            center_matrix_y * CELL_SIZE + CELL_SIZE - 1,
-            center_y + RUNTIME_RANDOM_MAX_OFFSET,
-        )
-
-        for y in range(min_y, max_y + 1):
-            matrix_y = y // CELL_SIZE
-            if matrix_y != center_matrix_y or matrix_y >= height:
-                continue
-            local_y = y % CELL_SIZE
-            for x in range(min_x, max_x + 1):
-                if exclude_center and x == center_x and y == center_y:
-                    continue
-                matrix_x = x // CELL_SIZE
-                if matrix_x != center_matrix_x or matrix_x >= width or (x, y) in blocked:
-                    continue
-                cell_index = matrix_y * width + matrix_x
-                land_file_id = land_values[cell_index]
-                if land_file_id >= len(land_narc.files):
-                    continue
-                if land_file_id not in permission_cache:
-                    permission_cache[land_file_id] = read_permission_grid(land_narc, land_file_id)
-                permission = permission_cache[land_file_id][local_y * CELL_SIZE + (x % CELL_SIZE)]
-                if not is_loaded_window_land_candidate(permission):
-                    continue
-                stamp = Stamp(
-                    matrix_id=header.matrix_id,
-                    matrix_x=matrix_x,
-                    matrix_y=matrix_y,
-                    matrix_value=values[cell_index],
-                    land_file_id=land_file_id,
-                )
-                tiles[(x, y)] = candidate_dict(
+            warps.append(
+                WarpEvent(
+                    index=index,
                     x=x,
                     y=y,
-                    source=candidate_source,
-                    stamp=stamp,
-                    permission=permission,
+                    dest_header=dest_header,
+                    dest_anchor=dest_anchor,
+                    height=height,
                 )
-        return tiles
-
-    tiles = collect_for_map(loaded_map_id, f"{source}:loaded-window")
-    if not tiles and fallback_map_id != loaded_map_id:
-        tiles = collect_for_map(fallback_map_id, f"{source}:loaded-window-fallback")
-    return tuple(tiles[key] for key in sorted(tiles))
+            )
+    except struct.error as exc:
+        raise ValueError(f"event file {event_file_id} has malformed warp data") from exc
+    return warps
 
 
-def random_tile_evidence(random_tiles: tuple[dict[str, int | str], ...]) -> dict[str, object]:
-    coordinates = sorted((int(tile["x"]), int(tile["y"])) for tile in random_tiles)
-    digest = hashlib.sha256()
-    for x, y in coordinates:
-        digest.update(f"{x},{y}\n".encode("ascii"))
-    evidence: dict[str, object] = {
-        "count": len(coordinates),
-        "sha256": digest.hexdigest(),
-    }
-    if coordinates:
-        evidence["min_x"] = coordinates[0][0]
-        evidence["max_x"] = max(x for x, _y in coordinates)
-        evidence["min_y"] = min(y for _x, y in coordinates)
-        evidence["max_y"] = max(y for _x, y in coordinates)
-    return evidence
-
-
-def choose_fixed_destination(
+def build_incoming_warps(
     *,
-    symbol: str,
-    map_id: int,
-    data_id: int,
-    source: str,
-    source_map_id: int,
-    x: int,
-    y: int,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
+    maps: dict[str, int],
     arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-    random_candidates: list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]],
-) -> Destination:
-    header = read_header(arm9, source_map_id)
-    blocked = read_event_blocked_tiles(event_narc, header.event_file_id)
-    local_x = x % CELL_SIZE
-    local_y = y % CELL_SIZE
-    for stamp in find_stamps(matrix_narc, matrix_cache, source_map_id, header):
-        if stamp.matrix_x != x // CELL_SIZE or stamp.matrix_y != y // CELL_SIZE:
+    event_narc: ndspy.narc.NARC,
+    target_map_ids: set[int],
+) -> dict[int, list[IncomingWarp]]:
+    incoming = {map_id: [] for map_id in target_map_ids}
+    max_map_id = max(maps.values())
+
+    for source_map_id in range(max_map_id + 1):
+        try:
+            header = read_header(arm9, source_map_id)
+            warps = read_event_warps(event_narc, header.event_file_id)
+        except ValueError:
             continue
-        if stamp.land_file_id >= len(land_narc.files):
-            break
-        if stamp.land_file_id not in permission_cache:
-            permission_cache[stamp.land_file_id] = read_permission_grid(land_narc, stamp.land_file_id)
-        permission = permission_cache[stamp.land_file_id][local_y * CELL_SIZE + local_x]
-        if (x, y) in blocked:
-            raise RuntimeError(f"verified destination {symbol} {x},{y} is blocked by event data")
-        random_tiles = loaded_window_random_tile_candidates(
-            center_x=x,
-            center_y=y,
-            loaded_map_id=map_id,
-            fallback_map_id=source_map_id,
-            source=source,
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache=matrix_cache,
-            permission_cache=permission_cache,
-        )
-        return Destination(
-            symbol=symbol,
-            map_id=map_id,
-            data_id=data_id,
-            x=x,
-            y=y,
-            direction=1,
-            source=source,
-            matrix_id=stamp.matrix_id,
-            matrix_x=stamp.matrix_x,
-            matrix_y=stamp.matrix_y,
-            matrix_value=stamp.matrix_value,
-            land_file_id=stamp.land_file_id,
-            permission=permission,
-            random_tiles=random_tiles,
-        )
-    raise RuntimeError(f"verified destination {symbol} {x},{y} is outside source stamps")
+
+        for warp in warps:
+            if warp.dest_header in incoming:
+                incoming[warp.dest_header].append(
+                    IncomingWarp(
+                        source_map_id=source_map_id,
+                        source_event_file_id=header.event_file_id,
+                        warp=warp,
+                    )
+                )
+
+    return incoming
 
 
-def choose_destination(
+def choose_warp_destination(
     *,
     symbol: str,
     map_id: int,
     data_id: int,
-    source: str,
-    source_map_id: int,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
-    arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-    random_candidates: list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]],
+    target_event_file_id: int,
+    incoming_warps: dict[int, list[IncomingWarp]],
 ) -> Destination | None:
-    def try_candidate_list(
-        candidates: list[tuple[int, int, int, int, int, int, int, int, int, Stamp, int, str]],
-    ) -> Destination | None:
-        for candidate in candidates:
-            (
-                _neighbors,
-                _center,
-                y,
-                x,
-                _matrix_id,
-                _matrix_x,
-                _matrix_y,
-                _land_file_id,
-                _candidate_index,
-                stamp,
-                permission,
-                candidate_source,
-            ) = candidate
-            random_tiles = loaded_window_random_tile_candidates(
-                center_x=x,
-                center_y=y,
-                loaded_map_id=map_id,
-                fallback_map_id=source_map_id,
-                source=source,
-                matrix_narc=matrix_narc,
-                land_narc=land_narc,
-                event_narc=event_narc,
-                arm9=arm9,
-                matrix_cache=matrix_cache,
-                permission_cache=permission_cache,
-            )
-            if not random_tiles:
-                continue
-            destination_source = source
-            if candidate_source != "derived":
-                destination_source = f"{source}:{candidate_source.removeprefix('derived:')}"
-            return Destination(
-                symbol=symbol,
-                map_id=map_id,
-                data_id=data_id,
-                x=x,
-                y=y,
-                direction=1,
-                source=destination_source,
-                matrix_id=stamp.matrix_id,
-                matrix_x=stamp.matrix_x,
-                matrix_y=stamp.matrix_y,
-                matrix_value=stamp.matrix_value,
-                land_file_id=stamp.land_file_id,
-                permission=permission,
-                random_tiles=random_tiles,
-            )
+    warps = incoming_warps.get(map_id, [])
+    if not warps:
         return None
 
-    destination = try_candidate_list(random_candidates)
-    if destination is not None:
-        return destination
-
-    loaded_candidates = collect_loaded_map_candidates(
+    incoming = sorted(
+        warps,
+        key=lambda row: (
+            row.source_map_id,
+            row.warp.index,
+            row.warp.dest_anchor,
+        ),
+    )[0]
+    warp = incoming.warp
+    return Destination(
+        symbol=symbol,
         map_id=map_id,
-        matrix_narc=matrix_narc,
-        land_narc=land_narc,
-        event_narc=event_narc,
-        arm9=arm9,
-        matrix_cache=matrix_cache,
-        permission_cache=permission_cache,
+        data_id=data_id,
+        x=warp.dest_anchor,
+        y=WARP_ID_Y_SENTINEL,
+        direction=1,
+        source="incoming-warp-anchor",
+        matrix_id=0,
+        matrix_x=0,
+        matrix_y=0,
+        matrix_value=map_id,
+        land_file_id=0,
+        permission=0,
+        event_file_id=target_event_file_id,
+        warp_index=warp.dest_anchor,
+        warp_dest_header=warp.dest_header,
+        warp_dest_anchor=warp.dest_anchor,
+        warp_height=warp.height,
+        source_map_id=incoming.source_map_id,
+        source_event_file_id=incoming.source_event_file_id,
+        source_warp_index=warp.index,
+        source_warp_x=warp.x,
+        source_warp_y=warp.y,
     )
-    return try_candidate_list(loaded_candidates)
 
 
-def packed_destination_word(destination: Destination) -> int:
-    warp_code = 0 if destination.warp_id is None else destination.warp_id + 1
+def packed_destination_halfword(destination: Destination) -> int:
     if destination.direction != 1:
         raise ValueError(f"{destination.symbol} direction must stay implicit south")
     if not (0 <= destination.map_id < PACKED_MAP_LIMIT):
         raise ValueError(f"{destination.symbol} map id {destination.map_id} does not fit packed row")
-    if not (0 <= destination.x < PACKED_X_LIMIT):
-        raise ValueError(f"{destination.symbol} x {destination.x} does not fit packed row")
-    if not (0 <= destination.y < PACKED_Y_LIMIT):
-        raise ValueError(f"{destination.symbol} y {destination.y} does not fit packed row")
-    if not (0 <= warp_code < PACKED_WARP_LIMIT):
-        raise ValueError(f"{destination.symbol} warp id {destination.warp_id} does not fit packed row")
+    if destination.y != WARP_ID_Y_SENTINEL:
+        raise ValueError(f"{destination.symbol} must use a warp-id destination")
+    if not (0 <= destination.x < PACKED_WARP_LIMIT):
+        raise ValueError(f"{destination.symbol} warp id {destination.x} does not fit packed row")
     return (
         (destination.map_id << PACKED_MAP_SHIFT)
-        | (destination.x << PACKED_X_SHIFT)
-        | (destination.y << PACKED_Y_SHIFT)
-        | (warp_code << PACKED_WARP_SHIFT)
-    )
-
-
-def choose_compact_random_pair(
-    random_tiles: tuple[dict[str, int | str], ...],
-    *,
-    prefer_nonzero_permission: bool = False,
-) -> tuple[dict[str, int | str], dict[str, int | str]]:
-    coordinates = {
-        (int(tile["x"]), int(tile["y"]))
-        for tile in random_tiles
-    }
-    by_coordinate = {
-        (int(tile["x"]), int(tile["y"])): tile
-        for tile in random_tiles
-    }
-
-    pairs = []
-    for x, y in coordinates:
-        if (x + 1, y) in coordinates:
-            local_x = x % CELL_SIZE
-            local_y = y % CELL_SIZE
-            primary = by_coordinate[(x, y)]
-            alternate = by_coordinate[(x + 1, y)]
-            nonzero_permission = (
-                int(primary["permission"]) != 0
-                and int(alternate["permission"]) != 0
-            )
-            pairs.append((
-                0 if (prefer_nonzero_permission and nonzero_permission) else 1,
-                abs(local_x - 15) + abs(local_y - 16),
-                y,
-                x,
-            ))
-
-    for _nonzero_rank, _distance, y, x in sorted(pairs):
-        return by_coordinate[(x, y)], by_coordinate[(x + 1, y)]
-    raise RuntimeError("random candidate set has no horizontal compact pair")
-
-
-def compact_cross_map_destination(
-    destination: Destination,
-    *,
-    source_map_id: int,
-    source: str,
-    matrix_narc: ndspy.narc.NARC,
-    land_narc: ndspy.narc.NARC,
-    event_narc: ndspy.narc.NARC,
-    arm9: bytes,
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]],
-    permission_cache: dict[int, tuple[int, ...]],
-) -> Destination:
-    base_tile, _alternate_tile = choose_compact_random_pair(
-        destination.random_tiles,
-        prefer_nonzero_permission="header-wildcard" in destination.source,
-    )
-    x = int(base_tile["x"])
-    y = int(base_tile["y"])
-    random_tiles = loaded_window_random_tile_candidates(
-        center_x=x,
-        center_y=y,
-        loaded_map_id=destination.map_id,
-        fallback_map_id=source_map_id,
-        source=f"{source}:compact-pair-center",
-        matrix_narc=matrix_narc,
-        land_narc=land_narc,
-        event_narc=event_narc,
-        arm9=arm9,
-        matrix_cache=matrix_cache,
-        permission_cache=permission_cache,
-    )
-    if not random_tiles:
-        raise RuntimeError(f"compact pair center {destination.symbol} {x},{y} has no random candidates")
-    return Destination(
-        symbol=destination.symbol,
-        map_id=destination.map_id,
-        data_id=destination.data_id,
-        x=x,
-        y=y,
-        direction=destination.direction,
-        source=f"{destination.source}:compact-pair",
-        matrix_id=int(base_tile["matrix_id"]),
-        matrix_x=int(base_tile["matrix_x"]),
-        matrix_y=int(base_tile["matrix_y"]),
-        matrix_value=int(base_tile["matrix_value"]),
-        land_file_id=int(base_tile["land_file_id"]),
-        permission=int(base_tile["permission"]),
-        warp_id=VERIFIED_WARP_ANCHORS.get(destination.symbol),
-        random_tiles=random_tiles,
+        | (destination.x << PACKED_WARP_SHIFT)
     )
 
 
@@ -807,54 +289,57 @@ def write_c(destinations: list[Destination], output: Path) -> None:
         "",
         '#include "../../include/config.h"',
         '#include "../../include/constants/maps.h"',
-        '#include "../../include/overworld_wild_behavior_data.h"',
         "",
         "#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS",
         "",
         "#define MAP_TELEPORT_ENCOUNTER_MAP_SHIFT 0",
-        "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x000001FFu",
-        "#define MAP_TELEPORT_ENCOUNTER_X_SHIFT 9",
-            "#define MAP_TELEPORT_ENCOUNTER_X_MASK 0x000007FFu",
-        "#define MAP_TELEPORT_ENCOUNTER_Y_SHIFT 20",
-            "#define MAP_TELEPORT_ENCOUNTER_Y_MASK 0x000003FFu",
-            "#define MAP_TELEPORT_ENCOUNTER_WARP_SHIFT 30",
-            "#define MAP_TELEPORT_ENCOUNTER_WARP_MASK 0x00000003u",
-            "",
-            "static const u32 sMapTeleportEncounterDestinations[OWED_ENCOUNTER_AREA_COUNT] = {",
-        ]
+        "#define MAP_TELEPORT_ENCOUNTER_MAP_MASK 0x03FFu",
+        "#define MAP_TELEPORT_ENCOUNTER_WARP_SHIFT 10",
+        "#define MAP_TELEPORT_ENCOUNTER_WARP_MASK 0x003Fu",
+        f"#define MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT {len(destinations)}",
+        "",
+        "static const u16 sMapTeleportEncounterDestinations[MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT] = {",
+    ]
     for destination in destinations:
-        packed = packed_destination_word(destination)
+        packed = packed_destination_halfword(destination)
         lines.append(
-            f"    0x{packed:08X}u, // {destination.symbol} {destination.x},{destination.y}"
+            "    "
+            f"0x{packed:04X}u, // {destination.symbol} "
+            f"warp-id {destination.warp_index} via map {destination.source_map_id} "
+            f"warp {destination.source_warp_index} at "
+            f"{destination.source_warp_x},{destination.source_warp_y}"
         )
     lines.extend(
         [
             "};",
             "",
-            "BOOL MapTeleport_TrySelectEncounterDestinationByIndex(",
-            "    u16 index,",
-            "    MapTeleportDestination *destination)",
-            "{",
-            "    u32 packed;",
+            "static MapTeleportDestination sMapTeleportEncounterDestinationScratch;",
             "",
-            "    if (destination == NULL || index >= OWED_ENCOUNTER_AREA_COUNT) {",
-            "        return FALSE;",
+            "static u16 MapTeleport_EncounterDestinationPackedMapId(u16 packed)",
+            "{",
+            "    return (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)",
+            "        & MAP_TELEPORT_ENCOUNTER_MAP_MASK);",
+            "}",
+            "",
+            "static const MapTeleportDestination *MapTeleport_EncounterDestinationFromPacked(u16 packed)",
+            "{",
+            "    sMapTeleportEncounterDestinationScratch.mapId =",
+            "        MapTeleport_EncounterDestinationPackedMapId(packed);",
+            "    sMapTeleportEncounterDestinationScratch.x =",
+            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_WARP_SHIFT)",
+            "            & MAP_TELEPORT_ENCOUNTER_WARP_MASK);",
+            "    sMapTeleportEncounterDestinationScratch.y = MAP_TELEPORT_DESTINATION_WARP_ID_Y;",
+            "    sMapTeleportEncounterDestinationScratch.direction = MAP_TELEPORT_DIRECTION_SOUTH;",
+            "    return &sMapTeleportEncounterDestinationScratch;",
+            "}",
+            "",
+            "static const MapTeleportDestination *MapTeleport_EncounterDestinationByIndex(u16 index)",
+            "{",
+            "    if (index >= MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT) {",
+            "        return NULL;",
             "    }",
             "",
-            "    packed = sMapTeleportEncounterDestinations[index];",
-            "    destination->mapId =",
-            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_MAP_SHIFT)",
-            "            & MAP_TELEPORT_ENCOUNTER_MAP_MASK);",
-            "    destination->x =",
-            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_X_SHIFT) & MAP_TELEPORT_ENCOUNTER_X_MASK);",
-            "    destination->y =",
-            "        (u16)((packed >> MAP_TELEPORT_ENCOUNTER_Y_SHIFT) & MAP_TELEPORT_ENCOUNTER_Y_MASK);",
-            "    destination->direction =",
-            "        MAP_TELEPORT_DIRECTION_SOUTH",
-            "        | (u16)(((packed >> MAP_TELEPORT_ENCOUNTER_WARP_SHIFT)",
-            "            & MAP_TELEPORT_ENCOUNTER_WARP_MASK) << 8);",
-            "",
-            "    return TRUE;",
+            "    return MapTeleport_EncounterDestinationFromPacked(sMapTeleportEncounterDestinations[index]);",
             "}",
             "",
             "const MapTeleportEncounterDestinationEntry gMapTeleportEncounterDestinationEntry",
@@ -862,8 +347,10 @@ def write_c(destinations: list[Destination], output: Path) -> None:
             "    MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC,",
             "    MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION,",
             "    sizeof(MapTeleportEncounterDestinationEntry),",
-            "    OWED_ENCOUNTER_AREA_COUNT,",
+            "    MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT,",
             "    0,",
+            "    MapTeleport_EncounterDestinationByIndex,",
+            "    NULL,",
             "};",
             "",
             "#endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS",
@@ -874,21 +361,22 @@ def write_c(destinations: list[Destination], output: Path) -> None:
     output.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_json(destinations: list[Destination], output: Path) -> None:
-    def json_destination(destination: Destination) -> dict[str, object]:
-        data = dict(destination.__dict__)
-        data.pop("random_tiles")
-        data["random_tile_evidence"] = random_tile_evidence(destination.random_tiles)
-        data["random_tile_count"] = len(destination.random_tiles)
-        return data
-
+def write_json(
+    destinations: list[Destination],
+    output: Path,
+    authoritative_count: int,
+    skipped_no_warp_symbols: list[str],
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(
             {
+                "authoritative_count": authoritative_count,
+                "destination_policy": "encounter maps with incoming game warp anchors only",
                 "expected_count": len(destinations),
-                "random_tile_predicate": RANDOM_TILE_PREDICATE,
-                "destinations": [json_destination(destination) for destination in destinations],
+                "skipped_no_warp_count": len(skipped_no_warp_symbols),
+                "skipped_no_warp_symbols": skipped_no_warp_symbols,
+                "destinations": [destination.__dict__ for destination in destinations],
             },
             indent=2,
             sort_keys=True,
@@ -904,8 +392,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--maps-header", type=Path, default=Path("include/constants/maps.h"))
     parser.add_argument("--data-header", type=Path, default=Path("include/overworld_wild_behavior_data.h"))
     parser.add_argument("--arm9", type=Path, default=Path("base/arm9.bin"))
-    parser.add_argument("--matrix-narc", type=Path, default=Path("base/root/a/0/4/1"))
-    parser.add_argument("--land-narc", type=Path, default=Path("base/root/a/0/6/5"))
     parser.add_argument("--event-narc", type=Path, default=Path("base/root/a/0/3/2"))
     parser.add_argument("--c-output", type=Path, default=Path("src/field/map_teleport_encounter_destinations.c"))
     parser.add_argument("--json-output", type=Path, default=Path("documentation/verification/encounter_map_teleport_destinations.json"))
@@ -920,131 +406,49 @@ def main() -> int:
     if len(entries) != expected_count:
         raise ValueError(f"expected {expected_count} authoritative maps, got {len(entries)}")
 
-    required_files = [args.arm9, args.matrix_narc, args.land_narc, args.event_narc]
+    required_files = [args.arm9, args.event_narc]
     missing_files = [str(path) for path in required_files if not path.is_file()]
     if missing_files:
         raise FileNotFoundError(f"missing extracted ROM inputs: {', '.join(missing_files)}")
 
     arm9 = args.arm9.read_bytes()
-    matrix_narc = ndspy.narc.NARC.fromFile(args.matrix_narc)
-    land_narc = ndspy.narc.NARC.fromFile(args.land_narc)
     event_narc = ndspy.narc.NARC.fromFile(args.event_narc)
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]] = {}
-    permission_cache: dict[int, tuple[int, ...]] = {}
     destinations: list[Destination] = []
-    missing: list[str] = []
+    skipped_no_warps: list[str] = []
+    target_map_ids = {map_id for _symbol, map_id, _data_id in entries}
+    incoming_warps = build_incoming_warps(
+        maps=maps,
+        arm9=arm9,
+        event_narc=event_narc,
+        target_map_ids=target_map_ids,
+    )
 
     for symbol, map_id, data_id in entries:
-        source_symbol = FALLBACK_STAMPS.get(symbol, symbol)
-        source_map_id = maps[source_symbol]
-        source = "derived" if source_symbol == symbol else f"fallback:{source_symbol}"
-        random_candidates = collect_land_candidates(
-            source_map_id=source_map_id,
-            source=source,
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache=matrix_cache,
-            permission_cache=permission_cache,
+        header = read_header(arm9, map_id)
+        destination = choose_warp_destination(
+            symbol=symbol,
+            map_id=map_id,
+            data_id=data_id,
+            target_event_file_id=header.event_file_id,
+            incoming_warps=incoming_warps,
         )
-        if symbol in VERIFIED_DESTINATIONS:
-            x, y = VERIFIED_DESTINATIONS[symbol]
-            destination = choose_fixed_destination(
-                symbol=symbol,
-                map_id=map_id,
-                data_id=data_id,
-                source=f"verified:{source}",
-                source_map_id=source_map_id,
-                x=x,
-                y=y,
-                matrix_narc=matrix_narc,
-                land_narc=land_narc,
-                event_narc=event_narc,
-                arm9=arm9,
-                matrix_cache=matrix_cache,
-                permission_cache=permission_cache,
-                random_candidates=random_candidates,
-            )
-            if not destination.random_tiles:
-                destination = choose_destination(
-                    symbol=symbol,
-                    map_id=map_id,
-                    data_id=data_id,
-                    source=f"verified-alternate:{source}",
-                    source_map_id=source_map_id,
-                    matrix_narc=matrix_narc,
-                    land_narc=land_narc,
-                    event_narc=event_narc,
-                    arm9=arm9,
-                    matrix_cache=matrix_cache,
-                    permission_cache=permission_cache,
-                    random_candidates=random_candidates,
-                )
-        else:
-            destination = choose_destination(
-                symbol=symbol,
-                map_id=map_id,
-                data_id=data_id,
-                source=source,
-                source_map_id=source_map_id,
-                matrix_narc=matrix_narc,
-                land_narc=land_narc,
-                event_narc=event_narc,
-                arm9=arm9,
-                matrix_cache=matrix_cache,
-                permission_cache=permission_cache,
-                random_candidates=random_candidates,
-            )
         if destination is None:
-            missing.append(symbol)
+            skipped_no_warps.append(symbol)
         else:
-            destination = compact_cross_map_destination(
-                destination,
-                source_map_id=source_map_id,
-                source=source,
-                matrix_narc=matrix_narc,
-                land_narc=land_narc,
-                event_narc=event_narc,
-                arm9=arm9,
-                matrix_cache=matrix_cache,
-                permission_cache=permission_cache,
-            )
             destinations.append(destination)
 
-    if missing:
-        raise RuntimeError(f"no safe destination candidates for: {', '.join(missing)}")
-    if len(destinations) != expected_count:
-        raise RuntimeError(f"generated {len(destinations)} destinations, expected {expected_count}")
-    missing_random = [
-        destination.symbol
-        for destination in destinations
-        if not destination.random_tiles
-    ]
-    if missing_random:
-        raise RuntimeError(
-            "no random loaded-window candidates for: "
-            + ", ".join(missing_random)
-        )
+    if not destinations:
+        raise RuntimeError("no encounter maps had incoming warp anchors")
 
     write_c(destinations, args.c_output)
-    write_json(destinations, args.json_output)
+    write_json(destinations, args.json_output, expected_count, skipped_no_warps)
     print(
         json.dumps(
             {
-                "expected_count": expected_count,
+                "authoritative_count": expected_count,
                 "generated_count": len(destinations),
-                "fallbacks": {
-                    destination.symbol: destination.source
-                    for destination in destinations
-                    if destination.source.startswith("fallback:")
-                },
-                "random_tile_alternate_count": sum(
-                    1 for destination in destinations if len(destination.random_tiles) > 1
-                ),
-                "random_tile_max_count": max(
-                    len(destination.random_tiles) for destination in destinations
-                ),
+                "skipped_no_warp_count": len(skipped_no_warps),
+                "skipped_no_warp_symbols": skipped_no_warps,
                 "c_output": str(args.c_output),
                 "json_output": str(args.json_output),
             },

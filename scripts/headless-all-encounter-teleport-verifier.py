@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify L+R teleport destinations for every authoritative encounter map."""
+"""Verify L+R warp-backed encounter map teleport destinations."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ DEBUG_DESTINATION_INDEX_NONE = 0xFFFF
 ENCOUNTER_DESTINATION_ENTRY_ADDR = 0x023C8034
 ENCOUNTER_DESTINATION_MAGIC = 0x4D544544
 ENCOUNTER_DESTINATION_VERSION = 1
+C_DESTINATION_TABLE_PATH = Path("src/field/map_teleport_encounter_destinations.c")
 DEFAULT_EXPECT_COUNT = 150
 FIELD_OVERLAY_MAX_SIZE = 0x5000
 FIELD_OVERLAY_SIZE_PATHS = (
@@ -58,6 +59,7 @@ def ensure_repo_venv() -> None:
 ensure_repo_venv()
 
 import generate_encounter_map_teleport_destinations as generator  # type: ignore  # noqa: E402
+from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
 
 
 def import_script(path: Path, name: str) -> Any:
@@ -69,15 +71,7 @@ def import_script(path: Path, name: str) -> Any:
     return module
 
 
-if "--static-only" in sys.argv:
-    headless = None
-else:
-    from desmume.emulator import DeSmuME  # type: ignore  # noqa: E402
-
-    headless = import_script(
-        REPO_ROOT / "scripts/headless-overworld-test.py",
-        "headless_overworld_test",
-    )
+headless = import_script(REPO_ROOT / "scripts/headless-overworld-test.py", "headless_overworld_test")
 
 
 def repo_path(path: str | Path) -> Path:
@@ -221,7 +215,13 @@ def request_count_changed(before: int, after: int) -> bool:
     return before != after
 
 
+def destination_uses_warp_id(destination: dict[str, Any]) -> bool:
+    return int(destination["y"]) == generator.WARP_ID_Y_SENTINEL
+
+
 def status_matches_destination(destination: dict[str, Any], status: dict[str, int]) -> bool:
+    if destination_uses_warp_id(destination):
+        return status["map_id"] == int(destination["map_id"])
     return (
         status["map_id"] == int(destination["map_id"])
         and status["x"] == int(destination["x"])
@@ -264,271 +264,13 @@ def nonblack_pixel_count(emu: DeSmuME) -> int:
     return sum(1 for red, green, blue in pixels if red + green + blue > 24)
 
 
-def load_destinations(path: Path) -> list[dict[str, Any]]:
+def load_destination_payload(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text())
     destinations = data.get("destinations", [])
     if not isinstance(destinations, list):
         raise ValueError(f"{path} does not contain a destinations list")
-    return destinations
-
-
-def packed_destination_word(destination: dict[str, Any]) -> int:
-    warp_id = destination.get("warp_id")
-    warp_code = 0 if warp_id is None else int(warp_id) + 1
-    return (
-        (int(destination["map_id"]) << generator.PACKED_MAP_SHIFT)
-        | (int(destination["x"]) << generator.PACKED_X_SHIFT)
-        | (int(destination["y"]) << generator.PACKED_Y_SHIFT)
-        | (warp_code << generator.PACKED_WARP_SHIFT)
-    )
-
-
-def static_fallback_map_id(destination: dict[str, Any], maps: dict[str, int]) -> int:
-    match = re.search(r"fallback:(MAP_\w+)", str(destination.get("source", "")))
-    if match:
-        return maps[match.group(1)]
-    return int(destination["map_id"])
-
-
-def static_destination_audit(destinations: list[dict[str, Any]]) -> dict[str, Any]:
-    source = (REPO_ROOT / "src/field/map_teleport_encounter_destinations.c").read_text()
-    runtime_source = (REPO_ROOT / "src/field/map_teleport.c").read_text()
-    runtime_event_scan_detected = all(
-        token in runtime_source
-        for token in (
-            "num_warp_events",
-            "warp_events",
-            "num_coord_events",
-            "coord_events",
-        )
-    )
-    runtime_permission_active_callback_scan_detected = (
-        "MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET 0x60" in runtime_source
-        and "provider->getPermission(fieldSystem, x, y, permission)" in runtime_source
-        and "MAP_TELEPORT_PERMISSION_COORD" not in runtime_source
-        and "GetMetatilePermissionAt(" not in runtime_source
-    )
-    runtime_permission_high_bit_scan_detected = (
-        runtime_permission_active_callback_scan_detected
-        and "0x8000" in runtime_source
-    )
-    runtime_direct_encounter_selector_detected = (
-        "gMapTeleportPendingRandomLoadedLandMapId" not in runtime_source
-        and "randomDestination.x += gf_rand() & 1" in runtime_source
-        and "MAP_TELEPORT_WARP_ID_MASK" in runtime_source
-        and "destination->mapId != fieldSystem->location->mapId" not in runtime_source
-    )
-    runtime_current_map_helper_detected = (
-        "MapTeleport_TrySelectRandomLoadedLandTile" in runtime_source
-        and "MapTeleport_OverlayIsLoadedLandTileWithPermission(" in runtime_source
-        and "permission != 0" in runtime_source
-        and "MapTeleport_IsGeneratedLoadedLandTile" not in runtime_source
-        and "MapTeleport_TryGetCurrentMapGeneratedLandPair" not in runtime_source
-    )
-    runtime_same_cell_clamp_detected = (
-        "centerX = fieldSystem->location->x" in runtime_source
-        and "centerY = fieldSystem->location->z" in runtime_source
-        and "centerX & ~31" in runtime_source
-        and "centerY & ~31" in runtime_source
-        and "+ 32" in runtime_source
-    )
-    table_rows = re.findall(
-        r"0x([0-9A-Fa-f]{8})u,\s*//\s*(MAP_\w+)\s+(\d+),(\d+)",
-        source,
-    )
-    mismatches: list[dict[str, Any]] = []
-    random_evidence_mismatches: list[dict[str, Any]] = []
-    compact_pair_mismatches: list[dict[str, Any]] = []
-    compact_pairs: list[dict[str, Any]] = []
-    event_blocked_low_land_hazards: list[dict[str, Any]] = []
-    maps = generator.read_map_constants(REPO_ROOT / "include/constants/maps.h")
-    matrix_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/4/1")
-    land_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/6/5")
-    event_narc = generator.ndspy.narc.NARC.fromFile(REPO_ROOT / "base/root/a/0/3/2")
-    arm9 = (REPO_ROOT / "base/arm9.bin").read_bytes()
-    matrix_cache: dict[int, tuple[int, int, tuple[int, ...], tuple[int, ...]]] = {}
-    permission_cache: dict[int, tuple[int, ...]] = {}
-    for index, destination in enumerate(destinations):
-        if index >= len(table_rows):
-            mismatches.append({"index": index, "reason": "missing packed C row"})
-            continue
-        packed_hex, symbol, x, y = table_rows[index]
-        expected = packed_destination_word(destination)
-        actual = int(packed_hex, 16)
-        if (
-            actual != expected
-            or symbol != destination["symbol"]
-            or int(x) != int(destination["x"])
-            or int(y) != int(destination["y"])
-        ):
-            mismatches.append(
-                {
-                    "index": index,
-                    "symbol": destination["symbol"],
-                    "expected_packed": f"0x{expected:08X}",
-                    "actual_packed": f"0x{actual:08X}",
-                    "actual_symbol": symbol,
-                    "actual_x": int(x),
-                    "actual_y": int(y),
-                }
-            )
-        random_tiles = generator.loaded_window_random_tile_candidates(
-            center_x=int(destination["x"]),
-            center_y=int(destination["y"]),
-            loaded_map_id=int(destination["map_id"]),
-            fallback_map_id=static_fallback_map_id(destination, maps),
-            source="static-audit",
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache=matrix_cache,
-            permission_cache=permission_cache,
-        )
-        strict_tiles_with_center = generator.loaded_window_random_tile_candidates(
-            center_x=int(destination["x"]),
-            center_y=int(destination["y"]),
-            loaded_map_id=int(destination["map_id"]),
-            fallback_map_id=static_fallback_map_id(destination, maps),
-            source="static-audit-compact-pair",
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache=matrix_cache,
-            permission_cache=permission_cache,
-            exclude_center=False,
-        )
-        loose_random_tiles = generator.loaded_window_random_tile_candidates(
-            center_x=int(destination["x"]),
-            center_y=int(destination["y"]),
-            loaded_map_id=int(destination["map_id"]),
-            fallback_map_id=static_fallback_map_id(destination, maps),
-            source="static-audit-runtime-low-land",
-            matrix_narc=matrix_narc,
-            land_narc=land_narc,
-            event_narc=event_narc,
-            arm9=arm9,
-            matrix_cache=matrix_cache,
-            permission_cache=permission_cache,
-            exclude_event_blocked=False,
-        )
-        strict_coordinates = {
-            (int(tile["x"]), int(tile["y"]))
-            for tile in strict_tiles_with_center
-        }
-        compact_pair = {
-            (int(destination["x"]), int(destination["y"])),
-            (int(destination["x"]) + 1, int(destination["y"])),
-        }
-        if not compact_pair <= strict_coordinates:
-            compact_pair_mismatches.append(
-                {
-                    "index": index,
-                    "symbol": destination["symbol"],
-                    "compact_pair": [
-                        {"x": x, "y": y}
-                        for x, y in sorted(compact_pair)
-                    ],
-                }
-            )
-        else:
-            compact_pairs.append(
-                {
-                    "index": index,
-                    "symbol": destination["symbol"],
-                    "map_id": destination["map_id"],
-                    "pair": [
-                        {"x": x, "y": y}
-                        for x, y in sorted(compact_pair)
-                    ],
-                }
-            )
-        event_hazards = [
-            tile
-            for tile in loose_random_tiles
-            if (int(tile["x"]), int(tile["y"])) not in strict_coordinates
-        ]
-        if event_hazards:
-            event_blocked_low_land_hazards.append(
-                {
-                    "index": index,
-                    "symbol": destination["symbol"],
-                    "count": len(event_hazards),
-                    "sample": [
-                        {"x": int(tile["x"]), "y": int(tile["y"])}
-                        for tile in event_hazards[:8]
-                    ],
-                }
-            )
-        evidence = generator.random_tile_evidence(random_tiles)
-        if (
-            int(destination.get("random_tile_count", 0)) != len(random_tiles)
-            or destination.get("random_tile_evidence") != evidence
-        ):
-            random_evidence_mismatches.append(
-                {
-                    "index": index,
-                    "symbol": destination["symbol"],
-                    "stored_count": destination.get("random_tile_count"),
-                    "actual_count": len(random_tiles),
-                    "stored_evidence": destination.get("random_tile_evidence"),
-                    "actual_evidence": evidence,
-                }
-            )
-    zero_random = [
-        {
-            "index": index,
-            "symbol": destination["symbol"],
-            "map_id": destination["map_id"],
-            "x": destination["x"],
-            "y": destination["y"],
-        }
-        for index, destination in enumerate(destinations)
-        if int(destination.get("random_tile_count", 0)) == 0
-    ]
-    return {
-        "c_table_count": len(table_rows),
-        "json_count": len(destinations),
-        "packed_table_matches_json": not mismatches
-        and len(table_rows) == len(destinations),
-        "packed_table_mismatches": mismatches,
-        "zero_random_tile_count": len(zero_random),
-        "zero_random_tile_destinations": zero_random,
-        "random_evidence_mismatch_count": len(random_evidence_mismatches),
-        "random_evidence_mismatches": random_evidence_mismatches,
-        "compact_pair_mismatch_count": len(compact_pair_mismatches),
-        "compact_pair_mismatches": compact_pair_mismatches,
-        "compact_pair_coverage_count": len(compact_pairs),
-        "compact_pair_t24": next(
-            (pair for pair in compact_pairs if pair["symbol"] == "MAP_T24"),
-            None,
-        ),
-        "runtime_event_scan_detected": runtime_event_scan_detected,
-        "runtime_permission_active_callback_scan_detected": runtime_permission_active_callback_scan_detected,
-        "runtime_permission_high_bit_scan_detected": runtime_permission_high_bit_scan_detected,
-        "runtime_direct_encounter_selector_detected": runtime_direct_encounter_selector_detected,
-        "runtime_current_map_helper_detected": runtime_current_map_helper_detected,
-        "runtime_same_cell_clamp_detected": runtime_same_cell_clamp_detected,
-        "event_blocked_low_land_hazard_window_count": len(event_blocked_low_land_hazards),
-        "event_blocked_low_land_hazard_tile_count": sum(
-            item["count"] for item in event_blocked_low_land_hazards
-        ),
-        "event_blocked_low_land_hazards": event_blocked_low_land_hazards,
-        "ok": len(table_rows) == len(destinations)
-        and not mismatches
-        and not zero_random
-        and not random_evidence_mismatches
-        and not compact_pair_mismatches
-        and runtime_event_scan_detected
-        and runtime_permission_high_bit_scan_detected
-        and runtime_direct_encounter_selector_detected
-        and runtime_current_map_helper_detected
-        and runtime_same_cell_clamp_detected,
-        "event_blocked_hazards_runtime_rejected": runtime_event_scan_detected,
-        "high_bit_permissions_runtime_rejected": runtime_permission_high_bit_scan_detected,
-        "same_cell_runtime_selector_clamp_detected": runtime_same_cell_clamp_detected,
-    }
+    data["destinations"] = destinations
+    return data
 
 
 def authoritative_entries() -> list[tuple[str, int, int]]:
@@ -538,6 +280,279 @@ def authoritative_entries() -> list[tuple[str, int, int]]:
         REPO_ROOT / "include/overworld_wild_behavior_data.h",
         maps,
     )
+
+
+def warp_backing_failures(destinations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    arm9_path = REPO_ROOT / "base/arm9.bin"
+    event_narc_path = REPO_ROOT / "base/root/a/0/3/2"
+    if not arm9_path.is_file() or not event_narc_path.is_file():
+        return [
+            {
+                "reason": "missing extracted ROM inputs",
+                "arm9": str(arm9_path),
+                "event_narc": str(event_narc_path),
+            }
+        ]
+
+    arm9 = arm9_path.read_bytes()
+    event_narc = generator.ndspy.narc.NARC.fromFile(event_narc_path)
+    maps = generator.read_map_constants(REPO_ROOT / "include/constants/maps.h")
+    target_map_ids = {int(destination["map_id"]) for destination in destinations}
+    incoming_warps = generator.build_incoming_warps(
+        maps=maps,
+        arm9=arm9,
+        event_narc=event_narc,
+        target_map_ids=target_map_ids,
+    )
+    failures: list[dict[str, Any]] = []
+    for destination in destinations:
+        map_id = int(destination["map_id"])
+        header = generator.read_header(arm9, map_id)
+        warp_id = int(destination["x"])
+        if int(destination.get("event_file_id", header.event_file_id)) != header.event_file_id:
+            failures.append(
+                {
+                    "symbol": destination.get("symbol"),
+                    "map_id": map_id,
+                    "reason": "event file id mismatch",
+                    "json_event_file_id": destination.get("event_file_id"),
+                    "actual_event_file_id": header.event_file_id,
+                }
+            )
+        if not destination_uses_warp_id(destination):
+            failures.append(
+                {
+                    "symbol": destination.get("symbol"),
+                    "map_id": map_id,
+                    "reason": "destination is not encoded as a warp id",
+                    "x": destination.get("x"),
+                    "y": destination.get("y"),
+                }
+            )
+            continue
+        if int(destination.get("warp_index", -1)) != warp_id:
+            failures.append(
+                {
+                    "symbol": destination.get("symbol"),
+                    "map_id": map_id,
+                    "reason": "warp index metadata does not match encoded warp id",
+                    "warp_index": destination.get("warp_index"),
+                    "encoded_warp_id": warp_id,
+                }
+            )
+        matches = [
+            incoming
+            for incoming in incoming_warps.get(map_id, [])
+            if incoming.warp.dest_anchor == warp_id
+        ]
+        if not matches:
+            failures.append(
+                {
+                    "symbol": destination.get("symbol"),
+                    "map_id": map_id,
+                    "warp_id": warp_id,
+                    "reason": "destination warp id is not backed by an incoming warp",
+                }
+            )
+            continue
+        if not any(
+            incoming.source_map_id == int(destination.get("source_map_id", -1))
+            and incoming.source_event_file_id == int(destination.get("source_event_file_id", -1))
+            and incoming.warp.index == int(destination.get("source_warp_index", -1))
+            and incoming.warp.x == int(destination.get("source_warp_x", -1))
+            and incoming.warp.y == int(destination.get("source_warp_y", -1))
+            and incoming.warp.dest_header == map_id
+            and incoming.warp.dest_anchor == warp_id
+            for incoming in matches
+        ):
+            failures.append(
+                {
+                    "symbol": destination.get("symbol"),
+                    "map_id": map_id,
+                    "warp_id": warp_id,
+                    "reason": "incoming warp metadata does not match source event data",
+                }
+            )
+    return failures
+
+
+def skipped_no_warp_failures(
+    authoritative: list[tuple[str, int, int]],
+    skipped_symbols: list[str],
+) -> list[dict[str, Any]]:
+    symbol_to_map = {symbol: map_id for symbol, map_id, _data_id in authoritative}
+    arm9_path = REPO_ROOT / "base/arm9.bin"
+    event_narc_path = REPO_ROOT / "base/root/a/0/3/2"
+    if not arm9_path.is_file() or not event_narc_path.is_file():
+        return []
+
+    arm9 = arm9_path.read_bytes()
+    event_narc = generator.ndspy.narc.NARC.fromFile(event_narc_path)
+    maps = generator.read_map_constants(REPO_ROOT / "include/constants/maps.h")
+    incoming_warps = generator.build_incoming_warps(
+        maps=maps,
+        arm9=arm9,
+        event_narc=event_narc,
+        target_map_ids=set(symbol_to_map.values()),
+    )
+    failures: list[dict[str, Any]] = []
+    for symbol in skipped_symbols:
+        if symbol not in symbol_to_map:
+            failures.append({"symbol": symbol, "reason": "skipped symbol is not authoritative"})
+            continue
+        map_id = symbol_to_map[symbol]
+        warps = incoming_warps.get(map_id, [])
+        if warps:
+            failures.append(
+                {
+                    "symbol": symbol,
+                    "map_id": map_id,
+                    "reason": "skipped map has incoming warp anchors",
+                    "warp_count": len(warps),
+                }
+            )
+    return failures
+
+
+def decode_c_packed_destination(packed: int) -> dict[str, int]:
+    return {
+        "map_id": (packed >> generator.PACKED_MAP_SHIFT) & (generator.PACKED_MAP_LIMIT - 1),
+        "x": (packed >> generator.PACKED_X_SHIFT) & (generator.PACKED_X_LIMIT - 1),
+        "y": (packed >> generator.PACKED_Y_SHIFT) & (generator.PACKED_Y_LIMIT - 1),
+        "direction": 1,
+    }
+
+
+def c_table_failures(destinations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    path = repo_path(C_DESTINATION_TABLE_PATH)
+    if not path.is_file():
+        return [{"reason": "generated C table is missing", "path": str(path)}]
+
+    source = path.read_text()
+    failures: list[dict[str, Any]] = []
+    count_match = re.search(
+        r"#define\s+MAP_TELEPORT_ENCOUNTER_DESTINATION_COUNT\s+(\d+)\b",
+        source,
+    )
+    if count_match is None:
+        failures.append({"reason": "generated C table count define is missing"})
+        expected_count = None
+    else:
+        expected_count = int(count_match.group(1))
+        if expected_count != len(destinations):
+            failures.append(
+                {
+                    "reason": "generated C table count mismatch",
+                    "c_count": expected_count,
+                    "json_count": len(destinations),
+                }
+            )
+
+    body_match = re.search(
+        r"sMapTeleportEncounterDestinations\[[^\]]+\]\s*=\s*\{(?P<body>.*?)\};",
+        source,
+        re.S,
+    )
+    if body_match is None:
+        failures.append({"reason": "generated C table initializer is missing"})
+        return failures
+
+    c_rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(body_match.group("body").splitlines(), start=1):
+        match = re.search(
+            r"0x([0-9A-Fa-f]+)u,\s*//\s*(MAP_\w+)\s+warp-id\s+(-?\d+)"
+            r"\s+via map\s+(-?\d+)\s+warp\s+(-?\d+)\s+at\s+(-?\d+),(-?\d+)",
+            line,
+        )
+        if match is None:
+            if line.strip():
+                failures.append(
+                    {
+                        "reason": "unparsed generated C table row",
+                        "line": line_number,
+                        "text": line.strip(),
+                    }
+                )
+            continue
+        packed = int(match.group(1), 16)
+        decoded = decode_c_packed_destination(packed)
+        c_rows.append(
+            {
+                **decoded,
+                "symbol_comment": match.group(2),
+                "warp_index_comment": int(match.group(3)),
+                "source_map_id_comment": int(match.group(4)),
+                "source_warp_index_comment": int(match.group(5)),
+                "source_warp_x_comment": int(match.group(6)),
+                "source_warp_y_comment": int(match.group(7)),
+            }
+        )
+
+    if expected_count is not None and len(c_rows) != expected_count:
+        failures.append(
+            {
+                "reason": "generated C table row count mismatch",
+                "c_rows": len(c_rows),
+                "c_count": expected_count,
+            }
+        )
+    if len(c_rows) != len(destinations):
+        failures.append(
+            {
+                "reason": "generated C table row count differs from JSON",
+                "c_rows": len(c_rows),
+                "json_count": len(destinations),
+            }
+        )
+
+    for index, (c_row, destination) in enumerate(zip(c_rows, destinations)):
+        expected = {
+            "map_id": int(destination["map_id"]),
+            "x": int(destination["x"]),
+            "y": int(destination["y"]),
+            "direction": int(destination["direction"]),
+        }
+        actual = {
+            "map_id": c_row["map_id"],
+            "x": c_row["x"],
+            "y": c_row["y"],
+            "direction": c_row["direction"],
+        }
+        if actual != expected:
+            failures.append(
+                {
+                    "reason": "generated C packed destination differs from JSON",
+                    "index": index,
+                    "symbol": destination.get("symbol"),
+                    "actual": actual,
+                    "expected": expected,
+                }
+            )
+        if c_row["symbol_comment"] != destination.get("symbol"):
+            failures.append(
+                {
+                    "reason": "generated C symbol comment differs from JSON",
+                    "index": index,
+                    "c_symbol": c_row["symbol_comment"],
+                    "json_symbol": destination.get("symbol"),
+                }
+            )
+        if (
+            c_row["warp_index_comment"] != int(destination.get("warp_index", -1))
+            or c_row["source_map_id_comment"] != int(destination.get("source_map_id", -1))
+            or c_row["source_warp_index_comment"] != int(destination.get("source_warp_index", -1))
+            or c_row["source_warp_x_comment"] != int(destination.get("source_warp_x", -1))
+            or c_row["source_warp_y_comment"] != int(destination.get("source_warp_y", -1))
+        ):
+            failures.append(
+                {
+                    "reason": "generated C row comment metadata differs from JSON",
+                    "index": index,
+                    "symbol": destination.get("symbol"),
+                }
+            )
+
+    return failures
 
 
 def result_failure_reason(
@@ -561,7 +576,10 @@ def result_failure_reason(
         )
     if status["map_id"] != int(destination["map_id"]):
         return f"map mismatch: got {status['map_id']}"
-    if status["x"] != int(destination["x"]) or status["y"] != int(destination["y"]):
+    if (
+        not destination_uses_warp_id(destination)
+        and (status["x"] != int(destination["x"]) or status["y"] != int(destination["y"]))
+    ):
         return f"position mismatch: got {status['x']},{status['y']}"
     if nonblack_pixels < min_nonblack_pixels:
         return f"screenshot looked black/unloaded: {nonblack_pixels} nonblack pixels"
@@ -613,12 +631,9 @@ def wait_for_request_outcome(
         )
         if request_seen and observed["request_result"] != MAP_TELEPORT_RESULT_OK:
             return observed, frames_waited
-        if (
-            request_seen
-            and observed["ready"] != 0
-            and observed["map_id"] == int(destination["map_id"])
-            and observed["x"] == int(destination["x"])
-            and observed["y"] == int(destination["y"])
+        if request_seen and observed["ready"] != 0 and status_matches_destination(
+            destination,
+            observed,
         ):
             return observed, frames_waited
         if frames_waited == args.max_wait_frames:
@@ -900,7 +915,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("documentation/verification/all_encounter_teleport_verifier.jsonl"),
     )
-    parser.add_argument("--expect-count", type=int, default=DEFAULT_EXPECT_COUNT)
+    parser.add_argument("--expect-count", type=int)
     parser.add_argument("--boot-frames", type=int, default=420)
     parser.add_argument("--ready-a-taps", type=int, default=10)
     parser.add_argument("--tap-hold-frames", type=int, default=24)
@@ -915,7 +930,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-interval", type=int, default=12)
     parser.add_argument("--min-nonblack-pixels", type=int, default=1000)
     parser.add_argument("--limit", type=int, help="Debug-only map limit; any value below expected count fails summary.")
-    parser.add_argument("--static-only", action="store_true")
     parser.add_argument("--worker-index", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--worker-output", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--worker-timeout-seconds", type=int, default=120)
@@ -925,29 +939,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
-
-    destinations = load_destinations(repo_path(args.destinations))
-    authoritative = authoritative_entries()
-    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
-    destination_symbols = [destination["symbol"] for destination in destinations]
-    static_audit = static_destination_audit(destinations)
-    if args.static_only:
-        summary = {
-            "destinations": str(repo_path(args.destinations)),
-            "expected_count": args.expect_count,
-            "authoritative_count": len(authoritative),
-            "generated_destination_count": len(destinations),
-            "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
-            "static_destination_audit": static_audit,
-            "passed": (
-                len(authoritative) == args.expect_count
-                and len(destinations) == args.expect_count
-                and authoritative_symbols == destination_symbols
-                and static_audit["ok"]
-            ),
-        }
-        print(json.dumps(summary, indent=2, sort_keys=True))
-        return 0 if summary["passed"] else 1
 
     rom = repo_path(args.rom)
     if not rom.is_file():
@@ -962,6 +953,25 @@ def main() -> int:
         save_path = headless.find_dsv(args.dsv)
         raw_save = headless.extract_raw_save(save_path)
         save_kind = "dsv"
+
+    destination_payload = load_destination_payload(repo_path(args.destinations))
+    destinations = destination_payload["destinations"]
+    expected_count = (
+        args.expect_count
+        if args.expect_count is not None
+        else int(destination_payload.get("expected_count", DEFAULT_EXPECT_COUNT))
+    )
+    args.expect_count = expected_count
+    authoritative = authoritative_entries()
+    authoritative_symbols = [symbol for symbol, _map_id, _data_id in authoritative]
+    destination_symbols = [destination["symbol"] for destination in destinations]
+    skipped_no_warp_symbols = [
+        str(symbol) for symbol in destination_payload.get("skipped_no_warp_symbols", [])
+    ]
+    expected_destination_symbols = [
+        symbol for symbol in authoritative_symbols if symbol not in set(skipped_no_warp_symbols)
+    ]
+    destination_symbols_match_expected = destination_symbols == expected_destination_symbols
 
     if args.worker_index is not None:
         if args.worker_output is None:
@@ -984,7 +994,6 @@ def main() -> int:
         args.worker_output.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
         return 0
 
-    expected_count = args.expect_count
     results: list[dict[str, Any]] = []
     entry: dict[str, int] | None = None
     ready_frames = 0
@@ -1036,6 +1045,9 @@ def main() -> int:
     )
     all_passed_rows_have_evidence = passed_without_evidence == 0
     field_overlay_size = field_overlay_size_report()
+    warp_failures = warp_backing_failures(destinations)
+    no_warp_skip_failures = skipped_no_warp_failures(authoritative, skipped_no_warp_symbols)
+    generated_c_table_failures = c_table_failures(destinations)
     summary = {
         "rom": str(rom),
         "save": str(save_path),
@@ -1044,6 +1056,8 @@ def main() -> int:
         "expected_count": expected_count,
         "authoritative_count": len(authoritative),
         "generated_destination_count": len(destinations),
+        "skipped_no_warp_count": len(skipped_no_warp_symbols),
+        "skipped_no_warp_symbols": skipped_no_warp_symbols,
         "runtime_checked_count": len(results),
         "runtime_pass_count": passed,
         "runtime_fail_count": len(failures),
@@ -1053,20 +1067,25 @@ def main() -> int:
         "stale_match_rejected_count": stale_match_rejected,
         "all_passed_rows_have_evidence": all_passed_rows_have_evidence,
         "field_overlay_size": field_overlay_size,
-        "static_destination_audit": static_audit,
         "ready_frames": ready_frames,
         "elapsed_seconds": round(time.monotonic() - started_at, 3),
-        "authoritative_symbols_match_destinations": authoritative_symbols == destination_symbols,
+        "destination_symbols_match_expected": destination_symbols_match_expected,
+        "all_destinations_warp_backed": not warp_failures,
+        "warp_backing_failures": warp_failures,
+        "skipped_no_warp_failures": no_warp_skip_failures,
+        "generated_c_table_matches_json": not generated_c_table_failures,
+        "generated_c_table_failures": generated_c_table_failures,
         "destination_entry": entry,
         "passed": (
-            len(authoritative) == expected_count
-            and len(destinations) == expected_count
+            len(destinations) == expected_count
             and len(results) == expected_count
             and passed == expected_count
             and all_passed_rows_have_evidence
             and field_overlay_size["ok"]
-            and static_audit["ok"]
-            and authoritative_symbols == destination_symbols
+            and destination_symbols_match_expected
+            and not warp_failures
+            and not no_warp_skip_failures
+            and not generated_c_table_failures
             and entry["magic"] == ENCOUNTER_DESTINATION_MAGIC
             and entry["version"] == ENCOUNTER_DESTINATION_VERSION
             and entry["count"] == expected_count

@@ -2,38 +2,33 @@
 
 #include "../../include/constants/buttons.h"
 #include "../../include/constants/maps.h"
+#include "../../include/constants/sndseq.h"
+#include "../../include/io_reg.h"
 #include "../../include/map_events_internal.h"
-#include "../../include/overworld_wild_behavior_data.h"
 #include "../../include/script.h"
+#include "../../include/sound.h"
 #include "../../include/task.h"
 
-#define MAP_TELEPORT_DEBUG_TASK_PRIORITY 90
+#define MAP_TELEPORT_PENDING_TIMEOUT_FRAMES 240
 #define MAP_TELEPORT_DEBUG_KEYS (PAD_BUTTON_L | PAD_BUTTON_R)
 #define MAP_TELEPORT_TILE_HEADBUTT 6
-#define MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET 0x60
-#define MAP_TELEPORT_WARP_ID_SHIFT 8
-#define MAP_TELEPORT_WARP_ID_MASK 0xFF00
-#define MAP_TELEPORT_DIRECTION_MASK 0x0303
-
-typedef BOOL (*MapTeleportGetPermissionFunc)(
-    FieldSystem *fieldSystem,
-    int x,
-    int y,
-    u16 *permission);
-
-typedef struct MapTeleportPermissionProvider {
-    void *unk0;
-    MapTeleportGetPermissionFunc getPermission;
-} MapTeleportPermissionProvider;
+#define MAP_TELEPORT_BLACK_TRANSITION_SE SEQ_SE_DP_TELE
+#define MAP_TELEPORT_BLACK_FADE_STEPS 1
+#define MAP_TELEPORT_MASTER_BRIGHT_DARKEN 0x8000
+#define MAP_TELEPORT_MASTER_BRIGHT_MAX 16
 
 typedef struct MapTeleportPlainWarpTaskEnv {
     u32 state;
     Location location;
 } MapTeleportPlainWarpTaskEnv;
 
-typedef struct MapTeleportDebugTaskEnv {
-    u8 wasHeld;
-} MapTeleportDebugTaskEnv;
+typedef enum MapTeleportTransitionState {
+    MAP_TELEPORT_TRANSITION_INACTIVE = 0,
+    MAP_TELEPORT_TRANSITION_FADE_OUT,
+    MAP_TELEPORT_TRANSITION_START_WARP,
+    MAP_TELEPORT_TRANSITION_WAIT_WARP,
+    MAP_TELEPORT_TRANSITION_FADE_IN,
+} MapTeleportTransitionState;
 
 TaskManager *LONG_CALL FieldSystem_CreateTask(
     FieldSystem *fieldSystem,
@@ -41,7 +36,17 @@ TaskManager *LONG_CALL FieldSystem_CreateTask(
     void *env);
 BOOL LONG_CALL Task_ScriptWarp(TaskManager *taskman);
 
-static SysTask *sMapTeleportDebugTask;
+static BOOL sMapTeleportRequestPending;
+static u8 sMapTeleportDebugWasHeld;
+static u16 sMapTeleportPendingFrames;
+static MapTeleportDestination sMapTeleportPendingDestination;
+
+static MapTeleportResult MapTeleport_OverlayRequest(
+    FieldSystem *fieldSystem,
+    const MapTeleportDestination *destination);
+static BOOL MapTeleport_StartPlainWarpTask(
+    FieldSystem *fieldSystem,
+    const MapTeleportDestination *destination);
 
 MapTeleportDestination gMapTeleportDebugDestination
     __attribute__((section(".map_teleport_debug_destination"), used)) = {
@@ -66,16 +71,9 @@ MapTeleportDebugStatus gMapTeleportDebugStatus
     MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE,
 };
 
-static void MapTeleport_PublishRequestResult(MapTeleportResult result)
+static BOOL MapTeleport_IsSurfBehavior(u8 behavior)
 {
-    if (result == MAP_TELEPORT_RESULT_FIELD_BUSY) {
-        return;
-    }
-
-    gMapTeleportRuntimeRequestResult = result;
-    gMapTeleportDebugStatus.requestResult = result;
-    gMapTeleportRuntimeRequestCount++;
-    gMapTeleportDebugStatus.requestCount = gMapTeleportRuntimeRequestCount;
+    return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
 }
 
 static BOOL MapTeleport_IsMapIdValid(u16 mapId)
@@ -85,8 +83,14 @@ static BOOL MapTeleport_IsMapIdValid(u16 mapId)
 
 static BOOL MapTeleport_IsDirectionValid(u16 direction)
 {
-    return (direction & ~MAP_TELEPORT_DIRECTION_MASK) == 0
-        && (direction & 3) <= MAP_TELEPORT_DIRECTION_EAST;
+    return direction <= MAP_TELEPORT_DIRECTION_EAST;
+}
+
+static BOOL MapTeleport_DestinationUsesWarpId(
+    const MapTeleportDestination *destination)
+{
+    return destination != NULL
+        && destination->y == MAP_TELEPORT_DESTINATION_WARP_ID_Y;
 }
 
 static BOOL MapTeleport_IsDestinationValid(const MapTeleportDestination *destination)
@@ -109,11 +113,165 @@ static BOOL MapTeleport_IsFieldStructReady(FieldSystem *fieldSystem)
     return TRUE;
 }
 
+static BOOL MapTeleport_CurrentLocationDiffersFromTemporaryReturn(
+    FieldSystem *fieldSystem,
+    const MapTeleportTemporaryReturnState *temporaryReturn)
+{
+    return fieldSystem->location->mapId != temporaryReturn->returnMapId
+        || fieldSystem->location->x != temporaryReturn->returnX
+        || fieldSystem->location->z != temporaryReturn->returnY;
+}
+
+static u16 MapTeleport_AbsDiffU16(u16 a, u16 b)
+{
+    return a > b ? a - b : b - a;
+}
+
+static void MapTeleport_ArmTemporaryReturn(
+    FieldSystem *fieldSystem,
+    const MapTeleportDestination *target,
+    MapTeleportTemporaryReturnState *temporaryReturn)
+{
+    if (target == NULL || temporaryReturn == NULL) {
+        return;
+    }
+
+    temporaryReturn->returnMapId = fieldSystem->location->mapId;
+    temporaryReturn->returnX = fieldSystem->location->x;
+    temporaryReturn->returnY = fieldSystem->location->z;
+    temporaryReturn->targetMapId = target->mapId;
+    temporaryReturn->lastX = 0;
+    temporaryReturn->lastY = 0;
+    temporaryReturn->returnDirection = fieldSystem->location->direction;
+    temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL;
+}
+
+static void MapTeleport_PlayBlackTransitionSE(void)
+{
+    GF_Snd_LoadSeqEx(
+        MAP_TELEPORT_BLACK_TRANSITION_SE,
+        NNS_SND_ARC_LOAD_ALL);
+    StopSE(MAP_TELEPORT_BLACK_TRANSITION_SE);
+    PlaySE(MAP_TELEPORT_BLACK_TRANSITION_SE);
+}
+
+static void MapTeleport_ConfirmTemporaryReturnArrival(
+    FieldSystem *fieldSystem,
+    MapTeleportTemporaryReturnState *temporaryReturn)
+{
+    if (temporaryReturn == NULL
+        || temporaryReturn->stepState
+            != MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL
+        || !MapTeleport_IsFieldStructReady(fieldSystem)) {
+        return;
+    }
+
+    if (fieldSystem->location->mapId != temporaryReturn->targetMapId
+        || !MapTeleport_CurrentLocationDiffersFromTemporaryReturn(
+            fieldSystem,
+            temporaryReturn)) {
+        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
+        return;
+    }
+
+    temporaryReturn->lastX = fieldSystem->location->x;
+    temporaryReturn->lastY = fieldSystem->location->z;
+    temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_STEPS + 1;
+}
+
+static BOOL MapTeleport_IsTemporaryReturnDestination(
+    const MapTeleportDestination *destination,
+    const MapTeleportTemporaryReturnState *temporaryReturn)
+{
+    return destination != NULL
+        && temporaryReturn != NULL
+        && !MapTeleport_DestinationUsesWarpId(destination)
+        && destination->mapId == temporaryReturn->returnMapId
+        && destination->x == temporaryReturn->returnX
+        && destination->y == temporaryReturn->returnY
+        && destination->direction == temporaryReturn->returnDirection;
+}
+
+static BOOL MapTeleport_TemporaryReturnBlocksRequest(
+    const MapTeleportDestination *destination)
+{
+    if (gMapTeleportTemporaryReturnState.stepState
+        <= MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL) {
+        return FALSE;
+    }
+
+    return !MapTeleport_IsTemporaryReturnDestination(
+        destination,
+        &gMapTeleportTemporaryReturnState);
+}
+
+static void MapTeleport_UpdateTemporaryReturn(
+    FieldSystem *fieldSystem,
+    MapTeleportTemporaryReturnState *temporaryReturn)
+{
+    MapTeleportDestination returnDestination;
+    MapTeleportResult result;
+
+    if (temporaryReturn == NULL
+        || temporaryReturn->stepState == MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE
+        || !MapTeleport_IsFieldStructReady(fieldSystem)
+        || fieldSystem->taskman != NULL) {
+        return;
+    }
+
+    if (temporaryReturn->stepState == MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL) {
+        return;
+    }
+
+    if (fieldSystem->location->mapId != temporaryReturn->targetMapId) {
+        temporaryReturn->targetMapId = fieldSystem->location->mapId;
+        temporaryReturn->lastX = fieldSystem->location->x;
+        temporaryReturn->lastY = fieldSystem->location->z;
+        return;
+    }
+
+    if (fieldSystem->location->x == temporaryReturn->lastX
+        && fieldSystem->location->z == temporaryReturn->lastY) {
+        return;
+    }
+
+    if (MapTeleport_AbsDiffU16(fieldSystem->location->x, temporaryReturn->lastX)
+        + MapTeleport_AbsDiffU16(fieldSystem->location->z, temporaryReturn->lastY) != 1) {
+        temporaryReturn->lastX = fieldSystem->location->x;
+        temporaryReturn->lastY = fieldSystem->location->z;
+        return;
+    }
+
+    if (temporaryReturn->stepState > 2) {
+        temporaryReturn->stepState--;
+        temporaryReturn->lastX = fieldSystem->location->x;
+        temporaryReturn->lastY = fieldSystem->location->z;
+        return;
+    }
+
+    returnDestination.mapId = temporaryReturn->returnMapId;
+    returnDestination.x = temporaryReturn->returnX;
+    returnDestination.y = temporaryReturn->returnY;
+    returnDestination.direction = temporaryReturn->returnDirection;
+    result = MapTeleport_OverlayRequest(fieldSystem, &returnDestination);
+    if (result != MAP_TELEPORT_RESULT_FIELD_BUSY) {
+        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
+    }
+}
+
 static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
 {
+    gMapTeleportDebugStatus.magic = MAP_TELEPORT_DEBUG_STATUS_MAGIC;
+    gMapTeleportDebugStatus.version = MAP_TELEPORT_DEBUG_STATUS_VERSION;
+    gMapTeleportDebugStatus.size = sizeof(MapTeleportDebugStatus);
     gMapTeleportDebugStatus.ready = ready;
 
     if (!ready || fieldSystem == NULL || fieldSystem->location == NULL) {
+        gMapTeleportDebugStatus.mapId = MAP_NOTHING;
+        gMapTeleportDebugStatus.x = 0;
+        gMapTeleportDebugStatus.y = 0;
+        gMapTeleportDebugStatus.direction = MAP_TELEPORT_DIRECTION_SOUTH;
+        gMapTeleportDebugStatus.destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
         return;
     }
 
@@ -121,43 +279,13 @@ static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
     gMapTeleportDebugStatus.x = fieldSystem->location->x;
     gMapTeleportDebugStatus.y = fieldSystem->location->z;
     gMapTeleportDebugStatus.direction = fieldSystem->location->direction;
-    gMapTeleportDebugStatus.requestResult = gMapTeleportRuntimeRequestResult;
-    gMapTeleportDebugStatus.requestCount = gMapTeleportRuntimeRequestCount;
 }
 
-static BOOL MapTeleport_GetLoadedPermission(
-    FieldSystem *fieldSystem,
-    u16 x,
-    u16 y,
-    u16 *permission)
+static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
 {
-    MapTeleportPermissionProvider *provider;
-
-    provider =
-        *(MapTeleportPermissionProvider **)((u8 *)fieldSystem
-            + MAP_TELEPORT_FIELD_PERMISSION_PROVIDER_OFFSET);
-    return provider != NULL
-        && provider->getPermission != NULL
-        && provider->getPermission(fieldSystem, x, y, permission);
-}
-
-static BOOL MapTeleport_OverlayIsLoadedLandTileWithPermission(
-    FieldSystem *fieldSystem,
-    u16 x,
-    u16 y,
-    u16 *permissionOut)
-{
-    WARP_EVENT *warp;
-    COORD_EVENT *coord;
-    u32 i;
-    u16 permission;
+    u8 behavior;
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        return FALSE;
-    }
-
-    if (!MapTeleport_GetLoadedPermission(fieldSystem, x, y, &permission)
-        || (permission & 0x8000) != 0) {
         return FALSE;
     }
 
@@ -165,136 +293,232 @@ static BOOL MapTeleport_OverlayIsLoadedLandTileWithPermission(
         return FALSE;
     }
 
-    if ((u8)permission >= 16 || (u8)permission == MAP_TELEPORT_TILE_HEADBUTT) {
+    behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
+    return behavior != MAP_TELEPORT_TILE_HEADBUTT && !MapTeleport_IsSurfBehavior(behavior);
+}
+
+static BOOL MapTeleport_PendingDestinationReached(FieldSystem *fieldSystem)
+{
+    if (!MapTeleport_IsFieldStructReady(fieldSystem)
+        || fieldSystem->location->mapId != sMapTeleportPendingDestination.mapId) {
         return FALSE;
     }
 
-    for (i = fieldSystem->map_events->num_warp_events,
-        warp = fieldSystem->map_events->warp_events;
-         i != 0;
-         i--, warp++) {
-        if (warp->x == x && warp->y == y) {
-            return FALSE;
-        }
-    }
-
-    for (i = fieldSystem->map_events->num_coord_events,
-        coord = fieldSystem->map_events->coord_events;
-         i != 0;
-         i--, coord++) {
-        if ((u16)(x - coord->x) < coord->w && (u16)(y - coord->y) < coord->h) {
-            return FALSE;
-        }
-    }
-
-    *permissionOut = permission;
-    return TRUE;
+    return MapTeleport_DestinationUsesWarpId(&sMapTeleportPendingDestination)
+        || (fieldSystem->location->x == sMapTeleportPendingDestination.x
+            && fieldSystem->location->z == sMapTeleportPendingDestination.y);
 }
 
-static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
+static void MapTeleport_SetBlackFadeLevel(u8 level)
 {
-    u16 permission;
+    u16 brightness;
 
-    return MapTeleport_OverlayIsLoadedLandTileWithPermission(fieldSystem, x, y, &permission);
+    if (level > MAP_TELEPORT_MASTER_BRIGHT_MAX) {
+        level = MAP_TELEPORT_MASTER_BRIGHT_MAX;
+    }
+
+    if (level == 0) {
+        brightness = 0;
+    } else {
+        brightness = MAP_TELEPORT_MASTER_BRIGHT_DARKEN | level;
+    }
+
+    reg_GX_MASTER_BRIGHT = brightness;
+    reg_GXS_DB_MASTER_BRIGHT = brightness;
 }
 
-BOOL MapTeleport_TrySelectRandomLoadedLandTile(
-    FieldSystem *fieldSystem,
-    MapTeleportDestination *destination)
+static void MapTeleport_BeginTransition(void)
 {
-    u16 count = 0;
-    u16 permission;
-    BOOL preferNonzero = FALSE;
-    int centerX;
-    int centerY;
-    int x;
-    int y;
+    gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_OUT;
+    gMapTeleportTransitionState.frame = 0;
+    MapTeleport_SetBlackFadeLevel(0);
+}
 
-    if (!MapTeleport_IsFieldStructReady(fieldSystem) || destination == NULL) {
+static u8 MapTeleport_BlackFadeLevelFromFrame(u8 frame)
+{
+    if (frame == 0) {
+        return 0;
+    }
+
+    if (frame >= MAP_TELEPORT_BLACK_FADE_STEPS) {
+        return MAP_TELEPORT_MASTER_BRIGHT_MAX;
+    }
+
+    return (frame * MAP_TELEPORT_MASTER_BRIGHT_MAX
+        + MAP_TELEPORT_BLACK_FADE_STEPS - 1)
+        / MAP_TELEPORT_BLACK_FADE_STEPS;
+}
+
+static BOOL MapTeleport_FadeOutToBlack(void)
+{
+    if (gMapTeleportTransitionState.frame < MAP_TELEPORT_BLACK_FADE_STEPS) {
+        gMapTeleportTransitionState.frame++;
+    }
+
+    MapTeleport_SetBlackFadeLevel(
+        MapTeleport_BlackFadeLevelFromFrame(gMapTeleportTransitionState.frame));
+    return gMapTeleportTransitionState.frame >= MAP_TELEPORT_BLACK_FADE_STEPS;
+}
+
+static BOOL MapTeleport_FadeInFromBlack(void)
+{
+    if (gMapTeleportTransitionState.frame != 0) {
+        gMapTeleportTransitionState.frame--;
+    }
+
+    MapTeleport_SetBlackFadeLevel(
+        MapTeleport_BlackFadeLevelFromFrame(gMapTeleportTransitionState.frame));
+    return gMapTeleportTransitionState.frame == 0;
+}
+
+static BOOL MapTeleport_UpdateTransition(FieldSystem *fieldSystem)
+{
+    if (gMapTeleportTransitionState.state == MAP_TELEPORT_TRANSITION_INACTIVE) {
         return FALSE;
     }
 
-    centerX = fieldSystem->location->x;
-    centerY = fieldSystem->location->z;
-    for (y = centerY & ~31; y < ((centerY & ~31) + 32); y++) {
-        for (x = centerX & ~31; x < ((centerX & ~31) + 32); x++) {
-            if ((x != centerX || y != centerY)
-                && MapTeleport_OverlayIsLoadedLandTileWithPermission(
-                    fieldSystem,
-                    (u16)x,
-                    (u16)y,
-                    &permission)) {
-                if (permission != 0) {
-                    if (!preferNonzero) {
-                        preferNonzero = TRUE;
-                        count = 0;
-                    }
-                } else if (preferNonzero) {
-                    continue;
-                }
-                count++;
-                if ((gf_rand() % count) == 0) {
-                    destination->mapId = fieldSystem->location->mapId;
-                    destination->x = (u16)x;
-                    destination->y = (u16)y;
-                    destination->direction = fieldSystem->location->direction;
-                }
-            }
+    switch (gMapTeleportTransitionState.state) {
+    case MAP_TELEPORT_TRANSITION_FADE_OUT:
+        if (fieldSystem->taskman != NULL) {
+            return TRUE;
         }
+
+        if (MapTeleport_FadeOutToBlack()) {
+            MapTeleport_PlayBlackTransitionSE();
+            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_START_WARP;
+        }
+        return TRUE;
+
+    case MAP_TELEPORT_TRANSITION_START_WARP:
+        if (fieldSystem->taskman != NULL) {
+            return TRUE;
+        }
+
+        MapTeleport_SetBlackFadeLevel(MAP_TELEPORT_MASTER_BRIGHT_MAX);
+        if (!MapTeleport_StartPlainWarpTask(fieldSystem, &sMapTeleportPendingDestination)) {
+            sMapTeleportRequestPending = FALSE;
+            sMapTeleportPendingFrames = 0;
+            gMapTeleportTransitionState.frame = MAP_TELEPORT_BLACK_FADE_STEPS;
+            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_IN;
+            return TRUE;
+        }
+        gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_WAIT_WARP;
+        return TRUE;
+
+    case MAP_TELEPORT_TRANSITION_WAIT_WARP:
+        MapTeleport_SetBlackFadeLevel(MAP_TELEPORT_MASTER_BRIGHT_MAX);
+        if (fieldSystem->taskman == NULL || MapTeleport_PendingDestinationReached(fieldSystem)) {
+            MapTeleport_ConfirmTemporaryReturnArrival(
+                fieldSystem,
+                &gMapTeleportTemporaryReturnState);
+            gMapTeleportTransitionState.frame = MAP_TELEPORT_BLACK_FADE_STEPS;
+            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_IN;
+        }
+        return TRUE;
+
+    case MAP_TELEPORT_TRANSITION_FADE_IN:
+        if (MapTeleport_FadeInFromBlack()) {
+            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
+        }
+        return TRUE;
     }
 
-    return count != 0;
+    gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
+    MapTeleport_SetBlackFadeLevel(0);
+    return FALSE;
 }
 
-static void MapTeleport_StartPlainWarpTask(
+static void MapTeleport_UpdatePending(FieldSystem *fieldSystem)
+{
+    if (!sMapTeleportRequestPending) {
+        return;
+    }
+
+    if (MapTeleport_PendingDestinationReached(fieldSystem)) {
+        sMapTeleportRequestPending = FALSE;
+        sMapTeleportPendingFrames = 0;
+        return;
+    }
+
+    if (sMapTeleportPendingFrames != 0) {
+        sMapTeleportPendingFrames--;
+        if (sMapTeleportPendingFrames == 0) {
+            sMapTeleportRequestPending = FALSE;
+        }
+    }
+}
+
+static BOOL MapTeleport_StartPlainWarpTask(
     FieldSystem *fieldSystem,
     const MapTeleportDestination *destination)
 {
     MapTeleportPlainWarpTaskEnv *env;
 
     env = sys_AllocMemoryLo(11, sizeof(MapTeleportPlainWarpTaskEnv));
+    if (env == NULL) {
+        return FALSE;
+    }
+
     env->state = 0;
     env->location.mapId = destination->mapId;
-    env->location.warpId = (destination->direction >> MAP_TELEPORT_WARP_ID_SHIFT) - 1;
-    env->location.x = destination->x;
-    env->location.z = destination->y;
-    env->location.direction = destination->direction & 3;
-    FieldSystem_CreateTask(fieldSystem, Task_ScriptWarp, env);
-}
-
-static MapTeleportResult MapTeleport_OverlayRequestInternal(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination,
-    BOOL validateLoadedTile)
-{
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        return MAP_TELEPORT_RESULT_INVALID_FIELD;
+    if (MapTeleport_DestinationUsesWarpId(destination)) {
+        env->location.warpId = destination->x;
+        env->location.x = -1;
+        env->location.z = -1;
+    } else {
+        env->location.warpId = -1;
+        env->location.x = destination->x;
+        env->location.z = destination->y;
+    }
+    env->location.direction = destination->direction;
+    if (FieldSystem_CreateTask(fieldSystem, Task_ScriptWarp, env) == NULL) {
+        sys_FreeMemoryEz(env);
+        return FALSE;
     }
 
-    if (!MapTeleport_IsDestinationValid(destination)) {
-        return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
-    }
-
-    if (fieldSystem->taskman != NULL) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
-    if (validateLoadedTile
-        && destination->mapId == fieldSystem->location->mapId
-        && (destination->direction & MAP_TELEPORT_WARP_ID_MASK) == 0
-        && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)) {
-        return MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE;
-    }
-
-    MapTeleport_StartPlainWarpTask(fieldSystem, destination);
-    return MAP_TELEPORT_RESULT_OK;
+    return TRUE;
 }
 
 static MapTeleportResult MapTeleport_OverlayRequest(
     FieldSystem *fieldSystem,
     const MapTeleportDestination *destination)
 {
-    return MapTeleport_OverlayRequestInternal(fieldSystem, destination, TRUE);
+    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
+        return MAP_TELEPORT_RESULT_INVALID_FIELD;
+    }
+
+    MapTeleport_UpdatePending(fieldSystem);
+    if (gMapTeleportTransitionState.state != MAP_TELEPORT_TRANSITION_INACTIVE) {
+        return MAP_TELEPORT_RESULT_FIELD_BUSY;
+    }
+
+    if (sMapTeleportRequestPending) {
+        return MAP_TELEPORT_RESULT_FIELD_BUSY;
+    }
+
+    if (!MapTeleport_IsDestinationValid(destination)) {
+        return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
+    }
+
+    if (MapTeleport_TemporaryReturnBlocksRequest(destination)) {
+        return MAP_TELEPORT_RESULT_FIELD_BUSY;
+    }
+
+    if (fieldSystem->taskman != NULL) {
+        return MAP_TELEPORT_RESULT_FIELD_BUSY;
+    }
+
+    if (!MapTeleport_DestinationUsesWarpId(destination)
+        && destination->mapId == fieldSystem->location->mapId
+        && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)) {
+        return MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE;
+    }
+
+    sMapTeleportRequestPending = TRUE;
+    sMapTeleportPendingFrames = MAP_TELEPORT_PENDING_TIMEOUT_FRAMES;
+    sMapTeleportPendingDestination = *destination;
+    MapTeleport_BeginTransition();
+    return MAP_TELEPORT_RESULT_OK;
 }
 
 static BOOL MapTeleport_DebugKeysHeld(void)
@@ -302,96 +526,59 @@ static BOOL MapTeleport_DebugKeysHeld(void)
     return (PAD_Read() & MAP_TELEPORT_DEBUG_KEYS) == MAP_TELEPORT_DEBUG_KEYS;
 }
 
-static void MapTeleport_DebugTask(SysTask *task, void *data)
+static void MapTeleport_PollDebugImpl(FieldSystem *fieldSystem)
 {
-    MapTeleportDebugTaskEnv *env = (MapTeleportDebugTaskEnv *)data;
-    FieldSystem *fieldSystem = gFieldSysPtr;
     const MapTeleportDestination *destination;
-    MapTeleportDestination randomDestination;
     MapTeleportResult result;
+    u16 count;
     u16 destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
 
-    (void)task;
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
         MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
         return;
     }
 
     MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
+    MapTeleport_UpdatePending(fieldSystem);
+    if (MapTeleport_UpdateTransition(fieldSystem)) {
+        return;
+    }
+
+    MapTeleport_UpdateTemporaryReturn(fieldSystem, &gMapTeleportTemporaryReturnState);
     if (!MapTeleport_DebugKeysHeld()) {
-        env->wasHeld = FALSE;
+        sMapTeleportDebugWasHeld = FALSE;
         return;
     }
 
-    if (env->wasHeld) {
+    if (sMapTeleportDebugWasHeld) {
         return;
     }
 
-    env->wasHeld = TRUE;
+    sMapTeleportDebugWasHeld = TRUE;
     if (gMapTeleportDebugStatus.destinationIndex
         == MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED) {
         destination = &gMapTeleportDebugDestination;
         destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED;
     } else {
-        destinationIndex = gMapTeleportDebugStatus.destinationIndex;
-        if (destinationIndex >= OWED_ENCOUNTER_AREA_COUNT) {
-            destinationIndex = gf_rand() % OWED_ENCOUNTER_AREA_COUNT;
-            gMapTeleportDebugStatus.destinationIndex =
-                MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
-        }
-        if (destinationIndex != MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE) {
-            if (MapTeleport_TrySelectEncounterDestinationByIndex(
-                    destinationIndex,
-                    &randomDestination)) {
-                if ((randomDestination.direction & MAP_TELEPORT_WARP_ID_MASK) == 0) {
-                    if (randomDestination.mapId == fieldSystem->location->mapId) {
-                        destination = MapTeleport_TrySelectRandomLoadedLandTile(
-                            fieldSystem,
-                            &randomDestination)
-                            ? &randomDestination
-                            : NULL;
-                    } else {
-                        randomDestination.x += gf_rand() & 1;
-                        destination = &randomDestination;
-                    }
-                } else {
-                    destination = &randomDestination;
-                }
-            } else {
-                destination = NULL;
-            }
+        count = MapTeleport_GetEncounterDestinationCount();
+        if (count != 0) {
+            destinationIndex = gf_rand() % count;
+            destination = MapTeleport_GetEncounterDestinationByIndex(destinationIndex);
         } else {
             destination = NULL;
         }
     }
 
-    result = MapTeleport_OverlayRequestInternal(
-        fieldSystem,
-        destination,
-        destinationIndex == MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED);
-    MapTeleport_PublishRequestResult(result);
-}
-
-static void MapTeleport_StartDebugTaskImpl(FieldSystem *fieldSystem)
-{
-    MapTeleportDebugTaskEnv *env;
-
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
-        return;
+    result = MapTeleport_OverlayRequest(fieldSystem, destination);
+    if (result == MAP_TELEPORT_RESULT_OK) {
+        MapTeleport_ArmTemporaryReturn(
+            fieldSystem,
+            destination,
+            &gMapTeleportTemporaryReturnState);
     }
-
-    MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
-    if (sMapTeleportDebugTask != NULL) {
-        return;
-    }
-
-    env = sys_AllocMemoryLo(11, sizeof(MapTeleportDebugTaskEnv));
-    env->wasHeld = TRUE;
-    sMapTeleportDebugTask = CreateSysTask(
-        MapTeleport_DebugTask,
-        env,
-        MAP_TELEPORT_DEBUG_TASK_PRIORITY);
+    gMapTeleportDebugStatus.destinationIndex = destinationIndex;
+    gMapTeleportDebugStatus.requestResult = result;
+    gMapTeleportDebugStatus.requestCount++;
 }
 
 const MapTeleportOverlayEntry gMapTeleportOverlayEntry
@@ -401,5 +588,5 @@ const MapTeleportOverlayEntry gMapTeleportOverlayEntry
     sizeof(MapTeleportOverlayEntry),
     MapTeleport_OverlayRequest,
     MapTeleport_OverlayIsLoadedLandTile,
-    MapTeleport_StartDebugTaskImpl,
+    MapTeleport_PollDebugImpl,
 };
