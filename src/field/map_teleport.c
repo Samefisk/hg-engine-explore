@@ -11,7 +11,6 @@
 
 #define MAP_TELEPORT_PENDING_TIMEOUT_FRAMES 240
 #define MAP_TELEPORT_DEBUG_KEYS (PAD_BUTTON_L | PAD_BUTTON_R)
-#define MAP_TELEPORT_TILE_HEADBUTT 6
 #define MAP_TELEPORT_BLACK_TRANSITION_SE SEQ_SE_DP_TELE
 #define MAP_TELEPORT_BLACK_FADE_STEPS 1
 #define MAP_TELEPORT_MASTER_BRIGHT_DARKEN 0x8000
@@ -70,11 +69,6 @@ MapTeleportDebugStatus gMapTeleportDebugStatus
     FALSE,
     MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE,
 };
-
-static BOOL MapTeleport_IsSurfBehavior(u8 behavior)
-{
-    return behavior == 16 || behavior == 18 || behavior == 21 || behavior == 42;
-}
 
 static BOOL MapTeleport_IsMapIdValid(u16 mapId)
 {
@@ -279,22 +273,6 @@ static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
     gMapTeleportDebugStatus.direction = fieldSystem->location->direction;
 }
 
-static BOOL MapTeleport_OverlayIsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
-{
-    u8 behavior;
-
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        return FALSE;
-    }
-
-    if (IsMetatileBlockedAt(fieldSystem, x, y)) {
-        return FALSE;
-    }
-
-    behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    return behavior != MAP_TELEPORT_TILE_HEADBUTT && !MapTeleport_IsSurfBehavior(behavior);
-}
-
 static BOOL MapTeleport_PendingDestinationReached(FieldSystem *fieldSystem)
 {
     if (!MapTeleport_IsFieldStructReady(fieldSystem)
@@ -372,6 +350,14 @@ static BOOL MapTeleport_FadeInFromBlack(void)
 static BOOL MapTeleport_UpdateTransition(FieldSystem *fieldSystem)
 {
     if (gMapTeleportTransitionState.state == MAP_TELEPORT_TRANSITION_INACTIVE) {
+        return FALSE;
+    }
+
+    if (!sMapTeleportRequestPending
+        && gMapTeleportTransitionState.state < MAP_TELEPORT_TRANSITION_WAIT_WARP) {
+        gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
+        gMapTeleportTransitionState.frame = 0;
+        MapTeleport_SetBlackFadeLevel(0);
         return FALSE;
     }
 
@@ -511,12 +497,6 @@ static MapTeleportResult MapTeleport_OverlayRequest(
         return MAP_TELEPORT_RESULT_FIELD_BUSY;
     }
 
-    if (!MapTeleport_DestinationUsesWarpId(destination)
-        && destination->mapId == fieldSystem->location->mapId
-        && !MapTeleport_OverlayIsLoadedLandTile(fieldSystem, destination->x, destination->y)) {
-        return MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE;
-    }
-
     sMapTeleportRequestPending = TRUE;
     sMapTeleportPendingFrames = MAP_TELEPORT_PENDING_TIMEOUT_FRAMES;
     sMapTeleportPendingDestination = *destination;
@@ -590,6 +570,6 @@ const MapTeleportOverlayEntry gMapTeleportOverlayEntry
     MAP_TELEPORT_OVERLAY_VERSION,
     sizeof(MapTeleportOverlayEntry),
     MapTeleport_OverlayRequest,
-    MapTeleport_OverlayIsLoadedLandTile,
+    NULL,
     MapTeleport_PollDebugImpl,
 };

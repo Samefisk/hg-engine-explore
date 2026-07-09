@@ -70,21 +70,27 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         return;
     }
 
-    MapTeleport_PollDebug(fieldSystem);
-
     if (fieldSystem->location != NULL
         && sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
-        sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
-        sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
-        OverworldWildSpawns_RefreshMapState(fieldSystem);
-    }
+        if (sOverworldWildSpawnState.battleGraceSteps == 0) {
+            sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
+        } else {
+            sOverworldWildSpawnState.battleGraceSteps--;
+        }
+        if (sOverworldWildSpawnState.battleGraceSteps != 0) {
+            return;
+        }
 
-    if (sOverworldWildSpawnState.battleGraceSteps != 0) {
+        sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
+        OverworldWildSpawns_RefreshMapState(fieldSystem);
+    } else if (sOverworldWildSpawnState.battleGraceSteps != 0) {
         sOverworldWildSpawnState.battleGraceSteps--;
         if (sOverworldWildSpawnState.battleGraceSteps != 0) {
             return;
         }
     }
+
+    MapTeleport_PollDebug(fieldSystem);
 
 #if OW_WILD_FIELD_READY_INITIAL_SPAWN
     OverworldWildSpawns_OnPlayerStep(fieldSystem);
@@ -142,7 +148,6 @@ void OverworldWildSpawns_OnFieldSystemReady(FieldSystem *fieldSystem)
 #else
     if (sFieldReadyTaskFieldSystem != fieldSystem) {
         sFieldReadyTaskMapId = 0;
-        sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
         CreateSysTask(
             OverworldWildSpawns_FieldReadyTask,
             fieldSystem,
