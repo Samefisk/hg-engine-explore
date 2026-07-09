@@ -737,18 +737,18 @@ headbuttheader  32,  15,   0   // Route 28
 
 headbuttheader  33,  35,   0   // Route 29
     // normal slots
-    headbuttencounter SPECIES_CLEFAIRY, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_CLEFAIRY, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 2, 3
+    headbuttencounter SPECIES_MEWTWO, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 4, 5
+    headbuttencounter SPECIES_MEWTWO, 4, 5
     // special slots
     headbuttencounter SPECIES_NONE, 0, 0
     headbuttencounter SPECIES_NONE, 0, 0
@@ -1347,17 +1347,17 @@ headbuttheader  47,   3,   0   // Route 45
 headbuttheader  48,  10,   0   // Route 46
     // normal slots
     headbuttencounter SPECIES_SPEAROW, 2, 3
-    headbuttencounter SPECIES_HERACROSS, 2, 3
-    headbuttencounter SPECIES_HERACROSS, 2, 3
-    headbuttencounter SPECIES_AIPOM, 2, 3
-    headbuttencounter SPECIES_AIPOM, 2, 3
-    headbuttencounter SPECIES_AIPOM, 2, 3
+    headbuttencounter SPECIES_SPEAROW, 2, 3
+    headbuttencounter SPECIES_SPEAROW, 2, 3
+    headbuttencounter SPECIES_SPEAROW, 2, 3
+    headbuttencounter SPECIES_SPEAROW, 2, 3
+    headbuttencounter SPECIES_SPEAROW, 2, 3
     headbuttencounter SPECIES_SPEAROW, 4, 5
     headbuttencounter SPECIES_SPEAROW, 4, 5
     headbuttencounter SPECIES_SPEAROW, 4, 5
-    headbuttencounter SPECIES_AIPOM, 4, 5
-    headbuttencounter SPECIES_AIPOM, 4, 5
-    headbuttencounter SPECIES_AIPOM, 4, 5
+    headbuttencounter SPECIES_SPEAROW, 4, 5
+    headbuttencounter SPECIES_SPEAROW, 4, 5
+    headbuttencounter SPECIES_SPEAROW, 4, 5
     // special slots
     headbuttencounter SPECIES_NONE, 0, 0
     headbuttencounter SPECIES_NONE, 0, 0

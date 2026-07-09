@@ -123,54 +123,54 @@ superrodrate 0
 walklevels 2, 3, 2, 3, 3, 3, 2, 2, 4, 4, 4, 4
 
 // morning encounter slots
-pokemon SPECIES_SENTRET
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_SENTRET
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_DELIBIRD
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_PICHU
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_RATTATA
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_RATTATA
-pokemon SPECIES_PIDGEY
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
 
 // day encounter slots
-pokemon SPECIES_SENTRET
-pokemon SPECIES_MANKEY
-pokemon SPECIES_SENTRET
-pokemon SPECIES_MANKEY
-pokemon SPECIES_MANKEY
-pokemon SPECIES_MANKEY
-pokemon SPECIES_PICHU
-pokemon SPECIES_IGGLYBUFF
-pokemon SPECIES_RATTATA
-pokemon SPECIES_MANKEY
-pokemon SPECIES_RATTATA
-pokemon SPECIES_MANKEY
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
 
 // night encounter slots
-pokemon SPECIES_MANKEY
-pokemon SPECIES_MANKEY
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_RATTATA
-pokemon SPECIES_SENTRET
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_SENTRET
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
 
 // hoenn encounter slots
-pokemon SPECIES_PLUSLE
-pokemon SPECIES_MINUN
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
 
 // sinnoh encounter slots
-pokemon SPECIES_SHINX
-pokemon SPECIES_SHINX
+pokemon SPECIES_MEWTWO
+pokemon SPECIES_MEWTWO
 
 // surf encounters
 encounter SPECIES_NONE, 0, 0
@@ -205,7 +205,7 @@ encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // swarm grass
-pokemon SPECIES_PIDGEY
+pokemon SPECIES_MEWTWO
 // swarm surf
 pokemon SPECIES_NONE
 // swarm good rod
@@ -7091,54 +7091,54 @@ superrodrate 0
 walklevels 3, 2, 3, 2, 2, 2, 2, 2, 3, 4, 3, 4
 
 // morning encounter slots
-pokemon SPECIES_PHANPY
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_GEODUDE
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_TEDDIURSA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_GEODUDE
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_RATTATA
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_RATTATA
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
 
 // day encounter slots
-pokemon SPECIES_PHANPY
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_GEODUDE
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_TEDDIURSA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_GEODUDE
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_RATTATA
 pokemon SPECIES_SPEAROW
-pokemon SPECIES_RATTATA
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
 
 // night encounter slots
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_RATTATA
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_GLIGAR
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_RATTATA
-pokemon SPECIES_GEODUDE
-pokemon SPECIES_RATTATA
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
 
 // hoenn encounter slots
-pokemon SPECIES_PLUSLE
-pokemon SPECIES_MINUN
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
 
 // sinnoh encounter slots
-pokemon SPECIES_SHINX
-pokemon SPECIES_SHINX
+pokemon SPECIES_SPEAROW
+pokemon SPECIES_SPEAROW
 
 // surf encounters
 encounter SPECIES_NONE, 0, 0
@@ -7173,7 +7173,7 @@ encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // swarm grass
-pokemon SPECIES_GEODUDE
+pokemon SPECIES_SPEAROW
 // swarm surf
 pokemon SPECIES_NONE
 // swarm good rod

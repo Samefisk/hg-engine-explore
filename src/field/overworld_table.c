@@ -267,6 +267,7 @@ struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts tha
     { .tag =  412, .gfx = 199, .callback_params = 0x0000},
     { .tag =  413, .gfx = 196, .callback_params = 0x0000},
     { .tag =  349, .gfx = 243, .callback_params = 0x5C00},
+    { .tag =  230, .gfx = 1553, .callback_params = OVERWORLD_SIZE_SMALL}, // long-hop native shadow carrier
     { .tag =  234, .gfx = 242, .callback_params = 0x0024},
     { .tag =  350, .gfx = 229, .callback_params = 0x0024},
     { .tag =  376, .gfx = 230, .callback_params = 0x0024},

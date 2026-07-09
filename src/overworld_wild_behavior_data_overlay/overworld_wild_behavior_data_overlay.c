@@ -6,15 +6,43 @@
 
 #define OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT 150
 
+typedef struct OverworldWildBehaviorDataOverlayHeader {
+    OverworldWildEncounterLookupDataEntry legacyEncounterLookup;
+    OverworldWildCustomJumpShadowEntry customJumpShadow;
+} OverworldWildBehaviorDataOverlayHeader;
+
 static const u16 sOverworldWildLegacyEncounterAreaMapIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT];
 static const u8 sOverworldWildLegacyEncounterAreaDataIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT];
+static void *OverworldWildBehavior_CreateCustomJumpShadowEffectNoop(
+    void *effectContext,
+    void *object);
+static void OverworldWildBehavior_ClearCustomJumpShadowEffectNoop(void);
 
-const OverworldWildEncounterLookupDataEntry gOverworldWildLegacyEncounterLookupDataEntry
+const OverworldWildBehaviorDataOverlayHeader gOverworldWildBehaviorDataOverlayHeader
     __attribute__((section(".overworld_wild_behavior_data_entry"), used)) = {
-    sOverworldWildLegacyEncounterAreaMapIds,
-    sOverworldWildLegacyEncounterAreaDataIds,
-    OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT,
+    {
+        sOverworldWildLegacyEncounterAreaMapIds,
+        sOverworldWildLegacyEncounterAreaDataIds,
+        OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT,
+    },
+    {
+        OverworldWildBehavior_CreateCustomJumpShadowEffectNoop,
+        OverworldWildBehavior_ClearCustomJumpShadowEffectNoop,
+    },
 };
+
+static void *OverworldWildBehavior_CreateCustomJumpShadowEffectNoop(
+    void *effectContext,
+    void *object)
+{
+    (void)effectContext;
+    (void)object;
+    return NULL;
+}
+
+static void OverworldWildBehavior_ClearCustomJumpShadowEffectNoop(void)
+{
+}
 
 static const u16 sOverworldWildLegacyEncounterAreaMapIds[OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT] = {
     MAP_T20, MAP_R29, MAP_T21, MAP_R30,

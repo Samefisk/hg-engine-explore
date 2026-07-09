@@ -374,6 +374,7 @@ void LONG_CALL MapObject_StartMovementCommandInternal(LocalMapObject *obj, u32 m
 void LONG_CALL MapObject_StartMovementCommand(LocalMapObject *obj, u32 movementCommand);
 u32 LONG_CALL MapObject_MovementCommandFromDirection(u32 direction, u32 movementCommand);
 BOOL LONG_CALL MapObject_UpdateMovementCommand(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_RefreshHeightFromTerrain(LocalMapObject *obj);
 SysTask * LONG_CALL MapObject_StartMovementList(LocalMapObject *obj, const u16 *movementList);
 BOOL LONG_CALL MapObject_MovementListTaskIsFinished(SysTask *task);
 void LONG_CALL MapObject_CleanupMovementListTask(SysTask *task);

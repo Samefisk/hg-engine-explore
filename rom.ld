@@ -434,6 +434,7 @@ MapObject_MovementListTaskIsFinished = 0x02062260 | 1;
 MapObject_CleanupMovementListTask = 0x0206226C | 1;
 MapObject_MovementCommandFromDirection = 0x0206234C | 1;
 MapObject_UpdateMovementCommand = 0x02062428 | 1;
+MapObject_RefreshHeightFromTerrain = 0x02061070 | 1;
 MapObject_StartJumpMovementInternal = 0x02062958 | 1;
 IsMetatileBlockedAt = 0x020548C0 | 1;
 GetMetatileBehaviorAt = 0x02054918 | 1;

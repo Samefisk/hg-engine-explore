@@ -374,6 +374,7 @@ Purpose of this checkpoint:
 | [overworld_wild_canopy_long_hop_attempts.md](overworld_wild_canopy_long_hop_attempts.md) | 57 | Tracks the movement carrier work for visible multi-tile Mankey jumps. |
 | [overworld_wild_headbutt_tree_top_locator_attempts.md](overworld_wild_headbutt_tree_top_locator_attempts.md) | 69 | Tracks target semantics for headbutt/tree-top/canopy locations. |
 | [overworld_wild_mankey_canopy_rendering_attempts.md](overworld_wild_mankey_canopy_rendering_attempts.md) | 183 | This is the do-not-repeat pile for making Mankey appear above canopy using map-object render knobs. |
+| [overworld_wild_shadow_rendering_attempts.md](overworld_wild_shadow_rendering_attempts.md) | 6 | Tracks overworld wild Pokemon shadow visibility, offset, and canopy long-hop floor-shadow regressions. |
 | [overworld_wild_effects_and_bubbles_attempts.md](overworld_wild_effects_and_bubbles_attempts.md) | 177 | Tracks non-movement presentation: spot hops, tired bubbles, Onix smoke, step sounds, and crash sounds. |
 | [overworld_wild_visibility_and_probe_lifecycle_attempts.md](overworld_wild_visibility_and_probe_lifecycle_attempts.md) | 133 | Tracks invisibility, BIT_VANISH, helper/probe lifecycles, and the rule that normal Pokemon should be visible from birth. |
 | [overworld_wild_shiny_lifecycle.md](overworld_wild_shiny_lifecycle.md) | 57 | Tracks shiny overworld render setup, saved shiny persistence, battle identity handoff, and related cleanup. |
