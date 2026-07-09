@@ -22,10 +22,12 @@ SECTIONS {
                 *(.rodata)
                 *(.fini)
                 *(COMMON)
+                . = ALIGN(4);
                 __text_end  = . ;
 
                 __bss_start__ = . ;
                 *(.bss)
+                . = ALIGN(4);
                 __bss_end__ = . ;
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;

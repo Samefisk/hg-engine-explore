@@ -87,8 +87,6 @@
 #define IMPLEMENT_OVERWORLD_WILD_SPAWNS
 #define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
 #define OVERWORLD_WILD_SPAWNS_RAM_CRASH_FEEDBACK_SCRIPT 2075
-#define OVERWORLD_WILD_SPAWNS_SOUND_TESTER_SCRIPT 2076
-#define OVERWORLD_WILD_SPAWNS_VISUAL_TESTER_SCRIPT 2077
 
 // IMPLEMENT_CAPTURE_EXPERIENCE defines whether or not capturing wild pokemon will net experience
 // commenting this line out disables capture experience

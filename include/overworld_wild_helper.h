@@ -6,7 +6,7 @@
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 3
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 8
 
 #define OW_WILD_HELPER_DIRECTION_NONE 0xFF
 #define OW_WILD_HELPER_DIRECTION_UP 0
@@ -38,6 +38,8 @@ typedef struct OverworldWildSpawnPosition {
 typedef struct OverworldWildSpawnStartup {
     s16 targetX;
     s16 targetY;
+    s16 startX;
+    s16 startY;
     u8 locomotion;
     u8 hopDirection;
 } OverworldWildSpawnStartup;
@@ -51,7 +53,7 @@ typedef struct OverworldWildPreparedSpawn {
     u8 behaviorClass;
     u8 shiny;
     u8 shinyCounterEligible;
-    u8 reserved;
+    u8 behaviorLimitKey;
 } OverworldWildPreparedSpawn;
 
 typedef struct OverworldWildHelperPlayerState {
@@ -101,26 +103,18 @@ typedef void (*OverworldWildHelperLoadSavedShinyFunc)(
     void *context,
     int savedShinySlot,
     OverworldWildRolledEncounter *encounter);
-typedef void (*OverworldWildHelperApplyBehaviorTestSpeciesFunc)(
-    void *context,
-    OverworldWildSpawnTerrain terrain,
-    int slot,
-    int savedShinySlot,
-    OverworldWildRolledEncounter *encounter);
-
 typedef struct OverworldWildHelperSpawnCallbacks {
     OverworldWildHelperGetPlayerStateFunc getPlayerState;
     OverworldWildHelperTryGetSpawnTerrainFunc tryGetSpawnTerrain;
     OverworldWildHelperTilePredicateFunc isTileOccupied;
     OverworldWildHelperNearActiveSpawnFunc isNearActiveSpawn;
     OverworldWildHelperTilePredicateFunc isWalkableLandTile;
-    OverworldWildHelperTilePredicateFunc isFishingShoreTile;
+    OverworldWildHelperTilePredicateFunc isStaticFishingShoreTile;
     OverworldWildHelperGetMapIdFunc getMapId;
     OverworldWildHelperArchiveLoadFunc loadArchiveData;
     OverworldWildHelperTryGetEncounterDataIdFunc tryGetEncounterDataId;
     OverworldWildHelperFindSavedShinyFunc findSavedShiny;
     OverworldWildHelperLoadSavedShinyFunc loadSavedShiny;
-    OverworldWildHelperApplyBehaviorTestSpeciesFunc applyBehaviorTestSpecies;
 } OverworldWildHelperSpawnCallbacks;
 
 typedef BOOL (*OverworldWildHelperTryPrepareSpawnFunc)(

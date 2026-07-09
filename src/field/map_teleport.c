@@ -224,9 +224,7 @@ static void MapTeleport_UpdateTemporaryReturn(
     }
 
     if (fieldSystem->location->mapId != temporaryReturn->targetMapId) {
-        temporaryReturn->targetMapId = fieldSystem->location->mapId;
-        temporaryReturn->lastX = fieldSystem->location->x;
-        temporaryReturn->lastY = fieldSystem->location->z;
+        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
         return;
     }
 
@@ -407,7 +405,11 @@ static BOOL MapTeleport_UpdateTransition(FieldSystem *fieldSystem)
 
     case MAP_TELEPORT_TRANSITION_WAIT_WARP:
         MapTeleport_SetBlackFadeLevel(MAP_TELEPORT_MASTER_BRIGHT_MAX);
-        if (fieldSystem->taskman == NULL || MapTeleport_PendingDestinationReached(fieldSystem)) {
+        if (fieldSystem->taskman == NULL
+            && (MapTeleport_PendingDestinationReached(fieldSystem)
+                || !sMapTeleportRequestPending)) {
+            sMapTeleportRequestPending = FALSE;
+            sMapTeleportPendingFrames = 0;
             MapTeleport_ConfirmTemporaryReturnArrival(
                 fieldSystem,
                 &gMapTeleportTemporaryReturnState);
@@ -434,7 +436,8 @@ static void MapTeleport_UpdatePending(FieldSystem *fieldSystem)
         return;
     }
 
-    if (MapTeleport_PendingDestinationReached(fieldSystem)) {
+    if (MapTeleport_PendingDestinationReached(fieldSystem)
+        && fieldSystem->taskman == NULL) {
         sMapTeleportRequestPending = FALSE;
         sMapTeleportPendingFrames = 0;
         return;

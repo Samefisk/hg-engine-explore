@@ -2,6 +2,7 @@
 #include "../include/debug.h"
 #include "../include/map_teleport.h"
 #include "../include/overlay.h"
+#include "../include/overworld_wild_behavior_data.h"
 #include "../include/overworld_wild_spawns_internal.h"
 #include "../include/save.h"
 #include "../include/constants/file.h"
@@ -31,18 +32,42 @@ static BOOL IsOverworldWildOverlay(u32 ovyId)
         || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
 }
 
-static void UnloadColdOverworldWildOverlaysFor(u32 ovyId)
+static void ResetMapTeleportOverlayState(void)
 {
-    if (IsOverworldWildOverlay(ovyId)) {
-        return;
+    *(u32 *)MAP_TELEPORT_OVERLAY_ENTRY_ADDR = 0;
+    gMapTeleportTransitionState.state = 0;
+    gMapTeleportTransitionState.frame = 0;
+}
+
+static void ClearOverworldWildBehaviorDataEffects(void)
+{
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        OVERWORLD_WILD_CUSTOM_JUMP_SHADOW_ENTRY->clear();
+    }
+}
+
+void LONG_CALL UnloadOverworldWildOverlays(void)
+{
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
     }
 
     if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
         UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
     }
     if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        ClearOverworldWildBehaviorDataEffects();
         UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
     }
+}
+
+static void UnloadColdOverworldWildOverlaysFor(u32 ovyId)
+{
+    if (IsOverworldWildOverlay(ovyId)) {
+        return;
+    }
+
+    UnloadOverworldWildOverlays();
 }
 
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
@@ -74,8 +99,12 @@ unloadSecond:
     table = GetLoadedOverlaysInRegion(GetOverlayLoadDestination(ovyId));
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
         if (table[i].active == TRUE && table[i].id == ovyId) {
+            if (ovyId == OVERLAY_FIELD_EXTENSION) {
+                ResetMapTeleportOverlayState();
+            }
             if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
                 && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {
+                ClearOverworldWildBehaviorDataEffects();
                 OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData();
             }
             FreeOverlayAllocation(&table[i]);
@@ -137,9 +166,9 @@ loadExtension:
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
         debug_printf("Overlay %d has priority over field overlays--unloading them...\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-        *(u32 *)MAP_TELEPORT_OVERLAY_ENTRY_ADDR = 0;
+        ResetMapTeleportOverlayState();
         UnloadOverlayByID(OVERLAY_FIELD_EXTENSION);
-        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
+        UnloadOverworldWildOverlays();
     }
 
     if (!CanOverlayBeLoaded(ovyId)) {

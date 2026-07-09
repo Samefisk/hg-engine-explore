@@ -165,7 +165,7 @@ static inline void MapTeleport_PollDebug(FieldSystem *fieldSystem)
 {
     const MapTeleportOverlayEntry *entry = MapTeleport_GetOverlayEntry();
 
-    if (entry == NULL) {
+    if (entry == NULL || entry->pollDebug == NULL) {
         return;
     }
 

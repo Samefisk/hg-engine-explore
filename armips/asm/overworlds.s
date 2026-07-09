@@ -67,8 +67,38 @@ OverworldWildSpawns_IsPokemonPaletteObjectId:
     bl OverworldWildSpawns_TransitionDispatchThumbThunk
 .endarea
 
+.org 0x021F7908
+.area 0x04, 0x00
+    bl 0x021FA3E8
+.endarea
+
+.org 0x021F8E68
+.area 0x04, 0x00
+    bl 0x0205F97C
+.endarea
+
+.org 0x022061BA
+.area 0x04, 0x00
+    bl 0x021F771C
+.endarea
+
+.org 0x02206220
+.area 0x04, 0x00
+    bl 0x021F771C
+.endarea
+
+.org 0x022061E0
+.area 0x04, 0x00
+    bl 0x020205D8
+.endarea
+
+.org 0x02206246
+.area 0x04, 0x00
+    bl 0x020205D8
+.endarea
+
 .org 0x02209B18
-.area 0x40, 0xFF
+.area 0x02209B44-., 0xFF
 OverworldWildSpawns_CheckShinyPaletteObject:
     push {r4, lr}
     mov r4, r0
@@ -160,7 +190,7 @@ does_species_have_dimorphism:
     ldrb r0, [r1, r0]
     pop {r3, pc}
 
-.pool
+    .pool
 
 .endarea
 

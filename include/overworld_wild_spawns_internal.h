@@ -18,7 +18,8 @@
 #define OW_WILD_SAVED_SHINY_TERRAIN_MASK 0x7F
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
-#define OW_WILD_CANOPY_HOP_MOVEMENT_LIST_WORDS 72
+#define OW_WILD_STAGED_HOP_MOVEMENT_LIST_WORDS 72
+#define OW_WILD_FIELD_READY_DELAY_FRAMES 90
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -74,10 +75,8 @@ typedef struct OverworldWildSpawnState {
     u8 movementEmoteShowBubbleEachJump[OW_WILD_MAX_SPAWNS];
     u8 movementEmotePlayCryOnHop[OW_WILD_MAX_SPAWNS];
     u8 movementActiveSteps[OW_WILD_MAX_SPAWNS];
-    u8 movementPlayfulNeighborSteps[OW_WILD_MAX_SPAWNS];
     u8 movementSpotCooldowns[OW_WILD_MAX_SPAWNS];
     u8 movementBehaviorClasses[OW_WILD_MAX_SPAWNS];
-    u16 movementForcedAsleepMask;
     s16 movementPreviousTileX[OW_WILD_MAX_SPAWNS];
     s16 movementPreviousTileY[OW_WILD_MAX_SPAWNS];
     u8 movementPreviousTileLocked[OW_WILD_MAX_SPAWNS];
@@ -88,19 +87,18 @@ typedef struct OverworldWildSpawnState {
     s16 movementSpawnRunTargetX[OW_WILD_MAX_SPAWNS];
     s16 movementSpawnRunTargetY[OW_WILD_MAX_SPAWNS];
     u8 movementSpawnRunActive[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopOriginX[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopOriginY[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopTargetX[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopTargetY[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopAvoidX[OW_WILD_MAX_SPAWNS];
-    s16 movementCanopyHopAvoidY[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopOriginX[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopOriginY[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopTargetX[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopTargetY[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopAvoidX[OW_WILD_MAX_SPAWNS];
+    s16 movementStagedHopAvoidY[OW_WILD_MAX_SPAWNS];
     s16 movementMankeyPathFailureX[OW_WILD_MAX_SPAWNS];
     s16 movementMankeyPathFailureY[OW_WILD_MAX_SPAWNS];
-    u8 movementCanopyHopDirections[OW_WILD_MAX_SPAWNS];
-    u8 movementCanopyHopDistances[OW_WILD_MAX_SPAWNS];
-    u8 movementCanopyHopFinishWithTired[OW_WILD_MAX_SPAWNS];
-    u8 movementCanopyHopPending[OW_WILD_MAX_SPAWNS];
-    u8 movementCanopyHopAvoidValid[OW_WILD_MAX_SPAWNS];
+    u8 movementStagedHopDistances[OW_WILD_MAX_SPAWNS];
+    u8 movementStagedHopFinishWithTired[OW_WILD_MAX_SPAWNS];
+    u8 movementStagedHopPending[OW_WILD_MAX_SPAWNS];
+    u8 movementStagedHopAvoidValid[OW_WILD_MAX_SPAWNS];
     u8 movementMankeyPathFailureCounts[OW_WILD_MAX_SPAWNS];
     u8 movementRamDirections[OW_WILD_MAX_SPAWNS];
     u8 movementRamStepCounters[OW_WILD_MAX_SPAWNS];
@@ -125,8 +123,11 @@ typedef struct OverworldWildSpawnState {
 
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+    BOOL (*tryPrimeBattleFromTalk)(
+        FieldSystem *fieldSystem,
+        OverworldWildSpawnState *state,
+        LocalMapObject *talkedObject);
     void (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
-    void (*visualTesterCommand)(FieldSystem *fieldSystem, u16 command);
     void (*cleanupResidentData)(void);
 } OverworldWildSpawnsOverlayEntry;
 

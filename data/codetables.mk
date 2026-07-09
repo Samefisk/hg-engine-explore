@@ -179,6 +179,7 @@ OVERWORLD_WILD_BEHAVIOR_DATA_BIN := build/OverworldWildBehaviorData.bin
 $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN): $(OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES)
 	@echo "writing overworld wild behavior data..."
 	@mkdir -p $(dir $@)
+	$(PYTHON) scripts/overworld_behavior_profile_viewer.py --validate-overrides
 	$(CC) $(CFLAGS) -c data/OverworldWildBehaviorData.c -o $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ)
 	$(OBJCOPY) -O binary $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ) $@
 	$(PYTHON) $(OVERWORLD_WILD_BLOB_VALIDATOR) --owbd $@ --owbd-source include/overworld_wild_behavior_data.h

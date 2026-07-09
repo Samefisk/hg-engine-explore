@@ -6750,23 +6750,6 @@ FORM_ROCKET_DISGUISE                    equ 1024
 .equ NEW_COMMAND_QUEUE_NEW_REPEL, 0
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE, 1
 .equ NEW_COMMAND_OVERWORLD_WILD_BATTLE_CLEANUP, 2
-.equ NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_BUFFER_NUMBERS, 3
-.equ NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_PLAY, 4
-.equ NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_ADJUST, 5
-.equ NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_CLOSE, 6
-.equ NEW_COMMAND_OVERWORLD_WILD_VISUAL_TESTER, 7
-
-.equ OVERWORLD_WILD_VISUAL_TESTER_BUFFER_NUMBERS, 0
-.equ OVERWORLD_WILD_VISUAL_TESTER_PLAY, 1
-.equ OVERWORLD_WILD_VISUAL_TESTER_NEXT_PLAY, 2
-.equ OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_PLAY, 3
-.equ OVERWORLD_WILD_VISUAL_TESTER_NEXT_16_PLAY, 4
-.equ OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_16_PLAY, 5
-.equ OVERWORLD_WILD_VISUAL_TESTER_NEXT_128_PLAY, 6
-.equ OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_128_PLAY, 7
-.equ OVERWORLD_WILD_VISUAL_TESTER_CLOSE, 8
-.equ OVERWORLD_WILD_VISUAL_TESTER_CLEAR_TEMPORARY_EFFECTS, 9
-.equ OVERWORLD_WILD_VISUAL_TESTER_TICK_TEMPORARY_EFFECTS, 10
 
 .macro RunNewCommand,slot,unk
 DummyTextTrap slot, unk
@@ -6782,70 +6765,6 @@ RunNewCommand NEW_COMMAND_OVERWORLD_WILD_BATTLE, 0
 
 .macro OverworldWildBattleCleanup
 RunNewCommand NEW_COMMAND_OVERWORLD_WILD_BATTLE_CLEANUP, 0
-.endmacro
-
-.macro OverworldWildSoundTesterBufferNumbers
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_BUFFER_NUMBERS, 0
-.endmacro
-
-.macro OverworldWildSoundTesterPlay
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_PLAY, 0
-.endmacro
-
-.macro OverworldWildSoundTesterAdjust,delta
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_ADJUST, delta
-.endmacro
-
-.macro OverworldWildSoundTesterClose
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_SOUND_TESTER_CLOSE, 0
-.endmacro
-
-.macro OverworldWildVisualTesterCommand,command
-RunNewCommand NEW_COMMAND_OVERWORLD_WILD_VISUAL_TESTER, command
-.endmacro
-
-.macro OverworldWildVisualTesterBufferNumbers
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_BUFFER_NUMBERS
-.endmacro
-
-.macro OverworldWildVisualTesterPlay
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterNextPlay
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_NEXT_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterPreviousPlay
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterNext16Play
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_NEXT_16_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterPrevious16Play
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_16_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterNext128Play
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_NEXT_128_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterPrevious128Play
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_PREVIOUS_128_PLAY
-.endmacro
-
-.macro OverworldWildVisualTesterClose
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_CLOSE
-.endmacro
-
-.macro OverworldWildVisualTesterClearTemporaryEffects
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_CLEAR_TEMPORARY_EFFECTS
-.endmacro
-
-.macro OverworldWildVisualTesterTickTemporaryEffects
-OverworldWildVisualTesterCommand OVERWORLD_WILD_VISUAL_TESTER_TICK_TEMPORARY_EFFECTS
 .endmacro
 
 // Dummy

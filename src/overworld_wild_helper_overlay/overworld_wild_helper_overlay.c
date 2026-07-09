@@ -21,6 +21,19 @@
 #define OW_WILD_HELPER_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_HELPER_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE 1
 #define OW_WILD_HELPER_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE OW_WILD_HELPER_SPAWN_MAX_DISTANCE
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS OW_WILD_HELPER_SPAWN_MAX_DISTANCE
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS * 2 + 1)
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER (OW_WILD_HELPER_SPAWN_MIN_DISTANCE * 2 - 1)
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN \
+    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS - OW_WILD_HELPER_SPAWN_MIN_DISTANCE + 1)
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX \
+    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + OW_WILD_HELPER_SPAWN_MIN_DISTANCE - 1)
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_TILE_COUNT \
+    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER * OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER \
+        - OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER \
+            * OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER)
+#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT \
+    ((OW_WILD_HELPER_STATIC_SPAWN_CACHE_TILE_COUNT + 7) / 8)
 #define OW_WILD_HELPER_DESPAWN_DISTANCE 14
 #define OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE 3
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
@@ -95,6 +108,13 @@ typedef struct OverworldWildHelperHeadbuttLandingOffset {
     s8 dy;
 } OverworldWildHelperHeadbuttLandingOffset;
 
+typedef struct OverworldWildHelperStaticSpawnTileCache {
+    u8 fishingShoreBits[OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT];
+    u16 mapId;
+    s16 playerX;
+    s16 playerY;
+} OverworldWildHelperStaticSpawnTileCache;
+
 static const u8 sOverworldWildHelperGrassSlotWeights[OW_WILD_HELPER_GRASS_SLOTS] = {
     20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
 };
@@ -113,6 +133,8 @@ static const OverworldWildHelperHeadbuttLandingOffset sOverworldWildHelperHeadbu
     { -1, 0 },
     { 1, 0 },
 };
+
+static OverworldWildHelperStaticSpawnTileCache sOverworldWildHelperStaticSpawnTileCache;
 
 static int OverworldWildHelper_Abs(int value)
 {
@@ -150,19 +172,22 @@ static int OverworldWildHelper_DirectionDeltaY(u8 direction)
 
 static BOOL OverworldWildHelper_AreSpawnCallbacksValid(const OverworldWildHelperSpawnCallbacks *callbacks)
 {
-    return callbacks != NULL
-        && callbacks->getPlayerState != NULL
-        && callbacks->tryGetSpawnTerrain != NULL
-        && callbacks->isTileOccupied != NULL
-        && callbacks->isNearActiveSpawn != NULL
-        && callbacks->isWalkableLandTile != NULL
-        && callbacks->isFishingShoreTile != NULL
-        && callbacks->getMapId != NULL
-        && callbacks->loadArchiveData != NULL
-        && callbacks->tryGetEncounterDataId != NULL
-        && callbacks->findSavedShiny != NULL
-        && callbacks->loadSavedShiny != NULL
-        && callbacks->applyBehaviorTestSpecies != NULL;
+    const void * const *callbackFields = (const void * const *)callbacks;
+    u32 callbackIndex;
+
+    if (callbacks == NULL) {
+        return FALSE;
+    }
+
+    for (callbackIndex = 0;
+         callbackIndex < sizeof(*callbacks) / sizeof(callbackFields[0]);
+         callbackIndex++) {
+        if (callbackFields[callbackIndex] == NULL) {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
 }
 
 static BOOL OverworldWildHelper_GetMapId(
@@ -170,9 +195,7 @@ static BOOL OverworldWildHelper_GetMapId(
     void *context,
     u16 *mapId)
 {
-    return callbacks != NULL
-        && callbacks->getMapId != NULL
-        && callbacks->getMapId(context, mapId);
+    return callbacks->getMapId(context, mapId);
 }
 
 static BOOL OverworldWildHelper_LoadArchiveData(
@@ -212,8 +235,7 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
     int x;
     int y;
 
-    if (position == NULL
-        || !callbacks->getPlayerState(context, &playerState)) {
+    if (!callbacks->getPlayerState(context, &playerState)) {
         return FALSE;
     }
 
@@ -254,36 +276,137 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
     return candidateCount != 0;
 }
 
-static BOOL OverworldWildHelper_TryPickFishingSpawnPosition(
+static void OverworldWildHelper_ClearStaticSpawnTileBits(u8 *bits)
+{
+    u32 wordIndex;
+
+    for (wordIndex = 0;
+         wordIndex < OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT;
+         wordIndex++) {
+        bits[wordIndex] = 0;
+    }
+}
+
+static void OverworldWildHelper_SetStaticSpawnTileBit(u8 *bits, int index)
+{
+    bits[index / 8] |= 1U << (index % 8);
+}
+
+static BOOL OverworldWildHelper_GetStaticSpawnTileBit(const u8 *bits, int index)
+{
+    return (bits[index / 8] & (1U << (index % 8))) != 0;
+}
+
+static void OverworldWildHelper_RebuildStaticSpawnTileCache(
+    OverworldWildHelperStaticSpawnTileCache *cache,
+    const OverworldWildHelperSpawnCallbacks *callbacks,
+    void *context,
+    u16 mapId,
+    int playerX,
+    int playerY)
+{
+    int relX;
+    int relY;
+    int index = 0;
+
+    OverworldWildHelper_ClearStaticSpawnTileBits(cache->fishingShoreBits);
+
+    for (relY = 0; relY < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER; relY++) {
+        for (relX = 0; relX < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER; relX++) {
+            int x = playerX - OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + relX;
+            int y = playerY - OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + relY;
+
+            if (relX >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
+                && relX <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX
+                && relY >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
+                && relY <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX) {
+                continue;
+            }
+
+            if (callbacks->isStaticFishingShoreTile(context, x, y)) {
+                OverworldWildHelper_SetStaticSpawnTileBit(cache->fishingShoreBits, index);
+            }
+
+            index++;
+        }
+    }
+
+    cache->mapId = mapId + 1;
+    cache->playerX = (s16)playerX;
+    cache->playerY = (s16)playerY;
+}
+
+static OverworldWildHelperStaticSpawnTileCache *OverworldWildHelper_EnsureStaticSpawnTileCache(
+    const OverworldWildHelperSpawnCallbacks *callbacks,
+    void *context,
+    const OverworldWildHelperPlayerState *playerState)
+{
+    OverworldWildHelperStaticSpawnTileCache *cache;
+    u16 mapId;
+
+    if (callbacks == NULL
+        || callbacks->isStaticFishingShoreTile == NULL
+        || playerState == NULL
+        || !OverworldWildHelper_GetMapId(callbacks, context, &mapId)) {
+        return NULL;
+    }
+
+    cache = &sOverworldWildHelperStaticSpawnTileCache;
+    if (cache->mapId == mapId + 1
+        && cache->playerX == playerState->playerX
+        && cache->playerY == playerState->playerY) {
+        return cache;
+    }
+
+    OverworldWildHelper_RebuildStaticSpawnTileCache(
+        cache,
+        callbacks,
+        context,
+        mapId,
+        playerState->playerX,
+        playerState->playerY);
+    return cache;
+}
+
+static BOOL OverworldWildHelper_TryPickCachedFishingSpawnPosition(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnPosition *position)
 {
+    OverworldWildHelperStaticSpawnTileCache *cache;
     OverworldWildHelperPlayerState playerState;
     u32 candidateCount = 0;
+    int relX;
+    int relY;
     int x;
     int y;
+    int index = 0;
 
     if (position == NULL
         || !callbacks->getPlayerState(context, &playerState)) {
         return FALSE;
     }
 
-    for (y = playerState.playerY - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-         y <= playerState.playerY + OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-         y++) {
-        for (x = playerState.playerX - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-             x <= playerState.playerX + OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-             x++) {
-            int dx = x - playerState.playerX;
-            int dy = y - playerState.playerY;
-            int distance = OverworldWildHelper_Max(
-                OverworldWildHelper_Abs(dx),
-                OverworldWildHelper_Abs(dy));
+    cache = OverworldWildHelper_EnsureStaticSpawnTileCache(callbacks, context, &playerState);
+    if (cache == NULL) {
+        return FALSE;
+    }
 
-            if (distance < OW_WILD_HELPER_SPAWN_MIN_DISTANCE
-                || distance > OW_WILD_HELPER_SPAWN_MAX_DISTANCE
-                || !callbacks->isFishingShoreTile(context, x, y)
+    for (relY = 0, y = playerState.playerY - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
+         relY < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER;
+         relY++, y++) {
+        for (relX = 0, x = playerState.playerX - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
+             relX < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER;
+             relX++, x++) {
+            if (relX >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
+                && relX <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX
+                && relY >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
+                && relY <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX) {
+                continue;
+            }
+
+            if (!OverworldWildHelper_GetStaticSpawnTileBit(cache->fishingShoreBits, index++)
+                || callbacks->isTileOccupied(context, x, y)
                 || callbacks->isNearActiveSpawn(
                     context,
                     x,
@@ -458,7 +581,7 @@ static BOOL OverworldWildHelper_TryPickSpawnPositionForTerrain(
         return OverworldWildHelper_TryPickHeadbuttSpawnPosition(callbacks, context, position);
     }
     if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
-        return OverworldWildHelper_TryPickFishingSpawnPosition(callbacks, context, position);
+        return OverworldWildHelper_TryPickCachedFishingSpawnPosition(callbacks, context, position);
     }
     return OverworldWildHelper_TryPickSpawnPosition(callbacks, context, terrain, position);
 }
@@ -812,7 +935,6 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
-    int slot,
     const OverworldWildSpawnPosition *position,
     BOOL shinyAlreadySpawned,
     u16 shinyOddsDenominator,
@@ -820,13 +942,6 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
     int *savedShinySlot,
     BOOL *shiny)
 {
-    if (position == NULL
-        || encounter == NULL
-        || savedShinySlot == NULL
-        || shiny == NULL) {
-        return FALSE;
-    }
-
     *savedShinySlot = callbacks->findSavedShiny(context, terrain);
     if (*savedShinySlot >= 0) {
         callbacks->loadSavedShiny(context, *savedShinySlot, encounter);
@@ -855,7 +970,6 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
         return FALSE;
     }
 
-    callbacks->applyBehaviorTestSpecies(context, terrain, slot, *savedShinySlot, encounter);
     return TRUE;
 }
 
@@ -866,10 +980,7 @@ static BOOL OverworldWildHelper_CopyPreparedSpawn(
     int savedShinySlot,
     OverworldWildPreparedSpawn *prepared)
 {
-    if (position == NULL
-        || encounter == NULL
-        || prepared == NULL
-        || encounter->species == SPECIES_NONE
+    if (encounter->species == SPECIES_NONE
         || encounter->level == 0) {
         return FALSE;
     }
@@ -879,7 +990,7 @@ static BOOL OverworldWildHelper_CopyPreparedSpawn(
     prepared->savedShinySlot = savedShinySlot;
     prepared->shiny = shiny;
     prepared->shinyCounterEligible = FALSE;
-    prepared->reserved = 0;
+    prepared->behaviorLimitKey = 0;
     prepared->behaviorProfile = (OverworldWildBehaviorProfile){ 0 };
     prepared->startup = (OverworldWildSpawnStartup){ 0 };
     prepared->behaviorClass = 0;
@@ -911,7 +1022,6 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
             callbacks,
             context,
             terrain,
-            slot,
             &position,
             shinyAlreadySpawned,
             shinyOddsDenominator,

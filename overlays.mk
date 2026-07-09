@@ -3,6 +3,8 @@ CODE_BUILD_DIRS += $(BUILD)
 THUMB_HELP := $(BUILD)/thumb_help.o
 LINKED_OUTPUTS = build/linked.o
 
+OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-ipa-pta -fno-expensive-optimizations
+
 INDIVIDUAL := individual
 OVERLAYS := $(filter-out $(INDIVIDUAL) $(shell cd $(C_SUBDIR); ls *.*),$(shell cd $(C_SUBDIR); ls))
 
@@ -26,11 +28,11 @@ $1_C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*
 $1_ASM_SRCS := $(wildcard $(ASM_SUBDIR)/$1/*.s)
 ALL_ASM_SRCS += $(wildcard $(ASM_SUBDIR)/$1/*.s)
 $1_ASM_OBJS := $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s))
-$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(THUMB_HELP)
+$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay,$1),,$(THUMB_HELP))
 
 
-$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) rom_gen.ld
-	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(THUMB_HELP)
+$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay,$1),,$(THUMB_HELP)) rom_gen.ld
+	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay,$1),,$(THUMB_HELP))
 
 $(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o
 	$(OBJCOPY) -O binary $(BUILD)/$1_linked.o $(BUILD)/output_$1.bin
