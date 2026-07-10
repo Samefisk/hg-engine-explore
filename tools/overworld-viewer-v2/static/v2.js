@@ -33,7 +33,7 @@ const elements = {};
   "profilesView", "profileSearch", "profileKindFilter", "profileLibrary",
   "profileContextSpecies", "profileContextTerrain", "profileContextLevel",
   "profileContextShiny", "resolveContext", "profileResolution", "profileInspector",
-  "routesView", "routeSearch", "routeLibrary", "routeInspector",
+  "routesView", "routeSearch", "routeFilters", "routeLibrary", "routeInspector",
   "soundsView", "soundSearch", "soundFilters", "soundLibrary", "soundInspector",
   "soundStatus", "shinyCounter", "refreshShiny", "resetShiny", "maxShiny",
   "reservedShinies", "toastRegion", "confirmDialog",
@@ -118,14 +118,37 @@ function totalChangeCount() {
   );
 }
 
+function totalValidationCount() {
+  return Object.values(state.controllers).reduce((total, controller) => {
+    const count = typeof controller?.validationCount === "function"
+      ? controller.validationCount()
+      : (typeof controller?.hasInvalid === "function" && controller.hasInvalid() ? 1 : 0);
+    return total + (Number(count) || 0);
+  }, 0);
+}
+
+function firstValidationMessage() {
+  for (const controller of Object.values(state.controllers)) {
+    if (typeof controller?.validationMessage !== "function") continue;
+    const message = controller.validationMessage();
+    if (message) return message;
+  }
+  return "Fix invalid draft values before saving.";
+}
+
 function markDirty() {
   const count = totalChangeCount();
+  const validationCount = totalValidationCount();
   elements.pendingCount.textContent = String(count);
   elements.pendingCount.hidden = count === 0;
-  elements.saveAll.disabled = state.busy || state.conflict || count === 0;
-  elements.resetDraft.disabled = state.busy || count === 0;
-  if (count > 0 && !state.busy) setStatus(`${count} draft change${count === 1 ? "" : "s"}`, "pending");
-  if (count === 0 && !state.busy && !state.conflict) setStatus("Source ready", "ready");
+  elements.saveAll.disabled = state.busy || state.conflict || count === 0 || validationCount > 0;
+  elements.resetDraft.disabled = state.busy || (count === 0 && validationCount === 0);
+  if (validationCount > 0 && !state.busy) {
+    setStatus(`${validationCount} invalid draft value${validationCount === 1 ? "" : "s"} · ${firstValidationMessage()}`, "error");
+  } else if (count > 0 && !state.busy) {
+    setStatus(`${count} draft change${count === 1 ? "" : "s"}`, "pending");
+  }
+  if (count === 0 && validationCount === 0 && !state.busy && !state.conflict) setStatus("Source ready", "ready");
 }
 
 function setBusy(busy) {
@@ -223,6 +246,12 @@ function compactPayload(payload) {
 }
 
 async function saveAllChanges() {
+  if (totalValidationCount() > 0) {
+    const message = firstValidationMessage();
+    setStatus(message, "error");
+    toast(message, "error");
+    return;
+  }
   const profilePayload = state.controllers.profiles?.commitPayload?.() || {};
   const routePayload = state.controllers.routes?.commitPayload?.() || {};
   const domains = compactPayload({ ...profilePayload, ...routePayload });
@@ -255,7 +284,7 @@ async function saveAllChanges() {
 }
 
 async function resetAllDrafts() {
-  if (!totalChangeCount()) return;
+  if (!totalChangeCount() && !totalValidationCount()) return;
   const confirmed = await confirmAction({
     title: "Discard every draft change?",
     message: "This clears unsaved profile, override, route, and spawn-setting edits.",

@@ -417,6 +417,7 @@ def resolve_context(
     terrain_values, destination_values = legacy.parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
+    primitive_maps = legacy.parse_primitive_maps(source, macros)
 
     class_labels = legacy.invert_labels(macros, legacy.CLASS_PREFIX)
     group_labels = legacy.invert_labels(macros, legacy.GROUP_PREFIX)
@@ -614,6 +615,7 @@ def resolve_context(
         ],
         "baseProfile": base_profile,
         "resolvedProfile": resolved_profile,
+        "resolvedPrimitives": legacy.resolve_primitives(resolved_profile, primitive_maps, macros),
         "resolverLayers": resolver_layers,
         "matchedOverrideOrders": matched_rule_orders,
         "matchedOverrideProfileOrders": matched_profile_orders,

@@ -1826,17 +1826,47 @@ button {
 .match-card {
   min-width: 0;
   margin: 0;
-  padding: 8px;
+  padding: 0;
   border: 1px solid #b9b6ae;
   border-radius: 2px;
   background: #f7f4ec;
 }
 
-.match-card legend {
-  padding: 0 5px;
+.pv2-match-card > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 9px;
+  background: #ebe8df;
+}
+
+.pv2-match-card > summary > span,
+.pv2-match-card > summary > em {
   color: var(--red-dark);
   font: 850 10px/1 var(--mono);
+  font-style: normal;
   text-transform: uppercase;
+}
+
+.pv2-match-card > summary > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #3f4642;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv2-match-card > summary > em {
+  color: #606763;
+  font-size: 9px;
+}
+
+.pv2-match-body {
+  padding: 8px;
+  border-top: 1px solid #c3c0b8;
 }
 
 .match-grid {
@@ -2039,6 +2069,232 @@ button {
   border: 1px dashed #aaa8a1;
   color: #59605c;
   text-align: center;
+}
+
+.pv2-target-builder {
+  margin: 9px;
+  padding: 9px;
+  border: 1px dashed #a6a49d;
+  background: #ebe8df;
+}
+
+.pv2-target-builder > header,
+.pv2-target-controls,
+.pv2-section-actions,
+.pv2-diagnostics > summary,
+.pv2-full-profile > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pv2-target-builder > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pv2-target-builder > header small,
+.pv2-target-builder > header em,
+.pv2-section-actions,
+.pv2-member-note {
+  color: #5d6460;
+  font: 700 9px/1.3 var(--mono);
+}
+
+.pv2-target-builder > header em {
+  flex: 0 0 auto;
+  font-style: normal;
+}
+
+.pv2-target-controls {
+  display: grid;
+  grid-template-columns: minmax(125px, .7fr) minmax(160px, 1fr) auto;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.pv2-target-controls label,
+.pv2-member-search {
+  display: grid;
+  gap: 3px;
+  color: #4f5652;
+  font: 750 10px/1.2 var(--mono);
+}
+
+.pv2-target-controls select,
+.pv2-member-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 35px;
+  padding: 0 8px;
+  border: 1px solid #b4b1a9;
+  border-radius: 3px;
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+
+.pv2-target-preview {
+  display: flex;
+  align-items: center;
+  min-height: 37px;
+  margin-top: 7px;
+}
+
+.pv2-target-preview img,
+.pv2-target-preview > span {
+  width: 32px;
+  height: 32px;
+  margin-right: -5px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(1px 1px 0 rgb(48 52 50 / 20%));
+}
+
+.pv2-target-preview b {
+  margin-left: 10px;
+  font: 800 10px/1 var(--mono);
+}
+
+.pv2-member-search {
+  margin: 0 9px 9px;
+}
+
+.pv2-member-note {
+  margin: -2px 9px 9px;
+}
+
+.pv2-section-actions {
+  padding: 7px 9px;
+  border-bottom: 1px solid #d0cdc4;
+  background: #ece9e1;
+}
+
+.pv2-match-card.is-invalid {
+  border-color: #b7554f;
+  box-shadow: inset 3px 0 #c74f47;
+}
+
+.pv2-match-card.is-invalid > summary > strong,
+[aria-invalid="true"] {
+  color: #8d2e29;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: #b84f49 !important;
+  box-shadow: inset 3px 0 #c74f47;
+}
+
+.pv2-diagnostics,
+.pv2-full-profile {
+  margin: 8px;
+  border: 1px solid #aaa8a1;
+  border-radius: 2px;
+  background: #e4e1d9;
+}
+
+.pv2-diagnostics > summary,
+.pv2-full-profile > summary {
+  min-height: 40px;
+  padding: 7px 9px;
+  font: 800 10px/1.2 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-diagnostics > summary small,
+.pv2-full-profile > summary small {
+  color: #5b625e;
+}
+
+.pv2-diagnostic-stack {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid #bbb8af;
+}
+
+.pv2-diagnostic-stack h4 {
+  margin: 0 0 5px;
+  color: #505753;
+  font: 850 9px/1.2 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-diagnostic-list,
+.pv2-runtime-layers,
+.pv2-runtime-layers ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv2-diagnostic-list li,
+.pv2-runtime-layers > li,
+.pv2-runtime-layers ul li,
+.pv2-full-profile dl > div,
+.pv2-primitives > div {
+  padding: 6px 7px;
+  border: 1px solid #c2bfb7;
+  background: #f3f0e8;
+}
+
+.pv2-diagnostic-list li,
+.pv2-runtime-layers header,
+.pv2-runtime-layers ul li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.pv2-runtime-layers ul {
+  margin-top: 5px;
+}
+
+.pv2-runtime-layers p {
+  margin: 4px 0 0;
+  color: #636965;
+  font-size: 10px;
+}
+
+.pv2-full-profile dl,
+.pv2-primitives {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 8px;
+  border-top: 1px solid #bbb8af;
+}
+
+.pv2-full-profile dl > div,
+.pv2-primitives > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pv2-full-profile dt,
+.pv2-primitives dt {
+  color: #5d6460;
+  font: 750 9px/1.2 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-full-profile dd,
+.pv2-primitives dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.pv2-full-profile dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--green);
+  font: 700 9px/1.2 var(--mono);
 }
 
 /* Routes and sounds ----------------------------------------------------- */
@@ -2405,6 +2661,105 @@ button {
   text-align: center;
 }
 
+.route-filter-row .filter-chip {
+  min-height: 27px;
+  padding-inline: 7px;
+  font-size: 9px;
+  text-transform: none;
+}
+
+.v2-route-overview {
+  padding: 10px 12px 2px;
+  border-bottom: 1px solid #d0cdc4;
+  background: #eeebe3;
+}
+
+.v2-route-overview > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v2-route-overview h3 {
+  margin: 2px 0 0;
+  color: #323836;
+  font-size: 14px;
+}
+
+.v2-route-overview > header > small {
+  color: #5e6561;
+  font: 700 9px/1.2 var(--mono);
+}
+
+.v2-roster-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 8px 0;
+}
+
+.v2-roster-strip > button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 43px;
+  padding: 4px 6px;
+  border: 1px solid #bbb8af;
+  border-radius: 2px;
+  background: #f8f5ed;
+  color: #343a38;
+  text-align: left;
+}
+
+.v2-roster-strip > button:hover {
+  border-color: var(--red-dark);
+  background: #fff7ef;
+}
+
+.v2-roster-icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.v2-roster-strip span,
+.v2-roster-strip strong,
+.v2-roster-strip small {
+  display: block;
+  min-width: 0;
+}
+
+.v2-roster-strip strong,
+.v2-roster-strip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-roster-strip strong {
+  font-size: 11px;
+}
+
+.v2-roster-strip small {
+  margin-top: 2px;
+  color: #606763;
+  font: 650 8px/1.2 var(--mono);
+}
+
+.v2-bulk-editor {
+  grid-template-columns: minmax(160px, .8fr) minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.v2-bulk-editor .v2-field {
+  grid-template-columns: 1fr;
+  gap: 3px;
+}
+
 .v2-sound-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2765,6 +3120,25 @@ td select {
 }
 
 @media (max-width: 780px) {
+  .pv2-target-controls,
+  .v2-bulk-editor {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pv2-target-controls > button,
+  .v2-bulk-editor > button {
+    grid-column: 1 / -1;
+  }
+
+  .pv2-full-profile dl,
+  .pv2-primitives {
+    grid-template-columns: 1fr;
+  }
+
+  .v2-roster-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .cartridge-header {
     grid-template-columns: minmax(0, 1fr) max-content max-content;
     gap: 7px;
@@ -2881,6 +3255,18 @@ td select {
 }
 
 @media (max-width: 560px) {
+  .pv2-target-controls,
+  .v2-bulk-editor,
+  .v2-roster-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .pv2-section-actions,
+  .v2-route-overview > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .brand-lens {
     width: 27px;
     height: 27px;

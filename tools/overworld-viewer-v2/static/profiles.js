@@ -16,6 +16,22 @@ const DEFAULT_MATCH = Object.freeze({
   behaviorClass: "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
 });
 
+const NO_TARGET_CLASS = "0xFE";
+
+const TARGET_KINDS = Object.freeze([
+  ["pokemon", "Pokémon"],
+  ["family", "Evolution family"],
+  ["type", "Typing"],
+  ["spawnPool", "Spawn pool"],
+]);
+
+const SPAWN_POOLS = Object.freeze([
+  { key: "land", label: "Land", raw: "OW_WILD_SPAWN_TERRAIN_LAND", tableKeys: ["morning", "day", "night", "hoenn", "sinnoh"], swarmKeys: ["landSwarm"] },
+  { key: "surf", label: "Surf", raw: "OW_WILD_SPAWN_TERRAIN_SURF", tableKeys: ["surf"], swarmKeys: ["surfSwarm"] },
+  { key: "fish", label: "Fishing", raw: "OW_WILD_SPAWN_TERRAIN_FISHING", tableKeys: ["oldRod", "goodRod", "superRod"], swarmKeys: ["nightFish", "fishSwarm"] },
+  { key: "headbutt", label: "Headbutt", raw: "OW_WILD_SPAWN_TERRAIN_HEADBUTT", tableKeys: ["headbuttNormal", "headbuttSpecial"], swarmKeys: [] },
+]);
+
 const MATCH_FIELDS = Object.freeze([
   ["species", "Pokémon"],
   ["groupMask", "Group mask"],
@@ -242,6 +258,9 @@ export function createProfilesController({
     contextResult: null,
     contextError: "",
     contextBusy: false,
+    targetKind: "pokemon",
+    targetValue: "",
+    memberQuery: "",
     draggedKey: "",
     selectionHint: "",
     busy: false,
@@ -370,6 +389,24 @@ export function createProfilesController({
     return drafts.overrideNames.get(profileKey(profile)) ?? profile.name ?? profile.symbol ?? "Profile";
   }
 
+  function overrideNameAvailable(name, excludedProfile = null) {
+    const normalized = String(name || "").trim().toLowerCase();
+    if (!normalized) return false;
+    const excludedKey = excludedProfile ? profileKey(excludedProfile) : "";
+    return !overrideProfiles().some((profile) => profile !== excludedProfile
+      && (!excludedKey || profileKey(profile) !== excludedKey)
+      && nameFor(profile).trim().toLowerCase() === normalized
+      && !drafts.removedOverrides.has(profileKey(profile)));
+  }
+
+  function uniqueOverrideName(preferred) {
+    const base = String(preferred || "New override profile").trim() || "New override profile";
+    if (overrideNameAvailable(base)) return base;
+    let suffix = 2;
+    while (!overrideNameAvailable(`${base} ${suffix}`)) suffix += 1;
+    return `${base} ${suffix}`;
+  }
+
   function rawFieldMap(profile) {
     const result = {};
     for (const field of data.fields) {
@@ -419,7 +456,14 @@ export function createProfilesController({
   }
 
   function setMatches(profile, matches) {
-    const normalized = matches.map(cloneRawMatch);
+    const normalized = matches.map((match) => {
+      const next = cloneRawMatch(match);
+      const hasExplicitTarget = MATCH_FIELDS.some(([field]) => field !== "behaviorClass"
+        && !(field === "species" && next[field] === "SPECIES_NONE")
+        && !isAnyMatchValue(field, next[field]));
+      if (next.behaviorClass === NO_TARGET_CLASS && hasExplicitTarget) next.behaviorClass = DEFAULT_MATCH.behaviorClass;
+      return next;
+    });
     if (profile.draftId) {
       profile.matches = normalized;
       return;
@@ -452,6 +496,137 @@ export function createProfilesController({
     const targetKey = profileKey(targetProfile);
     if (original && profileKey(original) === targetKey) drafts.memberships.delete(symbol);
     else drafts.memberships.set(symbol, targetKey);
+  }
+
+  function speciesEntries() {
+    return data.assignments
+      .map((assignment) => assignment?.species)
+      .filter((species) => species?.symbol && species.symbol !== "SPECIES_NONE");
+  }
+
+  function compactLookup(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  function speciesForInput(value) {
+    const needle = compactLookup(value);
+    if (!needle) return null;
+    const options = [...speciesEntries(), ...(data.speciesOptions || [])];
+    return options.find((species) => unique([
+      species.symbol,
+      species.name,
+      ...(species.aliases || []),
+    ]).some((candidate) => compactLookup(candidate) === needle)) || null;
+  }
+
+  function typeGroupSymbol(typeSymbol) {
+    return `OW_WILD_BEHAVIOR_GROUP_TYPE_${String(typeSymbol || "").replace(/^TYPE_/, "")}`;
+  }
+
+  function routeSpeciesForPool(pool) {
+    if (!pool) return [];
+    const liveSymbols = state.controllers?.routes?.speciesSymbolsForPool?.(pool.tableKeys, pool.swarmKeys);
+    if (Array.isArray(liveSymbols)) {
+      const symbols = new Set(liveSymbols);
+      return speciesEntries().filter((species) => symbols.has(species.symbol));
+    }
+    const symbols = new Set();
+    const add = (species, form = 0) => {
+      const base = species?.baseSymbol || species?.symbol;
+      const option = (data.speciesOptions || []).find((candidate) =>
+        (candidate.baseSymbol || candidate.symbol) === base && Number(candidate.form || 0) === Number(form || 0));
+      const symbol = option?.symbol || species?.symbol;
+      if (symbol && symbol !== "SPECIES_NONE") symbols.add(symbol);
+    };
+    (data.routes || []).forEach((route) => {
+      [...(route.pokemonTables || []), ...(route.slotTables || []), ...(route.headbuttTables || [])]
+        .filter((table) => pool.tableKeys.includes(table.key))
+        .forEach((table) => (table.slots || []).forEach((slot) => add(slot.species, slot.form)));
+      (route.swarms || [])
+        .filter((swarm) => pool.swarmKeys.includes(swarm.key))
+        .forEach((swarm) => add(swarm.species, swarm.form));
+    });
+    return speciesEntries().filter((species) => symbols.has(species.symbol));
+  }
+
+  function familyEntries() {
+    const byBase = new Map();
+    speciesEntries().forEach((species) => {
+      const base = species.familyBaseSymbol || species.symbol;
+      if (!byBase.has(base)) byBase.set(base, []);
+      byBase.get(base).push(species);
+    });
+    return [...byBase.entries()].map(([symbol, members]) => ({
+      symbol,
+      name: members.find((species) => species.symbol === symbol)?.name || members[0]?.familyBaseName || humanizeRaw(symbol),
+      members,
+    }));
+  }
+
+  function targetOptions(kind) {
+    if (kind === "type") return (data.typeOptions || []).map((type) => ({ value: type.symbol, label: type.name }));
+    if (kind === "spawnPool") return SPAWN_POOLS.map((pool) => ({ value: pool.raw, label: pool.label }));
+    if (kind === "family") return familyEntries().map((family) => ({ value: family.symbol, label: `${family.name} family` }));
+    return speciesEntries().map((species) => ({ value: species.symbol, label: species.name }));
+  }
+
+  function normalizedTargetValue(kind = ui.targetKind) {
+    const options = targetOptions(kind);
+    if (options.some((option) => option.value === ui.targetValue)) return ui.targetValue;
+    return options[0]?.value || "";
+  }
+
+  function targetCandidates(kind = ui.targetKind, value = normalizedTargetValue(kind)) {
+    if (kind === "type") {
+      return speciesEntries().filter((species) => (species.types || []).some((type) => type.symbol === value));
+    }
+    if (kind === "spawnPool") {
+      return routeSpeciesForPool(SPAWN_POOLS.find((pool) => pool.raw === value));
+    }
+    if (kind === "family") {
+      return familyEntries().find((family) => family.symbol === value)?.members || [];
+    }
+    const species = speciesEntries().find((entry) => entry.symbol === value);
+    return species ? [species] : [];
+  }
+
+  function targetMatches(kind = ui.targetKind, value = normalizedTargetValue(kind)) {
+    if (kind === "type") return [{ ...DEFAULT_MATCH, groupMask: typeGroupSymbol(value) }];
+    if (kind === "spawnPool") return [{ ...DEFAULT_MATCH, terrain: value }];
+    return targetCandidates(kind, value).map((species) => ({ ...DEFAULT_MATCH, species: species.symbol }));
+  }
+
+  function matchCanTargetAssignment(match, assignment) {
+    if (!match || match.behaviorClass === NO_TARGET_CLASS) return false;
+    if (match.species !== DEFAULT_MATCH.species && match.species !== assignment.species?.symbol) return false;
+    const pendingBase = findProfile(pendingBaseKeyForSpecies(assignment.species?.symbol));
+    const baseSymbol = pendingBase?.symbol || assignment.behaviorClass?.symbol;
+    if (match.behaviorClass !== DEFAULT_MATCH.behaviorClass && match.behaviorClass !== baseSymbol) return false;
+    if (match.groupMask && match.groupMask !== DEFAULT_MATCH.groupMask && match.groupMask !== "OW_WILD_BEHAVIOR_GROUP_NONE") {
+      const group = (data.groups || []).find((entry) => entry.group?.symbol === match.groupMask);
+      if (!group?.species?.some((species) => species.symbol === assignment.species?.symbol)) return false;
+    }
+    return true;
+  }
+
+  function potentialAssignmentsFor(profile) {
+    if (!isOverrideProfile(profile)) return [];
+    const matches = matchesFor(profile);
+    return data.assignments.filter((assignment) => matches.some((match) => matchCanTargetAssignment(match, assignment)));
+  }
+
+  function matchingContextFor(profile, assignment) {
+    const match = matchesFor(profile).find((candidate) => matchCanTargetAssignment(candidate, assignment));
+    if (!match) return null;
+    const currentLevel = Number(ui.context.level || 1);
+    const minimum = match.minLevel === DEFAULT_MATCH.minLevel ? 1 : Number(match.minLevel);
+    const maximum = match.maxLevel === DEFAULT_MATCH.maxLevel ? 100 : Number(match.maxLevel);
+    return {
+      species: assignment.species?.symbol,
+      terrain: match.terrain === DEFAULT_MATCH.terrain ? ui.context.terrain : match.terrain,
+      level: String(Math.min(maximum, Math.max(minimum, currentLevel))),
+      shiny: match.shiny === DEFAULT_MATCH.shiny ? ui.context.shiny : String(match.shiny) === "1",
+    };
   }
 
   function savedOrderKeys() {
@@ -502,8 +677,20 @@ export function createProfilesController({
     return data.fields.find((field) => field.key === fieldKey)?.label || humanizeRaw(fieldKey);
   }
 
-  function fieldOptions(fieldKey, currentRaw = "") {
+  function fieldLabelForProfile(profile, fieldKey) {
+    if (fieldKey !== "ramMaxSpeed") return fieldLabel(fieldKey);
+    return fieldRaw(profile, "chillAction") === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM" ? "RAM max speed" : "Chain pause";
+  }
+
+  function fieldOptions(fieldKey, currentRaw = "", profile = null) {
     const options = [...(data.editOptions?.[fieldKey] || [])];
+    const explicitlyUsesRam = profile && fieldRaw(profile, "chillAction") === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
+    if (fieldKey === "ramMaxSpeed" && !explicitlyUsesRam) {
+      for (let value = 0; value <= 255; value += 1) {
+        const raw = String(value);
+        if (!options.some((option) => valueRaw(option) === raw)) options.push({ raw, label: raw, value });
+      }
+    }
     if (currentRaw && !options.some((option) => valueRaw(option) === currentRaw)) {
       options.push({ raw: currentRaw, label: humanizeRaw(currentRaw) });
     }
@@ -511,9 +698,20 @@ export function createProfilesController({
   }
 
   function profileSearchText(profile) {
-    const members = isOverrideProfile(profile) ? [] : membersFor(profile).map((item) => item.species?.name);
+    const assignments = isOverrideProfile(profile) ? potentialAssignmentsFor(profile) : membersFor(profile);
+    const members = assignments.flatMap((item) => [
+      item.species?.name,
+      item.species?.symbol,
+      item.species?.familyBaseName,
+      ...(item.species?.types || []).flatMap((type) => [type.name, type.symbol]),
+      ...(item.groups || []),
+    ]);
     const matches = isOverrideProfile(profile) ? matchesFor(profile).flatMap((match) => Object.values(match).map(humanizeRaw)) : [];
-    return [nameFor(profile), profile.symbol, profile.summary, ...members, ...matches].filter(Boolean).join(" ").toLowerCase();
+    const fields = data.fields.flatMap((field) => [field.label, fieldRaw(profile, field.key), valueLabel(profile?.profile?.[field.key])]);
+    const rules = (profile.classRules || []).flatMap((rule) => [rule.summary, rule.className]);
+    const primitives = Object.values(profile.primitives || {}).flatMap((primitive) => [valueRaw(primitive), valueLabel(primitive)]);
+    return [nameFor(profile), profile.symbol, profile.summary, ...members, ...matches, ...fields, ...rules, ...primitives]
+      .filter(Boolean).join(" ").toLowerCase();
   }
 
   function visibleProfiles(profiles, kind) {
@@ -579,22 +777,23 @@ export function createProfilesController({
     const raw = fieldRaw(profile, fieldKey);
     const original = originalFieldRaw(profile, fieldKey);
     const changed = profile.draftId ? Boolean(raw) : raw !== original;
-    const options = fieldOptions(fieldKey, raw);
+    const options = fieldOptions(fieldKey, raw, profile);
+    const label = fieldLabelForProfile(profile, fieldKey);
     const contextBase = isOverrideProfile(profile) ? ui.contextResult?.baseProfile?.[fieldKey] : null;
     return `
       <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${isOverrideProfile(profile) ? " is-overridden" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${changed ? "changed" : (isOverrideProfile(profile) ? "override" : "saved")}">
         <span class="field-copy pv2-field-copy">
-          <strong>${escapeHtml(fieldLabel(fieldKey))}</strong>
+          <strong>${escapeHtml(label)}</strong>
           ${isOverrideProfile(profile) ? `<small class="field-base base-value">(${escapeHtml(valueLabel(contextBase || "Resolve a context below"))})</small>` : `<small>${escapeHtml(humanizeRaw(raw))}</small>`}
         </span>
-        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" aria-label="${escapeHtml(fieldLabel(fieldKey))}">
+        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" aria-label="${escapeHtml(label)}">
           ${isOverrideProfile(profile) ? `<option value="">Not overridden</option>` : ""}
           ${options.map((option) => {
             const optionRaw = valueRaw(option);
             return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === raw ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
           }).join("")}
         </select>
-        ${isOverrideProfile(profile) ? `<button type="button" data-action="remove-field" data-field="${escapeHtml(fieldKey)}" aria-label="Remove ${escapeHtml(fieldLabel(fieldKey))} override">Remove</button>` : ""}
+        ${isOverrideProfile(profile) ? `<button type="button" data-action="remove-field" data-field="${escapeHtml(fieldKey)}" aria-label="Remove ${escapeHtml(label)} override">Remove</button>` : ""}
       </label>`;
   }
 
@@ -621,6 +820,7 @@ export function createProfilesController({
       .map((section) => `
         <details class="field-section pv2-field-section" data-section-id="${section.id}" ${ui.openSections.has(section.id) ? "open" : ""}>
           <summary><span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span><em>${section.activeFields.length}</em></summary>
+          ${isOverrideProfile(profile) ? `<div class="pv2-section-actions"><span>Fields in this group apply together with the layer.</span><button type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}">Make section inherit</button></div>` : ""}
           <div class="field-grid profile-fields pv2-field-grid">${section.activeFields.map((field) => renderFieldControl(profile, field)).join("")}</div>
         </details>`).join("");
     if (!isOverrideProfile(profile)) return rendered;
@@ -636,12 +836,120 @@ export function createProfilesController({
   }
 
   function matchSuggestions(field) {
-    if (field === "species") return unique([DEFAULT_MATCH.species, ...data.assignments.map((item) => item?.species?.symbol)]);
-    if (field === "terrain") return unique([DEFAULT_MATCH.terrain, ...Object.values(data.labels?.terrains || {}).map((item) => item.symbol)]);
-    if (field === "groupMask") return unique([DEFAULT_MATCH.groupMask, ...Object.values(data.labels?.groups || {}).map((item) => item.symbol)]);
-    if (field === "behaviorClass") return unique([DEFAULT_MATCH.behaviorClass, ...baseProfiles().map((profile) => profile.symbol)]);
-    if (field === "shiny") return [DEFAULT_MATCH.shiny, "0", "1"];
-    return [DEFAULT_MATCH[field], ...Array.from({ length: 101 }, (_, index) => String(index))];
+    const existing = data.classes.flatMap((profile) => {
+      const matches = Array.isArray(profile.matches) && profile.matches.length ? profile.matches : [profile.match].filter(Boolean);
+      return matches.map((match) => match?.[field]).filter(Boolean);
+    });
+    if (field === "species") return unique([DEFAULT_MATCH.species, ...data.assignments.map((item) => item?.species?.symbol), ...existing]);
+    if (field === "terrain") return unique([DEFAULT_MATCH.terrain, ...Object.values(data.labels?.terrains || {}).map((item) => item.symbol), ...existing]);
+    if (field === "groupMask") return unique([
+      DEFAULT_MATCH.groupMask,
+      ...Object.values(data.labels?.groups || {}).map((item) => item.symbol),
+      ...(data.typeOptions || []).map((type) => typeGroupSymbol(type.symbol)),
+      ...existing,
+    ]);
+    if (field === "behaviorClass") return unique([DEFAULT_MATCH.behaviorClass, NO_TARGET_CLASS, ...baseProfiles().map((profile) => profile.symbol), ...existing]);
+    if (field === "shiny") return unique([DEFAULT_MATCH.shiny, "0", "1", ...existing]);
+    return unique([DEFAULT_MATCH[field], ...Array.from({ length: 101 }, (_, index) => String(index)), ...existing]);
+  }
+
+  function isAnyMatchValue(field, raw) {
+    return raw === DEFAULT_MATCH[field]
+      || (["minLevel", "maxLevel"].includes(field) && String(raw) === "0")
+      || (field === "groupMask" && raw === "OW_WILD_BEHAVIOR_GROUP_NONE");
+  }
+
+  function matchErrors(match) {
+    if (match?.behaviorClass === NO_TARGET_CLASS) return [];
+    const errors = [];
+    const allowed = new Map(MATCH_FIELDS.map(([field]) => [field, new Set(matchSuggestions(field))]));
+    MATCH_FIELDS.forEach(([field, label]) => {
+      const raw = String(match?.[field] || "");
+      const numeric = ["minLevel", "maxLevel"].includes(field) && /^\d+$/.test(raw);
+      if (!raw || (!allowed.get(field).has(raw) && !numeric)) errors.push(`${label} has an unknown value`);
+      if (numeric && Number(raw) > 100) errors.push(`${label} must be between 0 and 100`);
+    });
+    const min = isAnyMatchValue("minLevel", match.minLevel) ? null : Number(match.minLevel);
+    const max = isAnyMatchValue("maxLevel", match.maxLevel) ? null : Number(match.maxLevel);
+    if (Number.isFinite(min) && Number.isFinite(max) && min > max) errors.push("Minimum level is greater than maximum level");
+    if (MATCH_FIELDS.every(([field]) => isAnyMatchValue(field, match[field]))) errors.push("Rule would match every Pokémon context");
+    return errors;
+  }
+
+  function profileValidationErrors() {
+    const errors = [];
+    allProfiles().forEach((profile) => {
+      if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
+      if (fieldRaw(profile, "chillAction") !== "OW_WILD_BEHAVIOR_LOCOMOTION_RAM") return;
+      const raw = fieldRaw(profile, "ramMaxSpeed");
+      const option = (data.editOptions?.ramMaxSpeed || []).find((candidate) => valueRaw(candidate) === raw);
+      const numeric = Number(option?.value ?? raw);
+      if (Number.isFinite(numeric) && numeric > 4) errors.push(`${nameFor(profile)} RAM max speed must be between 0 and 4`);
+    });
+    const seenNames = new Set();
+    overrideProfiles().filter((profile) => !drafts.removedOverrides.has(profileKey(profile))).forEach((profile) => {
+      const name = nameFor(profile).trim().toLowerCase();
+      if (!name || seenNames.has(name)) errors.push("Override profile names must be unique");
+      seenNames.add(name);
+      const shouldValidateMatches = profile.draftId || drafts.overrideMatches.has(profileKey(profile));
+      if (shouldValidateMatches) matchesFor(profile).forEach((match) => errors.push(...matchErrors(match)));
+    });
+    return unique(errors);
+  }
+
+  function renderTargetBuilder(profile, mode = "override") {
+    const kind = ui.targetKind;
+    const value = normalizedTargetValue(kind);
+    ui.targetValue = value;
+    const candidates = targetCandidates(kind, value);
+    const targetOptionsHtml = targetOptions(kind).map((option) => `
+      <option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("");
+    const assignable = mode === "base"
+      ? candidates.filter((species) => pendingBaseKeyForSpecies(species.symbol) !== profileKey(profile))
+      : candidates;
+    const canApply = mode === "base" ? assignable.length > 0 : targetMatches(kind, value).length > 0;
+    const preview = candidates.slice(0, 14).map((species) => species.iconUrl
+      ? `<img src="${escapeHtml(species.iconUrl)}" alt="${escapeHtml(species.name)}" loading="lazy">`
+      : `<span>${escapeHtml(species.name?.slice(0, 1) || "?")}</span>`).join("");
+    return `
+      <section class="pv2-target-builder" aria-label="${mode === "base" ? "Assign profile members" : "Add override target"}">
+        <header><div><strong>${mode === "base" ? "Assign a target set" : "Add a targeting rule"}</strong><small>${mode === "base" ? "Move matching Pokémon into this base profile." : "Target rows use OR logic; this layer still applies only once."}</small></div><em>${candidates.length} match${candidates.length === 1 ? "" : "es"}</em></header>
+        <div class="pv2-target-controls">
+          <label><span>Target kind</span><select data-target-kind>${TARGET_KINDS.map(([key, label]) => `<option value="${key}" ${key === kind ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+          <label><span>Target</span><select data-target-value>${targetOptionsHtml}</select></label>
+          <button type="button" data-action="add-target" ${canApply ? "" : "disabled"}>${mode === "base" ? `Assign ${assignable.length}` : "Add target"}</button>
+        </div>
+        <div class="pv2-target-preview" aria-label="Target preview">${preview || `<small>No Pokémon match this target.</small>`}${candidates.length > 14 ? `<b>+${candidates.length - 14}</b>` : ""}</div>
+      </section>`;
+  }
+
+  function addTarget(profile) {
+    const kind = ui.targetKind;
+    const value = normalizedTargetValue(kind);
+    if (!value) return;
+    if (isOverrideProfile(profile)) {
+      let matches = matchesFor(profile).map(cloneRawMatch);
+      if (matches.length === 1 && matches[0].behaviorClass === NO_TARGET_CLASS) matches = [];
+      const signatures = new Set(matches.map((match) => JSON.stringify(cloneRawMatch(match))));
+      targetMatches(kind, value).forEach((match) => {
+        const signature = JSON.stringify(cloneRawMatch(match));
+        if (!signatures.has(signature)) {
+          signatures.add(signature);
+          matches.push(match);
+        }
+      });
+      if (matches.length) setMatches(profile, matches);
+      ui.openSections.add("matches");
+      status(`Added ${humanizeRaw(value)} to ${nameFor(profile)}.`, "warning");
+    } else {
+      const candidates = targetCandidates(kind, value)
+        .filter((species) => pendingBaseKeyForSpecies(species.symbol) !== profileKey(profile));
+      candidates.forEach((species) => setMembership(species.symbol, profile));
+      status(`Assigned ${candidates.length} Pokémon to ${nameFor(profile)}.`, "warning");
+    }
+    renderEditor();
+    renderList();
+    signalDirty();
   }
 
   function renderMatches(profile) {
@@ -652,15 +960,21 @@ export function createProfilesController({
       <details class="match-section pv2-match-section" data-section-id="matches" ${ui.openSections.has("matches") ? "open" : ""}>
         <summary><span><strong>Match rules</strong><small>Each rule targets a context; all rules share this layer's fields.</small></span><em>${matches.length}</em></summary>
         <div class="match-list pv2-match-list">
-          ${matches.map((match, matchIndex) => `
-            <fieldset class="match-card pv2-match-card">
-              <legend>Rule ${matchIndex + 1}</legend>
+          ${renderTargetBuilder(profile, "override")}
+          ${matches.map((match, matchIndex) => {
+            const errors = matchErrors(match);
+            return `
+            <details class="match-card pv2-match-card${errors.length ? " is-invalid" : ""}" ${errors.length ? "open" : ""}>
+              <summary><span>Rule ${String(matchIndex + 1).padStart(2, "0")}</span><strong>${escapeHtml(errors[0] || matchSummary(match))}</strong><em>${errors.length ? "Fix rule" : "Raw rule"}</em></summary>
+              <div class="pv2-match-body">
               <div class="match-grid pv2-match-grid">
                 ${MATCH_FIELDS.map(([field, label]) => `
                   <label><span>${escapeHtml(label)}</span><input data-match-index="${matchIndex}" data-match-field="${field}" list="pv2-match-${field}" value="${escapeHtml(match[field])}" autocomplete="off"></label>`).join("")}
               </div>
-              <div class="match-actions pv2-match-actions"><small>${escapeHtml(matchSummary(match))}</small><button type="button" data-action="remove-match" data-match-index="${matchIndex}" ${matches.length === 1 ? "disabled" : ""}>Remove rule</button></div>
-            </fieldset>`).join("")}
+              <div class="match-actions pv2-match-actions"><small>Advanced raw values for this target only.</small><button type="button" data-action="remove-match" data-match-index="${matchIndex}" ${matches.length === 1 ? "disabled" : ""}>Remove rule</button></div>
+              </div>
+            </details>`;
+          }).join("")}
           <button type="button" data-action="add-match">Add match rule</button>
         </div>
         ${datalists}
@@ -668,6 +982,7 @@ export function createProfilesController({
   }
 
   function matchSummary(match) {
+    if (match?.behaviorClass === NO_TARGET_CLASS) return "No target yet — this layer is inert until a target is added";
     const specific = MATCH_FIELDS
       .map(([field, label]) => [label, match[field]])
       .filter(([, raw]) => raw && !ANY_MATCH_PREFIXES.some((prefix) => raw === prefix || raw.startsWith(prefix)));
@@ -676,21 +991,37 @@ export function createProfilesController({
 
   function renderMembership(profile) {
     const members = membersFor(profile);
-    const memberSymbols = new Set(members.map((item) => item.species?.symbol));
-    const available = data.assignments.filter((item) => !memberSymbols.has(item.species?.symbol));
     const isDefault = String(profile.index) === String(data.defaultClassIndex);
     const expanded = ui.openSections.has("membership");
+    const query = ui.memberQuery.trim().toLowerCase();
+    const visibleMembers = members.filter((assignment) => !query || [
+      assignment.species?.name,
+      assignment.species?.symbol,
+      assignment.species?.familyBaseName,
+      ...(assignment.species?.types || []).flatMap((type) => [type.name, type.symbol]),
+    ].filter(Boolean).join(" ").toLowerCase().includes(query)).slice(0, 160);
     return `
       <details class="membership-section pv2-membership" data-section-id="membership" ${expanded ? "open" : ""}>
         <summary><span><strong>Membership</strong><small>Assign Pokémon to this base profile.</small></span><em>${members.length}</em></summary>
-        ${expanded ? `<div class="member-add pv2-member-add">
-          <select data-member-select aria-label="Pokémon to assign"><option value="">Choose Pokémon…</option>${available.map((assignment) => `<option value="${escapeHtml(assignment.species.symbol)}">${escapeHtml(assignment.species.name)}</option>`).join("")}</select>
-          <button type="button" data-action="add-member" ${available.length ? "" : "disabled"}>Assign</button>
-        </div>
+        ${expanded ? `${renderTargetBuilder(profile, "base")}
+        <label class="pv2-member-search"><span>Find current members</span><input type="search" value="${escapeHtml(ui.memberQuery)}" data-member-search placeholder="Name, symbol, family, or type"></label>
         <ul class="member-list pv2-member-list">
-          ${members.map((assignment) => `<li><span>${assignment.species?.iconUrl ? `<img src="${escapeHtml(assignment.species.iconUrl)}" alt="" loading="lazy">` : ""}<strong>${escapeHtml(assignment.species?.name)}</strong><small>${escapeHtml(assignment.species?.symbol)}</small></span><button type="button" data-action="remove-member" data-species="${escapeHtml(assignment.species?.symbol)}" ${isDefault ? "disabled title=\"Default members cannot be unassigned\"" : ""}>${isDefault ? "Default" : "Move to Default"}</button></li>`).join("") || `<li class="empty-state empty-state--small">No Pokémon currently use this profile.</li>`}
+          ${visibleMembers.map((assignment) => `<li><span>${assignment.species?.iconUrl ? `<img src="${escapeHtml(assignment.species.iconUrl)}" alt="" loading="lazy">` : ""}<strong>${escapeHtml(assignment.species?.name)}</strong><small>${escapeHtml(assignment.species?.symbol)}</small></span><button type="button" data-action="remove-member" data-species="${escapeHtml(assignment.species?.symbol)}" ${isDefault ? "disabled title=\"Default members cannot be unassigned\"" : ""}>${isDefault ? "Default" : "Move to Default"}</button></li>`).join("") || `<li class="empty-state empty-state--small">No members match this search.</li>`}
         </ul>
+        ${members.length > visibleMembers.length ? `<p class="pv2-member-note">Showing ${visibleMembers.length} of ${members.length}. Search to narrow this list.</p>` : ""}
         ` : ""}
+      </details>`;
+  }
+
+  function renderAffected(profile) {
+    const affected = potentialAssignmentsFor(profile);
+    const expanded = ui.openSections.has("affected");
+    return `
+      <details class="membership-section pv2-affected" data-section-id="affected" ${expanded ? "open" : ""}>
+        <summary><span><strong>Potential coverage</strong><small>Pokémon that can match this one layer in at least one valid context.</small></span><em>${affected.length}</em></summary>
+        ${expanded ? `<ul class="member-list pv2-member-list">
+          ${affected.slice(0, 160).map((assignment) => `<li><span>${assignment.species?.iconUrl ? `<img src="${escapeHtml(assignment.species.iconUrl)}" alt="" loading="lazy">` : ""}<strong>${escapeHtml(assignment.species?.name)}</strong><small>${escapeHtml(assignment.species?.symbol)}</small></span><button type="button" data-action="inspect-species" data-species="${escapeHtml(assignment.species?.symbol)}">Resolve match</button></li>`).join("") || `<li class="empty-state empty-state--small">No Pokémon can currently match this layer.</li>`}
+        </ul>${affected.length > 160 ? `<p class="pv2-member-note">Showing the first 160 of ${affected.length} possible Pokémon.</p>` : ""}` : ""}
       </details>`;
   }
 
@@ -704,6 +1035,7 @@ export function createProfilesController({
     const override = isOverrideProfile(profile);
     const removed = drafts.removedOverrides.has(key);
     const actions = `
+      ${!override && String(profile.index) !== String(data.defaultClassIndex) ? `<button type="button" data-action="convert-base-to-override" data-profile-key="${escapeHtml(key)}">Make override</button>` : ""}
       <button type="button" data-action="rename-profile" data-profile-key="${escapeHtml(key)}" ${profile.canRename === false ? "disabled" : ""}>Rename</button>
       <button type="button" data-action="duplicate-profile" data-profile-key="${escapeHtml(key)}">Duplicate</button>
       <button class="is-danger" type="button" data-action="delete-profile" data-profile-key="${escapeHtml(key)}" ${!override && profile.canDelete === false ? "disabled" : ""}>${removed ? "Undo removal" : "Delete"}</button>`;
@@ -713,7 +1045,7 @@ export function createProfilesController({
         <div class="inspector-actions pv2-editor-actions">${actions}</div>
       </header>
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}
-      ${override ? renderMatches(profile) : renderMembership(profile)}
+      ${override ? `${renderMatches(profile)}${renderAffected(profile)}` : renderMembership(profile)}
       <section class="profile-field-editor pv2-fields" aria-labelledby="pv2-fields-title">
         <header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="pv2-fields-title">${override ? "Overridden values" : "Profile values"}</h3></div><span>${data.fields.length} available fields</span></header>
         ${renderFieldSections(profile)}
@@ -746,6 +1078,11 @@ export function createProfilesController({
     const renderLayer = ({ layer, index }) => `<li class="resolution-layer ${layer.matched ? "is-matched" : "is-skipped"}${index === finalMatchedOverrideIndex ? " is-applied-last" : ""}"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(layer.name)}</strong><small>${escapeHtml(layer.summary || layer.kind)}</small></div><em>${index === finalMatchedOverrideIndex ? "applied last" : (layer.matched ? "applied" : "skipped")}</em></li>`;
     const allFields = unique([...Object.keys(result.baseProfile || {}), ...Object.keys(result.resolvedProfile || {})]);
     const changed = allFields.filter((field) => valueRaw(result.baseProfile?.[field]) !== valueRaw(result.resolvedProfile?.[field]));
+    const classHits = result.classRuleHits || [];
+    const runtimeLayers = result.runtimeLayers || [];
+    const normalizations = result.normalizations || [];
+    const primitives = Object.entries(result.resolvedPrimitives || {});
+    const runtimeChangeCount = runtimeLayers.reduce((total, layer) => total + (layer.changes || []).length, 0);
     return `
       <div class="resolution-result">
         <header class="resolution-summary"><div><small>Resolved subject</small><strong>${escapeHtml(result.context?.species?.name || ui.context.species)} · Lv ${escapeHtml(result.context?.level || ui.context.level)}</strong></div><span class="result-chip">${matchedOverrideIndexes.length} matched</span></header>
@@ -755,6 +1092,23 @@ export function createProfilesController({
         <section><h3>Base → effective by field</h3><ul class="resolution-fields">
           ${changed.map((field) => `<li><strong>${escapeHtml(fieldLabel(field))}</strong><span class="base-value">(${escapeHtml(valueLabel(result.baseProfile?.[field]))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}</b></li>`).join("") || `<li class="pv2-empty">No field changes in this context.</li>`}
         </ul></section>
+        <details class="pv2-diagnostics">
+          <summary><span>Runtime diagnostics</span><small>${runtimeChangeCount} field writes · ${classHits.length} class match${classHits.length === 1 ? "" : "es"}</small></summary>
+          <div class="pv2-diagnostic-stack">
+            <section><h4>Class selection</h4><ul class="pv2-diagnostic-list">
+              ${classHits.map((hit) => `<li><span>#${escapeHtml(hit.order)}</span><strong>${escapeHtml(hit.summary)}</strong><small>${escapeHtml(hit.className)}</small></li>`).join("") || `<li class="pv2-empty">No class rules matched.</li>`}
+            </ul></section>
+            <section><h4>Runtime layer writes</h4><ol class="pv2-runtime-layers">
+              ${runtimeLayers.map((layer, index) => `<li><header><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(layer.label)}</strong><small>${(layer.changes || []).length} fields</small></header>${(layer.changes || []).length ? `<ul>${layer.changes.map((change) => `<li><strong>${escapeHtml(change.label || fieldLabel(change.field))}</strong><span class="base-value">(${escapeHtml(valueLabel(change.before))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(change.after))}</b></li>`).join("")}</ul>` : `<p>No runtime writes.</p>`}</li>`).join("") || `<li class="pv2-empty">No runtime layers returned.</li>`}
+            </ol></section>
+            ${normalizations.length ? `<section><h4>Normalizations</h4><ul class="pv2-diagnostic-list">${normalizations.map((item) => `<li><strong>${escapeHtml(item.label || fieldLabel(item.field))}</strong><small>${escapeHtml(item.reason || item.summary || `${valueLabel(item.before)} → ${valueLabel(item.after)}`)}</small></li>`).join("")}</ul></section>` : ""}
+            ${primitives.length ? `<section><h4>Resolved engine primitives</h4><dl class="pv2-primitives">${primitives.map(([key, value]) => `<div><dt>${escapeHtml(humanizeRaw(String(key).replace(/([a-z])([A-Z])/g, "$1_$2")))}</dt><dd>${escapeHtml(valueLabel(value))}</dd></div>`).join("")}</dl></section>` : ""}
+          </div>
+        </details>
+        <details class="pv2-full-profile">
+          <summary><span>Full effective profile</span><small>${allFields.length} fields</small></summary>
+          <dl>${allFields.map((field) => `<div><dt>${escapeHtml(fieldLabel(field))}</dt><dd>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}<small>(${escapeHtml(valueLabel(result.baseProfile?.[field]))})</small></dd></div>`).join("")}</dl>
+        </details>
       </div>`;
   }
 
@@ -865,6 +1219,21 @@ export function createProfilesController({
     if (ui.selectedKey === oldKey) ui.selectedKey = newKey;
   }
 
+  function rewriteDraftBehaviorClass(oldSymbol, newSymbol) {
+    if (!oldSymbol || !newSymbol || oldSymbol === newSymbol) return;
+    drafts.overrideMatches.forEach((matches, key) => {
+      const rewritten = matches.map((match) => match.behaviorClass === oldSymbol
+        ? { ...match, behaviorClass: newSymbol }
+        : match);
+      drafts.overrideMatches.set(key, rewritten);
+    });
+    drafts.newOverrides.forEach((draft) => {
+      draft.matches = draft.matches.map((match) => match.behaviorClass === oldSymbol
+        ? { ...match, behaviorClass: newSymbol }
+        : match);
+    });
+  }
+
   function dropProfileDraft(key) {
     drafts.baseFields.delete(key);
     drafts.overrideFields.delete(key);
@@ -882,8 +1251,14 @@ export function createProfilesController({
     renderList();
     try {
       const oldKey = currentProfile ? profileKey(currentProfile) : "";
+      const oldSymbol = currentProfile?.symbol || "";
+      const fallbackSymbol = baseByIndex(data.defaultClassIndex)?.symbol || "OW_WILD_BEHAVIOR_CLASS_DEFAULT";
       const result = await apiPost("/manage-profiles", payload);
-      if (payload.action === "rename" && result?.symbol) rekeyBaseDraft(oldKey, `base:${result.symbol}`);
+      if (payload.action === "rename" && result?.symbol) {
+        rekeyBaseDraft(oldKey, `base:${result.symbol}`);
+        rewriteDraftBehaviorClass(oldSymbol, result.symbol);
+      }
+      if (payload.action === "delete") rewriteDraftBehaviorClass(oldSymbol, fallbackSymbol);
       if (payload.action === "delete") dropProfileDraft(oldKey);
       if (typeof state.reloadData === "function") await state.reloadData({ keepStatus: true });
       else refresh(await apiGet("/data.json", { cache: "no-store" }));
@@ -907,7 +1282,14 @@ export function createProfilesController({
       onSubmit: (form) => {
         const formData = new FormData(form);
         const name = String(formData.get("name") || "").trim();
-        const pokemon = String(formData.get("pokemon") || "").split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
+        const rawPokemon = String(formData.get("pokemon") || "").split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
+        const resolved = rawPokemon.map(speciesForInput);
+        const invalid = rawPokemon.filter((_, index) => !resolved[index]);
+        if (invalid.length) {
+          status(`Unknown Pokémon: ${invalid.join(", ")}`, "error");
+          return;
+        }
+        const pokemon = unique(resolved.map((species) => species.symbol));
         return manageBaseProfile({ action: "create", name, pokemon });
       },
     });
@@ -929,18 +1311,22 @@ export function createProfilesController({
   }
 
   function createOverrideDialog(source = null) {
+    const suggestedName = uniqueOverrideName(source ? `${nameFor(source)} copy` : "New override profile");
     openDialog({
       title: source ? `Duplicate ${nameFor(source)}` : "Create override profile",
       submitLabel: source ? "Duplicate override" : "Create draft",
-      fields: `<label><span>Name</span><input name="name" required maxlength="80" value="${escapeHtml(source ? `${nameFor(source)} copy` : "New override profile")}" autocomplete="off"></label>`,
+      fields: `<label><span>Name</span><input name="name" required maxlength="80" value="${escapeHtml(suggestedName)}" autocomplete="off"></label>`,
       onSubmit: (form) => {
         const name = String(new FormData(form).get("name") || "").trim();
-        const defaultSpecies = ui.context.species || data.assignments[0]?.species?.symbol || DEFAULT_MATCH.species;
+        if (!overrideNameAvailable(name)) {
+          status(`An override named ${name} already exists. Names identify layers and must be unique.`, "error");
+          return;
+        }
         const draft = {
           draftId: createDraftId(),
           name,
           fields: source ? Object.fromEntries(data.fields.map((field) => [field.key, fieldRaw(source, field.key)]).filter(([, raw]) => raw)) : {},
-          matches: source ? matchesFor(source).map(cloneRawMatch) : [{ ...DEFAULT_MATCH, species: defaultSpecies }],
+          matches: source ? matchesFor(source).map(cloneRawMatch) : [{ ...DEFAULT_MATCH, behaviorClass: NO_TARGET_CLASS }],
         };
         drafts.newOverrides.push(draft);
         ui.selectedKey = `draft:${draft.draftId}`;
@@ -951,6 +1337,34 @@ export function createProfilesController({
     });
   }
 
+  function createOverrideFromBase(profile) {
+    if (!profile || isOverrideProfile(profile) || String(profile.index) === String(data.defaultClassIndex)) return;
+    const members = membersFor(profile);
+    if (!members.length) {
+      status(`${nameFor(profile)} has no Pokémon to target.`, "error");
+      return;
+    }
+    const name = uniqueOverrideName(`${nameFor(profile)} override`);
+    const fields = {};
+    const allowed = new Set(data.overrideFieldKeys || []);
+    data.fields.forEach((field) => {
+      const raw = fieldRaw(profile, field.key);
+      if (allowed.has(field.key) && raw) fields[field.key] = raw;
+    });
+    const draft = {
+      draftId: createDraftId(),
+      name,
+      fields,
+      matches: members.map((assignment) => ({ ...DEFAULT_MATCH, species: assignment.species.symbol })),
+    };
+    drafts.newOverrides.push(draft);
+    ui.selectedKey = `draft:${draft.draftId}`;
+    ui.selectionHint = name;
+    ui.openSections.add("matches");
+    renderAll();
+    status(`Created ${name} with ${members.length} member targets. The base profile is unchanged.`, "warning");
+  }
+
   function renameDialog(profile) {
     openDialog({
       title: `Rename ${nameFor(profile)}`,
@@ -958,6 +1372,10 @@ export function createProfilesController({
       onSubmit: (form) => {
         const name = String(new FormData(form).get("name") || "").trim();
         if (isOverrideProfile(profile)) {
+          if (!overrideNameAvailable(name, profile)) {
+            status(`An override named ${name} already exists. Names identify layers and must be unique.`, "error");
+            return;
+          }
           if (profile.draftId) profile.name = name;
           else if (name === profile.name) drafts.overrideNames.delete(profileKey(profile));
           else drafts.overrideNames.set(profileKey(profile), name);
@@ -1023,6 +1441,9 @@ export function createProfilesController({
   function changeMatch(profile, index, field, raw) {
     const matches = matchesFor(profile).map(cloneRawMatch);
     if (!matches[index]) return;
+    if (matches[index].behaviorClass === NO_TARGET_CLASS && field !== "behaviorClass") {
+      matches[index].behaviorClass = DEFAULT_MATCH.behaviorClass;
+    }
     matches[index][field] = String(raw || DEFAULT_MATCH[field]);
     setMatches(profile, matches);
     renderList();
@@ -1069,17 +1490,32 @@ export function createProfilesController({
     else if (action === "create-base") createBaseDialog();
     else if (action === "create-override") createOverrideDialog();
     else if (action === "new-profile") createProfileDialog();
+    else if (action === "convert-base-to-override" && profile) createOverrideFromBase(profile);
     else if (action === "rename-profile" && profile) renameDialog(profile);
     else if (action === "duplicate-profile" && profile) duplicateProfile(profile);
     else if (action === "delete-profile" && profile) deleteProfile(profile);
     else if (action === "close-dialog") closeDialog();
     else if (action === "add-field" && profile) addOverrideField(profile);
+    else if (action === "add-target" && profile) addTarget(profile);
+    else if (action === "inspect-species") {
+      const assignment = data.assignments.find((item) => item.species?.symbol === target.dataset.species);
+      const context = assignment && profile ? matchingContextFor(profile, assignment) : null;
+      if (context) Object.assign(ui.context, context);
+      else ui.context.species = target.dataset.species;
+      renderContextControls();
+      resolveContext();
+    }
+    else if (action === "clear-section" && profile) {
+      const section = FIELD_SECTIONS.find((candidate) => candidate.id === target.dataset.section);
+      (section?.fields || []).forEach((field) => setField(profile, field, ""));
+      renderEditor(); renderList(); signalDirty();
+    }
     else if (action === "remove-field" && profile) {
       setField(profile, target.dataset.field, "");
       renderEditor(); renderList(); signalDirty();
     } else if (action === "add-match" && profile) {
       const matches = matchesFor(profile).map(cloneRawMatch);
-      matches.push(cloneRawMatch(matches.at(-1) || { ...DEFAULT_MATCH, species: ui.context.species }));
+      matches.push({ ...DEFAULT_MATCH });
       setMatches(profile, matches); renderEditor(); renderList(); signalDirty();
     } else if (action === "remove-match" && profile) {
       const matches = matchesFor(profile).map(cloneRawMatch);
@@ -1100,6 +1536,15 @@ export function createProfilesController({
     if (event.target === elements.profileSearch) {
       ui.search = event.target.value;
       renderList();
+    } else if (event.target.matches("[data-member-search]")) {
+      ui.memberQuery = event.target.value;
+      const profile = findProfile();
+      if (profile) {
+        renderEditor();
+        const input = editorElement.querySelector("[data-member-search]");
+        input?.focus();
+        input?.setSelectionRange(ui.memberQuery.length, ui.memberQuery.length);
+      }
     }
   }
 
@@ -1108,6 +1553,17 @@ export function createProfilesController({
     if (event.target === elements.profileKindFilter) {
       ui.kind = event.target.value;
       renderList();
+      return;
+    }
+    if (event.target.matches("[data-target-kind]")) {
+      ui.targetKind = event.target.value;
+      ui.targetValue = "";
+      renderEditor();
+      return;
+    }
+    if (event.target.matches("[data-target-value]")) {
+      ui.targetValue = event.target.value;
+      renderEditor();
       return;
     }
     if (event.target.matches("[data-profile-value]") && profile) {
@@ -1129,9 +1585,15 @@ export function createProfilesController({
   function onToggle(event) {
     const section = event.target.closest("[data-section-id]");
     if (!section) return;
-    if (section.open) ui.openSections.add(section.dataset.sectionId);
-    else ui.openSections.delete(section.dataset.sectionId);
-    if (section.dataset.sectionId === "membership") requestAnimationFrame(renderEditor);
+    const wasOpen = ui.openSections.has(section.dataset.sectionId);
+    if (section.open) {
+      ui.openSections.add(section.dataset.sectionId);
+      if (!wasOpen && ["membership", "affected", "matches"].includes(section.dataset.sectionId)) {
+        requestAnimationFrame(renderEditor);
+      }
+    } else {
+      ui.openSections.delete(section.dataset.sectionId);
+    }
   }
 
   async function onSubmit(event) {
@@ -1347,6 +1809,9 @@ export function createProfilesController({
   return Object.freeze({
     hasChanges,
     changeCount,
+    hasInvalid: () => profileValidationErrors().length > 0,
+    validationCount: () => profileValidationErrors().length,
+    validationMessage: () => profileValidationErrors()[0] || "",
     commitPayload,
     clearCommitted,
     reset,

@@ -5193,6 +5193,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
             for override in existing_overrides
         ]
         preferred_profile_orders: set[int] = set()
+        identity_changed_profile_orders: set[int] = set()
 
         for order, replacement_matches in match_replacements.items():
             profile_order = existing_overrides[order - 1]["profileOrder"]
@@ -5266,6 +5267,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
             profile_order = existing_overrides[order - 1]["profileOrder"]
             preferred_profile_orders.add(profile_order)
             profiles_model[profile_order - 1]["name"] = name
+            identity_changed_profile_orders.add(profile_order)
 
         for index, change in enumerate(additions, 1):
             validate_override_fields(change["fields"], f"override {index}")
@@ -5287,6 +5289,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 }
             )
             profile_order = len(profiles_model)
+            identity_changed_profile_orders.add(profile_order)
             if change.get("name"):
                 preferred_profile_orders.add(profile_order)
             for match_index, match in enumerate(change.get("matches") or [change["match"]], 1):
@@ -5298,6 +5301,24 @@ def apply_profile_override_changes(body: bytes) -> dict:
                         "removed": False,
                     }
                 )
+
+        active_profile_orders_by_name: dict[str, set[int]] = {}
+        for rule in rules_model:
+            if rule["removed"]:
+                continue
+            profile_order = rule["profileOrder"]
+            name = profiles_model[profile_order - 1].get("name", "").strip()
+            if name:
+                active_profile_orders_by_name.setdefault(name.lower(), set()).add(profile_order)
+        duplicate_changed_names = [
+            profiles_model[min(profile_orders) - 1].get("name", normalized_name)
+            for normalized_name, profile_orders in active_profile_orders_by_name.items()
+            if len(profile_orders) > 1 and profile_orders.intersection(identity_changed_profile_orders)
+        ]
+        if duplicate_changed_names:
+            raise ValueError(
+                f"override profile names must be unique: {', '.join(sorted(duplicate_changed_names))}"
+            )
 
         if reorder_groups:
             profile_order_by_rule_order = {

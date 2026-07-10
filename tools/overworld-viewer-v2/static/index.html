@@ -202,8 +202,12 @@
             </header>
             <label class="search-field search-field--standalone" for="routeSearch">
               <span class="sr-only">Search routes</span>
-              <input id="routeSearch" type="search" placeholder="Search route or map" autocomplete="off">
+              <input id="routeSearch" type="search" placeholder="Search route, map, or Pokémon" autocomplete="off">
             </label>
+            <fieldset id="routeFilters" class="filter-row route-filter-row">
+              <legend class="sr-only">Encounter method filters</legend>
+              <button class="filter-chip is-active" type="button" data-route-filter="grass" aria-pressed="true">Grass</button>
+            </fieldset>
             <div id="routeLibrary" class="item-library">
               <div class="loading-card"><span></span><p>Loading route encounters…</p></div>
             </div>

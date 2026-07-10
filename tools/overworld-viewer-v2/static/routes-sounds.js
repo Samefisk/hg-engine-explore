@@ -1,5 +1,20 @@
 const ROUTE_SPECIES_LIST_ID = "v2-route-species-options";
 
+const ROUTE_METHODS = [
+  { key: "grass", label: "Grass", tables: ["morning", "day", "night"], rates: ["walkrate"] },
+  { key: "sounds", label: "Sounds", tables: ["hoenn", "sinnoh"], rates: [] },
+  { key: "surf", label: "Surf", tables: ["surf"], rates: ["surfrate"] },
+  { key: "rockSmash", label: "Rock smash", tables: ["rockSmash"], rates: ["rocksmashrate"] },
+  { key: "headbutt", label: "Headbutt", tables: ["headbuttNormal", "headbuttSpecial"], rates: [] },
+  { key: "oldRod", label: "Old rod", tables: ["oldRod"], rates: ["oldrodrate"] },
+  { key: "goodRod", label: "Good rod", tables: ["goodRod"], rates: ["goodrodrate"] },
+  { key: "superRod", label: "Super rod", tables: ["superRod"], rates: ["superrodrate"] },
+  { key: "swarms", label: "Swarms", tables: ["landSwarm", "surfSwarm", "fishSwarm", "radioSwarm"], rates: [] },
+];
+
+const ROUTE_METHOD_BY_TABLE = new Map(ROUTE_METHODS.flatMap((method) => method.tables.map((table) => [table, method.key])));
+const ROUTE_METHOD_BY_RATE = new Map(ROUTE_METHODS.flatMap((method) => method.rates.map((rate) => [rate, method.key])));
+
 const SOUND_FILTERS = [
   ["all", "All"],
   ["effects", "Sound effects"],
@@ -114,6 +129,7 @@ export function createRoutesController({
 } = {}) {
   void api;
   const search = elementFrom(elements, "routeSearch");
+  const filters = elementFrom(elements, "routeFilters");
   const library = elementFrom(elements, "routeLibrary");
   const inspector = elementFrom(elements, "routeInspector");
   const routeCount = elements?.routeCount
@@ -134,10 +150,30 @@ export function createRoutesController({
     species: [],
     speciesByLookup: new Map(),
     speciesByBaseForm: new Map(),
+    methodFilters: new Set(ROUTE_METHODS.map((method) => method.key)),
+    invalidInputs: new Map(),
   };
 
   function signalDirty() {
     if (typeof markDirty === "function") markDirty();
+  }
+
+  function invalidKey(kind, owner, path = "") {
+    return `${kind}:${owner}:${path}`;
+  }
+
+  function markInvalid(key, message, invalid) {
+    if (invalid) model.invalidInputs.set(key, message);
+    else model.invalidInputs.delete(key);
+    signalDirty();
+  }
+
+  function methodEnabled(key) {
+    return model.methodFilters.has(key);
+  }
+
+  function methodForTable(key) {
+    return ROUTE_METHOD_BY_TABLE.get(key) || "grass";
   }
 
   function selectedRoute() {
@@ -185,13 +221,14 @@ export function createRoutesController({
       symbol,
       shortSpeciesSymbol(symbol),
       option.name,
-      option.baseSymbol,
-      shortSpeciesSymbol(option.baseSymbol),
+      ...asArray(option.aliases),
     ];
     names.forEach((name) => {
       if (!name) return;
-      model.speciesByLookup.set(String(name).toLowerCase(), option);
-      model.speciesByLookup.set(compact(name), option);
+      const keys = [String(name).toLowerCase(), compact(name)];
+      keys.forEach((key) => {
+        if (!model.speciesByLookup.has(key)) model.speciesByLookup.set(key, option);
+      });
     });
     const base = option.baseSymbol || option.symbol;
     model.speciesByBaseForm.set(`${base}:${Number(option.form || 0)}`, option);
@@ -217,6 +254,26 @@ export function createRoutesController({
       symbol: option?.baseSymbol || option?.symbol || "SPECIES_NONE",
       form: String(option?.baseSymbol ? Number(option.form || 0) : 0),
     };
+  }
+
+  function speciesIdentity(symbol, form = 0) {
+    return `${symbol || "SPECIES_NONE"}\u0001${Number(form || 0)}`;
+  }
+
+  function effectiveSpeciesGroups(route, { respectFilters = true } = {}) {
+    const groups = new Map();
+    encounterTargets(route, { respectFilters, includeDisabled: true }).forEach((target) => {
+      const symbol = effective(route.id, target.path, target.originalSymbol);
+      const form = effective(route.id, target.formPath, target.originalForm);
+      if (!symbol || symbol === "SPECIES_NONE") return;
+      const key = speciesIdentity(symbol, form);
+      const option = displaySpecies(symbol, form);
+      const current = groups.get(key) || { key, symbol, form: String(form || 0), option, count: 0, methods: new Set() };
+      current.count += 1;
+      current.methods.add(target.method);
+      groups.set(key, current);
+    });
+    return [...groups.values()].sort((left, right) => right.count - left.count || String(left.option?.name).localeCompare(String(right.option?.name)));
   }
 
   function addBaseline(routeId, path, value) {
@@ -247,31 +304,48 @@ export function createRoutesController({
 
   function routeMatches(route) {
     const query = model.query;
+    const groups = effectiveSpeciesGroups(route);
+    if (!groups.length && model.methodFilters.size !== ROUTE_METHODS.length) return false;
     if (!query) return true;
     const text = [
       route.id,
       route.name,
       ...asArray(route.maps).flatMap((map) => [map.name, map.symbol]),
-      ...asArray(route.species).flatMap((species) => [species.name, species.symbol]),
+      ...groups.flatMap((entry) => [
+        entry.option?.name,
+        entry.option?.symbol,
+        entry.symbol,
+        ...asArray(entry.option?.aliases),
+      ]),
     ].join(" ").toLowerCase();
-    return text.includes(query);
+    return text.includes(query) || compact(text).includes(compact(query));
+  }
+
+  function renderFilters() {
+    if (!filters) return;
+    filters.innerHTML = ROUTE_METHODS.map((method) => {
+      const active = methodEnabled(method.key);
+      return `<button class="filter-chip${active ? " is-active" : ""}" type="button" data-route-filter="${escapeHtml(method.key)}" aria-pressed="${active}">${escapeHtml(method.label)}</button>`;
+    }).join("");
   }
 
   function renderLibrary() {
     if (!library) return;
     const visible = model.routes.filter(routeMatches);
-    if (routeCount) routeCount.textContent = model.query ? `${visible.length}/${model.routes.length}` : String(model.routes.length);
+    if (routeCount) routeCount.textContent = visible.length === model.routes.length ? String(model.routes.length) : `${visible.length}/${model.routes.length}`;
     library.innerHTML = visible.length ? visible.map((route) => {
       const selected = String(route.id) === String(model.selectedRouteId);
       const edits = routeChangeCount(route.id);
-      const sample = asArray(route.species).slice(0, 4);
+      const groups = effectiveSpeciesGroups(route);
+      const sample = groups.slice(0, 4).map((entry) => entry.option);
+      const speciesCount = groups.length;
       return `
         <button class="v2-library-row v2-route-row${selected ? " is-selected" : ""}${edits ? " is-dirty" : ""}" type="button"
           data-route-select="${escapeHtml(route.id)}" aria-pressed="${selected}">
           <span class="v2-library-id">#${escapeHtml(route.id)}</span>
           <span class="v2-library-copy">
             <strong>${escapeHtml(route.name)}</strong>
-            <small>${escapeHtml(mapLabel(route))}${edits ? ` · ${edits} change${edits === 1 ? "" : "s"}` : ""}</small>
+            <small>${escapeHtml(mapLabel(route))} · ${speciesCount} species${edits ? ` · ${edits} change${edits === 1 ? "" : "s"}` : ""}</small>
           </span>
           <span class="v2-icon-stack" aria-hidden="true">${sample.map((species) => icon(species)).join("")}</span>
         </button>`;
@@ -281,12 +355,14 @@ export function createRoutesController({
   function inputNumber(routeId, path, value, label, min = 0, max = 100, extraClass = "") {
     const raw = effective(routeId, path, value);
     const changed = raw !== String(value ?? "");
+    const rangeKey = invalidKey("level-range", routeId, String(path || "").replace(/\.(min|max)Level$/, ""));
+    const invalid = model.invalidInputs.has(invalidKey("route", routeId, path)) || model.invalidInputs.has(rangeKey);
     return `
       <label class="v2-field ${extraClass}${changed ? " is-dirty" : ""}">
         <span>${escapeHtml(label)}</span>
         <input type="number" min="${escapeHtml(min)}" max="${escapeHtml(max)}" step="1" value="${escapeHtml(raw)}"
           data-route-number data-route-id="${escapeHtml(routeId)}" data-path="${escapeHtml(path)}"
-          data-original="${escapeHtml(value)}">
+          data-original="${escapeHtml(value)}" aria-invalid="${invalid}">
       </label>`;
   }
 
@@ -295,6 +371,8 @@ export function createRoutesController({
     const rawForm = effective(routeId, formPath, form || 0);
     const option = displaySpecies(rawSymbol, rawForm);
     const changed = rawSymbol !== String(species?.symbol || "") || rawForm !== String(form || 0);
+    const invalid = model.invalidInputs.has(invalidKey("species", routeId, path));
+    const formInvalid = model.invalidInputs.has(invalidKey("route", routeId, formPath));
     return `
       <label class="v2-field v2-species-field${changed ? " is-dirty" : ""}">
         <span>${escapeHtml(label)}</span>
@@ -303,27 +381,28 @@ export function createRoutesController({
           <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(option.symbol || rawSymbol))}"
             autocomplete="off" data-route-species data-route-id="${escapeHtml(routeId)}"
             data-path="${escapeHtml(path)}" data-form-path="${escapeHtml(formPath)}"
-            data-original="${escapeHtml(species?.symbol)}" data-form-original="${escapeHtml(form || 0)}">
+            data-original="${escapeHtml(species?.symbol)}" data-form-original="${escapeHtml(form || 0)}" aria-invalid="${invalid}">
           <input class="v2-form-input" type="number" min="0" max="31" step="1" value="${escapeHtml(rawForm)}"
             aria-label="Form" title="Form" data-route-number data-route-id="${escapeHtml(routeId)}"
-            data-path="${escapeHtml(formPath)}" data-original="${escapeHtml(form || 0)}">
+            data-path="${escapeHtml(formPath)}" data-original="${escapeHtml(form || 0)}" aria-invalid="${formInvalid}">
         </span>
       </label>`;
   }
 
   function ratesSection(route) {
-    if (!asArray(route.rates).length) return "";
+    const rates = asArray(route.rates).filter((rate) => methodEnabled(ROUTE_METHOD_BY_RATE.get(rate.key) || "grass"));
+    if (!rates.length) return "";
     return `
       <details class="v2-disclosure" open>
         <summary><span>Encounter rates</span><small>0–100%</small></summary>
         <div class="v2-compact-grid">
-          ${route.rates.map((rate) => inputNumber(route.id, rate.path, rate.value, rate.label, 0, 100)).join("")}
+          ${rates.map((rate) => inputNumber(route.id, rate.path, rate.value, rate.label, 0, 100)).join("")}
         </div>
       </details>`;
   }
 
   function grassSection(route) {
-    if (!asArray(route.grassLevels).length) return "";
+    if (!methodEnabled("grass") || !asArray(route.grassLevels).length) return "";
     return `
       <details class="v2-disclosure">
         <summary><span>Grass levels</span><small>${route.grassLevels.length} weighted slots</small></summary>
@@ -390,13 +469,16 @@ export function createRoutesController({
       </details>`;
   }
 
-  function encounterTargets(route) {
+  function encounterTargets(route, { respectFilters = false, includeDisabled = false } = {}) {
     const targets = [];
-    const add = (path, formPath, species, form, enabled = true) => {
-      if (!enabled || !path || !formPath || species?.symbol === "SPECIES_NONE") return;
+    const add = (path, formPath, species, form, method, enabled = true) => {
+      if ((respectFilters && !methodEnabled(method)) || (!includeDisabled && !enabled) || !path || !formPath) return;
+      if (effective(route.id, path, species?.symbol) === "SPECIES_NONE") return;
       targets.push({
         path,
         formPath,
+        method,
+        enabled,
         originalSymbol: baseline(route.id, path, species?.symbol),
         originalForm: baseline(route.id, formPath, form || 0),
       });
@@ -404,15 +486,15 @@ export function createRoutesController({
     asArray(route.pokemonTables).forEach((table) => asArray(table.slots).forEach((slot, index) => {
       const grassLevel = ["morning", "day", "night"].includes(table.key) ? route.grassLevels?.[index] : null;
       const enabled = !grassLevel || Number(effective(route.id, grassLevel.path, grassLevel.value)) !== 0;
-      add(slot.path, slot.formPath, slot.species, slot.form, enabled);
+      add(slot.path, slot.formPath, slot.species, slot.form, methodForTable(table.key), enabled);
     }));
     [...asArray(route.slotTables), ...asArray(route.headbuttTables)].forEach((table) => {
       asArray(table.slots).forEach((slot) => {
         const enabled = Number(effective(route.id, slot.paths?.minLevel, slot.minLevel)) !== 0;
-        add(slot.paths?.species, slot.paths?.form, slot.species, slot.form, enabled);
+        add(slot.paths?.species, slot.paths?.form, slot.species, slot.form, methodForTable(table.key), enabled);
       });
     });
-    asArray(route.swarms).forEach((swarm) => add(swarm.path, swarm.formPath, swarm.species, swarm.form));
+    asArray(route.swarms).forEach((swarm) => add(swarm.path, swarm.formPath, swarm.species, swarm.form, "swarms"));
     return targets;
   }
 
@@ -436,12 +518,41 @@ export function createRoutesController({
           <label class="v2-field v2-species-field">
             <span>Only encounter</span>
             <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(option ? shortSpeciesSymbol(option.symbol) : "")}"
-              data-route-override-input autocomplete="off" placeholder="Pokémon">
+              data-route-override-input autocomplete="off" placeholder="Pokémon" aria-invalid="${model.invalidInputs.has(invalidKey("route-override", route.id))}">
           </label>
           <button type="button" data-action="set-route-override">Apply</button>
           <button type="button" data-action="clear-route-override"${current ? "" : " disabled"}>Turn off</button>
         </div>
         <p class="v2-help">Temporarily makes one Pokémon the only encounter on this route while retaining the original entries for restoration.</p>
+      </details>`;
+  }
+
+  function routeOverview(route) {
+    const groups = effectiveSpeciesGroups(route);
+    const methodNames = new Map(ROUTE_METHODS.map((method) => [method.key, method.label]));
+    return `
+      <section class="v2-route-overview" aria-labelledby="route-overview-title">
+        <header><div><span class="v2-eyebrow">Active method view</span><h3 id="route-overview-title">Encounter roster</h3></div><small>${groups.length} species · ${[...model.methodFilters].length} methods</small></header>
+        <div class="v2-roster-strip">
+          ${groups.map((entry) => `<button type="button" data-bulk-source="${escapeHtml(entry.key)}" aria-label="Replace ${escapeHtml(entry.option?.name || shortSpeciesSymbol(entry.symbol))}">
+            ${icon(entry.option, "v2-roster-icon")}<span><strong>${escapeHtml(entry.option?.name || shortSpeciesSymbol(entry.symbol))}</strong><small>${entry.count} slot${entry.count === 1 ? "" : "s"} · ${[...entry.methods].map((key) => methodNames.get(key) || key).join(", ")}</small></span>
+          </button>`).join("") || `<p class="v2-empty">No configured species in the selected encounter methods.</p>`}
+        </div>
+      </section>`;
+  }
+
+  function bulkSwapSection(route) {
+    const groups = effectiveSpeciesGroups(route);
+    if (!groups.length) return "";
+    return `
+      <details class="v2-disclosure v2-bulk-swap">
+        <summary><span>Bulk species swap</span><small>Selected methods only</small></summary>
+        <div class="v2-inline-editor v2-bulk-editor">
+          <label class="v2-field"><span>Replace</span><select data-bulk-species-source>${groups.map((entry) => `<option value="${escapeHtml(entry.key)}">${escapeHtml(entry.option?.name || shortSpeciesSymbol(entry.symbol))} · ${entry.count} slot${entry.count === 1 ? "" : "s"}</option>`).join("")}</select></label>
+          <label class="v2-field v2-species-field"><span>With</span><input type="text" list="${ROUTE_SPECIES_LIST_ID}" data-bulk-species-target autocomplete="off" placeholder="Choose Pokémon" aria-invalid="${model.invalidInputs.has(invalidKey("bulk", route.id))}"></label>
+          <button type="button" data-action="bulk-swap-species">Stage ${groups[0].count} swaps</button>
+        </div>
+        <p class="v2-help">Every matching slot in the active method filters is staged together. Forms are written as the correct base species and form pair.</p>
       </details>`;
   }
 
@@ -454,18 +565,26 @@ export function createRoutesController({
         const changed = model.spawnDrafts.has(field.symbol);
         if (field.kind === "species") {
           const option = displaySpecies(value, 0);
+          const invalid = model.invalidInputs.has(invalidKey("spawn", field.symbol));
           return `
             <label class="v2-field v2-species-field${changed ? " is-dirty" : ""}">
               <span>${escapeHtml(field.label)}</span>
               <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(option.symbol || value))}"
-                data-spawn-species data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}" autocomplete="off">
+                data-spawn-species data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}" autocomplete="off" aria-invalid="${invalid}">
             </label>`;
         }
+        const relationshipInvalid = (
+          ["OW_WILD_SPAWN_MIN_DISTANCE", "OW_WILD_SPAWN_MAX_DISTANCE"].includes(field.symbol)
+          && model.invalidInputs.has("spawn-range:min-max")
+        ) || (
+          field.symbol === "OW_WILD_DESPAWN_DISTANCE"
+          && model.invalidInputs.has("spawn-range:despawn")
+        );
         return `
           <label class="v2-field${changed ? " is-dirty" : ""}">
             <span>${escapeHtml(field.label)}${field.suffix ? ` (${escapeHtml(field.suffix)})` : ""}</span>
             <input type="number" min="${escapeHtml(field.min)}" max="${escapeHtml(field.max)}" step="1" value="${escapeHtml(value)}"
-              data-spawn-number data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}">
+              data-spawn-number data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}" aria-invalid="${model.invalidInputs.has(invalidKey("spawn", field.symbol)) || relationshipInvalid}">
           </label>`;
       }).join("");
     }).join("");
@@ -499,61 +618,140 @@ export function createRoutesController({
       return;
     }
     const edits = routeChangeCount(route.id);
+    const groups = effectiveSpeciesGroups(route);
+    const pokemonTables = asArray(route.pokemonTables).filter((table) => methodEnabled(methodForTable(table.key)));
+    const slotTables = asArray(route.slotTables).filter((table) => methodEnabled(methodForTable(table.key)));
+    const headbuttTables = asArray(route.headbuttTables).filter((table) => methodEnabled(methodForTable(table.key)));
     inspector.innerHTML = `
       <header class="v2-inspector-header">
         <div>
           <span class="v2-eyebrow">Encounter data #${escapeHtml(route.id)}</span>
           <h2>${escapeHtml(route.name)}</h2>
-          <p>${escapeHtml(mapLabel(route))} · ${escapeHtml(route.speciesCount ?? asArray(route.species).length)} species</p>
+          <p>${escapeHtml(mapLabel(route))} · ${groups.length} species in view</p>
         </div>
         <span class="v2-change-chip${edits ? " is-dirty" : ""}">${edits ? `${edits} changed` : "Source"}</span>
       </header>
+      ${routeOverview(route)}
+      ${bulkSwapSection(route)}
       ${ratesSection(route)}
       ${overrideSection(route)}
       ${grassSection(route)}
       <section class="v2-disclosure-stack" aria-label="Encounter tables">
-        ${asArray(route.pokemonTables).map((table) => pokemonTable(route, table)).join("")}
-        ${asArray(route.slotTables).map((table) => levelTable(route, table)).join("")}
-        ${asArray(route.headbuttTables).map((table) => levelTable(route, table)).join("")}
-        ${swarmsSection(route)}
+        ${pokemonTables.map((table) => pokemonTable(route, table)).join("")}
+        ${slotTables.map((table) => levelTable(route, table)).join("")}
+        ${headbuttTables.map((table) => levelTable(route, table)).join("")}
+        ${methodEnabled("swarms") ? swarmsSection(route) : ""}
       </section>
       ${spawnSettingsSection()}
       ${speciesOptions()}`;
   }
 
   function render() {
+    renderFilters();
     renderLibrary();
     renderInspector();
+  }
+
+  function currentRouteById(routeId) {
+    return model.routesById.get(String(routeId)) || null;
+  }
+
+  function overrideSensitivePath(path) {
+    return /(?:\.form|\.species|\.minLevel)$/.test(String(path || ""))
+      || String(path || "").startsWith("grassLevels.")
+      || String(path || "").startsWith("pokemon.")
+      || String(path || "").startsWith("swarm.");
+  }
+
+  function detachRouteOverride(route) {
+    if (!route || !currentOverride(route)) return false;
+    if (route.encounterOverride) model.overrideDrafts.set(String(route.id), { action: "clear" });
+    else model.overrideDrafts.delete(String(route.id));
+    return true;
+  }
+
+  function refreshInspectorDerived(route) {
+    if (!route || String(selectedRoute()?.id) !== String(route.id)) return;
+    const overview = inspector.querySelector(".v2-route-overview");
+    if (overview) overview.outerHTML = routeOverview(route);
+    const bulk = inspector.querySelector(".v2-bulk-swap");
+    const nextBulk = bulkSwapSection(route);
+    if (bulk) bulk.outerHTML = nextBulk;
+    const groups = effectiveSpeciesGroups(route);
+    const headingCopy = inspector.querySelector(".v2-inspector-header p");
+    if (headingCopy) headingCopy.textContent = `${mapLabel(route)} · ${groups.length} species in view`;
+    const chip = inspector.querySelector(".v2-change-chip");
+    const edits = routeChangeCount(route.id);
+    if (chip) {
+      chip.textContent = edits ? `${edits} changed` : "Source";
+      chip.classList.toggle("is-dirty", Boolean(edits));
+    }
+    const spawnSummary = inspector.querySelector(".v2-global-settings > summary small");
+    if (spawnSummary) spawnSummary.textContent = `${model.spawnDrafts.size} changed`;
   }
 
   function applyNumberInput(input) {
     const valid = numberIsValid(input.value, input.min || null, input.max || null);
     input.setAttribute("aria-invalid", String(!valid));
+    const key = invalidKey("route", input.dataset.routeId, input.dataset.path);
+    markInvalid(key, "Use a route value within the shown range.", !valid);
     if (!valid) return false;
+    const route = currentRouteById(input.dataset.routeId);
+    if (overrideSensitivePath(input.dataset.path)) detachRouteOverride(route);
     setEncounterDraft(input.dataset.routeId, input.dataset.path, input.value, input.dataset.original);
     input.closest(".v2-field")?.classList.toggle(
       "is-dirty",
       effective(input.dataset.routeId, input.dataset.path, input.dataset.original) !== String(input.dataset.original),
     );
+    const range = input.closest(".v2-level-range");
+    if (range) {
+      const values = [...range.querySelectorAll("[data-route-number]")];
+      const minInput = values.find((candidate) => candidate.dataset.path?.endsWith(".minLevel"));
+      const maxInput = values.find((candidate) => candidate.dataset.path?.endsWith(".maxLevel"));
+      const rangeInvalid = minInput && maxInput && Number(minInput.value) > Number(maxInput.value);
+      const rangeKey = invalidKey("level-range", input.dataset.routeId, input.dataset.path?.replace(/\.(min|max)Level$/, ""));
+      markInvalid(rangeKey, "A slot minimum level cannot exceed its maximum level.", rangeInvalid);
+      minInput?.setAttribute("aria-invalid", String(Boolean(rangeInvalid)));
+      maxInput?.setAttribute("aria-invalid", String(Boolean(rangeInvalid)));
+    }
+    if (input.dataset.path?.endsWith(".form")) {
+      const control = input.closest(".v2-species-control");
+      const speciesInput = control?.querySelector("[data-route-species]");
+      const option = displaySpecies(
+        effective(input.dataset.routeId, speciesInput?.dataset.path, speciesInput?.dataset.original),
+        input.value,
+      );
+      const image = control?.querySelector("img");
+      if (image && option.iconUrl) image.src = option.iconUrl;
+      if (speciesInput) speciesInput.value = shortSpeciesSymbol(option.symbol);
+    }
     signalDirty();
     renderLibrary();
+    refreshInspectorDerived(route);
     return true;
   }
 
   function applySpeciesInput(input) {
     const option = resolveSpecies(input.value);
     input.setAttribute("aria-invalid", String(!option));
+    const key = invalidKey("species", input.dataset.routeId, input.dataset.path);
+    markInvalid(key, "Choose a valid Pokémon for every route slot.", !option);
     if (!option) {
       notify(setStatus, "Choose a valid Pokémon.", "error");
       return false;
     }
+    const route = currentRouteById(input.dataset.routeId);
+    detachRouteOverride(route);
     const write = speciesWrite(option);
     setEncounterDraft(input.dataset.routeId, input.dataset.path, write.symbol, input.dataset.original);
     setEncounterDraft(input.dataset.routeId, input.dataset.formPath, write.form, input.dataset.formOriginal || 0);
     input.value = shortSpeciesSymbol(option.symbol);
+    const speciesIcon = input.closest(".v2-species-control")?.querySelector("img");
+    if (speciesIcon && option.iconUrl) speciesIcon.src = option.iconUrl;
     const formInput = Array.from(input.parentElement?.querySelectorAll("[data-path]") || [])
       .find((candidate) => candidate.dataset.path === input.dataset.formPath);
     if (formInput) formInput.value = write.form;
+    model.invalidInputs.delete(invalidKey("route", input.dataset.routeId, input.dataset.formPath));
     input.closest(".v2-field")?.classList.toggle(
       "is-dirty",
       effective(input.dataset.routeId, input.dataset.path, input.dataset.original) !== String(input.dataset.original)
@@ -561,6 +759,7 @@ export function createRoutesController({
     );
     signalDirty();
     renderLibrary();
+    refreshInspectorDerived(route);
     return true;
   }
 
@@ -572,32 +771,61 @@ export function createRoutesController({
       const option = resolveSpecies(value);
       valid = Boolean(option);
       if (option) {
-        value = speciesWrite(option).symbol;
+        value = option.symbol;
         input.value = shortSpeciesSymbol(option.symbol);
       }
     } else {
       valid = numberIsValid(value, input.min || null, input.max || null);
     }
     input.setAttribute("aria-invalid", String(!valid));
+    const key = invalidKey("spawn", input.dataset.symbol);
+    markInvalid(key, species ? "Choose a valid Pokémon for the spawn setting." : "Use a spawn setting within the shown range.", !valid);
     if (!valid) {
       notify(setStatus, species ? "Choose a valid Pokémon." : "Use a value within the shown range.", "error");
       return false;
     }
     setSpawnDraft(input.dataset.symbol, value, original);
+    validateSpawnRelationships();
     input.closest(".v2-field")?.classList.toggle("is-dirty", model.spawnDrafts.has(input.dataset.symbol));
     signalDirty();
+    refreshInspectorDerived(selectedRoute());
     return true;
+  }
+
+  function spawnNumericValue(symbol) {
+    for (const group of asArray(model.data.spawnSettings)) {
+      for (const setting of asArray(group.settings)) {
+        const fields = setting.kind === "testSpawn" ? asArray(setting.fields) : [setting];
+        const field = fields.find((candidate) => candidate.symbol === symbol);
+        if (field) return Number(model.spawnDrafts.get(symbol) ?? field.value ?? field.raw);
+      }
+    }
+    return NaN;
+  }
+
+  function validateSpawnRelationships() {
+    const minimum = spawnNumericValue("OW_WILD_SPAWN_MIN_DISTANCE");
+    const maximum = spawnNumericValue("OW_WILD_SPAWN_MAX_DISTANCE");
+    const despawn = spawnNumericValue("OW_WILD_DESPAWN_DISTANCE");
+    const minMaxInvalid = Number.isFinite(minimum) && Number.isFinite(maximum) && minimum > maximum;
+    const despawnInvalid = Number.isFinite(maximum) && Number.isFinite(despawn) && despawn < maximum;
+    markInvalid("spawn-range:min-max", "Spawn minimum distance cannot exceed maximum distance.", minMaxInvalid);
+    markInvalid("spawn-range:despawn", "Despawn distance must be at least the spawn maximum distance.", despawnInvalid);
+    ["OW_WILD_SPAWN_MIN_DISTANCE", "OW_WILD_SPAWN_MAX_DISTANCE"].forEach((symbol) => {
+      inspector?.querySelector(`[data-symbol="${symbol}"]`)?.setAttribute("aria-invalid", String(minMaxInvalid));
+    });
+    inspector?.querySelector('[data-symbol="OW_WILD_DESPAWN_DISTANCE"]')?.setAttribute("aria-invalid", String(despawnInvalid));
   }
 
   function overrideBaselineEntries(route, targets) {
     const pending = model.overrideDrafts.get(String(route.id));
     if (pending?.action === "set" && asArray(pending.entries).length) return pending.entries;
-    if (asArray(route.encounterOverride?.entries).length) return route.encounterOverride.entries;
+    if (!pending && asArray(route.encounterOverride?.entries).length) return route.encounterOverride.entries;
     return targets.map((target) => ({
       path: target.path,
       formPath: target.formPath,
-      species: target.originalSymbol,
-      form: String(target.originalForm || 0),
+      species: effective(route.id, target.path, target.originalSymbol),
+      form: String(effective(route.id, target.formPath, target.originalForm) || 0),
     }));
   }
 
@@ -654,6 +882,70 @@ export function createRoutesController({
     return true;
   }
 
+  function bulkSourceCount(route, identity) {
+    return encounterTargets(route, { respectFilters: true, includeDisabled: true }).filter((target) => {
+      const symbol = effective(route.id, target.path, target.originalSymbol);
+      const form = effective(route.id, target.formPath, target.originalForm);
+      return speciesIdentity(symbol, form) === identity;
+    }).length;
+  }
+
+  function updateBulkSwapPreview() {
+    const route = selectedRoute();
+    const source = inspector?.querySelector("[data-bulk-species-source]");
+    const button = inspector?.querySelector('[data-action="bulk-swap-species"]');
+    if (!route || !source || !button) return;
+    const count = bulkSourceCount(route, source.value);
+    button.textContent = `Stage ${count} swap${count === 1 ? "" : "s"}`;
+    button.disabled = count === 0;
+  }
+
+  function bulkSwapSpecies(route, identity, option) {
+    const targets = encounterTargets(route, { respectFilters: true, includeDisabled: true }).filter((target) => {
+      const symbol = effective(route.id, target.path, target.originalSymbol);
+      const form = effective(route.id, target.formPath, target.originalForm);
+      return speciesIdentity(symbol, form) === identity;
+    });
+    if (!targets.length) {
+      notify(setStatus, "No matching slots remain in the active methods.", "error");
+      return false;
+    }
+    detachRouteOverride(route);
+    const write = speciesWrite(option);
+    targets.forEach((target) => {
+      setEncounterDraft(route.id, target.path, write.symbol, target.originalSymbol);
+      setEncounterDraft(route.id, target.formPath, write.form, target.originalForm);
+      model.invalidInputs.delete(invalidKey("species", route.id, target.path));
+    });
+    signalDirty();
+    render();
+    notify(setStatus, `${targets.length} ${route.name} slot${targets.length === 1 ? "" : "s"} now draft ${option.name || shortSpeciesSymbol(option.symbol)}.`, "success");
+    return true;
+  }
+
+  function speciesSymbolsForPool(tableKeys = [], swarmKeys = []) {
+    const tableSet = new Set(tableKeys);
+    const swarmSet = new Set(swarmKeys);
+    const symbols = new Set();
+    const add = (route, path, formPath, fallbackSpecies, fallbackForm = 0) => {
+      const symbol = effective(route.id, path, fallbackSpecies?.symbol);
+      const form = effective(route.id, formPath, fallbackForm);
+      const option = displaySpecies(symbol, form);
+      if (option?.symbol && option.symbol !== "SPECIES_NONE") symbols.add(option.symbol);
+    };
+    model.routes.forEach((route) => {
+      [...asArray(route.pokemonTables), ...asArray(route.slotTables), ...asArray(route.headbuttTables)]
+        .filter((table) => tableSet.has(table.key))
+        .forEach((table) => asArray(table.slots).forEach((slot) => {
+          add(route, slot.path || slot.paths?.species, slot.formPath || slot.paths?.form, slot.species, slot.form);
+        }));
+      asArray(route.swarms).filter((swarm) => swarmSet.has(swarm.key)).forEach((swarm) => {
+        add(route, swarm.path, swarm.formPath, swarm.species, swarm.form);
+      });
+    });
+    return [...symbols];
+  }
+
   function routePayload() {
     const changes = {};
     model.encounterDrafts.forEach((value, key) => {
@@ -700,6 +992,7 @@ export function createRoutesController({
     if (scope === "all" || scope === "spawnSettings" || scope === "/save-spawn-settings") {
       model.spawnDrafts.clear();
     }
+    if (scope === "all") model.invalidInputs.clear();
     signalDirty();
     render();
   }
@@ -744,6 +1037,21 @@ export function createRoutesController({
     model.selectedRouteId = button.dataset.routeSelect;
     render();
   }, { signal: abort.signal });
+  filters?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-route-filter]");
+    if (!button) return;
+    const key = button.dataset.routeFilter;
+    if (model.methodFilters.has(key)) {
+      if (model.methodFilters.size === 1) {
+        notify(setStatus, "Keep at least one encounter method visible.", "info");
+        return;
+      }
+      model.methodFilters.delete(key);
+    } else {
+      model.methodFilters.add(key);
+    }
+    render();
+  }, { signal: abort.signal });
   inspector?.addEventListener("input", (event) => {
     const input = event.target;
     if (input.matches("[data-route-number]")) applyNumberInput(input);
@@ -753,8 +1061,19 @@ export function createRoutesController({
     const input = event.target;
     if (input.matches("[data-route-species]")) applySpeciesInput(input);
     else if (input.matches("[data-spawn-species]")) applySpawnInput(input, true);
+    else if (input.matches("[data-bulk-species-source]")) updateBulkSwapPreview();
   }, { signal: abort.signal });
   inspector?.addEventListener("click", async (event) => {
+    const sourceTrigger = event.target.closest("[data-bulk-source]");
+    if (sourceTrigger) {
+      const bulk = inspector.querySelector(".v2-bulk-swap");
+      if (bulk) bulk.open = true;
+      const select = inspector.querySelector("[data-bulk-species-source]");
+      if (select) select.value = sourceTrigger.dataset.bulkSource;
+      updateBulkSwapPreview();
+      inspector.querySelector("[data-bulk-species-target]")?.focus();
+      return;
+    }
     const action = event.target.closest("[data-action]")?.dataset.action;
     const route = selectedRoute();
     if (!route || !action) return;
@@ -762,13 +1081,27 @@ export function createRoutesController({
       const input = inspector.querySelector("[data-route-override-input]");
       const option = resolveSpecies(input?.value);
       input?.setAttribute("aria-invalid", String(!option || option.symbol === "SPECIES_NONE"));
+      markInvalid(invalidKey("route-override", route.id), "Choose a valid Pokémon for the route-only encounter.", !option || option.symbol === "SPECIES_NONE");
       if (!option || option.symbol === "SPECIES_NONE") {
         notify(setStatus, "Choose a valid Pokémon for the route-only encounter.", "error");
         return;
       }
+      model.invalidInputs.delete(invalidKey("route-override", route.id));
       setRouteOverride(route, option);
     } else if (action === "clear-route-override") {
       await clearRouteOverride(route);
+    } else if (action === "bulk-swap-species") {
+      const source = inspector.querySelector("[data-bulk-species-source]");
+      const input = inspector.querySelector("[data-bulk-species-target]");
+      const option = resolveSpecies(input?.value);
+      input?.setAttribute("aria-invalid", String(!option || option.symbol === "SPECIES_NONE"));
+      markInvalid(invalidKey("bulk", route.id), "Choose a valid Pokémon for the bulk swap.", !option || option.symbol === "SPECIES_NONE");
+      if (!option || option.symbol === "SPECIES_NONE") {
+        notify(setStatus, "Choose a valid replacement Pokémon.", "error");
+        return;
+      }
+      model.invalidInputs.delete(invalidKey("bulk", route.id));
+      bulkSwapSpecies(route, source?.value || "", option);
     }
   }, { signal: abort.signal });
 
@@ -780,6 +1113,16 @@ export function createRoutesController({
     changeCount() {
       return model.encounterDrafts.size + model.overrideDrafts.size + model.spawnDrafts.size;
     },
+    hasInvalid() {
+      return model.invalidInputs.size > 0;
+    },
+    validationCount() {
+      return model.invalidInputs.size;
+    },
+    validationMessage() {
+      return model.invalidInputs.values().next().value || "";
+    },
+    speciesSymbolsForPool,
     commitPayload,
     clearCommitted,
     reset,

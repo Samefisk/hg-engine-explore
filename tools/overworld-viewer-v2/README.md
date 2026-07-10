@@ -25,6 +25,9 @@ binding.
 - Keeps drag handles and keyboard move controls for override ordering.
 - Treats each override profile as one runtime layer. Its targeting rows are OR
   conditions; the profile's field changes apply once when any row matches.
+- Adds structured profile targeting for individual Pokémon, evolution
+  families, types, and live encounter pools while keeping raw rule editing for
+  advanced cases. New override drafts start inert until a target is added.
 - Documents the resolver contract in the UI: evaluation is top to bottom and
   the last matching override applies last.
 - Adds an exact context resolver for Pokémon, terrain, level, and shiny state.
@@ -36,6 +39,10 @@ binding.
   read, retrying instead of pairing stale parsed data with a newer revision.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
   across profiles, memberships, overrides, encounters, and spawn settings.
+- Adds a Route Deck roster, encounter-method filters, form-safe bulk species
+  swaps, route-only layers, and live summaries derived from the current draft.
+- Blocks Save while match rules, slot values, forms, level ranges, or global
+  spawn-distance relationships are invalid.
 - Holds the same cross-process workspace lock for the full ROM build, so a
   second V2 process cannot rewrite source files mid-build.
 - Snapshots every writable source and restores the complete snapshot if a
