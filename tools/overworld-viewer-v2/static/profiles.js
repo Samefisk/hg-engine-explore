@@ -117,6 +117,33 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
     ]),
   }),
+  "ram-tuning-chill": Object.freeze({
+    id: "ram-tuning-chill",
+    label: "RAM tuning",
+    meta: "steps · speed tier",
+    fields: Object.freeze([
+      Object.freeze({ key: "ramAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration. Shared with Movement Chain move count" }),
+      Object.freeze({ key: "ramMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed. Shared with Movement Chain pause frames" }),
+    ]),
+  }),
+  "ram-tuning-active": Object.freeze({
+    id: "ram-tuning-active",
+    label: "RAM tuning",
+    meta: "steps · speed tier",
+    fields: Object.freeze([
+      Object.freeze({ key: "attentiveRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
+      Object.freeze({ key: "attentiveRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
+    ]),
+  }),
+  "ram-tuning-tired": Object.freeze({
+    id: "ram-tuning-tired",
+    label: "RAM tuning",
+    meta: "steps · speed tier",
+    fields: Object.freeze([
+      Object.freeze({ key: "tiredRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
+      Object.freeze({ key: "tiredRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
+    ]),
+  }),
 });
 
 const FIELD_SECTIONS = Object.freeze([
@@ -254,7 +281,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
-    ram: ["ramAccelerationSteps", "ramMaxSpeed"],
+    ramTuning: Object.freeze({ composite: "ram-tuning-chill", fields: Object.freeze(["ramAccelerationSteps", "ramMaxSpeed"]) }),
   }),
   active: Object.freeze({
     speed: "attentiveSpeed",
@@ -262,7 +289,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "attentiveHopPause", "attentiveHopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
-    ram: ["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"],
+    ramTuning: Object.freeze({ composite: "ram-tuning-active", fields: Object.freeze(["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"]) }),
   }),
   tired: Object.freeze({
     speed: "tiredSpeed",
@@ -270,7 +297,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "tiredHopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
-    ram: ["tiredRamAccelerationSteps", "tiredRamMaxSpeed"],
+    ramTuning: Object.freeze({ composite: "ram-tuning-tired", fields: Object.freeze(["tiredRamAccelerationSteps", "tiredRamMaxSpeed"]) }),
   }),
 });
 
@@ -925,18 +952,34 @@ export function createProfilesController({
   }
 
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
-    const options = [...(data.editOptions?.[fieldKey] || [])];
-    const usesRam = profile && context.parentField
-      ? context.parentField === "chillAction" && fieldRaw(profile, context.parentField) === RAM_LOCOMOTION
-      : profile && canUseRamLocomotion(profile);
+    let options = [...(data.editOptions?.[fieldKey] || [])];
+    let usesRam = false;
+    if (typeof context.ramMode === "boolean") usesRam = context.ramMode;
+    else if (!context.ambiguous && profile && context.parentField) {
+      usesRam = context.parentField === "chillAction" && fieldRaw(profile, context.parentField) === RAM_LOCOMOTION;
+    } else if (!context.ambiguous && profile) {
+      usesRam = canUseRamLocomotion(profile);
+    }
     if (fieldKey === "ramMaxSpeed" && !usesRam) {
       for (let value = 0; value <= 255; value += 1) {
         const raw = String(value);
         if (!options.some((option) => valueRaw(option) === raw)) options.push({ raw, label: raw, value });
       }
     }
+    if (fieldKey === "ramMaxSpeed" && usesRam) {
+      options = options
+        .filter((option) => Number(valueRaw(option)) <= 4 || valueRaw(option) === currentRaw)
+        .map((option) => Number(valueRaw(option)) > 4
+          ? { ...option, label: `${valueRaw(option)} — RAM clamps to 4; Chain pause ${valueRaw(option)} frames` }
+          : option);
+    }
     if (currentRaw && !options.some((option) => valueRaw(option) === currentRaw)) {
-      options.push({ raw: currentRaw, label: humanizeRaw(currentRaw) });
+      options.push({
+        raw: currentRaw,
+        label: fieldKey === "ramMaxSpeed" && usesRam && Number(currentRaw) > 4
+          ? `${currentRaw} — RAM clamps to 4; Chain pause ${currentRaw} frames`
+          : humanizeRaw(currentRaw),
+      });
     }
     return options;
   }
@@ -1276,7 +1319,7 @@ export function createProfilesController({
       : fields.hopOptions;
     append(hopOptionFields, inherited || raw === LOCOMOTION.hop, { beforeLabel: "Hop options" });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
-    if (inheritedChillRam) append(fields.ram, true);
+    if (inheritedChillRam) append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
     if (inheritedChillAmbiguous) {
       append([fields.chain[0]], true, { label: "Chain moves / RAM acceleration" });
       append([fields.chain[1]], true, { label: "Chain pause / RAM max speed" });
@@ -1285,7 +1328,12 @@ export function createProfilesController({
       append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram), { composite: "movement-chain" });
     }
     append(fields.teleportTiming.fields, inherited || raw === LOCOMOTION.teleport, { composite: fields.teleportTiming.composite });
-    if (!inheritedChillRam && !inheritedChillAmbiguous) append(fields.ram, inherited || raw === LOCOMOTION.ram);
+    if (!inheritedChillRam && !inheritedChillAmbiguous) {
+      append(fields.ramTuning.fields, inherited || raw === LOCOMOTION.ram, {
+        composite: fields.ramTuning.composite,
+        ramMode: raw === LOCOMOTION.ram,
+      });
+    }
     const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
     return {
       nodes: [...nodes.values()],
