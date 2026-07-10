@@ -303,7 +303,7 @@ function applyBuildStatus(status) {
   const running = Boolean(status?.running);
   const output = status?.output || status?.error || "";
   elements.buildOutput.textContent = output;
-  elements.buildPanel.hidden = !elements.showBuildLog.checked && !running && !output;
+  elements.buildPanel.hidden = !elements.showBuildLog.checked;
   elements.buildRom.disabled = running || state.busy;
   elements.buildRom.textContent = running ? "Building…" : "Build ROM";
   if (running) setStatus(status.latestLine || "Building ROM…", "busy");
@@ -323,7 +323,7 @@ async function pollBuild() {
 
 async function startBuild() {
   setStatus("Starting ROM build…", "busy");
-  elements.buildPanel.hidden = false;
+  elements.buildPanel.hidden = !elements.showBuildLog.checked;
   try {
     const status = await api.post("/build", { runAfter: elements.autoRun.checked });
     applyBuildStatus(status);
