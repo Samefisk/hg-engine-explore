@@ -884,115 +884,6 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveCircleRadius",
 }
 
-COMMON_NUMERIC_FIELD_SYMBOLS = {
-    "alertTime": [
-        "OW_WILD_SPAWNER_ALERT_TIME_AUTO",
-        "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
-        "OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES_PER_JUMP",
-    ],
-    "alertness": [
-        "OW_WILD_SPAWNER_SPOT_RANGE",
-        "OW_WILD_SPAWNER_CLOSE_ALERT_RADIUS",
-        "OW_WILD_SPAWNER_ONIX_RAM_ALERTNESS",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_TREE_ALERT_RADIUS",
-    ],
-    "chillSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "attentiveSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "tiredSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "range": [
-        "OW_WILD_SPAWNER_MOVEMENT_RANGE",
-        "OW_WILD_SPAWNER_PHANTOM_STALK_RANGE",
-        "OW_WILD_SPAWNER_ONIX_RAM_RANGE",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE",
-    ],
-    "chillCooldown": [
-        "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
-    ],
-    "hopMinDistance": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MIN_TILES",
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "hopMaxDistance": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MAX_TILES",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_MAX_HOP_TILES",
-    ],
-    "hopPause": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
-        "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
-    ],
-    "hopTime": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_FRAMES_PER_TILE",
-    ],
-    "spawnHopTime": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_FRAMES_PER_TILE",
-    ],
-    "teleportTime": [
-        "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
-    ],
-    "teleportPause": [
-        "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
-    ],
-    "spawnDestinationMinDistance": [
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "spawnDestinationMaxDistance": [
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "ramAccelerationSteps": [
-        "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
-    ],
-    "ramMaxSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
-    ],
-}
-
-for _profile_field, _source_field in {
-    "attentiveHopMinDistance": "hopMinDistance",
-    "tiredHopMinDistance": "hopMinDistance",
-    "attentiveHopMaxDistance": "hopMaxDistance",
-    "tiredHopMaxDistance": "hopMaxDistance",
-    "attentiveHopPause": "hopPause",
-    "tiredHopPause": "hopPause",
-    "attentiveTeleportTime": "teleportTime",
-    "tiredTeleportTime": "teleportTime",
-    "attentiveTeleportPause": "teleportPause",
-    "tiredTeleportPause": "teleportPause",
-    "attentiveRamAccelerationSteps": "ramAccelerationSteps",
-    "tiredRamAccelerationSteps": "ramAccelerationSteps",
-    "attentiveRamMaxSpeed": "ramMaxSpeed",
-    "tiredRamMaxSpeed": "ramMaxSpeed",
-}.items():
-    COMMON_NUMERIC_FIELD_SYMBOLS[_profile_field] = COMMON_NUMERIC_FIELD_SYMBOLS[_source_field]
-
 NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "alertTime": 255,
     "alertChance": 100,
@@ -1430,6 +1321,37 @@ def make_value(raw: str, field: str | None, macros: dict[str, int]) -> dict:
 
 def numeric(value: dict) -> int | None:
     return value.get("value")
+
+
+def canonical_profile_value_raw(value: dict, field: str) -> str:
+    evaluated = numeric(value)
+    if field in NUMERIC_PROFILE_FIELDS and evaluated is not None:
+        return str(evaluated)
+    return value.get("raw", "")
+
+
+def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    for field, value in profile.items():
+        if field in NUMERIC_PROFILE_FIELDS and numeric(value) is not None:
+            raw = str(numeric(value))
+            result[field] = {**value, "raw": raw, "symbol": None, "label": raw}
+        else:
+            result[field] = copy.deepcopy(value)
+    return result
+
+
+def canonical_profile_change_raw(field: str, raw: str, macros: dict[str, int]) -> str:
+    cleaned = clean_token(raw)
+    if cleaned == "":
+        return ""
+    if field not in NUMERIC_PROFILE_FIELDS:
+        return cleaned
+    value = make_value(cleaned, field, macros)
+    evaluated = numeric(value)
+    if evaluated is None:
+        raise ValueError(f"invalid numeric value for {field}: {raw}")
+    return str(evaluated)
 
 
 def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
@@ -1991,12 +1913,9 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
         elif field in NUMERIC_PROFILE_FIELDS:
             for value in range(0, NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64) + 1):
                 add_value_option(options, seen, str(value), field, macros)
-            for symbol in COMMON_NUMERIC_FIELD_SYMBOLS.get(field, []):
-                if symbol in macros:
-                    add_value_option(options, seen, symbol, field, macros)
         if field not in CANONICAL_PROFILE_FIELD_RAWS:
             for profile in class_profiles:
-                add_value_option(options, seen, profile[field]["raw"], field, macros)
+                add_value_option(options, seen, canonical_profile_value_raw(profile[field], field), field, macros)
         result[field] = options
     return result
 
@@ -4042,7 +3961,7 @@ def build_data() -> dict:
                 "species": entry,
                 "groups": group_names,
                 "behaviorClass": class_label,
-                "profile": profile,
+                "profile": profile_numeric_view(profile),
                 "primitives": resolve_primitives(profile, primitive_maps, macros),
                 "profileId": profile["profileId"],
                 "classRuleHits": [{"order": rule["order"], "summary": rule["summary"], "className": rule["className"]} for rule in class_hits],
@@ -4082,10 +4001,10 @@ def build_data() -> dict:
                 "name": class_label["name"],
                 "canRename": index != default_class and not runtime_owned,
                 "canDelete": index != default_class and not runtime_owned,
-                "override": {"mask": parse_mask("0", macros), "profile": class_profile},
-                "profile": profile,
+                "override": {"mask": parse_mask("0", macros), "profile": profile_numeric_view(class_profile)},
+                "profile": profile_numeric_view(profile),
                 "primitives": resolve_primitives(profile, primitive_maps, macros),
-                "editProfile": class_profile,
+                "editProfile": profile_numeric_view(class_profile),
                 "layers": layers,
                 "classRules": targeting_rules,
                 "classRuleCount": len(targeting_rules),
@@ -4103,6 +4022,7 @@ def build_data() -> dict:
             if any(hit["order"] == order for hit in (item.get("variableOverrideHits") or []))
         )
         member_symbols = list(override.get("memberSymbols") or [])
+        override_profile = override_edit_profile(override["behavior"], macros)
         classes.append(
             {
                 "index": f"override:{order}",
@@ -4116,9 +4036,9 @@ def build_data() -> dict:
                 "canRename": True,
                 "canDelete": True,
                 "override": override["behavior"],
-                "profile": override_edit_profile(override["behavior"], macros),
+                "profile": profile_numeric_view(override_profile),
                 "primitives": {},
-                "editProfile": override_edit_profile(override["behavior"], macros),
+                "editProfile": profile_numeric_view(override_profile),
                 "layers": [
                     {
                         "kind": "behaviorOverride",
@@ -4164,7 +4084,7 @@ def build_data() -> dict:
         },
         "editOptions": build_edit_options(macros, class_profiles),
         "defaultClassIndex": default_class,
-        "defaultProfile": default_profile,
+        "defaultProfile": profile_numeric_view(default_profile),
         "primitiveFields": [{"key": field, "label": PRIMITIVE_FIELD_LABELS[field]} for field in PRIMITIVE_FIELDS],
         "primitiveMaps": primitive_maps,
         "classes": classes,
@@ -4329,7 +4249,7 @@ def format_mask_expression(mask_fields: set[str], indent: str, word: int = 1) ->
 
 
 def raw_values(profile: dict[str, dict]) -> dict[str, str]:
-    return {field: profile[field]["raw"] for field in PROFILE_FIELDS}
+    return {field: canonical_profile_value_raw(profile[field], field) for field in PROFILE_FIELDS}
 
 
 def numeric_raw(raw: str, field: str, macros: dict[str, int]) -> int | None:
@@ -4345,7 +4265,7 @@ def valid_change_options(macros: dict[str, int], class_profiles: list[dict[str, 
         for field in PROFILE_FIELDS:
             value = profile[field]
             if value.get("raw") and value.get("value") is not None:
-                options[field].add(value["raw"])
+                options[field].add(canonical_profile_value_raw(value, field))
     # Movement Chain pause reuses ramMaxSpeed as a frame count. The visible RAM
     # controls stay capped as speeds, but saving must accept Chain frame values.
     options["ramMaxSpeed"].update(str(value) for value in range(0, 256))
@@ -5215,6 +5135,14 @@ def apply_profile_changes(body: bytes) -> dict:
     if not changes:
         return {"saved": False, "message": "No changes"}
 
+    changes = {
+        class_index: {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in field_changes.items()
+        }
+        for class_index, field_changes in changes.items()
+    }
+
     valid_options = valid_change_options(macros, class_profiles)
     for class_index, field_changes in changes.items():
         if class_index < 0 or class_index >= len(class_profiles):
@@ -5376,11 +5304,23 @@ def apply_profile_override_changes(body: bytes) -> dict:
     existing_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
     existing_names = parse_override_profile_names(raw_behavior_data)
     valid_options = valid_change_options(macros, class_profiles)
+    for addition in additions:
+        addition["fields"] = {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in addition["fields"].items()
+        }
+    edits = {
+        order: {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in field_changes.items()
+        }
+        for order, field_changes in edits.items()
+    }
     for override in existing_overrides:
         for field in behavior_override_field_keys(override["behavior"]):
             value = override["behavior"]["profile"][field]
             if value.get("raw") and value.get("value") is not None:
-                valid_options[field].add(value["raw"])
+                valid_options[field].add(canonical_profile_value_raw(value, field))
 
     def validate_override_fields(fields: dict[str, str], label: str) -> None:
         for field, raw in fields.items():

@@ -83,7 +83,7 @@ function methodMark(key) {
     sinnoh: `<svg ${common}><path d="M7 15V6l7 2v6"/><circle cx="5" cy="15" r="2"/><circle cx="12" cy="14" r="2"/></svg>`,
     swarms: `<svg ${common}><path d="M10 2v4M10 14v4M2 10h4M14 10h4M4.4 4.4l2.8 2.8M12.8 12.8l2.8 2.8M15.6 4.4l-2.8 2.8M7.2 12.8l-2.8 2.8"/></svg>`,
   };
-  return `<span class="v2-method-mark" aria-hidden="true">${icons[key] || escapeHtml(METHOD_META.get(key)?.short || "•")}</span>`;
+  return `<span class="v2-method-mark" data-method="${escapeHtml(key)}" aria-hidden="true">${icons[key] || escapeHtml(METHOD_META.get(key)?.short || "•")}</span>`;
 }
 
 function mapLabel(route) {
@@ -611,38 +611,44 @@ export function createRoutesController({
     return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   }
 
-  function summaryChip(route, group, aggregate) {
+  function summaryChip(route, group, aggregate, totalRate, aggregateCount) {
     const invalid = model.invalidInputs.has(invalidKey("summary", route.id, `${group.key}:${aggregate.identity}`));
     const levels = [...aggregate.levels].map((value) => value.replace(/^Lv\s*/, "")).slice(0, 4).join(", ");
-    const rate = aggregate.hasRate ? `${formatRate(aggregate.rate)}%` : `${aggregate.targets.length}×`;
+    const share = aggregate.hasRate
+      ? (totalRate > 0 ? aggregate.rate / totalRate : 1 / Math.max(1, aggregateCount))
+      : 1;
+    const normalizedRate = aggregate.hasRate && totalRate > 0 ? share * 100 : 0;
+    const rate = aggregate.hasRate ? `${formatRate(normalizedRate)}%` : `${aggregate.targets.length}×`;
     const changed = aggregate.targets.some((target) => (
       effective(route.id, target.path, target.originalSymbol) !== target.originalSymbol
       || effective(route.id, target.formPath, target.originalForm) !== target.originalForm
     ));
     const searchText = speciesSearchText(aggregate);
     const searchMatch = Boolean(model.query && (searchText.includes(model.query) || compact(searchText).includes(compact(model.query))));
-    const width = aggregate.hasRate ? Math.max(148, Math.min(340, Math.round(140 + aggregate.rate * 2))) : 172;
-    const meter = aggregate.hasRate ? Math.max(0, Math.min(100, aggregate.rate)) : 0;
-    return `<div class="v2-encounter-chip${changed ? " is-dirty" : ""}${aggregate.symbol === "SPECIES_NONE" ? " is-empty" : ""}${searchMatch ? " is-search-match" : ""}" style="--summary-width:${width}px;--summary-rate:${meter}%">
+    const meter = aggregate.hasRate ? Math.max(0, Math.min(100, normalizedRate)) : 0;
+    const compactChip = aggregate.hasRate && share < .18;
+    const compactTabIndex = compactChip ? ` tabindex="-1"` : "";
+    return `<div class="v2-encounter-chip${compactChip ? " is-compact" : ""}${changed ? " is-dirty" : ""}${aggregate.symbol === "SPECIES_NONE" ? " is-empty" : ""}${searchMatch ? " is-search-match" : ""}" style="--summary-weight:${share};--summary-rate:${meter}%">
       <button class="v2-encounter-chip-visual" type="button" data-route-group-edit="${escapeHtml(group.key)}"
         data-route-id="${escapeHtml(route.id)}" data-species-identity="${escapeHtml(aggregate.identity)}"
-        aria-label="Edit ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} entries in ${escapeHtml(group.label)}">
+        aria-label="Edit ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} entries in ${escapeHtml(group.label)}"${compactTabIndex}>
         <strong>${escapeHtml(rate)}</strong>${icon(aggregate.option, "v2-summary-sprite")}<small>${escapeHtml(levels)}</small>
       </button>
       <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(aggregate.option?.symbol || aggregate.symbol))}"
         data-route-summary-species data-route-id="${escapeHtml(route.id)}" data-group-key="${escapeHtml(group.key)}"
-        data-species-identity="${escapeHtml(aggregate.identity)}" autocomplete="off" aria-label="Replace ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} in ${escapeHtml(group.label)}" aria-invalid="${invalid}">
+        data-species-identity="${escapeHtml(aggregate.identity)}" autocomplete="off" aria-label="Replace ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} in ${escapeHtml(group.label)}" aria-invalid="${invalid}"${compactTabIndex}>
     </div>`;
   }
 
   function summaryRow(route, group) {
     const aggregates = aggregateTargets(group.targets);
+    const totalRate = aggregates.reduce((total, aggregate) => total + (aggregate.hasRate ? aggregate.rate : 0), 0);
     const methodText = `${group.key} ${group.label}`.toLowerCase();
     const searchMatch = Boolean(model.query && (methodText.includes(model.query) || compact(methodText).includes(compact(model.query))));
     return `<article class="v2-encounter-summary-row v2-source-${escapeHtml(group.key)}${searchMatch ? " is-search-match" : ""}">
-      <header>${methodMark(group.key)}<span><strong>${escapeHtml(group.label)}</strong><small>${group.targets.length} slots</small></span></header>
+      <header><button class="v2-encounter-group-edit" type="button" data-route-group-edit-all="${escapeHtml(group.key)}" data-route-id="${escapeHtml(route.id)}" aria-label="Edit all ${escapeHtml(group.label)} encounter slots">${methodMark(group.key)}<span><strong>${escapeHtml(group.label)}</strong><small>${group.targets.length} slots</small></span></button></header>
       <div class="v2-encounter-summary-chips">${aggregates.length
-        ? aggregates.map((aggregate) => summaryChip(route, group, aggregate)).join("")
+        ? aggregates.map((aggregate) => summaryChip(route, group, aggregate, totalRate, aggregates.length)).join("")
         : "<span class=\"v2-summary-empty\">No encounters</span>"}</div>
     </article>`;
   }
@@ -710,17 +716,20 @@ export function createRoutesController({
     if (!editor || String(editor.routeId) !== String(route.id)) return "";
     const group = sourceGroup(route, editor.groupKey);
     const allTargets = sourceGroups(route).flatMap((source) => source.targets);
-    const targets = (editor.wide ? allTargets : group?.targets || [])
-      .filter((target) => speciesIdentity(target.symbol, target.form) === editor.identity);
+    const targets = editor.all
+      ? (group?.targets || [])
+      : (editor.wide ? allTargets : group?.targets || [])
+        .filter((target) => speciesIdentity(target.symbol, target.form) === editor.identity);
     if (!targets.length) return "";
     const option = targets[0]?.option;
     const highlighted = targets.filter((target) => editor.groupKey === "grass"
       ? ["morning", "day", "night"].includes(target.groupKey)
       : target.groupKey === editor.groupKey);
     const contextLabel = editor.wide ? "Route-wide species swap" : (group?.label || targets[0]?.groupLabel || "Encounter source");
+    const editorTitle = editor.all ? `Edit ${targets.length} encounter slots` : (option?.name || shortSpeciesSymbol(targets[0]?.symbol));
     return `<dialog class="v2-route-dialog v2-entry-dialog" data-route-entry-dialog aria-labelledby="v2EntryDialogTitle">
       <div class="v2-route-dialog-shell">
-        <header><div><span class="v2-eyebrow">${escapeHtml(contextLabel)} · ${targets.length} matching entries</span><h2 id="v2EntryDialogTitle">${escapeHtml(option?.name || shortSpeciesSymbol(targets[0]?.symbol))}</h2></div>
+        <header><div><span class="v2-eyebrow">${escapeHtml(contextLabel)} · ${targets.length} ${editor.all ? "entries" : "matching entries"}</span><h2 id="v2EntryDialogTitle">${escapeHtml(editorTitle)}</h2></div>
           <button type="button" data-action="close-entry-editor" aria-label="Close entry editor">×</button></header>
         <div class="v2-entry-list">
           ${editor.wide ? `<div class="v2-entry-bulk">
@@ -1280,6 +1289,14 @@ export function createRoutesController({
     renderInspector();
   }
 
+  function openGroupEntryEditor(routeId, groupKey) {
+    selectRoute(routeId);
+    model.entryEditor = { routeId, groupKey, identity: null, wide: false, all: true };
+    model.overrideEditor = false;
+    model.spawnEditor = false;
+    renderInspector();
+  }
+
   function openWideEntryEditor(routeId, groupKey, identity) {
     selectRoute(routeId);
     model.entryEditor = { routeId, groupKey, identity, wide: true };
@@ -1364,6 +1381,11 @@ export function createRoutesController({
       openWideEntryEditor(wide.dataset.routeId, wide.dataset.routeWideEdit, wide.dataset.speciesIdentity);
       return;
     }
+    const all = event.target.closest("[data-route-group-edit-all]");
+    if (all) {
+      openGroupEntryEditor(all.dataset.routeId, all.dataset.routeGroupEditAll);
+      return;
+    }
     const group = event.target.closest("[data-route-group-edit]");
     if (group) {
       openEntryEditor(group.dataset.routeId, group.dataset.routeGroupEdit, group.dataset.speciesIdentity);
@@ -1443,6 +1465,11 @@ export function createRoutesController({
     const wide = event.target.closest("[data-route-wide-edit]");
     if (wide) {
       openWideEntryEditor(wide.dataset.routeId, wide.dataset.routeWideEdit, wide.dataset.speciesIdentity);
+      return;
+    }
+    const all = event.target.closest("[data-route-group-edit-all]");
+    if (all) {
+      openGroupEntryEditor(all.dataset.routeId, all.dataset.routeGroupEditAll);
       return;
     }
     const group = event.target.closest("[data-route-group-edit]");

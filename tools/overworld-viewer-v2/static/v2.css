@@ -80,8 +80,6 @@
   min-width: 18px;
   min-height: 18px;
   border-radius: 2px;
-  background: #dddcd5;
-  color: #616763;
   font-size: 8px;
 }
 
@@ -93,8 +91,7 @@
 }
 
 .route-filter-row .filter-chip.is-active > span:first-child {
-  background: #d5e9dd;
-  color: #246448;
+  filter: saturate(1.08);
 }
 
 .route-filter-row .filter-chip:hover,
@@ -218,14 +215,18 @@
 
 .v2-route-group-strip {
   grid-column: 1 / -1;
+  flex-wrap: wrap;
   margin-top: 6px;
-  padding-bottom: 2px;
+  padding-bottom: 0;
+  overflow-x: visible;
+  scrollbar-width: none;
 }
 
 .v2-route-method-group {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
+  max-width: 100%;
   min-height: 31px;
   overflow: hidden;
   border: 1px solid #d1cec5;
@@ -244,10 +245,25 @@
   align-self: stretch;
   min-width: 27px;
   padding: 3px;
-  background: #e3e4de;
-  color: #59605c;
+  background: var(--method-bg, #e3e4de);
+  color: var(--method-fg, #59605c);
   font: 850 8px/1 var(--mono);
 }
+
+.v2-method-mark[data-method="grass"] { --method-bg: #dcebdd; --method-fg: #2f5d3a; }
+.v2-method-mark[data-method="morning"] { --method-bg: #f7e3be; --method-fg: #7a4a12; }
+.v2-method-mark[data-method="day"] { --method-bg: #fff0a8; --method-fg: #665100; }
+.v2-method-mark[data-method="night"] { --method-bg: #ddd9f1; --method-fg: #464276; }
+.v2-method-mark[data-method="surf"] { --method-bg: #d7eaf4; --method-fg: #245c78; }
+.v2-method-mark[data-method="rockSmash"] { --method-bg: #e8dcce; --method-fg: #6a482d; }
+.v2-method-mark[data-method="headbuttNormal"] { --method-bg: #dce8d1; --method-fg: #496033; }
+.v2-method-mark[data-method="headbuttSpecial"] { --method-bg: #e5d7ec; --method-fg: #654178; }
+.v2-method-mark[data-method="oldRod"] { --method-bg: #e0e8ec; --method-fg: #46606f; }
+.v2-method-mark[data-method="goodRod"] { --method-bg: #cfe5e7; --method-fg: #235e67; }
+.v2-method-mark[data-method="superRod"] { --method-bg: #bbdde8; --method-fg: #174f68; }
+.v2-method-mark[data-method="hoenn"] { --method-bg: #f2d9ca; --method-fg: #7b452f; }
+.v2-method-mark[data-method="sinnoh"] { --method-bg: #dce0ef; --method-fg: #485578; }
+.v2-method-mark[data-method="swarms"] { --method-bg: #f0d6da; --method-fg: #7d3d49; }
 
 .v2-method-mark svg {
   width: 16px;
@@ -256,6 +272,7 @@
 
 .v2-route-method-species {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   min-height: 30px;
   padding: 1px 3px;
@@ -404,8 +421,8 @@
 .v2-route-rate > span {
   display: grid;
   place-items: center;
-  background: #e7e8e2;
-  color: #5c635f;
+  background: var(--method-bg, #e7e8e2);
+  color: var(--method-fg, #5c635f);
   font: 850 8px/1 var(--mono);
 }
 
@@ -519,12 +536,28 @@
 }
 
 .v2-encounter-summary-row > header {
+  padding: 0;
+  border-right: 1px solid #d3d0c7;
+}
+
+.v2-encounter-group-edit {
   display: grid;
   grid-template-columns: 31px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 55px;
   padding: 6px;
-  border-right: 1px solid #d3d0c7;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.v2-encounter-group-edit:hover,
+.v2-encounter-group-edit:focus-visible {
+  background: rgb(255 255 255 / 48%);
 }
 
 .v2-encounter-summary-row > header .v2-method-mark {
@@ -573,13 +606,14 @@
 }
 
 .v2-encounter-chip {
-  --summary-width: 172px;
+  --summary-weight: 1;
   --summary-rate: 0%;
   position: relative;
-  display: grid;
-  flex: 0 1 var(--summary-width);
-  grid-template-columns: auto minmax(72px, 1fr);
-  width: var(--summary-width);
+  display: block;
+  flex: var(--summary-weight) 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
   min-height: 40px;
   overflow: hidden;
   border: 1px solid #c5c2b9;
@@ -620,7 +654,11 @@
   grid-template-columns: 32px 32px;
   grid-template-rows: 20px 14px;
   align-items: center;
-  min-width: 69px;
+  width: 69px;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 2px 3px;
   border-right: 1px solid #d6d3ca;
   background: #f1eee6;
@@ -656,7 +694,9 @@
 }
 
 .v2-encounter-chip > input {
-  width: 100%;
+  position: absolute;
+  inset: 0 0 0 69px;
+  width: auto;
   min-width: 0;
   border: 0;
   background: transparent;
@@ -864,6 +904,8 @@
   min-height: 23px;
   margin-bottom: 4px;
   border-radius: 3px;
+  background: var(--method-bg, #e3e4de);
+  color: var(--method-fg, #59605c);
 }
 
 .v2-entry-species {
@@ -3792,11 +3834,88 @@ button {
   font: 800 8px/1.25 var(--mono);
 }
 
+.pv2-suboption-divider {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 5px 9px 4px;
+  border-bottom: 1px solid #d3d0c7;
+  background: #e5e2da;
+  color: #5a615d;
+  font: 850 8px/1.1 var(--mono);
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.pv2-composite-field,
+.pv2-composite-field:nth-child(odd) {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(112px, .5fr) minmax(0, 2fr);
+}
+
+.pv2-composite-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv2-composite-control {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pv2-composite-control > span:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  min-width: 0;
+  color: #616864;
+  font: 850 8px/1 var(--mono);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.pv2-composite-control > span:first-child b {
+  color: inherit;
+  font: inherit;
+}
+
+.pv2-composite-control > span:first-child small {
+  color: #747a76;
+  font: 700 8px/1 var(--mono);
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+.pv2-composite-control[data-composite-state="override"] > span:first-child {
+  color: var(--red-dark);
+}
+
+.pv2-composite-control[data-composite-state="inherited"] > span:first-child {
+  color: #47715e;
+}
+
+.pv2-composite-control[data-composite-state="changed"] > span:first-child {
+  color: #995719;
+}
+
+.pv2-composite-control > select {
+  min-width: 0;
+  min-height: 38px;
+}
+
 @container (max-width: 390px) {
   .pv2-field {
     grid-template-columns: 1fr;
     gap: 6px;
     min-height: 0;
+  }
+
+  .pv2-composite-controls {
+    grid-template-columns: 1fr;
   }
 
   .pv2-field-section > summary {

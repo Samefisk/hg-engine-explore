@@ -585,8 +585,8 @@ def resolve_context(
             }
             for rule in class_hits
         ],
-        "baseProfile": base_profile,
-        "resolvedProfile": resolved_profile,
+        "baseProfile": legacy.profile_numeric_view(base_profile),
+        "resolvedProfile": legacy.profile_numeric_view(resolved_profile),
         "resolvedPrimitives": legacy.resolve_primitives(resolved_profile, primitive_maps, macros),
         "resolverLayers": resolver_layers,
         "matchedOverrideOrders": matched_override_orders,

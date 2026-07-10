@@ -49,6 +49,18 @@ const PROFILE_FIELD_RANGES = Object.freeze([
 
 const PROFILE_FIELD_RANGE_BY_MIN = new Map(PROFILE_FIELD_RANGES.map((range) => [range.min, range]));
 
+const PROFILE_FIELD_COMPOSITES = Object.freeze({
+  "movement-chain": Object.freeze({
+    id: "movement-chain",
+    label: "Movement chain",
+    fields: Object.freeze([
+      Object.freeze({ key: "ramAccelerationSteps", label: "Moves", unit: "moves" }),
+      Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
+      Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
+    ]),
+  }),
+});
+
 const FIELD_SECTIONS = Object.freeze([
   {
     id: "spawn",
@@ -1177,18 +1189,23 @@ export function createProfilesController({
     const raw = fieldRaw(profile, parentField);
     const inherited = isOverrideProfile(profile) && !raw;
     const moves = Boolean(raw && raw !== LOCOMOTION.none);
+    const effectiveRaw = inherited ? valueRaw(ui.contextResult?.baseProfile?.[parentField]) : raw;
+    const inheritedChillRam = scope === "chill" && inherited && effectiveRaw === LOCOMOTION.ram;
+    const inheritedChillAmbiguous = scope === "chill" && inherited && !effectiveRaw;
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
-    const append = (fieldKeys, active) => fieldKeys.forEach((field) => {
+    const append = (fieldKeys, active, extra = {}) => fieldKeys.forEach((field, index) => {
       const candidate = explicitInactiveNode(profile, field, active, {
         parentField,
         ambiguous,
+        ...extra,
+        beforeLabel: index === 0 ? extra.beforeLabel : "",
       });
       if (!candidate) return;
       const existing = nodes.get(field);
       if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
     });
-    append([fields.speed], inherited || moves);
+    append([fields.speed], inherited || moves, { label: "Movement speed" });
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
@@ -1196,18 +1213,25 @@ export function createProfilesController({
     const hopFields = throwUsesStandaloneRange
       ? fields.hop.filter((field) => field !== "attentiveHopMaxDistance")
       : fields.hop;
-    append(hopFields, inherited || raw === LOCOMOTION.hop);
-    append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram));
+    append(hopFields, inherited || raw === LOCOMOTION.hop, { beforeLabel: "Hop options" });
+    if (inheritedChillRam) append(fields.ram, true);
+    if (inheritedChillAmbiguous) {
+      append([fields.chain[0]], true, { label: "Chain moves / RAM acceleration" });
+      append([fields.chain[1]], true, { label: "Chain pause / RAM max speed" });
+      append([fields.chain[2]], true);
+    } else {
+      append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram), { composite: "movement-chain" });
+    }
     append(fields.teleport, inherited || raw === LOCOMOTION.teleport);
-    append(fields.ram, inherited || raw === LOCOMOTION.ram);
+    if (!inheritedChillRam && !inheritedChillAmbiguous) append(fields.ram, inherited || raw === LOCOMOTION.ram);
     const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
     return {
       nodes: [...nodes.values()],
       context: inherited
-        ? "All movement suboptions stay available while this value inherits."
+        ? "Movement settings stay available while this value inherits."
         : (raw === LOCOMOTION.none
           ? (nodes.size ? "Stored suboptions are inactive while movement is None." : "None has no movement suboptions.")
-          : `${valueLabel(option || raw)} suboptions.`),
+          : `${valueLabel(option || raw)} movement settings.`),
       inherited,
     };
   }
@@ -1473,6 +1497,94 @@ export function createProfilesController({
       </div>`;
   }
 
+  function renderCompositeFieldControl(profile, compositeNode, presentation = {}) {
+    const override = isOverrideProfile(profile);
+    const controls = compositeNode.composite.fields.map((definition) => {
+      const node = compositeNode.nodes.find((candidate) => candidate.field === definition.key) || {};
+      const raw = fieldRaw(profile, definition.key);
+      const original = originalFieldRaw(profile, definition.key);
+      const contextBase = override ? ui.contextResult?.baseProfile?.[definition.key] : null;
+      const contextBaseRaw = valueRaw(contextBase);
+      const hasContextBase = contextBase !== null && contextBase !== undefined && contextBaseRaw !== "";
+      const changed = profile.draftId ? Boolean(raw) : raw !== original;
+      const hasOverride = Boolean(raw);
+      const inactive = Boolean(presentation.parentInactive || node.inactive);
+      const state = override
+        ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
+        : (changed ? "changed" : "saved");
+      let stateLabel = override
+        ? (changed
+          ? (hasOverride ? "Edited override" : "Will inherit")
+          : (hasOverride ? "Overrides base" : "Inherited"))
+        : (changed ? "Edited value" : "Saved value");
+      if (inactive) stateLabel = `${stateLabel}; currently inactive`;
+      const instance = `${presentation.instance}:${definition.key}`;
+      const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      const baseLabel = hasContextBase ? valueLabel(contextBase) : "";
+      const description = [
+        definition.unit ? `Unit: ${definition.unit}.` : "",
+        `Status: ${stateLabel}.`,
+        hasContextBase ? `Base value: ${baseLabel}.` : "",
+      ].filter(Boolean).join(" ");
+      return {
+        ...definition,
+        node,
+        raw,
+        changed,
+        hasOverride,
+        inactive,
+        state,
+        instance,
+        descriptionId,
+        description,
+        hasContextBase,
+        baseLabel,
+        options: fieldOptions(definition.key, raw, profile, node),
+      };
+    });
+    const changed = controls.some((control) => control.changed);
+    const hasOverride = controls.some((control) => control.hasOverride);
+    const inherited = override && controls.every((control) => !control.hasOverride);
+    const inactive = controls.some((control) => control.inactive);
+    const compositeState = override
+      ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
+      : (changed ? "changed" : "saved");
+    return `
+      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">moves · frames · action</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}">
+          ${controls.map((control) => `
+            <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
+              <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
+              <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
+              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.key)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(control.descriptionId)}">
+                ${override ? `<option value="" ${control.raw ? "" : "selected"}>Inherit</option>` : ""}
+                ${control.options.map((option) => {
+                  const optionRaw = valueRaw(option);
+                  return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(control.raw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
+                }).join("")}
+              </select>
+            </label>`).join("")}
+        </span>
+      </div>`;
+  }
+
+  function consolidateSiblingComposites(nodes) {
+    const siblings = (nodes || []).filter(Boolean);
+    const byField = new Map(siblings.map((node) => [node.field, node]));
+    const consumed = new Set();
+    return siblings.flatMap((node) => {
+      if (consumed.has(node.field) || !node.composite) return consumed.has(node.field) ? [] : [node];
+      const composite = PROFILE_FIELD_COMPOSITES[node.composite];
+      if (!composite) return [node];
+      const compositeNodes = composite.fields.map((field) => byField.get(field.key));
+      if (compositeNodes.some((candidate) => !candidate || candidate.composite !== composite.id)) return [node];
+      if (node.field !== composite.fields[0].key) return [];
+      composite.fields.slice(1).forEach((field) => consumed.add(field.key));
+      return [{ composite, nodes: compositeNodes }];
+    });
+  }
+
   function consolidateSiblingRanges(nodes) {
     const siblings = (nodes || []).filter(Boolean);
     const byField = new Map(siblings.map((node) => [node.field, node]));
@@ -1485,6 +1597,10 @@ export function createProfilesController({
       consumed.add(range.max);
       return [{ range, minNode: node, maxNode }];
     });
+  }
+
+  function consolidateSiblingControls(nodes) {
+    return consolidateSiblingRanges(consolidateSiblingComposites(nodes));
   }
 
   function renderVirtualFieldControl(profile, node, presentation = {}) {
@@ -1559,6 +1675,19 @@ export function createProfilesController({
 
   function renderHierarchyNode(profile, node, sectionId, path, depth = 0, parentInactive = false) {
     if (!node) return "";
+    if (node.composite) {
+      const editableNodes = node.nodes.filter((candidate) => profileCanEditField(profile, candidate.field));
+      if (editableNodes.length !== node.nodes.length) {
+        return editableNodes
+          .map((candidate, index) => renderHierarchyNode(profile, candidate, sectionId, `${path}.available-${index}`, depth, parentInactive))
+          .join("");
+      }
+      return renderCompositeFieldControl(profile, node, {
+        depth,
+        parentInactive,
+        instance: `${sectionId}:${path}:${node.composite.id}`,
+      });
+    }
     if (node.range) {
       const canEditMinimum = profileCanEditField(profile, node.range.min);
       const canEditMaximum = profileCanEditField(profile, node.range.max);
@@ -1575,7 +1704,7 @@ export function createProfilesController({
     if (!profileCanEditField(profile, node.field)) return "";
     const inactive = Boolean(parentInactive || node.inactive);
     const instance = `${sectionId}:${path}:${node.field}`;
-    const childMarkup = consolidateSiblingRanges(node.children || [])
+    const childMarkup = consolidateSiblingControls(node.children || [])
       .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, depth + 1, inactive))
       .filter(Boolean)
       .join("");
@@ -1587,8 +1716,9 @@ export function createProfilesController({
       instance,
       parent: Boolean(childMarkup) || depth === 0,
     });
-    if (!childMarkup) return control;
-    return `
+    const beforeMarkup = node.beforeLabel ? `<p class="pv2-suboption-divider">${escapeHtml(node.beforeLabel)}</p>` : "";
+    if (!childMarkup) return `${beforeMarkup}${control}`;
+    return `${beforeMarkup}
       <div class="pv2-option-group${depth ? " is-nested" : ""}" data-option-parent="${escapeHtml(node.field)}" data-option-depth="${depth}">
         <div class="pv2-option-parent">${control}</div>
         <div class="pv2-suboptions" role="group" aria-label="${escapeHtml(fieldLabelForProfile(profile, node.field))} suboptions">
@@ -1624,14 +1754,16 @@ export function createProfilesController({
     }
     return section.nodes.map((descriptor, index) => {
       if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, index);
-      const markup = consolidateSiblingRanges((descriptor.fields || [])
+      const markup = consolidateSiblingControls((descriptor.fields || [])
         .filter((field) => profileCanEditField(profile, field))
         .map((field) => ({ field })))
-        .map((node, fieldIndex) => node.range
-          ? renderRangeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:range` })
-          : renderFieldControl(profile, node.field, {
+        .map((node, fieldIndex) => node.composite
+          ? renderCompositeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:${node.composite.id}` })
+          : (node.range
+            ? renderRangeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:range` })
+            : renderFieldControl(profile, node.field, {
             instance: `${section.id}:fields-${index}.${fieldIndex}:${node.field}`,
-          }))
+          })))
         .join("");
       return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
     }).join("");
