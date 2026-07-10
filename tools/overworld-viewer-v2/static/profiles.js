@@ -1841,6 +1841,18 @@ export function createProfilesController({
       </div>`;
   }
 
+  function projectComposite(composite, nodes) {
+    const availableFields = new Set(nodes.map((node) => node.field));
+    const fields = composite.fields.filter((field) => availableFields.has(field.key));
+    const { range, ...projected } = composite;
+    const keepsRange = range && availableFields.has(range.min) && availableFields.has(range.max);
+    return {
+      ...projected,
+      fields,
+      ...(keepsRange ? { range } : {}),
+    };
+  }
+
   function consolidateSiblingComposites(nodes) {
     const siblings = (nodes || []).filter(Boolean);
     const byField = new Map(siblings.map((node) => [node.field, node]));
@@ -1853,12 +1865,14 @@ export function createProfilesController({
       if (consumed.has(node.field) || !node.composite) return consumed.has(node.field) ? [] : [node];
       const composite = PROFILE_FIELD_COMPOSITES[node.composite];
       if (!composite) return [standaloneNode(node)];
-      const compositeNodes = composite.fields.map((field) => byField.get(field.key));
-      if (compositeNodes.some((candidate) => !candidate || candidate.composite !== composite.id)) return [standaloneNode(node)];
-      if (node.field !== composite.fields[0].key) return [];
-      composite.fields.slice(1).forEach((field) => consumed.add(field.key));
+      const compositeNodes = composite.fields
+        .map((field) => byField.get(field.key))
+        .filter((candidate) => candidate?.composite === composite.id);
+      if (compositeNodes.length < 2) return [standaloneNode(node)];
+      if (node.field !== compositeNodes[0].field) return [];
+      compositeNodes.slice(1).forEach((candidate) => consumed.add(candidate.field));
       return [{
-        composite,
+        composite: projectComposite(composite, compositeNodes),
         nodes: compositeNodes,
         children: compositeNodes.flatMap((candidate) => candidate.children || []),
       }];
@@ -1958,6 +1972,14 @@ export function createProfilesController({
     if (node.composite && Array.isArray(node.nodes)) {
       const editableNodes = node.nodes.filter((candidate) => profileCanEditField(profile, candidate.field));
       if (editableNodes.length !== node.nodes.length) {
+        if (editableNodes.length >= 2) {
+          return renderHierarchyNode(profile, {
+            ...node,
+            composite: projectComposite(node.composite, editableNodes),
+            nodes: editableNodes,
+            children: editableNodes.flatMap((candidate) => candidate.children || []),
+          }, sectionId, `${path}.available`, depth, parentInactive);
+        }
         return editableNodes
           .map((candidate, index) => renderHierarchyNode(profile, candidate, sectionId, `${path}.available-${index}`, depth, parentInactive))
           .join("");
