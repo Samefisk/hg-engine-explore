@@ -53,10 +53,41 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "movement-chain": Object.freeze({
     id: "movement-chain",
     label: "Movement chain",
+    meta: "moves · frames · action",
     fields: Object.freeze([
       Object.freeze({ key: "ramAccelerationSteps", label: "Moves", unit: "moves" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
       Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
+    ]),
+  }),
+  "hop-timing-chill": Object.freeze({
+    id: "hop-timing-chill",
+    label: "Hop timing",
+    meta: "frames/tile · frames · frames/turn",
+    fields: Object.freeze([
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
+      Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Chill only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
+    ]),
+  }),
+  "hop-timing-active": Object.freeze({
+    id: "hop-timing-active",
+    label: "Hop timing",
+    meta: "frames/tile · frames · frames/turn",
+    fields: Object.freeze([
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
+      Object.freeze({ key: "attentiveHopPause", label: "Pause", unit: "frames", note: "Active only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "attentiveHopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Active only. Zero disables spinning" }),
+    ]),
+  }),
+  "hop-timing-tired": Object.freeze({
+    id: "hop-timing-tired",
+    label: "Hop timing",
+    meta: "frames/tile · frames · frames/turn",
+    fields: Object.freeze([
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
+      Object.freeze({ key: "tiredHopPause", label: "Pause", unit: "frames", note: "Tired only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
     ]),
   }),
 });
@@ -192,21 +223,24 @@ const LOCOMOTION = Object.freeze({
 const MOVEMENT_FIELDS = Object.freeze({
   chill: Object.freeze({
     speed: "chillSpeed",
-    hop: ["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause"],
+    hopOptions: Object.freeze(["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"]),
+    hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleport: ["teleportTime", "teleportPause"],
     ram: ["ramAccelerationSteps", "ramMaxSpeed"],
   }),
   active: Object.freeze({
     speed: "attentiveSpeed",
-    hop: ["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance", "hopTime", "attentiveHopSpinSpeed", "attentiveHopPause"],
+    hopOptions: Object.freeze(["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"]),
+    hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "attentiveHopPause", "attentiveHopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleport: ["attentiveTeleportTime", "attentiveTeleportPause"],
     ram: ["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"],
   }),
   tired: Object.freeze({
     speed: "tiredSpeed",
-    hop: ["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime", "hopSpinSpeed", "tiredHopPause"],
+    hopOptions: Object.freeze(["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"]),
+    hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "tiredHopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleport: ["tiredTeleportTime", "tiredTeleportPause"],
     ram: ["tiredRamAccelerationSteps", "tiredRamMaxSpeed"],
@@ -1210,10 +1244,11 @@ export function createProfilesController({
       && activeActionShowsThrowRange(profile)
       && !inherited
       && raw !== LOCOMOTION.hop;
-    const hopFields = throwUsesStandaloneRange
-      ? fields.hop.filter((field) => field !== "attentiveHopMaxDistance")
-      : fields.hop;
-    append(hopFields, inherited || raw === LOCOMOTION.hop, { beforeLabel: "Hop options" });
+    const hopOptionFields = throwUsesStandaloneRange
+      ? fields.hopOptions.filter((field) => field !== "attentiveHopMaxDistance")
+      : fields.hopOptions;
+    append(hopOptionFields, inherited || raw === LOCOMOTION.hop, { beforeLabel: "Hop options" });
+    append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
     if (inheritedChillRam) append(fields.ram, true);
     if (inheritedChillAmbiguous) {
       append([fields.chain[0]], true, { label: "Chain moves / RAM acceleration" });
@@ -1523,6 +1558,7 @@ export function createProfilesController({
       const baseLabel = hasContextBase ? valueLabel(contextBase) : "";
       const description = [
         definition.unit ? `Unit: ${definition.unit}.` : "",
+        definition.note ? `${definition.note}.` : "",
         `Status: ${stateLabel}.`,
         hasContextBase ? `Base value: ${baseLabel}.` : "",
       ].filter(Boolean).join(" ");
@@ -1551,7 +1587,7 @@ export function createProfilesController({
       : (changed ? "changed" : "saved");
     return `
       <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
-        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">moves · frames · action</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">${escapeHtml(compositeNode.composite.meta || "")}</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
         <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}">
           ${controls.map((control) => `
             <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
