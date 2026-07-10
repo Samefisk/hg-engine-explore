@@ -905,6 +905,7 @@
 .v2-entry-species input,
 .v2-entry-field input,
 .v2-spawn-field input,
+.v2-spawn-range-control input,
 .v2-override-editor input {
   width: 100%;
   min-width: 0;
@@ -931,6 +932,55 @@
 }
 
 .v2-entry-levels > .v2-entry-field + .v2-entry-field {
+  border-left: 1px solid #d3d0c7;
+}
+
+.v2-entry-range {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 8px 7px;
+  border: 0;
+}
+
+.v2-entry-range legend,
+.v2-spawn-range legend {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  color: #555c58;
+  font: 800 8px/1.1 var(--mono);
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.v2-entry-range legend small,
+.v2-spawn-range legend small {
+  color: #747a76;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+.v2-entry-range-controls,
+.v2-spawn-range-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.v2-entry-range-controls {
+  margin: 3px -8px -7px;
+}
+
+.v2-entry-range-controls > .v2-entry-field {
+  padding: 4px 8px 7px;
+}
+
+.v2-entry-range-controls > .v2-entry-field + .v2-entry-field {
   border-left: 1px solid #d3d0c7;
 }
 
@@ -1006,6 +1056,39 @@
   min-height: 54px;
   padding: 6px 7px;
   border-bottom: 1px solid #e0ddd4;
+}
+
+.v2-spawn-range {
+  grid-column: span 2;
+  min-width: 0;
+  margin: 0;
+  padding: 7px;
+  border: 0;
+  border-bottom: 1px solid #e0ddd4;
+}
+
+.v2-spawn-range.is-dirty {
+  background: #fff5e3;
+  box-shadow: inset 3px 0 #d3974e;
+}
+
+.v2-spawn-range-controls {
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.v2-spawn-range-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v2-spawn-range-control > span {
+  color: #626965;
+  font: 800 8px/1 var(--mono);
+  text-transform: uppercase;
 }
 
 @media (max-width: 1120px) {
@@ -1098,6 +1181,10 @@
   .v2-spawn-groups section > div,
   .v2-entry-bulk {
     grid-template-columns: 1fr;
+  }
+
+  .v2-spawn-range {
+    grid-column: auto;
   }
 
   .v2-entry-bulk label {
@@ -3368,6 +3455,42 @@ button {
   border-top: 1px solid #cbc8bf;
 }
 
+.pv2-match-range {
+  grid-column: span 2;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pv2-match-range legend {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 3px;
+  padding: 0;
+  color: #4f5652;
+  font: 750 10px/1.2 var(--mono);
+}
+
+.pv2-match-range legend small {
+  color: #69706c;
+  font-size: 9px;
+  text-transform: lowercase;
+}
+
+.pv2-match-range-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pv2-match-range.is-invalid input {
+  border-color: #b7554f;
+  box-shadow: inset 0 0 0 1px rgb(183 85 79 / 16%);
+}
+
 .pv2-shared-conditions.is-invalid {
   box-shadow: inset 3px 0 #c74f47;
 }
@@ -3612,6 +3735,61 @@ button {
 
 .pv2-field > select {
   min-height: 38px;
+}
+
+.pv2-range-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv2-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pv2-range-control > span:not(.sr-only) {
+  color: #616864;
+  font: 850 8px/1 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.pv2-range-control[data-range-state="override"] > span:not(.sr-only) {
+  color: var(--red-dark);
+}
+
+.pv2-range-control[data-range-state="inherited"] > span:not(.sr-only) {
+  color: #47715e;
+}
+
+.pv2-range-control[data-range-state="changed"] > span:not(.sr-only) {
+  color: #995719;
+}
+
+.pv2-range-control > select {
+  min-width: 0;
+  min-height: 38px;
+}
+
+.pv2-range-field.is-invalid {
+  border-left-color: #b7554f;
+  background: #fff2ed;
+}
+
+.pv2-range-field.is-invalid select {
+  border-color: #b7554f;
+}
+
+.pv2-range-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #8d2e29;
+  font: 800 8px/1.25 var(--mono);
 }
 
 @container (max-width: 390px) {
@@ -4822,6 +5000,10 @@ td select {
 
   .match-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pv2-match-range {
+    grid-column: auto;
   }
 
   .match-actions,

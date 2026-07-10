@@ -736,7 +736,7 @@ export function createRoutesController({
           <div class="v2-entry-levels">${target.levelPath
             ? inputNumber(route.id, target.levelPath, target.originalLevel, "Level", 0, 100)
             : target.minPath
-              ? `${inputNumber(route.id, target.minPath, target.originalMin, "Min", 0, 100)}${inputNumber(route.id, target.maxPath, target.originalMax, "Max", 0, 100)}`
+              ? `<fieldset class="v2-entry-range"><legend><span>Level range</span><small>levels</small></legend><span class="v2-entry-range-controls">${inputNumber(route.id, target.minPath, target.originalMin, "Min", 0, 100)}${inputNumber(route.id, target.maxPath, target.originalMax, "Max", 0, 100)}</span></fieldset>`
               : `<span>${escapeHtml(target.levelLabel || "No levels")}</span>`}</div>
         </article>`;
           }).join("")}</div>
@@ -766,27 +766,57 @@ export function createRoutesController({
   }
 
   function spawnSettingRows(group) {
-    return asArray(group.settings).map((setting) => {
-      const fields = setting.kind === "testSpawn" ? asArray(setting.fields) : [setting];
-      return fields.map((field) => {
-        const original = field.kind === "species" ? (field.symbolValue || field.raw) : field.value;
-        const value = model.spawnDrafts.get(field.symbol) ?? String(original ?? "");
-        const changed = model.spawnDrafts.has(field.symbol);
-        if (field.kind === "species") {
-          const option = displaySpecies(value, 0);
-          const invalid = model.invalidInputs.has(invalidKey("spawn", field.symbol));
-          return `<label class="v2-spawn-field${changed ? " is-dirty" : ""}"><span>${escapeHtml(field.label)}</span>
-            <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(option.symbol || value))}"
-              data-spawn-species data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}" autocomplete="off" aria-invalid="${invalid}"></label>`;
+    const fields = asArray(group.settings).flatMap((setting) => (
+      setting.kind === "testSpawn" ? asArray(setting.fields) : [setting]
+    ));
+    const bySymbol = new Map(fields.map((field) => [field.symbol, field]));
+    const consumed = new Set();
+
+    function fieldState(field) {
+      const original = field.kind === "species" ? (field.symbolValue || field.raw) : field.value;
+      const value = model.spawnDrafts.get(field.symbol) ?? String(original ?? "");
+      const changed = model.spawnDrafts.has(field.symbol);
+      const relationshipInvalid = (
+        ["OW_WILD_SPAWN_MIN_DISTANCE", "OW_WILD_SPAWN_MAX_DISTANCE"].includes(field.symbol)
+        && model.invalidInputs.has("spawn-range:min-max")
+      ) || (field.symbol === "OW_WILD_DESPAWN_DISTANCE" && model.invalidInputs.has("spawn-range:despawn"));
+      return {
+        original,
+        value,
+        changed,
+        invalid: model.invalidInputs.has(invalidKey("spawn", field.symbol)) || relationshipInvalid,
+      };
+    }
+
+    function numberInput(field, label, state = fieldState(field)) {
+      return `<label class="v2-spawn-range-control${state.changed ? " is-dirty" : ""}"><span>${escapeHtml(label)}</span>
+        <input type="number" min="${escapeHtml(field.min)}" max="${escapeHtml(field.max)}" step="1" value="${escapeHtml(state.value)}"
+          data-spawn-number data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(state.original)}" aria-label="Spawn distance ${escapeHtml(label.toLowerCase())}" aria-invalid="${state.invalid}"></label>`;
+    }
+
+    return fields.flatMap((field) => {
+      if (consumed.has(field.symbol)) return [];
+      if (field.symbol === "OW_WILD_SPAWN_MAX_DISTANCE" && bySymbol.has("OW_WILD_SPAWN_MIN_DISTANCE")) return [];
+      if (field.symbol === "OW_WILD_SPAWN_MIN_DISTANCE") {
+        const maximum = bySymbol.get("OW_WILD_SPAWN_MAX_DISTANCE");
+        if (maximum) {
+          consumed.add(maximum.symbol);
+          const minimumState = fieldState(field);
+          const maximumState = fieldState(maximum);
+          return [`<fieldset class="v2-spawn-range${minimumState.changed || maximumState.changed ? " is-dirty" : ""}"><legend><span>Spawn distance</span><small>tiles</small></legend><span class="v2-spawn-range-controls">${numberInput(field, "Min", minimumState)}${numberInput(maximum, "Max", maximumState)}</span></fieldset>`];
         }
-        const relationshipInvalid = (
-          ["OW_WILD_SPAWN_MIN_DISTANCE", "OW_WILD_SPAWN_MAX_DISTANCE"].includes(field.symbol)
-          && model.invalidInputs.has("spawn-range:min-max")
-        ) || (field.symbol === "OW_WILD_DESPAWN_DISTANCE" && model.invalidInputs.has("spawn-range:despawn"));
-        return `<label class="v2-spawn-field${changed ? " is-dirty" : ""}"><span>${escapeHtml(field.label)}${field.suffix ? ` (${escapeHtml(field.suffix)})` : ""}</span>
-          <input type="number" min="${escapeHtml(field.min)}" max="${escapeHtml(field.max)}" step="1" value="${escapeHtml(value)}"
-            data-spawn-number data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(original)}" aria-invalid="${model.invalidInputs.has(invalidKey("spawn", field.symbol)) || relationshipInvalid}"></label>`;
-      }).join("");
+      }
+
+      const state = fieldState(field);
+      if (field.kind === "species") {
+        const option = displaySpecies(state.value, 0);
+        return [`<label class="v2-spawn-field${state.changed ? " is-dirty" : ""}"><span>${escapeHtml(field.label)}</span>
+          <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(option.symbol || state.value))}"
+            data-spawn-species data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(state.original)}" autocomplete="off" aria-invalid="${state.invalid}"></label>`];
+      }
+      return [`<label class="v2-spawn-field${state.changed ? " is-dirty" : ""}"><span>${escapeHtml(field.label)}${field.suffix ? ` (${escapeHtml(field.suffix)})` : ""}</span>
+        <input type="number" min="${escapeHtml(field.min)}" max="${escapeHtml(field.max)}" step="1" value="${escapeHtml(state.value)}"
+          data-spawn-number data-symbol="${escapeHtml(field.symbol)}" data-original="${escapeHtml(state.original)}" aria-invalid="${state.invalid}"></label>`];
     }).join("");
   }
 
@@ -1139,6 +1169,24 @@ export function createRoutesController({
     setSpawnDraft(input.dataset.symbol, value, original);
     validateSpawnRelationships();
     input.closest("label")?.classList.toggle("is-dirty", model.spawnDrafts.has(input.dataset.symbol));
+    const dialog = input.closest("[data-route-spawn-dialog]");
+    const range = input.closest(".v2-spawn-range");
+    if (range) {
+      const rangeDirty = [...range.querySelectorAll("[data-spawn-number]")]
+        .some((control) => model.spawnDrafts.has(control.dataset.symbol));
+      range.classList.toggle("is-dirty", rangeDirty);
+    }
+    const relationshipStates = [
+      ["OW_WILD_SPAWN_MIN_DISTANCE", model.invalidInputs.has("spawn-range:min-max")],
+      ["OW_WILD_SPAWN_MAX_DISTANCE", model.invalidInputs.has("spawn-range:min-max")],
+      ["OW_WILD_DESPAWN_DISTANCE", model.invalidInputs.has("spawn-range:despawn")],
+    ];
+    relationshipStates.forEach(([symbol, relationshipInvalid]) => {
+      const control = dialog?.querySelector(`[data-symbol="${symbol}"]`);
+      if (!control) return;
+      const ownInvalid = model.invalidInputs.has(invalidKey("spawn", symbol));
+      control.setAttribute("aria-invalid", String(ownInvalid || relationshipInvalid));
+    });
     signalDirty();
     return true;
   }

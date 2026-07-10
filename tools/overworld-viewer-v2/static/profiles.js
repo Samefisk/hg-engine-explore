@@ -40,6 +40,15 @@ const MATCH_FIELDS = Object.freeze([
   ["behaviorClass", "Base profile"],
 ]);
 
+const PROFILE_FIELD_RANGES = Object.freeze([
+  Object.freeze({ min: "spawnDestinationMinDistance", max: "spawnDestinationMaxDistance", label: "Spawn distance", unit: "tiles" }),
+  Object.freeze({ min: "hopMinDistance", max: "hopMaxDistance", label: "Hop distance", unit: "tiles" }),
+  Object.freeze({ min: "attentiveHopMinDistance", max: "attentiveHopMaxDistance", label: "Hop distance", unit: "tiles" }),
+  Object.freeze({ min: "tiredHopMinDistance", max: "tiredHopMaxDistance", label: "Hop distance", unit: "tiles" }),
+]);
+
+const PROFILE_FIELD_RANGE_BY_MIN = new Map(PROFILE_FIELD_RANGES.map((range) => [range.min, range]));
+
 const FIELD_SECTIONS = Object.freeze([
   {
     id: "spawn",
@@ -1180,7 +1189,11 @@ export function createProfilesController({
       if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
     });
     append([fields.speed], inherited || moves);
-    const hopFields = scope === "active" && activeActionShowsThrowRange(profile)
+    const throwUsesStandaloneRange = scope === "active"
+      && activeActionShowsThrowRange(profile)
+      && !inherited
+      && raw !== LOCOMOTION.hop;
+    const hopFields = throwUsesStandaloneRange
       ? fields.hop.filter((field) => field !== "attentiveHopMaxDistance")
       : fields.hop;
     append(hopFields, inherited || raw === LOCOMOTION.hop);
@@ -1211,13 +1224,15 @@ export function createProfilesController({
       const movementRaw = fieldRaw(profile, "movementStyle");
       const sharedWithHop = movementRaw === LOCOMOTION.hop || (isOverrideProfile(profile) && !movementRaw);
       return {
-        nodes: showsThrowRange ? [{
+        nodes: showsThrowRange && !sharedWithHop ? [{
           field: "attentiveHopMaxDistance",
-          label: sharedWithHop ? "Max hop / throw range" : "Throw range",
+          label: "Throw range",
         }] : [],
-        context: showsThrowRange
-          ? "Maximum aligned throw distance for the active action."
-          : "This action has no additional options.",
+        context: showsThrowRange && sharedWithHop
+          ? "Throw range uses the Hop distance maximum below."
+          : (showsThrowRange
+            ? "Maximum aligned throw distance for the active action."
+            : "This action has no additional options."),
         inherited: isOverrideProfile(profile) && !scopedActionCountRaw(descriptor.scope, raw),
       };
     }
@@ -1336,6 +1351,142 @@ export function createProfilesController({
     );
   }
 
+  function fieldNumericValue(fieldKey, raw) {
+    if (raw === null || raw === undefined || raw === "") return NaN;
+    const option = (data.editOptions?.[fieldKey] || []).find((candidate) => valueRaw(candidate) === String(raw));
+    return Number(option?.value ?? raw);
+  }
+
+  function profileFieldRangeError(profile, range) {
+    const minimumRaw = fieldRaw(profile, range.min);
+    const maximumRaw = fieldRaw(profile, range.max);
+    const standaloneThrowRange = range.max === "attentiveHopMaxDistance"
+      && activeActionShowsThrowRange(profile)
+      && fieldRaw(profile, "movementStyle")
+      && fieldRaw(profile, "movementStyle") !== LOCOMOTION.hop;
+    if (standaloneThrowRange) return "";
+
+    let pairs = [{ minimumRaw, maximumRaw }];
+    if (isOverrideProfile(profile) && (!minimumRaw || !maximumRaw)) {
+      const baseKeys = unique(potentialAssignmentsFor(profile)
+        .map((assignment) => pendingBaseKeyForSpecies(assignment?.species?.symbol))
+        .filter(Boolean));
+      pairs = baseKeys.map((key) => {
+        const baseProfile = findProfile(key);
+        return {
+          minimumRaw: minimumRaw || fieldRaw(baseProfile, range.min),
+          maximumRaw: maximumRaw || fieldRaw(baseProfile, range.max),
+        };
+      });
+    }
+
+    const invalid = pairs.some((pair) => {
+      const minimum = fieldNumericValue(range.min, pair.minimumRaw);
+      const maximum = fieldNumericValue(range.max, pair.maximumRaw);
+      return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum > maximum;
+    });
+    return invalid ? `${range.label}: minimum cannot exceed maximum.` : "";
+  }
+
+  function renderRangeFieldControl(profile, rangeNode, presentation = {}) {
+    const override = isOverrideProfile(profile);
+    const rangeError = profileFieldRangeError(profile, rangeNode.range);
+    const errorId = `pv2-range-error-${String(presentation.instance || rangeNode.range.min).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const controls = [
+      { role: "Minimum", shortLabel: "Min", node: rangeNode.minNode, fieldKey: rangeNode.range.min },
+      { role: "Maximum", shortLabel: "Max", node: rangeNode.maxNode, fieldKey: rangeNode.range.max },
+    ].map((control) => {
+      const raw = fieldRaw(profile, control.fieldKey);
+      const original = originalFieldRaw(profile, control.fieldKey);
+      const contextBase = override ? ui.contextResult?.baseProfile?.[control.fieldKey] : null;
+      const contextBaseRaw = valueRaw(contextBase);
+      const hasContextBase = contextBase !== null && contextBase !== undefined && contextBaseRaw !== "";
+      const changed = profile.draftId ? Boolean(raw) : raw !== original;
+      const hasOverride = Boolean(raw);
+      const inactive = Boolean(presentation.parentInactive || control.node?.inactive);
+      const state = override
+        ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
+        : (changed ? "changed" : "saved");
+      let stateLabel = override
+        ? (changed
+          ? (hasOverride ? "Edited override" : "Will inherit")
+          : (hasOverride ? "Overrides base" : "Inherited"))
+        : (changed ? "Edited value" : "Saved value");
+      if (inactive) stateLabel = `${stateLabel}; currently inactive`;
+      const instance = `${presentation.instance}:${control.fieldKey}`;
+      const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      const baseLabel = hasContextBase ? valueLabel(contextBase) : "";
+      const description = [
+        rangeNode.range.unit ? `Unit: ${rangeNode.range.unit}.` : "",
+        `Status: ${stateLabel}.`,
+        hasContextBase ? `Base value: ${baseLabel}.` : "",
+      ].filter(Boolean).join(" ");
+      return {
+        ...control,
+        raw,
+        changed,
+        hasOverride,
+        inactive,
+        state,
+        instance,
+        descriptionId,
+        description,
+        hasContextBase,
+        baseLabel,
+        options: fieldOptions(control.fieldKey, raw, profile, control.node || {}),
+      };
+    });
+    const changed = controls.some((control) => control.changed);
+    const hasOverride = controls.some((control) => control.hasOverride);
+    const inherited = override && controls.every((control) => !control.hasOverride);
+    const inactive = controls.some((control) => control.inactive);
+    const baseLabels = controls.map((control) => control.hasContextBase ? control.baseLabel : "—");
+    const hasContextBase = controls.some((control) => control.hasContextBase);
+    const rangeState = override
+      ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
+      : (changed ? "changed" : "saved");
+    return `
+      <div class="field-row profile-field pv2-field pv2-range-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-field-row="${escapeHtml(`${rangeNode.range.min}:${rangeNode.range.max}`)}" data-field-state="${rangeState}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy">
+          <strong>${escapeHtml(rangeNode.range.label)}</strong>
+          <small class="pv2-field-meta">
+            ${rangeNode.range.unit ? `<span class="pv2-field-unit">${escapeHtml(rangeNode.range.unit)}</span>` : ""}
+            ${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}
+            ${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(baseLabels.join("–"))})</span>` : ""}
+          </small>
+        </span>
+        <span class="pv2-range-controls" role="group" aria-label="${escapeHtml(rangeNode.range.label)}">
+          ${controls.map((control) => `
+            <label class="pv2-range-control" data-range-state="${escapeHtml(control.state)}">
+              <span>${escapeHtml(control.shortLabel)}</span>
+              <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
+              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.fieldKey)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${rangeNode.range.label}, ${control.role.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError ? ` ${errorId}` : ""}`)}" aria-invalid="${Boolean(rangeError)}">
+                ${override ? `<option value="" ${control.raw ? "" : "selected"}>Inherit</option>` : ""}
+                ${control.options.map((option) => {
+                  const optionRaw = valueRaw(option);
+                  return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(control.raw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
+                }).join("")}
+              </select>
+            </label>`).join("")}
+          ${rangeError ? `<small id="${escapeHtml(errorId)}" class="pv2-range-error">${escapeHtml(rangeError)}</small>` : ""}
+        </span>
+      </div>`;
+  }
+
+  function consolidateSiblingRanges(nodes) {
+    const siblings = (nodes || []).filter(Boolean);
+    const byField = new Map(siblings.map((node) => [node.field, node]));
+    const consumed = new Set();
+    return siblings.flatMap((node) => {
+      if (consumed.has(node.field)) return [];
+      const range = PROFILE_FIELD_RANGE_BY_MIN.get(node.field);
+      const maxNode = range ? byField.get(range.max) : null;
+      if (!range || !maxNode) return [node];
+      consumed.add(range.max);
+      return [{ range, minNode: node, maxNode }];
+    });
+  }
+
   function renderVirtualFieldControl(profile, node, presentation = {}) {
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
@@ -1407,10 +1558,24 @@ export function createProfilesController({
   }
 
   function renderHierarchyNode(profile, node, sectionId, path, depth = 0, parentInactive = false) {
-    if (!node || !profileCanEditField(profile, node.field)) return "";
+    if (!node) return "";
+    if (node.range) {
+      const canEditMinimum = profileCanEditField(profile, node.range.min);
+      const canEditMaximum = profileCanEditField(profile, node.range.max);
+      if (!canEditMinimum || !canEditMaximum) {
+        const availableNode = canEditMinimum ? node.minNode : (canEditMaximum ? node.maxNode : null);
+        return availableNode ? renderHierarchyNode(profile, availableNode, sectionId, `${path}.available`, depth, parentInactive) : "";
+      }
+      return renderRangeFieldControl(profile, node, {
+        depth,
+        parentInactive,
+        instance: `${sectionId}:${path}:range`,
+      });
+    }
+    if (!profileCanEditField(profile, node.field)) return "";
     const inactive = Boolean(parentInactive || node.inactive);
     const instance = `${sectionId}:${path}:${node.field}`;
-    const childMarkup = (node.children || [])
+    const childMarkup = consolidateSiblingRanges(node.children || [])
       .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, depth + 1, inactive))
       .filter(Boolean)
       .join("");
@@ -1459,11 +1624,14 @@ export function createProfilesController({
     }
     return section.nodes.map((descriptor, index) => {
       if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, index);
-      const markup = (descriptor.fields || [])
+      const markup = consolidateSiblingRanges((descriptor.fields || [])
         .filter((field) => profileCanEditField(profile, field))
-        .map((field, fieldIndex) => renderFieldControl(profile, field, {
-          instance: `${section.id}:fields-${index}.${fieldIndex}:${field}`,
-        }))
+        .map((field) => ({ field })))
+        .map((node, fieldIndex) => node.range
+          ? renderRangeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:range` })
+          : renderFieldControl(profile, node.field, {
+            instance: `${section.id}:fields-${index}.${fieldIndex}:${node.field}`,
+          }))
         .join("");
       return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
     }).join("");
@@ -1571,6 +1739,10 @@ export function createProfilesController({
     const errors = [];
     allProfiles().forEach((profile) => {
       if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
+      PROFILE_FIELD_RANGES.forEach((range) => {
+        const error = profileFieldRangeError(profile, range);
+        if (error) errors.push(`${nameFor(profile)} — ${error}`);
+      });
       if (!canUseRamLocomotion(profile)) return;
       const raw = fieldRaw(profile, "ramMaxSpeed");
       const option = (data.editOptions?.ramMaxSpeed || []).find((candidate) => valueRaw(candidate) === raw);
@@ -1648,8 +1820,9 @@ export function createProfilesController({
   function renderOverrideTarget(profile) {
     const target = targetFor(profile);
     const expanded = ui.openSections.has("override-target");
-    const conditionFields = MATCH_FIELDS.filter(([field]) => field !== "species");
-    const datalists = conditionFields.map(([field]) => `
+    const conditionFields = MATCH_FIELDS.filter(([field]) => !["species", "minLevel", "maxLevel"].includes(field));
+    const levelFields = MATCH_FIELDS.filter(([field]) => ["minLevel", "maxLevel"].includes(field));
+    const datalists = [...conditionFields, ...levelFields].map(([field]) => `
       <datalist id="pv2-match-${escapeHtml(field)}">${matchSuggestions(field).map((raw) => `<option value="${escapeHtml(raw)}">${escapeHtml(humanizeRaw(raw))}</option>`).join("")}</datalist>`).join("");
     const query = ui.memberQuery.trim().toLowerCase();
     const bySymbol = new Map(speciesEntries().map((species) => [species.symbol, species]));
@@ -1662,6 +1835,12 @@ export function createProfilesController({
     ].filter(Boolean).join(" ").toLowerCase().includes(query)).slice(0, 160);
     const modeLabel = target.targetMode === "all" ? "All matching Pokémon" : (target.targetMode === "disabled" ? "Disabled" : `${members.length} members`);
     const conditionErrors = matchErrors(target.match, target.targetMode !== "all");
+    const minimumLevel = isAnyMatchValue("minLevel", target.match.minLevel) ? null : Number(target.match.minLevel);
+    const maximumLevel = isAnyMatchValue("maxLevel", target.match.maxLevel) ? null : Number(target.match.maxLevel);
+    const levelRangeError = Number.isFinite(minimumLevel) && Number.isFinite(maximumLevel) && minimumLevel > maximumLevel
+      ? "Minimum level is greater than maximum level"
+      : "";
+    const levelRangeErrorId = `pv2-level-range-error-${profileKey(profile).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     return `
       <details class="membership-section pv2-membership pv2-override-target" data-section-id="override-target" ${expanded ? "open" : ""}>
         <summary><span><strong>Members</strong><small>One member set, evaluated as one override layer.</small></span><em>${escapeHtml(modeLabel)}</em></summary>
@@ -1685,7 +1864,15 @@ export function createProfilesController({
           <details class="pv2-shared-conditions${conditionErrors.length ? " is-invalid" : ""}" data-section-id="override-conditions" ${ui.openSections.has("override-conditions") || conditionErrors.length ? "open" : ""}>
             <summary><span><strong>Shared conditions</strong><small>These conditions are checked once, together with membership.</small></span><em>${conditionErrors.length ? "Needs attention" : "Optional"}</em></summary>
             <div class="match-grid pv2-match-grid">
-              ${conditionFields.map(([field, label]) => `<label><span>${escapeHtml(label)}</span><input data-target-condition="${field}" list="pv2-match-${field}" value="${escapeHtml(target.match[field])}" autocomplete="off"></label>`).join("")}
+              ${conditionFields.slice(0, 2).map(([field, label]) => `<label><span>${escapeHtml(label)}</span><input data-target-condition="${field}" list="pv2-match-${field}" value="${escapeHtml(target.match[field])}" autocomplete="off"></label>`).join("")}
+              <fieldset class="pv2-match-range${levelRangeError ? " is-invalid" : ""}">
+                <legend><span>Level range</span><small>levels</small></legend>
+                <span class="pv2-match-range-controls">
+                  ${levelFields.map(([field]) => `<label><span>${field === "minLevel" ? "Min" : "Max"}</span><input data-target-condition="${field}" list="pv2-match-${field}" value="${escapeHtml(target.match[field])}" autocomplete="off" aria-label="${field === "minLevel" ? "Minimum level" : "Maximum level"}" aria-invalid="${Boolean(levelRangeError)}"${levelRangeError ? ` aria-describedby="${escapeHtml(levelRangeErrorId)}"` : ""}></label>`).join("")}
+                </span>
+                ${levelRangeError ? `<span id="${escapeHtml(levelRangeErrorId)}" class="sr-only">${escapeHtml(levelRangeError)}</span>` : ""}
+              </fieldset>
+              ${conditionFields.slice(2).map(([field, label]) => `<label><span>${escapeHtml(label)}</span><input data-target-condition="${field}" list="pv2-match-${field}" value="${escapeHtml(target.match[field])}" autocomplete="off"></label>`).join("")}
             </div>
             ${conditionErrors.length ? `<p class="pv2-condition-error">${escapeHtml(conditionErrors[0])}</p>` : `<p class="pv2-member-note">Conditions use AND logic. They narrow this one profile; they do not become separate rules.</p>`}
           </details>
@@ -2293,14 +2480,15 @@ export function createProfilesController({
       renderEditor(); renderList(); signalDirty();
       const focusTarget = fieldInstance
         ? editorElement.querySelector(`[data-profile-value][data-field-instance="${CSS.escape(fieldInstance)}"]`)
-        : editorElement.querySelector(`[data-profile-value][data-field-key="${CSS.escape(fieldKey)}"]`);
+        : null;
+      const fieldFallback = editorElement.querySelector(`[data-profile-value][data-field-key="${CSS.escape(fieldKey)}"]`);
       const parentFallback = sectionId && parentField
         ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"] > .pv2-option-parent [data-profile-value]`)
         : null;
       const sectionFallback = sectionId
         ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] > summary`)
         : null;
-      (focusTarget || parentFallback || sectionFallback)?.focus({ preventScroll: true });
+      (focusTarget || fieldFallback || parentFallback || sectionFallback)?.focus({ preventScroll: true });
       if (wasParentControl && sectionId && parentField) {
         const afterGroup = editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"]`);
         const afterChildren = afterGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
@@ -2318,8 +2506,10 @@ export function createProfilesController({
       return;
     }
     if (event.target.matches("[data-target-condition]") && profile) {
-      changeTargetCondition(profile, event.target.dataset.targetCondition, event.target.value);
+      const field = event.target.dataset.targetCondition;
+      changeTargetCondition(profile, field, event.target.value);
       renderEditor();
+      editorElement.querySelector(`[data-target-condition="${CSS.escape(field)}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (event.target === elements.profileContextSpecies) ui.context.species = event.target.value;
