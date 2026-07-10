@@ -1628,8 +1628,11 @@ button {
 
 .profile-select {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   justify-items: stretch;
+  align-items: center;
   align-content: center;
+  column-gap: 6px;
   min-width: 0;
   border: 0 !important;
   border-radius: 0 !important;
@@ -1645,6 +1648,35 @@ button {
 
 .profile-select > .profile-kind {
   justify-self: start;
+}
+
+.pv2-profile-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.pv2-profile-icons {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  min-width: 30px;
+  padding-left: 4px;
+}
+
+.pv2-profile-icons img {
+  width: 30px;
+  height: 30px;
+  margin-left: -10px;
+  border: 1px solid #bbb8af;
+  border-radius: 50%;
+  background: #ebe7de;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(1px 1px 0 rgb(48 52 50 / 16%));
+}
+
+.pv2-profile-icons img:first-child {
+  margin-left: 0;
 }
 
 .profile-kind {
