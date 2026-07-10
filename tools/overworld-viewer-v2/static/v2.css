@@ -3726,7 +3726,7 @@ button {
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
-  min-height: 45px;
+  min-height: 52px;
   margin: 0 0 -1px;
   padding: 7px 8px;
   border: 1px solid #aaa79f;
@@ -3761,9 +3761,34 @@ button {
 }
 
 .pv2-lifecycle-tab > span {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pv2-lifecycle-tab > span > strong,
+.pv2-lifecycle-tab > span > small {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.pv2-lifecycle-tab > span > strong {
+  color: inherit;
+  font: inherit;
+}
+
+.pv2-lifecycle-tab > span > small {
+  color: #69716c;
+  font: 700 8px/1 var(--mono);
+  letter-spacing: .01em;
+  text-transform: none;
+}
+
+.pv2-lifecycle-tab[aria-selected="true"] > span > small {
+  color: #57625d;
 }
 
 .pv2-lifecycle-tab > em {

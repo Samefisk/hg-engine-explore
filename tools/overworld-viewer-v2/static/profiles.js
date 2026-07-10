@@ -337,6 +337,11 @@ const FIELD_SECTIONS = Object.freeze([
 
 const LIFECYCLE_SECTION_IDS = Object.freeze(["spawn", "chill", "alert", "active", "tired"]);
 const LIFECYCLE_SECTION_ID_SET = new Set(LIFECYCLE_SECTION_IDS);
+const LIFECYCLE_TAB_SUMMARY_FIELDS = Object.freeze({
+  chill: Object.freeze(["chillState", "chillAction"]),
+  active: Object.freeze(["attentiveState", "movementStyle"]),
+  tired: Object.freeze(["tiredState", "specialAction"]),
+});
 
 const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
   "OW_WILD_BEHAVIOR_KIND_CHASE",
@@ -2211,6 +2216,19 @@ export function createProfilesController({
       </details>`;
   }
 
+  function lifecycleTabSummary(profile, sectionId) {
+    const fields = LIFECYCLE_TAB_SUMMARY_FIELDS[sectionId];
+    if (!fields) return "";
+    return fields.map((field) => {
+      const raw = fieldRaw(profile, field);
+      if (raw) {
+        const option = fieldOptions(field, raw, profile).find((candidate) => valueRaw(candidate) === raw);
+        return valueLabel(option || raw);
+      }
+      return isOverrideProfile(profile) ? "Inherit" : "Not set";
+    }).join(" / ");
+  }
+
   function renderLifecycleTabs(profile, sections, override) {
     if (!sections.length) return "";
     const key = profileKey(profile);
@@ -2223,7 +2241,8 @@ export function createProfilesController({
       const selected = section.id === preferred.id;
       const count = sectionCountInfo(section, override);
       const label = section.title.replace(/ state$/i, "");
-      return `<button class="pv2-lifecycle-tab" type="button" role="tab" id="pv2-lifecycle-tab-${escapeHtml(section.id)}" aria-controls="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-selected="${selected}" aria-label="${escapeHtml(`${section.title}, ${count.spoken}`)}" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-tab" data-lifecycle-tab="${escapeHtml(section.id)}"><span aria-hidden="true">${escapeHtml(label)}</span><em aria-hidden="true">${escapeHtml(count.compact)}</em></button>`;
+      const summary = lifecycleTabSummary(profile, section.id);
+      return `<button class="pv2-lifecycle-tab" type="button" role="tab" id="pv2-lifecycle-tab-${escapeHtml(section.id)}" aria-controls="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-selected="${selected}" aria-label="${escapeHtml([section.title, summary, count.spoken].filter(Boolean).join(", "))}" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-tab" data-lifecycle-tab="${escapeHtml(section.id)}"><span aria-hidden="true"><strong>${escapeHtml(label)}</strong>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</span><em aria-hidden="true">${escapeHtml(count.compact)}</em></button>`;
     }).join("");
     const panels = sections.map((section) => {
       const selected = section.id === preferred.id;
