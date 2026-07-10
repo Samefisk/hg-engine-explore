@@ -4157,7 +4157,7 @@ button {
 .pv2-mode-tab {
   position: relative;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: stretch;
   gap: 8px;
   min-width: 0;
@@ -4168,6 +4168,7 @@ button {
   border-bottom-color: #aaa8a1;
   border-radius: 4px 4px 0 0;
   background: var(--mode-tab, var(--life-suboption, #dedbd3));
+  cursor: pointer;
 }
 
 .pv2-mode-tab.is-active {
@@ -4219,6 +4220,7 @@ button {
   max-width: min(230px, 100%);
   align-self: center;
   justify-self: end;
+  cursor: default;
 }
 
 #profileInspector .pv2-mode-tab-select .pv2-field,

@@ -3056,6 +3056,14 @@ export function createProfilesController({
   }
 
   function onClick(event) {
+    const modeTabShell = event.target.closest(".pv2-mode-tab");
+    if (modeTabShell && root.contains(modeTabShell) && !event.target.closest(".pv2-mode-tab-select")) {
+      const modeTab = modeTabShell.querySelector("[data-mode-tab]");
+      if (modeTab) {
+        selectModeTab(modeTab.dataset.modeTabSection, modeTab.dataset.modeTab);
+        return;
+      }
+    }
     const target = event.target.closest("[data-action]");
     if (!target || !root.contains(target)) return;
     const action = target.dataset.action;
