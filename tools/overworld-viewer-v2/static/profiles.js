@@ -825,6 +825,23 @@ export function createProfilesController({
     return usesRam ? "RAM max speed" : "Chain pause";
   }
 
+  function fieldUnitForProfile(profile, fieldKey, context = {}) {
+    if (context.unit !== undefined) return context.unit;
+    if (context.compound === "spawn-destination-distance") return "tiles";
+    if (!["ramAccelerationSteps", "ramMaxSpeed"].includes(fieldKey)) {
+      return data.fields.find((field) => field.key === fieldKey)?.unit || "";
+    }
+    const parentRaw = context.parentField ? fieldRaw(profile, context.parentField) : "";
+    const ambiguous = context.ambiguous || (isOverrideProfile(profile) && !parentRaw);
+    const usesRam = context.parentField === "chillAction" && parentRaw === RAM_LOCOMOTION;
+    if (fieldKey === "ramAccelerationSteps") {
+      if (ambiguous) return "moves / steps";
+      return usesRam ? "steps" : "moves";
+    }
+    if (ambiguous) return "frames / speed";
+    return usesRam ? "speed" : "frames";
+  }
+
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     const options = [...(data.editOptions?.[fieldKey] || [])];
     const usesRam = profile && context.parentField
@@ -1261,26 +1278,41 @@ export function createProfilesController({
     const state = override
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
-    let stateLabel = changed
-      ? (hasOverride ? "Edited override" : "Will inherit")
-      : (hasOverride ? "Overrides base" : "Inherited");
-    if (presentation.inactive && hasOverride) stateLabel = changed ? "Edited · inactive" : "Stored · inactive";
+    let stateLabel = override
+      ? (changed
+        ? (hasOverride ? "Edited override" : "Will inherit")
+        : (hasOverride ? "Overrides base" : "Inherited"))
+      : (changed ? "Edited value" : "Saved value");
+    if (presentation.inactive) stateLabel = `${stateLabel}; currently inactive`;
     const instance = presentation.instance || fieldKey;
     const label = fieldLabelForProfile(profile, fieldKey, presentation);
     const allowInherit = presentation.allowInherit ?? override;
     const baseLabel = hasContextBase
       ? (presentation.baseLabel ? presentation.baseLabel(contextBaseRaw) : valueLabel(contextBase))
       : "";
-    const metaMarkup = override
-      ? `<small class="pv2-field-meta"><span class="pv2-field-state">${escapeHtml(stateLabel)}</span>${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(baseLabel)})</span>` : ""}</small>`
-      : (presentation.inactive ? `<small class="pv2-field-meta"><span class="pv2-field-state">Edited · inactive</span></small>` : "");
+    const unit = fieldUnitForProfile(profile, fieldKey, presentation);
+    const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const description = [
+      unit ? `Unit: ${unit}.` : "",
+      `Status: ${stateLabel}.`,
+      hasContextBase ? `Base value: ${baseLabel}.` : "",
+    ].filter(Boolean).join(" ");
+    const stateMarkup = `<span id="${escapeHtml(descriptionId)}" class="sr-only">${escapeHtml(description)}</span>`;
+    const visibleMeta = [
+      unit ? `<span class="pv2-field-unit" aria-hidden="true">${escapeHtml(unit)}</span>` : "",
+      presentation.inactive ? `<span class="pv2-field-note" aria-hidden="true">inactive</span>` : "",
+      hasContextBase ? `<span class="field-base base-value pv2-field-base" aria-hidden="true">(${escapeHtml(baseLabel)})</span>` : "",
+    ].filter(Boolean).join("");
+    const metaMarkup = visibleMeta
+      ? `<small class="pv2-field-meta">${stateMarkup}${visibleMeta}</small>`
+      : stateMarkup;
     return `
       <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
           ${metaMarkup}
         </span>
-        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""} aria-label="${escapeHtml(label)}">
+        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""} aria-label="${escapeHtml(label)}" aria-describedby="${escapeHtml(descriptionId)}">
           ${allowInherit ? `<option value="" ${selectedRaw ? "" : "selected"}>Inherit</option>` : ""}
           ${selectOptions.map((option) => {
             const optionRaw = valueRaw(option);

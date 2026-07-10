@@ -345,6 +345,50 @@ FIELD_LABELS = {
     "attentiveAvoidPreviousTile": "Avoid previous tile",
 }
 
+FIELD_UNITS = {
+    "spawnHopTime": "frames",
+    "spawnDestinationMinDistance": "tiles",
+    "spawnDestinationMaxDistance": "tiles",
+    "overworldLimit": "Pokémon",
+    "chillSpeed": "speed",
+    "hopMinDistance": "tiles",
+    "hopMaxDistance": "tiles",
+    "hopTime": "frames",
+    "hopSpinSpeed": "frames",
+    "hopPause": "frames",
+    "teleportTime": "frames",
+    "teleportPause": "frames",
+    "ramAccelerationSteps": "moves",
+    "ramMaxSpeed": "frames",
+    "chillCooldown": "frames",
+    "alertTime": "frames",
+    "alertness": "tiles",
+    "alertChance": "%",
+    "stamina": "frames",
+    "attentiveCircleRadius": "tiles",
+    "attentiveSpeed": "speed",
+    "attentiveHopMinDistance": "tiles",
+    "attentiveHopMaxDistance": "tiles",
+    "attentiveHopPause": "frames",
+    "attentiveHopSpinSpeed": "frames",
+    "attentiveTeleportTime": "frames",
+    "attentiveTeleportPause": "frames",
+    "attentiveRamAccelerationSteps": "steps",
+    "attentiveRamMaxSpeed": "speed",
+    "attentiveChaseBoostDistance": "tiles",
+    "attentiveChaseBoostSpeed": "speed",
+    "tiredSpeed": "speed",
+    "tiredHopMinDistance": "tiles",
+    "tiredHopMaxDistance": "tiles",
+    "tiredHopPause": "frames",
+    "tiredTeleportTime": "frames",
+    "tiredTeleportPause": "frames",
+    "tiredRamAccelerationSteps": "steps",
+    "tiredRamMaxSpeed": "speed",
+    "restTime": "frames",
+    "range": "tiles",
+}
+
 PRIMITIVE_FIELDS = [
     "spawnLocomotion",
     "chillLocomotion",
@@ -4099,7 +4143,10 @@ def build_data() -> dict:
         "source": data_source_metadata(),
         "profilesAvailable": True,
         "profileError": None,
-        "fields": [{"key": field, "label": FIELD_LABELS[field]} for field in PROFILE_FIELDS],
+        "fields": [
+            {"key": field, "label": FIELD_LABELS[field], "unit": FIELD_UNITS.get(field, "")}
+            for field in PROFILE_FIELDS
+        ],
         "overrideFieldKeys": sorted(OVERRIDE_SYMBOL_BY_FIELD),
         "counts": {
             "species": len(assignments),

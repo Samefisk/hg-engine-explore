@@ -3593,18 +3593,15 @@ button {
   margin-top: 0 !important;
 }
 
-.pv2-field-state {
+.pv2-field-unit,
+.pv2-field-note {
   color: #686f6b;
   font: 800 9px/1.2 var(--mono);
   letter-spacing: .035em;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
-.pv2-field[data-field-state="override"] .pv2-field-state {
-  color: var(--red-dark);
-}
-
-.pv2-field[data-field-state="changed"] .pv2-field-state {
+.pv2-field-note {
   color: #8a521f;
 }
 
