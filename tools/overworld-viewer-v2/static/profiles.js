@@ -53,7 +53,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "movement-chain": Object.freeze({
     id: "movement-chain",
     label: "Movement chain",
-    meta: "moves · frames · action",
     fields: Object.freeze([
       Object.freeze({ key: "ramAccelerationSteps", label: "Moves", unit: "moves" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
@@ -63,7 +62,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "movement-chain-or-ram": Object.freeze({
     id: "movement-chain-or-ram",
     label: "Shared Chain / RAM tuning",
-    meta: "moves/steps · frames/speed · Chain-only",
     fields: Object.freeze([
       Object.freeze({
         key: "ramAccelerationSteps",
@@ -88,7 +86,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-path-chill": Object.freeze({
     id: "hop-path-chill",
     label: "Hop path",
-    meta: "direction · tiles",
     range: Object.freeze({ min: "hopMinDistance", max: "hopMaxDistance", label: "Hop distance", unit: "tiles" }),
     fields: Object.freeze([
       Object.freeze({ key: "hopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
@@ -99,7 +96,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-path-active": Object.freeze({
     id: "hop-path-active",
     label: "Hop path",
-    meta: "direction · tiles",
     range: Object.freeze({ min: "attentiveHopMinDistance", max: "attentiveHopMaxDistance", label: "Hop distance", unit: "tiles" }),
     fields: Object.freeze([
       Object.freeze({ key: "attentiveHopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
@@ -110,7 +106,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-path-tired": Object.freeze({
     id: "hop-path-tired",
     label: "Hop path",
-    meta: "direction · tiles",
     range: Object.freeze({ min: "tiredHopMinDistance", max: "tiredHopMaxDistance", label: "Hop distance", unit: "tiles" }),
     fields: Object.freeze([
       Object.freeze({ key: "tiredHopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
@@ -121,7 +116,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-timing-chill": Object.freeze({
     id: "hop-timing-chill",
     label: "Hop timing",
-    meta: "frames/tile · frames · frames/turn",
     fields: Object.freeze([
       Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
       Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Chill only. Zero uses the fallback cooldown" }),
@@ -131,7 +125,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-timing-active": Object.freeze({
     id: "hop-timing-active",
     label: "Hop timing",
-    meta: "frames/tile · frames · frames/turn",
     fields: Object.freeze([
       Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
       Object.freeze({ key: "attentiveHopPause", label: "Pause", unit: "frames", note: "Active only. Zero uses the fallback cooldown" }),
@@ -141,7 +134,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "hop-timing-tired": Object.freeze({
     id: "hop-timing-tired",
     label: "Hop timing",
-    meta: "frames/tile · frames · frames/turn",
     fields: Object.freeze([
       Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
       Object.freeze({ key: "tiredHopPause", label: "Pause", unit: "frames", note: "Tired only. Zero uses the fallback cooldown" }),
@@ -151,7 +143,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "teleport-timing-chill": Object.freeze({
     id: "teleport-timing-chill",
     label: "Teleport timing",
-    meta: "frames",
     fields: Object.freeze([
       Object.freeze({ key: "teleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
       Object.freeze({ key: "teleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
@@ -160,7 +151,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "teleport-timing-active": Object.freeze({
     id: "teleport-timing-active",
     label: "Teleport timing",
-    meta: "frames",
     fields: Object.freeze([
       Object.freeze({ key: "attentiveTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
       Object.freeze({ key: "attentiveTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
@@ -169,7 +159,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "teleport-timing-tired": Object.freeze({
     id: "teleport-timing-tired",
     label: "Teleport timing",
-    meta: "frames",
     fields: Object.freeze([
       Object.freeze({ key: "tiredTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
       Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
@@ -178,7 +167,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "ram-tuning-chill": Object.freeze({
     id: "ram-tuning-chill",
     label: "RAM tuning",
-    meta: "steps · speed tier",
     fields: Object.freeze([
       Object.freeze({ key: "ramAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration. Shared with Movement Chain move count" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed. Shared with Movement Chain pause frames" }),
@@ -187,7 +175,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "ram-tuning-active": Object.freeze({
     id: "ram-tuning-active",
     label: "RAM tuning",
-    meta: "steps · speed tier",
     fields: Object.freeze([
       Object.freeze({ key: "attentiveRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
       Object.freeze({ key: "attentiveRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
@@ -196,7 +183,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   "ram-tuning-tired": Object.freeze({
     id: "ram-tuning-tired",
     label: "RAM tuning",
-    meta: "steps · speed tier",
     fields: Object.freeze([
       Object.freeze({ key: "tiredRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
       Object.freeze({ key: "tiredRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
@@ -1763,7 +1749,7 @@ export function createProfilesController({
       : (changed ? "changed" : "saved");
     return `
       <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
-        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">${escapeHtml(compositeNode.composite.meta || "")}</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong>${inactive ? `<small class="pv2-field-meta"><span class="pv2-field-note">inactive</span></small>` : ""}</span>
         <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
           ${controls.map((control) => `
             <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
