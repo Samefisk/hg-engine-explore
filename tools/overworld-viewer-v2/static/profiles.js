@@ -791,7 +791,7 @@ export function createProfilesController({
       : `${membersFor(profile).length} members`;
     const dragEnabled = override && !profile.draftId && !filtered() && !ui.busy;
     const orderControls = override
-      ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use keyboard controls" : "Clear filters to reorder"}">⋮⋮</span>`
+      ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use keyboard controls" : "Clear filters to reorder"}"><span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><span class="pv2-drag-grip" aria-hidden="true">⋮⋮</span></span>`
       : "";
     const previewSpecies = profilePreviewSpecies(profile, override);
     const previewIcons = previewSpecies.length ? `
@@ -803,7 +803,6 @@ export function createProfilesController({
         ${orderControls}
         <button class="profile-select pv2-profile-select" type="button" data-action="select-profile" data-profile-key="${escapeHtml(key)}" aria-current="${selected ? "true" : "false"}">
           <span class="pv2-profile-heading">
-            ${override ? `<span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>` : ""}
             <span class="pv2-profile-copy">
               <span class="profile-kind pv2-profile-kind">${override ? (profile.draftId ? "New override" : `Override ${index + 1}`) : (String(profile.index) === String(data.defaultClassIndex) ? "Default base" : "Base profile")}</span>
               <strong>${escapeHtml(nameFor(profile))}</strong>

@@ -2694,9 +2694,20 @@ button {
 }
 
 .override-profile > .profile-row-drag-handle {
+  align-content: center;
+  gap: 5px;
   min-width: 44px;
   min-height: 100%;
+}
+
+.profile-row-drag-handle > .profile-index {
+  pointer-events: none;
+}
+
+.pv2-drag-grip {
+  color: #5b625e;
   font: 850 15px/1 var(--mono);
+  pointer-events: none;
 }
 
 .profile-select {
@@ -2734,10 +2745,6 @@ button {
   align-items: center;
   gap: 7px;
   min-width: 0;
-}
-
-.pv2-profile-heading > .profile-index {
-  flex: 0 0 auto;
 }
 
 .pv2-profile-icons {
