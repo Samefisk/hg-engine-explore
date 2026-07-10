@@ -11,31 +11,18 @@
 #define OW_WILD_HELPER_FISH_SLOTS 5
 #define OW_WILD_HELPER_HEADBUTT_NORMAL_SLOTS 12
 #define OW_WILD_HELPER_HEADBUTT_SPECIAL_SLOTS 6
-#define OW_WILD_HELPER_HEADBUTT_COORDS_PER_TREE 6
 #define OW_WILD_HELPER_HEADBUTT_NORMAL_TREE 0
 #define OW_WILD_HELPER_HEADBUTT_SPECIAL_TREE 1
-#define OW_WILD_HELPER_HEADBUTT_EMPTY_COORD -1
-#define OW_WILD_HELPER_HEADBUTT_TREE_TOPS_MAX_LOCATIONS 512
 #define OW_WILD_HELPER_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_HELPER_SPAWN_MIN_DISTANCE 4
 #define OW_WILD_HELPER_SPAWN_MAX_DISTANCE 8
-#define OW_WILD_HELPER_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE 1
-#define OW_WILD_HELPER_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE OW_WILD_HELPER_SPAWN_MAX_DISTANCE
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS OW_WILD_HELPER_SPAWN_MAX_DISTANCE
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS * 2 + 1)
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER (OW_WILD_HELPER_SPAWN_MIN_DISTANCE * 2 - 1)
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN \
-    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS - OW_WILD_HELPER_SPAWN_MIN_DISTANCE + 1)
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX \
-    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + OW_WILD_HELPER_SPAWN_MIN_DISTANCE - 1)
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_TILE_COUNT \
-    (OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER * OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER \
-        - OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER \
-            * OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_DIAMETER)
-#define OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT \
-    ((OW_WILD_HELPER_STATIC_SPAWN_CACHE_TILE_COUNT + 7) / 8)
-#define OW_WILD_HELPER_DESPAWN_DISTANCE 14
 #define OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE 3
+#define OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH 1
+#define OW_WILD_HELPER_SPAWN_POSITION_BUDGET 16
+#define OW_WILD_HELPER_SPAWN_POSITION_DIAMETER (OW_WILD_HELPER_SPAWN_MAX_DISTANCE * 2 + 1)
+#define OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT \
+    (OW_WILD_HELPER_SPAWN_POSITION_DIAMETER * OW_WILD_HELPER_SPAWN_POSITION_DIAMETER)
+#define OW_WILD_HELPER_SPAWN_POSITION_STRIDE 73
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
 #define OW_WILD_HELPER_NELEMS(array) (sizeof(array) / sizeof((array)[0]))
@@ -94,26 +81,10 @@ typedef struct OverworldWildHelperHeadbuttEncounterSlot {
     u8 maxLevel;
 } OverworldWildHelperHeadbuttEncounterSlot;
 
-typedef struct OverworldWildHelperHeadbuttCoord {
-    s16 x;
-    s16 y;
-} OverworldWildHelperHeadbuttCoord;
-
-typedef struct OverworldWildHelperHeadbuttTree {
-    OverworldWildHelperHeadbuttCoord coords[OW_WILD_HELPER_HEADBUTT_COORDS_PER_TREE];
-} OverworldWildHelperHeadbuttTree;
-
-typedef struct OverworldWildHelperHeadbuttLandingOffset {
+typedef struct OverworldWildHelperCoordOffset {
     s8 dx;
     s8 dy;
-} OverworldWildHelperHeadbuttLandingOffset;
-
-typedef struct OverworldWildHelperStaticSpawnTileCache {
-    u8 fishingShoreBits[OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT];
-    u16 mapId;
-    s16 playerX;
-    s16 playerY;
-} OverworldWildHelperStaticSpawnTileCache;
+} OverworldWildHelperCoordOffset;
 
 static const u8 sOverworldWildHelperGrassSlotWeights[OW_WILD_HELPER_GRASS_SLOTS] = {
     20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1,
@@ -127,14 +98,17 @@ static const u8 sOverworldWildHelperFishingSlotWeights[OW_WILD_HELPER_FISH_SLOTS
     60, 30, 5, 4, 1,
 };
 
-static const OverworldWildHelperHeadbuttLandingOffset sOverworldWildHelperHeadbuttLandingOffsets[] = {
+static const OverworldWildHelperCoordOffset sOverworldWildHelperCardinalOffsets[] = {
     { 0, 1 },
     { 0, -1 },
     { -1, 0 },
     { 1, 0 },
 };
 
-static OverworldWildHelperStaticSpawnTileCache sOverworldWildHelperStaticSpawnTileCache;
+#if OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH
+// Stored as cursor + 1 so zero can mean uninitialized after the helper overlay is loaded.
+static u16 sOverworldWildHelperSpawnPositionCursor[2];
+#endif
 
 static int OverworldWildHelper_Abs(int value)
 {
@@ -210,20 +184,6 @@ static BOOL OverworldWildHelper_LoadArchiveData(
     return callbacks->loadArchiveData(context, arcId, datId, offset, dest, size);
 }
 
-static int OverworldWildHelper_DistanceFromPlayer(
-    const OverworldWildHelperPlayerState *playerState,
-    int x,
-    int y)
-{
-    if (playerState == NULL) {
-        return OW_WILD_HELPER_DESPAWN_DISTANCE + 1;
-    }
-
-    return OverworldWildHelper_Max(
-        OverworldWildHelper_Abs(x - playerState->playerX),
-        OverworldWildHelper_Abs(y - playerState->playerY));
-}
-
 static BOOL OverworldWildHelper_TryPickSpawnPosition(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
@@ -231,6 +191,69 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
     OverworldWildSpawnPosition *position)
 {
     OverworldWildHelperPlayerState playerState;
+#if OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH
+    u16 *storedCursor;
+    u32 cursor;
+    u32 checked = 0;
+    u32 visited = 0;
+
+    if (!callbacks->getPlayerState(context, &playerState)) {
+        return FALSE;
+    }
+
+    storedCursor = &sOverworldWildHelperSpawnPositionCursor[
+        requestedTerrain == OW_WILD_SPAWN_TERRAIN_SURF];
+    cursor = *storedCursor == 0
+        ? gf_rand() % OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT
+        : *storedCursor - 1;
+
+    while (checked < OW_WILD_HELPER_SPAWN_POSITION_BUDGET
+        && visited < OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT) {
+        u32 candidate = cursor;
+        int dx;
+        int dy;
+        int x;
+        int y;
+        OverworldWildSpawnTerrain terrain;
+
+        cursor = (cursor + OW_WILD_HELPER_SPAWN_POSITION_STRIDE)
+            % OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT;
+        visited++;
+        dx = candidate % OW_WILD_HELPER_SPAWN_POSITION_DIAMETER
+            - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
+        dy = candidate / OW_WILD_HELPER_SPAWN_POSITION_DIAMETER
+            - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
+
+        if (OverworldWildHelper_Max(
+                OverworldWildHelper_Abs(dx),
+                OverworldWildHelper_Abs(dy))
+            < OW_WILD_HELPER_SPAWN_MIN_DISTANCE) {
+            continue;
+        }
+
+        checked++;
+        x = playerState.playerX + dx;
+        y = playerState.playerY + dy;
+        if (!callbacks->tryGetSpawnTerrain(context, x, y, &terrain)
+            || terrain != requestedTerrain
+            || callbacks->isTileOccupied(context, x, y)
+            || callbacks->isNearActiveSpawn(
+                context,
+                x,
+                y,
+                OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE)) {
+            continue;
+        }
+
+        position->startX = x;
+        position->startY = y;
+        *storedCursor = cursor + 1;
+        return TRUE;
+    }
+
+    *storedCursor = cursor + 1;
+    return FALSE;
+#else
     u32 candidateCount = 0;
     int x;
     int y;
@@ -274,231 +297,55 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
     }
 
     return candidateCount != 0;
+#endif
 }
 
-static void OverworldWildHelper_ClearStaticSpawnTileBits(u8 *bits)
-{
-    u32 wordIndex;
-
-    for (wordIndex = 0;
-         wordIndex < OW_WILD_HELPER_STATIC_SPAWN_CACHE_WORD_COUNT;
-         wordIndex++) {
-        bits[wordIndex] = 0;
-    }
-}
-
-static void OverworldWildHelper_SetStaticSpawnTileBit(u8 *bits, int index)
-{
-    bits[index / 8] |= 1U << (index % 8);
-}
-
-static BOOL OverworldWildHelper_GetStaticSpawnTileBit(const u8 *bits, int index)
-{
-    return (bits[index / 8] & (1U << (index % 8))) != 0;
-}
-
-static void OverworldWildHelper_RebuildStaticSpawnTileCache(
-    OverworldWildHelperStaticSpawnTileCache *cache,
-    const OverworldWildHelperSpawnCallbacks *callbacks,
-    void *context,
-    u16 mapId,
-    int playerX,
-    int playerY)
-{
-    int relX;
-    int relY;
-    int index = 0;
-
-    OverworldWildHelper_ClearStaticSpawnTileBits(cache->fishingShoreBits);
-
-    for (relY = 0; relY < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER; relY++) {
-        for (relX = 0; relX < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER; relX++) {
-            int x = playerX - OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + relX;
-            int y = playerY - OW_WILD_HELPER_STATIC_SPAWN_CACHE_RADIUS + relY;
-
-            if (relX >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
-                && relX <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX
-                && relY >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
-                && relY <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX) {
-                continue;
-            }
-
-            if (callbacks->isStaticFishingShoreTile(context, x, y)) {
-                OverworldWildHelper_SetStaticSpawnTileBit(cache->fishingShoreBits, index);
-            }
-
-            index++;
-        }
-    }
-
-    cache->mapId = mapId + 1;
-    cache->playerX = (s16)playerX;
-    cache->playerY = (s16)playerY;
-}
-
-static OverworldWildHelperStaticSpawnTileCache *OverworldWildHelper_EnsureStaticSpawnTileCache(
-    const OverworldWildHelperSpawnCallbacks *callbacks,
-    void *context,
-    const OverworldWildHelperPlayerState *playerState)
-{
-    OverworldWildHelperStaticSpawnTileCache *cache;
-    u16 mapId;
-
-    if (callbacks == NULL
-        || callbacks->isStaticFishingShoreTile == NULL
-        || playerState == NULL
-        || !OverworldWildHelper_GetMapId(callbacks, context, &mapId)) {
-        return NULL;
-    }
-
-    cache = &sOverworldWildHelperStaticSpawnTileCache;
-    if (cache->mapId == mapId + 1
-        && cache->playerX == playerState->playerX
-        && cache->playerY == playerState->playerY) {
-        return cache;
-    }
-
-    OverworldWildHelper_RebuildStaticSpawnTileCache(
-        cache,
-        callbacks,
-        context,
-        mapId,
-        playerState->playerX,
-        playerState->playerY);
-    return cache;
-}
-
-static BOOL OverworldWildHelper_TryPickCachedFishingSpawnPosition(
+static BOOL OverworldWildHelper_TryPickFishingSpawnPosition(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnPosition *position)
 {
-    OverworldWildHelperStaticSpawnTileCache *cache;
     OverworldWildHelperPlayerState playerState;
-    u32 candidateCount = 0;
-    int relX;
-    int relY;
-    int x;
-    int y;
-    int index = 0;
+    u32 start;
+    u32 i;
 
     if (position == NULL
         || !callbacks->getPlayerState(context, &playerState)) {
         return FALSE;
     }
 
-    cache = OverworldWildHelper_EnsureStaticSpawnTileCache(callbacks, context, &playerState);
-    if (cache == NULL) {
-        return FALSE;
-    }
+    start = gf_rand() & 3;
+    for (i = 0; i < OW_WILD_HELPER_NELEMS(sOverworldWildHelperCardinalOffsets); i++) {
+        const OverworldWildHelperCoordOffset *offset =
+            &sOverworldWildHelperCardinalOffsets[(start + i) & 3];
+        OverworldWildSpawnTerrain terrain;
+        int x = playerState.playerX + offset->dx;
+        int y = playerState.playerY + offset->dy;
 
-    for (relY = 0, y = playerState.playerY - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-         relY < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER;
-         relY++, y++) {
-        for (relX = 0, x = playerState.playerX - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-             relX < OW_WILD_HELPER_STATIC_SPAWN_CACHE_DIAMETER;
-             relX++, x++) {
-            if (relX >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
-                && relX <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX
-                && relY >= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MIN
-                && relY <= OW_WILD_HELPER_STATIC_SPAWN_CACHE_INNER_MAX) {
-                continue;
-            }
-
-            if (!OverworldWildHelper_GetStaticSpawnTileBit(cache->fishingShoreBits, index++)
-                || callbacks->isTileOccupied(context, x, y)
-                || callbacks->isNearActiveSpawn(
-                    context,
-                    x,
-                    y,
-                    OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE)) {
-                continue;
-            }
-
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                position->startX = x;
-                position->startY = y;
-            }
-        }
-    }
-
-    return candidateCount != 0;
-}
-
-static u32 OverworldWildHelper_GetHeadbuttTreeDataOffset(void)
-{
-    return sizeof(OverworldWildHelperHeadbuttHeader)
-        + (OW_WILD_HELPER_HEADBUTT_NORMAL_SLOTS + OW_WILD_HELPER_HEADBUTT_SPECIAL_SLOTS)
-            * sizeof(OverworldWildHelperHeadbuttEncounterSlot);
-}
-
-static void OverworldWildHelper_TryPickHeadbuttLanding(
-    const OverworldWildHelperSpawnCallbacks *callbacks,
-    void *context,
-    const OverworldWildHelperPlayerState *playerState,
-    int treeX,
-    int treeY,
-    u8 treeType,
-    OverworldWildSpawnPosition *position,
-    u32 *candidateCount)
-{
-    u32 landingStart;
-    u32 landingAttempt;
-
-    if (position == NULL
-        || candidateCount == NULL
-        || treeX == OW_WILD_HELPER_HEADBUTT_EMPTY_COORD
-        || treeY == OW_WILD_HELPER_HEADBUTT_EMPTY_COORD) {
-        return;
-    }
-
-    landingStart = gf_rand() % OW_WILD_HELPER_NELEMS(sOverworldWildHelperHeadbuttLandingOffsets);
-    for (landingAttempt = 0;
-         landingAttempt < OW_WILD_HELPER_NELEMS(sOverworldWildHelperHeadbuttLandingOffsets);
-         landingAttempt++) {
-        const OverworldWildHelperHeadbuttLandingOffset *landing =
-            &sOverworldWildHelperHeadbuttLandingOffsets[
-                (landingStart + landingAttempt)
-                    % OW_WILD_HELPER_NELEMS(sOverworldWildHelperHeadbuttLandingOffsets)];
-        int spawnX = treeX + landing->dx;
-        int spawnY = treeY + landing->dy;
-        int distance = OverworldWildHelper_DistanceFromPlayer(playerState, spawnX, spawnY);
-
-        if (distance < OW_WILD_HELPER_SPAWN_MIN_DISTANCE
-            || distance > OW_WILD_HELPER_SPAWN_MAX_DISTANCE
-            || !callbacks->isWalkableLandTile(context, spawnX, spawnY)
-            || callbacks->isNearActiveSpawn(
-                context,
-                treeX,
-                treeY,
-                OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE)) {
+        if (!callbacks->tryGetSpawnTerrain(context, x, y, &terrain)
+            || terrain != OW_WILD_SPAWN_TERRAIN_SURF
+            || callbacks->isTileOccupied(context, x, y)) {
             continue;
         }
 
-        (*candidateCount)++;
-        if ((gf_rand() % *candidateCount) == 0) {
-            position->startX = treeX;
-            position->startY = treeY;
-            position->headbuttTreeType = treeType;
-        }
+        position->startX = x;
+        position->startY = y;
+        return TRUE;
     }
+
+    return FALSE;
 }
 
-static BOOL OverworldWildHelper_TryPickHeadbuttSpawnPosition(
+static BOOL OverworldWildHelper_TryPickHeadbuttEncounterPool(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
-    OverworldWildSpawnPosition *position)
+    u8 *treeType)
 {
     OverworldWildHelperHeadbuttHeader header;
-    OverworldWildHelperPlayerState playerState;
-    u32 treeDataOffset;
-    u32 candidateCount = 0;
-    u32 treeGroup;
+    u32 treeCount;
     u16 mapId;
 
-    if (position == NULL
-        || !callbacks->getPlayerState(context, &playerState)
+    if (treeType == NULL
         || !OverworldWildHelper_GetMapId(callbacks, context, &mapId)
         || !OverworldWildHelper_LoadHeadbuttDataByMapId(
             callbacks,
@@ -510,65 +357,15 @@ static BOOL OverworldWildHelper_TryPickHeadbuttSpawnPosition(
         return FALSE;
     }
 
-    if (header.normalTreeCount == 0 && header.specialTreeCount == 0) {
+    treeCount = header.normalTreeCount + header.specialTreeCount;
+    if (treeCount == 0) {
         return FALSE;
     }
 
-    treeDataOffset = OverworldWildHelper_GetHeadbuttTreeDataOffset();
-
-    for (treeGroup = 0; treeGroup < 2; treeGroup++) {
-        u8 treeType = treeGroup == 0
-            ? OW_WILD_HELPER_HEADBUTT_NORMAL_TREE
-            : OW_WILD_HELPER_HEADBUTT_SPECIAL_TREE;
-        u32 treeCount = treeType == OW_WILD_HELPER_HEADBUTT_NORMAL_TREE
-            ? header.normalTreeCount
-            : header.specialTreeCount;
-        u32 treeOffset = treeDataOffset;
-        u32 treeIndex;
-
-        if (treeType == OW_WILD_HELPER_HEADBUTT_SPECIAL_TREE) {
-            treeOffset += header.normalTreeCount * sizeof(OverworldWildHelperHeadbuttTree);
-        }
-
-        for (treeIndex = 0; treeIndex < treeCount; treeIndex++) {
-            OverworldWildHelperHeadbuttTree tree;
-            u32 coordIndex;
-
-            if (!OverworldWildHelper_LoadHeadbuttDataByMapId(
-                    callbacks,
-                    context,
-                    mapId,
-                    treeOffset + treeIndex * sizeof(tree),
-                    &tree,
-                    sizeof(tree))) {
-                return FALSE;
-            }
-
-            for (coordIndex = 0;
-                 coordIndex < OW_WILD_HELPER_HEADBUTT_COORDS_PER_TREE;
-                 coordIndex++) {
-                int treeX = tree.coords[coordIndex].x;
-                int treeY = tree.coords[coordIndex].y;
-
-                if (treeX == OW_WILD_HELPER_HEADBUTT_EMPTY_COORD
-                    || treeY == OW_WILD_HELPER_HEADBUTT_EMPTY_COORD) {
-                    continue;
-                }
-
-                OverworldWildHelper_TryPickHeadbuttLanding(
-                    callbacks,
-                    context,
-                    &playerState,
-                    treeX,
-                    treeY,
-                    treeType,
-                    position,
-                    &candidateCount);
-            }
-        }
-    }
-
-    return candidateCount != 0;
+    *treeType = (gf_rand() % treeCount) < header.normalTreeCount
+        ? OW_WILD_HELPER_HEADBUTT_NORMAL_TREE
+        : OW_WILD_HELPER_HEADBUTT_SPECIAL_TREE;
+    return TRUE;
 }
 
 static BOOL OverworldWildHelper_TryPickSpawnPositionForTerrain(
@@ -577,11 +374,17 @@ static BOOL OverworldWildHelper_TryPickSpawnPositionForTerrain(
     OverworldWildSpawnTerrain terrain,
     OverworldWildSpawnPosition *position)
 {
+    if (position == NULL) {
+        return FALSE;
+    }
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
-        return OverworldWildHelper_TryPickHeadbuttSpawnPosition(callbacks, context, position);
+        return OverworldWildHelper_TryPickHeadbuttEncounterPool(
+            callbacks,
+            context,
+            &position->headbuttTreeType);
     }
     if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
-        return OverworldWildHelper_TryPickCachedFishingSpawnPosition(callbacks, context, position);
+        return OverworldWildHelper_TryPickFishingSpawnPosition(callbacks, context, position);
     }
     return OverworldWildHelper_TryPickSpawnPosition(callbacks, context, terrain, position);
 }
