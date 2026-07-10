@@ -4122,9 +4122,9 @@ button {
 ) {
   --mode-accent: var(--life-accent);
   --mode-tab: color-mix(in srgb, var(--life-accent) 32%, #fff);
-  --life-panel: color-mix(in srgb, var(--life-accent) 16%, #fff);
-  --life-item: color-mix(in srgb, var(--life-accent) 8%, #fff);
-  --life-suboption: color-mix(in srgb, var(--life-accent) 24%, #fff);
+  --life-panel: color-mix(in srgb, var(--life-accent) 8%, #fff);
+  --life-item: color-mix(in srgb, var(--life-accent) 4%, #fff);
+  --life-suboption: color-mix(in srgb, var(--life-accent) 14%, #fff);
   --life-control: color-mix(in srgb, var(--life-accent) 38%, #fff);
 }
 
@@ -4133,11 +4133,11 @@ button {
   .pv2-mode-tabpanel[data-mode-tabpanel="movement"]
 ) {
   --mode-accent: color-mix(in srgb, var(--life-accent) 72%, #1f2428);
-  --mode-tab: color-mix(in srgb, var(--life-accent) 10%, #fff);
-  --life-panel: color-mix(in srgb, var(--life-accent) 4%, #fff);
+  --mode-tab: color-mix(in srgb, var(--life-accent) 20%, #fff);
+  --life-panel: color-mix(in srgb, var(--life-accent) 3%, #fff);
   --life-item: color-mix(in srgb, var(--life-accent) 1%, #fff);
-  --life-suboption: color-mix(in srgb, var(--life-accent) 7%, #fff);
-  --life-control: color-mix(in srgb, var(--life-accent) 14%, #fff);
+  --life-suboption: color-mix(in srgb, var(--life-accent) 6%, #fff);
+  --life-control: color-mix(in srgb, var(--life-accent) 20%, #fff);
 }
 
 .pv2-mode-tabs-workspace {
@@ -4173,10 +4173,10 @@ button {
 .pv2-mode-tab.is-active {
   position: relative;
   z-index: 1;
-  border-color: #918e87;
+  border-color: color-mix(in srgb, var(--mode-accent, #918e87) 52%, #918e87);
   border-bottom-color: var(--life-panel, #f7f4ed);
   background: var(--life-panel, #f7f4ed);
-  box-shadow: inset 0 2px var(--mode-accent, var(--life-accent, var(--red)));
+  box-shadow: inset 0 3px var(--mode-accent, var(--life-accent, var(--red)));
 }
 
 #profileInspector .pv2-mode-tab > button {
