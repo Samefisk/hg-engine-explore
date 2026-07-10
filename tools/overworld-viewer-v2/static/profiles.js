@@ -246,12 +246,10 @@ const FIELD_SECTIONS = Object.freeze([
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
       "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause", "teleportTime",
       "teleportPause", "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction",
-      "chillCooldown",
     ],
     nodes: [
       { kind: "branch", field: "chillState", branch: "chill-behavior", subtab: "behavior" },
       { kind: "branch", field: "chillAction", branch: "movement", scope: "chill", subtab: "movement" },
-      { kind: "fields", fields: ["chillCooldown"], subtab: "behavior" },
     ],
   },
   {

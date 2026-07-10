@@ -252,7 +252,7 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_SPAWNER_ASLEEP_REST_TIMER 255
 #define OW_WILD_SPAWNER_TIRED_WANDER_PAUSE_FRAMES 24
 #define OW_WILD_SPAWNER_TIRED_EMOTE_SE SEQ_SE_PL_BALLOON05
-#define OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES 32
+#define OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES 32
 #define OW_WILD_SPAWNER_MOVEMENT_TARGET_MAX 6
 #define OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_DISTANCE 5
 #define OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_DISTANCE 6
@@ -703,8 +703,7 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfi
         OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
         OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE,
         OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER,
-        OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,        OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES,
-
+        OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
         100,
         OW_WILD_SPAWN_DESTINATION_POOL,
         OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
@@ -2584,8 +2583,6 @@ static const u8 sOverworldWildBehaviorOverrideFieldOffsets[] = {
     OW_WILD_PROFILE_OFFSET(tiredSpeed),
     OW_WILD_PROFILE_OFFSET(targetSelector),
     OW_WILD_PROFILE_OFFSET(movementStyle),
-    OW_WILD_PROFILE_OFFSET(chillCooldown),
-    OW_WILD_PROFILE_OFFSET(alertChance),
     OW_WILD_PROFILE_OFFSET(alertChance),
     OW_WILD_PROFILE_OFFSET(alertTime),
     OW_WILD_PROFILE_OFFSET(spawnDestination),
@@ -2668,8 +2665,8 @@ static void OverworldWildSpawns_ApplyBehaviorOverride(
     }
 
     OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask, 0);
-    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask2, 29);
-    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask3, 44);
+    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask2, 27);
+    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask3, 42);
 }
 
 static BOOL OverworldWildSpawns_OverrideSetsOverworldLimit(
@@ -3321,15 +3318,6 @@ static OverworldWildBehaviorPrimitives OverworldWildSpawns_ResolveBehaviorPrimit
     return primitives;
 }
 
-static u8 OverworldWildSpawns_GetChillCooldownFrames(const OverworldWildBehaviorProfile *profile)
-{
-    if (profile == NULL || profile->chillCooldown == 0) {
-        return OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
-    }
-
-    return profile->chillCooldown;
-}
-
 static u8 OverworldWildSpawns_GetBehaviorHopPauseFrames(
     const OverworldWildBehaviorProfile *profile,
     u8 spotState)
@@ -3351,7 +3339,7 @@ static u8 OverworldWildSpawns_GetBehaviorHopPauseFrames(
             return OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN;
         }
         if (spotState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-            return OverworldWildSpawns_GetChillCooldownFrames(profile);
+            return OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         }
     }
     return OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES;
@@ -7104,7 +7092,7 @@ static BOOL OverworldWildSpawns_TryStartPhantomChillTeleportMovementCommand(
             &targetX,
             &targetY,
             &targetFacing)) {
-        state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+        state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
         return FALSE;
@@ -7124,7 +7112,7 @@ static BOOL OverworldWildSpawns_TryStartPhantomChillTeleportMovementCommand(
         return TRUE;
     }
 
-    state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
     return FALSE;
 }
 
@@ -8016,7 +8004,7 @@ static void OverworldWildSpawns_HandleFinishedMovementCommand(OverworldWildSpawn
             ? OverworldWildSpawns_GetBehaviorHopPauseFrames(
                 &profile,
                 state->movementSpotStates[slot])
-            : OverworldWildSpawns_GetChillCooldownFrames(&profile);
+            : OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         OverworldWildSpawns_ApplyUniversalChainMovementPause(
             state,
             slot,
@@ -8174,7 +8162,7 @@ static BOOL OverworldWildSpawns_TryStartChillWanderCommand(
         state->movementCooldowns[slot] =
             state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_TIRED
             ? OW_WILD_SPAWNER_TIRED_WANDER_PAUSE_FRAMES
-            : OverworldWildSpawns_GetChillCooldownFrames(profile);
+            : OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         return FALSE;
     }
 
@@ -8211,7 +8199,7 @@ static BOOL OverworldWildSpawns_TryStartChillWanderCommand(
     state->movementCooldowns[slot] =
         state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_TIRED
         ? OW_WILD_SPAWNER_TIRED_WANDER_PAUSE_FRAMES
-        : OverworldWildSpawns_GetChillCooldownFrames(profile);
+        : OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
     return FALSE;
 }
 
@@ -11800,7 +11788,7 @@ static void OverworldWildSpawns_SetPostSpawnStartupCooldown(
         return;
     }
 
-    state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
 }
 
 static BOOL OverworldWildSpawns_TryStartSpawnRunStep(
@@ -14455,7 +14443,7 @@ static BOOL OverworldWildSpawns_TryStartNextStagedHopMovementCommand(
         ) {
         OverworldWildSpawns_ClearStagedHopTarget(state, slot);
         MapObject_ClearBits(object, BIT_VANISH);
-        state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+        state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         return FALSE;
     }
 
@@ -14548,7 +14536,7 @@ static BOOL OverworldWildSpawns_TryStartNextStagedHopMovementCommand(
 #endif
     OverworldWildSpawns_ClearStagedHopTarget(state, slot);
     MapObject_ClearBits(object, BIT_VANISH);
-    state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
     return FALSE;
 }
 
@@ -15208,7 +15196,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
         MapObject_ClearSingleMovementActive(object);
     }
     MapObject_ClearBits(object, BIT_VANISH);
-    state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
     return FALSE;
 #endif
 #if OW_WILD_SPAWNER_CANOPY_TREE_ANCHOR_SINGLE_JUMP_PROBE \
@@ -15331,7 +15319,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
         return TRUE;
 #endif
     }
-    state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+    state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
     return FALSE;
 }
 #endif
@@ -15372,7 +15360,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
                     &targetY)) {
                 OverworldWildSpawns_ClearStagedHopTarget(state, slot);
                 OverworldWildSpawns_ClearMankeyPathFailure(state, slot);
-                state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+                state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
                 return FALSE;
             }
             targetIsMankeyTreeTop = TRUE;
@@ -15410,7 +15398,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
                 (u8)distance,
                 FALSE)) {
             OW_WILD_RUNTIME(state)->movementMankeyTreeTopLandingExpected[slot] = FALSE;
-            state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+            state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
             sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
             sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
             return FALSE;
@@ -15430,7 +15418,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
                 &profile,
                 &targetX,
                 &targetY)) {
-            state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+            state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
             sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
             sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
             return FALSE;
@@ -15445,7 +15433,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
                 &targetX,
                 &targetY,
                 &finishWithTired)) {
-            state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+            state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
             sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
             sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
             return FALSE;
@@ -15460,7 +15448,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
                &profile,
                &targetX,
                &targetY)) {
-        state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+        state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
         return FALSE;
@@ -15484,7 +15472,7 @@ static BOOL OverworldWildSpawns_TryStartHeadbuttTreeHop(
             direction,
             (u8)distance,
             finishWithTired)) {
-        state->movementCooldowns[slot] = OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES;
+        state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
         sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         sOverworldWildMovementDiagnosticWalkSuppressedByBlocked = TRUE;
         return FALSE;

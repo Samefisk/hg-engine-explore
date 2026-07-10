@@ -210,7 +210,6 @@ PROFILE_FIELDS = [
     "attentiveAction",
     "targetSelector",
     "movementStyle",
-    "chillCooldown",
     "alertChance",
     "spawnDestination",
     "attentiveBattle",
@@ -294,7 +293,6 @@ FIELD_LABELS = {
     "attentiveAction": "Legacy response",
     "targetSelector": "Target",
     "movementStyle": "Movement style",
-    "chillCooldown": "Chill cooldown",
     "alertChance": "Alert chance",
     "spawnDestination": "Spawn destination",
     "attentiveBattle": "Battle Active",
@@ -360,7 +358,6 @@ FIELD_UNITS = {
     "teleportPause": "frames",
     "ramAccelerationSteps": "moves",
     "ramMaxSpeed": "frames",
-    "chillCooldown": "frames",
     "alertTime": "frames",
     "alertness": "tiles",
     "alertChance": "%",
@@ -576,7 +573,6 @@ OVERRIDE1_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE": "alertRange",
     "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR": "targetSelector",
     "OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE": "movementStyle",
-    "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_COOLDOWN": "chillCooldown",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE": "alertChance",
     "OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION": "spawnDestination",
     "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE": "attentiveBattle",
@@ -849,7 +845,6 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveSpeed",
     "tiredSpeed",
     "range",
-    "chillCooldown",
     "alertChance",
     "hopMinDistance",
     "hopMaxDistance",
@@ -14054,7 +14049,6 @@ HTML = r"""<!doctype html>
       "attentiveSpeed",
       "tiredSpeed",
       "range",
-      "chillCooldown",
       "alertChance",
       "hopMinDistance",
       "hopMaxDistance",
@@ -14173,7 +14167,6 @@ HTML = r"""<!doctype html>
       ramAccelerationSteps: { label: "Chain move count", shortLabel: "Chain", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainPauseAction: { label: "Chain pause action", shortLabel: "Action", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
-      chillCooldown: { label: "Time between hops", shortLabel: "Cooldown", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
 
       alertState: { label: "Alert trigger", shortLabel: "Trigger", category: "alert", subgroup: "Behavior", iconFamily: "condition" },
       alertEmote: { label: "Alert emote", shortLabel: "Emote", category: "alert", subgroup: "Visual", iconFamily: "visualAudio", rowIcon: true },
@@ -14285,7 +14278,6 @@ HTML = r"""<!doctype html>
           "ramAccelerationSteps",
           "ramMaxSpeed",
           "chainPauseAction",
-          "chillCooldown",
         ],
       },
       {
@@ -16622,7 +16614,6 @@ HTML = r"""<!doctype html>
         }));
       }
       fields.push(...movementFields.items);
-      fields.push(profileEditFieldItem(item, "chillCooldown"));
       return {
         count: fields.length,
         items: fields,
