@@ -4054,8 +4054,8 @@ button {
 .pv2-mode-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  padding: 7px 7px 0;
+  gap: 2px;
+  padding: 5px 5px 0;
   border-bottom: 1px solid #aaa8a1;
   background: #cfccc4;
 }
@@ -4070,7 +4070,7 @@ button {
   min-width: 0;
   min-height: 48px;
   margin-bottom: -1px;
-  padding: 7px 8px 7px 10px;
+  padding: 6px 7px 6px 9px;
   border: 1px solid #aaa79f;
   border-bottom-color: #aaa8a1;
   border-radius: 4px 4px 0 0;
@@ -4083,7 +4083,7 @@ button {
   border-color: #918e87;
   border-bottom-color: #f7f4ed;
   background: #f7f4ed;
-  box-shadow: inset 0 3px var(--red);
+  box-shadow: inset 0 2px var(--red);
 }
 
 #profileInspector .pv2-mode-tab > button {
@@ -4119,19 +4119,23 @@ button {
 }
 
 .pv2-mode-tab-select {
+  width: min(230px, 100%);
   min-width: 0;
+  justify-self: end;
 }
 
-.pv2-mode-tab-select .pv2-field {
+#profileInspector .pv2-mode-tab-select .pv2-field,
+#profileInspector .pv2-mode-tab-select .pv2-field:nth-child(odd) {
   display: block;
   min-height: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
 }
 
-.pv2-mode-tab-select .pv2-field-copy {
+#profileInspector .pv2-mode-tab-select .pv2-field-copy {
   display: none;
 }
 
@@ -4150,12 +4154,16 @@ button {
 
 .pv2-mode-tab.is-active .field-control {
   border-color: #9c9a92;
-  background-color: #e4e1d9;
+  background-color: #e7e3da;
   box-shadow: inset 0 1px 2px rgb(38 42 40 / 8%);
 }
 
 .pv2-mode-tab-select .field-control:hover {
-  background-color: #ddd9d1;
+  background-color: #d9d6ce;
+}
+
+.pv2-mode-tab.is-active .field-control:hover {
+  background-color: #ede9e1;
 }
 
 .pv2-mode-tab-select .field-control:focus-visible {
@@ -4584,7 +4592,7 @@ button {
 @container (max-width: 390px) {
   .pv2-mode-tabs {
     grid-template-columns: 1fr;
-    gap: 4px;
+    gap: 3px;
     padding: 5px;
   }
 
@@ -4596,11 +4604,7 @@ button {
   }
 
   #profileInspector .pv2-mode-tab > button {
-    min-height: 42px;
-  }
-
-  .pv2-mode-tab-select .pv2-field {
-    min-height: 42px;
+    min-height: 32px;
   }
 
   .pv2-field {
