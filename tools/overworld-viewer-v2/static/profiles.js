@@ -60,6 +60,31 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
     ]),
   }),
+  "movement-chain-or-ram": Object.freeze({
+    id: "movement-chain-or-ram",
+    label: "Shared Chain / RAM tuning",
+    meta: "moves/steps · frames/speed · Chain-only",
+    fields: Object.freeze([
+      Object.freeze({
+        key: "ramAccelerationSteps",
+        label: "Move count / RAM interval",
+        unit: "moves / steps",
+        note: "Chain move count or RAM acceleration interval, depending on the inherited movement style. Zero disables both behaviors",
+      }),
+      Object.freeze({
+        key: "ramMaxSpeed",
+        label: "Pause / max speed",
+        unit: "frames / speed tier",
+        note: "Chain pause duration or RAM maximum speed, depending on the inherited movement style",
+      }),
+      Object.freeze({
+        key: "chainPauseAction",
+        label: "Chain pause action",
+        unit: "",
+        note: "Ignored when the inherited movement style uses RAM",
+      }),
+    ]),
+  }),
   "hop-path-chill": Object.freeze({
     id: "hop-path-chill",
     label: "Hop path",
@@ -999,6 +1024,24 @@ export function createProfilesController({
         if (!options.some((option) => valueRaw(option) === raw)) options.push({ raw, label: raw, value });
       }
     }
+    if (context.chainRamDual && ["ramAccelerationSteps", "ramMaxSpeed"].includes(fieldKey)) {
+      options = options.map((option) => {
+        const raw = valueRaw(option);
+        const numeric = Number(raw);
+        if (!Number.isFinite(numeric)) return option;
+        if (fieldKey === "ramAccelerationSteps") {
+          return {
+            ...option,
+            label: numeric === 0
+              ? "0 — disables Chain pauses and RAM acceleration"
+              : `${raw} moves / steps`,
+          };
+        }
+        if (numeric === 0) return { ...option, label: "0 — no Chain pause; RAM stays at starting speed" };
+        if (numeric <= 4) return { ...option, label: `${raw} frame${numeric === 1 ? "" : "s"} / speed tier ${raw}` };
+        return { ...option, label: `${raw} frames — RAM clamps to speed tier 4` };
+      });
+    }
     if (fieldKey === "ramMaxSpeed" && usesRam) {
       options = options
         .filter((option) => Number(valueRaw(option)) <= 4 || valueRaw(option) === currentRaw)
@@ -1326,9 +1369,16 @@ export function createProfilesController({
     const raw = fieldRaw(profile, parentField);
     const inherited = isOverrideProfile(profile) && !raw;
     const moves = Boolean(raw && raw !== LOCOMOTION.none);
-    const effectiveRaw = inherited ? valueRaw(ui.contextResult?.baseProfile?.[parentField]) : raw;
-    const inheritedChillRam = scope === "chill" && inherited && effectiveRaw === LOCOMOTION.ram;
-    const inheritedChillAmbiguous = scope === "chill" && inherited && !effectiveRaw;
+    const inheritedChillCandidates = scope === "chill" && inherited
+      ? effectiveFieldCandidates(profile, parentField)
+      : [];
+    const inheritedChillRam = inheritedChillCandidates.length > 0
+      && inheritedChillCandidates.every((candidate) => candidate === LOCOMOTION.ram);
+    const inheritedChillChain = inheritedChillCandidates.length > 0
+      && inheritedChillCandidates.every((candidate) => candidate !== LOCOMOTION.ram);
+    const inheritedChillAmbiguous = scope === "chill" && inherited
+      && !inheritedChillRam
+      && !inheritedChillChain;
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -1359,11 +1409,15 @@ export function createProfilesController({
       composite: fields.hopPath.composite,
     });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
-    if (inheritedChillRam) append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
-    if (inheritedChillAmbiguous) {
-      append([fields.chain[0]], true, { label: "Chain moves / RAM acceleration" });
-      append([fields.chain[1]], true, { label: "Chain pause / RAM max speed" });
-      append([fields.chain[2]], true);
+    if (inheritedChillRam) {
+      append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
+      append([fields.chain[2]], false);
+    } else if (inheritedChillAmbiguous) {
+      append(fields.chain, true, {
+        composite: "movement-chain-or-ram",
+        chainRamDual: true,
+        ramMode: inheritedChillCandidates.includes(LOCOMOTION.ram),
+      });
     } else {
       append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram), { composite: "movement-chain" });
     }
