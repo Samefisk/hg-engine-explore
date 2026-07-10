@@ -237,6 +237,10 @@ const FIELD_SECTIONS = Object.freeze([
     title: "Chill state",
     hint: "Default behavior and movement before the Pokémon becomes alert.",
     sharedMovement: true,
+    subtabs: Object.freeze([
+      Object.freeze({ id: "behavior", label: "Behavior" }),
+      Object.freeze({ id: "movement", label: "Movement style" }),
+    ]),
     fields: [
       "chillState", "chillTarget", "chillAllowedTile", "chillAllowedTile2",
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
@@ -245,9 +249,9 @@ const FIELD_SECTIONS = Object.freeze([
       "chillCooldown",
     ],
     nodes: [
-      { kind: "branch", field: "chillState", branch: "chill-behavior" },
-      { kind: "branch", field: "chillAction", branch: "movement", scope: "chill" },
-      { kind: "fields", fields: ["chillCooldown"] },
+      { kind: "branch", field: "chillState", branch: "chill-behavior", subtab: "behavior" },
+      { kind: "branch", field: "chillAction", branch: "movement", scope: "chill", subtab: "movement" },
+      { kind: "fields", fields: ["chillCooldown"], subtab: "behavior" },
     ],
   },
   {
@@ -271,6 +275,10 @@ const FIELD_SECTIONS = Object.freeze([
     hint: "Alerted behavior, targeting, chase, and active movement.",
     scopedAction: "active",
     sharedMovement: true,
+    subtabs: Object.freeze([
+      Object.freeze({ id: "behavior", label: "Behavior" }),
+      Object.freeze({ id: "movement", label: "Movement style" }),
+    ]),
     fields: [
       "attentiveState", "stamina", "targetSelector", "attentiveCircleRadius",
       "attentiveContinueWhenArrived", "attentiveAllowedTile", "attentiveAllowedTile2",
@@ -282,11 +290,11 @@ const FIELD_SECTIONS = Object.freeze([
       "attentiveBattle", "alertSpecialAction",
     ],
     nodes: [
-      { kind: "branch", field: "attentiveState", branch: "active-behavior" },
-      { kind: "fields", fields: ["stamina"] },
-      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action" },
-      { kind: "branch", field: "movementStyle", branch: "movement", scope: "active" },
-      { kind: "fields", fields: ["attentiveBattle"] },
+      { kind: "branch", field: "attentiveState", branch: "active-behavior", subtab: "behavior" },
+      { kind: "fields", fields: ["stamina"], subtab: "behavior" },
+      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action", subtab: "behavior" },
+      { kind: "branch", field: "movementStyle", branch: "movement", scope: "active", subtab: "movement" },
+      { kind: "fields", fields: ["attentiveBattle"], subtab: "behavior" },
     ],
   },
   {
@@ -294,6 +302,10 @@ const FIELD_SECTIONS = Object.freeze([
     title: "Tired state",
     hint: "Recovery behavior, movement after exertion, and rest timing.",
     sharedMovement: true,
+    subtabs: Object.freeze([
+      Object.freeze({ id: "behavior", label: "Behavior" }),
+      Object.freeze({ id: "movement", label: "Movement style" }),
+    ]),
     fields: [
       "tiredState", "tiredAllowedTile", "tiredAllowedTile2", "specialAction", "tiredSpeed",
       "tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime",
@@ -302,9 +314,9 @@ const FIELD_SECTIONS = Object.freeze([
       "tiredRamAccelerationSteps", "tiredRamMaxSpeed", "restTime",
     ],
     nodes: [
-      { kind: "branch", field: "tiredState", branch: "tired-behavior" },
-      { kind: "branch", field: "specialAction", branch: "movement", scope: "tired" },
-      { kind: "fields", fields: ["restTime"] },
+      { kind: "branch", field: "tiredState", branch: "tired-behavior", subtab: "behavior" },
+      { kind: "branch", field: "specialAction", branch: "movement", scope: "tired", subtab: "movement" },
+      { kind: "fields", fields: ["restTime"], subtab: "behavior" },
     ],
   },
   {
@@ -545,6 +557,10 @@ export function createProfilesController({
     ? state.profileLifecycleSections
     : new Map();
   state.profileLifecycleSections = lifecycleSectionsByProfile;
+  const branchTabsByProfile = state.profileBranchTabs instanceof Map
+    ? state.profileBranchTabs
+    : new Map();
+  state.profileBranchTabs = branchTabsByProfile;
 
   const ui = {
     search: "",
@@ -1586,13 +1602,14 @@ export function createProfilesController({
     const metaMarkup = visibleMeta
       ? `<small class="pv2-field-meta">${stateMarkup}${visibleMeta}</small>`
       : stateMarkup;
+    const tabIndex = Number.isInteger(presentation.tabIndex) ? ` tabindex="${presentation.tabIndex}"` : "";
     return `
       <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
           ${metaMarkup}
         </span>
-        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""} aria-label="${escapeHtml(label)}" aria-describedby="${escapeHtml(descriptionId)}">
+        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""}${tabIndex} aria-label="${escapeHtml(label)}" aria-describedby="${escapeHtml(descriptionId)}">
           ${allowInherit ? `<option value="" ${selectedRaw ? "" : "selected"}>Inherit</option>` : ""}
           ${selectOptions.map((option) => {
             const optionRaw = valueRaw(option);
@@ -2006,44 +2023,133 @@ export function createProfilesController({
       </div>`;
   }
 
-  function renderBranch(profile, descriptor, sectionId, index) {
-    if (!profileCanEditField(profile, descriptor.field)) return "";
+  function branchParts(profile, descriptor) {
+    if (!profileCanEditField(profile, descriptor.field)) return null;
     const branch = branchChildren(profile, descriptor);
     const children = branch.nodes.filter((node) => profileCanEditField(profile, node.field));
-    const rootNode = {
-      field: descriptor.field,
+    return {
+      branch,
       children,
-      context: branch.context,
-      virtual: descriptor.virtual,
-      scope: descriptor.scope,
+      rootNode: {
+        field: descriptor.field,
+        children,
+        context: branch.context,
+        virtual: descriptor.virtual,
+        scope: descriptor.scope,
+      },
     };
-    const markup = renderHierarchyNode(profile, rootNode, sectionId, `branch-${index}`);
+  }
+
+  function renderBranch(profile, descriptor, sectionId, index) {
+    const parts = branchParts(profile, descriptor);
+    if (!parts) return "";
+    const markup = renderHierarchyNode(profile, parts.rootNode, sectionId, `branch-${index}`);
     if (!markup) return "";
-    if (!children.length) return `<div class="pv2-root-field-grid">${markup}</div>`;
+    if (!parts.children.length) return `<div class="pv2-root-field-grid">${markup}</div>`;
     return `
-      <div class="pv2-branch-wrap${branch.inherited ? " is-inherited-branch" : ""}">
+      <div class="pv2-branch-wrap${parts.branch.inherited ? " is-inherited-branch" : ""}">
         ${markup}
       </div>`;
+  }
+
+  function renderBranchTabSelect(profile, descriptor, sectionId, tabId, active) {
+    const parts = branchParts(profile, descriptor);
+    if (!parts) return "";
+    const renderControl = parts.rootNode.virtual ? renderVirtualFieldControl : renderFieldControl;
+    return renderControl(profile, parts.rootNode.virtual ? parts.rootNode : parts.rootNode.field, {
+      ...parts.rootNode,
+      depth: 0,
+      instance: `${sectionId}:mode-tab-${tabId}:${descriptor.field}`,
+      parent: true,
+      tabIndex: active ? 0 : -1,
+    });
+  }
+
+  function renderBranchTabBody(profile, descriptor, sectionId, path) {
+    const parts = branchParts(profile, descriptor);
+    if (!parts) return "";
+    const childMarkup = consolidateSiblingControls(parts.children)
+      .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, 1))
+      .filter(Boolean)
+      .join("");
+    const contextId = parts.branch.context
+      ? `pv2-mode-context-${`${sectionId}-${path}`.replace(/[^a-zA-Z0-9_-]/g, "-")}`
+      : "";
+    return `
+      <div class="pv2-mode-tab-branch${parts.branch.inherited ? " is-inherited-branch" : ""}">
+        ${childMarkup ? `<div class="pv2-mode-tab-suboptions" role="group" aria-label="${escapeHtml(`${fieldLabelForProfile(profile, descriptor.field)} suboptions`)}"${contextId ? ` aria-describedby="${escapeHtml(contextId)}"` : ""}>
+          ${parts.branch.context ? `<p id="${escapeHtml(contextId)}" class="pv2-branch-context">${escapeHtml(parts.branch.context)}</p>` : ""}
+          <div class="pv2-suboption-grid">${childMarkup}</div>
+        </div>` : (parts.branch.context ? `<p class="pv2-branch-context">${escapeHtml(parts.branch.context)}</p>` : "")}
+      </div>`;
+  }
+
+  function renderFieldsDescriptor(profile, section, descriptor, index, prefix = "fields") {
+    const markup = consolidateSiblingControls((descriptor.fields || [])
+      .filter((field) => profileCanEditField(profile, field))
+      .map((field) => ({ field, composite: descriptor.composite || "" })))
+      .map((node, fieldIndex) => node.composite
+        ? renderCompositeFieldControl(profile, node, { instance: `${section.id}:${prefix}-${index}.${fieldIndex}:${node.composite.id}` })
+        : (node.range
+          ? renderRangeFieldControl(profile, node, { instance: `${section.id}:${prefix}-${index}.${fieldIndex}:range` })
+          : renderFieldControl(profile, node.field, {
+          instance: `${section.id}:${prefix}-${index}.${fieldIndex}:${node.field}`,
+        })))
+      .join("");
+    return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
+  }
+
+  function selectedModeTab(profile, sectionId, tabs) {
+    const key = profileKey(profile);
+    const selections = branchTabsByProfile.get(key) || new Map();
+    const stored = selections.get(sectionId);
+    const selected = tabs.find((tab) => tab.id === stored) || tabs[0];
+    selections.set(sectionId, selected.id);
+    branchTabsByProfile.set(key, selections);
+    return selected;
+  }
+
+  function renderModeTabs(profile, section, descriptors) {
+    const tabs = (section.subtabs || []).map((tab) => {
+      const tabDescriptors = descriptors.filter((descriptor) => descriptor.subtab === tab.id);
+      const parentDescriptor = tabDescriptors.find((descriptor) => descriptor.kind === "branch");
+      return { ...tab, descriptors: tabDescriptors, parentDescriptor };
+    }).filter((tab) => tab.parentDescriptor && profileCanEditField(profile, tab.parentDescriptor.field));
+    if (tabs.length < 2) return "";
+    const selected = selectedModeTab(profile, section.id, tabs);
+    const tabHeaders = tabs.map((tab) => {
+      const active = tab.id === selected.id;
+      return `<div class="pv2-mode-tab${active ? " is-active" : ""}">
+        <button type="button" role="tab" id="pv2-mode-tab-${escapeHtml(section.id)}-${escapeHtml(tab.id)}" aria-controls="pv2-mode-panel-${escapeHtml(section.id)}-${escapeHtml(tab.id)}" aria-selected="${active}" tabindex="${active ? "0" : "-1"}" data-action="select-mode-tab" data-mode-tab="${escapeHtml(tab.id)}" data-mode-tab-section="${escapeHtml(section.id)}">${escapeHtml(tab.label)}</button>
+        <div class="pv2-mode-tab-select" data-mode-tab-select="${escapeHtml(tab.id)}" data-mode-tab-section="${escapeHtml(section.id)}">${renderBranchTabSelect(profile, tab.parentDescriptor, section.id, tab.id, active)}</div>
+      </div>`;
+    }).join("");
+    const tabPanels = tabs.map((tab) => {
+      const active = tab.id === selected.id;
+      const content = active ? tab.descriptors.map((descriptor, index) => {
+        if (descriptor.kind === "branch") return renderBranchTabBody(profile, descriptor, section.id, `mode-${tab.id}-${index}`);
+        return renderFieldsDescriptor(profile, section, descriptor, index, `mode-${tab.id}-fields`);
+      }).join("") : "";
+      return `<section class="pv2-mode-tabpanel" role="tabpanel" id="pv2-mode-panel-${escapeHtml(section.id)}-${escapeHtml(tab.id)}" aria-labelledby="pv2-mode-tab-${escapeHtml(section.id)}-${escapeHtml(tab.id)}" data-mode-tabpanel="${escapeHtml(tab.id)}" ${active ? "" : "hidden"}>${content}</section>`;
+    }).join("");
+    return `<div class="pv2-mode-tabs-workspace"><div class="pv2-mode-tabs" role="tablist" aria-label="${escapeHtml(`${section.title} options`)}">${tabHeaders}</div>${tabPanels}</div>`;
   }
 
   function renderSectionContent(profile, section) {
     if (!section.nodes) {
       return `<div class="pv2-root-field-grid">${section.fields.map((field, index) => renderFieldControl(profile, field, { instance: `${section.id}:field-${index}:${field}` })).join("")}</div>`;
     }
-    return section.nodes.map((descriptor, index) => {
+    const tabbedDescriptors = section.nodes.filter((descriptor) => descriptor.subtab);
+    const standaloneDescriptors = section.nodes.filter((descriptor) => !descriptor.subtab);
+    const modeTabs = tabbedDescriptors.length ? renderModeTabs(profile, section, tabbedDescriptors) : "";
+    const standalone = standaloneDescriptors.map((descriptor, index) => {
+      if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, `standalone-${index}`);
+      return renderFieldsDescriptor(profile, section, descriptor, index);
+    }).join("");
+    if (modeTabs) return `${modeTabs}${standalone}`;
+    return [...tabbedDescriptors, ...standaloneDescriptors].map((descriptor, index) => {
       if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, index);
-      const markup = consolidateSiblingControls((descriptor.fields || [])
-        .filter((field) => profileCanEditField(profile, field))
-        .map((field) => ({ field, composite: descriptor.composite || "" })))
-        .map((node, fieldIndex) => node.composite
-          ? renderCompositeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:${node.composite.id}` })
-          : (node.range
-            ? renderRangeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:range` })
-            : renderFieldControl(profile, node.field, {
-            instance: `${section.id}:fields-${index}.${fieldIndex}:${node.field}`,
-          })))
-        .join("");
-      return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
+      return renderFieldsDescriptor(profile, section, descriptor, index);
     }).join("");
   }
 
@@ -2176,6 +2282,20 @@ export function createProfilesController({
     lifecycleSectionsByProfile.set(key, sectionId);
     renderEditor();
     if (focus) focusSectionNavigation(lifecycleSectionsByProfile.get(key));
+  }
+
+  function selectModeTab(sectionId, tabId, focus = true) {
+    const profile = findProfile();
+    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
+    if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
+    const key = profileKey(profile);
+    const selections = branchTabsByProfile.get(key) || new Map();
+    selections.set(sectionId, tabId);
+    branchTabsByProfile.set(key, selections);
+    renderEditor();
+    if (focus) {
+      editorElement.querySelector(`[data-mode-tab-section="${CSS.escape(sectionId)}"][data-mode-tab="${CSS.escape(tabId)}"]`)?.focus({ preventScroll: true });
+    }
   }
 
   function matchSuggestions(field) {
@@ -2555,6 +2675,14 @@ export function createProfilesController({
     lifecycleSectionsByProfile.delete(oldKey);
   }
 
+  function rekeyBranchTabs(oldKey, newKey) {
+    if (!oldKey || !newKey || oldKey === newKey || !branchTabsByProfile.has(oldKey)) return;
+    if (!branchTabsByProfile.has(newKey)) {
+      branchTabsByProfile.set(newKey, branchTabsByProfile.get(oldKey));
+    }
+    branchTabsByProfile.delete(oldKey);
+  }
+
   function renderAll() {
     if (ui.destroyed) return;
     if (!ui.selectedKey || !findProfile(ui.selectedKey)) {
@@ -2644,6 +2772,7 @@ export function createProfilesController({
     }
     for (const [species, target] of drafts.memberships) if (target === oldKey) drafts.memberships.set(species, newKey);
     rekeyLifecycleSection(oldKey, newKey);
+    rekeyBranchTabs(oldKey, newKey);
     if (ui.selectedKey === oldKey) ui.selectedKey = newKey;
   }
 
@@ -2665,6 +2794,7 @@ export function createProfilesController({
     drafts.overrideNames.delete(key);
     drafts.overrideTargets.delete(key);
     lifecycleSectionsByProfile.delete(key);
+    branchTabsByProfile.delete(key);
     drafts.removedOverrides.delete(key);
     drafts.overrideOrder = drafts.overrideOrder.filter((item) => item !== key);
     for (const [species, target] of drafts.memberships) if (target === key) drafts.memberships.delete(species);
@@ -2837,6 +2967,7 @@ export function createProfilesController({
     if (profile.draftId) {
       drafts.newOverrides = drafts.newOverrides.filter((item) => item.draftId !== profile.draftId);
       lifecycleSectionsByProfile.delete(key);
+      branchTabsByProfile.delete(key);
       if (ui.selectedKey === key) ui.selectedKey = "";
       renderAll();
       return;
@@ -2900,6 +3031,7 @@ export function createProfilesController({
     else if (action === "close-context-resolver") closeContextResolver();
     else if (action === "select-profile") setSelected(key);
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
+    else if (action === "select-mode-tab") selectModeTab(target.dataset.modeTabSection, target.dataset.modeTab);
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
     else if (action === "create-base") createBaseDialog();
@@ -2989,6 +3121,7 @@ export function createProfilesController({
       const parentGroup = event.target.closest("[data-option-parent]");
       const parentField = parentGroup?.dataset.optionParent;
       const sectionId = event.target.closest("[data-section-id]")?.dataset.sectionId;
+      const modeTabSelect = event.target.closest("[data-mode-tab-select]");
       const wasParentControl = Boolean(event.target.closest(".pv2-option-parent"));
       const beforeChildren = parentGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
       let nextRaw = event.target.value;
@@ -3009,6 +3142,11 @@ export function createProfilesController({
         } else if (nextRaw === ALERT_SPECIAL.none && scopedActionRaw(scope, currentRaw) === ALERT_SPECIAL.none) {
           nextRaw = currentRaw;
         }
+      }
+      if (modeTabSelect) {
+        const selections = branchTabsByProfile.get(profileKey(profile)) || new Map();
+        selections.set(modeTabSelect.dataset.modeTabSection, modeTabSelect.dataset.modeTabSelect);
+        branchTabsByProfile.set(profileKey(profile), selections);
       }
       setField(profile, fieldKey, nextRaw);
       renderEditor(); renderList(); signalDirty();
@@ -3096,6 +3234,20 @@ export function createProfilesController({
           ? tabs.length - 1
           : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length);
       selectLifecycleTab(tabs[nextIndex].dataset.lifecycleTab);
+      return;
+    }
+    const modeTab = event.target.closest("[data-mode-tab]");
+    if (modeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      const tabs = [...(modeTab.closest('[role="tablist"]')?.querySelectorAll("[data-mode-tab]") || [])];
+      const index = tabs.indexOf(modeTab);
+      if (index < 0 || !tabs.length) return;
+      event.preventDefault();
+      const nextIndex = event.key === "Home"
+        ? 0
+        : (event.key === "End"
+          ? tabs.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length);
+      selectModeTab(modeTab.dataset.modeTabSection, tabs[nextIndex].dataset.modeTab);
       return;
     }
     const handle = event.target.closest("[data-reorder-handle]");
@@ -3220,13 +3372,15 @@ export function createProfilesController({
     if (domains.has("profileOverrides")) {
       ui.pendingLifecycleProfiles = overrideProfiles().map((profile) => {
         const key = profileKey(profile);
+        const modeTabs = branchTabsByProfile.get(key);
         return {
           key,
           name: nameFor(profile),
           section: lifecycleSectionsByProfile.get(key) || "",
+          modeTabs: modeTabs?.size ? new Map(modeTabs) : null,
           selected: ui.selectedKey === key,
         };
-      }).filter((entry) => entry.section || entry.selected);
+      }).filter((entry) => entry.section || entry.modeTabs || entry.selected);
     }
     if (domains.has("profiles")) drafts.baseFields.clear();
     if (domains.has("profileMemberships")) drafts.memberships.clear();
@@ -3243,7 +3397,11 @@ export function createProfilesController({
 
   function reset() {
     ui.selectionHint = nameFor(findProfile());
-    drafts.newOverrides.forEach((draft) => lifecycleSectionsByProfile.delete(`draft:${draft.draftId}`));
+    drafts.newOverrides.forEach((draft) => {
+      const key = `draft:${draft.draftId}`;
+      lifecycleSectionsByProfile.delete(key);
+      branchTabsByProfile.delete(key);
+    });
     ui.pendingLifecycleProfiles = [];
     drafts.baseFields.clear();
     drafts.overrideFields.clear();
@@ -3273,6 +3431,9 @@ export function createProfilesController({
     for (const key of lifecycleSectionsByProfile.keys()) {
       if (!profileKeys.has(key)) lifecycleSectionsByProfile.delete(key);
     }
+    for (const key of branchTabsByProfile.keys()) {
+      if (!profileKeys.has(key)) branchTabsByProfile.delete(key);
+    }
   }
 
   function refresh(nextData) {
@@ -3287,8 +3448,12 @@ export function createProfilesController({
         if (!promoted) continue;
         const promotedKey = profileKey(promoted);
         rekeyLifecycleSection(pending.key, promotedKey);
+        rekeyBranchTabs(pending.key, promotedKey);
         if (pending.section && !lifecycleSectionsByProfile.has(promotedKey)) {
           lifecycleSectionsByProfile.set(promotedKey, pending.section);
+        }
+        if (pending.modeTabs?.size && !branchTabsByProfile.has(promotedKey)) {
+          branchTabsByProfile.set(promotedKey, pending.modeTabs);
         }
         if (pending.selected) {
           ui.selectedKey = promotedKey;
