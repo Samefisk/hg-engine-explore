@@ -3548,6 +3548,104 @@ button {
   container-type: inline-size;
 }
 
+.pv2-lifecycle-workspace {
+  border-top: 1px solid #aaa8a1;
+  background: #e9e6df;
+}
+
+.pv2-lifecycle-tabs {
+  display: grid;
+  grid-template-columns: repeat(var(--lifecycle-tab-count, 5), minmax(0, 1fr));
+  gap: 4px;
+  padding: 7px 7px 0;
+  border-bottom: 1px solid #aaa8a1;
+  background: #cfccc4;
+}
+
+#profileInspector .pv2-lifecycle-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  min-height: 45px;
+  margin: 0 0 -1px;
+  padding: 7px 8px;
+  border: 1px solid #aaa79f;
+  border-bottom-color: #aaa8a1;
+  border-radius: 4px 4px 0 0;
+  background: #dedbd3;
+  color: #4a514d;
+  box-shadow: none;
+  font: 850 10px/1.1 var(--mono);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+#profileInspector .pv2-lifecycle-tab:hover {
+  border-color: #838781;
+  background: #e9e6df;
+}
+
+#profileInspector .pv2-lifecycle-tab[aria-selected="true"] {
+  z-index: 1;
+  border-color: #918e87;
+  border-bottom-color: #f7f4ed;
+  background: #f7f4ed;
+  color: #292f2c;
+  box-shadow: inset 0 3px var(--red);
+}
+
+#profileInspector .pv2-lifecycle-tab:focus-visible {
+  z-index: 2;
+  outline: 2px solid #2c6151;
+  outline-offset: -3px;
+}
+
+.pv2-lifecycle-tab > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv2-lifecycle-tab > em {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 3px 4px;
+  border: 1px solid #aaa8a1;
+  border-radius: 2px;
+  background: #eeebe4;
+  color: #59605c;
+  font: 850 8px/1 var(--mono);
+  font-style: normal;
+  text-align: center;
+}
+
+.pv2-lifecycle-tab[aria-selected="true"] > em {
+  border-color: #a84b46;
+  background: #f7e9e5;
+  color: #8e2f2b;
+}
+
+.pv2-lifecycle-tabpanel[hidden] {
+  display: none;
+}
+
+.pv2-lifecycle-tabpanel {
+  min-width: 0;
+  background: #f7f4ed;
+}
+
+.pv2-lifecycle-hint {
+  margin: 0;
+  padding: 8px 11px;
+  border-bottom: 1px solid #cfccc4;
+  background: #f2efe8;
+  color: #555d58;
+  font: 700 10px/1.35 var(--sans);
+}
+
 .profile-field-editor > .pv2-field-section {
   margin: 0;
   border: 0;
@@ -3559,6 +3657,10 @@ button {
 
 .profile-field-editor > .pv2-field-section:first-of-type {
   border-top: 0;
+}
+
+.profile-field-editor > .pv2-lifecycle-workspace + .pv2-field-section:first-of-type {
+  border-top: 1px solid #aaa8a1;
 }
 
 .pv2-field-section > summary {
@@ -3983,6 +4085,28 @@ button {
 }
 
 @container (max-width: 620px) {
+  .pv2-lifecycle-tabs {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-color: #8d918c transparent;
+    scrollbar-width: thin;
+  }
+
+  .pv2-lifecycle-tabs::-webkit-scrollbar {
+    height: 5px;
+  }
+
+  .pv2-lifecycle-tabs::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: #8d918c;
+  }
+
+  #profileInspector .pv2-lifecycle-tab {
+    flex: 1 0 84px;
+    scroll-snap-align: start;
+  }
+
   .pv2-composite-field,
   .pv2-composite-field:nth-child(odd) {
     grid-template-columns: minmax(0, 1fr);

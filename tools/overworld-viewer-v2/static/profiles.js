@@ -297,6 +297,9 @@ const FIELD_SECTIONS = Object.freeze([
   },
 ]);
 
+const LIFECYCLE_SECTION_IDS = Object.freeze(["spawn", "chill", "alert", "active", "tired"]);
+const LIFECYCLE_SECTION_ID_SET = new Set(LIFECYCLE_SECTION_IDS);
+
 const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
   "OW_WILD_BEHAVIOR_KIND_CHASE",
   "OW_WILD_BEHAVIOR_KIND_FLEE",
@@ -506,6 +509,10 @@ export function createProfilesController({
   let data = normalizeData(state.profileData || state.data || state.appData);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   state.profileDrafts = drafts;
+  const lifecycleSectionsByProfile = state.profileLifecycleSections instanceof Map
+    ? state.profileLifecycleSections
+    : new Map();
+  state.profileLifecycleSections = lifecycleSectionsByProfile;
 
   const ui = {
     search: "",
@@ -526,6 +533,7 @@ export function createProfilesController({
     memberQuery: "",
     draggedKey: "",
     selectionHint: "",
+    pendingLifecycleProfiles: [],
     busy: false,
     destroyed: false,
   };
@@ -2010,6 +2018,56 @@ export function createProfilesController({
       .filter((field) => !sectioned.has(field) && (!isOverrideProfile(profile) || allowed.has(field)));
   }
 
+  function sectionCountInfo(section, override) {
+    return {
+      compact: override ? `${section.overrideCount}/${section.fields.length}` : String(section.fields.length),
+      spoken: override
+        ? `${section.overrideCount} of ${section.fields.length} fields overridden`
+        : `${section.fields.length} fields`,
+    };
+  }
+
+  function renderSectionToolbar(section) {
+    return `<div class="pv2-section-toolbar"><span>Only set values override; the rest inherit.${section.sharedMovement ? " Shared movement values can affect other states." : ""}</span><button class="pv2-section-inherit" type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}" aria-label="Make all ${escapeHtml(section.title)} values inherit" ${section.overrideCount ? "" : "disabled"}>Inherit all</button></div>`;
+  }
+
+  function renderAccordionSection(profile, section, override) {
+    const count = sectionCountInfo(section, override);
+    const expanded = ui.openSections.has(section.id);
+    return `
+      <details class="field-section pv2-field-section" data-section-id="${escapeHtml(section.id)}" ${expanded ? "open" : ""}>
+        <summary>
+          <span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span>
+          <em><span aria-hidden="true">${escapeHtml(count.compact)}</span><span class="sr-only">${escapeHtml(count.spoken)}</span></em>
+        </summary>
+        ${override && expanded ? renderSectionToolbar(section) : ""}
+        ${expanded ? `<div class="profile-fields pv2-field-hierarchy">${renderSectionContent(profile, section)}</div>` : ""}
+      </details>`;
+  }
+
+  function renderLifecycleTabs(profile, sections, override) {
+    if (!sections.length) return "";
+    const key = profileKey(profile);
+    const storedSection = lifecycleSectionsByProfile.get(key);
+    const preferred = sections.find((section) => section.id === storedSection)
+      || sections.find((section) => section.id === "spawn")
+      || sections[0];
+    lifecycleSectionsByProfile.set(key, preferred.id);
+    const tabs = sections.map((section) => {
+      const selected = section.id === preferred.id;
+      const count = sectionCountInfo(section, override);
+      const label = section.title.replace(/ state$/i, "");
+      return `<button class="pv2-lifecycle-tab" type="button" role="tab" id="pv2-lifecycle-tab-${escapeHtml(section.id)}" aria-controls="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-selected="${selected}" aria-label="${escapeHtml(`${section.title}, ${count.spoken}`)}" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-tab" data-lifecycle-tab="${escapeHtml(section.id)}"><span aria-hidden="true">${escapeHtml(label)}</span><em aria-hidden="true">${escapeHtml(count.compact)}</em></button>`;
+    }).join("");
+    const panels = sections.map((section) => {
+      const selected = section.id === preferred.id;
+      return `<section class="pv2-lifecycle-tabpanel" role="tabpanel" id="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-labelledby="pv2-lifecycle-tab-${escapeHtml(section.id)}" data-section-id="${escapeHtml(section.id)}" ${selected ? "" : "hidden"}>
+        ${selected ? `<p class="pv2-lifecycle-hint">${escapeHtml(section.hint)}</p>${override ? renderSectionToolbar(section) : ""}<div class="profile-fields pv2-field-hierarchy">${renderSectionContent(profile, section)}</div>` : ""}
+      </section>`;
+    }).join("");
+    return `<div class="pv2-lifecycle-workspace"><div class="pv2-lifecycle-tabs" role="tablist" aria-label="Profile lifecycle" style="--lifecycle-tab-count:${sections.length}">${tabs}</div>${panels}</div>`;
+  }
+
   function renderFieldSections(profile) {
     const override = isOverrideProfile(profile);
     const sections = FIELD_SECTIONS.map((section) => {
@@ -2024,18 +2082,40 @@ export function createProfilesController({
       fields: other,
       overrideCount: other.filter((field) => fieldRaw(profile, field)).length,
     });
-    const rendered = sections
-      .filter((section) => section.fields.length)
-      .map((section) => `
-        <details class="field-section pv2-field-section" data-section-id="${section.id}" ${ui.openSections.has(section.id) ? "open" : ""}>
-          <summary>
-            <span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span>
-            <em><span aria-hidden="true">${override ? `${section.overrideCount} / ${section.fields.length}` : section.fields.length}</span><span class="sr-only">${override ? `${section.overrideCount} of ${section.fields.length} fields overridden` : `${section.fields.length} fields`}</span></em>
-          </summary>
-          ${override && ui.openSections.has(section.id) ? `<div class="pv2-section-toolbar"><span>Only set values override; the rest inherit.${section.sharedMovement ? " Shared movement values can affect other states." : ""}</span><button class="pv2-section-inherit" type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}" aria-label="Make all ${escapeHtml(section.title)} values inherit" ${section.overrideCount ? "" : "disabled"}>Inherit all</button></div>` : ""}
-          ${ui.openSections.has(section.id) ? `<div class="profile-fields pv2-field-hierarchy">${renderSectionContent(profile, section)}</div>` : ""}
-        </details>`).join("");
+    const visibleSections = sections.filter((section) => section.fields.length);
+    const lifecycleSections = LIFECYCLE_SECTION_IDS
+      .map((id) => visibleSections.find((section) => section.id === id))
+      .filter(Boolean);
+    const secondarySections = visibleSections.filter((section) => !LIFECYCLE_SECTION_ID_SET.has(section.id));
+    const rendered = [
+      renderLifecycleTabs(profile, lifecycleSections, override),
+      ...secondarySections.map((section) => renderAccordionSection(profile, section, override)),
+    ].filter(Boolean).join("");
     return rendered || `<p class="empty-state empty-state--small">No editable fields are available for this profile.</p>`;
+  }
+
+  function sectionNavigationTarget(sectionId) {
+    if (!sectionId) return null;
+    if (LIFECYCLE_SECTION_ID_SET.has(sectionId)) {
+      return editorElement.querySelector(`[data-lifecycle-tab="${CSS.escape(sectionId)}"]`);
+    }
+    return editorElement.querySelector(`details[data-section-id="${CSS.escape(sectionId)}"] > summary`);
+  }
+
+  function focusSectionNavigation(sectionId) {
+    const target = sectionNavigationTarget(sectionId);
+    target?.focus({ preventScroll: true });
+    if (target?.matches("[data-lifecycle-tab]")) target.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  function selectLifecycleTab(sectionId, focus = true) {
+    if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)) return;
+    const profile = findProfile();
+    if (!profile) return;
+    const key = profileKey(profile);
+    lifecycleSectionsByProfile.set(key, sectionId);
+    renderEditor();
+    if (focus) focusSectionNavigation(lifecycleSectionsByProfile.get(key));
   }
 
   function matchSuggestions(field) {
@@ -2371,11 +2451,20 @@ export function createProfilesController({
       ${renderContextResult()}`;
   }
 
+  function rekeyLifecycleSection(oldKey, newKey) {
+    if (!oldKey || !newKey || oldKey === newKey || !lifecycleSectionsByProfile.has(oldKey)) return;
+    if (!lifecycleSectionsByProfile.has(newKey)) {
+      lifecycleSectionsByProfile.set(newKey, lifecycleSectionsByProfile.get(oldKey));
+    }
+    lifecycleSectionsByProfile.delete(oldKey);
+  }
+
   function renderAll() {
     if (ui.destroyed) return;
     if (!ui.selectedKey || !findProfile(ui.selectedKey)) {
       const hinted = allProfiles().find((profile) => nameFor(profile) === ui.selectionHint);
-      ui.selectedKey = profileKey(hinted || baseProfiles().find((profile) => String(profile.index) === String(data.defaultClassIndex)) || allProfiles()[0] || {});
+      const nextKey = profileKey(hinted || baseProfiles().find((profile) => String(profile.index) === String(data.defaultClassIndex)) || allProfiles()[0] || {});
+      ui.selectedKey = nextKey;
     }
     renderList();
     renderEditor();
@@ -2458,6 +2547,7 @@ export function createProfilesController({
       drafts.baseFields.delete(oldKey);
     }
     for (const [species, target] of drafts.memberships) if (target === oldKey) drafts.memberships.set(species, newKey);
+    rekeyLifecycleSection(oldKey, newKey);
     if (ui.selectedKey === oldKey) ui.selectedKey = newKey;
   }
 
@@ -2478,6 +2568,7 @@ export function createProfilesController({
     drafts.overrideFields.delete(key);
     drafts.overrideNames.delete(key);
     drafts.overrideTargets.delete(key);
+    lifecycleSectionsByProfile.delete(key);
     drafts.removedOverrides.delete(key);
     drafts.overrideOrder = drafts.overrideOrder.filter((item) => item !== key);
     for (const [species, target] of drafts.memberships) if (target === key) drafts.memberships.delete(species);
@@ -2649,6 +2740,7 @@ export function createProfilesController({
     const key = profileKey(profile);
     if (profile.draftId) {
       drafts.newOverrides = drafts.newOverrides.filter((item) => item.draftId !== profile.draftId);
+      lifecycleSectionsByProfile.delete(key);
       if (ui.selectedKey === key) ui.selectedKey = "";
       renderAll();
       return;
@@ -2709,6 +2801,7 @@ export function createProfilesController({
     const key = target.dataset.profileKey || ui.selectedKey;
     const profile = findProfile(key);
     if (action === "select-profile") setSelected(key);
+    else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
     else if (action === "create-base") createBaseDialog();
@@ -2736,7 +2829,7 @@ export function createProfilesController({
       const clearedCount = fields.filter((field) => sectionFieldRaw(section, profile, field)).length;
       fields.forEach((field) => clearSectionField(section, profile, field));
       renderEditor(); renderList(); signalDirty();
-      editorElement.querySelector(`[data-section-id="${CSS.escape(target.dataset.section)}"] > summary`)?.focus({ preventScroll: true });
+      focusSectionNavigation(target.dataset.section);
       announce(`${section?.title || "Advanced"}: ${clearedCount} override value${clearedCount === 1 ? "" : "s"} will inherit after saving.`);
     }
     else if (action === "remove-override-member" && profile) {
@@ -2827,9 +2920,7 @@ export function createProfilesController({
       const parentFallback = sectionId && parentField
         ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"] > .pv2-option-parent [data-profile-value]`)
         : null;
-      const sectionFallback = sectionId
-        ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] > summary`)
-        : null;
+      const sectionFallback = sectionNavigationTarget(sectionId);
       (focusTarget || fieldFallback || parentFallback || sectionFallback)?.focus({ preventScroll: true });
       if (wasParentControl && sectionId && parentField) {
         const afterGroup = editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"]`);
@@ -2861,8 +2952,8 @@ export function createProfilesController({
   }
 
   function onToggle(event) {
-    const section = event.target.closest("[data-section-id]");
-    if (!section) return;
+    const section = event.target;
+    if (!(section instanceof HTMLDetailsElement) || !section.matches("details[data-section-id]")) return;
     const wasOpen = ui.openSections.has(section.dataset.sectionId);
     if (section.open) {
       ui.openSections.add(section.dataset.sectionId);
@@ -2872,7 +2963,7 @@ export function createProfilesController({
         const sectionId = section.dataset.sectionId;
         requestAnimationFrame(() => {
           renderEditor();
-          editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] > summary`)?.focus({ preventScroll: true });
+          focusSectionNavigation(sectionId);
         });
       }
     } else {
@@ -2889,6 +2980,20 @@ export function createProfilesController({
   }
 
   function onKeyDown(event) {
+    const lifecycleTab = event.target.closest("[data-lifecycle-tab]");
+    if (lifecycleTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      const tabs = [...(lifecycleTab.closest('[role="tablist"]')?.querySelectorAll("[data-lifecycle-tab]") || [])];
+      const index = tabs.indexOf(lifecycleTab);
+      if (index < 0 || !tabs.length) return;
+      event.preventDefault();
+      const nextIndex = event.key === "Home"
+        ? 0
+        : (event.key === "End"
+          ? tabs.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length);
+      selectLifecycleTab(tabs[nextIndex].dataset.lifecycleTab);
+      return;
+    }
     const handle = event.target.closest("[data-reorder-handle]");
     if (!handle || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
@@ -3008,6 +3113,17 @@ export function createProfilesController({
   function clearCommitted(committed = null) {
     const domains = committedDomains(committed);
     ui.selectionHint = nameFor(findProfile());
+    if (domains.has("profileOverrides")) {
+      ui.pendingLifecycleProfiles = overrideProfiles().map((profile) => {
+        const key = profileKey(profile);
+        return {
+          key,
+          name: nameFor(profile),
+          section: lifecycleSectionsByProfile.get(key) || "",
+          selected: ui.selectedKey === key,
+        };
+      }).filter((entry) => entry.section || entry.selected);
+    }
     if (domains.has("profiles")) drafts.baseFields.clear();
     if (domains.has("profileMemberships")) drafts.memberships.clear();
     if (domains.has("profileOverrides")) {
@@ -3023,6 +3139,8 @@ export function createProfilesController({
 
   function reset() {
     ui.selectionHint = nameFor(findProfile());
+    drafts.newOverrides.forEach((draft) => lifecycleSectionsByProfile.delete(`draft:${draft.draftId}`));
+    ui.pendingLifecycleProfiles = [];
     drafts.baseFields.clear();
     drafts.overrideFields.clear();
     drafts.memberships.clear();
@@ -3047,6 +3165,10 @@ export function createProfilesController({
       if (!baseKeys.has(target) || !data.assignments.some((item) => item.species?.symbol === species)) drafts.memberships.delete(species);
     }
     drafts.overrideOrder = drafts.overrideOrder.filter((key) => overrideKeys.has(key));
+    const profileKeys = new Set(allProfiles().map(profileKey));
+    for (const key of lifecycleSectionsByProfile.keys()) {
+      if (!profileKeys.has(key)) lifecycleSectionsByProfile.delete(key);
+    }
   }
 
   function refresh(nextData) {
@@ -3054,6 +3176,23 @@ export function createProfilesController({
     ui.selectionHint = ui.selectionHint || nameFor(findProfile());
     data = normalizeData(nextData);
     state.profileData = data;
+    if (ui.pendingLifecycleProfiles.length) {
+      const overridesByName = new Map(savedOverrideProfiles().map((profile) => [nameFor(profile).trim().toLowerCase(), profile]));
+      for (const pending of ui.pendingLifecycleProfiles) {
+        const promoted = overridesByName.get(pending.name.trim().toLowerCase());
+        if (!promoted) continue;
+        const promotedKey = profileKey(promoted);
+        rekeyLifecycleSection(pending.key, promotedKey);
+        if (pending.section && !lifecycleSectionsByProfile.has(promotedKey)) {
+          lifecycleSectionsByProfile.set(promotedKey, pending.section);
+        }
+        if (pending.selected) {
+          ui.selectedKey = promotedKey;
+          ui.selectionHint = nameFor(promoted);
+        }
+      }
+      ui.pendingLifecycleProfiles = [];
+    }
     pruneDrafts();
     ui.contextResult = null;
     ui.contextError = data.profilesAvailable === false ? (data.profileError?.message || "Profiles are unavailable in this source state.") : "";
