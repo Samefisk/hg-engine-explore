@@ -4743,6 +4743,24 @@ button {
   }
 }
 
+#profileInspector select.field-control {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 38px;
+  min-height: 38px;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23292f2c' stroke-width='1.6' stroke-linecap='square' stroke-linejoin='miter'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+}
+
+#profileInspector .pv2-mode-tab-select select.field-control {
+  height: 32px;
+  min-height: 32px;
+  padding-right: 28px;
+}
+
 .pv2-match-card.is-invalid {
   border-color: #b7554f;
   box-shadow: inset 3px 0 #c74f47;
