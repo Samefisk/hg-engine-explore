@@ -1615,36 +1615,10 @@ button {
   grid-template-columns: 44px 42px minmax(0, 1fr);
 }
 
-.profile-row-order-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 27px 25px;
+.override-profile > .profile-row-drag-handle {
   min-width: 44px;
-  border-right: 1px solid #c1beb5;
-  background: #dbd7cf;
-}
-
-.profile-row-order-controls .profile-row-drag-handle {
-  grid-column: 1 / -1;
-  min-width: 44px;
-  min-height: 27px;
-  border: 0;
-  border-radius: 0;
+  min-height: 100%;
   font: 850 15px/1 var(--mono);
-}
-
-.profile-row-order-controls button {
-  min-width: 22px;
-  min-height: 25px;
-  padding: 0;
-  border: 0;
-  border-top: 1px solid #c1beb5;
-  background: transparent;
-  color: #4e5551;
-}
-
-.profile-row-order-controls button + button {
-  border-left: 1px solid #c1beb5;
 }
 
 .override-profile > .profile-index {

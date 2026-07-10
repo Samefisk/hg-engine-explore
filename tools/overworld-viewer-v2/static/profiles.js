@@ -751,12 +751,9 @@ export function createProfilesController({
       ? (overrideTarget.targetMode === "all" ? "all matching Pokémon" : `${overrideTarget.members.length} members`)
       : `${membersFor(profile).length} members`;
     const dragEnabled = override && !profile.draftId && !filtered() && !ui.busy;
-    const orderControls = override ? `
-      <span class="profile-row-order-controls pv2-order-controls" aria-label="Override order">
-        <span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use arrow keys" : "Clear filters to reorder"}">⋮⋮</span>
-        <button type="button" data-action="move-up" data-profile-key="${escapeHtml(key)}" ${!dragEnabled || index === 0 ? "disabled" : ""} aria-label="Move earlier">↑</button>
-        <button type="button" data-action="move-down" data-profile-key="${escapeHtml(key)}" ${!dragEnabled || index === total - 1 ? "disabled" : ""} aria-label="Move later">↓</button>
-      </span>` : "";
+    const orderControls = override
+      ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use keyboard controls" : "Clear filters to reorder"}">⋮⋮</span>`
+      : "";
     return `
       <li class="profile-row pv2-profile-row${selected ? " is-active is-selected" : ""}${removed ? " is-removed" : ""}${changed ? " is-changed" : ""}${override ? " override-profile" : ""}" data-profile-row data-profile-key="${escapeHtml(key)}">
         ${orderControls}
@@ -773,7 +770,7 @@ export function createProfilesController({
   function renderList() {
     const bases = visibleProfiles(baseProfiles(), "base");
     const overrides = visibleProfiles(overrideProfiles(), "override");
-    const filterMessage = filtered() ? `<p class="order-help pv2-filter-note">Reordering is paused while the library is filtered.</p>` : `<p class="order-help">Drag the numbered grip or use its arrow keys. Later matching layers apply last.</p>`;
+    const filterMessage = filtered() ? `<p class="order-help pv2-filter-note">Reordering is paused while the library is filtered.</p>` : `<p class="order-help">Drag the dotted grip; keyboard reordering is also supported. Later matching layers apply last.</p>`;
     listElement.innerHTML = `
       ${ui.kind !== "override" ? `
         <section class="profile-group profile-group--base pv2-library-group" data-profile-group="base" aria-labelledby="pv2-base-heading">
