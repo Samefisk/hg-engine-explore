@@ -3576,10 +3576,11 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  min-height: 34px;
-  padding: 3px 8px 3px 11px;
+  min-height: 40px;
+  padding: 6px 9px 6px 12px;
   border-top: 1px solid #d0cdc4;
-  background: #ece9e1;
+  border-bottom: 1px solid #d7d4cb;
+  background: #f0ede6;
   color: #5d6460;
   font: 700 9px/1.3 var(--mono);
 }
@@ -3607,33 +3608,52 @@ button {
 }
 
 .pv2-field-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
   border-top: 1px solid #d3d0c7;
-  background: #d3d0c7;
+  background: #ebe8e1;
 }
 
 .pv2-field-hierarchy {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1px;
+  gap: 8px;
+  padding: 8px;
   border-top: 1px solid #c9c6bd;
-  background: #c9c6bd;
+  background: #e9e6df;
 }
 
 .pv2-root-field-grid,
 .pv2-suboption-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   min-width: 0;
-  background: #d3d0c7;
+  background: transparent;
 }
 
-.pv2-branch-wrap,
-.pv2-option-group {
+.pv2-root-field-grid > :last-child:nth-child(odd),
+.pv2-suboption-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.pv2-suboption-grid > .pv2-field:has(+ .pv2-suboption-divider) {
+  grid-column: 1 / -1;
+}
+
+.pv2-branch-wrap {
   min-width: 0;
-  background: #f7f5ef;
+  background: transparent;
+}
+
+.pv2-branch-wrap > .pv2-option-group {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #c8c5bc;
+  border-radius: 4px;
+  background: #f8f6f0;
+  box-shadow: 0 1px 1px rgb(38 42 40 / 5%);
 }
 
 .pv2-option-parent {
@@ -3642,28 +3662,48 @@ button {
 }
 
 .pv2-option-parent > .pv2-field {
-  min-height: 62px;
-  border-left-width: 4px;
-  background: #f7f4ed;
+  min-height: 58px;
+  padding: 8px 11px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: #fcfaf5;
 }
 
 .pv2-suboptions {
-  margin: 0 0 0 18px;
-  border-left: 3px solid #8d928d;
-  background: #e6e3da;
+  margin: 0 8px 8px 16px;
+  padding: 0 0 0 8px;
+  border: 0;
+  border-right: 1px solid #d8d5cc;
+  border-bottom: 1px solid #d8d5cc;
+  border-left: 2px solid #969d98;
+  background: #efede7;
 }
 
 .pv2-branch-wrap.is-inherited-branch > .pv2-option-group > .pv2-suboptions {
-  border-left-color: #789181;
+  border-left-color: #969d98;
 }
 
 .pv2-branch-context {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin: 0;
-  padding: 5px 10px 5px 12px;
+  padding: 7px 8px 6px;
   border-bottom: 1px solid #d1cec5;
-  background: #ebe8e0;
-  color: #5d6460;
-  font: 750 9px/1.3 var(--mono);
+  background: transparent;
+  color: #585f5b;
+  font: 700 10px/1.35 var(--mono);
+}
+
+.pv2-branch-context::before {
+  content: "↳";
+  flex: 0 0 auto;
+  color: #64806f;
+  font-weight: 900;
+}
+
+.pv2-suboption-grid {
+  padding: 6px 0 0;
 }
 
 .pv2-suboption-grid > .pv2-option-group.is-nested {
@@ -3671,38 +3711,53 @@ button {
 }
 
 .pv2-option-group.is-nested {
-  background: #f4f2eb;
+  overflow: hidden;
+  border: 1px solid #d1cec5;
+  border-radius: 3px;
+  background: #f7f5ef;
 }
 
 .pv2-option-group.is-nested > .pv2-option-parent > .pv2-field {
   min-height: 56px;
-  background: #f4f2eb;
+  background: #faf8f3;
 }
 
 .pv2-option-group.is-nested > .pv2-suboptions {
-  margin-left: 14px;
+  margin: 0 6px 6px 12px;
+  padding-left: 6px;
   border-left-width: 2px;
 }
 
 .pv2-field,
 .pv2-field:nth-child(odd) {
-  grid-template-columns: minmax(105px, .8fr) minmax(140px, 1.2fr);
-  gap: 10px;
-  min-height: 58px;
+  grid-template-columns: minmax(130px, .8fr) minmax(160px, 1.2fr);
+  gap: 12px;
+  min-height: 56px;
   padding: 8px 10px;
-  border: 0;
+  border: 1px solid #d7d4cb;
   border-left: 3px solid transparent;
-  background: #faf8f2;
+  border-radius: 3px;
+  background: #fdfbf6;
 }
 
 .pv2-field.is-overridden {
   border-left-color: var(--red);
-  background: #faf8f2;
+  background: #fffaf7;
 }
 
 .pv2-field.is-inherited {
-  border-left-color: #789181;
-  background: #f2f3ee;
+  border-left-color: #8fa69a;
+  background: #fafbf7;
+}
+
+.pv2-option-parent > .pv2-field,
+.pv2-option-parent > .pv2-field.is-inherited,
+.pv2-option-parent > .pv2-field.is-overridden {
+  background: #f7f4ed;
+}
+
+.pv2-option-parent > .pv2-field .pv2-field-copy strong {
+  font-size: 13px;
 }
 
 .pv2-field.is-changed {
@@ -3713,11 +3768,12 @@ button {
 .pv2-field.is-suboption {
   min-height: 54px;
   padding-block: 7px;
-  background: #fbfaf5;
+  background: #fffdf8;
 }
 
 .pv2-field.is-suboption.is-inherited {
-  background: #f1f3ee;
+  border-left-color: #d7d4cb;
+  background: #fbfcf8;
 }
 
 .pv2-field.is-inactive {
@@ -3731,7 +3787,7 @@ button {
 
 .pv2-field.is-suboption.is-inherited,
 .pv2-option-group.is-nested > .pv2-option-parent > .pv2-field.is-inherited {
-  background: #f1f3ee;
+  background: #fbfcf8;
 }
 
 .pv2-field.is-suboption.is-inactive,
@@ -3760,7 +3816,7 @@ button {
 
 .pv2-field-unit,
 .pv2-field-note {
-  color: #686f6b;
+  color: #565d59;
   font: 800 9px/1.2 var(--mono);
   letter-spacing: .035em;
   text-transform: lowercase;
@@ -3836,14 +3892,23 @@ button {
 
 .pv2-suboption-divider {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  padding: 5px 9px 4px;
-  border-bottom: 1px solid #d3d0c7;
-  background: #e5e2da;
-  color: #5a615d;
+  padding: 7px 2px 1px;
+  border: 0;
+  background: transparent;
+  color: #587565;
   font: 850 8px/1.1 var(--mono);
   letter-spacing: .045em;
   text-transform: uppercase;
+}
+
+.pv2-suboption-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  border-top: 1px solid #c8d0ca;
 }
 
 .pv2-composite-field,
@@ -3884,8 +3949,8 @@ button {
 }
 
 .pv2-composite-control > span:first-child small {
-  color: #747a76;
-  font: 700 8px/1 var(--mono);
+  color: #5d6460;
+  font: 700 9px/1 var(--mono);
   letter-spacing: 0;
   text-transform: lowercase;
 }
@@ -3905,6 +3970,26 @@ button {
 .pv2-composite-control > select {
   min-width: 0;
   min-height: 38px;
+}
+
+@container (max-width: 760px) {
+  .pv2-field-grid,
+  .pv2-root-field-grid,
+  .pv2-suboption-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 620px) {
+  .pv2-composite-field,
+  .pv2-composite-field:nth-child(odd) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .pv2-composite-controls {
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  }
 }
 
 @container (max-width: 390px) {

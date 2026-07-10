@@ -1177,7 +1177,7 @@ export function createProfilesController({
     return {
       nodes,
       context: inherited
-        ? "All behavior suboptions stay available while this value inherits."
+        ? "Available while behavior inherits."
         : (onlyInactive ? "Stored suboptions are inactive for the selected behavior." : (nodes.length ? "Options used by the selected behavior." : "This behavior has no additional options.")),
       inherited,
     };
@@ -1228,7 +1228,7 @@ export function createProfilesController({
     return {
       nodes: [...nodes.values()],
       context: inherited
-        ? "Movement settings stay available while this value inherits."
+        ? "Available while movement style inherits."
         : (raw === LOCOMOTION.none
           ? (nodes.size ? "Stored suboptions are inactive while movement is None." : "None has no movement suboptions.")
           : `${valueLabel(option || raw)} movement settings.`),
@@ -1267,7 +1267,7 @@ export function createProfilesController({
       return {
         nodes,
         context: inherited
-          ? "Spawn delay stays available while spawn behavior inherits."
+          ? "Available while spawn state inherits."
           : (usesHopTime ? "Timing for the forced off-screen hop." : (nodes.length ? "Stored spawn timing is inactive for this behavior." : "This spawn behavior has no additional timing.")),
         inherited,
       };
@@ -1283,7 +1283,7 @@ export function createProfilesController({
       return {
         nodes,
         context: inherited
-          ? "Distance limits stay available while destination inherits."
+          ? "Available while destination inherits."
           : (playerInfo ? "Distance from the player for this destination." : (needsDistance ? "Minimum and maximum distance from the player." : (nodes.length ? "Stored distance limits are inactive for this destination." : "This destination has no additional options."))),
         inherited,
       };
@@ -1297,7 +1297,7 @@ export function createProfilesController({
       return {
         nodes,
         context: inherited
-          ? "Range length stays available while the range type inherits."
+          ? "Available while range type inherits."
           : (needsLength ? "Length used by the selected range shape." : (nodes.length ? "Stored range length is inactive for this shape." : "The selected range shape has no length option.")),
         inherited,
       };
@@ -1709,6 +1709,7 @@ export function createProfilesController({
       .filter(Boolean)
       .join("");
     const renderControl = node.virtual ? renderVirtualFieldControl : renderFieldControl;
+    const contextId = node.context ? `pv2-branch-context-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "";
     const control = renderControl(profile, node.virtual ? node : node.field, {
       ...node,
       depth,
@@ -1716,13 +1717,13 @@ export function createProfilesController({
       instance,
       parent: Boolean(childMarkup) || depth === 0,
     });
-    const beforeMarkup = node.beforeLabel ? `<p class="pv2-suboption-divider">${escapeHtml(node.beforeLabel)}</p>` : "";
+    const beforeMarkup = node.beforeLabel ? `<h4 class="pv2-suboption-divider">${escapeHtml(node.beforeLabel)}</h4>` : "";
     if (!childMarkup) return `${beforeMarkup}${control}`;
     return `${beforeMarkup}
       <div class="pv2-option-group${depth ? " is-nested" : ""}" data-option-parent="${escapeHtml(node.field)}" data-option-depth="${depth}">
         <div class="pv2-option-parent">${control}</div>
-        <div class="pv2-suboptions" role="group" aria-label="${escapeHtml(fieldLabelForProfile(profile, node.field))} suboptions">
-          ${node.context ? `<p class="pv2-branch-context">${escapeHtml(node.context)}</p>` : ""}
+        <div class="pv2-suboptions" role="group" aria-label="${escapeHtml(fieldLabelForProfile(profile, node.field))} suboptions"${contextId ? ` aria-describedby="${escapeHtml(contextId)}"` : ""}>
+          ${node.context ? `<p id="${escapeHtml(contextId)}" class="pv2-branch-context">${escapeHtml(node.context)}</p>` : ""}
           <div class="pv2-suboption-grid">${childMarkup}</div>
         </div>
       </div>`;
