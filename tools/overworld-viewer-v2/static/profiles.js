@@ -46,8 +46,8 @@ const FIELD_SECTIONS = Object.freeze([
     title: "Identity & spawning",
     hint: "Behavior family, spawn state, destination, and population limits.",
     fields: [
-      "profileId", "spawnState", "spawnDestination", "spawnDestinationMinDistance",
-      "spawnDestinationMaxDistance", "spawnHopTime", "overworldLimit", "jumpLevel",
+      "profileId", "spawnState", "spawnDestination", "spawnHopTime",
+      "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "overworldLimit", "jumpLevel",
     ],
   },
   {
@@ -102,6 +102,8 @@ const ANY_MATCH_PREFIXES = Object.freeze([
   "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
   "OW_WILD_BEHAVIOR_GROUP_NONE",
 ]);
+
+const RAM_LOCOMOTION = "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -690,15 +692,32 @@ export function createProfilesController({
     return data.fields.find((field) => field.key === fieldKey)?.label || humanizeRaw(fieldKey);
   }
 
+  function effectiveFieldCandidates(profile, fieldKey) {
+    const ownValue = fieldRaw(profile, fieldKey);
+    if (ownValue || !isOverrideProfile(profile)) return ownValue ? [ownValue] : [];
+    const baseKeys = new Set(potentialAssignmentsFor(profile)
+      .map((assignment) => pendingBaseKeyForSpecies(assignment?.species?.symbol))
+      .filter(Boolean));
+    return unique([...baseKeys].map((key) => fieldRaw(findProfile(key), fieldKey)).filter(Boolean));
+  }
+
+  function canUseRamLocomotion(profile) {
+    return effectiveFieldCandidates(profile, "chillAction").includes(RAM_LOCOMOTION);
+  }
+
   function fieldLabelForProfile(profile, fieldKey) {
     if (fieldKey !== "ramMaxSpeed") return fieldLabel(fieldKey);
-    return fieldRaw(profile, "chillAction") === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM" ? "RAM max speed" : "Chain pause";
+    const locomotion = effectiveFieldCandidates(profile, "chillAction");
+    const usesRam = locomotion.includes(RAM_LOCOMOTION);
+    const usesChain = locomotion.some((raw) => raw !== RAM_LOCOMOTION);
+    if (usesRam && usesChain) return "RAM speed / chain pause";
+    return usesRam ? "RAM max speed" : "Chain pause";
   }
 
   function fieldOptions(fieldKey, currentRaw = "", profile = null) {
     const options = [...(data.editOptions?.[fieldKey] || [])];
-    const explicitlyUsesRam = profile && fieldRaw(profile, "chillAction") === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
-    if (fieldKey === "ramMaxSpeed" && !explicitlyUsesRam) {
+    const usesRam = profile && canUseRamLocomotion(profile);
+    if (fieldKey === "ramMaxSpeed" && !usesRam) {
       for (let value = 0; value <= 255; value += 1) {
         const raw = String(value);
         if (!options.some((option) => valueRaw(option) === raw)) options.push({ raw, label: raw, value });
@@ -818,60 +837,72 @@ export function createProfilesController({
     const changed = profile.draftId ? Boolean(raw) : raw !== original;
     const options = fieldOptions(fieldKey, raw, profile);
     const label = fieldLabelForProfile(profile, fieldKey);
-    const contextBase = isOverrideProfile(profile) ? ui.contextResult?.baseProfile?.[fieldKey] : null;
+    const override = isOverrideProfile(profile);
+    const contextBase = override ? ui.contextResult?.baseProfile?.[fieldKey] : null;
+    const hasContextBase = contextBase !== null && contextBase !== undefined && valueRaw(contextBase) !== "";
+    const hasOverride = Boolean(raw);
+    const state = override
+      ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
+      : (changed ? "changed" : "saved");
+    const stateLabel = changed
+      ? (hasOverride ? "Edited override" : "Will inherit")
+      : (hasOverride ? "Overrides base" : "Inherited");
     return `
-      <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${isOverrideProfile(profile) ? " is-overridden" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${changed ? "changed" : (isOverrideProfile(profile) ? "override" : "saved")}">
+      <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
-          ${isOverrideProfile(profile) ? `<small class="field-base base-value">(${escapeHtml(valueLabel(contextBase || "Resolve a context below"))})</small>` : `<small>${escapeHtml(humanizeRaw(raw))}</small>`}
+          ${override ? `<small class="pv2-field-meta"><span class="pv2-field-state">${escapeHtml(stateLabel)}</span>${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(valueLabel(contextBase))})</span>` : ""}</small>` : ""}
         </span>
         <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" aria-label="${escapeHtml(label)}">
-          ${isOverrideProfile(profile) ? `<option value="">Not overridden</option>` : ""}
+          ${override ? `<option value="" ${raw ? "" : "selected"}>Inherit</option>` : ""}
           ${options.map((option) => {
             const optionRaw = valueRaw(option);
             return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === raw ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
           }).join("")}
         </select>
-        ${isOverrideProfile(profile) ? `<button type="button" data-action="remove-field" data-field="${escapeHtml(fieldKey)}" aria-label="Remove ${escapeHtml(label)} override">Remove</button>` : ""}
       </label>`;
   }
 
   function sectionFields(section, profile) {
     const known = new Set(data.fields.map((field) => field.key));
-    const fields = section.fields.filter((field) => known.has(field));
-    if (!isOverrideProfile(profile)) return fields;
-    return fields.filter((field) => fieldRaw(profile, field));
+    const allowed = new Set(data.overrideFieldKeys || []);
+    return section.fields.filter((field) => known.has(field) && (!isOverrideProfile(profile) || allowed.has(field)));
   }
 
   function unsectionedFields(profile) {
     const sectioned = new Set(FIELD_SECTIONS.flatMap((section) => section.fields));
+    const allowed = new Set(data.overrideFieldKeys || []);
     return data.fields
       .map((field) => field.key)
-      .filter((field) => !sectioned.has(field) && (!isOverrideProfile(profile) || fieldRaw(profile, field)));
+      .filter((field) => !sectioned.has(field) && (!isOverrideProfile(profile) || allowed.has(field)));
   }
 
   function renderFieldSections(profile) {
-    const sections = FIELD_SECTIONS.map((section) => ({ ...section, activeFields: sectionFields(section, profile) }));
+    const override = isOverrideProfile(profile);
+    const sections = FIELD_SECTIONS.map((section) => {
+      const fields = sectionFields(section, profile);
+      return { ...section, fields, overrideCount: fields.filter((field) => fieldRaw(profile, field)).length };
+    });
     const other = unsectionedFields(profile);
-    if (other.length) sections.push({ id: "advanced", title: "Advanced", hint: "Additional engine-level controls.", activeFields: other });
+    if (other.length) sections.push({
+      id: "advanced",
+      title: "Advanced",
+      hint: "Additional engine-level controls.",
+      fields: other,
+      overrideCount: other.filter((field) => fieldRaw(profile, field)).length,
+    });
     const rendered = sections
-      .filter((section) => !isOverrideProfile(profile) || section.activeFields.length)
+      .filter((section) => section.fields.length)
       .map((section) => `
         <details class="field-section pv2-field-section" data-section-id="${section.id}" ${ui.openSections.has(section.id) ? "open" : ""}>
-          <summary><span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span><em>${section.activeFields.length}</em></summary>
-          ${isOverrideProfile(profile) ? `<div class="pv2-section-actions"><span>Fields in this group apply together with the layer.</span><button type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}">Make section inherit</button></div>` : ""}
-          <div class="field-grid profile-fields pv2-field-grid">${section.activeFields.map((field) => renderFieldControl(profile, field)).join("")}</div>
+          <summary>
+            <span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span>
+            <em><span aria-hidden="true">${override ? `${section.overrideCount} / ${section.fields.length}` : section.fields.length}</span><span class="sr-only">${override ? `${section.overrideCount} of ${section.fields.length} fields overridden` : `${section.fields.length} fields`}</span></em>
+          </summary>
+          ${override && ui.openSections.has(section.id) ? `<div class="pv2-section-toolbar"><span>Only set values override; the rest inherit.</span><button class="pv2-section-inherit" type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}" aria-label="Make all ${escapeHtml(section.title)} values inherit" ${section.overrideCount ? "" : "disabled"}>Inherit all</button></div>` : ""}
+          ${ui.openSections.has(section.id) ? `<div class="field-grid profile-fields pv2-field-grid">${section.fields.map((field) => renderFieldControl(profile, field)).join("")}</div>` : ""}
         </details>`).join("");
-    if (!isOverrideProfile(profile)) return rendered;
-
-    const allowed = new Set(data.overrideFieldKeys || []);
-    const inactive = data.fields.filter((field) => allowed.has(field.key) && !fieldRaw(profile, field.key));
-    return `
-      <div class="add-field-control pv2-add-field">
-        <label><span>Add an override field</span><select data-add-field-select><option value="">Choose field…</option>${inactive.map((field) => `<option value="${escapeHtml(field.key)}">${escapeHtml(field.label)}</option>`).join("")}</select></label>
-        <button type="button" data-action="add-field" ${inactive.length ? "" : "disabled"}>Add field</button>
-      </div>
-      ${rendered || `<p class="empty-state empty-state--small">This layer has no fields yet. Add only the values it should replace.</p>`}`;
+    return rendered || `<p class="empty-state empty-state--small">No editable fields are available for this profile.</p>`;
   }
 
   function matchSuggestions(field) {
@@ -917,7 +948,7 @@ export function createProfilesController({
     const errors = [];
     allProfiles().forEach((profile) => {
       if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
-      if (fieldRaw(profile, "chillAction") !== "OW_WILD_BEHAVIOR_LOCOMOTION_RAM") return;
+      if (!canUseRamLocomotion(profile)) return;
       const raw = fieldRaw(profile, "ramMaxSpeed");
       const option = (data.editOptions?.ramMaxSpeed || []).find((candidate) => valueRaw(candidate) === raw);
       const numeric = Number(option?.value ?? raw);
@@ -1474,22 +1505,6 @@ export function createProfilesController({
     if (confirmed) await manageBaseProfile({ action: "delete", classIndex: profile.index }, profile);
   }
 
-  function addOverrideField(profile) {
-    const select = editorElement.querySelector("[data-add-field-select]");
-    const field = select?.value;
-    if (!field) return;
-    const defaultRaw = valueRaw(data.editOptions?.[field]?.[0]);
-    if (!defaultRaw) {
-      status(`${fieldLabel(field)} has no valid values.`, "error");
-      return;
-    }
-    setField(profile, field, defaultRaw);
-    ui.openSections.add(FIELD_SECTIONS.find((section) => section.fields.includes(field))?.id || "advanced");
-    renderEditor();
-    renderList();
-    signalDirty();
-  }
-
   function changeTargetCondition(profile, field, raw) {
     const target = targetFor(profile);
     if (!Object.hasOwn(DEFAULT_MATCH, field) || field === "species") return;
@@ -1544,7 +1559,6 @@ export function createProfilesController({
     else if (action === "duplicate-profile" && profile) duplicateProfile(profile);
     else if (action === "delete-profile" && profile) deleteProfile(profile);
     else if (action === "close-dialog") closeDialog();
-    else if (action === "add-field" && profile) addOverrideField(profile);
     else if (action === "add-target" && profile) addTarget(profile);
     else if (action === "inspect-species") {
       const assignment = data.assignments.find((item) => item.species?.symbol === target.dataset.species);
@@ -1555,14 +1569,17 @@ export function createProfilesController({
       resolveContext();
     }
     else if (action === "clear-section" && profile) {
+      event.preventDefault();
+      event.stopPropagation();
       const section = FIELD_SECTIONS.find((candidate) => candidate.id === target.dataset.section);
-      (section?.fields || []).forEach((field) => setField(profile, field, ""));
+      const fields = section ? sectionFields(section, profile) : (target.dataset.section === "advanced" ? unsectionedFields(profile) : []);
+      const clearedCount = fields.filter((field) => fieldRaw(profile, field)).length;
+      fields.forEach((field) => setField(profile, field, ""));
       renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-section-id="${CSS.escape(target.dataset.section)}"] > summary`)?.focus({ preventScroll: true });
+      announce(`${section?.title || "Advanced"}: ${clearedCount} override value${clearedCount === 1 ? "" : "s"} will inherit after saving.`);
     }
-    else if (action === "remove-field" && profile) {
-      setField(profile, target.dataset.field, "");
-      renderEditor(); renderList(); signalDirty();
-    } else if (action === "remove-override-member" && profile) {
+    else if (action === "remove-override-member" && profile) {
       const overrideTarget = targetFor(profile);
       overrideTarget.members = overrideTarget.members.filter((symbol) => symbol !== target.dataset.species);
       if (!overrideTarget.members.length && overrideTarget.targetMode === "members") overrideTarget.targetMode = "disabled";
@@ -1613,8 +1630,10 @@ export function createProfilesController({
       return;
     }
     if (event.target.matches("[data-profile-value]") && profile) {
-      setField(profile, event.target.dataset.fieldKey, event.target.value);
+      const fieldKey = event.target.dataset.fieldKey;
+      setField(profile, fieldKey, event.target.value);
       renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-profile-value][data-field-key="${CSS.escape(fieldKey)}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (event.target.matches("[data-target-mode]") && profile) {
@@ -1641,8 +1660,14 @@ export function createProfilesController({
     const wasOpen = ui.openSections.has(section.dataset.sectionId);
     if (section.open) {
       ui.openSections.add(section.dataset.sectionId);
-      if (!wasOpen && ["membership", "affected", "override-target"].includes(section.dataset.sectionId)) {
-        requestAnimationFrame(renderEditor);
+      const rendersOnOpen = ["membership", "affected", "override-target", "advanced"].includes(section.dataset.sectionId)
+        || FIELD_SECTIONS.some((candidate) => candidate.id === section.dataset.sectionId);
+      if (!wasOpen && rendersOnOpen) {
+        const sectionId = section.dataset.sectionId;
+        requestAnimationFrame(() => {
+          renderEditor();
+          editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] > summary`)?.focus({ preventScroll: true });
+        });
       }
     } else {
       ui.openSections.delete(section.dataset.sectionId);

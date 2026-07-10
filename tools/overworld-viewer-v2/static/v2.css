@@ -2855,15 +2855,6 @@ button {
   font-size: 10px;
 }
 
-.field-row > button {
-  min-width: 35px;
-  padding-inline: 7px !important;
-  border-color: #c69a95 !important;
-  background: #f5e7e3 !important;
-  color: #8d332e !important;
-  font-size: 10px;
-}
-
 .add-field-control,
 .member-add {
   display: grid;
@@ -3164,7 +3155,6 @@ button {
 
 .pv2-target-builder > header,
 .pv2-target-controls,
-.pv2-section-actions,
 .pv2-diagnostics > summary,
 .pv2-full-profile > summary {
   display: flex;
@@ -3180,7 +3170,6 @@ button {
 
 .pv2-target-builder > header small,
 .pv2-target-builder > header em,
-.pv2-section-actions,
 .pv2-member-note {
   color: #5d6460;
   font: 700 9px/1.3 var(--mono);
@@ -3331,10 +3320,160 @@ button {
   font: 800 10px/1.3 var(--mono);
 }
 
-.pv2-section-actions {
-  padding: 7px 9px;
-  border-bottom: 1px solid #d0cdc4;
+.profile-field-editor {
+  container-type: inline-size;
+}
+
+.profile-field-editor > .pv2-field-section {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #bbb8af;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-field-editor > .pv2-field-section:first-of-type {
+  border-top: 0;
+}
+
+.pv2-field-section > summary {
+  min-height: 48px;
+  padding: 7px 11px;
+  background: #e4e1d9;
+}
+
+.pv2-field-section[open] > summary {
+  background: #dad8d1;
+}
+
+.pv2-section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 34px;
+  padding: 3px 8px 3px 11px;
+  border-top: 1px solid #d0cdc4;
   background: #ece9e1;
+  color: #5d6460;
+  font: 700 9px/1.3 var(--mono);
+}
+
+#profileInspector .pv2-section-inherit {
+  min-height: 28px;
+  padding: 0 8px;
+  border-color: #aaa79f;
+  background: transparent;
+  color: #4e5551;
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+#profileInspector .pv2-section-inherit:hover:not(:disabled) {
+  border-color: #777c77;
+  background: #f6f3eb;
+  color: #2f3532;
+}
+
+#profileInspector .pv2-section-inherit:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.pv2-field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 1px;
+  border-top: 1px solid #d3d0c7;
+  background: #d3d0c7;
+}
+
+.pv2-field,
+.pv2-field:nth-child(odd) {
+  grid-template-columns: minmax(105px, .8fr) minmax(140px, 1.2fr);
+  gap: 10px;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: #faf8f2;
+}
+
+.pv2-field.is-overridden {
+  border-left-color: var(--red);
+  background: #faf8f2;
+}
+
+.pv2-field.is-inherited {
+  border-left-color: #789181;
+  background: #f2f3ee;
+}
+
+.pv2-field.is-changed {
+  border-left-color: #bd782f;
+  background: #fff7e8;
+}
+
+.pv2-field-copy {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.pv2-field-copy strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.pv2-field-meta {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 6px;
+  margin-top: 0 !important;
+}
+
+.pv2-field-state {
+  color: #686f6b;
+  font: 800 9px/1.2 var(--mono);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.pv2-field[data-field-state="override"] .pv2-field-state {
+  color: var(--red-dark);
+}
+
+.pv2-field[data-field-state="changed"] .pv2-field-state {
+  color: #8a521f;
+}
+
+.pv2-field .pv2-field-base {
+  color: #5d6460 !important;
+  font-weight: 700 !important;
+}
+
+.pv2-field > select {
+  min-height: 38px;
+}
+
+@container (max-width: 390px) {
+  .pv2-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .pv2-field-section > summary {
+    align-items: flex-start;
+  }
+
+  .pv2-section-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-block: 6px;
+  }
 }
 
 .pv2-match-card.is-invalid {
@@ -4429,7 +4568,6 @@ td select {
     grid-template-columns: 1fr;
   }
 
-  .pv2-section-actions,
   .v2-route-overview > header {
     align-items: flex-start;
     flex-direction: column;
@@ -4503,6 +4641,10 @@ td select {
     grid-template-columns: 1fr;
     gap: 5px;
     min-height: 72px;
+  }
+
+  .pv2-field {
+    min-height: 0;
   }
 
   .empty-state {
