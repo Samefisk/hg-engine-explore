@@ -42,60 +42,166 @@ const MATCH_FIELDS = Object.freeze([
 
 const FIELD_SECTIONS = Object.freeze([
   {
-    id: "identity",
-    title: "Identity & spawning",
-    hint: "Behavior family, spawn state, destination, and population limits.",
+    id: "spawn",
+    title: "Spawn",
+    hint: "Entry behavior, destination, distance, and population limits.",
     fields: [
-      "profileId", "spawnState", "spawnDestination", "spawnHopTime",
-      "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "overworldLimit", "jumpLevel",
+      "spawnState", "spawnHopTime", "spawnDestination", "spawnDestinationMinDistance",
+      "spawnDestinationMaxDistance", "jumpLevel", "overworldLimit",
+    ],
+    nodes: [
+      { kind: "branch", field: "spawnState", branch: "spawn-state" },
+      { kind: "branch", field: "spawnDestination", branch: "spawn-destination", virtual: "spawn-destination-type" },
+      { kind: "fields", fields: ["jumpLevel", "overworldLimit"] },
     ],
   },
   {
-    id: "calm",
-    title: "Calm state",
-    hint: "Default roaming behavior before the Pokémon becomes alert.",
+    id: "chill",
+    title: "Chill state",
+    hint: "Default behavior and movement before the Pokémon becomes alert.",
+    sharedMovement: true,
     fields: [
-      "chillState", "chillAction", "chillTarget", "chillSpeed", "chillCooldown",
-      "range", "chillAllowedTile", "chillAllowedTile2", "specialAction",
+      "chillState", "chillTarget", "chillAllowedTile", "chillAllowedTile2",
+      "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
+      "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause", "teleportTime",
+      "teleportPause", "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction",
+      "chillCooldown",
+    ],
+    nodes: [
+      { kind: "branch", field: "chillState", branch: "chill-behavior" },
+      { kind: "branch", field: "chillAction", branch: "movement", scope: "chill" },
+      { kind: "fields", fields: ["chillCooldown"] },
     ],
   },
   {
     id: "alert",
-    title: "Alert & active state",
-    hint: "Detection, reaction, targeting, chase, and active movement.",
+    title: "Alert",
+    hint: "Detection, reaction, range, and alert-time action.",
+    scopedAction: "alert",
     fields: [
       "alertState", "alertEmote", "alertTime", "alertness", "alertRange", "alertChance",
-      "alertSpecialAction", "attentiveState", "attentiveAction", "attentiveSpeed",
-      "attentiveBattle", "targetSelector", "movementStyle", "attentiveAllowedTile",
-      "attentiveAllowedTile2", "attentiveChaseBoostDistance", "attentiveChaseBoostSpeed",
-      "attentiveCircleRadius", "attentiveContinueWhenArrived", "attentiveAvoidPreviousTile",
+      "alertSpecialAction",
+    ],
+    nodes: [
+      { kind: "fields", fields: ["alertState", "alertEmote", "alertTime"] },
+      { kind: "branch", field: "alertRange", branch: "alert-range", virtual: "alert-range-type" },
+      { kind: "fields", fields: ["alertChance"] },
+      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "alert", virtual: "scoped-action" },
+    ],
+  },
+  {
+    id: "active",
+    title: "Active state",
+    hint: "Alerted behavior, targeting, chase, and active movement.",
+    scopedAction: "active",
+    sharedMovement: true,
+    fields: [
+      "attentiveState", "stamina", "targetSelector", "attentiveCircleRadius",
+      "attentiveContinueWhenArrived", "attentiveAllowedTile", "attentiveAllowedTile2",
+      "attentiveChaseBoostDistance", "attentiveChaseBoostSpeed", "movementStyle",
+      "attentiveSpeed", "attentiveHopAllowNonCardinal", "attentiveHopMinDistance",
+      "attentiveHopMaxDistance", "hopTime", "attentiveHopSpinSpeed", "attentiveHopPause",
+      "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction", "attentiveTeleportTime",
+      "attentiveTeleportPause", "attentiveRamAccelerationSteps", "attentiveRamMaxSpeed",
+      "attentiveBattle", "alertSpecialAction",
+    ],
+    nodes: [
+      { kind: "branch", field: "attentiveState", branch: "active-behavior" },
+      { kind: "fields", fields: ["stamina"] },
+      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action" },
+      { kind: "branch", field: "movementStyle", branch: "movement", scope: "active" },
+      { kind: "fields", fields: ["attentiveBattle"] },
     ],
   },
   {
     id: "tired",
     title: "Tired state",
-    hint: "Stamina, recovery timing, and movement after exertion.",
+    hint: "Recovery behavior, movement after exertion, and rest timing.",
+    sharedMovement: true,
     fields: [
-      "stamina", "tiredState", "restTime", "tiredSpeed", "tiredAllowedTile",
-      "tiredAllowedTile2",
+      "tiredState", "tiredAllowedTile", "tiredAllowedTile2", "specialAction", "tiredSpeed",
+      "tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime",
+      "hopSpinSpeed", "tiredHopPause", "ramAccelerationSteps", "ramMaxSpeed",
+      "chainPauseAction", "tiredTeleportTime", "tiredTeleportPause",
+      "tiredRamAccelerationSteps", "tiredRamMaxSpeed", "restTime",
+    ],
+    nodes: [
+      { kind: "branch", field: "tiredState", branch: "tired-behavior" },
+      { kind: "branch", field: "specialAction", branch: "movement", scope: "tired" },
+      { kind: "fields", fields: ["restTime"] },
     ],
   },
   {
-    id: "motion",
-    title: "Motion mechanics",
-    hint: "Hop, teleport, ram, and movement-chain tuning.",
-    fields: [
-      "hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance", "hopPause", "hopTime",
-      "hopSpinSpeed", "teleportTime", "teleportPause", "ramAccelerationSteps", "ramMaxSpeed",
-      "chainPauseAction", "attentiveHopAllowNonCardinal", "attentiveHopMinDistance",
-      "attentiveHopMaxDistance", "attentiveHopPause", "attentiveHopSpinSpeed",
-      "attentiveTeleportTime", "attentiveTeleportPause", "attentiveRamAccelerationSteps",
-      "attentiveRamMaxSpeed", "tiredHopAllowNonCardinal", "tiredHopMinDistance",
-      "tiredHopMaxDistance", "tiredHopPause", "tiredTeleportTime", "tiredTeleportPause",
-      "tiredRamAccelerationSteps", "tiredRamMaxSpeed",
-    ],
+    id: "stats",
+    title: "Stats",
+    hint: "Shared behavior distances and thresholds.",
+    fields: ["range"],
+    nodes: [{ kind: "fields", fields: ["range"] }],
+  },
+  {
+    id: "special",
+    title: "Special",
+    hint: "Behavior-family metadata used by engine integrations.",
+    fields: ["profileId"],
+    nodes: [{ kind: "fields", fields: ["profileId"] }],
   },
 ]);
+
+const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
+  "OW_WILD_BEHAVIOR_KIND_CHASE",
+  "OW_WILD_BEHAVIOR_KIND_FLEE",
+  "OW_WILD_BEHAVIOR_KIND_PLAYFUL",
+  "OW_WILD_BEHAVIOR_KIND_RAM",
+  "OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP",
+]));
+
+const TILE_BEHAVIORS = Object.freeze(new Set([
+  "OW_WILD_BEHAVIOR_KIND_WANDER",
+  ...TARGETABLE_BEHAVIORS,
+]));
+
+const LOCOMOTION = Object.freeze({
+  none: "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+  wander: "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+  hop: "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
+  ram: "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+  teleport: "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+});
+
+const MOVEMENT_FIELDS = Object.freeze({
+  chill: Object.freeze({
+    speed: "chillSpeed",
+    hop: ["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause"],
+    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    teleport: ["teleportTime", "teleportPause"],
+    ram: ["ramAccelerationSteps", "ramMaxSpeed"],
+  }),
+  active: Object.freeze({
+    speed: "attentiveSpeed",
+    hop: ["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance", "hopTime", "attentiveHopSpinSpeed", "attentiveHopPause"],
+    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    teleport: ["attentiveTeleportTime", "attentiveTeleportPause"],
+    ram: ["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"],
+  }),
+  tired: Object.freeze({
+    speed: "tiredSpeed",
+    hop: ["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime", "hopSpinSpeed", "tiredHopPause"],
+    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    teleport: ["tiredTeleportTime", "tiredTeleportPause"],
+    ram: ["tiredRamAccelerationSteps", "tiredRamMaxSpeed"],
+  }),
+});
+
+const CIRCLE_PLAYER_TARGET = "OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER";
+const SPAWN_HOP_FROM_OFF_SCREEN = "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN";
+const SPAWN_NEXT_TO_PLAYER = "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER";
+const SPAWN_DESTINATION_FRONT_TYPE = "__SPAWN_DESTINATION_FRONT_OF_PLAYER";
+const SPAWN_DESTINATION_BEHIND_TYPE = "__SPAWN_DESTINATION_BEHIND_PLAYER";
+const ALERT_SPECIAL = Object.freeze({
+  none: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+  call: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
+  throw: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW",
+});
 
 const ANY_MATCH_PREFIXES = Object.freeze([
   "OW_WILD_BEHAVIOR_MATCH_ANY_",
@@ -705,18 +811,25 @@ export function createProfilesController({
     return effectiveFieldCandidates(profile, "chillAction").includes(RAM_LOCOMOTION);
   }
 
-  function fieldLabelForProfile(profile, fieldKey) {
-    if (fieldKey !== "ramMaxSpeed") return fieldLabel(fieldKey);
-    const locomotion = effectiveFieldCandidates(profile, "chillAction");
-    const usesRam = locomotion.includes(RAM_LOCOMOTION);
-    const usesChain = locomotion.some((raw) => raw !== RAM_LOCOMOTION);
-    if (usesRam && usesChain) return "RAM speed / chain pause";
+  function fieldLabelForProfile(profile, fieldKey, context = {}) {
+    if (context.label) return context.label;
+    if (!['ramAccelerationSteps', 'ramMaxSpeed'].includes(fieldKey)) return fieldLabel(fieldKey);
+    const parentRaw = context.parentField ? fieldRaw(profile, context.parentField) : "";
+    const ambiguous = context.ambiguous || (isOverrideProfile(profile) && !parentRaw);
+    const usesRam = context.parentField === "chillAction" && parentRaw === RAM_LOCOMOTION;
+    if (fieldKey === "ramAccelerationSteps") {
+      if (ambiguous) return "Chain moves / RAM steps";
+      return usesRam ? "RAM acceleration steps" : "Chain moves";
+    }
+    if (ambiguous) return "Chain pause / RAM max";
     return usesRam ? "RAM max speed" : "Chain pause";
   }
 
-  function fieldOptions(fieldKey, currentRaw = "", profile = null) {
+  function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     const options = [...(data.editOptions?.[fieldKey] || [])];
-    const usesRam = profile && canUseRamLocomotion(profile);
+    const usesRam = profile && context.parentField
+      ? context.parentField === "chillAction" && fieldRaw(profile, context.parentField) === RAM_LOCOMOTION
+      : profile && canUseRamLocomotion(profile);
     if (fieldKey === "ramMaxSpeed" && !usesRam) {
       for (let value = 0; value <= 255; value += 1) {
         const raw = String(value);
@@ -727,6 +840,131 @@ export function createProfilesController({
       options.push({ raw: currentRaw, label: humanizeRaw(currentRaw) });
     }
     return options;
+  }
+
+  function spawnDestinationPlayerInfo(raw) {
+    const value = String(raw || "");
+    if (value === "OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER") return { kind: "front", distance: 1 };
+    if (value === "OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER") return { kind: "behind", distance: 5 };
+    const match = value.match(/^OW_WILD_SPAWN_DESTINATION_(ONE|TWO|THREE|FOUR|FIVE)_TILES?_(FRONT_OF|BEHIND)_PLAYER$/);
+    if (!match) return null;
+    const distances = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+    return { kind: match[2] === "FRONT_OF" ? "front" : "behind", distance: distances[match[1]] };
+  }
+
+  function spawnDestinationTypeKey(raw) {
+    const info = spawnDestinationPlayerInfo(raw);
+    if (!info) return raw;
+    return info.kind === "front" ? SPAWN_DESTINATION_FRONT_TYPE : SPAWN_DESTINATION_BEHIND_TYPE;
+  }
+
+  function spawnDestinationDistanceOptions(typeKey) {
+    const kind = typeKey === SPAWN_DESTINATION_FRONT_TYPE
+      ? "front"
+      : (typeKey === SPAWN_DESTINATION_BEHIND_TYPE ? "behind" : "");
+    if (!kind) return [];
+    return (data.editOptions?.spawnDestination || [])
+      .map((option) => ({ option, info: spawnDestinationPlayerInfo(valueRaw(option)) }))
+      .filter(({ info }) => info?.kind === kind)
+      .map(({ option, info }) => ({ ...option, distance: info.distance }))
+      .sort((a, b) => a.distance - b.distance);
+  }
+
+  function spawnDestinationTypeOptions() {
+    const options = [];
+    let hasFront = false;
+    let hasBehind = false;
+    (data.editOptions?.spawnDestination || []).forEach((option) => {
+      const info = spawnDestinationPlayerInfo(valueRaw(option));
+      if (!info) {
+        options.push(option);
+      } else if (info.kind === "front") {
+        hasFront = true;
+      } else {
+        hasBehind = true;
+      }
+    });
+    if (hasFront) options.push({ raw: SPAWN_DESTINATION_FRONT_TYPE, label: "Front of player" });
+    if (hasBehind) options.push({ raw: SPAWN_DESTINATION_BEHIND_TYPE, label: "Behind player" });
+    return options;
+  }
+
+  function spawnDestinationRawForType(typeKey, preferredDistance = null) {
+    const distanceOptions = spawnDestinationDistanceOptions(typeKey);
+    if (!distanceOptions.length) return typeKey;
+    const exact = distanceOptions.find((option) => String(option.distance) === String(preferredDistance));
+    if (exact) return valueRaw(exact);
+    const fallback = typeKey === SPAWN_DESTINATION_BEHIND_TYPE ? 5 : 1;
+    return valueRaw(distanceOptions.find((option) => option.distance === fallback) || distanceOptions[0]);
+  }
+
+  function alertRangeBaseRaw(raw) {
+    return String(raw || "").replace(/_CLOSE_RADIUS$/, "");
+  }
+
+  function alertRangeIsClose(raw) {
+    return /_CLOSE_RADIUS$/.test(String(raw || ""));
+  }
+
+  function alertRangeTypeOptions() {
+    const seen = new Map();
+    (data.editOptions?.alertRange || []).forEach((option) => {
+      const baseRaw = alertRangeBaseRaw(valueRaw(option));
+      if (seen.has(baseRaw)) return;
+      const baseOption = (data.editOptions?.alertRange || []).find((candidate) => valueRaw(candidate) === baseRaw) || option;
+      const label = valueLabel(baseOption).replace(/\s*\+\s*close radius$/i, "");
+      seen.set(baseRaw, { ...baseOption, raw: baseRaw, label });
+    });
+    return [...seen.values()];
+  }
+
+  function alertRangeSupportsClose(raw) {
+    const baseRaw = alertRangeBaseRaw(raw);
+    return (data.editOptions?.alertRange || []).some((option) => (
+      alertRangeBaseRaw(valueRaw(option)) === baseRaw && alertRangeIsClose(valueRaw(option))
+    ));
+  }
+
+  function alertRangeRawWithClose(raw, close) {
+    const baseRaw = alertRangeBaseRaw(raw);
+    const options = data.editOptions?.alertRange || [];
+    if (!close) return valueRaw(options.find((option) => valueRaw(option) === baseRaw)) || baseRaw;
+    return valueRaw(options.find((option) => (
+      alertRangeBaseRaw(valueRaw(option)) === baseRaw && alertRangeIsClose(valueRaw(option))
+    ))) || baseRaw;
+  }
+
+  function scopedActionOwns(scope, raw) {
+    return scope === "alert" ? raw === ALERT_SPECIAL.call : raw === ALERT_SPECIAL.throw;
+  }
+
+  function scopedActionIsKnown(raw) {
+    return ["", ALERT_SPECIAL.none, ALERT_SPECIAL.call, ALERT_SPECIAL.throw].includes(String(raw || ""));
+  }
+
+  function scopedActionRaw(scope, raw) {
+    if (!raw) return "";
+    if (!scopedActionIsKnown(raw)) return raw;
+    return scopedActionOwns(scope, raw) ? raw : ALERT_SPECIAL.none;
+  }
+
+  function scopedActionCountRaw(scope, raw) {
+    return raw === ALERT_SPECIAL.none || !scopedActionIsKnown(raw) || scopedActionOwns(scope, raw) ? raw : "";
+  }
+
+  function scopedActionClearRaw(scope, currentRaw, originalRaw) {
+    if (currentRaw === ALERT_SPECIAL.none) return "";
+    if (!scopedActionIsKnown(currentRaw)) return "";
+    if (!scopedActionOwns(scope, currentRaw)) return currentRaw;
+    const otherScope = scope === "alert" ? "active" : "alert";
+    if (scopedActionOwns(otherScope, originalRaw) && !scopedActionOwns(scope, originalRaw)) return originalRaw;
+    return "";
+  }
+
+  function activeActionShowsThrowRange(profile) {
+    const raw = fieldRaw(profile, "alertSpecialAction");
+    const displayRaw = scopedActionRaw("active", raw);
+    return raw === ALERT_SPECIAL.throw || (isOverrideProfile(profile) && !displayRaw);
   }
 
   function profileSearchText(profile) {
@@ -834,42 +1072,392 @@ export function createProfilesController({
     `;
   }
 
-  function renderFieldControl(profile, fieldKey) {
-    const raw = fieldRaw(profile, fieldKey);
-    const original = originalFieldRaw(profile, fieldKey);
-    const changed = profile.draftId ? Boolean(raw) : raw !== original;
-    const options = fieldOptions(fieldKey, raw, profile);
-    const label = fieldLabelForProfile(profile, fieldKey);
+  function profileCanEditField(profile, fieldKey) {
+    const known = data.fields.some((field) => field.key === fieldKey);
+    if (!known) return false;
+    return !isOverrideProfile(profile) || new Set(data.overrideFieldKeys || []).has(fieldKey);
+  }
+
+  function explicitInactiveNode(profile, fieldKey, active, extra = {}) {
+    if (active) return { field: fieldKey, ...extra };
+    const pending = profile.draftId
+      ? Object.prototype.hasOwnProperty.call(profile.fields || {}, fieldKey)
+      : Boolean(fieldDraftMap(profile)?.has(fieldKey));
+    if (pending || (isOverrideProfile(profile) && fieldRaw(profile, fieldKey))) {
+      return { field: fieldKey, inactive: true, ...extra };
+    }
+    return null;
+  }
+
+  function behaviorBranch(profile, branch) {
+    const definitions = {
+      "chill-behavior": {
+        parent: "chillState",
+        target: "chillTarget",
+        tiles: ["chillAllowedTile", "chillAllowedTile2"],
+      },
+      "active-behavior": {
+        parent: "attentiveState",
+        target: "targetSelector",
+        tiles: ["attentiveAllowedTile", "attentiveAllowedTile2"],
+        chase: ["attentiveChaseBoostDistance", "attentiveChaseBoostSpeed"],
+      },
+      "tired-behavior": {
+        parent: "tiredState",
+        tiles: ["tiredAllowedTile", "tiredAllowedTile2"],
+      },
+    };
+    const definition = definitions[branch];
+    if (!definition) return { nodes: [], context: "" };
+    const raw = fieldRaw(profile, definition.parent);
+    const inherited = isOverrideProfile(profile) && !raw;
+    const canTarget = inherited || TARGETABLE_BEHAVIORS.has(raw);
+    const usesTiles = inherited || TILE_BEHAVIORS.has(raw);
+    const nodes = [];
+    if (definition.target) {
+      const targetRaw = fieldRaw(profile, definition.target);
+      const targetInherited = isOverrideProfile(profile) && !targetRaw;
+      const targetChildren = definition.target === "targetSelector"
+        ? ["attentiveCircleRadius", "attentiveContinueWhenArrived"]
+          .map((field) => explicitInactiveNode(profile, field, targetInherited || targetRaw === CIRCLE_PLAYER_TARGET))
+          .filter(Boolean)
+        : [];
+      const targetNode = targetChildren.length && !canTarget
+        ? { field: definition.target, inactive: true, children: targetChildren }
+        : explicitInactiveNode(profile, definition.target, canTarget, { children: targetChildren });
+      if (targetNode) nodes.push(targetNode);
+    }
+    (definition.tiles || []).forEach((field) => {
+      const node = explicitInactiveNode(profile, field, usesTiles);
+      if (node) nodes.push(node);
+    });
+    (definition.chase || []).forEach((field) => {
+      const node = explicitInactiveNode(profile, field, canTarget);
+      if (node) nodes.push(node);
+    });
+    const onlyInactive = nodes.length && nodes.every((node) => node.inactive);
+    return {
+      nodes,
+      context: inherited
+        ? "All behavior suboptions stay available while this value inherits."
+        : (onlyInactive ? "Stored suboptions are inactive for the selected behavior." : (nodes.length ? "Options used by the selected behavior." : "This behavior has no additional options.")),
+      inherited,
+    };
+  }
+
+  function movementBranch(profile, parentField, scope) {
+    const fields = MOVEMENT_FIELDS[scope];
+    if (!fields) return { nodes: [], context: "" };
+    const raw = fieldRaw(profile, parentField);
+    const inherited = isOverrideProfile(profile) && !raw;
+    const moves = Boolean(raw && raw !== LOCOMOTION.none);
+    const nodes = new Map();
+    const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
+    const append = (fieldKeys, active) => fieldKeys.forEach((field) => {
+      const candidate = explicitInactiveNode(profile, field, active, {
+        parentField,
+        ambiguous,
+      });
+      if (!candidate) return;
+      const existing = nodes.get(field);
+      if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
+    });
+    append([fields.speed], inherited || moves);
+    const hopFields = scope === "active" && activeActionShowsThrowRange(profile)
+      ? fields.hop.filter((field) => field !== "attentiveHopMaxDistance")
+      : fields.hop;
+    append(hopFields, inherited || raw === LOCOMOTION.hop);
+    append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram));
+    append(fields.teleport, inherited || raw === LOCOMOTION.teleport);
+    append(fields.ram, inherited || raw === LOCOMOTION.ram);
+    const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
+    return {
+      nodes: [...nodes.values()],
+      context: inherited
+        ? "All movement suboptions stay available while this value inherits."
+        : (raw === LOCOMOTION.none
+          ? (nodes.size ? "Stored suboptions are inactive while movement is None." : "None has no movement suboptions.")
+          : `${valueLabel(option || raw)} suboptions.`),
+      inherited,
+    };
+  }
+
+  function branchChildren(profile, descriptor) {
+    if (["chill-behavior", "active-behavior", "tired-behavior"].includes(descriptor.branch)) {
+      return behaviorBranch(profile, descriptor.branch);
+    }
+    const raw = fieldRaw(profile, descriptor.field);
+    const inherited = isOverrideProfile(profile) && !raw;
+    if (descriptor.branch === "movement") return movementBranch(profile, descriptor.field, descriptor.scope);
+    if (descriptor.branch === "scoped-action") {
+      const showsThrowRange = descriptor.scope === "active" && activeActionShowsThrowRange(profile);
+      const movementRaw = fieldRaw(profile, "movementStyle");
+      const sharedWithHop = movementRaw === LOCOMOTION.hop || (isOverrideProfile(profile) && !movementRaw);
+      return {
+        nodes: showsThrowRange ? [{
+          field: "attentiveHopMaxDistance",
+          label: sharedWithHop ? "Max hop / throw range" : "Throw range",
+        }] : [],
+        context: showsThrowRange
+          ? "Maximum aligned throw distance for the active action."
+          : "This action has no additional options.",
+        inherited: isOverrideProfile(profile) && !scopedActionCountRaw(descriptor.scope, raw),
+      };
+    }
+    if (descriptor.branch === "spawn-state") {
+      const usesHopTime = inherited || raw === SPAWN_HOP_FROM_OFF_SCREEN
+        || valueLabel(fieldOptions(descriptor.field, raw, profile).find((option) => valueRaw(option) === raw)).toLowerCase().includes("hop from off screen");
+      const nodes = [explicitInactiveNode(profile, "spawnHopTime", usesHopTime)].filter(Boolean);
+      return {
+        nodes,
+        context: inherited
+          ? "Spawn delay stays available while spawn behavior inherits."
+          : (usesHopTime ? "Timing for the forced off-screen hop." : (nodes.length ? "Stored spawn timing is inactive for this behavior." : "This spawn behavior has no additional timing.")),
+        inherited,
+      };
+    }
+    if (descriptor.branch === "spawn-destination") {
+      const playerInfo = spawnDestinationPlayerInfo(raw);
+      const needsDistance = inherited || raw === SPAWN_NEXT_TO_PLAYER;
+      const nodes = playerInfo
+        ? [{ field: "spawnDestination", virtual: "spawn-destination-distance" }]
+        : ["spawnDestinationMinDistance", "spawnDestinationMaxDistance"]
+          .map((field) => explicitInactiveNode(profile, field, needsDistance))
+          .filter(Boolean);
+      return {
+        nodes,
+        context: inherited
+          ? "Distance limits stay available while destination inherits."
+          : (playerInfo ? "Distance from the player for this destination." : (needsDistance ? "Minimum and maximum distance from the player." : (nodes.length ? "Stored distance limits are inactive for this destination." : "This destination has no additional options."))),
+        inherited,
+      };
+    }
+    if (descriptor.branch === "alert-range") {
+      const needsLength = inherited || (!/_NONE$/.test(raw) && !/_TERRAIN_ONLY$/.test(raw));
+      const nodes = [];
+      if (raw && alertRangeSupportsClose(raw)) nodes.push({ field: "alertRange", virtual: "alert-range-close" });
+      const lengthNode = explicitInactiveNode(profile, "alertness", needsLength);
+      if (lengthNode) nodes.push(lengthNode);
+      return {
+        nodes,
+        context: inherited
+          ? "Range length stays available while the range type inherits."
+          : (needsLength ? "Length used by the selected range shape." : (nodes.length ? "Stored range length is inactive for this shape." : "The selected range shape has no length option.")),
+        inherited,
+      };
+    }
+    return { nodes: [], context: "", inherited };
+  }
+
+  function renderSelectField(profile, fieldKey, presentation, selectOptions, selectedRaw, stateRaw, originalStateRaw) {
     const override = isOverrideProfile(profile);
-    const contextBase = override ? ui.contextResult?.baseProfile?.[fieldKey] : null;
-    const hasContextBase = contextBase !== null && contextBase !== undefined && valueRaw(contextBase) !== "";
-    const hasOverride = Boolean(raw);
+    const changed = profile.draftId ? Boolean(stateRaw) : stateRaw !== originalStateRaw;
+    const contextBase = presentation.contextBase !== undefined
+      ? presentation.contextBase
+      : (override ? ui.contextResult?.baseProfile?.[fieldKey] : null);
+    const contextBaseRaw = valueRaw(contextBase);
+    const hasContextBase = contextBase !== null && contextBase !== undefined && contextBaseRaw !== "";
+    const hasOverride = Boolean(stateRaw);
     const state = override
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
-    const stateLabel = changed
+    let stateLabel = changed
       ? (hasOverride ? "Edited override" : "Will inherit")
       : (hasOverride ? "Overrides base" : "Inherited");
+    if (presentation.inactive && hasOverride) stateLabel = changed ? "Edited · inactive" : "Stored · inactive";
+    const instance = presentation.instance || fieldKey;
+    const label = fieldLabelForProfile(profile, fieldKey, presentation);
+    const allowInherit = presentation.allowInherit ?? override;
+    const baseLabel = hasContextBase
+      ? (presentation.baseLabel ? presentation.baseLabel(contextBaseRaw) : valueLabel(contextBase))
+      : "";
+    const metaMarkup = override
+      ? `<small class="pv2-field-meta"><span class="pv2-field-state">${escapeHtml(stateLabel)}</span>${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(baseLabel)})</span>` : ""}</small>`
+      : (presentation.inactive ? `<small class="pv2-field-meta"><span class="pv2-field-state">Edited · inactive</span></small>` : "");
     return `
-      <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}">
+      <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
-          ${override ? `<small class="pv2-field-meta"><span class="pv2-field-state">${escapeHtml(stateLabel)}</span>${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(valueLabel(contextBase))})</span>` : ""}</small>` : ""}
+          ${metaMarkup}
         </span>
-        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" aria-label="${escapeHtml(label)}">
-          ${override ? `<option value="" ${raw ? "" : "selected"}>Inherit</option>` : ""}
-          ${options.map((option) => {
+        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""} aria-label="${escapeHtml(label)}">
+          ${allowInherit ? `<option value="" ${selectedRaw ? "" : "selected"}>Inherit</option>` : ""}
+          ${selectOptions.map((option) => {
             const optionRaw = valueRaw(option);
-            return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === raw ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
+            return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(selectedRaw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
           }).join("")}
         </select>
       </label>`;
   }
 
+  function renderFieldControl(profile, fieldKey, presentation = {}) {
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    return renderSelectField(
+      profile,
+      fieldKey,
+      presentation,
+      fieldOptions(fieldKey, raw, profile, presentation),
+      raw,
+      raw,
+      original,
+    );
+  }
+
+  function renderVirtualFieldControl(profile, node, presentation = {}) {
+    const fieldKey = node.field;
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    if (node.virtual === "spawn-destination-type") {
+      return renderSelectField(profile, fieldKey, {
+        ...presentation,
+        label: "Spawn destination",
+        compound: node.virtual,
+        baseLabel: (baseRaw) => valueLabel(spawnDestinationTypeOptions().find((option) => valueRaw(option) === spawnDestinationTypeKey(baseRaw)) || spawnDestinationTypeKey(baseRaw)),
+      }, spawnDestinationTypeOptions(), spawnDestinationTypeKey(raw), raw, original);
+    }
+    if (node.virtual === "spawn-destination-distance") {
+      const info = spawnDestinationPlayerInfo(raw);
+      const options = spawnDestinationDistanceOptions(spawnDestinationTypeKey(raw))
+        .map((option) => ({ raw: String(option.distance), label: `${option.distance} tile${option.distance === 1 ? "" : "s"}` }));
+      return renderSelectField(profile, fieldKey, {
+        ...presentation,
+        label: "Spawn distance",
+        compound: node.virtual,
+        allowInherit: false,
+        baseLabel: (baseRaw) => {
+          const baseInfo = spawnDestinationPlayerInfo(baseRaw);
+          return baseInfo ? `${baseInfo.distance} tile${baseInfo.distance === 1 ? "" : "s"}` : valueLabel(baseRaw);
+        },
+      }, options, String(info?.distance || ""), raw, original);
+    }
+    if (node.virtual === "alert-range-type") {
+      return renderSelectField(profile, fieldKey, {
+        ...presentation,
+        label: "Range type",
+        compound: node.virtual,
+        baseLabel: (baseRaw) => valueLabel(alertRangeTypeOptions().find((option) => valueRaw(option) === alertRangeBaseRaw(baseRaw)) || alertRangeBaseRaw(baseRaw)),
+      }, alertRangeTypeOptions(), alertRangeBaseRaw(raw), raw, original);
+    }
+    if (node.virtual === "alert-range-close") {
+      return renderSelectField(profile, fieldKey, {
+        ...presentation,
+        label: "Close range",
+        compound: node.virtual,
+        allowInherit: false,
+        baseLabel: (baseRaw) => alertRangeIsClose(baseRaw) ? "Yes" : "No",
+      }, [{ raw: "0", label: "No" }, { raw: "1", label: "Yes" }], alertRangeIsClose(raw) ? "1" : "0", raw, original);
+    }
+    if (node.virtual === "scoped-action") {
+      const scope = node.scope;
+      const scopedRaw = scopedActionCountRaw(scope, raw);
+      const originalScopedRaw = scopedActionCountRaw(scope, original);
+      const displayRaw = scopedActionRaw(scope, raw);
+      const actionRaw = scope === "alert" ? ALERT_SPECIAL.call : ALERT_SPECIAL.throw;
+      const actionOption = (data.editOptions?.alertSpecialAction || []).find((option) => valueRaw(option) === actionRaw) || { raw: actionRaw };
+      const noneOption = (data.editOptions?.alertSpecialAction || []).find((option) => valueRaw(option) === ALERT_SPECIAL.none) || { raw: ALERT_SPECIAL.none, label: "None" };
+      const unknownOption = raw && !scopedActionIsKnown(raw)
+        ? { raw, label: `Unsupported stored action · ${valueLabel(raw)}` }
+        : null;
+      const contextBaseRaw = valueRaw(ui.contextResult?.baseProfile?.alertSpecialAction);
+      return renderSelectField(profile, fieldKey, {
+        ...presentation,
+        label: scope === "alert" ? "Alert action" : "Active action",
+        compound: node.virtual,
+        scope,
+        contextBase: contextBaseRaw,
+        baseLabel: (baseRaw) => !scopedActionIsKnown(baseRaw)
+          ? `Unsupported stored action · ${valueLabel(baseRaw)}`
+          : valueLabel(scopedActionOwns(scope, baseRaw) ? actionOption : noneOption),
+      }, [noneOption, actionOption, unknownOption].filter(Boolean), displayRaw, scopedRaw, originalScopedRaw);
+    }
+    return renderFieldControl(profile, fieldKey, presentation);
+  }
+
+  function renderHierarchyNode(profile, node, sectionId, path, depth = 0, parentInactive = false) {
+    if (!node || !profileCanEditField(profile, node.field)) return "";
+    const inactive = Boolean(parentInactive || node.inactive);
+    const instance = `${sectionId}:${path}:${node.field}`;
+    const childMarkup = (node.children || [])
+      .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, depth + 1, inactive))
+      .filter(Boolean)
+      .join("");
+    const renderControl = node.virtual ? renderVirtualFieldControl : renderFieldControl;
+    const control = renderControl(profile, node.virtual ? node : node.field, {
+      ...node,
+      depth,
+      inactive,
+      instance,
+      parent: Boolean(childMarkup) || depth === 0,
+    });
+    if (!childMarkup) return control;
+    return `
+      <div class="pv2-option-group${depth ? " is-nested" : ""}" data-option-parent="${escapeHtml(node.field)}" data-option-depth="${depth}">
+        <div class="pv2-option-parent">${control}</div>
+        <div class="pv2-suboptions" role="group" aria-label="${escapeHtml(fieldLabelForProfile(profile, node.field))} suboptions">
+          ${node.context ? `<p class="pv2-branch-context">${escapeHtml(node.context)}</p>` : ""}
+          <div class="pv2-suboption-grid">${childMarkup}</div>
+        </div>
+      </div>`;
+  }
+
+  function renderBranch(profile, descriptor, sectionId, index) {
+    if (!profileCanEditField(profile, descriptor.field)) return "";
+    const branch = branchChildren(profile, descriptor);
+    const children = branch.nodes.filter((node) => profileCanEditField(profile, node.field));
+    const rootNode = {
+      field: descriptor.field,
+      children,
+      context: branch.context,
+      virtual: descriptor.virtual,
+      scope: descriptor.scope,
+    };
+    const markup = renderHierarchyNode(profile, rootNode, sectionId, `branch-${index}`);
+    if (!markup) return "";
+    if (!children.length) return `<div class="pv2-root-field-grid">${markup}</div>`;
+    return `
+      <div class="pv2-branch-wrap${branch.inherited ? " is-inherited-branch" : ""}">
+        ${markup}
+      </div>`;
+  }
+
+  function renderSectionContent(profile, section) {
+    if (!section.nodes) {
+      return `<div class="pv2-root-field-grid">${section.fields.map((field, index) => renderFieldControl(profile, field, { instance: `${section.id}:field-${index}:${field}` })).join("")}</div>`;
+    }
+    return section.nodes.map((descriptor, index) => {
+      if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, index);
+      const markup = (descriptor.fields || [])
+        .filter((field) => profileCanEditField(profile, field))
+        .map((field, fieldIndex) => renderFieldControl(profile, field, {
+          instance: `${section.id}:fields-${index}.${fieldIndex}:${field}`,
+        }))
+        .join("");
+      return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
+    }).join("");
+  }
+
   function sectionFields(section, profile) {
     const known = new Set(data.fields.map((field) => field.key));
     const allowed = new Set(data.overrideFieldKeys || []);
-    return section.fields.filter((field) => known.has(field) && (!isOverrideProfile(profile) || allowed.has(field)));
+    return unique(section.fields.filter((field) => known.has(field) && (!isOverrideProfile(profile) || allowed.has(field))));
+  }
+
+  function sectionFieldRaw(section, profile, fieldKey) {
+    const raw = fieldRaw(profile, fieldKey);
+    if (fieldKey === "alertSpecialAction" && section?.scopedAction) {
+      return scopedActionCountRaw(section.scopedAction, raw);
+    }
+    return raw;
+  }
+
+  function clearSectionField(section, profile, fieldKey) {
+    if (fieldKey === "alertSpecialAction" && section?.scopedAction) {
+      const raw = scopedActionClearRaw(section.scopedAction, fieldRaw(profile, fieldKey), originalFieldRaw(profile, fieldKey));
+      setField(profile, fieldKey, raw);
+      return;
+    }
+    setField(profile, fieldKey, "");
   }
 
   function unsectionedFields(profile) {
@@ -884,7 +1472,7 @@ export function createProfilesController({
     const override = isOverrideProfile(profile);
     const sections = FIELD_SECTIONS.map((section) => {
       const fields = sectionFields(section, profile);
-      return { ...section, fields, overrideCount: fields.filter((field) => fieldRaw(profile, field)).length };
+      return { ...section, fields, overrideCount: fields.filter((field) => sectionFieldRaw(section, profile, field)).length };
     });
     const other = unsectionedFields(profile);
     if (other.length) sections.push({
@@ -902,8 +1490,8 @@ export function createProfilesController({
             <span><strong>${escapeHtml(section.title)}</strong><small>${escapeHtml(section.hint)}</small></span>
             <em><span aria-hidden="true">${override ? `${section.overrideCount} / ${section.fields.length}` : section.fields.length}</span><span class="sr-only">${override ? `${section.overrideCount} of ${section.fields.length} fields overridden` : `${section.fields.length} fields`}</span></em>
           </summary>
-          ${override && ui.openSections.has(section.id) ? `<div class="pv2-section-toolbar"><span>Only set values override; the rest inherit.</span><button class="pv2-section-inherit" type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}" aria-label="Make all ${escapeHtml(section.title)} values inherit" ${section.overrideCount ? "" : "disabled"}>Inherit all</button></div>` : ""}
-          ${ui.openSections.has(section.id) ? `<div class="field-grid profile-fields pv2-field-grid">${section.fields.map((field) => renderFieldControl(profile, field)).join("")}</div>` : ""}
+          ${override && ui.openSections.has(section.id) ? `<div class="pv2-section-toolbar"><span>Only set values override; the rest inherit.${section.sharedMovement ? " Shared movement values can affect other states." : ""}</span><button class="pv2-section-inherit" type="button" data-action="clear-section" data-section="${escapeHtml(section.id)}" aria-label="Make all ${escapeHtml(section.title)} values inherit" ${section.overrideCount ? "" : "disabled"}>Inherit all</button></div>` : ""}
+          ${ui.openSections.has(section.id) ? `<div class="profile-fields pv2-field-hierarchy">${renderSectionContent(profile, section)}</div>` : ""}
         </details>`).join("");
     return rendered || `<p class="empty-state empty-state--small">No editable fields are available for this profile.</p>`;
   }
@@ -1584,8 +2172,8 @@ export function createProfilesController({
       event.stopPropagation();
       const section = FIELD_SECTIONS.find((candidate) => candidate.id === target.dataset.section);
       const fields = section ? sectionFields(section, profile) : (target.dataset.section === "advanced" ? unsectionedFields(profile) : []);
-      const clearedCount = fields.filter((field) => fieldRaw(profile, field)).length;
-      fields.forEach((field) => setField(profile, field, ""));
+      const clearedCount = fields.filter((field) => sectionFieldRaw(section, profile, field)).length;
+      fields.forEach((field) => clearSectionField(section, profile, field));
       renderEditor(); renderList(); signalDirty();
       editorElement.querySelector(`[data-section-id="${CSS.escape(target.dataset.section)}"] > summary`)?.focus({ preventScroll: true });
       announce(`${section?.title || "Advanced"}: ${clearedCount} override value${clearedCount === 1 ? "" : "s"} will inherit after saving.`);
@@ -1642,9 +2230,52 @@ export function createProfilesController({
     }
     if (event.target.matches("[data-profile-value]") && profile) {
       const fieldKey = event.target.dataset.fieldKey;
-      setField(profile, fieldKey, event.target.value);
+      const fieldInstance = event.target.dataset.fieldInstance;
+      const compound = event.target.dataset.profileCompound;
+      const scope = event.target.dataset.compoundScope;
+      const parentGroup = event.target.closest("[data-option-parent]");
+      const parentField = parentGroup?.dataset.optionParent;
+      const sectionId = event.target.closest("[data-section-id]")?.dataset.sectionId;
+      const wasParentControl = Boolean(event.target.closest(".pv2-option-parent"));
+      const beforeChildren = parentGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
+      let nextRaw = event.target.value;
+      const currentRaw = fieldRaw(profile, fieldKey);
+      if (compound === "spawn-destination-type" && nextRaw) {
+        const currentInfo = spawnDestinationPlayerInfo(currentRaw);
+        const preferredDistance = currentInfo && spawnDestinationTypeKey(currentRaw) === nextRaw ? currentInfo.distance : null;
+        nextRaw = spawnDestinationRawForType(nextRaw, preferredDistance);
+      } else if (compound === "spawn-destination-distance") {
+        nextRaw = spawnDestinationRawForType(spawnDestinationTypeKey(currentRaw), nextRaw);
+      } else if (compound === "alert-range-type" && nextRaw) {
+        nextRaw = alertRangeRawWithClose(nextRaw, alertRangeSupportsClose(nextRaw) && alertRangeIsClose(currentRaw));
+      } else if (compound === "alert-range-close") {
+        nextRaw = alertRangeRawWithClose(currentRaw, nextRaw === "1");
+      } else if (compound === "scoped-action") {
+        if (!nextRaw && isOverrideProfile(profile)) {
+          nextRaw = scopedActionClearRaw(scope, currentRaw, originalFieldRaw(profile, fieldKey));
+        } else if (nextRaw === ALERT_SPECIAL.none && scopedActionRaw(scope, currentRaw) === ALERT_SPECIAL.none) {
+          nextRaw = currentRaw;
+        }
+      }
+      setField(profile, fieldKey, nextRaw);
       renderEditor(); renderList(); signalDirty();
-      editorElement.querySelector(`[data-profile-value][data-field-key="${CSS.escape(fieldKey)}"]`)?.focus({ preventScroll: true });
+      const focusTarget = fieldInstance
+        ? editorElement.querySelector(`[data-profile-value][data-field-instance="${CSS.escape(fieldInstance)}"]`)
+        : editorElement.querySelector(`[data-profile-value][data-field-key="${CSS.escape(fieldKey)}"]`);
+      const parentFallback = sectionId && parentField
+        ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"] > .pv2-option-parent [data-profile-value]`)
+        : null;
+      const sectionFallback = sectionId
+        ? editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] > summary`)
+        : null;
+      (focusTarget || parentFallback || sectionFallback)?.focus({ preventScroll: true });
+      if (wasParentControl && sectionId && parentField) {
+        const afterGroup = editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"]`);
+        const afterChildren = afterGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
+        if (afterChildren !== beforeChildren) {
+          announce(`${fieldLabelForProfile(profile, fieldKey)} now shows ${afterChildren} suboption${afterChildren === 1 ? "" : "s"}.`);
+        }
+      }
       return;
     }
     if (event.target.matches("[data-target-mode]") && profile) {
