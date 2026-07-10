@@ -1,5 +1,6 @@
 import { createProfilesController } from "/v2-assets/profiles.js";
-import { createRoutesController, createSoundsController } from "/v2-assets/routes-sounds.js";
+import { createRoutesController } from "/v2-assets/routes.js";
+import { createSoundsController } from "/v2-assets/routes-sounds.js";
 
 const state = {
   data: null,

@@ -41,8 +41,12 @@ binding.
   read, retrying instead of pairing stale parsed data with a newer revision.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
   across profiles, memberships, overrides, encounters, and spawn settings.
-- Adds a Route Deck roster, encounter-method filters, form-safe bulk species
-  swaps, route-only layers, and live summaries derived from the current draft.
+- Rebuilds Route Deck around the proven encounter workflow: persisted
+  per-source filters, semantic route/Pokémon/type search, method-grouped sprite
+  actions, compact aggregate summaries, and contextual per-slot editing.
+- Keeps route-only encounters as one reversible route operation. Manual source
+  edits first restore the complete stored baseline, and conflicting external
+  source changes block restoration instead of being overwritten.
 - Blocks Save while shared profile conditions, slot values, forms, level ranges, or global
   spawn-distance relationships are invalid.
 - Holds the same cross-process workspace lock for the full ROM build, so a
@@ -60,8 +64,9 @@ binding.
   system.
 - `static/v2.js` orchestrates navigation, atomic saves, builds, ROM launching,
   status, and utilities.
-- `static/profiles.js` and `static/routes-sounds.js` implement the focused
-  domain workflows without copying the legacy DOM.
+- `static/profiles.js`, `static/routes.js`, and `static/routes-sounds.js`
+  implement the focused profile, route, and sound workflows without copying
+  the legacy DOM.
 - `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
   same profile-first, apply-once resolution contract in the game runtime.
 

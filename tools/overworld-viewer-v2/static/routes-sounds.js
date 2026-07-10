@@ -1,3 +1,5 @@
+export { createRoutesController } from "./routes.js";
+
 const ROUTE_SPECIES_LIST_ID = "v2-route-species-options";
 
 const ROUTE_METHODS = [
@@ -119,7 +121,9 @@ function numberIsValid(raw, min, max) {
     && (max == null || value <= Number(max));
 }
 
-export function createRoutesController({
+// Retained only until the Sound Deck is extracted from this historical shared
+// module. Public imports are routed to the maintained controller above.
+function createDeprecatedRoutesController({
   state: appState = {},
   api = null,
   elements = {},

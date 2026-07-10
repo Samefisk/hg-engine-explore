@@ -25,6 +25,7 @@ V2_ASSETS = {
     "/v2-assets/v2.css": (STATIC_DIR / "v2.css", "text/css; charset=utf-8"),
     "/v2-assets/v2.js": (STATIC_DIR / "v2.js", "application/javascript; charset=utf-8"),
     "/v2-assets/profiles.js": (STATIC_DIR / "profiles.js", "application/javascript; charset=utf-8"),
+    "/v2-assets/routes.js": (STATIC_DIR / "routes.js", "application/javascript; charset=utf-8"),
     "/v2-assets/routes-sounds.js": (STATIC_DIR / "routes-sounds.js", "application/javascript; charset=utf-8"),
 }
 
