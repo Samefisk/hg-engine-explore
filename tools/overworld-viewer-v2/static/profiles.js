@@ -2502,10 +2502,10 @@ export function createProfilesController({
       </details>`;
   }
 
-  function renderMembership(profile) {
+  function renderMembershipManager(profile) {
     const members = membersFor(profile);
     const isDefault = String(profile.index) === String(data.defaultClassIndex);
-    const expanded = ui.openSections.has("membership");
+    const expanded = ui.openSections.has("member-list");
     const query = ui.memberQuery.trim().toLowerCase();
     const visibleMembers = members.filter((assignment) => !query || [
       assignment.species?.name,
@@ -2514,15 +2514,29 @@ export function createProfilesController({
       ...(assignment.species?.types || []).flatMap((type) => [type.name, type.symbol]),
     ].filter(Boolean).join(" ").toLowerCase().includes(query)).slice(0, 160);
     return `
-      <details class="membership-section pv2-membership" data-section-id="membership" ${expanded ? "open" : ""}>
-        <summary><span><strong>Membership</strong><small>Assign Pokémon to this base profile.</small></span><em>${members.length}</em></summary>
-        ${expanded ? `${renderTargetBuilder(profile, "base")}
+      <details class="pv2-member-manager" data-section-id="member-list" ${expanded ? "open" : ""}>
+        <summary><span><strong>Manage assigned Pokémon</strong><small>Search or move individual Pokémon back to Default.</small></span><em>${members.length}</em></summary>
+        ${expanded ? `
         <label class="pv2-member-search"><span>Find current members</span><input type="search" value="${escapeHtml(ui.memberQuery)}" data-member-search placeholder="Name, symbol, family, or type"></label>
         <ul class="member-list pv2-member-list">
           ${visibleMembers.map((assignment) => `<li><span>${assignment.species?.iconUrl ? `<img src="${escapeHtml(assignment.species.iconUrl)}" alt="" loading="lazy">` : ""}<strong>${escapeHtml(assignment.species?.name)}</strong><small>${escapeHtml(assignment.species?.symbol)}</small></span><button type="button" data-action="remove-member" data-species="${escapeHtml(assignment.species?.symbol)}" ${isDefault ? "disabled title=\"Default members cannot be unassigned\"" : ""}>${isDefault ? "Default" : "Move to Default"}</button></li>`).join("") || `<li class="empty-state empty-state--small">No members match this search.</li>`}
         </ul>
         ${members.length > visibleMembers.length ? `<p class="pv2-member-note">Showing ${visibleMembers.length} of ${members.length}. Search to narrow this list.</p>` : ""}
         ` : ""}
+      </details>`;
+  }
+
+  function renderMembershipControl(profile) {
+    const members = membersFor(profile);
+    const expanded = ui.openSections.has("membership");
+    const label = `Assign Pokémon — ${members.length} assigned`;
+    return `
+      <details class="pv2-member-control" data-section-id="membership" ${expanded ? "open" : ""}>
+        <summary aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"><span aria-hidden="true">+</span><span class="sr-only">${escapeHtml(label)}</span></summary>
+        ${expanded ? `<div class="pv2-member-popover">
+          ${renderTargetBuilder(profile, "base")}
+          ${renderMembershipManager(profile)}
+        </div>` : ""}
       </details>`;
   }
 
@@ -2559,10 +2573,11 @@ export function createProfilesController({
     const override = isOverrideProfile(profile);
     const removed = drafts.removedOverrides.has(key);
     const headerSpecies = profilePreviewSpecies(profile, override, 20);
-    const headerIcons = headerSpecies.length ? `
-      <span class="pv2-editor-icons" aria-hidden="true">
+    const headerIcons = headerSpecies.length || !override ? `
+      <div class="pv2-editor-icons">
+        ${override ? "" : renderMembershipControl(profile)}
         ${headerSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" width="20" height="20" decoding="async" draggable="false">`).join("")}
-      </span>` : "";
+      </div>` : "";
     const actions = `
       ${!override && String(profile.index) !== String(data.defaultClassIndex) ? `<button type="button" data-action="convert-base-to-override" data-profile-key="${escapeHtml(key)}">Make override</button>` : ""}
       <button type="button" data-action="rename-profile" data-profile-key="${escapeHtml(key)}" ${profile.canRename === false ? "disabled" : ""}>Rename</button>
@@ -2578,7 +2593,7 @@ export function createProfilesController({
       </header>
       ${renderResolvedContextIndicator()}
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}
-      ${override ? `${renderOverrideTarget(profile)}${renderAffected(profile)}` : renderMembership(profile)}
+      ${override ? `${renderOverrideTarget(profile)}${renderAffected(profile)}` : ""}
       <section class="profile-field-editor pv2-fields" aria-labelledby="pv2-fields-title">
         <header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="pv2-fields-title">${override ? "Overridden values" : "Profile values"}</h3></div><span>${data.fields.length} available fields</span></header>
         ${renderFieldSections(profile)}
@@ -3213,7 +3228,7 @@ export function createProfilesController({
     const wasOpen = ui.openSections.has(section.dataset.sectionId);
     if (section.open) {
       ui.openSections.add(section.dataset.sectionId);
-      const rendersOnOpen = ["membership", "affected", "override-target", "advanced"].includes(section.dataset.sectionId)
+      const rendersOnOpen = ["membership", "member-list", "affected", "override-target", "advanced"].includes(section.dataset.sectionId)
         || FIELD_SECTIONS.some((candidate) => candidate.id === section.dataset.sectionId);
       if (!wasOpen && rendersOnOpen) {
         const sectionId = section.dataset.sectionId;

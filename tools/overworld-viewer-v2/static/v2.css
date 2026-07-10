@@ -3043,6 +3043,121 @@ button {
   padding-left: 1px;
 }
 
+.pv2-member-control {
+  position: relative;
+  flex: 0 0 auto;
+  margin-right: 6px;
+}
+
+.pv2-member-control > summary {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px dashed #8fa69a;
+  border-radius: 50%;
+  background: #f3f6f1;
+  color: #3d6c58;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pv2-member-control > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pv2-member-control > summary > span:not(.sr-only) {
+  font: 900 15px/1 var(--mono);
+}
+
+.pv2-member-control > summary:hover {
+  border-color: #54836c;
+  background: #e6efe8;
+}
+
+.pv2-member-control[open] > summary {
+  border-style: solid;
+  border-color: #3f785f;
+  background: #dfece3;
+  color: #245b45;
+}
+
+.pv2-member-control > summary:focus-visible {
+  outline: 2px solid #2c6151;
+  outline-offset: 2px;
+}
+
+.pv2-member-popover {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(610px, calc(100vw - 44px));
+  max-height: min(680px, calc(100dvh - 110px));
+  overflow: auto;
+  border: 1px solid #8e938d;
+  border-top: 3px solid #4c8268;
+  border-radius: 4px;
+  background: #f8f6f0;
+  box-shadow: 7px 8px 0 rgb(43 47 44 / 18%);
+}
+
+.pv2-member-popover .pv2-target-builder {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid #c9c6bd;
+  background: #eeece5;
+}
+
+.pv2-member-manager {
+  border: 0;
+  background: transparent;
+}
+
+.pv2-member-manager > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 7px 9px;
+  color: #4c544f;
+  cursor: pointer;
+}
+
+.pv2-member-manager > summary > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pv2-member-manager > summary strong {
+  font: 850 9px/1.1 var(--mono);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.pv2-member-manager > summary small {
+  color: #606763;
+  font: 650 9px/1.2 var(--sans);
+}
+
+.pv2-member-manager > summary em {
+  flex: 0 0 auto;
+  padding: 3px 5px;
+  border: 1px solid #aaa8a1;
+  border-radius: 2px;
+  background: #efebe3;
+  color: #555c58;
+  font: 850 9px/1 var(--mono);
+  font-style: normal;
+}
+
+.pv2-member-manager[open] > summary {
+  border-bottom: 1px solid #c9c6bd;
+  background: #e7e4dc;
+}
+
 .pv2-editor-icons img {
   flex: 0 0 auto;
   width: 20px;
@@ -3054,7 +3169,7 @@ button {
   pointer-events: none;
 }
 
-.pv2-editor-icons img:first-child {
+.pv2-editor-icons img:first-of-type {
   margin-left: 0;
 }
 
