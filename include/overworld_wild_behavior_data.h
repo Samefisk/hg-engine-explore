@@ -6,15 +6,15 @@
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 31
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 32
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OWBD_CLASS_PROFILE_COUNT 7
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
 #define OWBD_OVERRIDE_PROFILE_COUNT 7
-#define OWBD_OVERRIDE_RULE_COUNT 45
-#define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_RULE_COUNT
+#define OWBD_OVERRIDE_MEMBER_COUNT 33
+#define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
 #define OWED_ENCOUNTER_AREA_COUNT 150
 #define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
 
@@ -169,25 +169,20 @@ typedef struct OverworldWildBehaviorSpeciesClassRule {
     u8 behaviorClass;
 } OverworldWildBehaviorSpeciesClassRule;
 
-typedef struct OverworldWildBehaviorOverride {
-    OverworldWildBehaviorMatch match;
-    u32 mask;
-    u16 mask2;
-    u32 mask3;
-    OverworldWildBehaviorProfile profile;
-} OverworldWildBehaviorOverride;
-
 typedef struct OverworldWildBehaviorOverrideProfile {
+    OverworldWildBehaviorMatch match;
+    u16 memberStart;
+    u16 memberCount;
+    u8 targetMode;
     u32 mask;
     u16 mask2;
     u32 mask3;
     OverworldWildBehaviorProfile profile;
 } OverworldWildBehaviorOverrideProfile;
 
-typedef struct OverworldWildBehaviorOverrideRule {
-    OverworldWildBehaviorMatch match;
-    u8 profileIndex;
-} OverworldWildBehaviorOverrideRule;
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)
@@ -278,8 +273,8 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     u16 speciesClassRuleCount;
     const OverworldWildBehaviorOverrideProfile *overrideProfiles;
     u16 overrideProfileCount;
-    const OverworldWildBehaviorOverrideRule *overrideRules;
-    u16 overrideRuleCount;
+    const u16 *overrideMembers;
+    u16 overrideMemberCount;
 } OverworldWildBehaviorDataOverlayEntry;
 
 typedef struct OverworldWildBehaviorDataBlobHeader {
@@ -299,9 +294,9 @@ typedef struct OverworldWildBehaviorDataBlobHeader {
     u32 overrideProfilesOffset;
     u16 overrideProfileCount;
     u16 overrideProfileSize;
-    u32 overrideRulesOffset;
-    u16 overrideRuleCount;
-    u16 overrideRuleSize;
+    u32 overrideMembersOffset;
+    u16 overrideMemberCount;
+    u16 overrideMemberSize;
 } OverworldWildBehaviorDataBlobHeader;
 
 typedef struct OverworldWildEncounterLookupDataBlobHeader {

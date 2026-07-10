@@ -785,7 +785,7 @@ typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorClassRule classRules[OWBD_CLASS_RULE_COUNT];
     OverworldWildBehaviorSpeciesClassRule speciesClassRules[OWBD_SPECIES_CLASS_RULE_COUNT];
     OverworldWildBehaviorOverrideProfile overrideProfiles[OWBD_OVERRIDE_PROFILE_COUNT];
-    OverworldWildBehaviorOverrideRule overrideRules[OWBD_OVERRIDE_RULE_COUNT];
+    u16 overrideMembers[OWBD_OVERRIDE_MEMBER_COUNT];
 } OverworldWildBehaviorDataBlob;
 
 static void OverworldWildSpawns_CleanupResidentData(void)
@@ -2529,6 +2529,39 @@ static BOOL OverworldWildSpawns_BehaviorMatchApplies(
     return TRUE;
 }
 
+static BOOL OverworldWildSpawns_OverrideProfileTargetsContext(
+    const OverworldWildBehaviorDataBlob *behaviorData,
+    const OverworldWildBehaviorContext *context,
+    const OverworldWildBehaviorOverrideProfile *overrideProfile)
+{
+    u32 memberEnd;
+    int i;
+
+    if (behaviorData == NULL || context == NULL || overrideProfile == NULL
+        || overrideProfile->targetMode == OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED
+        || !OverworldWildSpawns_BehaviorMatchApplies(context, &overrideProfile->match)) {
+        return FALSE;
+    }
+    if (overrideProfile->targetMode == OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL) {
+        return TRUE;
+    }
+    if (overrideProfile->targetMode != OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS
+        || overrideProfile->memberCount == 0) {
+        return FALSE;
+    }
+
+    memberEnd = (u32)overrideProfile->memberStart + overrideProfile->memberCount;
+    if (memberEnd > OWBD_OVERRIDE_MEMBER_COUNT) {
+        return FALSE;
+    }
+    for (i = overrideProfile->memberStart; i < memberEnd; i++) {
+        if (behaviorData->overrideMembers[i] == context->species) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 #define OW_WILD_PROFILE_OFFSET(field) ((u8)(u32)&(((OverworldWildBehaviorProfile *)0)->field))
 
 static const u8 sOverworldWildBehaviorOverrideFieldOffsets[] = {
@@ -2687,7 +2720,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     OverworldWildBehaviorProfile profile = OverworldWildSpawns_GetFallbackBehaviorProfile();
     u8 behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     u8 behaviorLimitKey = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-    int i;
     int overrideProfileIndex;
 
     if (context != NULL) {
@@ -2711,24 +2743,14 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     profile = behaviorData->classProfiles[behaviorClass];
 
     if (context != NULL) {
-        /* A profile is one ordered layer with one or more targeting rules. */
+        /* Each ordered override profile owns one target and applies at most once. */
         for (overrideProfileIndex = 0;
              overrideProfileIndex < OWBD_OVERRIDE_PROFILE_COUNT;
              overrideProfileIndex++) {
-            BOOL profileMatches = FALSE;
-
-            for (i = 0; i < OWBD_OVERRIDE_RULE_COUNT; i++) {
-                if (behaviorData->overrideRules[i].profileIndex != overrideProfileIndex) {
-                    continue;
-                }
-                if (OverworldWildSpawns_BehaviorMatchApplies(
-                        context,
-                        &behaviorData->overrideRules[i].match)) {
-                    profileMatches = TRUE;
-                    break;
-                }
-            }
-            if (!profileMatches) {
+            if (!OverworldWildSpawns_OverrideProfileTargetsContext(
+                    behaviorData,
+                    context,
+                    &behaviorData->overrideProfiles[overrideProfileIndex])) {
                 continue;
             }
 

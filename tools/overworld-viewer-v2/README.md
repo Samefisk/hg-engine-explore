@@ -23,11 +23,13 @@ binding.
   and Sound decks plus a compact Utilities menu.
 - Keeps base profiles and override profiles visually distinct.
 - Keeps drag handles and keyboard move controls for override ordering.
-- Treats each override profile as one runtime layer. Its targeting rows are OR
-  conditions; the profile's field changes apply once when any row matches.
-- Adds structured profile targeting for individual Pokémon, evolution
-  families, types, and live encounter pools while keeping raw rule editing for
-  advanced cases. New override drafts start inert until a target is added.
+- Treats each override profile as one runtime layer with one explicit member
+  set and one optional shared condition. The profile is evaluated and applied
+  at most once for a Pokémon context.
+- Adds member-set shortcuts for individual Pokémon, evolution families, types,
+  and live encounter pools. These shortcuts materialize members in the same
+  profile; they never create per-Pokémon backend rules. New override drafts
+  start disabled until members or an all-Pokémon shared condition is selected.
 - Documents the resolver contract in the UI: evaluation is top to bottom and
   the last matching override applies last.
 - Adds an exact context resolver for Pokémon, terrain, level, and shiny state.
@@ -41,7 +43,7 @@ binding.
   across profiles, memberships, overrides, encounters, and spawn settings.
 - Adds a Route Deck roster, encounter-method filters, form-safe bulk species
   swaps, route-only layers, and live summaries derived from the current draft.
-- Blocks Save while match rules, slot values, forms, level ranges, or global
+- Blocks Save while shared profile conditions, slot values, forms, level ranges, or global
   spawn-distance relationships are invalid.
 - Holds the same cross-process workspace lock for the full ROM build, so a
   second V2 process cannot rewrite source files mid-build.

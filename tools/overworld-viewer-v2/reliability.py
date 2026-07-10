@@ -498,77 +498,49 @@ def resolve_context(
         }
     ]
     working_profile = legacy.clone_profile(base_profile)
-    grouped_overrides: dict[int, list[dict[str, Any]]] = {}
-    for override in variable_overrides:
-        profile_order = int(
-            override.get("profileOrder")
-            or ((legacy.numeric(override.get("profileIndex")) or 0) + 1)
-        )
-        grouped_overrides.setdefault(profile_order, []).append(override)
-
-    matched_rule_orders: list[int] = []
-    matched_profile_orders: list[int] = []
+    matched_override_orders: list[int] = []
     runtime_layers: list[dict[str, Any]] = [
         {"kind": "class", "label": f"Class profile #{behavior_class}", "changes": []}
     ]
-    for profile_order, rules in sorted(grouped_overrides.items()):
-        first_rule = rules[0]
-        first_rule_order = int(first_rule["order"])
-        name = next(
-            (override_names.get(int(rule["order"]), "") for rule in rules if override_names.get(int(rule["order"]), "")),
-            f"Override profile #{profile_order}",
-        )
-        targets = []
-        matching_rules = []
-        for rule in rules:
-            matches = legacy.match_applies(context, rule["match"], macros)
-            if matches:
-                matching_rules.append(rule)
-                matched_rule_orders.append(int(rule["order"]))
-            targets.append(
-                {
-                    "ruleOrder": int(rule["order"]),
-                    "summary": rule.get("summary", ""),
-                    "matched": matches,
-                    "match": rule["match"],
-                }
-            )
-        matched = bool(matching_rules)
+    for override in variable_overrides:
+        profile_order = int(override["order"])
+        name = override_names.get(profile_order, "") or f"Override profile #{profile_order}"
+        matched = legacy.behavior_override_applies(context, override, macros)
+        if matched:
+            matched_override_orders.append(profile_order)
         changes = (
-            legacy.merge_profile(working_profile, first_rule["behavior"])
+            legacy.merge_profile(working_profile, override["behavior"])
             if matched
             else []
         )
         if matched:
-            matched_profile_orders.append(profile_order)
             runtime_layers.append(
                 {
                     "kind": "behaviorOverride",
                     "label": name,
                     "changes": changes,
-                    "mask": legacy.behavior_override_mask_summary(first_rule["behavior"]),
+                    "mask": legacy.behavior_override_mask_summary(override["behavior"]),
                 }
             )
-        matching_summary = ", ".join(
-            rule.get("summary", "") for rule in matching_rules if rule.get("summary")
-        )
+        members = override.get("memberSymbols") or []
+        matched_member = symbol if matched and symbol in members else ""
         resolver_layers.append(
             {
-                "id": _stable_layer_id(name, first_rule, profile_order),
+                "id": _stable_layer_id(name, override, profile_order),
                 "kind": "override",
                 "order": profile_order,
                 "name": name,
                 "matched": matched,
                 "applied": matched,
                 "summary": (
-                    f"Matched {matching_summary} · {len(rules)} target rules"
-                    if matching_summary
-                    else f"{len(rules)} target rules"
+                    f"Matched member {species_entry['name']}"
+                    if matched_member
+                    else override.get("summary", "Shared context")
                 ),
-                "targetCount": len(rules),
-                "matchedTargetCount": len(matching_rules),
-                "targets": targets,
-                "fields": legacy.behavior_override_mask_summary(first_rule["behavior"])["labels"],
+                "memberCount": len(members),
+                "matchedMember": matched_member,
+                "match": override["match"],
+                "fields": legacy.behavior_override_mask_summary(override["behavior"])["labels"],
                 "changes": changes,
             }
         )
@@ -617,8 +589,8 @@ def resolve_context(
         "resolvedProfile": resolved_profile,
         "resolvedPrimitives": legacy.resolve_primitives(resolved_profile, primitive_maps, macros),
         "resolverLayers": resolver_layers,
-        "matchedOverrideOrders": matched_rule_orders,
-        "matchedOverrideProfileOrders": matched_profile_orders,
+        "matchedOverrideOrders": matched_override_orders,
+        "matchedOverrideProfileOrders": matched_override_orders,
         "normalizations": normalizations,
         "runtimeLayers": runtime_layers,
     }

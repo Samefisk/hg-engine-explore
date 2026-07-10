@@ -2164,6 +2164,89 @@ button {
   margin: -2px 9px 9px;
 }
 
+.pv2-target-mode {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(180px, 1fr);
+  align-items: end;
+  gap: 8px;
+  margin: 0 9px 9px;
+  padding: 8px 9px;
+  border-left: 3px solid var(--red);
+  background: #e4e1d9;
+}
+
+.pv2-target-mode label {
+  display: grid;
+  gap: 3px;
+  color: #4f5652;
+  font: 750 10px/1.2 var(--mono);
+}
+
+.pv2-target-mode select {
+  width: 100%;
+  min-width: 0;
+  min-height: 35px;
+  padding: 0 8px;
+  border: 1px solid #b4b1a9;
+  border-radius: 3px;
+  background: var(--paper-strong);
+  color: var(--ink);
+}
+
+.pv2-target-mode small {
+  padding-bottom: 3px;
+  color: #5d6460;
+  font: 700 9px/1.35 var(--mono);
+}
+
+.pv2-shared-conditions {
+  margin: 0 9px 9px;
+  border-top: 1px solid #bdbab2;
+  background: #f0ede5;
+}
+
+.pv2-shared-conditions > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  min-height: 41px;
+  padding: 7px 9px;
+}
+
+.pv2-shared-conditions > summary span {
+  display: grid;
+  gap: 2px;
+}
+
+.pv2-shared-conditions > summary strong {
+  font: 850 10px/1.2 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-shared-conditions > summary small,
+.pv2-shared-conditions > summary em {
+  color: #5d6460;
+  font: 700 9px/1.3 var(--mono);
+  font-style: normal;
+}
+
+.pv2-shared-conditions > .match-grid {
+  padding: 8px 9px;
+  border-top: 1px solid #cbc8bf;
+}
+
+.pv2-shared-conditions.is-invalid {
+  box-shadow: inset 3px 0 #c74f47;
+}
+
+.pv2-condition-error {
+  margin: 0;
+  padding: 0 9px 9px;
+  color: #8d2e29;
+  font: 800 10px/1.3 var(--mono);
+}
+
 .pv2-section-actions {
   padding: 7px 9px;
   border-bottom: 1px solid #d0cdc4;
@@ -3256,6 +3339,7 @@ td select {
 
 @media (max-width: 560px) {
   .pv2-target-controls,
+  .pv2-target-mode,
   .v2-bulk-editor,
   .v2-roster-strip {
     grid-template-columns: 1fr;
