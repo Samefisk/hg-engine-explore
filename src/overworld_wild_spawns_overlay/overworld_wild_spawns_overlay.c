@@ -16219,28 +16219,8 @@ static BOOL OverworldWildSpawns_TryApplySpawnDestination(
     }
 }
 
-static BOOL OverworldWildSpawns_IsSpawnHopStartTile(
-    FieldSystem *fieldSystem,
-    const OverworldWildBehaviorProfile *profile,
-    int x,
-    int y)
-{
-    if (fieldSystem == NULL || profile == NULL || x < 0 || y < 0) {
-        return FALSE;
-    }
-    if (OverworldWildSpawns_IsTileOccupiedByObject(fieldSystem, x, y)) {
-        return FALSE;
-    }
-    if (OverworldWildSpawns_IsCanopyHopperTreeTopProfile(profile)) {
-        return OverworldWildSpawns_IsHeadbuttTreeTopLocation(fieldSystem, x, y);
-    }
-
-    return OverworldWildSpawns_IsWalkableLandTile(fieldSystem, x, y);
-}
-
 static BOOL OverworldWildSpawns_PrepareSpawnHopStart(
     FieldSystem *fieldSystem,
-    const OverworldWildBehaviorProfile *profile,
     OverworldWildSpawnStartup *startup)
 {
     int targetX;
@@ -16253,7 +16233,6 @@ static BOOL OverworldWildSpawns_PrepareSpawnHopStart(
 
     if (fieldSystem == NULL
         || fieldSystem->playerAvatar == NULL
-        || profile == NULL
         || startup == NULL) {
         return FALSE;
     }
@@ -16277,11 +16256,9 @@ static BOOL OverworldWildSpawns_PrepareSpawnHopStart(
         * OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE;
     startY = targetY - OverworldWildSpawns_MovementDirectionDeltaY(direction)
         * OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE;
-    if (!OverworldWildSpawns_IsSpawnHopStartTile(
-            fieldSystem,
-            profile,
-            startX,
-            startY)) {
+    if (startX < 0
+        || startY < 0
+        || GetMetatileBehaviorAt(fieldSystem, startX, startY) == 0xFF) {
         return FALSE;
     }
 
@@ -16324,7 +16301,6 @@ static void OverworldWildSpawns_PrepareSpawnStartup(
     } else if (primitives.spawnLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN) {
         (void)OverworldWildSpawns_PrepareSpawnHopStart(
             fieldSystem,
-            profile,
             startup);
     } else if (primitives.spawnLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP) {
         startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP;
