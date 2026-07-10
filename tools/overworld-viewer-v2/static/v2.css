@@ -3907,65 +3907,55 @@ button {
 }
 
 .pv2-mode-tabs-workspace {
-  overflow: hidden;
-  border: 1px solid #c8c5bc;
-  border-radius: 4px;
-  background: #f8f6f0;
-  box-shadow: 0 1px 1px rgb(38 42 40 / 5%);
+  min-width: 0;
+  background: transparent;
 }
 
 .pv2-mode-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-  padding: 6px 6px 0;
-  border-bottom: 1px solid #bbb8af;
-  background: #dfdcd4;
+  gap: 10px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid #d1cec5;
+  background: transparent;
 }
 
 .pv2-mode-tab {
   display: grid;
-  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
   min-width: 0;
-  margin-bottom: -1px;
-  border: 1px solid #aaa79f;
-  border-bottom-color: #aaa8a1;
-  border-radius: 4px 4px 0 0;
-  background: #e8e5de;
+  background: transparent;
 }
 
 .pv2-mode-tab.is-active {
-  position: relative;
-  z-index: 1;
-  border-color: #918e87;
-  border-bottom-color: #f8f6f0;
-  background: #f8f6f0;
-  box-shadow: inset 0 3px var(--red);
+  background: transparent;
 }
 
 #profileInspector .pv2-mode-tab > button {
+  display: flex;
+  align-items: center;
   min-width: 0;
-  min-height: 46px;
-  padding: 8px 9px;
+  min-height: 24px;
+  padding: 0 2px 3px;
   border: 0;
-  border-right: 1px solid #cbc8c0;
-  border-radius: 3px 0 0 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: #4c534f;
-  font: 850 10px/1.1 var(--mono);
-  letter-spacing: .025em;
+  color: #6a706c;
+  font: 850 9px/1 var(--mono);
+  letter-spacing: .045em;
   text-align: left;
   text-transform: uppercase;
 }
 
 #profileInspector .pv2-mode-tab > button:hover {
-  background: #efede7;
-  color: #272d2a;
+  color: #292f2c;
 }
 
 .pv2-mode-tab.is-active > button {
   color: #292f2c;
+  border-bottom-color: var(--red);
 }
 
 #profileInspector .pv2-mode-tab > button:focus-visible {
@@ -3982,9 +3972,8 @@ button {
 .pv2-mode-tab-select .pv2-field {
   display: block;
   min-height: 0;
-  padding: 5px;
+  padding: 0;
   border: 0;
-  border-left: 0;
   border-radius: 0;
   background: transparent;
 }
@@ -3995,16 +3984,26 @@ button {
 
 .pv2-mode-tab-select .field-control {
   width: 100%;
-  min-height: 34px;
-  padding-inline: 8px 25px;
-  border-color: #bcb9b0;
-  background-color: #fffdf8;
-  font-size: 12px;
+  min-height: 42px;
+  padding-inline: 12px 31px;
+  border-color: #c3c0b7;
+  border-radius: 4px;
+  background-color: #fcfaf5;
+  box-shadow: inset 0 1px rgb(255 255 255 / 65%);
+  color: #292f2c;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pv2-mode-tab.is-active .field-control {
+  border-color: #9c9a92;
+  box-shadow: inset 0 1px rgb(255 255 255 / 65%), 0 1px 2px rgb(38 42 40 / 8%);
 }
 
 .pv2-mode-tabpanel {
   min-width: 0;
-  background: #f8f6f0;
+  padding-top: 8px;
+  background: transparent;
 }
 
 .pv2-mode-tabpanel[hidden] {
@@ -4422,21 +4421,12 @@ button {
 @container (max-width: 390px) {
   .pv2-mode-tabs {
     grid-template-columns: 1fr;
-    gap: 3px;
-    padding: 4px;
-  }
-
-  .pv2-mode-tab {
-    margin-bottom: 0;
-    border-radius: 3px;
-  }
-
-  .pv2-mode-tab.is-active {
-    border-bottom-color: #918e87;
+    gap: 8px;
+    padding: 0 0 9px;
   }
 
   #profileInspector .pv2-mode-tab > button {
-    min-height: 40px;
+    min-height: 22px;
   }
 
   .pv2-field {
