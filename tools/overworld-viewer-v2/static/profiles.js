@@ -90,6 +90,33 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
     ]),
   }),
+  "teleport-timing-chill": Object.freeze({
+    id: "teleport-timing-chill",
+    label: "Teleport timing",
+    meta: "frames",
+    fields: Object.freeze([
+      Object.freeze({ key: "teleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
+      Object.freeze({ key: "teleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+    ]),
+  }),
+  "teleport-timing-active": Object.freeze({
+    id: "teleport-timing-active",
+    label: "Teleport timing",
+    meta: "frames",
+    fields: Object.freeze([
+      Object.freeze({ key: "attentiveTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
+      Object.freeze({ key: "attentiveTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+    ]),
+  }),
+  "teleport-timing-tired": Object.freeze({
+    id: "teleport-timing-tired",
+    label: "Teleport timing",
+    meta: "frames",
+    fields: Object.freeze([
+      Object.freeze({ key: "tiredTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
+      Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+    ]),
+  }),
 });
 
 const FIELD_SECTIONS = Object.freeze([
@@ -226,7 +253,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopOptions: Object.freeze(["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"]),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
-    teleport: ["teleportTime", "teleportPause"],
+    teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
     ram: ["ramAccelerationSteps", "ramMaxSpeed"],
   }),
   active: Object.freeze({
@@ -234,7 +261,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopOptions: Object.freeze(["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"]),
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "attentiveHopPause", "attentiveHopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
-    teleport: ["attentiveTeleportTime", "attentiveTeleportPause"],
+    teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
     ram: ["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"],
   }),
   tired: Object.freeze({
@@ -242,7 +269,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     hopOptions: Object.freeze(["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"]),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "tiredHopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
-    teleport: ["tiredTeleportTime", "tiredTeleportPause"],
+    teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
     ram: ["tiredRamAccelerationSteps", "tiredRamMaxSpeed"],
   }),
 });
@@ -1257,7 +1284,7 @@ export function createProfilesController({
     } else {
       append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram), { composite: "movement-chain" });
     }
-    append(fields.teleport, inherited || raw === LOCOMOTION.teleport);
+    append(fields.teleportTiming.fields, inherited || raw === LOCOMOTION.teleport, { composite: fields.teleportTiming.composite });
     if (!inheritedChillRam && !inheritedChillAmbiguous) append(fields.ram, inherited || raw === LOCOMOTION.ram);
     const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
     return {
@@ -1588,7 +1615,7 @@ export function createProfilesController({
     return `
       <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">${escapeHtml(compositeNode.composite.meta || "")}</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
-        <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}">
+        <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
           ${controls.map((control) => `
             <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
               <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
@@ -1609,12 +1636,16 @@ export function createProfilesController({
     const siblings = (nodes || []).filter(Boolean);
     const byField = new Map(siblings.map((node) => [node.field, node]));
     const consumed = new Set();
+    const standaloneNode = (node) => {
+      const { composite: _composite, ...standalone } = node;
+      return standalone;
+    };
     return siblings.flatMap((node) => {
       if (consumed.has(node.field) || !node.composite) return consumed.has(node.field) ? [] : [node];
       const composite = PROFILE_FIELD_COMPOSITES[node.composite];
-      if (!composite) return [node];
+      if (!composite) return [standaloneNode(node)];
       const compositeNodes = composite.fields.map((field) => byField.get(field.key));
-      if (compositeNodes.some((candidate) => !candidate || candidate.composite !== composite.id)) return [node];
+      if (compositeNodes.some((candidate) => !candidate || candidate.composite !== composite.id)) return [standaloneNode(node)];
       if (node.field !== composite.fields[0].key) return [];
       composite.fields.slice(1).forEach((field) => consumed.add(field.key));
       return [{ composite, nodes: compositeNodes }];
@@ -1711,7 +1742,7 @@ export function createProfilesController({
 
   function renderHierarchyNode(profile, node, sectionId, path, depth = 0, parentInactive = false) {
     if (!node) return "";
-    if (node.composite) {
+    if (node.composite && Array.isArray(node.nodes)) {
       const editableNodes = node.nodes.filter((candidate) => profileCanEditField(profile, candidate.field));
       if (editableNodes.length !== node.nodes.length) {
         return editableNodes
