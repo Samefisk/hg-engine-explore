@@ -756,12 +756,14 @@ export function createProfilesController({
     return Boolean(ui.search.trim() || ui.kind !== "all");
   }
 
-  function profilePreviewSpecies(profile, override = false) {
+  function profilePreviewSpecies(profile, override = false, limit = 20) {
     let candidates;
     if (override) {
       const target = targetFor(profile);
-      if (target.targetMode === "all") {
-        candidates = speciesEntries();
+      if (target.targetMode === "disabled") {
+        candidates = [];
+      } else if (target.targetMode === "all") {
+        candidates = potentialAssignmentsFor(profile).map((assignment) => assignment.species).filter(Boolean);
       } else {
         const bySymbol = new Map(speciesEntries().map((species) => [species.symbol, species]));
         candidates = target.members.map((symbol) => bySymbol.get(symbol)).filter(Boolean);
@@ -771,7 +773,7 @@ export function createProfilesController({
     }
     return [...new Map(candidates.map((species) => [species.symbol, species])).values()]
       .filter((species) => species.iconUrl)
-      .slice(0, override ? 2 : 3);
+      .slice(0, limit);
   }
 
   function renderProfileRow(profile, index, total, override = false) {
@@ -793,18 +795,20 @@ export function createProfilesController({
       : "";
     const previewSpecies = profilePreviewSpecies(profile, override);
     const previewIcons = previewSpecies.length ? `
-      <span class="pv2-profile-icons" aria-label="Pokémon preview: ${escapeHtml(previewSpecies.map((species) => species.name).join(", "))}">
-        ${previewSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" loading="lazy">`).join("")}
+      <span class="pv2-profile-icons" aria-hidden="true">
+        ${previewSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" width="16" height="16" loading="lazy" decoding="async" draggable="false">`).join("")}
       </span>` : "";
     return `
       <li class="profile-row pv2-profile-row${selected ? " is-active is-selected" : ""}${removed ? " is-removed" : ""}${changed ? " is-changed" : ""}${override ? " override-profile" : ""}" data-profile-row data-profile-key="${escapeHtml(key)}">
         ${orderControls}
-        ${override ? `<span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>` : ""}
         <button class="profile-select pv2-profile-select" type="button" data-action="select-profile" data-profile-key="${escapeHtml(key)}" aria-current="${selected ? "true" : "false"}">
-          <span class="pv2-profile-copy">
-            <span class="profile-kind pv2-profile-kind">${override ? (profile.draftId ? "New override" : `Override ${index + 1}`) : (String(profile.index) === String(data.defaultClassIndex) ? "Default base" : "Base profile")}</span>
-            <strong>${escapeHtml(nameFor(profile))}</strong>
-            <small>${escapeHtml(profile.symbol || "Unsaved layer")} · ${escapeHtml(membershipLabel)}</small>
+          <span class="pv2-profile-heading">
+            ${override ? `<span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>` : ""}
+            <span class="pv2-profile-copy">
+              <span class="profile-kind pv2-profile-kind">${override ? (profile.draftId ? "New override" : `Override ${index + 1}`) : (String(profile.index) === String(data.defaultClassIndex) ? "Default base" : "Base profile")}</span>
+              <strong>${escapeHtml(nameFor(profile))}</strong>
+              <small>${escapeHtml(profile.symbol || "Unsaved layer")} · ${escapeHtml(membershipLabel)}</small>
+            </span>
           </span>
           ${previewIcons}
         </button>
@@ -1116,6 +1120,11 @@ export function createProfilesController({
     const key = profileKey(profile);
     const override = isOverrideProfile(profile);
     const removed = drafts.removedOverrides.has(key);
+    const headerSpecies = profilePreviewSpecies(profile, override, 20);
+    const headerIcons = headerSpecies.length ? `
+      <span class="pv2-editor-icons" aria-hidden="true">
+        ${headerSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" width="20" height="20" decoding="async" draggable="false">`).join("")}
+      </span>` : "";
     const actions = `
       ${!override && String(profile.index) !== String(data.defaultClassIndex) ? `<button type="button" data-action="convert-base-to-override" data-profile-key="${escapeHtml(key)}">Make override</button>` : ""}
       <button type="button" data-action="rename-profile" data-profile-key="${escapeHtml(key)}" ${profile.canRename === false ? "disabled" : ""}>Rename</button>
@@ -1123,7 +1132,10 @@ export function createProfilesController({
       <button class="is-danger" type="button" data-action="delete-profile" data-profile-key="${escapeHtml(key)}" ${!override && profile.canDelete === false ? "disabled" : ""}>${removed ? "Undo removal" : "Delete"}</button>`;
     editorElement.innerHTML = `
       <header class="inspector-header v2-inspector-header pv2-editor-head">
-        <div><p class="eyebrow">${override ? "Ordered override" : "Base profile"}</p><h2>${escapeHtml(nameFor(profile))}</h2><p>${escapeHtml(profile.symbol || "New unsaved override")}</p></div>
+        <div class="pv2-editor-identity">
+          <div class="pv2-editor-title-copy"><p class="eyebrow">${override ? "Ordered override" : "Base profile"}</p><h2>${escapeHtml(nameFor(profile))}</h2><p>${escapeHtml(profile.symbol || "New unsaved override")}</p></div>
+          ${headerIcons}
+        </div>
         <div class="inspector-actions pv2-editor-actions">${actions}</div>
       </header>
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}

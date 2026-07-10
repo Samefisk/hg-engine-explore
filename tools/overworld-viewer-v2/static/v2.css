@@ -2690,7 +2690,7 @@ button {
 }
 
 .override-deck > .override-profile {
-  grid-template-columns: 44px 42px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
 }
 
 .override-profile > .profile-row-drag-handle {
@@ -2699,18 +2699,14 @@ button {
   font: 850 15px/1 var(--mono);
 }
 
-.override-profile > .profile-index {
-  align-self: center;
-  justify-self: center;
-}
-
 .profile-select {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
   justify-items: stretch;
   align-items: center;
   align-content: center;
-  column-gap: 6px;
+  gap: 4px;
   min-width: 0;
   border: 0 !important;
   border-radius: 0 !important;
@@ -2733,27 +2729,83 @@ button {
   min-width: 0;
 }
 
+.pv2-profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pv2-profile-heading > .profile-index {
+  flex: 0 0 auto;
+}
+
 .pv2-profile-icons {
   display: flex;
   align-items: center;
-  justify-self: end;
-  min-width: 30px;
-  padding-left: 4px;
+  flex-wrap: wrap;
+  justify-self: start;
+  width: 100%;
+  min-width: 16px;
 }
 
 .pv2-profile-icons img {
-  width: 30px;
-  height: 30px;
-  margin-left: -10px;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-left: -5px;
   border: 1px solid #bbb8af;
   border-radius: 50%;
   background: #ebe7de;
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(1px 1px 0 rgb(48 52 50 / 16%));
+  pointer-events: none;
 }
 
 .pv2-profile-icons img:first-child {
+  margin-left: 0;
+}
+
+.pv2-editor-identity {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv2-editor-title-copy {
+  min-width: 0;
+}
+
+.pv2-editor-title-copy h2,
+.pv2-editor-title-copy > p:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv2-editor-icons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding-left: 1px;
+}
+
+.pv2-editor-icons img {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-left: -2px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(1px 1px 0 rgb(48 52 50 / 20%));
+  pointer-events: none;
+}
+
+.pv2-editor-icons img:first-child {
   margin-left: 0;
 }
 
