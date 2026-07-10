@@ -95,6 +95,9 @@ void LONG_CALL UnloadOverlayByID(u32 ovyId) {
     BOOL cleanupMode = FALSE;
     PMiLoadedOverlay *table;
 
+    /* Settle wild-object presentation while the field renderer is still live. */
+    UnloadColdOverworldWildOverlaysFor(ovyId);
+
 unloadSecond:
     table = GetLoadedOverlaysInRegion(GetOverlayLoadDestination(ovyId));
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
@@ -166,9 +169,7 @@ loadExtension:
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
         debug_printf("Overlay %d has priority over field overlays--unloading them...\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-        ResetMapTeleportOverlayState();
         UnloadOverlayByID(OVERLAY_FIELD_EXTENSION);
-        UnloadOverworldWildOverlays();
     }
 
     if (!CanOverlayBeLoaded(ovyId)) {

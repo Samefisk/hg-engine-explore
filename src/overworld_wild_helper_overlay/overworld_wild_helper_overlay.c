@@ -2,9 +2,13 @@
 #include "../../include/config.h"
 #include "../../include/constants/file.h"
 #include "../../include/constants/species.h"
+#include "../../include/map_events_internal.h"
 #include "../../include/overworld_wild_spawns.h"
+#include "../../include/overworld_wild_movement.h"
 #include "../../include/pokemon.h"
 #include "../../include/rtc.h"
+#include "../../include/script.h"
+#include "../../include/sprite.h"
 
 #define OW_WILD_HELPER_GRASS_SLOTS 12
 #define OW_WILD_HELPER_SURF_SLOTS 5
@@ -25,6 +29,20 @@
 #define OW_WILD_HELPER_SPAWN_POSITION_STRIDE 73
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
+#define OW_WILD_HELPER_THROW_CARRIED_Y_OFFSET_FX32 (0x10000 / 2)
+#define OW_WILD_DESPAWN_TELEMETRY_MAGIC 0x4F574450
+#define OW_WILD_DESPAWN_CONTEXT_CURRENT (1 << 0)
+#define OW_WILD_DESPAWN_CONTEXT_TASK_BUSY (1 << 1)
+#define OW_WILD_DESPAWN_CONTEXT_POINTER_IN_ARRAY (1 << 2)
+#define OW_WILD_DESPAWN_CONTEXT_OBJECT_ACTIVE (1 << 3)
+#define OW_WILD_DESPAWN_CONTEXT_EXACT_ID (1 << 4)
+#define OW_WILD_DESPAWN_CONTEXT_EXACT_SCRIPT (1 << 5)
+#define OW_WILD_BATTLE_RESULT_WIN 0x1
+#define OW_WILD_BATTLE_RESULT_CAUGHT 0x4
+#define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
+#define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
+#define OW_WILD_HELPER_PAL_PARAM_SHINY 1
+#define OW_WILD_HELPER_PAL_PARAM_ENABLE 2
 #define OW_WILD_HELPER_NELEMS(array) (sizeof(array) / sizeof((array)[0]))
 #define OverworldWildHelper_LoadHeadbuttDataByMapId(callbacks, context, mapId, offset, dest, size) \
     OverworldWildHelper_LoadArchiveData(callbacks, context, ARC_HEADBUTT_TREES, mapId, offset, dest, size)
@@ -1440,6 +1458,721 @@ static BOOL OverworldWildHelper_PlanBehaviorHopStep(
         result);
 }
 
+static BOOL OverworldWildHelper_IsContextCurrent(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state)
+{
+    MapObjectMan *manager;
+
+    if (fieldSystem == NULL
+        || state == NULL
+        || fieldSystem->location == NULL
+        || fieldSystem->mapObjectMan == NULL) {
+        return FALSE;
+    }
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    return state->mapId == fieldSystem->location->mapId
+        && state->mapObjectMan == manager
+        && state->mapObjects == manager->objects;
+}
+
+static BOOL OverworldWildHelper_IsExactObject(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot)
+{
+    MapObjectMan *manager;
+    LocalMapObject *object;
+    BOOL pointerFound = FALSE;
+    int i;
+
+    if (slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || !OverworldWildHelper_IsContextCurrent(fieldSystem, state)
+        || !state->spawns[slot].active
+        || state->spawns[slot].mapId != fieldSystem->location->mapId
+        || state->spawns[slot].objectId != OW_WILD_OBJECT_ID_START + slot) {
+        return FALSE;
+    }
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    object = state->spawns[slot].object;
+    for (i = 0; object != NULL && i < (int)manager->object_count; i++) {
+        if (object == &manager->objects[i]) {
+            pointerFound = TRUE;
+            break;
+        }
+    }
+    return pointerFound
+        && (object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+        && object->id == state->spawns[slot].objectId
+        && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
+}
+
+static BOOL OverworldWildHelper_IsPresentationContextCurrent(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state)
+{
+    return fieldSystem == gFieldSysPtr
+        && OverworldWildHelper_IsContextCurrent(fieldSystem, state);
+}
+
+static void OverworldWildHelper_NormalizeThrowPresentation(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot)
+{
+    LocalMapObject *object;
+    int x;
+    int y;
+
+    if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
+        || !OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
+        return;
+    }
+
+    object = state->spawns[slot].object;
+    x = MapObject_GetCurrentX(object);
+    y = MapObject_GetCurrentY(object);
+    MapObject_SetCurrentX(object, (u32)x);
+    MapObject_SetCurrentY(object, (u32)y);
+    object->xInit = x;
+    object->yInit = y;
+    object->xPrev = x;
+    object->yPrev = y;
+    object->posVec[0] = (u32)((s32)x * 0x10000 + 0x8000);
+    object->posVec[2] = (u32)((s32)y * 0x10000 + 0x8000);
+    (void)MapObject_RefreshHeightFromTerrain(object);
+    object->faceVec[0] = 0;
+    object->faceVec[1] = 0;
+    object->faceVec[2] = 0;
+    object->unk88[1] = 0;
+    object->unk94[1] = 0;
+    MapObject_ClearBits(
+        object,
+        BIT_VANISH | MAPOBJECTFLAG_UNK18);
+}
+
+static void OverworldWildHelper_SyncCarriedThrowTarget(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    int carrierSlot,
+    int targetSlot)
+{
+    LocalMapObject *carrierObject;
+    LocalMapObject *targetObject;
+
+    if (presentation == NULL
+        || !OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
+        || !OverworldWildHelper_IsExactObject(fieldSystem, state, carrierSlot)
+        || !OverworldWildHelper_IsExactObject(fieldSystem, state, targetSlot)) {
+        return;
+    }
+
+    carrierObject = state->spawns[carrierSlot].object;
+    targetObject = state->spawns[targetSlot].object;
+    targetObject->xCurr = carrierObject->xCurr;
+    targetObject->yCurr = carrierObject->yCurr;
+    targetObject->hCurr = carrierObject->hCurr;
+    targetObject->xPrev = carrierObject->xPrev;
+    targetObject->yPrev = carrierObject->yPrev;
+    targetObject->hPrev = carrierObject->hPrev;
+    targetObject->posVec[0] = carrierObject->posVec[0];
+    targetObject->posVec[1] = carrierObject->posVec[1];
+    targetObject->posVec[2] = carrierObject->posVec[2];
+    targetObject->faceVec[0] = carrierObject->faceVec[0];
+    targetObject->faceVec[1] =
+        carrierObject->faceVec[1] + OW_WILD_HELPER_THROW_CARRIED_Y_OFFSET_FX32;
+    targetObject->faceVec[2] = carrierObject->faceVec[2];
+    targetObject->unk88[0] = carrierObject->unk88[0];
+    targetObject->unk88[1] =
+        carrierObject->unk88[1] + OW_WILD_HELPER_THROW_CARRIED_Y_OFFSET_FX32;
+    targetObject->unk88[2] = carrierObject->unk88[2];
+    targetObject->unk94[0] = carrierObject->unk94[0];
+    targetObject->unk94[1] = carrierObject->unk94[1];
+    targetObject->unk94[2] = carrierObject->unk94[2];
+    MapObject_SetBits(targetObject, MAPOBJECTFLAG_UNK18);
+    MapObject_ClearBits(targetObject, BIT_VANISH);
+    presentation->lastKnownX[carrierSlot] = (s16)MapObject_GetCurrentX(carrierObject);
+    presentation->lastKnownY[carrierSlot] = (s16)MapObject_GetCurrentY(carrierObject);
+    presentation->lastKnownX[targetSlot] = presentation->lastKnownX[carrierSlot];
+    presentation->lastKnownY[targetSlot] = presentation->lastKnownY[carrierSlot];
+}
+
+static BOOL OverworldWildHelper_ConfirmDistanceDespawn(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    int slot,
+    BOOL movementProtected,
+    u8 *distance)
+{
+    LocalMapObject *object;
+    int dx;
+    int dy;
+    int measured;
+
+    if (state == NULL
+        || fieldSystem == NULL
+        || presentation == NULL
+        || slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || state->spawns[slot].shiny
+        || movementProtected
+        || fieldSystem->playerAvatar == NULL
+        || !OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
+        if (state != NULL
+            && presentation != NULL
+            && slot >= 0
+            && slot < OW_WILD_MAX_SPAWNS) {
+            presentation->farSamples[slot] = 0;
+        }
+        return FALSE;
+    }
+    object = state->spawns[slot].object;
+    presentation->lastKnownX[slot] = (s16)MapObject_GetCurrentX(object);
+    presentation->lastKnownY[slot] = (s16)MapObject_GetCurrentY(object);
+    dx = presentation->lastKnownX[slot] - GetPlayerXCoord(fieldSystem->playerAvatar);
+    dy = presentation->lastKnownY[slot] - GetPlayerYCoord(fieldSystem->playerAvatar);
+    dx = dx < 0 ? -dx : dx;
+    dy = dy < 0 ? -dy : dy;
+    measured = dx > dy ? dx : dy;
+    if (distance != NULL) {
+        *distance = measured > 255 ? 255 : (u8)measured;
+    }
+    if (measured <= OW_WILD_DISTANCE_DESPAWN_TILES) {
+        presentation->farSamples[slot] = 0;
+        return FALSE;
+    }
+    if (presentation->farSamples[slot] < OW_WILD_DISTANCE_DESPAWN_SAMPLES) {
+        presentation->farSamples[slot]++;
+    }
+    return presentation->farSamples[slot] >= OW_WILD_DISTANCE_DESPAWN_SAMPLES;
+}
+
+static OverworldWildDespawnAuthorization OverworldWildHelper_AuthorizeDespawn(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    int slot,
+    u16 expectedGeneration,
+    OverworldWildDespawnReason reason,
+    LocalMapObject **verifiedObject)
+{
+    MapObjectMan *manager;
+    LocalMapObject *candidate = NULL;
+    BOOL terminalBattle = reason == OW_WILD_DESPAWN_REASON_BATTLE_DEFEATED
+        || reason == OW_WILD_DESPAWN_REASON_BATTLE_CAUGHT;
+    int candidateCount = 0;
+    int i;
+
+    if (verifiedObject != NULL) {
+        *verifiedObject = NULL;
+    }
+    if (state == NULL
+        || slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || presentation == NULL
+        || !state->spawns[slot].active
+        || expectedGeneration == 0
+        || state->spawns[slot].encounterGeneration != expectedGeneration
+        || reason <= OW_WILD_DESPAWN_REASON_NONE
+        || reason > OW_WILD_DESPAWN_REASON_DISTANCE
+        || (reason == OW_WILD_DESPAWN_REASON_DISTANCE
+            && presentation->farSamples[slot] < OW_WILD_DISTANCE_DESPAWN_SAMPLES)) {
+        return OW_WILD_DESPAWN_DENIED;
+    }
+    if (OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
+        if (verifiedObject != NULL) {
+            *verifiedObject = state->spawns[slot].object;
+        }
+        return OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT;
+    }
+    if (!terminalBattle) {
+        /* Distance removal never clears without the exact active presentation. */
+        return OW_WILD_DESPAWN_DENIED;
+    }
+    if (!OverworldWildHelper_IsContextCurrent(fieldSystem, state)) {
+        return OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY;
+    }
+    if (state->spawns[slot].mapId != fieldSystem->location->mapId) {
+        return OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY;
+    }
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    for (i = 0; i < (int)manager->object_count; i++) {
+        LocalMapObject *object = &manager->objects[i];
+
+        if (object->id == OW_WILD_OBJECT_ID_START + slot
+            && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
+            candidate = object;
+            candidateCount++;
+        }
+    }
+    if (candidateCount > 1) {
+        return OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY;
+    }
+    if (candidateCount == 1) {
+        if ((candidate->flags & MAPOBJECTFLAG_ACTIVE) != 0) {
+            state->spawns[slot].object = candidate;
+        }
+        if (verifiedObject != NULL) {
+            *verifiedObject = candidate;
+        }
+        return OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT;
+    }
+    return OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY;
+}
+
+static void OverworldWildHelper_RecordDespawnEvent(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    int slot,
+    OverworldWildDespawnReason reason,
+    OverworldWildDespawnAction action,
+    u8 distance)
+{
+    OverworldWildDespawnRecord *record;
+    OverworldWildSpawn *spawn;
+    LocalMapObject *object;
+    BOOL exactObject;
+    u8 flags = 0;
+
+    if (state == NULL
+        || presentation == NULL
+        || telemetry == NULL
+        || slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS) {
+        return;
+    }
+    if (telemetry->magic != OW_WILD_DESPAWN_TELEMETRY_MAGIC) {
+        telemetry->magic = OW_WILD_DESPAWN_TELEMETRY_MAGIC;
+        telemetry->sequence = 0;
+        telemetry->writeIndex = 0;
+        telemetry->unexpectedCount = 0;
+    }
+    spawn = &state->spawns[slot];
+    object = spawn->object;
+    exactObject = OverworldWildHelper_IsExactObject(fieldSystem, state, slot);
+    if (OverworldWildHelper_IsContextCurrent(fieldSystem, state)) {
+        flags |= OW_WILD_DESPAWN_CONTEXT_CURRENT;
+    }
+    if (fieldSystem != NULL && fieldSystem->taskman != NULL) {
+        flags |= OW_WILD_DESPAWN_CONTEXT_TASK_BUSY;
+    }
+    if (exactObject) {
+        flags |= OW_WILD_DESPAWN_CONTEXT_POINTER_IN_ARRAY
+            | OW_WILD_DESPAWN_CONTEXT_OBJECT_ACTIVE
+            | OW_WILD_DESPAWN_CONTEXT_EXACT_ID
+            | OW_WILD_DESPAWN_CONTEXT_EXACT_SCRIPT;
+    }
+    record = &telemetry->records[telemetry->writeIndex];
+    record->sequence = ++telemetry->sequence;
+    record->objectPtr = (u32)object;
+    record->objectFlags = exactObject ? object->flags : 0;
+    record->personality = spawn->personality;
+    record->mapId = fieldSystem != NULL && fieldSystem->location != NULL
+        ? (u16)fieldSystem->location->mapId
+        : MAP_NOTHING;
+    record->spawnMapId = spawn->mapId;
+    record->mapGeneration = state->mapGeneration;
+    record->encounterGeneration = spawn->encounterGeneration;
+    record->objectX = exactObject
+        ? (s16)MapObject_GetCurrentX(object)
+        : presentation->lastKnownX[slot];
+    record->objectY = exactObject
+        ? (s16)MapObject_GetCurrentY(object)
+        : presentation->lastKnownY[slot];
+    record->playerX = fieldSystem != NULL && fieldSystem->playerAvatar != NULL
+        ? (s16)GetPlayerXCoord(fieldSystem->playerAvatar)
+        : 0;
+    record->playerY = fieldSystem != NULL && fieldSystem->playerAvatar != NULL
+        ? (s16)GetPlayerYCoord(fieldSystem->playerAvatar)
+        : 0;
+    record->objectId = exactObject ? (s16)object->id : -1;
+    record->reason = (u8)reason;
+    record->action = (u8)action;
+    record->slot = (u8)slot;
+    record->distance = distance;
+    record->contextFlags = flags;
+    record->expectedObjectId = spawn->objectId;
+    if (reason < 4) {
+        telemetry->reasonCounts[reason]++;
+    }
+    if (action == OW_WILD_DESPAWN_ACTION_DELETE_SUPPRESSED
+        || action == OW_WILD_DESPAWN_ACTION_IDENTITY_CONFLICT) {
+        telemetry->unexpectedCount++;
+    }
+    telemetry->writeIndex = (telemetry->writeIndex + 1)
+        % OW_WILD_DESPAWN_RECORD_COUNT;
+}
+
+static u8 OverworldWildHelper_ClassifyBattleResult(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    u16 battleResult)
+{
+    int slot;
+
+    if (state == NULL) {
+        return OW_WILD_BATTLE_DISPOSITION_RETAIN;
+    }
+    slot = state->pendingSlot;
+    if (slot < 0
+        || slot >= OW_WILD_MAX_SPAWNS
+        || !state->spawns[slot].active
+        || state->pendingPersonality != state->spawns[slot].personality
+        || state->pendingMapGeneration == 0
+        || state->pendingMapGeneration != state->mapGeneration
+        || state->pendingEncounterGeneration == 0
+        || state->pendingEncounterGeneration != state->spawns[slot].encounterGeneration
+        || state->spawns[slot].objectId != OW_WILD_OBJECT_ID_START + slot) {
+        return OW_WILD_BATTLE_DISPOSITION_RETAIN;
+    }
+    (void)fieldSystem;
+    switch (battleResult) {
+    case OW_WILD_BATTLE_RESULT_WIN:
+        return OW_WILD_BATTLE_DISPOSITION_DEFEATED;
+    case OW_WILD_BATTLE_RESULT_CAUGHT:
+        return OW_WILD_BATTLE_DISPOSITION_CAUGHT;
+    case OW_WILD_BATTLE_RESULT_PLAYER_FLED:
+        return OW_WILD_BATTLE_DISPOSITION_FLED;
+    default:
+        return (battleResult & OW_WILD_BATTLE_RESULT_TRY_FLEE) != 0
+            ? OW_WILD_BATTLE_DISPOSITION_FLED
+            : OW_WILD_BATTLE_DISPOSITION_RETAIN;
+    }
+}
+
+static BOOL OverworldWildHelper_ReconcilePresentations(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    OverworldWildHelperRecreatePresentationFunc recreatePresentation)
+{
+    MapObjectMan *manager;
+    int i;
+
+    if (fieldSystem == NULL
+        || state == NULL
+        || presentation == NULL
+        || recreatePresentation == NULL
+        || !OverworldWildHelper_IsContextCurrent(fieldSystem, state)
+        || fieldSystem->taskman != NULL) {
+        return FALSE;
+    }
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        LocalMapObject *candidate = NULL;
+        u16 slotMask = (u16)(1u << i);
+        int candidateCount = 0;
+        int j;
+
+        if (!state->spawns[i].active) {
+            presentation->managerRestoreMask &= (u16)~slotMask;
+            continue;
+        }
+        if (OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
+            presentation->lastKnownX[i] = (s16)MapObject_GetCurrentX(state->spawns[i].object);
+            presentation->lastKnownY[i] = (s16)MapObject_GetCurrentY(state->spawns[i].object);
+            presentation->managerRestoreMask &= (u16)~slotMask;
+            continue;
+        }
+        state->spawns[i].object = NULL;
+        for (j = 0; j < (int)manager->object_count; j++) {
+            LocalMapObject *object = &manager->objects[j];
+
+            if ((object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+                && object->id == OW_WILD_OBJECT_ID_START + i
+                && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
+                candidate = object;
+                candidateCount++;
+            }
+        }
+        if (candidateCount > 1) {
+            OverworldWildHelper_RecordDespawnEvent(
+                fieldSystem,
+                state,
+                presentation,
+                telemetry,
+                i,
+                OW_WILD_DESPAWN_REASON_NONE,
+                OW_WILD_DESPAWN_ACTION_IDENTITY_CONFLICT,
+                0);
+            return FALSE;
+        }
+        if (candidateCount == 1) {
+            state->spawns[i].object = candidate;
+            state->spawns[i].objectId = OW_WILD_OBJECT_ID_START + i;
+            if (recreatePresentation(
+                    state,
+                    fieldSystem,
+                    i,
+                    candidate,
+                    MapObject_GetCurrentX(candidate),
+                    MapObject_GetCurrentY(candidate)) == NULL
+                || !OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
+                state->spawns[i].object = NULL;
+                return FALSE;
+            }
+            presentation->lastKnownX[i] = (s16)MapObject_GetCurrentX(candidate);
+            presentation->lastKnownY[i] = (s16)MapObject_GetCurrentY(candidate);
+            if ((presentation->managerRestoreMask & slotMask) != 0) {
+                presentation->farSamples[i] = 0;
+            }
+            presentation->managerRestoreMask &= (u16)~slotMask;
+            OverworldWildHelper_RecordDespawnEvent(
+                fieldSystem,
+                state,
+                presentation,
+                telemetry,
+                i,
+                OW_WILD_DESPAWN_REASON_NONE,
+                OW_WILD_DESPAWN_ACTION_REBIND_OBJECT,
+                0);
+            continue;
+        }
+        if ((presentation->managerRestoreMask & slotMask) == 0) {
+            /* A missing record in an unchanged manager is an invariant failure. */
+            OverworldWildHelper_RecordDespawnEvent(
+                fieldSystem,
+                state,
+                presentation,
+                telemetry,
+                i,
+                OW_WILD_DESPAWN_REASON_NONE,
+                OW_WILD_DESPAWN_ACTION_DELETE_SUPPRESSED,
+                0);
+            return FALSE;
+        }
+        OverworldWildHelper_RecordDespawnEvent(
+            fieldSystem,
+            state,
+            presentation,
+            telemetry,
+            i,
+            OW_WILD_DESPAWN_REASON_NONE,
+            OW_WILD_DESPAWN_ACTION_PRESENTATION_MISSING,
+            0);
+        if (GetMetatileBehaviorAt(
+                fieldSystem,
+                presentation->lastKnownX[i],
+                presentation->lastKnownY[i]) == 0xFF
+            || recreatePresentation(
+                state,
+                fieldSystem,
+                i,
+                NULL,
+                presentation->lastKnownX[i],
+                presentation->lastKnownY[i]) == NULL
+            || !OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
+            return FALSE;
+        }
+        presentation->managerRestoreMask &= (u16)~slotMask;
+        presentation->farSamples[i] = 0;
+        OverworldWildHelper_RecordDespawnEvent(
+            fieldSystem,
+            state,
+            presentation,
+            telemetry,
+            i,
+            OW_WILD_DESPAWN_REASON_NONE,
+            OW_WILD_DESPAWN_ACTION_RECREATE_OBJECT,
+            0);
+    }
+    return TRUE;
+}
+
+static BOOL OverworldWildHelper_RemoveEncounter(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    int slot,
+    u16 expectedGeneration,
+    OverworldWildDespawnReason reason,
+    u8 distance,
+    OverworldWildHelperResetSlotFunc resetSlot)
+{
+    LocalMapObject *verifiedObject = NULL;
+    OverworldWildDespawnAuthorization authorization =
+        OverworldWildHelper_AuthorizeDespawn(
+            fieldSystem,
+            state,
+            presentation,
+            slot,
+            expectedGeneration,
+            reason,
+            &verifiedObject);
+
+    OverworldWildHelper_RecordDespawnEvent(
+        fieldSystem,
+        state,
+        presentation,
+        telemetry,
+        slot,
+        reason,
+        authorization == OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT
+            ? OW_WILD_DESPAWN_ACTION_DELETE_OBJECT
+            : authorization == OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY
+                ? OW_WILD_DESPAWN_ACTION_CLEAR_LOGICAL_ONLY
+                : OW_WILD_DESPAWN_ACTION_DELETE_SUPPRESSED,
+        distance);
+    if (authorization == OW_WILD_DESPAWN_DENIED || resetSlot == NULL) {
+        return FALSE;
+    }
+    resetSlot(state, slot, TRUE);
+    if (verifiedObject != NULL) {
+        DeleteMapObject(verifiedObject);
+    }
+    return TRUE;
+}
+
+static void OverworldWildHelper_DespawnFarEncounters(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    u16 movementProtectedMask,
+    OverworldWildHelperResetSlotFunc resetSlot)
+{
+    int i;
+
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        u8 distance;
+        BOOL movementProtected = (movementProtectedMask & (1u << i)) != 0
+            || state->movementSpawnRunActive[i];
+
+        if (OverworldWildHelper_ConfirmDistanceDespawn(
+                fieldSystem,
+                state,
+                presentation,
+                i,
+                movementProtected,
+                &distance)) {
+            (void)OverworldWildHelper_RemoveEncounter(
+                fieldSystem,
+                state,
+                presentation,
+                telemetry,
+                i,
+                state->spawns[i].encounterGeneration,
+                OW_WILD_DESPAWN_REASON_DISTANCE,
+                distance,
+                resetSlot);
+        }
+    }
+}
+
+static u8 OverworldWildHelper_FinishBattle(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    u16 battleResult,
+    OverworldWildHelperResetSlotFunc resetSlot)
+{
+    u8 disposition = OverworldWildHelper_ClassifyBattleResult(
+        fieldSystem,
+        state,
+        battleResult);
+
+    if (disposition == OW_WILD_BATTLE_DISPOSITION_DEFEATED
+        || disposition == OW_WILD_BATTLE_DISPOSITION_CAUGHT) {
+        (void)OverworldWildHelper_RemoveEncounter(
+            fieldSystem,
+            state,
+            presentation,
+            telemetry,
+            state->pendingSlot,
+            state->pendingEncounterGeneration,
+            disposition == OW_WILD_BATTLE_DISPOSITION_DEFEATED
+                ? OW_WILD_DESPAWN_REASON_BATTLE_DEFEATED
+                : OW_WILD_DESPAWN_REASON_BATTLE_CAUGHT,
+            0,
+            resetSlot);
+    }
+    return disposition;
+}
+
+static LocalMapObject *OverworldWildHelper_CreatePresentationObject(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot,
+    int x,
+    int y,
+    u8 facing,
+    u8 movementBehavior,
+    u8 range)
+{
+    OverworldWildSpawn *spawn = &state->spawns[slot];
+    u32 spriteId = FollowingPokemon_GetSpriteID(spawn->species, spawn->form, 0);
+    LocalMapObject *object;
+
+    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
+    object = CreateSpecialFieldObjectWithParams(
+        fieldSystem->mapObjectMan,
+        x,
+        y,
+        facing,
+        spriteId,
+        OW_WILD_MOVE_STOCK_IDLE,
+        fieldSystem->location->mapId,
+        0,
+        movementBehavior,
+        OW_WILD_HELPER_PAL_PARAM_ENABLE
+            | (spawn->shiny ? OW_WILD_HELPER_PAL_PARAM_SHINY : 0));
+    if (object == NULL) {
+        return NULL;
+    }
+    MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
+    MapObject_SetScript(object, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT);
+    if (range == 0) {
+        range = 32;
+    }
+    MapObject_SetXRange(object, range);
+    MapObject_SetYRange(object, range);
+    FollowPokeMapObjectSetParams(object, spawn->species, spawn->form, spawn->shiny);
+    if (spawn->shiny) {
+        sub_02069DC8(object, TRUE);
+        ChangeMapObjSprite(object, spriteId);
+    }
+    object->facingInit = facing;
+    object->curFacing = facing;
+    object->nextFacing = facing;
+    object->curFacingBak = facing;
+    object->nextFacingBak = facing;
+    MapObject_SetCurrentX(object, (u32)x);
+    MapObject_SetCurrentY(object, (u32)y);
+    object->xInit = x;
+    object->yInit = y;
+    object->xPrev = x;
+    object->yPrev = y;
+    object->posVec[0] = (u32)((s32)x * 0x10000 + 0x8000);
+    object->posVec[2] = (u32)((s32)y * 0x10000 + 0x8000);
+    object->flags &= ~(BIT_VANISH | MAPOBJECTFLAG_UNK8);
+    return object;
+}
+
+static BOOL OverworldWildHelper_ValidateDeferredBattle(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot,
+    u16 encounterGeneration)
+{
+    return state != NULL
+        && slot >= 0
+        && slot < OW_WILD_MAX_SPAWNS
+        && state->pendingSlot == slot
+        && state->pendingMapGeneration == state->mapGeneration
+        && state->pendingEncounterGeneration == encounterGeneration
+        && state->pendingPersonality == state->spawns[slot].personality
+        && state->spawns[slot].encounterGeneration == encounterGeneration
+        && OverworldWildHelper_IsExactObject(fieldSystem, state, slot);
+}
+
 const OverworldWildHelperOverlayEntry gOverworldWildHelperOverlayEntry
     __attribute__((section(".overworld_wild_helper_entry"), used)) = {
     OVERWORLD_WILD_HELPER_OVERLAY_MAGIC,
@@ -1449,4 +2182,12 @@ const OverworldWildHelperOverlayEntry gOverworldWildHelperOverlayEntry
     OverworldWildHelper_TryPrepareEncounterSpawn,
     OverworldWildHelper_PickRandomBehaviorHop,
     OverworldWildHelper_PlanBehaviorHopStep,
+    OverworldWildHelper_IsPresentationContextCurrent,
+    OverworldWildHelper_NormalizeThrowPresentation,
+    OverworldWildHelper_SyncCarriedThrowTarget,
+    OverworldWildHelper_ReconcilePresentations,
+    OverworldWildHelper_DespawnFarEncounters,
+    OverworldWildHelper_FinishBattle,
+    OverworldWildHelper_CreatePresentationObject,
+    OverworldWildHelper_ValidateDeferredBattle,
 };
