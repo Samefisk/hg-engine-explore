@@ -1239,6 +1239,7 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 
 def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     label_overrides = {
+        "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",

@@ -102,36 +102,19 @@
 
     <main id="workspace" class="workspace" tabindex="-1">
       <section id="profilesView" class="view view--profiles is-active" role="tabpanel" aria-labelledby="profilesTab">
-        <header class="context-bar">
-          <div class="context-title">
-            <span class="eyebrow">Live subject</span>
-            <strong id="profilesViewTitle">Resolve before editing</strong>
-          </div>
-          <label class="compact-field">
-            <span>Pokémon</span>
-            <select id="profileContextSpecies"><option>Loading…</option></select>
-          </label>
-          <label class="compact-field">
-            <span>Terrain</span>
-            <select id="profileContextTerrain"><option>Loading…</option></select>
-          </label>
-          <label class="compact-field compact-field--number">
-            <span>Level</span>
-            <input id="profileContextLevel" type="number" min="1" max="100" value="20" inputmode="numeric">
-          </label>
-          <label class="check-control" for="profileContextShiny">
-            <input id="profileContextShiny" type="checkbox">
-            <span>Shiny</span>
-          </label>
-          <button id="resolveContext" class="button button--dark" type="button">Resolve</button>
-          <p class="context-help">Class → base → ordered overrides → fallback. Later matches apply last.</p>
-        </header>
-
-        <div class="profile-workbench">
+        <div id="profileWorkbench" class="profile-workbench">
           <aside class="panel library-panel" aria-labelledby="profileLibraryTitle">
             <header class="panel-heading">
               <span><small>Library</small><strong id="profileLibraryTitle">Profile deck</strong></span>
-              <button class="icon-button" type="button" data-action="new-profile" aria-label="Create profile">+</button>
+              <div class="panel-heading-actions">
+                <details class="profile-tool-menu">
+                  <summary class="icon-button" aria-label="More profile tools">•••</summary>
+                  <div>
+                    <button id="openProfileResolver" type="button" data-action="open-context-resolver" aria-controls="profileResolverDrawer" aria-expanded="false">Resolve context…</button>
+                  </div>
+                </details>
+                <button class="icon-button" type="button" data-action="new-profile" aria-label="Create profile">+</button>
+              </div>
             </header>
             <div class="library-tools">
               <label class="search-field" for="profileSearch">
@@ -179,15 +162,45 @@
             </div>
           </section>
 
-          <aside id="profileResolution" class="panel resolution-panel" aria-label="Context resolution" aria-live="polite">
-            <header class="panel-heading">
-              <span><small>Context scan</small><strong>Resolution</strong></span>
-              <span class="result-chip">Not run</span>
+          <aside id="profileResolverDrawer" class="resolver-drawer" aria-labelledby="profileResolverTitle" hidden>
+            <header class="profile-resolver-heading">
+              <div>
+                <span class="eyebrow">Profile diagnostic</span>
+                <strong id="profileResolverTitle">Context resolver</strong>
+              </div>
+              <button id="closeProfileResolver" class="icon-button" type="button" data-action="close-context-resolver" aria-label="Close context resolver">×</button>
             </header>
-            <div class="empty-state empty-state--small">
-              <span class="scan-grid" aria-hidden="true"></span>
-              <h2>Choose a subject</h2>
-              <p>Resolve a Pokémon and terrain to see the base profile, applied layers, and field provenance.</p>
+
+            <div class="resolver-drawer-controls">
+              <label class="compact-field">
+                <span>Pokémon</span>
+                <select id="profileContextSpecies"><option>Loading…</option></select>
+              </label>
+              <label class="compact-field">
+                <span>Terrain</span>
+                <select id="profileContextTerrain"><option>Loading…</option></select>
+              </label>
+              <label class="compact-field compact-field--number">
+                <span>Level</span>
+                <input id="profileContextLevel" type="number" min="1" max="100" value="20" inputmode="numeric">
+              </label>
+              <label class="check-control" for="profileContextShiny">
+                <input id="profileContextShiny" type="checkbox">
+                <span>Shiny</span>
+              </label>
+              <button id="resolveContext" class="button button--dark" type="button">Resolve</button>
+            </div>
+
+            <div id="profileResolution" class="resolution-panel" aria-label="Context resolution" aria-live="polite">
+              <header class="panel-heading">
+                <span><small>Context scan</small><strong>Resolution</strong></span>
+                <span class="result-chip">Not run</span>
+              </header>
+              <div class="empty-state empty-state--small">
+                <span class="scan-grid" aria-hidden="true"></span>
+                <h2>Choose a subject</h2>
+                <p>Resolve a Pokémon and terrain to see the base profile, applied layers, and field provenance.</p>
+              </div>
             </div>
           </aside>
         </div>

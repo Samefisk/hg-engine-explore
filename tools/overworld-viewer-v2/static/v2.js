@@ -34,6 +34,7 @@ const elements = {};
   "profilesView", "profileSearch", "profileKindFilter", "profileLibrary",
   "profileContextSpecies", "profileContextTerrain", "profileContextLevel",
   "profileContextShiny", "resolveContext", "profileResolution", "profileInspector",
+  "profileWorkbench", "profileResolverDrawer", "openProfileResolver", "closeProfileResolver",
   "routesView", "routeSearch", "routeFilters", "routeLibrary", "routeInspector",
   "soundsView", "soundSearch", "soundFilters", "soundLibrary", "soundInspector",
   "soundStatus", "shinyCounter", "refreshShiny", "resetShiny", "maxShiny",

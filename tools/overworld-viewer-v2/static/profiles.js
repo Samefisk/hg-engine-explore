@@ -50,6 +50,33 @@ const PROFILE_FIELD_RANGES = Object.freeze([
 const PROFILE_FIELD_RANGE_BY_MIN = new Map(PROFILE_FIELD_RANGES.map((range) => [range.min, range]));
 
 const PROFILE_FIELD_COMPOSITES = Object.freeze({
+  "alert-response": Object.freeze({
+    id: "alert-response",
+    label: "Alert response",
+    fields: Object.freeze([
+      Object.freeze({ key: "alertState", label: "Mode", unit: "" }),
+      Object.freeze({ key: "alertEmote", label: "Emote", unit: "" }),
+      Object.freeze({ key: "alertTime", label: "Time", unit: "frames" }),
+      Object.freeze({ key: "alertChance", label: "Chance", unit: "%" }),
+    ]),
+  }),
+  "active-chase-boost": Object.freeze({
+    id: "active-chase-boost",
+    label: "Chase boost",
+    fields: Object.freeze([
+      Object.freeze({ key: "attentiveChaseBoostDistance", label: "Distance", unit: "tiles" }),
+      Object.freeze({ key: "attentiveChaseBoostSpeed", label: "Speed", unit: "speed" }),
+    ]),
+  }),
+  "active-target-tiles": Object.freeze({
+    id: "active-target-tiles",
+    label: "Target & tiles",
+    fields: Object.freeze([
+      Object.freeze({ key: "targetSelector", label: "Target", unit: "" }),
+      Object.freeze({ key: "attentiveAllowedTile", label: "Allowed tile", unit: "" }),
+      Object.freeze({ key: "attentiveAllowedTile2", label: "Allowed tile 2", unit: "" }),
+    ]),
+  }),
   "movement-chain": Object.freeze({
     id: "movement-chain",
     label: "Movement chain",
@@ -233,9 +260,8 @@ const FIELD_SECTIONS = Object.freeze([
       "alertSpecialAction",
     ],
     nodes: [
-      { kind: "fields", fields: ["alertState", "alertEmote", "alertTime"] },
+      { kind: "fields", composite: "alert-response", fields: ["alertState", "alertEmote", "alertTime", "alertChance"] },
       { kind: "branch", field: "alertRange", branch: "alert-range", virtual: "alert-range-type" },
-      { kind: "fields", fields: ["alertChance"] },
       { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "alert", virtual: "scoped-action" },
     ],
   },
@@ -321,6 +347,10 @@ const LOCOMOTION = Object.freeze({
   teleport: "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
 });
 
+const RAW_LABEL_OVERRIDES = Object.freeze({
+  [LOCOMOTION.wander]: "Walk",
+});
+
 const MOVEMENT_FIELDS = Object.freeze({
   chill: Object.freeze({
     speed: "chillSpeed",
@@ -396,6 +426,8 @@ function valueRaw(value) {
 }
 
 function valueLabel(value) {
+  const raw = valueRaw(value);
+  if (RAW_LABEL_OVERRIDES[raw]) return RAW_LABEL_OVERRIDES[raw];
   if (value && typeof value === "object") {
     return String(value.label ?? value.name ?? humanizeRaw(value.raw ?? value.symbol ?? value.value));
   }
@@ -534,6 +566,7 @@ export function createProfilesController({
     draggedKey: "",
     selectionHint: "",
     pendingLifecycleProfiles: [],
+    resolverReturnFocus: null,
     busy: false,
     destroyed: false,
   };
@@ -543,8 +576,11 @@ export function createProfilesController({
   const listElement = elements.profileLibrary;
   const editorElement = elements.profileInspector;
   const contextElement = elements.profileResolution;
-  if (![listElement, editorElement, contextElement].every((element) => element instanceof Element)) {
-    throw new TypeError("Profile controller requires profileLibrary, profileInspector, and profileResolution elements");
+  const workbenchElement = elements.profileWorkbench;
+  const resolverDrawerElement = elements.profileResolverDrawer;
+  const resolverOpenElement = elements.openProfileResolver;
+  if (![listElement, editorElement, contextElement, workbenchElement, resolverDrawerElement, resolverOpenElement].every((element) => element instanceof Element)) {
+    throw new TypeError("Profile controller requires its library, inspector, workbench, and resolver elements");
   }
   root.classList.add("profile-controller-ready", "pv2");
   listElement.classList.add("pv2-profile-list");
@@ -1337,14 +1373,19 @@ export function createProfilesController({
       const targetNode = targetChildren.length && !canTarget
         ? { field: definition.target, inactive: true, children: targetChildren }
         : explicitInactiveNode(profile, definition.target, canTarget, { children: targetChildren });
-      if (targetNode) nodes.push(targetNode);
+      if (targetNode) {
+        if (branch === "active-behavior") targetNode.composite = "active-target-tiles";
+        nodes.push(targetNode);
+      }
     }
     (definition.tiles || []).forEach((field) => {
-      const node = explicitInactiveNode(profile, field, usesTiles);
+      const node = explicitInactiveNode(profile, field, usesTiles, {
+        composite: branch === "active-behavior" && definition.target ? "active-target-tiles" : "",
+      });
       if (node) nodes.push(node);
     });
     (definition.chase || []).forEach((field) => {
-      const node = explicitInactiveNode(profile, field, canTarget);
+      const node = explicitInactiveNode(profile, field, canTarget, { composite: "active-chase-boost" });
       if (node) nodes.push(node);
     });
     const onlyInactive = nodes.length && nodes.every((node) => node.inactive);
@@ -1373,6 +1414,8 @@ export function createProfilesController({
     const inheritedChillAmbiguous = scope === "chill" && inherited
       && !inheritedChillRam
       && !inheritedChillChain;
+    const effectiveMovementStyles = inherited ? effectiveFieldCandidates(profile, parentField) : [raw];
+    const usesMovementSpeed = effectiveMovementStyles.some((style) => style === LOCOMOTION.wander || style === LOCOMOTION.ram);
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -1390,7 +1433,7 @@ export function createProfilesController({
         if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
       });
     };
-    append([fields.speed], inherited || moves, { label: "Movement speed" });
+    append([fields.speed], usesMovementSpeed, { label: "Movement speed" });
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
@@ -1792,7 +1835,11 @@ export function createProfilesController({
       if (compositeNodes.some((candidate) => !candidate || candidate.composite !== composite.id)) return [standaloneNode(node)];
       if (node.field !== composite.fields[0].key) return [];
       composite.fields.slice(1).forEach((field) => consumed.add(field.key));
-      return [{ composite, nodes: compositeNodes }];
+      return [{
+        composite,
+        nodes: compositeNodes,
+        children: compositeNodes.flatMap((candidate) => candidate.children || []),
+      }];
     });
   }
 
@@ -1896,11 +1943,24 @@ export function createProfilesController({
       const beforeMarkup = node.nodes[0]?.beforeLabel
         ? `<h4 class="pv2-suboption-divider">${escapeHtml(node.nodes[0].beforeLabel)}</h4>`
         : "";
-      return `${beforeMarkup}${renderCompositeFieldControl(profile, node, {
+      const compositeControl = renderCompositeFieldControl(profile, node, {
         depth,
         parentInactive,
         instance: `${sectionId}:${path}:${node.composite.id}`,
-      })}`;
+      });
+      const compositeInactive = Boolean(parentInactive || node.nodes.some((candidate) => candidate.inactive));
+      const childMarkup = consolidateSiblingControls(node.children || [])
+        .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.child-${index}`, depth + 1, compositeInactive))
+        .filter(Boolean)
+        .join("");
+      if (!childMarkup) return `${beforeMarkup}${compositeControl}`;
+      return `${beforeMarkup}
+        <div class="pv2-option-group${depth ? " is-nested" : ""}" data-option-parent="${escapeHtml(node.nodes[0]?.field || node.composite.id)}" data-option-depth="${depth}">
+          <div class="pv2-option-parent">${compositeControl}</div>
+          <div class="pv2-suboptions" role="group" aria-label="${escapeHtml(`${node.composite.label} suboptions`)}">
+            <div class="pv2-suboption-grid">${childMarkup}</div>
+          </div>
+        </div>`;
     }
     if (node.range) {
       const canEditMinimum = profileCanEditField(profile, node.range.min);
@@ -1974,7 +2034,7 @@ export function createProfilesController({
       if (descriptor.kind === "branch") return renderBranch(profile, descriptor, section.id, index);
       const markup = consolidateSiblingControls((descriptor.fields || [])
         .filter((field) => profileCanEditField(profile, field))
-        .map((field) => ({ field })))
+        .map((field) => ({ field, composite: descriptor.composite || "" })))
         .map((node, fieldIndex) => node.composite
           ? renderCompositeFieldControl(profile, node, { instance: `${section.id}:fields-${index}.${fieldIndex}:${node.composite.id}` })
           : (node.range
@@ -2339,6 +2399,17 @@ export function createProfilesController({
       </details>`;
   }
 
+  function renderResolvedContextIndicator() {
+    if (!ui.contextResult) return "";
+    const speciesName = data.assignments.find((assignment) => assignment.species?.symbol === ui.context.species)?.species?.name
+      || ui.contextResult.context?.species?.name
+      || humanizeRaw(ui.context.species);
+    const terrainName = Object.values(data.labels?.terrains || {}).find((terrain) => terrain.symbol === ui.context.terrain)?.name
+      || humanizeRaw(ui.context.terrain);
+    const label = `${speciesName} · ${terrainName} · Lv ${ui.context.level}`;
+    return `<div class="pv2-context-indicator"><span><strong>Resolved context active</strong><small>${escapeHtml(label)}</small></span><button type="button" data-action="open-context-resolver">Review</button></div>`;
+  }
+
   function renderEditor() {
     const profile = findProfile();
     if (!profile) {
@@ -2366,6 +2437,7 @@ export function createProfilesController({
         </div>
         <div class="inspector-actions pv2-editor-actions">${actions}</div>
       </header>
+      ${renderResolvedContextIndicator()}
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}
       ${override ? `${renderOverrideTarget(profile)}${renderAffected(profile)}` : renderMembership(profile)}
       <section class="profile-field-editor pv2-fields" aria-labelledby="pv2-fields-title">
@@ -2449,6 +2521,30 @@ export function createProfilesController({
     contextElement.innerHTML = `
       <header class="panel-heading"><span><small>Context scan</small><strong>Resolution</strong></span><span class="result-chip">${ui.contextResult ? "Saved source" : "Not run"}</span></header>
       ${renderContextResult()}`;
+  }
+
+  function openContextResolver() {
+    const focused = document.activeElement;
+    const toolDisclosure = resolverOpenElement.closest("details");
+    const toolSummary = toolDisclosure?.querySelector("summary");
+    ui.resolverReturnFocus = focused instanceof HTMLElement && root.contains(focused)
+      ? (toolDisclosure?.contains(focused) ? toolSummary : focused)
+      : (toolSummary || resolverOpenElement);
+    toolDisclosure?.removeAttribute("open");
+    resolverDrawerElement.hidden = false;
+    workbenchElement.classList.add("is-resolver-open");
+    resolverOpenElement.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => elements.profileContextSpecies.focus({ preventScroll: true }));
+  }
+
+  function closeContextResolver() {
+    resolverDrawerElement.hidden = true;
+    workbenchElement.classList.remove("is-resolver-open");
+    resolverOpenElement.setAttribute("aria-expanded", "false");
+    const fallbackFocus = resolverOpenElement.closest("details")?.querySelector("summary") || resolverOpenElement;
+    const returnFocus = ui.resolverReturnFocus?.isConnected ? ui.resolverReturnFocus : fallbackFocus;
+    ui.resolverReturnFocus = null;
+    requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
   }
 
   function rekeyLifecycleSection(oldKey, newKey) {
@@ -2800,7 +2896,9 @@ export function createProfilesController({
     const action = target.dataset.action;
     const key = target.dataset.profileKey || ui.selectedKey;
     const profile = findProfile(key);
-    if (action === "select-profile") setSelected(key);
+    if (action === "open-context-resolver") openContextResolver();
+    else if (action === "close-context-resolver") closeContextResolver();
+    else if (action === "select-profile") setSelected(key);
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
@@ -2819,6 +2917,7 @@ export function createProfilesController({
       if (context) Object.assign(ui.context, context);
       else ui.context.species = target.dataset.species;
       renderContextControls();
+      openContextResolver();
       resolveContext();
     }
     else if (action === "clear-section" && profile) {
@@ -2980,6 +3079,11 @@ export function createProfilesController({
   }
 
   function onKeyDown(event) {
+    if (event.key === "Escape" && !resolverDrawerElement.hidden) {
+      event.preventDefault();
+      closeContextResolver();
+      return;
+    }
     const lifecycleTab = event.target.closest("[data-lifecycle-tab]");
     if (lifecycleTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       const tabs = [...(lifecycleTab.closest('[role="tablist"]')?.querySelectorAll("[data-lifecycle-tab]") || [])];
