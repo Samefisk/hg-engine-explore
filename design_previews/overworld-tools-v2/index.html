@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overworld Wild Tools V2 — Direction Mockups</title>
+  <link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+  <main class="gallery-shell">
+    <header class="gallery-header">
+      <div>
+        <span class="eyebrow">Overworld Wild Tools · V2 study</span>
+        <h1>Choose the product direction</h1>
+        <p>Five approaches, one identical task: edit <strong>Throwing!</strong> for Mankey, verify the matching context, then review the staged impact.</p>
+      </div>
+      <div class="gallery-selection" aria-live="polite">
+        <span>Current preference</span>
+        <strong id="preferenceLabel">None selected</strong>
+      </div>
+    </header>
+
+    <nav class="direction-tabs" aria-label="Mockup directions">
+      <button class="direction-tab is-active" data-direction="studio" aria-pressed="true">
+        <span class="direction-key">01</span>
+        <span><strong>Behavior Studio</strong><small>Balanced · lifecycle-first</small></span>
+      </button>
+      <button class="direction-tab" data-direction="resolver" aria-pressed="false">
+        <span class="direction-key">02</span>
+        <span><strong>Resolver Control Room</strong><small>Correctness · provenance-first</small></span>
+      </button>
+      <button class="direction-tab" data-direction="notebook" aria-pressed="false">
+        <span class="direction-key">03</span>
+        <span><strong>Field Notebook</strong><small>Approachable · plain language</small></span>
+      </button>
+      <button class="direction-tab" data-direction="pokedex" aria-pressed="false">
+        <span class="direction-key">04</span>
+        <span><strong>Pokédex Workshop</strong><small>Character · game-native</small></span>
+      </button>
+      <button class="direction-tab" data-direction="bench" aria-pressed="false">
+        <span class="direction-key">05</span>
+        <span><strong>Data Bench</strong><small>Expert · maximum throughput</small></span>
+      </button>
+    </nav>
+
+    <section class="mockup-frame">
+      <!-- Direction 01: Behavior Studio -->
+      <article class="mockup mockup-studio is-active" data-mockup="studio">
+        <header class="app-topbar">
+          <div class="brand-mark"><span class="brand-orbit"></span><strong>Wild Studio</strong><em>V2</em></div>
+          <nav class="app-tabs" aria-label="Studio workspaces">
+            <button class="is-current">Behaviors</button><button>Encounters</button><button>Sounds</button>
+          </nav>
+          <div class="app-actions">
+            <span class="sync-state"><i></i> Revision 8C41</span>
+            <button class="soft-button">Utilities</button>
+            <button class="soft-button">Build ROM</button>
+            <button class="soft-button">Open test.nds</button>
+            <button class="primary-button">Review 3 changes</button>
+          </div>
+        </header>
+        <div class="studio-body">
+          <aside class="module-rail" aria-label="Studio modules">
+            <button class="rail-icon is-current" aria-label="Behaviors"><span>◈</span></button>
+            <button class="rail-icon" aria-label="Routes"><span>⌁</span></button>
+            <button class="rail-icon" aria-label="Sounds"><span>♫</span></button>
+            <span class="rail-spacer"></span>
+            <button class="rail-icon" aria-label="Builds"><span>⌁</span></button>
+            <button class="rail-avatar" aria-label="Workspace settings">CA</button>
+          </aside>
+          <aside class="library-panel">
+            <div class="panel-heading">
+              <div><span class="overline">Library</span><h2>Behavior profiles</h2></div>
+              <button class="icon-button" aria-label="Create profile">＋</button>
+            </div>
+            <label class="search-field"><span>⌕</span><input value="" placeholder="Search profiles or Pokémon"></label>
+            <div class="library-section">
+              <div class="section-label"><span>Base profiles</span><small>7</small></div>
+              <button class="profile-list-row"><span class="type-icon shield">◇</span><span><strong>Default</strong><small>1,263 Pokémon</small></span><em>1,263</em></button>
+              <button class="profile-list-row"><span class="type-icon shield">◇</span><span><strong>Skittish</strong><small>Default · Appear</small></span><em>18</em></button>
+              <button class="profile-list-row"><span class="type-icon shield">◇</span><span><strong>Aggressive ram</strong><small>Default · Appear</small></span><em>9</em></button>
+            </div>
+            <div class="library-section">
+              <div class="section-label"><span>Override profiles</span><small>7</small></div>
+              <button class="profile-list-row is-selected"><span class="type-icon target">◎</span><span><strong>Throwing!</strong><small>16 ordered rules</small></span><em>9</em></button>
+              <button class="profile-list-row"><span class="type-icon target">◎</span><span><strong>Playful!</strong><small>7 ordered rules</small></span><em>6</em></button>
+              <button class="profile-list-row"><span class="type-icon target">◎</span><span><strong>Floaty Bounce</strong><small>7 ordered rules</small></span><em>6</em></button>
+            </div>
+            <div class="library-footer"><span>Throwing! · priority 2 of 7</span><button>Manage rule order →</button></div>
+          </aside>
+          <section class="studio-workspace">
+            <div class="workspace-title-row">
+              <div><span class="overline coral">Override profile</span><h2>Throwing!</h2><p>OVR_42F8 · Priority 2 of 7 · Pick up and throw on alert.</p></div>
+              <div class="header-tools"><button>Duplicate</button><button>•••</button></div>
+            </div>
+            <div class="context-bar">
+              <span class="context-title">Preview context</span>
+              <button><img src="../../data/graphics/sprites/mankey/icon.png" alt="">Mankey <b>⌄</b></button>
+              <button>Land <b>⌄</b></button><button>Lv. 18 <b>⌄</b></button>
+              <button><span class="shiny-dot"></span>Not shiny <b>⌄</b></button>
+              <span class="context-result">1 rule matches · #16</span>
+            </div>
+            <div class="lifecycle-tabs" role="tablist" aria-label="Behavior lifecycle">
+              <button><span class="phase-index">1</span><span>Spawn<small>Inherited</small></span></button>
+              <span class="phase-line"></span>
+              <button><span class="phase-index">2</span><span>Chill<small>Inherited</small></span></button>
+              <span class="phase-line"></span>
+              <button class="is-active"><span class="phase-index">3</span><span>Alert<small>6 included fields</small></span></button>
+              <span class="phase-line"></span>
+              <button><span class="phase-index">4</span><span>Active<small>7 included fields</small></span></button>
+              <span class="phase-line"></span>
+              <button><span class="phase-index">5</span><span>Tired<small>Inherited</small></span></button>
+            </div>
+            <div class="studio-edit-grid">
+              <section class="editor-card">
+                <div class="card-title-row"><div><span class="phase-glyph">!</span><span><strong>Included override fields</strong><small>4 of the 13 fields shown</small></span></div><span class="custom-count">13 included</span></div>
+                <div class="resolved-field is-custom">
+                  <div class="field-copy"><label>Alert special action</label><small>Canopy Hopper: None</small></div>
+                  <div class="inherit-toggle"><button>Inherit</button><button class="is-on">Custom</button></div>
+                  <button class="value-control">Pick up and throw <b>⌄</b></button>
+                </div>
+                <div class="resolved-field is-custom">
+                  <div class="field-copy"><label>Alert range type</label><small>Explicitly included</small></div>
+                  <div class="inherit-toggle"><button>Inherit</button><button class="is-on">Custom</button></div>
+                  <button class="value-control">Radius <b>⌄</b></button>
+                </div>
+                <div class="resolved-field is-custom">
+                  <div class="field-copy"><label>Alert distance</label><small>Tiles from player</small></div>
+                  <div class="inherit-toggle"><button>Inherit</button><button class="is-on">Custom</button></div>
+                  <div class="stepper"><button>−</button><strong>4</strong><button>＋</button></div>
+                </div>
+                <div class="resolved-field is-custom">
+                  <div class="field-copy"><label>Active target</label><small>Explicitly included</small></div>
+                  <div class="inherit-toggle"><button>Inherit</button><button class="is-on">Custom</button></div>
+                  <button class="value-control">Player cardinal line <b>⌄</b></button>
+                </div>
+              </section>
+              <aside class="impact-card">
+                <div class="impact-heading"><span class="live-pulse"></span><div><strong>Effective result</strong><small>For the preview context</small></div></div>
+                <div class="impact-pokemon"><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><span><strong>Mankey · Lv. 18</strong><small>Land · not shiny</small></span><b>Match</b></div>
+                <ol class="layer-list">
+                  <li><span class="layer-number">1</span><span><strong>Species: Mankey</strong><small>Class assignment</small></span><em>matched</em></li>
+                  <li><span class="layer-number">2</span><span><strong>Canopy Hopper</strong><small>Selected base profile</small></span><em>71 fields</em></li>
+                  <li class="is-winning"><span class="layer-number">3</span><span><strong>Throwing!</strong><small>Override rule #16</small></span><em>13 fields</em></li>
+                  <li><span class="layer-number">4</span><span><strong>Runtime fallback</strong><small>No normalization needed</small></span><em>clean</em></li>
+                </ol>
+                <button class="trace-button">Open full resolver trace</button>
+              </aside>
+            </div>
+          </section>
+        </div>
+        <footer class="change-tray">
+          <div><span class="change-count">3</span><span><strong>Unsaved changes</strong><small>Throwing! · fields only · 9 Pokémon affected</small></span></div>
+          <span class="commit-proof">Save: check rev → atomic write → reparse + resolve → verify, or roll back</span>
+          <div><button>Discard draft</button><button class="primary-button">Review & save atomically</button></div>
+        </footer>
+      </article>
+
+      <!-- Direction 02: Resolver Control Room -->
+      <article class="mockup mockup-resolver" data-mockup="resolver" hidden>
+        <header class="resolver-topbar">
+          <div class="resolver-brand"><span class="signal-logo"><i></i><i></i><i></i></span><strong>WILD / RESOLVER</strong><em>CONTROL ROOM</em></div>
+          <nav><button class="is-active">Behavior</button><button>Encounters</button><button>Audio</button><button>Builds</button><button>Utilities</button></nav>
+          <div class="resolver-status"><span><i class="status-light"></i> Revision 8C41</span><button>Open NDS</button><button>⌘ K</button><button class="cyan-button">Save 3</button></div>
+        </header>
+        <div class="resolver-context">
+          <span class="context-kicker">SIMULATION CONTEXT</span>
+          <button><img src="../../data/graphics/sprites/mankey/icon.png" alt="">SPECIES <strong>Mankey</strong><b>⌄</b></button>
+          <button>TERRAIN <strong>Land</strong><b>⌄</b></button>
+          <button>LEVEL <strong>18</strong><b>⌄</b></button>
+          <button>SHINY <strong>False</strong><b>⌄</b></button>
+          <span class="resolver-verdict"><i></i>1 / 45 RULES MATCH · #16</span>
+        </div>
+        <div class="resolver-body">
+          <aside class="resolver-sidebar">
+            <div class="resolver-panel-head"><span>PROFILES</span><button>＋ NEW</button></div>
+            <label class="dark-search">⌕ <input placeholder="Filter entities"></label>
+            <div class="dark-group-label">BASE / 7</div>
+            <button class="dark-row"><span class="row-symbol base-symbol">B</span><span><strong>Default</strong><small>CLASS_DEFAULT</small></span><em>1263</em></button>
+            <button class="dark-row"><span class="row-symbol base-symbol">B</span><span><strong>Skittish</strong><small>CLASS_SKITTISH</small></span><em>18</em></button>
+            <button class="dark-row"><span class="row-symbol base-symbol">B</span><span><strong>Aggressive ram</strong><small>CLASS_AGGRESSIVE_RAM</small></span><em>9</em></button>
+            <div class="dark-group-label">OVERRIDES / 7 <button>REORDER</button></div>
+            <button class="dark-row is-selected"><span class="row-symbol override-symbol">O</span><span><strong>Throwing!</strong><small>OVR_42F8 · 16 rules</small></span><em>9</em></button>
+            <button class="dark-row"><span class="row-symbol override-symbol">O</span><span><strong>Playful!</strong><small>OVR_98D1 · 7 rules</small></span><em>6</em></button>
+            <button class="dark-row"><span class="row-symbol override-symbol">O</span><span><strong>Floaty Bounce</strong><small>OVR_C221 · 7 rules</small></span><em>6</em></button>
+          </aside>
+          <section class="resolver-stack">
+            <div class="stack-header"><div><span>RESOLUTION TRACE · THROWING! PRIORITY 2 OF 7</span><h2>Mankey / Land / L18 / Normal</h2></div><button>Compare context</button></div>
+            <div class="stack-legend"><span><i class="legend-base"></i>Stored</span><span><i class="legend-match"></i>Matched</span><span><i class="legend-win"></i>Winning value</span><span><i class="legend-skip"></i>Skipped</span></div>
+            <ol class="resolution-layers">
+              <li class="layer-block base-layer">
+                <div class="layer-track"><span>01</span><i></i></div>
+                <div class="layer-body"><div class="layer-top"><span class="mono-badge">CLASS RULE</span><strong>Species: Mankey</strong><em>MATCH</em></div><p><code>SPECIES_MANKEY → CLASS_CANOPY_HOPPER</code></p></div>
+              </li>
+              <li class="layer-block base-layer">
+                <div class="layer-track"><span>02</span><i></i></div>
+                <div class="layer-body"><div class="layer-top"><span class="mono-badge">BASE</span><strong>Canopy Hopper</strong><em>71 stored fields</em></div><p>Loaded after the class assignment resolves.</p><div class="field-delta"><span>alert action <b>None</b></span><span>target <b>Player cardinal line</b></span><span>speed <b>2</b></span></div></div>
+              </li>
+              <li class="layer-block winning-layer">
+                <div class="layer-track"><span>03</span><i></i></div>
+                <div class="layer-body"><div class="layer-top"><span class="mono-badge">OVERRIDE</span><strong>Throwing! / rule #16</strong><em>MATCH</em></div><p><code>species = Mankey ∧ terrain = any ∧ level = any</code></p><div class="field-delta"><span>alert.special <b>Pick up and throw</b></span><span>alert.range <b>Radius · 4</b></span><span>target <b>Player cardinal line</b></span><span>+10 fields</span></div></div>
+              </li>
+              <li class="layer-block runtime-layer">
+                <div class="layer-track"><span>04</span><i></i></div>
+                <div class="layer-body"><div class="layer-top"><span class="mono-badge">RUNTIME</span><strong>Normalization</strong><em>0 changes</em></div><p>No fallback values required for this context.</p></div>
+              </li>
+            </ol>
+          </section>
+          <aside class="resolver-inspector">
+            <div class="inspector-heading"><span>EDIT TARGET</span><h2>Throwing!</h2><p>OVR_42F8 · stable ID · priority 2 of 7</p></div>
+            <div class="inspector-tabs"><button class="is-active">Fields <span>13</span></button><button>Rules <span>16</span></button><button>Impact <span>9</span></button></div>
+            <div class="dark-field is-overridden"><div><span>ALERT SPECIAL ACTION</span><small>Canopy Hopper: None</small></div><label><input type="checkbox" checked> INCLUDE</label><button>Pick up and throw⌄</button></div>
+            <div class="dark-field is-overridden"><div><span>ALERT RANGE TYPE</span><small>Explicit value</small></div><label><input type="checkbox" checked> INCLUDE</label><button>Radius⌄</button></div>
+            <div class="dark-field is-overridden"><div><span>ALERT DISTANCE</span><small>Tiles from player</small></div><label><input type="checkbox" checked> INCLUDE</label><button>4 tiles⌄</button></div>
+            <div class="dark-field is-overridden"><div><span>ACTIVE TARGET</span><small>Explicit value</small></div><label><input type="checkbox" checked> INCLUDE</label><button>Player cardinal line⌄</button></div>
+            <div class="conflict-check"><span>✓</span><div><strong>Preflight clean</strong><small>9 contexts re-resolved · no shadowed values</small></div></div>
+          </aside>
+        </div>
+        <footer class="resolver-footer"><span>REV 8C41 · SOURCE UNCHANGED</span><span class="commit-proof">SAVE PIPELINE: REV CHECK → ATOMIC WRITE → REPARSE + RESOLVE → VERIFY / ROLLBACK</span><span class="footer-grow"></span><button>DISCARD DRAFT</button><button>PREVIEW PATCH</button><button class="cyan-button">SAVE ATOMICALLY</button></footer>
+      </article>
+
+      <!-- Direction 03: Field Research Notebook -->
+      <article class="mockup mockup-notebook" data-mockup="notebook" hidden>
+        <header class="notebook-header">
+          <div class="notebook-brand"><span class="leaf-seal">❧</span><span><strong>Field Notes</strong><small>Overworld behavior editor</small></span></div>
+          <nav><button class="is-current">Behaviors</button><button>Route encounters</button><button>Sound library</button></nav>
+          <div><button class="paper-button">Utilities</button><button class="paper-button">Build game</button><button class="paper-button">Open test.nds</button><button class="ink-button">Review changes · 3</button></div>
+        </header>
+        <div class="notebook-context">
+          <span class="hand-label">Observing</span>
+          <button class="pokemon-token"><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><span><strong>Mankey</strong><small>Land · Level 18 · Not shiny</small></span><b>Change</b></button>
+          <div class="context-note"><span>✓</span><span><strong>Throwing! applies here</strong><small>Rule #16 matches · last match wins</small></span></div>
+        </div>
+        <div class="notebook-body">
+          <aside class="notebook-index">
+            <div class="index-title"><span>Contents</span><button>＋</button></div>
+            <label class="paper-search">⌕ <input placeholder="Find a profile"></label>
+            <div class="index-group"><span>Everyday behavior</span><small>Base profiles</small></div>
+            <button class="notebook-row"><span class="profile-sketch">◇</span><span><strong>Default</strong><small>Used by 1,263 Pokémon</small></span></button>
+            <button class="notebook-row"><span class="profile-sketch">◇</span><span><strong>Skittish</strong><small>Used by 18 Pokémon</small></span></button>
+            <button class="notebook-row"><span class="profile-sketch">◇</span><span><strong>Aggressive ram</strong><small>Used by 9 Pokémon</small></span></button>
+            <div class="index-group"><span>Special circumstances</span><small>Overrides · ordered</small></div>
+            <button class="notebook-row is-open"><span class="profile-sketch red">✦</span><span><strong>Throwing!</strong><small>Affects 9 Pokémon</small></span><em>open</em></button>
+            <button class="notebook-row"><span class="profile-sketch red">✦</span><span><strong>Playful!</strong><small>Affects 6 Pokémon</small></span></button>
+            <button class="notebook-row"><span class="profile-sketch red">✦</span><span><strong>Floaty Bounce</strong><small>Affects 6 Pokémon</small></span></button>
+            <button class="order-link">See why order matters →</button>
+          </aside>
+          <section class="notebook-page">
+            <div class="page-heading"><div><span class="hand-label red-ink">Special circumstance · priority 2 of 7</span><h2>Throwing!</h2><p>OVR_42F8 · When these Pokémon notice the player, they pick up and throw a rock.</p></div><button class="more-ink">•••</button></div>
+            <div class="story-flow">
+              <div><span class="story-number">1</span><span><strong>Appears</strong><small>Uses Canopy Hopper</small></span></div><i></i>
+              <div><span class="story-number">2</span><span><strong>Hops</strong><small>Uses Canopy Hopper</small></span></div><i></i>
+              <div class="is-changed"><span class="story-number">3</span><span><strong>Notices you</strong><small>Custom alert</small></span></div><i></i>
+              <div class="is-changed"><span class="story-number">4</span><span><strong>Throws</strong><small>13 included details</small></span></div><i></i>
+              <div><span class="story-number">5</span><span><strong>Recovers</strong><small>Uses Canopy Hopper</small></span></div>
+            </div>
+            <div class="plain-editor">
+              <div class="plain-section-heading"><span class="red-pencil">✎</span><div><h3>What Mankey does</h3><p>Only checked details replace the everyday Canopy Hopper profile. Four of 13 are shown.</p></div></div>
+              <div class="plain-field"><label class="plain-check"><input type="checkbox" checked><span class="sr-only">Include Special alert action</span></label><span><strong>Special alert action</strong><small>Instead of: None</small></span><button>Pick up and throw <b>⌄</b></button></div>
+              <div class="plain-field"><label class="plain-check"><input type="checkbox" checked><span class="sr-only">Include Alert shape</span></label><span><strong>Alert shape</strong><small>Included explicitly</small></span><button>Radius <b>⌄</b></button></div>
+              <div class="plain-field"><label class="plain-check"><input type="checkbox" checked><span class="sr-only">Include Alert distance</span></label><span><strong>Notices you within</strong><small>Tiles from player</small></span><button>4 tiles <b>⌄</b></button></div>
+              <div class="plain-field"><label class="plain-check"><input type="checkbox" checked><span class="sr-only">Include Active target</span></label><span><strong>Active target</strong><small>Included explicitly</small></span><button>Player cardinal line <b>⌄</b></button></div>
+              <button class="advanced-link">Show technical fields and symbols</button>
+            </div>
+          </section>
+          <aside class="notebook-margin">
+            <div class="margin-card pokemon-card"><span class="tape"></span><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><div><strong>Mankey</strong><small>Preview subject</small></div></div>
+            <div class="margin-card"><span class="hand-label">Why it applies</span><ol><li><b>Mankey rule</b><small>Chooses Canopy Hopper</small></li><li><b>Canopy Hopper</b><small>Loads the base profile</small></li><li class="red-ink"><b>Throwing! #16</b><small>Replaces 13 details</small></li><li><b>Game fallback</b><small>No changes needed</small></li></ol><button>See full explanation</button></div>
+            <div class="margin-card affected-card"><span class="hand-label">Also affected</span><div class="sprite-line">
+              <img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><img src="../../data/graphics/sprites/geodude/icon.png" alt="Geodude"><img src="../../data/graphics/sprites/onix/icon.png" alt="Onix"><span>+6</span>
+            </div><small>9 Pokémon across 16 rules</small></div>
+          </aside>
+        </div>
+        <footer class="notebook-footer"><div><span class="red-pencil">✎</span><span><strong>3 notes changed · revision 8C41</strong><small>Save checks the revision, writes atomically, rereads the files, recomputes what applies to every affected Pokémon, verifies the result, and rolls back on failure.</small></span></div><div><button class="paper-button">Put changes away</button><button class="ink-button">Review & save safely</button></div></footer>
+      </article>
+
+      <!-- Direction 04: Pokedex Workshop -->
+      <article class="mockup mockup-pokedex" data-mockup="pokedex" hidden>
+        <header class="dex-header">
+          <div class="dex-brand"><span class="dex-lens"><i></i></span><span><strong>WILD SYSTEMS</strong><small>POKÉDEX WORKSHOP / V2</small></span></div>
+          <nav><button class="is-on">PROFILE DECK</button><button>ROUTE DECK</button><button>SOUND DECK</button></nav>
+          <div class="dex-actions"><span class="dex-led"><i></i>REV 8C41</span><button>UTILITIES</button><button>BUILD</button><button>OPEN NDS</button><button class="red-button" data-dex-review-count>REVIEW ×3</button></div>
+        </header>
+        <div class="dex-context">
+          <span>LIVE SUBJECT</span>
+          <button class="dex-subject"><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><strong>#056 MANKEY</strong><b>⌄</b></button>
+          <button>LAND⌄</button><button>LV.18⌄</button><button>NORMAL⌄</button>
+          <div class="dex-match"><span>01</span><small id="dexMatchMeta">MATCH · FINAL<br>RULE #16</small></div>
+        </div>
+        <div class="dex-body">
+          <aside class="dex-deck">
+            <div class="deck-title"><span>PROFILE DECK</span><button>＋ NEW</button></div>
+            <label class="dex-search">SEARCH <input placeholder="NAME / SPECIES"></label>
+            <div class="deck-tabs"><button>BASE · 7</button><button class="is-on">OVERRIDES · APPLY ↓</button></div>
+            <p id="dexOrderHelp" class="dex-order-help"><span aria-hidden="true">⠿</span> DRAG OR ↑/↓ · APPLY TOP → BOTTOM · LAST MATCH APPLIES LAST</p>
+            <ol id="dexOverrideDeck" class="dex-profile-list" aria-label="Override resolver order; applied top to bottom; last matching override applies last" aria-describedby="dexOrderHelp">
+              <li class="dex-profile-item" data-profile-id="OVR_0F1A" data-profile-name="Forced asleep">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Forced asleep" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>01</b></span></button>
+                <button class="dex-profile-card"><span><strong>FORCED ASLEEP</strong><small>1 RULE / 0 AFFECTED</small></span><span class="mini-sprites"><span class="empty-sprite">—</span></span></button>
+              </li>
+              <li class="dex-profile-item is-selected" data-profile-id="OVR_42F8" data-profile-name="Throwing!">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Throwing!" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>02</b></span></button>
+                <button class="dex-profile-card" aria-current="true"><span><strong>THROWING!</strong><small>16 RULES / 9 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/mankey/icon.png" alt=""><img src="../../data/graphics/sprites/geodude/icon.png" alt=""><img src="../../data/graphics/sprites/onix/icon.png" alt=""></span></button>
+              </li>
+              <li class="dex-profile-item" data-profile-id="OVR_98D1" data-profile-name="Playful!">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Playful!" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>03</b></span></button>
+                <button class="dex-profile-card"><span><strong>PLAYFUL!</strong><small>7 RULES / 6 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/cleffa/icon.png" alt=""><img src="../../data/graphics/sprites/igglybuff/icon.png" alt=""></span></button>
+              </li>
+              <li class="dex-profile-item" data-profile-id="OVR_C221" data-profile-name="Floaty Bounce">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Floaty Bounce" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>04</b></span></button>
+                <button class="dex-profile-card"><span><strong>FLOATY BOUNCE</strong><small>7 RULES / 6 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/hoppip/icon.png" alt=""><img src="../../data/graphics/sprites/jumpluff/icon.png" alt=""></span></button>
+              </li>
+              <li class="dex-profile-item" data-profile-id="OVR_B17D" data-profile-name="Bird">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Bird" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>05</b></span></button>
+                <button class="dex-profile-card"><span><strong>BIRD</strong><small>8 RULES / 8 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/pidgey/icon.png" alt=""><img src="../../data/graphics/sprites/hoothoot/icon.png" alt=""></span></button>
+              </li>
+              <li class="dex-profile-item" data-profile-id="OVR_A6E0" data-profile-name="Swarm override">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Swarm override" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>06</b></span></button>
+                <button class="dex-profile-card"><span><strong>SWARM OVERRIDE</strong><small>3 RULES / 3 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/beedrill/icon.png" alt=""><img src="../../data/graphics/sprites/ariados/icon.png" alt=""></span></button>
+              </li>
+              <li class="dex-profile-item" data-profile-id="OVR_TEST" data-profile-name="Test">
+                <button class="dex-drag-handle" draggable="true" data-dex-drag-handle aria-label="Reorder Test" aria-keyshortcuts="ArrowUp ArrowDown"><span class="dex-grip" aria-hidden="true">⠿</span><span class="card-index"><b>07</b></span></button>
+                <button class="dex-profile-card"><span><strong>TEST</strong><small>1 RULE / 1 AFFECTED</small></span><span class="mini-sprites"><img src="../../data/graphics/sprites/ditto/icon.png" alt=""></span></button>
+              </li>
+            </ol>
+            <div id="dexOrderStatus" class="dex-order-status" aria-live="polite">RESOLVER ORDER ACTIVE · TOP → BOTTOM</div>
+            <button id="dexResetOrder" class="priority-button" disabled>↶ RESET RESOLVER ORDER</button>
+          </aside>
+          <section class="dex-workspace">
+            <div class="dex-title-row"><div><span id="dexSelectedPriority" class="red-tag">OVERRIDE PROFILE · RESOLVER ORDER 2 OF 7</span><h2>THROWING!</h2><p>STABLE ID / OVR_42F8</p></div><div class="dex-toolbar"><button>DUPLICATE</button><button>RULES · 16</button><button>•••</button></div></div>
+            <div class="dex-phases">
+              <button><span>01</span>SPAWN<small>BASE</small></button><button><span>02</span>CHILL<small>BASE</small></button><button class="is-on"><span>03</span>ALERT<small>+6</small></button><button><span>04</span>ACTIVE<small>+7</small></button><button><span>05</span>TIRED<small>BASE</small></button>
+            </div>
+            <div class="dex-editor">
+              <div class="dex-field-head"><span>INCLUDE / INHERIT · 4 OF 13 FIELDS SHOWN</span><span>BASE → OVERRIDE → EFFECTIVE</span></div>
+              <div class="dex-field is-active"><label><input type="checkbox" checked aria-label="Include Alert special action"><span></span></label><div><strong>ALERT SPECIAL ACTION</strong><small class="dex-base-value">(NONE)</small></div><i>→</i><button>PICK UP + THROW⌄</button><i>→</i><b>PICK UP + THROW</b></div>
+              <div class="dex-field is-active is-unchanged"><label><input type="checkbox" checked aria-label="Include Alert range type"><span></span></label><div><strong>ALERT RANGE TYPE</strong><small class="dex-base-value">(RADIUS)</small></div><i>→</i><button>RADIUS⌄</button><i>→</i><b>RADIUS <em class="dex-effective-note">UNCHANGED</em></b></div>
+              <div class="dex-field is-active"><label><input type="checkbox" checked aria-label="Include Alert distance"><span></span></label><div><strong>ALERT DISTANCE</strong><small class="dex-base-value">(3 TILES)</small></div><i>→</i><button>4 TILES⌄</button><i>→</i><b>4 TILES</b></div>
+              <div class="dex-field is-active"><label><input type="checkbox" checked aria-label="Include Active target"><span></span></label><div><strong>ACTIVE TARGET</strong><small class="dex-base-value">(PLAYER FRONT)</small></div><i>→</i><button>PLAYER CARDINAL⌄</button><i>→</i><b>PLAYER CARDINAL</b></div>
+              <div class="dex-field"><label><input type="checkbox" aria-label="Include Chain pause action"><span></span></label><div><strong>CHAIN PAUSE ACTION</strong><small class="dex-base-value">(NONE)</small></div><i>→</i><button disabled>INHERIT</button><i>→</i><b>NONE</b></div>
+            </div>
+          </section>
+          <aside class="dex-scan">
+            <div class="scan-screen"><span>RESOLUTION SCAN · TOP → BOTTOM</span><div class="pixel-subject"><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><i></i></div><strong>MANKEY</strong><small>LAND / LV.18 / NORMAL</small></div>
+            <div class="scan-step"><span>01</span><div><b>MANKEY RULE</b><small>CHOOSES CANOPY HOPPER</small></div><em>PASS</em></div>
+            <div class="scan-step"><span>02</span><div><b>CANOPY HOPPER</b><small>BASE PROFILE</small></div><em>PASS</em></div>
+            <div class="scan-step is-hit"><span>03</span><div><b>THROWING!</b><small id="dexScanOverrideMeta">RULE #16 · ORDER 2 OF 7</small></div><em id="dexScanOverrideResult">APPLIES LAST</em></div>
+            <div class="scan-step"><span>04</span><div><b>LATER OVERRIDES</b><small id="dexLaterOverridesMeta">0 MATCH AFTER ORDER 2</small></div><em>NO CHANGE</em></div>
+            <div class="scan-step"><span>05</span><div><b>FALLBACK</b><small>0 NORMALIZED</small></div><em>PASS</em></div>
+            <div class="scan-summary"><span>9</span><small>POKÉMON<br>AFFECTED</small><span>13</span><small>FIELDS<br>INCLUDED</small></div>
+            <button class="scan-button">OPEN FULL SCAN</button>
+          </aside>
+        </div>
+        <footer class="dex-footer"><span data-dex-draft-count>DRAFT SLOT A · 3 FIELD CHANGES</span><span>REV CHECK → ATOMIC WRITE → REPARSE + SCAN → VERIFY / ROLLBACK</span><span class="dex-footer-spacer"></span><button>RESET SLOT</button><button>PREVIEW</button><button class="red-button">SAVE + VERIFY</button></footer>
+      </article>
+
+      <!-- Direction 05: Data Bench -->
+      <article class="mockup mockup-bench" data-mockup="bench" hidden>
+        <header class="bench-header">
+          <div class="bench-brand"><span class="grid-logo"><i></i><i></i><i></i><i></i></span><strong>OVERWORLD DATA BENCH</strong><small>workspace / hg-engine</small></div>
+          <nav><button class="is-current">Profiles</button><button>Encounters</button><button>Sounds</button></nav>
+          <div class="bench-actions"><button>Command… <kbd>⌘K</kbd></button><button>Utilities</button><button>Build <kbd>⌘B</kbd></button><button>Open NDS</button><button class="blue-button">Review (3)</button></div>
+        </header>
+        <div class="bench-toolbar">
+          <label>View <select><option>Base + overrides</option></select></label>
+          <label>Context <select><option>Mankey / Land / L18 / Normal</option></select></label>
+          <label>Compare <select><option>Effective vs stored</option></select></label>
+          <span class="bench-match"><i></i>1 rule matches · #16</span>
+          <span class="bench-revision">REV 8C41 · CLEAN SOURCE</span>
+        </div>
+        <div class="bench-body">
+          <aside class="bench-sidebar">
+            <div class="bench-side-head"><span>ENTITIES</span><button>＋</button></div>
+            <label class="bench-search">⌕ <input placeholder="Filter…"></label>
+            <div class="bench-group">BASE PROFILES <span>7</span></div>
+            <button class="bench-row"><span>B</span><strong>Default</strong><em>1263</em></button>
+            <button class="bench-row"><span>B</span><strong>Skittish</strong><em>18</em></button>
+            <button class="bench-row"><span>B</span><strong>Aggressive chase</strong><em>1</em></button>
+            <button class="bench-row"><span>B</span><strong>Aggressive ram</strong><em>9</em></button>
+            <div class="bench-group">OVERRIDE PROFILES <span>7</span><button>↕</button></div>
+            <button class="bench-row is-selected"><span>O</span><strong>Throwing!</strong><em>9</em></button>
+            <button class="bench-row"><span>O</span><strong>Playful!</strong><em>6</em></button>
+            <button class="bench-row"><span>O</span><strong>Floaty Bounce</strong><em>6</em></button>
+            <button class="bench-row"><span>O</span><strong>Bird</strong><em>8</em></button>
+            <button class="bench-row"><span>O</span><strong>Swarm override</strong><em>3</em></button>
+          </aside>
+          <section class="bench-main">
+            <div class="bench-title"><div><span class="orange-square">O</span><span><strong>Throwing!</strong><small>OVR_42F8 · 16 rules · priority 2 of 7</small></span></div><div><button>Rules</button><button>Impact</button><button>Duplicate</button><button>•••</button></div></div>
+            <div class="bench-tabs"><button>All fields <span>71</span></button><button>Spawn <span>4</span></button><button>Chill <span>9</span></button><button>Alert <span>8</span></button><button class="is-on">Active <span>15</span></button><button>Tired <span>7</span></button><button>Stats <span>1</span></button></div>
+            <div class="data-table-wrap">
+              <table class="data-table">
+                <thead><tr><th><input type="checkbox" aria-label="Select all fields"></th><th>Field</th><th>Include</th><th>Base / inherited</th><th>Override value</th><th>Effective</th><th>Source</th></tr></thead>
+                <tbody>
+                  <tr class="is-edited"><td><input type="checkbox" aria-label="Select Alert special action"></td><td><strong>Alert special action</strong><small>alertSpecialAction</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Alert special action"><span></span></label></td><td>None</td><td><button>Pick up and throw⌄</button></td><td><b>Pick up and throw</b></td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr class="is-edited"><td><input type="checkbox" aria-label="Select Alert range type"></td><td><strong>Alert range type</strong><small>alertRange</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Alert range type"><span></span></label></td><td>Base value</td><td><button>Radius⌄</button></td><td><b>Radius</b></td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr class="is-edited"><td><input type="checkbox" aria-label="Select Alert distance"></td><td><strong>Alert distance</strong><small>alertness</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Alert distance"><span></span></label></td><td>Base value</td><td><button>4 tiles⌄</button></td><td><b>4 tiles</b></td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr class="is-edited"><td><input type="checkbox" aria-label="Select Active target"></td><td><strong>Active target</strong><small>targetSelector</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Active target"><span></span></label></td><td>Base value</td><td><button>Player cardinal line⌄</button></td><td><b>Player cardinal line</b></td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr><td><input type="checkbox" aria-label="Select Active speed"></td><td><strong>Active speed</strong><small>attentiveSpeed</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Active speed"><span></span></label></td><td>2</td><td><button>2⌄</button></td><td>2</td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr><td><input type="checkbox" aria-label="Select Overworld limit"></td><td><strong>Overworld limit</strong><small>overworldLimit</small></td><td><label class="tiny-switch"><input type="checkbox" checked aria-label="Include Overworld limit"><span></span></label></td><td>0 · unlimited</td><td><button>1⌄</button></td><td>1</td><td><span class="source-pill override">Override #16</span></td></tr>
+                  <tr><td><input type="checkbox" aria-label="Select Chain pause action"></td><td><strong>Chain pause action</strong><small>chainPauseAction</small></td><td><label class="tiny-switch"><input type="checkbox" aria-label="Include Chain pause action"><span></span></label></td><td>None</td><td class="muted-cell">— inherit —</td><td>None</td><td><span class="source-pill base">Canopy Hopper</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="bench-statusbar"><span>7 shown · 13 included · 3 edited</span><span>Tip: Space toggles Include · Enter edits a value</span><span>Preflight context verified</span></div>
+          </section>
+          <aside class="bench-inspector">
+            <div class="bench-inspector-head"><span>PROVENANCE</span><button>×</button></div>
+            <div class="bench-subject"><img src="../../data/graphics/sprites/mankey/icon.png" alt="Mankey"><span><strong>Mankey</strong><small>Land · L18 · Normal</small></span><em>MATCH</em></div>
+            <ol class="bench-layers"><li><span>01</span><div><strong>Species: Mankey</strong><small>Chooses Canopy Hopper</small></div><em>match</em></li><li><span>02</span><div><strong>Canopy Hopper</strong><small>Base profile · 71 fields</small></div><em>base</em></li><li class="is-winner"><span>03</span><div><strong>Throwing!</strong><small>Rule #16 · 13 fields</small></div><em>wins</em></li><li><span>04</span><div><strong>Runtime</strong><small>0 normalized fields</small></div><em>clean</em></li></ol>
+            <div class="impact-summary"><div><strong>9</strong><small>Pokémon</small></div><div><strong>16</strong><small>Rules</small></div><div><strong>13</strong><small>Fields</small></div></div>
+            <button class="full-width-button">Open resolution diff</button>
+          </aside>
+        </div>
+        <footer class="bench-footer"><span><i></i>Draft · 3 operations</span><span>REV 8C41 → ATOMIC WRITE → REPARSE + RESOLVE → VERIFY / ROLLBACK</span><span class="bench-footer-grow"></span><button>Discard</button><button>Preview source diff</button><button class="blue-button">Save atomically</button></footer>
+      </article>
+    </section>
+
+    <footer class="gallery-footer">
+      <div>
+        <span class="eyebrow">Preference capture</span>
+        <strong id="footerDirection">01 · Behavior Studio</strong>
+        <small id="footerDescription">The balanced direction: distinct base/override libraries, lifecycle editing, and a persistent resolver inspector.</small>
+      </div>
+      <button id="chooseDirection" class="choose-button">Choose Behavior Studio</button>
+    </footer>
+  </main>
+  <script src="mockups.js"></script>
+</body>
+</html>

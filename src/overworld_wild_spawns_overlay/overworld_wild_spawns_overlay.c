@@ -2688,6 +2688,7 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     u8 behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     u8 behaviorLimitKey = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     int i;
+    int overrideProfileIndex;
 
     if (context != NULL) {
         behaviorClass = context->behaviorClass;
@@ -2710,19 +2711,34 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     profile = behaviorData->classProfiles[behaviorClass];
 
     if (context != NULL) {
-        for (i = 0; i < OWBD_OVERRIDE_RULE_COUNT; i++) {
-            if (OverworldWildSpawns_BehaviorMatchApplies(
-                    context,
-                    &behaviorData->overrideRules[i].match)) {
-                const u8 overrideProfileIndex = behaviorData->overrideRules[i].profileIndex;
-                OverworldWildSpawns_ApplyBehaviorOverride(
-                    &profile,
-                    &behaviorData->overrideProfiles[overrideProfileIndex]);
-                if (OverworldWildSpawns_OverrideSetsOverworldLimit(
-                        &behaviorData->overrideProfiles[overrideProfileIndex])) {
-                    behaviorLimitKey = (u8)(OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE
-                        + overrideProfileIndex);
+        /* A profile is one ordered layer with one or more targeting rules. */
+        for (overrideProfileIndex = 0;
+             overrideProfileIndex < OWBD_OVERRIDE_PROFILE_COUNT;
+             overrideProfileIndex++) {
+            BOOL profileMatches = FALSE;
+
+            for (i = 0; i < OWBD_OVERRIDE_RULE_COUNT; i++) {
+                if (behaviorData->overrideRules[i].profileIndex != overrideProfileIndex) {
+                    continue;
                 }
+                if (OverworldWildSpawns_BehaviorMatchApplies(
+                        context,
+                        &behaviorData->overrideRules[i].match)) {
+                    profileMatches = TRUE;
+                    break;
+                }
+            }
+            if (!profileMatches) {
+                continue;
+            }
+
+            OverworldWildSpawns_ApplyBehaviorOverride(
+                &profile,
+                &behaviorData->overrideProfiles[overrideProfileIndex]);
+            if (OverworldWildSpawns_OverrideSetsOverworldLimit(
+                    &behaviorData->overrideProfiles[overrideProfileIndex])) {
+                behaviorLimitKey = (u8)(OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE
+                    + overrideProfileIndex);
             }
         }
     }

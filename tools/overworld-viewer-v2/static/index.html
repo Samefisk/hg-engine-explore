@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Wild Systems · Pokédex Workshop</title>
+  <link rel="stylesheet" href="/v2-assets/v2.css">
+  <script type="module" src="/v2-assets/v2.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+
+  <div id="app" class="workshop-shell" data-view="profiles">
+    <header id="appHeader" class="cartridge-header">
+      <div class="brand" aria-label="Wild Systems, Pokédex Workshop version 2">
+        <span class="brand-lens" aria-hidden="true"><i></i></span>
+        <span class="brand-copy">
+          <strong>Wild Systems</strong>
+          <small>Pokédex Workshop <b>V2</b></small>
+        </span>
+      </div>
+
+      <nav id="workspaceNav" class="workspace-nav" aria-label="Workshop views" role="tablist">
+        <button id="profilesTab" class="workspace-nav__button is-active" type="button" role="tab" data-view="profiles" aria-controls="profilesView" aria-selected="true">
+          <span>Profile</span><small>Deck</small>
+        </button>
+        <button id="routesTab" class="workspace-nav__button" type="button" role="tab" data-view="routes" aria-controls="routesView" aria-selected="false" tabindex="-1">
+          <span>Route</span><small>Deck</small>
+        </button>
+        <button id="soundsTab" class="workspace-nav__button" type="button" role="tab" data-view="sounds" aria-controls="soundsView" aria-selected="false" tabindex="-1">
+          <span>Sound</span><small>Deck</small>
+        </button>
+      </nav>
+
+      <div id="globalStatus" class="global-status" role="status" aria-live="polite" aria-atomic="true">
+        <i class="status-light" aria-hidden="true"></i>
+        <span><strong>Source ready</strong><small>Revision checking on</small></span>
+      </div>
+
+      <div class="header-actions" aria-label="Draft actions">
+        <button id="resetDraft" class="button button--quiet" type="button" disabled>Reset</button>
+        <button id="saveAll" class="button button--primary" type="button" disabled>
+          Save <span id="pendingCount" class="count-badge" aria-label="0 pending changes">0</span>
+        </button>
+      </div>
+
+      <details class="utility-menu">
+        <summary class="button button--dark">Utilities</summary>
+        <div class="utility-popover">
+          <section class="utility-section" aria-labelledby="pipelineHeading">
+            <div class="utility-heading">
+              <span><small>Pipeline</small><strong id="pipelineHeading">Build &amp; run</strong></span>
+              <span class="utility-tag">Source-safe</span>
+            </div>
+            <div class="utility-actions">
+              <button id="buildRom" class="button button--primary" type="button">Build ROM</button>
+              <button id="openNds" class="button" type="button">Open NDS</button>
+              <button id="restartServer" class="button button--danger-quiet" type="button">Restart server</button>
+            </div>
+            <div class="switch-list">
+              <label class="switch-row" for="autoBuild">
+                <span><strong>Build after save</strong><small>Compile only after a verified source commit.</small></span>
+                <input id="autoBuild" type="checkbox"><i aria-hidden="true"></i>
+              </label>
+              <label class="switch-row" for="autoRun">
+                <span><strong>Open after build</strong><small>Launch test.nds when the build succeeds.</small></span>
+                <input id="autoRun" type="checkbox"><i aria-hidden="true"></i>
+              </label>
+              <label class="switch-row" for="showBuildLog">
+                <span><strong>Show build log</strong><small>Open the console when a build begins.</small></span>
+                <input id="showBuildLog" type="checkbox"><i aria-hidden="true"></i>
+              </label>
+            </div>
+          </section>
+
+          <section class="utility-section" aria-labelledby="shinyHeading">
+            <div class="utility-heading">
+              <span><small>Save utility</small><strong id="shinyHeading">Shiny counter</strong></span>
+              <output id="shinyCounter" class="counter-readout" aria-live="polite">—</output>
+            </div>
+            <div class="utility-actions utility-actions--four">
+              <button id="refreshShiny" class="button" type="button">Refresh</button>
+              <button id="resetShiny" class="button" type="button">Set 0</button>
+              <button id="maxShiny" class="button" type="button">Set 8191</button>
+            </div>
+            <div id="reservedShinies" class="reserved-shinies" aria-live="polite">
+              <p class="empty-copy">No reserved shinies.</p>
+            </div>
+          </section>
+        </div>
+      </details>
+    </header>
+
+    <section id="buildPanel" class="build-panel" aria-labelledby="buildPanelTitle" hidden>
+      <header>
+        <span><i aria-hidden="true"></i><strong id="buildPanelTitle">Build console</strong></span>
+        <button class="icon-button" type="button" data-action="close-build-panel" aria-label="Close build console">×</button>
+      </header>
+      <pre id="buildOutput" tabindex="0" aria-label="Build output">Waiting for a build…</pre>
+    </section>
+
+    <main id="workspace" class="workspace" tabindex="-1">
+      <section id="profilesView" class="view view--profiles is-active" role="tabpanel" aria-labelledby="profilesTab">
+        <header class="context-bar">
+          <div class="context-title">
+            <span class="eyebrow">Live subject</span>
+            <strong id="profilesViewTitle">Resolve before editing</strong>
+          </div>
+          <label class="compact-field">
+            <span>Pokémon</span>
+            <select id="profileContextSpecies"><option>Loading…</option></select>
+          </label>
+          <label class="compact-field">
+            <span>Terrain</span>
+            <select id="profileContextTerrain"><option>Loading…</option></select>
+          </label>
+          <label class="compact-field compact-field--number">
+            <span>Level</span>
+            <input id="profileContextLevel" type="number" min="1" max="100" value="20" inputmode="numeric">
+          </label>
+          <label class="check-control" for="profileContextShiny">
+            <input id="profileContextShiny" type="checkbox">
+            <span>Shiny</span>
+          </label>
+          <button id="resolveContext" class="button button--dark" type="button">Resolve</button>
+          <p class="context-help">Class → base → ordered overrides → fallback. Later matches apply last.</p>
+        </header>
+
+        <div class="profile-workbench">
+          <aside class="panel library-panel" aria-labelledby="profileLibraryTitle">
+            <header class="panel-heading">
+              <span><small>Library</small><strong id="profileLibraryTitle">Profile deck</strong></span>
+              <button class="icon-button" type="button" data-action="new-profile" aria-label="Create profile">+</button>
+            </header>
+            <div class="library-tools">
+              <label class="search-field" for="profileSearch">
+                <span class="sr-only">Search profiles</span>
+                <input id="profileSearch" type="search" placeholder="Search name or Pokémon" autocomplete="off">
+              </label>
+              <label class="sr-only" for="profileKindFilter">Profile kind</label>
+              <select id="profileKindFilter" class="kind-filter">
+                <option value="all">All profiles</option>
+                <option value="base">Base only</option>
+                <option value="override">Overrides only</option>
+              </select>
+            </div>
+
+            <div id="profileLibrary" class="profile-library">
+              <section class="profile-group profile-group--base" data-profile-group="base" aria-labelledby="baseProfilesTitle">
+                <header>
+                  <span><i aria-hidden="true">B</i><strong id="baseProfilesTitle">Base profiles</strong></span>
+                  <small data-count="base">0</small>
+                </header>
+                <ul class="profile-list" data-profile-list="base">
+                  <li class="loading-row"><span></span><span>Loading base profiles…</span></li>
+                </ul>
+              </section>
+
+              <section class="profile-group profile-group--overrides" data-profile-group="overrides" aria-labelledby="overrideProfilesTitle">
+                <header>
+                  <span><i aria-hidden="true">O</i><strong id="overrideProfilesTitle">Ordered overrides</strong></span>
+                  <small data-count="overrides">0</small>
+                </header>
+                <p id="overrideOrderHelp" class="order-help">Drag the numbered grip or use its arrow keys. Applied top to bottom; later matches apply last.</p>
+                <ol class="profile-list override-deck" data-profile-list="overrides" aria-describedby="overrideOrderHelp">
+                  <li class="loading-row"><span></span><span>Loading override order…</span></li>
+                </ol>
+              </section>
+            </div>
+          </aside>
+
+          <section id="profileInspector" class="panel inspector-panel" aria-label="Profile inspector">
+            <div class="empty-state">
+              <span class="empty-state__glyph" aria-hidden="true">◇</span>
+              <h2>Select a profile</h2>
+              <p>Choose a base profile or ordered override to inspect its fields and affected Pokémon.</p>
+              <p class="field-legend"><b>(Base value)</b><i aria-hidden="true">→</i>Override<i aria-hidden="true">→</i>Effective</p>
+            </div>
+          </section>
+
+          <aside id="profileResolution" class="panel resolution-panel" aria-label="Context resolution" aria-live="polite">
+            <header class="panel-heading">
+              <span><small>Context scan</small><strong>Resolution</strong></span>
+              <span class="result-chip">Not run</span>
+            </header>
+            <div class="empty-state empty-state--small">
+              <span class="scan-grid" aria-hidden="true"></span>
+              <h2>Choose a subject</h2>
+              <p>Resolve a Pokémon and terrain to see the base profile, applied layers, and field provenance.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="routesView" class="view view--routes" role="tabpanel" aria-labelledby="routesTab" hidden>
+        <div class="two-pane-workbench">
+          <aside class="panel library-panel" aria-labelledby="routeLibraryTitle">
+            <header class="panel-heading">
+              <span><small>Encounters</small><strong id="routeLibraryTitle">Route deck</strong></span>
+              <span class="panel-count" data-route-count>0</span>
+            </header>
+            <label class="search-field search-field--standalone" for="routeSearch">
+              <span class="sr-only">Search routes</span>
+              <input id="routeSearch" type="search" placeholder="Search route or map" autocomplete="off">
+            </label>
+            <div id="routeLibrary" class="item-library">
+              <div class="loading-card"><span></span><p>Loading route encounters…</p></div>
+            </div>
+          </aside>
+          <section id="routeInspector" class="panel inspector-panel" aria-label="Route inspector">
+            <div class="empty-state">
+              <span class="empty-state__glyph" aria-hidden="true">⌁</span>
+              <h2 id="routesViewTitle">Select a route</h2>
+              <p>Encounter rates, slots, forms, levels, swaps, and route overrides appear here.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="soundsView" class="view view--sounds" role="tabpanel" aria-labelledby="soundsTab" hidden>
+        <div class="two-pane-workbench">
+          <aside class="panel library-panel" aria-labelledby="soundLibraryTitle">
+            <header class="panel-heading">
+              <span><small>Audio index</small><strong id="soundLibraryTitle">Sound deck</strong></span>
+              <span id="soundStatus" class="panel-count" role="status" aria-live="polite">0</span>
+            </header>
+            <label class="search-field search-field--standalone" for="soundSearch">
+              <span class="sr-only">Search sound effects</span>
+              <input id="soundSearch" type="search" placeholder="Search sound or ID" autocomplete="off">
+            </label>
+            <fieldset id="soundFilters" class="filter-row">
+              <legend class="sr-only">Sound effect filters</legend>
+              <button class="filter-chip is-active" type="button" data-filter="all" aria-pressed="true">All</button>
+            </fieldset>
+            <div id="soundLibrary" class="item-library">
+              <div class="loading-card"><span></span><p>Loading sound effects…</p></div>
+            </div>
+          </aside>
+          <section id="soundInspector" class="panel inspector-panel" aria-label="Sound effect inspector">
+            <div class="empty-state">
+              <span class="empty-state__glyph" aria-hidden="true">♫</span>
+              <h2 id="soundsViewTitle">Select a sound</h2>
+              <p>Preview metadata, symbol usage, and playback controls appear here.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastRegion" class="toast-region" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions"></div>
+
+  <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <form method="dialog">
+      <span class="dialog-mark" aria-hidden="true">!</span>
+      <div>
+        <p class="eyebrow">Please confirm</p>
+        <h2 id="confirmTitle">Continue?</h2>
+        <p id="confirmMessage">This action cannot be undone.</p>
+      </div>
+      <div class="dialog-actions">
+        <button class="button button--quiet" type="submit" value="cancel" data-confirm-cancel>Cancel</button>
+        <button class="button button--primary" type="submit" value="confirm" data-confirm-accept>Continue</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

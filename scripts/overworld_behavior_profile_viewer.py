@@ -4654,6 +4654,7 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
     raw_edits = {}
     raw_renames = {}
     raw_reorder = []
+    raw_match_replacements = {}
     if isinstance(changes, list):
         raw_adds = changes
         raw_removes = []
@@ -4663,6 +4664,7 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raw_edits = changes.get("edit", {})
         raw_renames = changes.get("rename", {})
         raw_reorder = changes.get("reorder", [])
+        raw_match_replacements = changes.get("replaceMatches", {})
     else:
         raise ValueError("missing changes list")
     if not isinstance(raw_adds, list):
@@ -4675,6 +4677,15 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raise ValueError("override renames must be an object")
     if not isinstance(raw_reorder, list):
         raise ValueError("override reorder must be a list")
+    if not isinstance(raw_match_replacements, dict):
+        raise ValueError("override match replacements must be an object")
+
+    def parse_raw_match(raw_match: dict) -> dict[str, str]:
+        match_raws = default_behavior_match_raws()
+        for match_field in MATCH_FIELDS:
+            if match_field in raw_match:
+                match_raws[match_field] = clean_token(str(raw_match[match_field]))
+        return match_raws
 
     parsed_adds = []
     for index, raw_change in enumerate(raw_adds, 1):
@@ -4691,13 +4702,6 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             raw = clean_token(str(raw_change.get("raw", "")))
             if field:
                 fields[field] = raw
-        def parse_raw_match(raw_match: dict) -> dict[str, str]:
-            match_raws = default_behavior_match_raws()
-            for match_field in MATCH_FIELDS:
-                if match_field in raw_match:
-                    match_raws[match_field] = clean_token(str(raw_match[match_field]))
-            return match_raws
-
         raw_matches = raw_change.get("matches")
         if isinstance(raw_matches, list):
             matches = [
@@ -4762,7 +4766,28 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             group.append(order)
         if group:
             parsed_reorder.append(group)
-    return {"add": parsed_adds, "edit": parsed_edits, "rename": parsed_renames, "remove": parsed_removes, "reorder": parsed_reorder}
+
+    parsed_match_replacements = {}
+    for raw_order, raw_matches in raw_match_replacements.items():
+        try:
+            order = int(raw_order)
+        except Exception as exc:
+            raise ValueError(f"invalid override match replacement order: {raw_order}") from exc
+        if not isinstance(raw_matches, list):
+            raise ValueError(f"override match replacement {order} must be a list")
+        matches = [parse_raw_match(raw_match) for raw_match in raw_matches if isinstance(raw_match, dict)]
+        if len(matches) != len(raw_matches) or not matches:
+            raise ValueError(f"override match replacement {order} must include valid match objects")
+        parsed_match_replacements[order] = matches
+
+    return {
+        "add": parsed_adds,
+        "edit": parsed_edits,
+        "rename": parsed_renames,
+        "remove": parsed_removes,
+        "reorder": parsed_reorder,
+        "replaceMatches": parsed_match_replacements,
+    }
 
 
 def canonicalize_named_override_profile_rules(
@@ -5073,7 +5098,8 @@ def apply_profile_override_changes(body: bytes) -> dict:
     renames = changes["rename"]
     removals = changes["remove"]
     reorder_groups = changes["reorder"]
-    if not additions and not edits and not renames and not removals and not reorder_groups:
+    match_replacements = changes["replaceMatches"]
+    if not additions and not edits and not renames and not removals and not reorder_groups and not match_replacements:
         return {"saved": False, "message": "No changes"}
 
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
@@ -5144,7 +5170,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
         profile_names = parse_override_profile_entry_names(raw_behavior_data)
 
         reorder_orders = {order for group in reorder_groups for order in group}
-        for order in set(removals) | set(edits.keys()) | set(renames.keys()) | reorder_orders:
+        for order in set(removals) | set(edits.keys()) | set(renames.keys()) | set(match_replacements.keys()) | reorder_orders:
             if order < 1 or order > len(existing_overrides):
                 raise ValueError(f"override order out of range: {order}")
         for order, field_changes in edits.items():
@@ -5167,6 +5193,48 @@ def apply_profile_override_changes(body: bytes) -> dict:
             for override in existing_overrides
         ]
         preferred_profile_orders: set[int] = set()
+
+        for order, replacement_matches in match_replacements.items():
+            profile_order = existing_overrides[order - 1]["profileOrder"]
+            profile_rule_orders = {
+                override["order"]
+                for override in existing_overrides
+                if override["profileOrder"] == profile_order
+            }
+            if profile_rule_orders.intersection(removals):
+                raise ValueError(f"override {order} cannot be removed and have its matches replaced")
+            matching_indexes = [
+                index
+                for index, rule in enumerate(rules_model)
+                if rule["profileOrder"] == profile_order
+            ]
+            if not matching_indexes:
+                raise ValueError(f"override {order} has no rules to replace")
+            for match_index, match in enumerate(replacement_matches, 1):
+                validate_override_match(match, f"override {order}.{match_index}")
+            old_orders = [
+                rules_model[index].get("order")
+                for index in matching_indexes
+                if rules_model[index].get("order") is not None
+            ]
+            insertion_index = matching_indexes[0]
+            matching_index_set = set(matching_indexes)
+            rules_model = [
+                rule
+                for index, rule in enumerate(rules_model)
+                if index not in matching_index_set
+            ]
+            replacement_rules = [
+                {
+                    "order": old_orders[index] if index < len(old_orders) else None,
+                    "match": match,
+                    "profileOrder": profile_order,
+                    "removed": False,
+                }
+                for index, match in enumerate(replacement_matches)
+            ]
+            rules_model[insertion_index:insertion_index] = replacement_rules
+            preferred_profile_orders.add(profile_order)
 
         for order, field_changes in edits.items():
             if order in removals:
@@ -5232,30 +5300,41 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 )
 
         if reorder_groups:
-            rule_by_order = {
-                rule["order"]: rule
+            profile_order_by_rule_order = {
+                rule["order"]: rule["profileOrder"]
                 for rule in rules_model
-                if rule.get("order") is not None
+                if rule.get("order") is not None and not rule["removed"]
             }
-            reordered_rules = []
-            seen_orders = set()
-            for group in reorder_groups:
-                for order in group:
-                    rule = rule_by_order.get(order)
-                    if rule is None or rule["removed"]:
-                        continue
-                    reordered_rules.append(rule)
-                    seen_orders.add(order)
-            for rule in rules_model:
-                order = rule.get("order")
-                if order is not None and order in seen_orders:
-                    continue
-                if not rule["removed"]:
-                    reordered_rules.append(rule)
+            active_rules_by_profile: dict[int, list[dict]] = {}
+            active_profile_order: list[int] = []
             for rule in rules_model:
                 if rule["removed"]:
-                    reordered_rules.append(rule)
-            rules_model = reordered_rules
+                    continue
+                profile_order = rule["profileOrder"]
+                if profile_order not in active_rules_by_profile:
+                    active_rules_by_profile[profile_order] = []
+                    active_profile_order.append(profile_order)
+                active_rules_by_profile[profile_order].append(rule)
+
+            requested_profile_order = []
+            seen_profile_orders = set()
+            for group in reorder_groups:
+                for order in group:
+                    profile_order = profile_order_by_rule_order.get(order)
+                    if profile_order is None or profile_order in seen_profile_orders:
+                        continue
+                    requested_profile_order.append(profile_order)
+                    seen_profile_orders.add(profile_order)
+            requested_profile_order.extend(
+                profile_order
+                for profile_order in active_profile_order
+                if profile_order not in seen_profile_orders
+            )
+            rules_model = [
+                rule
+                for profile_order in requested_profile_order
+                for rule in active_rules_by_profile[profile_order]
+            ] + [rule for rule in rules_model if rule["removed"]]
 
         canonicalize_named_override_profile_rules(profiles_model, rules_model, preferred_profile_orders)
 
@@ -5331,10 +5410,12 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if changed:
             validate_behavior_data_override_profiles(updated_source, macros, group_labels)
             write_behavior_data_source(updated_source)
-        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + (1 if reorder_groups else 0)
+        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + len(match_replacements) + (1 if reorder_groups else 0)
         label = "override profile change" if total_changes == 1 else "override profile changes"
         return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
 
+    if match_replacements:
+        raise ValueError("override match replacement requires split override profile data")
     if reorder_groups:
         raise ValueError("override profile reordering requires split override profile data")
 
