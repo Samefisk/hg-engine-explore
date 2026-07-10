@@ -3874,12 +3874,14 @@ button {
   min-height: 38px;
 }
 
-.pv2-range-field.is-invalid {
+.pv2-range-field.is-invalid,
+.pv2-composite-field.is-invalid {
   border-left-color: #b7554f;
   background: #fff2ed;
 }
 
-.pv2-range-field.is-invalid select {
+.pv2-range-field.is-invalid select,
+.pv2-composite-field.is-invalid select[aria-invalid="true"] {
   border-color: #b7554f;
 }
 
@@ -3989,6 +3991,16 @@ button {
 
   .pv2-composite-controls {
     grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  }
+}
+
+@container (min-width: 391px) and (max-width: 620px) {
+  [data-field-row^="hop-path-"] .pv2-composite-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-field-row^="hop-path-"] .pv2-composite-control:first-child {
+    grid-column: 1 / -1;
   }
 }
 

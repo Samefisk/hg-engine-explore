@@ -60,6 +60,39 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
     ]),
   }),
+  "hop-path-chill": Object.freeze({
+    id: "hop-path-chill",
+    label: "Hop path",
+    meta: "direction · tiles",
+    range: Object.freeze({ min: "hopMinDistance", max: "hopMaxDistance", label: "Hop distance", unit: "tiles" }),
+    fields: Object.freeze([
+      Object.freeze({ key: "hopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
+      Object.freeze({ key: "hopMinDistance", label: "Min distance", unit: "tiles" }),
+      Object.freeze({ key: "hopMaxDistance", label: "Max distance", unit: "tiles" }),
+    ]),
+  }),
+  "hop-path-active": Object.freeze({
+    id: "hop-path-active",
+    label: "Hop path",
+    meta: "direction · tiles",
+    range: Object.freeze({ min: "attentiveHopMinDistance", max: "attentiveHopMaxDistance", label: "Hop distance", unit: "tiles" }),
+    fields: Object.freeze([
+      Object.freeze({ key: "attentiveHopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
+      Object.freeze({ key: "attentiveHopMinDistance", label: "Min distance", unit: "tiles" }),
+      Object.freeze({ key: "attentiveHopMaxDistance", label: "Max distance", unit: "tiles" }),
+    ]),
+  }),
+  "hop-path-tired": Object.freeze({
+    id: "hop-path-tired",
+    label: "Hop path",
+    meta: "direction · tiles",
+    range: Object.freeze({ min: "tiredHopMinDistance", max: "tiredHopMaxDistance", label: "Hop distance", unit: "tiles" }),
+    fields: Object.freeze([
+      Object.freeze({ key: "tiredHopAllowNonCardinal", label: "Diagonal hops", unit: "", note: "Allows non-cardinal directions" }),
+      Object.freeze({ key: "tiredHopMinDistance", label: "Min distance", unit: "tiles" }),
+      Object.freeze({ key: "tiredHopMaxDistance", label: "Max distance", unit: "tiles" }),
+    ]),
+  }),
   "hop-timing-chill": Object.freeze({
     id: "hop-timing-chill",
     label: "Hop timing",
@@ -277,7 +310,7 @@ const LOCOMOTION = Object.freeze({
 const MOVEMENT_FIELDS = Object.freeze({
   chill: Object.freeze({
     speed: "chillSpeed",
-    hopOptions: Object.freeze(["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"]),
+    hopPath: Object.freeze({ composite: "hop-path-chill", fields: Object.freeze(["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
@@ -285,7 +318,7 @@ const MOVEMENT_FIELDS = Object.freeze({
   }),
   active: Object.freeze({
     speed: "attentiveSpeed",
-    hopOptions: Object.freeze(["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"]),
+    hopPath: Object.freeze({ composite: "hop-path-active", fields: Object.freeze(["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "attentiveHopPause", "attentiveHopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
@@ -293,7 +326,7 @@ const MOVEMENT_FIELDS = Object.freeze({
   }),
   tired: Object.freeze({
     speed: "tiredSpeed",
-    hopOptions: Object.freeze(["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"]),
+    hopPath: Object.freeze({ composite: "hop-path-tired", fields: Object.freeze(["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "tiredHopPause", "hopSpinSpeed"]) }),
     chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
@@ -1298,26 +1331,33 @@ export function createProfilesController({
     const inheritedChillAmbiguous = scope === "chill" && inherited && !effectiveRaw;
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
-    const append = (fieldKeys, active, extra = {}) => fieldKeys.forEach((field, index) => {
-      const candidate = explicitInactiveNode(profile, field, active, {
-        parentField,
-        ambiguous,
-        ...extra,
-        beforeLabel: index === 0 ? extra.beforeLabel : "",
+    const append = (fieldKeys, active, extra = {}) => {
+      let appended = false;
+      fieldKeys.forEach((field) => {
+        const candidate = explicitInactiveNode(profile, field, active, {
+          parentField,
+          ambiguous,
+          ...extra,
+          beforeLabel: appended ? "" : extra.beforeLabel,
+        });
+        if (!candidate) return;
+        appended = true;
+        const existing = nodes.get(field);
+        if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
       });
-      if (!candidate) return;
-      const existing = nodes.get(field);
-      if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
-    });
+    };
     append([fields.speed], inherited || moves, { label: "Movement speed" });
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
       && raw !== LOCOMOTION.hop;
-    const hopOptionFields = throwUsesStandaloneRange
-      ? fields.hopOptions.filter((field) => field !== "attentiveHopMaxDistance")
-      : fields.hopOptions;
-    append(hopOptionFields, inherited || raw === LOCOMOTION.hop, { beforeLabel: "Hop options" });
+    const hopPathFields = throwUsesStandaloneRange
+      ? fields.hopPath.fields.filter((field) => field !== "attentiveHopMaxDistance")
+      : fields.hopPath.fields;
+    append(hopPathFields, inherited || raw === LOCOMOTION.hop, {
+      beforeLabel: "Hop options",
+      composite: fields.hopPath.composite,
+    });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
     if (inheritedChillRam) append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
     if (inheritedChillAmbiguous) {
@@ -1609,6 +1649,10 @@ export function createProfilesController({
 
   function renderCompositeFieldControl(profile, compositeNode, presentation = {}) {
     const override = isOverrideProfile(profile);
+    const rangeError = compositeNode.composite.range
+      ? profileFieldRangeError(profile, compositeNode.composite.range)
+      : "";
+    const rangeErrorId = `pv2-range-error-${String(presentation.instance || compositeNode.composite.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const controls = compositeNode.composite.fields.map((definition) => {
       const node = compositeNode.nodes.find((candidate) => candidate.field === definition.key) || {};
       const raw = fieldRaw(profile, definition.key);
@@ -1631,6 +1675,8 @@ export function createProfilesController({
       const instance = `${presentation.instance}:${definition.key}`;
       const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
       const baseLabel = hasContextBase ? valueLabel(contextBase) : "";
+      const rangeMember = Boolean(compositeNode.composite.range
+        && [compositeNode.composite.range.min, compositeNode.composite.range.max].includes(definition.key));
       const description = [
         definition.unit ? `Unit: ${definition.unit}.` : "",
         definition.note ? `${definition.note}.` : "",
@@ -1650,6 +1696,7 @@ export function createProfilesController({
         description,
         hasContextBase,
         baseLabel,
+        rangeMember,
         options: fieldOptions(definition.key, raw, profile, node),
       };
     });
@@ -1661,14 +1708,14 @@ export function createProfilesController({
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
     return `
-      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-unit">${escapeHtml(compositeNode.composite.meta || "")}</span>${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
         <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
           ${controls.map((control) => `
             <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
               <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
               <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
-              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.key)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(control.descriptionId)}">
+              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.key)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError && control.rangeMember ? ` ${rangeErrorId}` : ""}`)}" aria-invalid="${Boolean(rangeError && control.rangeMember)}">
                 ${override ? `<option value="" ${control.raw ? "" : "selected"}>Inherit</option>` : ""}
                 ${control.options.map((option) => {
                   const optionRaw = valueRaw(option);
@@ -1676,6 +1723,7 @@ export function createProfilesController({
                 }).join("")}
               </select>
             </label>`).join("")}
+          ${rangeError ? `<small id="${escapeHtml(rangeErrorId)}" class="pv2-range-error">${escapeHtml(rangeError)}</small>` : ""}
         </span>
       </div>`;
   }
@@ -1710,7 +1758,7 @@ export function createProfilesController({
       const maxNode = range ? byField.get(range.max) : null;
       if (!range || !maxNode) return [node];
       consumed.add(range.max);
-      return [{ range, minNode: node, maxNode }];
+      return [{ range, minNode: node, maxNode, beforeLabel: node.beforeLabel || maxNode.beforeLabel || "" }];
     });
   }
 
@@ -1797,11 +1845,14 @@ export function createProfilesController({
           .map((candidate, index) => renderHierarchyNode(profile, candidate, sectionId, `${path}.available-${index}`, depth, parentInactive))
           .join("");
       }
-      return renderCompositeFieldControl(profile, node, {
+      const beforeMarkup = node.nodes[0]?.beforeLabel
+        ? `<h4 class="pv2-suboption-divider">${escapeHtml(node.nodes[0].beforeLabel)}</h4>`
+        : "";
+      return `${beforeMarkup}${renderCompositeFieldControl(profile, node, {
         depth,
         parentInactive,
         instance: `${sectionId}:${path}:${node.composite.id}`,
-      });
+      })}`;
     }
     if (node.range) {
       const canEditMinimum = profileCanEditField(profile, node.range.min);
@@ -1810,11 +1861,14 @@ export function createProfilesController({
         const availableNode = canEditMinimum ? node.minNode : (canEditMaximum ? node.maxNode : null);
         return availableNode ? renderHierarchyNode(profile, availableNode, sectionId, `${path}.available`, depth, parentInactive) : "";
       }
-      return renderRangeFieldControl(profile, node, {
+      const beforeMarkup = node.beforeLabel
+        ? `<h4 class="pv2-suboption-divider">${escapeHtml(node.beforeLabel)}</h4>`
+        : "";
+      return `${beforeMarkup}${renderRangeFieldControl(profile, node, {
         depth,
         parentInactive,
         instance: `${sectionId}:${path}:range`,
-      });
+      })}`;
     }
     if (!profileCanEditField(profile, node.field)) return "";
     const inactive = Boolean(parentInactive || node.inactive);
