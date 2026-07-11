@@ -18,8 +18,42 @@
 #define OW_WILD_SAVED_SHINY_TERRAIN_MASK 0x7F
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
+#define OW_WILD_OBJECT_ID_START 0xE0
+#define OW_WILD_DISTANCE_DESPAWN_SAMPLES 2
+#define OW_WILD_DISTANCE_DESPAWN_TILES 16
 #define OW_WILD_STAGED_HOP_MOVEMENT_LIST_WORDS 72
 #define OW_WILD_FIELD_READY_DELAY_FRAMES 90
+
+typedef enum OverworldWildDespawnReason {
+    OW_WILD_DESPAWN_REASON_NONE = 0,
+    OW_WILD_DESPAWN_REASON_BATTLE_DEFEATED,
+    OW_WILD_DESPAWN_REASON_BATTLE_CAUGHT,
+    OW_WILD_DESPAWN_REASON_DISTANCE,
+} OverworldWildDespawnReason;
+
+typedef enum OverworldWildDespawnAction {
+    OW_WILD_DESPAWN_ACTION_NONE = 0,
+    OW_WILD_DESPAWN_ACTION_DELETE_OBJECT,
+    OW_WILD_DESPAWN_ACTION_CLEAR_LOGICAL_ONLY,
+    OW_WILD_DESPAWN_ACTION_REBIND_OBJECT,
+    OW_WILD_DESPAWN_ACTION_PRESENTATION_MISSING,
+    OW_WILD_DESPAWN_ACTION_RECREATE_OBJECT,
+    OW_WILD_DESPAWN_ACTION_DELETE_SUPPRESSED,
+    OW_WILD_DESPAWN_ACTION_IDENTITY_CONFLICT,
+} OverworldWildDespawnAction;
+
+typedef enum OverworldWildBattleDisposition {
+    OW_WILD_BATTLE_DISPOSITION_RETAIN = 0,
+    OW_WILD_BATTLE_DISPOSITION_FLED,
+    OW_WILD_BATTLE_DISPOSITION_DEFEATED,
+    OW_WILD_BATTLE_DISPOSITION_CAUGHT,
+} OverworldWildBattleDisposition;
+
+typedef enum OverworldWildDespawnAuthorization {
+    OW_WILD_DESPAWN_DENIED = 0,
+    OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY,
+    OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT,
+} OverworldWildDespawnAuthorization;
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -31,7 +65,52 @@ typedef struct OverworldWildSpawn {
     u8 terrain;
     u8 shiny;
     u8 active;
+    u8 objectId;
+    u16 encounterGeneration;
 } OverworldWildSpawn;
+
+typedef char OverworldWildSpawnSizeMustRemain20Bytes[
+    sizeof(OverworldWildSpawn) == 20 ? 1 : -1];
+
+typedef struct OverworldWildDespawnRecord {
+    u32 objectPtr;
+    u32 objectFlags;
+    u32 personality;
+    u16 sequence;
+    u16 mapId;
+    u16 spawnMapId;
+    u16 mapGeneration;
+    u16 encounterGeneration;
+    s16 objectX;
+    s16 objectY;
+    s16 playerX;
+    s16 playerY;
+    s16 objectId;
+    u8 reason;
+    u8 action;
+    u8 slot;
+    u8 distance;
+    u8 contextFlags;
+    u8 expectedObjectId;
+} OverworldWildDespawnRecord;
+
+#define OW_WILD_DESPAWN_RECORD_COUNT 8
+
+typedef struct OverworldWildDespawnTelemetry {
+    u32 magic;
+    u16 sequence;
+    u8 writeIndex;
+    u8 unexpectedCount;
+    u16 reasonCounts[4];
+    OverworldWildDespawnRecord records[OW_WILD_DESPAWN_RECORD_COUNT];
+} OverworldWildDespawnTelemetry;
+
+typedef struct OverworldWildPresentationState {
+    s16 lastKnownX[OW_WILD_MAX_SPAWNS];
+    s16 lastKnownY[OW_WILD_MAX_SPAWNS];
+    u8 farSamples[OW_WILD_MAX_SPAWNS];
+    u16 managerRestoreMask;
+} OverworldWildPresentationState;
 
 typedef struct OverworldWildSavedShiny {
     u16 mapId;
@@ -119,6 +198,10 @@ typedef struct OverworldWildSpawnState {
     s16 movementPhantomTeleportTargetY[OW_WILD_MAX_SPAWNS];
     u8 movementPhantomTeleportHasTarget[OW_WILD_MAX_SPAWNS];
     u8 movementAButtonDown;
+    u16 mapGeneration;
+    u16 pendingMapGeneration;
+    u16 pendingEncounterGeneration;
+    u8 presentationRestorePending;
 } OverworldWildSpawnState;
 
 typedef struct OverworldWildSpawnsOverlayEntry {
@@ -127,7 +210,7 @@ typedef struct OverworldWildSpawnsOverlayEntry {
         FieldSystem *fieldSystem,
         OverworldWildSpawnState *state,
         LocalMapObject *talkedObject);
-    void (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
+    u8 (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
     void (*cleanupResidentData)(void);
 } OverworldWildSpawnsOverlayEntry;
 

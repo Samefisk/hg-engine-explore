@@ -4571,11 +4571,13 @@ def consolidate_named_override_profiles(raw_source: str, preferred_profile_order
     return updated_source
 
 
-def write_behavior_data_source(raw_source: str) -> None:
+def write_behavior_data_source(raw_source: str, raw_header: str | None = None) -> None:
     raw_source = consolidate_named_override_profiles(raw_source)
     counts = behavior_blob_counts(raw_source)
+    if raw_header is None:
+        raw_header = BEHAVIOR_DATA_HEADER.read_text()
     BEHAVIOR_DATA_SOURCE.write_text(raw_source)
-    BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(BEHAVIOR_DATA_HEADER.read_text(), counts))
+    BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(raw_header, counts))
     invalidate_data_cache()
 
 
@@ -4638,6 +4640,7 @@ def validate_profile_management_species(symbols: list[str], valid_species: set[s
 def apply_profile_management_change(body: bytes) -> dict:
     change = parse_profile_management_payload(body)
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    raw_behavior_header = BEHAVIOR_DATA_HEADER.read_text()
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
@@ -4646,7 +4649,7 @@ def apply_profile_management_change(body: bytes) -> dict:
         parse_profile(entry, macros)
         for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
-    class_entries = class_define_entries(raw_behavior_data)
+    class_entries = class_define_entries(raw_behavior_header)
     validate_class_define_entries(class_entries, len(class_profiles))
     class_symbols = [entry["symbol"] for entry in class_entries[: len(class_profiles)]]
     default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
@@ -4660,9 +4663,9 @@ def apply_profile_management_change(body: bytes) -> dict:
         pokemon = validate_profile_management_species(change.get("pokemon", []), valid_species)
         new_symbol = sanitize_class_symbol(change["name"], set(class_symbols))
         new_index = len(class_profiles)
-        updated_source = replace_class_define_block(raw_behavior_data, class_symbols + [new_symbol], len(class_profiles))
-        updated_source = append_profile_initializer(updated_source, raw_values(class_profiles[default_class]))
-        write_behavior_data_source(updated_source)
+        updated_header = replace_class_define_block(raw_behavior_header, class_symbols + [new_symbol], len(class_profiles))
+        updated_source = append_profile_initializer(raw_behavior_data, raw_values(class_profiles[default_class]))
+        write_behavior_data_source(updated_source, updated_header)
         membership_result = None
         if pokemon:
             membership_result = apply_profile_membership_changes(
@@ -4683,9 +4686,9 @@ def apply_profile_management_change(body: bytes) -> dict:
     if action == "duplicate":
         new_symbol = sanitize_class_symbol(change["name"], set(class_symbols))
         new_index = len(class_profiles)
-        updated_source = replace_class_define_block(raw_behavior_data, class_symbols + [new_symbol], len(class_profiles))
-        updated_source = append_profile_initializer(updated_source, raw_values(class_profiles[class_index]))
-        write_behavior_data_source(updated_source)
+        updated_header = replace_class_define_block(raw_behavior_header, class_symbols + [new_symbol], len(class_profiles))
+        updated_source = append_profile_initializer(raw_behavior_data, raw_values(class_profiles[class_index]))
+        write_behavior_data_source(updated_source, updated_header)
         return {
             "saved": True,
             "message": f"Duplicated {humanize_symbol(old_symbol, CLASS_PREFIX)} as {humanize_symbol(new_symbol, CLASS_PREFIX)}",
@@ -4702,9 +4705,9 @@ def apply_profile_management_change(body: bytes) -> dict:
         if new_symbol == old_symbol:
             return {"saved": False, "message": "No code changes needed", "classIndex": class_index, "symbol": old_symbol}
         class_symbols[class_index] = new_symbol
-        updated_source = replace_class_define_block(raw_behavior_data, class_symbols, len(class_profiles))
-        updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", new_symbol, updated_source)
-        write_behavior_data_source(updated_source)
+        updated_header = replace_class_define_block(raw_behavior_header, class_symbols, len(class_profiles))
+        updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", new_symbol, raw_behavior_data)
+        write_behavior_data_source(updated_source, updated_header)
         return {"saved": True, "message": f"Renamed profile to {humanize_symbol(new_symbol, CLASS_PREFIX)}", "classIndex": class_index, "symbol": new_symbol}
 
     if class_index == default_class:
@@ -4713,9 +4716,9 @@ def apply_profile_management_change(body: bytes) -> dict:
         raise ValueError(f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is still referenced by behavior runtime code and cannot be deleted safely")
     class_symbols.pop(class_index)
     updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", "OW_WILD_BEHAVIOR_CLASS_DEFAULT", raw_behavior_data)
-    updated_source = replace_class_define_block(updated_source, class_symbols, len(class_profiles))
+    updated_header = replace_class_define_block(raw_behavior_header, class_symbols, len(class_profiles))
     updated_source = remove_profile_initializer(updated_source, class_index, len(class_profiles))
-    write_behavior_data_source(updated_source)
+    write_behavior_data_source(updated_source, updated_header)
     return {"saved": True, "message": f"Deleted {humanize_symbol(old_symbol, CLASS_PREFIX)}", "classIndex": default_class}
 
 

@@ -14,8 +14,6 @@
 #include "../include/task.h"
 
 #define OW_WILD_BATTLE_OUTCOME_PLAYER_FLED 5
-#define OW_WILD_BATTLE_RESULT_PLAYER_FLED 0x5
-#define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE 0x01
 #define OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE 0x02
 #define OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE 0x04
@@ -50,8 +48,6 @@ static u16 sFieldReadyTaskMapId;
 static u8 sBattleFlags;
 extern u32 space_for_setmondata;
 
-static void OverworldWildSpawns_RefreshMapState(FieldSystem *fieldSystem);
-
 static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
 {
     FieldSystem *fieldSystem = (FieldSystem *)data;
@@ -59,7 +55,6 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     if (fieldSystem != gFieldSysPtr) {
         if (sFieldReadyTaskFieldSystem == fieldSystem) {
             sFieldReadyTaskFieldSystem = NULL;
-            sFieldReadyTaskMapId = 0;
             sOverworldWildSpawnState.battleGraceSteps = 0;
         }
         DestroySysTask(task);
@@ -68,6 +63,13 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
 
     if (fieldSystem->taskman != NULL) {
         return;
+    }
+
+    if (fieldSystem->location != NULL
+        && sFieldReadyTaskMapId == (u16)fieldSystem->location->mapId
+        && sOverworldWildSpawnState.presentationRestorePending
+        && sOverworldWildSpawnState.battleGraceSteps == 0) {
+        goto refresh;
     }
 
     if (fieldSystem->location != NULL
@@ -81,8 +83,9 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
             return;
         }
 
+refresh:
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
-        OverworldWildSpawns_RefreshMapState(fieldSystem);
+        (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
     } else if (sOverworldWildSpawnState.battleGraceSteps != 0) {
         sOverworldWildSpawnState.battleGraceSteps--;
         if (sOverworldWildSpawnState.battleGraceSteps != 0) {
@@ -105,18 +108,6 @@ static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntr
     }
 
     return OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
-}
-
-static void OverworldWildSpawns_RefreshMapState(FieldSystem *fieldSystem)
-{
-    const OverworldWildSpawnsOverlayEntry *entry;
-
-    entry = OverworldWildSpawns_GetOverlayEntry();
-    if (entry == NULL) {
-        return;
-    }
-
-    entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
 }
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
@@ -189,18 +180,11 @@ u32 OverworldWildSpawns_PopPendingBattle(FieldSystem *fieldSystem, LocalMapObjec
         sBattleFlags |= OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE;
     }
 
-    sOverworldWildSpawnState.pendingPersonality = 0;
     sOverworldWildSpawnState.pendingSpecies = SPECIES_NONE;
     sOverworldWildSpawnState.pendingLevel = 0;
     sOverworldWildSpawnState.pendingShiny = FALSE;
 
     return pendingBattle;
-}
-
-static BOOL OverworldWildSpawns_BattleResultIsPlayerFlee(u16 battleResult)
-{
-    return battleResult == OW_WILD_BATTLE_RESULT_PLAYER_FLED
-        || (battleResult & OW_WILD_BATTLE_RESULT_TRY_FLEE) != 0;
 }
 
 static int OverworldWildSpawns_FindSavedHpSlot(u32 personality)
@@ -367,17 +351,22 @@ void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bs
 void OverworldWildSpawns_CleanupPendingBattle(FieldSystem *fieldSystem, u32 battleResult)
 {
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
+    u8 disposition = OW_WILD_BATTLE_DISPOSITION_RETAIN;
     u32 battlePersonality = sBattleHpPersonality;
 
     if (entry != NULL) {
-        entry->cleanupPendingBattle(fieldSystem, &sOverworldWildSpawnState, battleResult);
+        disposition = entry->cleanupPendingBattle(
+            fieldSystem,
+            &sOverworldWildSpawnState,
+            (u16)battleResult);
     } else {
         sOverworldWildSpawnState.pendingPersonality = 0;
         sOverworldWildSpawnState.pendingSlot = -1;
         sOverworldWildSpawnState.movementQueuedBattleSlot = -1;
     }
 
-    if (!OverworldWildSpawns_BattleResultIsPlayerFlee(battleResult)) {
+    if (disposition == OW_WILD_BATTLE_DISPOSITION_DEFEATED
+        || disposition == OW_WILD_BATTLE_DISPOSITION_CAUGHT) {
         OverworldWildSpawns_ClearSavedHp(battlePersonality);
     }
 

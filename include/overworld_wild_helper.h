@@ -3,10 +3,11 @@
 
 #include "types.h"
 #include "overworld_wild_behavior_data.h"
+#include "overworld_wild_spawns_internal.h"
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 9
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 12
 
 #define OW_WILD_HELPER_DIRECTION_NONE 0xFF
 #define OW_WILD_HELPER_DIRECTION_UP 0
@@ -108,8 +109,6 @@ typedef struct OverworldWildHelperSpawnCallbacks {
     OverworldWildHelperTryGetSpawnTerrainFunc tryGetSpawnTerrain;
     OverworldWildHelperTilePredicateFunc isTileOccupied;
     OverworldWildHelperNearActiveSpawnFunc isNearActiveSpawn;
-    OverworldWildHelperTilePredicateFunc isWalkableLandTile;
-    OverworldWildHelperTilePredicateFunc isStaticFishingShoreTile;
     OverworldWildHelperGetMapIdFunc getMapId;
     OverworldWildHelperArchiveLoadFunc loadArchiveData;
     OverworldWildHelperTryGetEncounterDataIdFunc tryGetEncounterDataId;
@@ -174,6 +173,88 @@ typedef BOOL (*OverworldWildHelperPickHopFunc)(
     void *context,
     OverworldWildHelperHopResult *result);
 
+typedef LocalMapObject *(*OverworldWildHelperRecreatePresentationFunc)(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    LocalMapObject *object,
+    int x,
+    int y);
+typedef void (*OverworldWildHelperResetSlotFunc)(
+    OverworldWildSpawnState *state,
+    int slot,
+    BOOL deleteAuxiliaryObjects);
+typedef BOOL (*OverworldWildHelperReconcilePresentationsFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    OverworldWildHelperRecreatePresentationFunc recreatePresentation);
+typedef BOOL (*OverworldWildHelperIsPresentationContextCurrentFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state);
+typedef void (*OverworldWildHelperNormalizeThrowPresentationFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot);
+typedef void (*OverworldWildHelperSyncCarriedThrowTargetFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    int carrierSlot,
+    int targetSlot);
+typedef BOOL (*OverworldWildHelperRemoveEncounterFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    int slot,
+    u16 expectedGeneration,
+    OverworldWildDespawnReason reason,
+    u8 distance,
+    OverworldWildHelperResetSlotFunc resetSlot);
+typedef void (*OverworldWildHelperDespawnFarEncountersFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    u16 movementProtectedMask,
+    OverworldWildHelperResetSlotFunc resetSlot);
+typedef void (*OverworldWildHelperRecordDespawnEventFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    int slot,
+    OverworldWildDespawnReason reason,
+    OverworldWildDespawnAction action,
+    u8 distance);
+typedef u8 (*OverworldWildHelperClassifyBattleResultFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    u16 battleResult);
+typedef u8 (*OverworldWildHelperFinishBattleFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    u16 battleResult,
+    OverworldWildHelperResetSlotFunc resetSlot);
+typedef LocalMapObject *(*OverworldWildHelperCreatePresentationObjectFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot,
+    int x,
+    int y,
+    u8 facing,
+    u8 movementBehavior,
+    u8 range);
+typedef BOOL (*OverworldWildHelperValidateDeferredBattleFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int slot,
+    u16 encounterGeneration);
+
 typedef struct OverworldWildHelperOverlayEntry {
     u32 magic;
     u16 version;
@@ -182,6 +263,14 @@ typedef struct OverworldWildHelperOverlayEntry {
     OverworldWildHelperTryPrepareEncounterSpawnFunc tryPrepareEncounterSpawn;
     OverworldWildHelperPickHopFunc pickRandomBehaviorHop;
     OverworldWildHelperPickHopFunc planBehaviorHopStep;
+    OverworldWildHelperIsPresentationContextCurrentFunc isPresentationContextCurrent;
+    OverworldWildHelperNormalizeThrowPresentationFunc normalizeThrowPresentation;
+    OverworldWildHelperSyncCarriedThrowTargetFunc syncCarriedThrowTarget;
+    OverworldWildHelperReconcilePresentationsFunc reconcilePresentations;
+    OverworldWildHelperDespawnFarEncountersFunc despawnFarEncounters;
+    OverworldWildHelperFinishBattleFunc finishBattle;
+    OverworldWildHelperCreatePresentationObjectFunc createPresentationObject;
+    OverworldWildHelperValidateDeferredBattleFunc validateDeferredBattle;
 } OverworldWildHelperOverlayEntry;
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY \

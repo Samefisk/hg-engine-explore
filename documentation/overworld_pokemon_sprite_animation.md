@@ -13,31 +13,32 @@ This note tracks what is known about overworld Pokemon sprite animation speed an
 
 ## Custom Hop Landing Fix
 
-The custom hop landing path previously set `0x00020028` after landing as `OW_WILD_SPAWNER_CUSTOM_JUMP_LANDING_SET_BITS`. Those bits correspond to map-object flags 3, 5, and 17. Leaving them raised after a custom hop can make the Pokemon sprite animation continue at the faster hop pacing.
+The custom hop landing path previously wrote `0x00020028` for a two-frame
+post-landing pulse. Those bits are stock movement transition/completion state,
+not a supported sprite-animation API. If the frame task paused for a script or
+the overlay unloaded before the timer expired, the pulse could outlive its
+custom hop and make only the sprite animate at the faster hop cadence.
 
-The landing path now treats those bits as short-lived animation state:
-
-- `OW_WILD_SPAWNER_CUSTOM_JUMP_LANDING_ANIM_BITS`
-- cleared by `OverworldWildSpawns_SetObjectLandingTile`
-- pulsed by `OverworldWildSpawns_PlayCustomJumpLandingFeedback`
-- cleared by `OverworldWildSpawns_TickCustomJumpLandingFeedback`
-
-This keeps custom hops from permanently speeding up the Pokemon's idle/walk
-sprite animation after landing, while still giving the stock landing animation
-state a rendered window.
+The custom landing pulse has been removed. Custom jumps now clear only the bits
+that their direct-render carrier explicitly owns (`BIT_JUMP_START`,
+`BIT_MOVE_START`, and `MAPOBJECTFLAG_UNK13`) after the carrier finishes. Stock
+movement completion flags and partner-wrapper state are left to their stock
+command lifecycle.
 
 ## Persistent Regression Hardening
 
-The landing pulse now has its own `movementCustomJumpLandingAnimFrames` timer.
-Do not reuse the custom jump elapsed timer for post-landing animation feedback:
-that field is jump-progress state, and sharing it with the landing pulse lets
-cleanup, object recreation, or context-loss paths accidentally leave the
-`0x00020028` presentation bits alive longer than intended.
+The spot-emote `0x49` partner-prep command now has explicit, object-bound
+ownership. Normal completion closes it with `0x4A`; timeout, reset, object
+replacement, despawn, battle teardown, and overlay unload all use the same
+finish-and-restore path. Binding ownership to the object pointer prevents a
+late cleanup for one spawn generation from changing a replacement object in
+the same slot.
 
-The custom jump cleanup path clears the whole custom-jump presentation bit set,
-including the landing animation bits. Landing feedback must be re-applied with
-`OverworldWildSpawns_PlayCustomJumpLandingFeedback` after cleanup when a short
-landing pulse is actually desired.
+Do not add a generic map-object "presentation mask" or a timer that clears
+stock flags later. In particular, movement start/end events and the movement
+completion latch must be produced and consumed by the command that owns them.
+Durable cleanup means completing or cancelling the command transaction and
+running its paired restore command, not guessing which raw flags look visual.
 
 ## Future Intentional Speed Control
 
@@ -47,7 +48,7 @@ If overworld Pokemon sprite animation speed becomes a profile option, use a scop
 2. Apply the requested animation speed while the behavior is active.
 3. Restore the saved state when the behavior ends, the Pokemon lands, despawns, is picked up, or enters battle.
 
-Avoid piggybacking on custom hop landing flags for permanent animation speed changes. Hop flags are transient movement state and should be normalized at landing.
+Avoid piggybacking on custom hop landing flags for permanent animation speed changes. Hop flags are stock movement lifecycle state, not an animation-speed control surface.
 
 ## Useful Symbols And Findings
 
@@ -119,8 +120,8 @@ For now:
 
 - Use existing movement speed tiers for movement feel.
 - Use `hopTime` only for jump travel/arc feel.
-- Keep clearing transient custom-hop landing bits so hop state does not become
-  accidental permanent animation-speed state.
+- Do not synthesize stock movement transition/completion bits as landing
+  feedback. Let the owning movement command produce and consume them.
 
 For a future dedicated sprite-animation-speed feature:
 

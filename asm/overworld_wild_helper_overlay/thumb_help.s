@@ -31,11 +31,11 @@ __aeabi_uidivmod:
 .size __aeabi_uidiv, . - __aeabi_uidiv
 .size __aeabi_uidivmod, . - __aeabi_uidivmod
 
-.global memset
+.global __wrap_memset
 .thumb_func
-.type memset,function
-memset:
+.type __wrap_memset,function
+__wrap_memset:
     push {lr}
     blx 0x020E5B44
     pop {pc}
-.size memset, . - memset
+.size __wrap_memset, . - __wrap_memset

@@ -31,10 +31,10 @@ __aeabi_uidivmod:
 .size __aeabi_uidiv, . - __aeabi_uidiv
 .size __aeabi_uidivmod, . - __aeabi_uidivmod
 
-.global __gnu_thumb1_case_uqi
+.global __wrap___gnu_thumb1_case_uqi
 .thumb_func
-.type __gnu_thumb1_case_uqi,function
-__gnu_thumb1_case_uqi:
+.type __wrap___gnu_thumb1_case_uqi,function
+__wrap___gnu_thumb1_case_uqi:
     push {r1}
     mov r1, lr
     lsrs r1, r1, #1
@@ -44,12 +44,12 @@ __gnu_thumb1_case_uqi:
     add lr, lr, r1
     pop {r1}
     bx lr
-.size __gnu_thumb1_case_uqi, . - __gnu_thumb1_case_uqi
+.size __wrap___gnu_thumb1_case_uqi, . - __wrap___gnu_thumb1_case_uqi
 
-.global __gnu_thumb1_case_uhi
+.global __wrap___gnu_thumb1_case_uhi
 .thumb_func
-.type __gnu_thumb1_case_uhi,function
-__gnu_thumb1_case_uhi:
+.type __wrap___gnu_thumb1_case_uhi,function
+__wrap___gnu_thumb1_case_uhi:
     push {r0, r1}
     mov r1, lr
     lsrs r1, r1, #1
@@ -60,22 +60,38 @@ __gnu_thumb1_case_uhi:
     add lr, lr, r1
     pop {r0, r1}
     bx lr
-.size __gnu_thumb1_case_uhi, . - __gnu_thumb1_case_uhi
+.size __wrap___gnu_thumb1_case_uhi, . - __wrap___gnu_thumb1_case_uhi
 
-.global memset
+.global __wrap___gnu_thumb1_case_shi
 .thumb_func
-.type memset,function
-memset:
+.type __wrap___gnu_thumb1_case_shi,function
+__wrap___gnu_thumb1_case_shi:
+    push {r0, r1}
+    mov r1, lr
+    lsrs r1, r1, #1
+    lsls r0, r0, #1
+    lsls r1, r1, #1
+    ldrsh r1, [r1, r0]
+    lsls r1, r1, #1
+    add lr, lr, r1
+    pop {r0, r1}
+    bx lr
+.size __wrap___gnu_thumb1_case_shi, . - __wrap___gnu_thumb1_case_shi
+
+.global __wrap_memset
+.thumb_func
+.type __wrap_memset,function
+__wrap_memset:
     push {lr}
     blx 0x020E5B44
     pop {pc}
-.size memset, . - memset
+.size __wrap_memset, . - __wrap_memset
 
-.global memcpy
+.global __wrap_memcpy
 .thumb_func
-.type memcpy,function
-memcpy:
+.type __wrap_memcpy,function
+__wrap_memcpy:
     push {lr}
     blx 0x020E5AD8
     pop {pc}
-.size memcpy, . - memcpy
+.size __wrap_memcpy, . - __wrap_memcpy
