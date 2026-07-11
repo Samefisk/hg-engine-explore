@@ -747,6 +747,33 @@ Verification:
 Result:
 - Passed. The delivered feature branch reproduces the reviewed visual result.
 
+### A35 Overlay Markers On The Enemy Status Panel
+
+Change:
+- Shifted both marker anchors from tiles `(14,4)/(14,5)` to
+  `(13,3)/(13,4)`, moving them eight pixels left and eight pixels up.
+- Temporarily added Fire as a secondary type to inspect both rows, then removed
+  the probe before the final build.
+
+Why this is not a duplicate:
+- Earlier probes verified rendering and stacking beside the panel. This tests
+  the user's follow-up placement request: overlap the slanted status-panel tip.
+
+Verification:
+- Normal Docker builds passed for the real monotype and temporary dual-row
+  variants.
+- Against the untouched base ROM, BG1 rows `(13-16,3)` and `(13-16,4)` each
+  read as eight zero bytes at both command selection and Fell Stinger, proving
+  the new cells are blank before the feature draws or clears them.
+- The explicit `--sav test.sav` rival route produced
+  `enemy_type_hud_over_panel.png` with the real Water marker.
+- `enemy_type_hud_over_panel_dual_probe.png` shows Water and Fire stacked over
+  the panel edge at the new anchors.
+
+Result:
+- Passed. The temporary Fire probe was removed; only the coordinate change
+  remains in the product diff.
+
 ## Duplicate-Check Notes
 
 - Do not retry OAM positioning/resource tags without new evidence; A1-A21

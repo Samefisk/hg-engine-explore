@@ -20,11 +20,11 @@ static BOOL sEnemyTypeMarkerInitialized;
 static struct BattleSystem *sEnemyTypeMarkerOwner;
 
 static const u8 sEnemyTypeMarkerX[ENEMY_TYPE_MARKER_SLOT_COUNT] = {
-    14, 14,
+    13, 13,
 };
 
 static const u8 sEnemyTypeMarkerY[ENEMY_TYPE_MARKER_SLOT_COUNT] = {
-    4, 5,
+    3, 4,
 };
 
 static BOOL EnemyTypeMarker_IsDisplayableType(u8 type)
