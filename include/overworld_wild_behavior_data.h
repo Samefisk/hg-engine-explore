@@ -6,22 +6,21 @@
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 31
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 33
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
-#define OW_WILD_BEHAVIOR_CLASS_SKITTISH 1
-#define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 2
-#define OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM 3
-#define OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER 4
-#define OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER 5
-#define OW_WILD_BEHAVIOR_CLASS_PICKED_UP 6
-#define OWBD_CLASS_PROFILE_COUNT 7
+#define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 1
+#define OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM 2
+#define OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER 3
+#define OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER 4
+#define OW_WILD_BEHAVIOR_CLASS_PICKED_UP 5
+#define OWBD_CLASS_PROFILE_COUNT 6
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
-#define OWBD_OVERRIDE_PROFILE_COUNT 7
-#define OWBD_OVERRIDE_RULE_COUNT 45
-#define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_RULE_COUNT
+#define OWBD_OVERRIDE_PROFILE_COUNT 8
+#define OWBD_OVERRIDE_MEMBER_COUNT 51
+#define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
 #define OWED_ENCOUNTER_AREA_COUNT 150
 #define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
 
@@ -96,7 +95,6 @@ typedef struct OverworldWildBehaviorProfile {
     u8 attentiveAction;
     u8 targetSelector;
     u8 movementStyle;
-    u8 chillCooldown;
     u8 alertChance;
     u8 spawnDestination;
     u8 attentiveBattle;
@@ -176,25 +174,20 @@ typedef struct OverworldWildBehaviorSpeciesClassRule {
     u8 behaviorClass;
 } OverworldWildBehaviorSpeciesClassRule;
 
-typedef struct OverworldWildBehaviorOverride {
-    OverworldWildBehaviorMatch match;
-    u32 mask;
-    u16 mask2;
-    u32 mask3;
-    OverworldWildBehaviorProfile profile;
-} OverworldWildBehaviorOverride;
-
 typedef struct OverworldWildBehaviorOverrideProfile {
+    OverworldWildBehaviorMatch match;
+    u16 memberStart;
+    u16 memberCount;
+    u8 targetMode;
     u32 mask;
     u16 mask2;
     u32 mask3;
     OverworldWildBehaviorProfile profile;
 } OverworldWildBehaviorOverrideProfile;
 
-typedef struct OverworldWildBehaviorOverrideRule {
-    OverworldWildBehaviorMatch match;
-    u8 profileIndex;
-} OverworldWildBehaviorOverrideRule;
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
+#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)
@@ -215,15 +208,14 @@ typedef struct OverworldWildBehaviorOverrideRule {
 #define OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED (1u << 16)
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR (1u << 17)
 #define OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE (1u << 18)
-#define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_COOLDOWN (1u << 19)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE (1u << 21)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME (1u << 22)
-#define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION (1u << 23)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE (1u << 24)
-#define OW_WILD_BEHAVIOR_OVERRIDE_SPECIAL_ACTION (1u << 25)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL (1u << 26)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE (1u << 27)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE (1u << 28)
+#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE (1u << 19)
+#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME (1u << 20)
+#define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION (1u << 21)
+#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE (1u << 22)
+#define OW_WILD_BEHAVIOR_OVERRIDE_SPECIAL_ACTION (1u << 23)
+#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL (1u << 24)
+#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE (1u << 25)
+#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE (1u << 26)
 
 #define OW_WILD_BEHAVIOR_OVERRIDE2_HOP_PAUSE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_TIME (1u << 1)
@@ -285,8 +277,8 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     u16 speciesClassRuleCount;
     const OverworldWildBehaviorOverrideProfile *overrideProfiles;
     u16 overrideProfileCount;
-    const OverworldWildBehaviorOverrideRule *overrideRules;
-    u16 overrideRuleCount;
+    const u16 *overrideMembers;
+    u16 overrideMemberCount;
 } OverworldWildBehaviorDataOverlayEntry;
 
 typedef struct OverworldWildBehaviorDataBlobHeader {
@@ -306,9 +298,9 @@ typedef struct OverworldWildBehaviorDataBlobHeader {
     u32 overrideProfilesOffset;
     u16 overrideProfileCount;
     u16 overrideProfileSize;
-    u32 overrideRulesOffset;
-    u16 overrideRuleCount;
-    u16 overrideRuleSize;
+    u32 overrideMembersOffset;
+    u16 overrideMemberCount;
+    u16 overrideMemberSize;
 } OverworldWildBehaviorDataBlobHeader;
 
 typedef struct OverworldWildEncounterLookupDataBlobHeader {

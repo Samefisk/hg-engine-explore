@@ -68,6 +68,7 @@ BLOB_BEHAVIOR_FIELD_INDEXES = {
     "sOverworldWildBehaviorClassRules": 2,
     "sOverworldWildBehaviorSpeciesClassRules": 3,
     "sOverworldWildBehaviorOverrideProfiles": 4,
+    "sOverworldWildBehaviorOverrideMembers": 5,
     "sOverworldWildBehaviorOverrideRules": 5,
     "sOverworldWildBehaviorOverrides": 4,
 }
@@ -75,8 +76,6 @@ OWBD_COUNT_DEFINES = {
     "OWBD_CLASS_PROFILE_COUNT": "sOverworldWildBehaviorClassProfiles",
     "OWBD_CLASS_RULE_COUNT": "sOverworldWildBehaviorClassRules",
     "OWBD_SPECIES_CLASS_RULE_COUNT": "sOverworldWildBehaviorSpeciesClassRules",
-    "OWBD_OVERRIDE_PROFILE_COUNT": "sOverworldWildBehaviorOverrideProfiles",
-    "OWBD_OVERRIDE_RULE_COUNT": "sOverworldWildBehaviorOverrideRules",
 }
 ENEMY_PARTY_SOURCE = ROOT / "src/field/enemy_party.c"
 POKEGRA_MK = ROOT / "data/graphics/pokegra.mk"
@@ -211,7 +210,6 @@ PROFILE_FIELDS = [
     "attentiveAction",
     "targetSelector",
     "movementStyle",
-    "chillCooldown",
     "alertChance",
     "spawnDestination",
     "attentiveBattle",
@@ -295,7 +293,6 @@ FIELD_LABELS = {
     "attentiveAction": "Legacy response",
     "targetSelector": "Target",
     "movementStyle": "Movement style",
-    "chillCooldown": "Chill cooldown",
     "alertChance": "Alert chance",
     "spawnDestination": "Spawn destination",
     "attentiveBattle": "Battle Active",
@@ -344,6 +341,49 @@ FIELD_LABELS = {
     "attentiveCircleRadius": "Circle radius",
     "attentiveContinueWhenArrived": "Continue when arrived",
     "attentiveAvoidPreviousTile": "Avoid previous tile",
+}
+
+FIELD_UNITS = {
+    "spawnHopTime": "frames",
+    "spawnDestinationMinDistance": "tiles",
+    "spawnDestinationMaxDistance": "tiles",
+    "overworldLimit": "Pokémon",
+    "chillSpeed": "speed",
+    "hopMinDistance": "tiles",
+    "hopMaxDistance": "tiles",
+    "hopTime": "frames",
+    "hopSpinSpeed": "frames",
+    "hopPause": "frames",
+    "teleportTime": "frames",
+    "teleportPause": "frames",
+    "ramAccelerationSteps": "moves",
+    "ramMaxSpeed": "frames",
+    "alertTime": "frames",
+    "alertness": "tiles",
+    "alertChance": "%",
+    "stamina": "frames",
+    "attentiveCircleRadius": "tiles",
+    "attentiveSpeed": "speed",
+    "attentiveHopMinDistance": "tiles",
+    "attentiveHopMaxDistance": "tiles",
+    "attentiveHopPause": "frames",
+    "attentiveHopSpinSpeed": "frames",
+    "attentiveTeleportTime": "frames",
+    "attentiveTeleportPause": "frames",
+    "attentiveRamAccelerationSteps": "steps",
+    "attentiveRamMaxSpeed": "speed",
+    "attentiveChaseBoostDistance": "tiles",
+    "attentiveChaseBoostSpeed": "speed",
+    "tiredSpeed": "speed",
+    "tiredHopMinDistance": "tiles",
+    "tiredHopMaxDistance": "tiles",
+    "tiredHopPause": "frames",
+    "tiredTeleportTime": "frames",
+    "tiredTeleportPause": "frames",
+    "tiredRamAccelerationSteps": "steps",
+    "tiredRamMaxSpeed": "speed",
+    "restTime": "frames",
+    "range": "tiles",
 }
 
 PRIMITIVE_FIELDS = [
@@ -533,7 +573,6 @@ OVERRIDE1_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE": "alertRange",
     "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR": "targetSelector",
     "OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE": "movementStyle",
-    "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_COOLDOWN": "chillCooldown",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE": "alertChance",
     "OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION": "spawnDestination",
     "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE": "attentiveBattle",
@@ -806,7 +845,6 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveSpeed",
     "tiredSpeed",
     "range",
-    "chillCooldown",
     "alertChance",
     "hopMinDistance",
     "hopMaxDistance",
@@ -840,115 +878,6 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveChaseBoostSpeed",
     "attentiveCircleRadius",
 }
-
-COMMON_NUMERIC_FIELD_SYMBOLS = {
-    "alertTime": [
-        "OW_WILD_SPAWNER_ALERT_TIME_AUTO",
-        "OW_WILD_SPAWNER_SPOT_EMOTE_SPEECH_FRAMES",
-        "OW_WILD_SPAWNER_SPOT_EMOTE_FRAMES_PER_JUMP",
-    ],
-    "alertness": [
-        "OW_WILD_SPAWNER_SPOT_RANGE",
-        "OW_WILD_SPAWNER_CLOSE_ALERT_RADIUS",
-        "OW_WILD_SPAWNER_ONIX_RAM_ALERTNESS",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_TREE_ALERT_RADIUS",
-    ],
-    "chillSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "attentiveSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "tiredSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_PIDGEY_MOVEMENT_SPEED",
-        "OW_WILD_SPAWNER_ONIX_RAM_START_SPEED",
-    ],
-    "range": [
-        "OW_WILD_SPAWNER_MOVEMENT_RANGE",
-        "OW_WILD_SPAWNER_PHANTOM_STALK_RANGE",
-        "OW_WILD_SPAWNER_ONIX_RAM_RANGE",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE",
-    ],
-    "chillCooldown": [
-        "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
-    ],
-    "hopMinDistance": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MIN_TILES",
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "hopMaxDistance": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_MAX_TILES",
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_MAX_HOP_TILES",
-    ],
-    "hopPause": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES",
-        "OW_WILD_SPAWNER_CHILL_WANDER_COOLDOWN_FRAMES",
-    ],
-    "hopTime": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_FRAMES_PER_TILE",
-    ],
-    "spawnHopTime": [
-        "OW_WILD_SPAWNER_CANOPY_HOPPER_LONG_JUMP_FRAMES_PER_TILE",
-    ],
-    "teleportTime": [
-        "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES",
-    ],
-    "teleportPause": [
-        "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES",
-    ],
-    "spawnDestinationMinDistance": [
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "spawnDestinationMaxDistance": [
-        "OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP",
-    ],
-    "ramAccelerationSteps": [
-        "OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES",
-    ],
-    "ramMaxSpeed": [
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_1",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_2",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_3",
-        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
-        "OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED",
-    ],
-}
-
-for _profile_field, _source_field in {
-    "attentiveHopMinDistance": "hopMinDistance",
-    "tiredHopMinDistance": "hopMinDistance",
-    "attentiveHopMaxDistance": "hopMaxDistance",
-    "tiredHopMaxDistance": "hopMaxDistance",
-    "attentiveHopPause": "hopPause",
-    "tiredHopPause": "hopPause",
-    "attentiveTeleportTime": "teleportTime",
-    "tiredTeleportTime": "teleportTime",
-    "attentiveTeleportPause": "teleportPause",
-    "tiredTeleportPause": "teleportPause",
-    "attentiveRamAccelerationSteps": "ramAccelerationSteps",
-    "tiredRamAccelerationSteps": "ramAccelerationSteps",
-    "attentiveRamMaxSpeed": "ramMaxSpeed",
-    "tiredRamMaxSpeed": "ramMaxSpeed",
-}.items():
-    COMMON_NUMERIC_FIELD_SYMBOLS[_profile_field] = COMMON_NUMERIC_FIELD_SYMBOLS[_source_field]
 
 NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "alertTime": 255,
@@ -1305,6 +1234,7 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 
 def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     label_overrides = {
+        "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
@@ -1387,6 +1317,37 @@ def make_value(raw: str, field: str | None, macros: dict[str, int]) -> dict:
 
 def numeric(value: dict) -> int | None:
     return value.get("value")
+
+
+def canonical_profile_value_raw(value: dict, field: str) -> str:
+    evaluated = numeric(value)
+    if field in NUMERIC_PROFILE_FIELDS and evaluated is not None:
+        return str(evaluated)
+    return value.get("raw", "")
+
+
+def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    for field, value in profile.items():
+        if field in NUMERIC_PROFILE_FIELDS and numeric(value) is not None:
+            raw = str(numeric(value))
+            result[field] = {**value, "raw": raw, "symbol": None, "label": raw}
+        else:
+            result[field] = copy.deepcopy(value)
+    return result
+
+
+def canonical_profile_change_raw(field: str, raw: str, macros: dict[str, int]) -> str:
+    cleaned = clean_token(raw)
+    if cleaned == "":
+        return ""
+    if field not in NUMERIC_PROFILE_FIELDS:
+        return cleaned
+    value = make_value(cleaned, field, macros)
+    evaluated = numeric(value)
+    if evaluated is None:
+        raise ValueError(f"invalid numeric value for {field}: {raw}")
+    return str(evaluated)
 
 
 def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
@@ -1480,16 +1441,110 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     }
 
 
+def behavior_source_uses_override_members(source: str) -> bool:
+    return "sOverworldWildBehaviorOverrideMembers" in source or re.search(r"\boverrideMembers\b", source) is not None
+
+
 def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> list[dict]:
     entries = parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorOverrideProfiles"))
+    member_values = []
+    uses_member_model = behavior_source_uses_override_members(source)
+    if uses_member_model:
+        member_values = [
+            make_value(str(raw), None, macros)
+            for raw in parse_initializer(extract_braced_initializer(source, "sOverworldWildBehaviorOverrideMembers"))
+        ]
+    valid_member_values = {
+        value
+        for symbol, value in macros.items()
+        if symbol.startswith("SPECIES_") and symbol != "SPECIES_NONE" and isinstance(value, int)
+    }
+    disabled_mode = macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED", 0)
+    members_mode = macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1)
+    all_mode = macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL", 2)
+    expected_member_start = 0
     profiles = []
     for order, entry in enumerate(entries, 1):
+        if len(entry) == 8 and isinstance(entry[0], list):
+            member_start = numeric(make_value(str(entry[1]), None, macros))
+            member_count = numeric(make_value(str(entry[2]), None, macros))
+            target_mode = make_value(str(entry[3]), None, macros)
+            target_mode_value = numeric(target_mode)
+            if member_start is None or member_count is None or member_start < 0 or member_count < 0:
+                raise ParseError(f"override profile #{order} has invalid member range")
+            if member_start > 0xFFFF or member_count > 0xFFFF:
+                raise ParseError(f"override profile #{order} member range exceeds u16 storage")
+            if member_start != expected_member_start:
+                raise ParseError(f"override profile #{order} member slice is not contiguous")
+            if target_mode_value not in {disabled_mode, members_mode, all_mode}:
+                raise ParseError(f"override profile #{order} has invalid target mode")
+            member_end = member_start + member_count
+            if member_end > len(member_values) or member_end > 0xFFFF:
+                raise ParseError(f"override profile #{order} member range exceeds member table")
+            members = member_values[member_start:member_end]
+            member_symbols = [str(member.get("symbol") or member.get("raw") or "") for member in members]
+            if len(member_symbols) != len(set(member_symbols)):
+                raise ParseError(f"override profile #{order} contains duplicate members")
+            if any(numeric(member) not in valid_member_values for member in members):
+                raise ParseError(f"override profile #{order} contains an invalid Pokemon member")
+            if target_mode_value == members_mode and member_count == 0:
+                raise ParseError(f"override profile #{order} member target is empty")
+            match = parse_match(entry[0], macros)
+            unresolved_match_fields = [field for field, value in match.items() if numeric(value) is None]
+            if unresolved_match_fields:
+                raise ParseError(
+                    f"override profile #{order} has invalid shared match value for {', '.join(unresolved_match_fields)}"
+                )
+            any_species = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES", macros.get("SPECIES_NONE", 0))
+            if numeric(match["species"]) != any_species:
+                raise ParseError(f"override profile #{order} shared match must use ANY species")
+            any_level = macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
+            min_level = numeric(match["minLevel"])
+            max_level = numeric(match["maxLevel"])
+            if min_level != any_level and max_level != any_level and min_level > max_level:
+                raise ParseError(f"override profile #{order} minimum level exceeds maximum level")
+            if target_mode_value == all_mode:
+                is_global = (
+                    numeric(match["groupMask"]) == macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)
+                    and numeric(match["terrain"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN")
+                    and min_level == any_level
+                    and max_level == any_level
+                    and numeric(match["shiny"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY")
+                    and numeric(match["behaviorClass"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS")
+                )
+                if is_global:
+                    raise ParseError(f"override profile #{order} ALL target requires a shared condition")
+            expected_member_start = member_end
+            profiles.append(
+                {
+                    "order": order,
+                    "profileOrder": order,
+                    "kind": "behavior",
+                    "match": match,
+                    "memberStart": member_start,
+                    "memberCount": member_count,
+                    "members": members,
+                    "memberSymbols": member_symbols,
+                    "targetMode": target_mode,
+                    "behavior": parse_behavior_override(entry[4:], macros),
+                }
+            )
+            continue
+        if uses_member_model:
+            raise ParseError(f"override profile #{order} does not use the member target shape")
         profiles.append(
             {
                 "order": order,
                 "behavior": parse_behavior_override(entry, macros),
             }
         )
+    if uses_member_model:
+        if expected_member_start == 0:
+            sentinel_ok = len(member_values) == 1 and numeric(member_values[0]) == macros.get("SPECIES_NONE", 0)
+            if not sentinel_ok:
+                raise ParseError("empty override member storage must contain one SPECIES_NONE sentinel")
+        elif expected_member_start != len(member_values):
+            raise ParseError("override member table contains unreferenced entries")
     return profiles
 
 
@@ -1518,6 +1573,18 @@ def parse_behavior_override_rules(source: str, macros: dict[str, int], group_lab
 
 
 def parse_behavior_overrides(source: str, macros: dict[str, int], group_labels: dict[int, dict]) -> list[dict]:
+    if behavior_source_uses_override_members(source):
+        overrides = parse_behavior_override_profiles(source, macros)
+        for override in overrides:
+            mode = numeric(override["targetMode"])
+            if mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED", 0):
+                override["summary"] = "Disabled"
+            elif mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
+                count = len(override["members"])
+                override["summary"] = f"{count} member{'s' if count != 1 else ''}"
+            else:
+                override["summary"] = match_summary(override["match"], macros, group_labels)
+        return overrides
     try:
         return parse_behavior_override_rules(source, macros, group_labels)
     except ParseError:
@@ -1609,6 +1676,8 @@ def parse_override_profile_entry_names(raw_source: str) -> dict[int, str]:
 
 
 def parse_override_profile_names(raw_source: str) -> dict[int, str]:
+    if behavior_source_uses_override_members(raw_source):
+        return parse_override_profile_entry_names(raw_source)
     try:
         profile_names = parse_override_profile_entry_names(raw_source)
         rule_entries = parse_initializer(extract_braced_initializer(raw_source, "sOverworldWildBehaviorOverrideRules"))
@@ -1840,12 +1909,9 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
         elif field in NUMERIC_PROFILE_FIELDS:
             for value in range(0, NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64) + 1):
                 add_value_option(options, seen, str(value), field, macros)
-            for symbol in COMMON_NUMERIC_FIELD_SYMBOLS.get(field, []):
-                if symbol in macros:
-                    add_value_option(options, seen, symbol, field, macros)
         if field not in CANONICAL_PROFILE_FIELD_RAWS:
             for profile in class_profiles:
-                add_value_option(options, seen, profile[field]["raw"], field, macros)
+                add_value_option(options, seen, canonical_profile_value_raw(profile[field], field), field, macros)
         result[field] = options
     return result
 
@@ -3631,6 +3697,21 @@ def class_for_context(context: dict, class_rules: list[dict], class_count: int, 
     return behavior_class, hits
 
 
+def behavior_override_applies(context: dict, override: dict, macros: dict[str, int]) -> bool:
+    if "targetMode" not in override:
+        return match_applies(context, override["match"], macros)
+    mode = numeric(override["targetMode"])
+    if mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED", 0):
+        return False
+    if not match_applies(context, override["match"], macros):
+        return False
+    if mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL", 2):
+        return True
+    if mode != macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
+        return False
+    return any(numeric(member) == context["species"] for member in override.get("members", []))
+
+
 def resolve_profile_for_context(
     context: dict,
     class_profiles: list[dict[str, dict]],
@@ -3644,7 +3725,7 @@ def resolve_profile_for_context(
     layers = [{"kind": "class", "label": f"Class profile #{class_index}", "changes": []}]
     variable_hits = []
     for override in variable_overrides:
-        if match_applies(context, override["match"], macros):
+        if behavior_override_applies(context, override, macros):
             changes = merge_profile(profile, override["behavior"])
             variable_hits.append(override)
             layers.append(
@@ -3876,7 +3957,7 @@ def build_data() -> dict:
                 "species": entry,
                 "groups": group_names,
                 "behaviorClass": class_label,
-                "profile": profile,
+                "profile": profile_numeric_view(profile),
                 "primitives": resolve_primitives(profile, primitive_maps, macros),
                 "profileId": profile["profileId"],
                 "classRuleHits": [{"order": rule["order"], "summary": rule["summary"], "className": rule["className"]} for rule in class_hits],
@@ -3916,10 +3997,10 @@ def build_data() -> dict:
                 "name": class_label["name"],
                 "canRename": index != default_class and not runtime_owned,
                 "canDelete": index != default_class and not runtime_owned,
-                "override": {"mask": parse_mask("0", macros), "profile": class_profile},
-                "profile": profile,
+                "override": {"mask": parse_mask("0", macros), "profile": profile_numeric_view(class_profile)},
+                "profile": profile_numeric_view(profile),
                 "primitives": resolve_primitives(profile, primitive_maps, macros),
-                "editProfile": class_profile,
+                "editProfile": profile_numeric_view(class_profile),
                 "layers": layers,
                 "classRules": targeting_rules,
                 "classRuleCount": len(targeting_rules),
@@ -3927,61 +4008,46 @@ def build_data() -> dict:
             }
         )
 
-    override_groups = []
-    override_groups_by_name: dict[str, dict] = {}
     for override in variable_overrides:
         order = override["order"]
         override_name = override_profile_names.get(order, "")
-        if override_name:
-            group = override_groups_by_name.get(override_name)
-            if group is None:
-                group = {"name": override_name, "overrides": []}
-                override_groups_by_name[override_name] = group
-                override_groups.append(group)
-            group["overrides"].append(override)
-        else:
-            override_groups.append({"name": "", "overrides": [override]})
-
-    for group in override_groups:
-        overrides = group["overrides"]
-        first_override = overrides[0]
-        first_order = first_override["order"]
-        orders = [override["order"] for override in overrides]
-        order_set = set(orders)
-        summary = first_override["summary"] if len(overrides) == 1 else f"{len(overrides)} match rules"
-        override_name = group["name"] or f"Override #{first_order}: {first_override['summary']}"
+        override_name = override_name or f"Override #{order}: {override['summary']}"
         matching_count = sum(
             1
             for item in assignments
-            if any(hit["order"] in order_set for hit in (item.get("variableOverrideHits") or []))
+            if any(hit["order"] == order for hit in (item.get("variableOverrideHits") or []))
         )
+        member_symbols = list(override.get("memberSymbols") or [])
+        override_profile = override_edit_profile(override["behavior"], macros)
         classes.append(
             {
-                "index": f"override:{first_order}",
-                "order": first_order,
-                "orders": orders,
+                "index": f"override:{order}",
+                "order": order,
+                "orders": [order],
                 "kind": "override",
                 "isOverrideProfile": True,
-                "symbol": f"OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_{first_order}",
+                "symbol": f"OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_{order}",
                 "name": override_name,
-                "customName": group["name"],
+                "customName": override_profile_names.get(order, ""),
                 "canRename": True,
                 "canDelete": True,
-                "override": first_override["behavior"],
-                "profile": override_edit_profile(first_override["behavior"], macros),
+                "override": override["behavior"],
+                "profile": profile_numeric_view(override_profile),
                 "primitives": {},
-                "editProfile": override_edit_profile(first_override["behavior"], macros),
+                "editProfile": profile_numeric_view(override_profile),
                 "layers": [
                     {
                         "kind": "behaviorOverride",
-                        "label": f"Override profile #{first_order}",
+                        "label": f"Override profile #{order}",
                         "changes": [],
-                        "mask": behavior_override_mask_summary(first_override["behavior"]),
+                        "mask": behavior_override_mask_summary(override["behavior"]),
                     }
                 ],
-                "match": first_override["match"],
-                "matches": [override["match"] for override in overrides],
-                "summary": summary,
+                "match": override["match"],
+                "members": [species_by_symbol[symbol] for symbol in member_symbols if symbol in species_by_symbol],
+                "memberSymbols": member_symbols,
+                "targetMode": override.get("targetMode"),
+                "summary": override["summary"],
                 "classRules": [],
                 "classRuleCount": 0,
                 "speciesCount": matching_count,
@@ -3993,7 +4059,10 @@ def build_data() -> dict:
         "source": data_source_metadata(),
         "profilesAvailable": True,
         "profileError": None,
-        "fields": [{"key": field, "label": FIELD_LABELS[field]} for field in PROFILE_FIELDS],
+        "fields": [
+            {"key": field, "label": FIELD_LABELS[field], "unit": FIELD_UNITS.get(field, "")}
+            for field in PROFILE_FIELDS
+        ],
         "overrideFieldKeys": sorted(OVERRIDE_SYMBOL_BY_FIELD),
         "counts": {
             "species": len(assignments),
@@ -4011,7 +4080,7 @@ def build_data() -> dict:
         },
         "editOptions": build_edit_options(macros, class_profiles),
         "defaultClassIndex": default_class,
-        "defaultProfile": default_profile,
+        "defaultProfile": profile_numeric_view(default_profile),
         "primitiveFields": [{"key": field, "label": PRIMITIVE_FIELD_LABELS[field]} for field in PRIMITIVE_FIELDS],
         "primitiveMaps": primitive_maps,
         "classes": classes,
@@ -4176,7 +4245,7 @@ def format_mask_expression(mask_fields: set[str], indent: str, word: int = 1) ->
 
 
 def raw_values(profile: dict[str, dict]) -> dict[str, str]:
-    return {field: profile[field]["raw"] for field in PROFILE_FIELDS}
+    return {field: canonical_profile_value_raw(profile[field], field) for field in PROFILE_FIELDS}
 
 
 def numeric_raw(raw: str, field: str, macros: dict[str, int]) -> int | None:
@@ -4192,7 +4261,7 @@ def valid_change_options(macros: dict[str, int], class_profiles: list[dict[str, 
         for field in PROFILE_FIELDS:
             value = profile[field]
             if value.get("raw") and value.get("value") is not None:
-                options[field].add(value["raw"])
+                options[field].add(canonical_profile_value_raw(value, field))
     # Movement Chain pause reuses ramMaxSpeed as a frame count. The visible RAM
     # controls stay capped as speeds, but saving must accept Chain frame values.
     options["ramMaxSpeed"].update(str(value) for value in range(0, 256))
@@ -4349,8 +4418,25 @@ def replace_define_value(raw_source: str, symbol: str, value: int) -> str:
 
 def behavior_blob_counts(raw_source: str) -> dict[str, int]:
     source = strip_c_comments(join_line_continuations(raw_source))
+    count_defines = dict(OWBD_COUNT_DEFINES)
+    if behavior_source_uses_override_members(source):
+        count_defines.update(
+            {
+                "OWBD_OVERRIDE_PROFILE_COUNT": "sOverworldWildBehaviorOverrideProfiles",
+                "OWBD_OVERRIDE_MEMBER_COUNT": "sOverworldWildBehaviorOverrideMembers",
+            }
+        )
+    elif "sOverworldWildBehaviorOverrideRules" in raw_source:
+        count_defines.update(
+            {
+                "OWBD_OVERRIDE_PROFILE_COUNT": "sOverworldWildBehaviorOverrideProfiles",
+                "OWBD_OVERRIDE_RULE_COUNT": "sOverworldWildBehaviorOverrideRules",
+            }
+        )
+    else:
+        count_defines["OWBD_OVERRIDE_COUNT"] = "sOverworldWildBehaviorOverrides"
     counts = {}
-    for define, initializer_name in OWBD_COUNT_DEFINES.items():
+    for define, initializer_name in count_defines.items():
         entries = parse_initializer(extract_braced_initializer(source, initializer_name))
         counts[define] = len(entries)
     return counts
@@ -4657,6 +4743,8 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
     raw_edits = {}
     raw_renames = {}
     raw_reorder = []
+    raw_match_replacements = {}
+    raw_target_replacements = {}
     if isinstance(changes, list):
         raw_adds = changes
         raw_removes = []
@@ -4666,6 +4754,8 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raw_edits = changes.get("edit", {})
         raw_renames = changes.get("rename", {})
         raw_reorder = changes.get("reorder", [])
+        raw_match_replacements = changes.get("replaceMatches", {})
+        raw_target_replacements = changes.get("replaceTargets", {})
     else:
         raise ValueError("missing changes list")
     if not isinstance(raw_adds, list):
@@ -4678,6 +4768,56 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raise ValueError("override renames must be an object")
     if not isinstance(raw_reorder, list):
         raise ValueError("override reorder must be a list")
+    if not isinstance(raw_match_replacements, dict):
+        raise ValueError("override match replacements must be an object")
+    if not isinstance(raw_target_replacements, dict):
+        raise ValueError("override target replacements must be an object")
+
+    def parse_raw_match(raw_match: dict) -> dict[str, str]:
+        match_raws = default_behavior_match_raws()
+        for match_field in MATCH_FIELDS:
+            if match_field in raw_match:
+                match_raws[match_field] = clean_token(str(raw_match[match_field]))
+        return match_raws
+
+    def target_from_matches(matches: list[dict[str, str]], label: str) -> dict:
+        members = []
+        shared_match = None
+        for match in matches:
+            if match.get("behaviorClass") == "0xFE":
+                continue
+            member = match.get("species", "")
+            condition = dict(match)
+            condition["species"] = "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES"
+            if shared_match is None:
+                shared_match = condition
+            elif condition != shared_match:
+                raise ValueError(f"{label} has different per-Pokemon conditions and cannot become one profile target")
+            if member not in {"", "SPECIES_NONE", "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES"} and member not in members:
+                members.append(member)
+        shared_match = shared_match or default_behavior_match_raws()
+        default_match = default_behavior_match_raws()
+        contextual = any(shared_match[field] != default_match[field] for field in MATCH_FIELDS if field != "species")
+        mode = "members" if members else ("all" if contextual else "disabled")
+        return {"members": members, "match": shared_match, "targetMode": mode}
+
+    def parse_target(raw_target: dict, label: str) -> dict:
+        raw_members = raw_target.get("members", [])
+        if not isinstance(raw_members, list):
+            raise ValueError(f"{label} members must be a list")
+        members = []
+        for raw_member in raw_members:
+            member = clean_token(str(raw_member)).upper()
+            if member and member not in members:
+                members.append(member)
+        match = parse_raw_match(raw_target.get("match") if isinstance(raw_target.get("match"), dict) else {})
+        match["species"] = "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES"
+        raw_mode = clean_token(str(raw_target.get("targetMode", "members" if members else "disabled"))).lower()
+        if raw_mode not in {"disabled", "members", "all"}:
+            raise ValueError(f"{label} has invalid target mode")
+        if raw_mode == "members" and not members:
+            raw_mode = "disabled"
+        return {"members": members, "match": match, "targetMode": raw_mode}
 
     parsed_adds = []
     for index, raw_change in enumerate(raw_adds, 1):
@@ -4694,29 +4834,19 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             raw = clean_token(str(raw_change.get("raw", "")))
             if field:
                 fields[field] = raw
-        def parse_raw_match(raw_match: dict) -> dict[str, str]:
-            match_raws = default_behavior_match_raws()
-            for match_field in MATCH_FIELDS:
-                if match_field in raw_match:
-                    match_raws[match_field] = clean_token(str(raw_match[match_field]))
-            return match_raws
-
-        raw_matches = raw_change.get("matches")
-        if isinstance(raw_matches, list):
-            matches = [
-                parse_raw_match(raw_match)
-                for raw_match in raw_matches
-                if isinstance(raw_match, dict)
-            ]
+        if isinstance(raw_change.get("target"), dict):
+            target = parse_target(raw_change["target"], f"override {index}")
         else:
-            raw_match = raw_change.get("match") if isinstance(raw_change.get("match"), dict) else {}
-            matches = [parse_raw_match(raw_match)]
-        if not matches:
-            raise ValueError(f"override {index} must include at least one match")
+            raw_matches = raw_change.get("matches")
+            if isinstance(raw_matches, list):
+                matches = [parse_raw_match(raw_match) for raw_match in raw_matches if isinstance(raw_match, dict)]
+            else:
+                raw_match = raw_change.get("match") if isinstance(raw_change.get("match"), dict) else {}
+                matches = [parse_raw_match(raw_match)]
+            target = target_from_matches(matches, f"override {index}")
         parsed_adds.append({
             "fields": fields,
-            "match": matches[0],
-            "matches": matches,
+            "target": target,
             "name": sanitize_override_profile_name(raw_change.get("name", "")),
         })
 
@@ -4765,7 +4895,43 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             group.append(order)
         if group:
             parsed_reorder.append(group)
-    return {"add": parsed_adds, "edit": parsed_edits, "rename": parsed_renames, "remove": parsed_removes, "reorder": parsed_reorder}
+
+    parsed_match_replacements = {}
+    for raw_order, raw_matches in raw_match_replacements.items():
+        try:
+            order = int(raw_order)
+        except Exception as exc:
+            raise ValueError(f"invalid override match replacement order: {raw_order}") from exc
+        if not isinstance(raw_matches, list):
+            raise ValueError(f"override match replacement {order} must be a list")
+        matches = [parse_raw_match(raw_match) for raw_match in raw_matches if isinstance(raw_match, dict)]
+        if len(matches) != len(raw_matches) or not matches:
+            raise ValueError(f"override match replacement {order} must include valid match objects")
+        parsed_match_replacements[order] = matches
+
+    parsed_target_replacements = {}
+    for raw_order, raw_target in raw_target_replacements.items():
+        try:
+            order = int(raw_order)
+        except Exception as exc:
+            raise ValueError(f"invalid override target replacement order: {raw_order}") from exc
+        if not isinstance(raw_target, dict):
+            raise ValueError(f"override target replacement {order} must be an object")
+        parsed_target_replacements[order] = parse_target(raw_target, f"override {order}")
+    for order, matches in parsed_match_replacements.items():
+        if order in parsed_target_replacements:
+            raise ValueError(f"override {order} cannot replace matches and target together")
+        parsed_target_replacements[order] = target_from_matches(matches, f"override {order}")
+
+    return {
+        "add": parsed_adds,
+        "edit": parsed_edits,
+        "rename": parsed_renames,
+        "remove": parsed_removes,
+        "reorder": parsed_reorder,
+        "replaceMatches": parsed_match_replacements,
+        "replaceTargets": parsed_target_replacements,
+    }
 
 
 def canonicalize_named_override_profile_rules(
@@ -4888,6 +5054,36 @@ def format_behavior_override_profile(
     )
 
 
+def format_behavior_override_member_profile(
+    match_raws: dict[str, str],
+    member_start: int,
+    member_count: int,
+    target_mode: str,
+    mask_fields: set[str],
+    profile_raws: dict[str, str],
+    indent: str = "    ",
+    name: str = "",
+) -> str:
+    mode_symbol = {
+        "disabled": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED",
+        "members": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS",
+        "all": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL",
+    }[target_mode]
+    inner = indent + "    "
+    return override_profile_name_comment(name, indent) + (
+        f"{indent}{{\n"
+        f"{inner}{format_match_initializer(match_raws, inner)},\n"
+        f"{inner}{member_start},\n"
+        f"{inner}{member_count},\n"
+        f"{inner}{mode_symbol},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
+        f"{inner}{format_profile_initializer(profile_raws, inner)},\n"
+        f"{indent}}}"
+    )
+
+
 def format_behavior_override_profile_rule(
     match_raws: dict[str, str],
     profile_index: int,
@@ -4937,6 +5133,14 @@ def apply_profile_changes(body: bytes) -> dict:
     changes = parse_save_payload(body)
     if not changes:
         return {"saved": False, "message": "No changes"}
+
+    changes = {
+        class_index: {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in field_changes.items()
+        }
+        for class_index, field_changes in changes.items()
+    }
 
     valid_options = valid_change_options(macros, class_profiles)
     for class_index, field_changes in changes.items():
@@ -5076,17 +5280,20 @@ def apply_profile_override_changes(body: bytes) -> dict:
     renames = changes["rename"]
     removals = changes["remove"]
     reorder_groups = changes["reorder"]
-    if not additions and not edits and not renames and not removals and not reorder_groups:
+    match_replacements = changes["replaceMatches"]
+    target_replacements = changes["replaceTargets"]
+    if not additions and not edits and not renames and not removals and not reorder_groups and not target_replacements:
         return {"saved": False, "message": "No changes"}
 
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
+    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
     terrain_values, destination_values = parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
+    valid_species = {entry["symbol"] for entry in parse_species(expressions, macros, species_order)}
 
     class_profiles = [
         parse_profile(entry, macros)
@@ -5096,11 +5303,23 @@ def apply_profile_override_changes(body: bytes) -> dict:
     existing_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
     existing_names = parse_override_profile_names(raw_behavior_data)
     valid_options = valid_change_options(macros, class_profiles)
+    for addition in additions:
+        addition["fields"] = {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in addition["fields"].items()
+        }
+    edits = {
+        order: {
+            field: canonical_profile_change_raw(field, raw, macros)
+            for field, raw in field_changes.items()
+        }
+        for order, field_changes in edits.items()
+    }
     for override in existing_overrides:
         for field in behavior_override_field_keys(override["behavior"]):
             value = override["behavior"]["profile"][field]
             if value.get("raw") and value.get("value") is not None:
-                valid_options[field].add(value["raw"])
+                valid_options[field].add(canonical_profile_value_raw(value, field))
 
     def validate_override_fields(fields: dict[str, str], label: str) -> None:
         for field, raw in fields.items():
@@ -5111,7 +5330,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
             if raw and raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
 
-    def validate_override_match(match_raws: dict[str, str], label: str) -> None:
+    def validate_override_match(match_raws: dict[str, str], label: str, allow_global: bool = False) -> None:
         match_values = [match_raws[match_field] for match_field in MATCH_FIELDS]
         parsed_match = parse_match(match_values, macros)
         unresolved = [field_name for field_name, value in parsed_match.items() if numeric(value) is None]
@@ -5123,7 +5342,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
         any_level = macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
         any_shiny = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY", 0)
         group_none = macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)
-        if (
+        if not allow_global and (
             numeric(parsed_match["species"]) == any_species
             and numeric(parsed_match["groupMask"]) == group_none
             and numeric(parsed_match["terrain"]) == any_terrain
@@ -5138,16 +5357,205 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if min_level != any_level and max_level != any_level and min_level is not None and max_level is not None and min_level > max_level:
             raise ValueError(f"{label} minimum level cannot be greater than maximum level")
 
+    def validate_override_target(target: dict, label: str) -> None:
+        mode = target["targetMode"]
+        members = target["members"]
+        if len(members) != len(set(members)):
+            raise ValueError(f"{label} contains duplicate Pokemon members")
+        if len(members) > 0xFFFF:
+            raise ValueError(f"{label} has too many Pokemon members for u16 storage")
+        invalid_members = [member for member in members if member not in valid_species or member == "SPECIES_NONE"]
+        if invalid_members:
+            raise ValueError(f"{label} contains invalid Pokemon: {', '.join(invalid_members)}")
+        if mode == "members" and not members:
+            raise ValueError(f"{label} member target must include at least one Pokemon")
+        validate_override_match(target["match"], label, allow_global=(mode in {"members", "disabled"}))
+
+    def legacy_matches_from_target(target: dict, label: str) -> list[dict[str, str]]:
+        """Losslessly project the v32 target shape onto the pre-v32 row model."""
+        validate_override_target(target, label)
+        if target["targetMode"] == "disabled":
+            disabled_match = default_behavior_match_raws()
+            disabled_match["behaviorClass"] = "0xFE"
+            return [disabled_match]
+        if target["targetMode"] == "all":
+            return [dict(target["match"])]
+        return [
+            {**target["match"], "species": member}
+            for member in target["members"]
+        ]
+
     try:
         backend_profiles = parse_behavior_override_profiles(behavior_source, macros)
     except ParseError:
         backend_profiles = []
 
+    if behavior_source_uses_override_members(behavior_source):
+        order_inputs = set(removals) | set(edits) | set(renames) | set(target_replacements)
+        order_inputs.update(order for group in reorder_groups for order in group)
+        for order in order_inputs:
+            if order < 1 or order > len(backend_profiles):
+                raise ValueError(f"override profile order out of range: {order}")
+
+        def mode_name(value: dict) -> str:
+            numeric_mode = numeric(value)
+            if numeric_mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
+                return "members"
+            if numeric_mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL", 2):
+                return "all"
+            return "disabled"
+
+        def behavior_from_fields(fields: dict[str, str]) -> dict:
+            profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
+            profile_raws.update(fields)
+            return parse_behavior_override(
+                [
+                    format_mask_expression(set(fields), "", 1),
+                    format_mask_expression(set(fields), "", 2),
+                    format_mask_expression(set(fields), "", 3),
+                    [profile_raws[field] for field in PROFILE_FIELDS],
+                ],
+                macros,
+            )
+
+        profiles_model = []
+        profile_names = parse_override_profile_entry_names(raw_behavior_data)
+        for profile in backend_profiles:
+            profiles_model.append(
+                {
+                    "originalOrder": profile["order"],
+                    "name": profile_names.get(profile["order"], ""),
+                    "behavior": profile["behavior"],
+                    "target": {
+                        "members": list(profile.get("memberSymbols") or []),
+                        "match": raw_match_values(profile["match"]),
+                        "targetMode": mode_name(profile["targetMode"]),
+                    },
+                }
+            )
+
+        for order, field_changes in edits.items():
+            if order in removals:
+                continue
+            validate_override_fields(field_changes, f"override {order}")
+            behavior = profiles_model[order - 1]["behavior"]
+            fields = {
+                field: behavior["profile"][field]["raw"]
+                for field in behavior_override_field_keys(behavior)
+            }
+            fields.update(field_changes)
+            profiles_model[order - 1]["behavior"] = behavior_from_fields(
+                {field: raw for field, raw in fields.items() if raw}
+            )
+
+        for order, name in renames.items():
+            if order not in removals:
+                profiles_model[order - 1]["name"] = name
+
+        for order, target in target_replacements.items():
+            if order in removals:
+                raise ValueError(f"override {order} cannot be removed and retargeted")
+            validate_override_target(target, f"override {order}")
+            profiles_model[order - 1]["target"] = target
+
+        next_original_order = len(profiles_model) + 1
+        for index, change in enumerate(additions, 1):
+            validate_override_fields(change["fields"], f"override addition {index}")
+            validate_override_target(change["target"], f"override addition {index}")
+            fields = {field: raw for field, raw in change["fields"].items() if raw}
+            profiles_model.append(
+                {
+                    "originalOrder": next_original_order,
+                    "name": change.get("name", ""),
+                    "behavior": behavior_from_fields(fields),
+                    "target": change["target"],
+                }
+            )
+            next_original_order += 1
+
+        active = [profile for profile in profiles_model if profile["originalOrder"] not in set(removals)]
+        if reorder_groups:
+            active_by_order = {profile["originalOrder"]: profile for profile in active}
+            requested = []
+            seen = set()
+            for group in reorder_groups:
+                for order in group:
+                    if order in active_by_order and order not in seen:
+                        requested.append(active_by_order[order])
+                        seen.add(order)
+            requested.extend(profile for profile in active if profile["originalOrder"] not in seen)
+            active = requested
+
+        if not active:
+            raise ValueError("at least one override profile is required; create a replacement before removing the last profile")
+
+        names = [profile["name"].strip().lower() for profile in active if profile["name"].strip()]
+        if len(names) != len(set(names)):
+            raise ValueError("override profile names must be unique")
+        if len(active) > 0xFFFF:
+            raise ValueError("too many override profiles for u16 storage")
+
+        profile_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideProfiles")
+        member_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideMembers")
+        profile_indent = line_indent_before(raw_behavior_data, profile_span[0])
+        member_indent = line_indent_before(raw_behavior_data, member_span[0])
+        profile_entry_indent = profile_indent + "    "
+        member_entry_indent = member_indent + "    "
+        flat_members = []
+        profile_entries = []
+        for profile in active:
+            target = profile["target"]
+            if len(flat_members) + len(target["members"]) > 0xFFFF:
+                raise ValueError("override member table exceeds u16 storage")
+            member_start = len(flat_members)
+            flat_members.extend(target["members"])
+            profile_entries.append(
+                format_behavior_override_member_profile(
+                    target["match"],
+                    member_start,
+                    len(target["members"]),
+                    target["targetMode"],
+                    set(behavior_override_field_keys(profile["behavior"])),
+                    raw_values(profile["behavior"]["profile"]),
+                    profile_entry_indent,
+                    profile["name"],
+                )
+            )
+        # Keep the fixed C blob layout standard-compliant even when every
+        # profile uses disabled/all targeting and no member slice is referenced.
+        stored_members = flat_members or ["SPECIES_NONE"]
+        profile_entries_text = ",\n".join(profile_entries)
+        member_entries_text = ",\n".join(member_entry_indent + member for member in stored_members)
+        formatted_profiles = f"{{\n{profile_entries_text}\n{profile_indent}}}"
+        formatted_members = f"{{\n{member_entries_text}\n{member_indent}}}"
+        replacements = [
+            (profile_span[0], profile_span[1], formatted_profiles),
+            (member_span[0], member_span[1], formatted_members),
+        ]
+        updated_source = raw_behavior_data
+        changed = False
+        for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
+            if updated_source[start:end] != replacement:
+                changed = True
+                updated_source = updated_source[:start] + replacement + updated_source[end:]
+        if changed:
+            validate_behavior_data_override_profiles(updated_source, macros, group_labels)
+            write_behavior_data_source(updated_source)
+        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + len(target_replacements) + (1 if reorder_groups else 0)
+        label = "override profile change" if total_changes == 1 else "override profile changes"
+        return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
+
+    # V2 always submits the profile-owned target shape. Older source layouts
+    # can still be upgraded/edited safely by projecting that one target into
+    # their legacy storage rows at the writer boundary.
+    for order, target in target_replacements.items():
+        match_replacements[order] = legacy_matches_from_target(target, f"override {order}")
+
     if backend_profiles:
         profile_names = parse_override_profile_entry_names(raw_behavior_data)
 
         reorder_orders = {order for group in reorder_groups for order in group}
-        for order in set(removals) | set(edits.keys()) | set(renames.keys()) | reorder_orders:
+        for order in set(removals) | set(edits.keys()) | set(renames.keys()) | set(match_replacements.keys()) | reorder_orders:
             if order < 1 or order > len(existing_overrides):
                 raise ValueError(f"override order out of range: {order}")
         for order, field_changes in edits.items():
@@ -5170,6 +5578,49 @@ def apply_profile_override_changes(body: bytes) -> dict:
             for override in existing_overrides
         ]
         preferred_profile_orders: set[int] = set()
+        identity_changed_profile_orders: set[int] = set()
+
+        for order, replacement_matches in match_replacements.items():
+            profile_order = existing_overrides[order - 1]["profileOrder"]
+            profile_rule_orders = {
+                override["order"]
+                for override in existing_overrides
+                if override["profileOrder"] == profile_order
+            }
+            if profile_rule_orders.intersection(removals):
+                raise ValueError(f"override {order} cannot be removed and have its matches replaced")
+            matching_indexes = [
+                index
+                for index, rule in enumerate(rules_model)
+                if rule["profileOrder"] == profile_order
+            ]
+            if not matching_indexes:
+                raise ValueError(f"override {order} has no rules to replace")
+            for match_index, match in enumerate(replacement_matches, 1):
+                validate_override_match(match, f"override {order}.{match_index}")
+            old_orders = [
+                rules_model[index].get("order")
+                for index in matching_indexes
+                if rules_model[index].get("order") is not None
+            ]
+            insertion_index = matching_indexes[0]
+            matching_index_set = set(matching_indexes)
+            rules_model = [
+                rule
+                for index, rule in enumerate(rules_model)
+                if index not in matching_index_set
+            ]
+            replacement_rules = [
+                {
+                    "order": old_orders[index] if index < len(old_orders) else None,
+                    "match": match,
+                    "profileOrder": profile_order,
+                    "removed": False,
+                }
+                for index, match in enumerate(replacement_matches)
+            ]
+            rules_model[insertion_index:insertion_index] = replacement_rules
+            preferred_profile_orders.add(profile_order)
 
         for order, field_changes in edits.items():
             if order in removals:
@@ -5201,6 +5652,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
             profile_order = existing_overrides[order - 1]["profileOrder"]
             preferred_profile_orders.add(profile_order)
             profiles_model[profile_order - 1]["name"] = name
+            identity_changed_profile_orders.add(profile_order)
 
         for index, change in enumerate(additions, 1):
             validate_override_fields(change["fields"], f"override {index}")
@@ -5222,9 +5674,11 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 }
             )
             profile_order = len(profiles_model)
+            identity_changed_profile_orders.add(profile_order)
             if change.get("name"):
                 preferred_profile_orders.add(profile_order)
-            for match_index, match in enumerate(change.get("matches") or [change["match"]], 1):
+            addition_matches = legacy_matches_from_target(change["target"], f"override {index}")
+            for match_index, match in enumerate(addition_matches, 1):
                 validate_override_match(match, f"override {index}.{match_index}")
                 rules_model.append(
                     {
@@ -5234,31 +5688,60 @@ def apply_profile_override_changes(body: bytes) -> dict:
                     }
                 )
 
+        active_profile_orders_by_name: dict[str, set[int]] = {}
+        for rule in rules_model:
+            if rule["removed"]:
+                continue
+            profile_order = rule["profileOrder"]
+            name = profiles_model[profile_order - 1].get("name", "").strip()
+            if name:
+                active_profile_orders_by_name.setdefault(name.lower(), set()).add(profile_order)
+        duplicate_changed_names = [
+            profiles_model[min(profile_orders) - 1].get("name", normalized_name)
+            for normalized_name, profile_orders in active_profile_orders_by_name.items()
+            if len(profile_orders) > 1 and profile_orders.intersection(identity_changed_profile_orders)
+        ]
+        if duplicate_changed_names:
+            raise ValueError(
+                f"override profile names must be unique: {', '.join(sorted(duplicate_changed_names))}"
+            )
+
         if reorder_groups:
-            rule_by_order = {
-                rule["order"]: rule
+            profile_order_by_rule_order = {
+                rule["order"]: rule["profileOrder"]
                 for rule in rules_model
-                if rule.get("order") is not None
+                if rule.get("order") is not None and not rule["removed"]
             }
-            reordered_rules = []
-            seen_orders = set()
-            for group in reorder_groups:
-                for order in group:
-                    rule = rule_by_order.get(order)
-                    if rule is None or rule["removed"]:
-                        continue
-                    reordered_rules.append(rule)
-                    seen_orders.add(order)
-            for rule in rules_model:
-                order = rule.get("order")
-                if order is not None and order in seen_orders:
-                    continue
-                if not rule["removed"]:
-                    reordered_rules.append(rule)
+            active_rules_by_profile: dict[int, list[dict]] = {}
+            active_profile_order: list[int] = []
             for rule in rules_model:
                 if rule["removed"]:
-                    reordered_rules.append(rule)
-            rules_model = reordered_rules
+                    continue
+                profile_order = rule["profileOrder"]
+                if profile_order not in active_rules_by_profile:
+                    active_rules_by_profile[profile_order] = []
+                    active_profile_order.append(profile_order)
+                active_rules_by_profile[profile_order].append(rule)
+
+            requested_profile_order = []
+            seen_profile_orders = set()
+            for group in reorder_groups:
+                for order in group:
+                    profile_order = profile_order_by_rule_order.get(order)
+                    if profile_order is None or profile_order in seen_profile_orders:
+                        continue
+                    requested_profile_order.append(profile_order)
+                    seen_profile_orders.add(profile_order)
+            requested_profile_order.extend(
+                profile_order
+                for profile_order in active_profile_order
+                if profile_order not in seen_profile_orders
+            )
+            rules_model = [
+                rule
+                for profile_order in requested_profile_order
+                for rule in active_rules_by_profile[profile_order]
+            ] + [rule for rule in rules_model if rule["removed"]]
 
         canonicalize_named_override_profile_rules(profiles_model, rules_model, preferred_profile_orders)
 
@@ -5334,10 +5817,12 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if changed:
             validate_behavior_data_override_profiles(updated_source, macros, group_labels)
             write_behavior_data_source(updated_source)
-        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + (1 if reorder_groups else 0)
+        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + len(match_replacements) + (1 if reorder_groups else 0)
         label = "override profile change" if total_changes == 1 else "override profile changes"
         return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
 
+    if match_replacements:
+        raise ValueError("override match replacement requires split override profile data")
     if reorder_groups:
         raise ValueError("override profile reordering requires split override profile data")
 
@@ -5353,7 +5838,8 @@ def apply_profile_override_changes(body: bytes) -> dict:
     formatted_rules = []
     for index, change in enumerate(additions, 1):
         validate_override_fields(change["fields"], f"override {index}")
-        for match_index, match in enumerate(change.get("matches") or [change["match"]], 1):
+        addition_matches = legacy_matches_from_target(change["target"], f"override {index}")
+        for match_index, match in enumerate(addition_matches, 1):
             validate_override_match(match, f"override {index}.{match_index}")
             formatted_rules.append(override_rule_from_fields(match, change["fields"], change.get("name", "")))
 
@@ -13566,7 +14052,6 @@ HTML = r"""<!doctype html>
       "attentiveSpeed",
       "tiredSpeed",
       "range",
-      "chillCooldown",
       "alertChance",
       "hopMinDistance",
       "hopMaxDistance",
@@ -13685,7 +14170,6 @@ HTML = r"""<!doctype html>
       ramAccelerationSteps: { label: "Chain move count", shortLabel: "Chain", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainPauseAction: { label: "Chain pause action", shortLabel: "Action", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
-      chillCooldown: { label: "Time between hops", shortLabel: "Cooldown", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
 
       alertState: { label: "Alert trigger", shortLabel: "Trigger", category: "alert", subgroup: "Behavior", iconFamily: "condition" },
       alertEmote: { label: "Alert emote", shortLabel: "Emote", category: "alert", subgroup: "Visual", iconFamily: "visualAudio", rowIcon: true },
@@ -13797,7 +14281,6 @@ HTML = r"""<!doctype html>
           "ramAccelerationSteps",
           "ramMaxSpeed",
           "chainPauseAction",
-          "chillCooldown",
         ],
       },
       {
@@ -16134,7 +16617,6 @@ HTML = r"""<!doctype html>
         }));
       }
       fields.push(...movementFields.items);
-      fields.push(profileEditFieldItem(item, "chillCooldown"));
       return {
         count: fields.length,
         items: fields,

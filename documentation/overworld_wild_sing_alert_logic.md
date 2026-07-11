@@ -152,7 +152,7 @@ The normalization pass ensured:
 - If the tired state used asleep, stamina was forced to `1`.
 - If it did not use asleep and `restTime == 0`, rest time was forced to `1`.
 
-The behavior-data side had a rule matching `OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP` to override profile index `0`. The runtime did not resolve this through normal context matching for Sing; it directly applied `overrideProfiles[0]`.
+At the time, the behavior-data side had a separate rule matching `OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP` to override profile index `0`. In data version 32, that representation is consolidated: the forced-asleep override profile itself owns the shared class condition and uses all-Pokémon target mode. It remains one profile layer, not a profile plus a separate executable rule.
 
 ## Asleep Runtime Behavior
 
@@ -177,4 +177,3 @@ To restore Sing later:
 5. Re-add `TryApplySingAlertSpecialAction` after alert emote completion and in the no-alert-visual fast path.
 6. Decide whether forced-asleep should still use `overrideProfiles[0]`; if not, document the new profile lookup rule and avoid hardcoded profile index assumptions.
 7. Rebuild and check overlay 149 size before adding polish.
-

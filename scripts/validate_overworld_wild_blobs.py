@@ -13,11 +13,11 @@ from typing import Optional
 
 OWBD_MAGIC = 0x4F574244
 OWBD_HEADER_SIZE = 52
-OWBD_PROFILE_SIZE = 71
+OWBD_PROFILE_SIZE = 70
 OWBD_CLASS_RULE_SIZE = 16
 OWBD_SPECIES_RULE_SIZE = 4
-OWBD_OVERRIDE_PROFILE_SIZE = 84
-OWBD_OVERRIDE_RULE_SIZE = 16
+OWBD_OVERRIDE_PROFILE_SIZE = 104
+OWBD_OVERRIDE_MEMBER_SIZE = 2
 
 OWED_MAGIC = 0x4F574544
 OWED_VERSION = 2
@@ -171,7 +171,7 @@ def validate_owbd(path: Path, source: Path) -> None:
     expected_class_rule_count = read_define(source, "OWBD_CLASS_RULE_COUNT")
     expected_species_rule_count = read_define(source, "OWBD_SPECIES_CLASS_RULE_COUNT")
     expected_override_profile_count = read_define(source, "OWBD_OVERRIDE_PROFILE_COUNT")
-    expected_override_rule_count = read_define(source, "OWBD_OVERRIDE_RULE_COUNT")
+    expected_override_member_count = read_define(source, "OWBD_OVERRIDE_MEMBER_COUNT")
     require(len(blob) >= OWBD_HEADER_SIZE, f"{path}: truncated OWBD header")
     fields = struct.unpack_from("<IHHI IHH IHH IHH IHH IHH", blob, 0)
     (
@@ -191,9 +191,9 @@ def validate_owbd(path: Path, source: Path) -> None:
         override_profiles_offset,
         override_profile_count,
         override_profile_size,
-        override_rules_offset,
-        override_rule_count,
-        override_rule_size,
+        override_members_offset,
+        override_member_count,
+        override_member_size,
     ) = fields
 
     require(magic == OWBD_MAGIC, f"{path}: bad OWBD magic")
@@ -204,18 +204,18 @@ def validate_owbd(path: Path, source: Path) -> None:
     require(class_rule_count == expected_class_rule_count, f"{path}: bad class rule count")
     require(species_rule_count == expected_species_rule_count, f"{path}: bad species class rule count")
     require(override_profile_count == expected_override_profile_count, f"{path}: bad override profile count")
-    require(override_rule_count == expected_override_rule_count, f"{path}: bad override rule count")
+    require(override_member_count == expected_override_member_count, f"{path}: bad override member count")
     require(class_profile_size == OWBD_PROFILE_SIZE, f"{path}: bad class profile element size")
     require(class_rule_size == OWBD_CLASS_RULE_SIZE, f"{path}: bad class rule element size")
     require(species_rule_size == OWBD_SPECIES_RULE_SIZE, f"{path}: bad species class rule element size")
     require(override_profile_size == OWBD_OVERRIDE_PROFILE_SIZE, f"{path}: bad override profile element size")
-    require(override_rule_size == OWBD_OVERRIDE_RULE_SIZE, f"{path}: bad override rule element size")
+    require(override_member_size == OWBD_OVERRIDE_MEMBER_SIZE, f"{path}: bad override member element size")
 
     class_profiles_end = range_end(path, "classProfiles", class_profiles_offset, class_profile_count, class_profile_size, blob_size, 2, header_size)
     class_rules_end = range_end(path, "classRules", class_rules_offset, class_rule_count, class_rule_size, blob_size, 4, class_profiles_end)
     species_rules_end = range_end(path, "speciesClassRules", species_rules_offset, species_rule_count, species_rule_size, blob_size, 2, class_rules_end)
     override_profiles_end = range_end(path, "overrideProfiles", override_profiles_offset, override_profile_count, override_profile_size, blob_size, 4, species_rules_end)
-    range_end(path, "overrideRules", override_rules_offset, override_rule_count, override_rule_size, blob_size, 4, override_profiles_end)
+    range_end(path, "overrideMembers", override_members_offset, override_member_count, override_member_size, blob_size, 2, override_profiles_end)
 
 
 def validate_owed(path: Path, source: Path, encounter_narc: Optional[Path]) -> None:
