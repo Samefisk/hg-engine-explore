@@ -66,15 +66,8 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     }
 
     if (fieldSystem->location != NULL
-        && sFieldReadyTaskMapId == (u16)fieldSystem->location->mapId
-        && sOverworldWildSpawnState.presentationRestorePending
-        && sOverworldWildSpawnState.battleGraceSteps == 0) {
-        /* Route same-map presentation restores through the normal settle delay. */
-        sFieldReadyTaskMapId = 0;
-    }
-
-    if (fieldSystem->location != NULL
         && sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
+        sOverworldWildSpawnState.presentationRestorePending = TRUE;
         if (sOverworldWildSpawnState.battleGraceSteps == 0) {
             sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
         } else {
@@ -85,7 +78,6 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         }
 
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
-        (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
     } else if (sOverworldWildSpawnState.battleGraceSteps != 0) {
         sOverworldWildSpawnState.battleGraceSteps--;
         if (sOverworldWildSpawnState.battleGraceSteps != 0) {

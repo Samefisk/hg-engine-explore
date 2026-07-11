@@ -1141,7 +1141,6 @@ static BOOL OverworldWildSpawns_HasPendingBattle(OverworldWildSpawnState *state)
 static BOOL OverworldWildSpawns_HasQueuedBattle(OverworldWildSpawnState *state);
 static BOOL OverworldWildSpawns_TryStartQueuedBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_TryStartBattleFromAButton(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
-static BOOL OverworldWildSpawns_TryQueueBattleFromAButton(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_IsPlayerStableForBattle(FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_TryGetCustomJumpVector(
     int dx,
@@ -5945,7 +5944,6 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
     if (state == NULL) {
         return;
     }
-    state->presentationRestorePending = TRUE;
     runtime = OW_WILD_RUNTIME(state);
     fieldSystem = state->movementFieldSystem;
     if (OverworldWildSpawns_IsPresentationFieldContextCurrent(state, fieldSystem)) {
@@ -5954,6 +5952,7 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
         return;
     }
 
+    state->presentationRestorePending = TRUE;
     /* The old manager is no longer safe to touch. Cancel code-owned tasks only. */
     OverworldWildSpawns_ResetAllMovementStateOnly(state, FALSE);
     OverworldWildSpawns_ClearQueuedHelpChildren(state);
@@ -5973,16 +5972,7 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
 
 static void __attribute__((noinline)) OverworldWildSpawns_CleanupPresentationBeforeUnload(OverworldWildSpawnState *state)
 {
-    FieldSystem *fieldSystem;
-
     if (state == NULL || state->movementRuntimeState == NULL) {
-        return;
-    }
-
-    fieldSystem = state->movementFieldSystem;
-    if (fieldSystem != NULL
-        && OverworldWildSpawns_IsPresentationFieldContextCurrent(state, fieldSystem)) {
-        OverworldWildSpawns_ResetAllMovementCommands(state, TRUE);
         return;
     }
 
@@ -10540,7 +10530,6 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     sOverworldWildMovementFrameTaskExecuting = TRUE;
     fieldSystem = state->movementFieldSystem;
     if (fieldSystem != NULL && fieldSystem->taskman != NULL) {
-        OverworldWildSpawns_TryQueueBattleFromAButton(state, fieldSystem);
         sOverworldWildMovementFrameTaskExecuting = FALSE;
         if (OverworldWildSpawns_HasFrameMovementWork(state)) {
             return;
@@ -18026,6 +18015,7 @@ static int OverworldWildSpawns_FindBattleTalkSlot(
     OverworldWildSpawnState *state,
     LocalMapObject *talkedObject)
 {
+    MapObjectMan *mapObjectMan;
     LocalMapObject *playerObject;
     int playerX;
     int playerY;
@@ -18037,8 +18027,19 @@ static int OverworldWildSpawns_FindBattleTalkSlot(
 
     if (state == NULL
         || fieldSystem == NULL
+        || fieldSystem != gFieldSysPtr
+        || fieldSystem->location == NULL
+        || fieldSystem->mapObjectMan == NULL
         || fieldSystem->playerAvatar == NULL
         || fieldSystem->playerAvatar->mapObject == NULL) {
+        return -1;
+    }
+
+    mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (state->presentationRestorePending
+        || state->mapId != fieldSystem->location->mapId
+        || state->mapObjectMan != mapObjectMan
+        || state->mapObjects != mapObjectMan->objects) {
         return -1;
     }
 
@@ -18127,33 +18128,6 @@ static BOOL OverworldWildSpawns_TryStartBattleFromAButton(
     }
 
     if (!OverworldWildSpawns_TryStartBattleForSlotOrQueue(state, fieldSystem, slot)) {
-        return FALSE;
-    }
-
-    state->movementAButtonDown = TRUE;
-    return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryQueueBattleFromAButton(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem)
-{
-    int slot;
-
-    if ((PAD_Read() & PAD_BUTTON_A) == 0) {
-        state->movementAButtonDown = FALSE;
-        return FALSE;
-    }
-    if (state->movementAButtonDown) {
-        return FALSE;
-    }
-
-    slot = OverworldWildSpawns_FindBattleTalkSlot(fieldSystem, state, NULL);
-    if (slot < 0) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_QueueBattleForSlot(state, fieldSystem, slot)) {
         return FALSE;
     }
 
