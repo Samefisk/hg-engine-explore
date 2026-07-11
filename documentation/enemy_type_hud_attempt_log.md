@@ -726,6 +726,27 @@ Result:
 - The final scope is the smallest fully evidenced implementation: the primary
   enemy Pokemon's one or two types, without modifying a second HUD region.
 
+### A34 Final Isolated Feature-Worktree Verification
+
+Change:
+- Cherry-picked the two reviewed implementation commits into the requested
+  `feature/battle-type-hud-v2` worktree and rebuilt there from scratch.
+
+Why this is not a duplicate:
+- All earlier builds used the BG prototype worktree. This verifies the exact
+  branch and worktree delivered to the user after integration.
+
+Verification:
+- The normal Docker build passed, including the atlas freshness check wired
+  into `all`, and produced `test.nds`.
+- The explicit `--sav test.sav` flow held Right for 180 frames and tapped A 75
+  times to reach the rival command screen.
+- `enemy_type_hud_feature_worktree_final.png` shows the final `WAT` marker
+  beside Totodile's status gauge.
+
+Result:
+- Passed. The delivered feature branch reproduces the reviewed visual result.
+
 ## Duplicate-Check Notes
 
 - Do not retry OAM positioning/resource tags without new evidence; A1-A21
