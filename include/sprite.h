@@ -143,7 +143,6 @@ BOOL LONG_CALL OAM_LoadResourceCellArc(void *csp, void *crp, int arc_id, int dat
 u8 LONG_CALL OAM_LoadResourcePlttWorkArc(void *pfd, int req, void *csp, void *crp, int arc_id, int data_id, int comp, int num, int trans_mode, int id);
 void *LONG_CALL ArcUtil_ScrnDataGet(u32 fileIdx, u32 dataIdx, BOOL compressedFlag, NNSG2dScreenData** scrnData, u32 heapID);
 void LONG_CALL BG_LoadScreenTilemapData(void *bgl, u32 bg_id, u16 *scrn_buf, int size);
-void LONG_CALL BgCopyOrUncompressTilemapBufferRangeToVram(void *bgl, u8 bg_id, const void *buffer, u32 buffer_size, u32 base_tile);
 void LONG_CALL ScheduleBgTilemapBufferTransfer(void *bgl, int bg_id);
 void LONG_CALL OAM_ObjectAnimeSeqSetCap(void *, int anim_no);
 u32 LONG_CALL GfGfxLoader_LoadCharData(u32 narcId, s32 memberNo, void *bgConfig, u32 layer, u32 tileStart, u32 szByte, BOOL isCompressed, u32 heapId);

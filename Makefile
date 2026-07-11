@@ -78,10 +78,7 @@ PYTHON = $(PYTHON_NO_VENV)
 VENV_ACTIVATE =
 endif
 
-.PHONY: clean all dumprom enemy-type-marker-check
-
-enemy-type-marker-check:
-	$(PYTHON_NO_VENV) scripts/generate-enemy-type-marker-atlas.py --check
+.PHONY: clean all dumprom
 
 default: all
 
@@ -269,7 +266,7 @@ $(OUTPUT):$(LINK)
 
 
 
-all: enemy-type-marker-check $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
+all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	rm -rf $(BASE)
 	@mkdir -p $(REQUIRED_DIRECTORIES)
 	@# find and delete macOS and windows files

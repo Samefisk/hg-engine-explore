@@ -774,6 +774,334 @@ Result:
 - Passed. The temporary Fire probe was removed; only the coordinate change
   remains in the product diff.
 
+### A36 Foreground OBJ Markers With Corrected Priorities
+
+Change:
+- Replaced the primary enemy's BG1 marker cells with two main-screen OAM
+  actors centered at `(112,32)` and `(112,40)`.
+- Reused the proven 32x32 cell and animation resources from
+  `ARC_ITEM_GFX_DATA`, while loading deterministic per-type NCGR/NCLR pairs
+  from member `369 + 2 * type`.
+- Set `NNS_G2D_VRAM_TYPE_2DMAIN`, `FADE_MAIN_OBJ`, hardware `bg_pri = 0`, and
+  software draw priority `0x17`, immediately in front of the enemy gauge's
+  software priority `0x18`.
+
+Why this is not a duplicate:
+- A01-A21 used hardware priority `1` and software draw priority `100`. This
+  attempt changes the ordering evidence that controls whether the actor can
+  appear in front of the gauge: hardware priority `0` and software priority
+  `0x17`.
+
+Verification:
+- Not built or run at the user's request.
+
+Result:
+- Pending runtime verification.
+
+### A37 Harden Foreground Resource Failure And UI Transitions
+
+Change:
+- Treat palette slot `0xFF` as a load failure before creating an actor.
+- Forget stale marker bookkeeping without deleting actors if the battle's CATS
+  managers are already unavailable.
+- Limit foreground markers to `CONTROLLER_COMMAND_SELECTION_SCREEN_INPUT`,
+  removing them while the enemy gauge slides, switches, or is otherwise not on
+  the normal command screen.
+
+Why this is not a duplicate:
+- A36 established the corrected foreground priorities. This pass addresses
+  independent failure and transition cases identified by critical review; no
+  earlier attempt changed palette-result handling or command-state visibility.
+
+Verification:
+- Pending rebuild and runtime verification.
+
+Result:
+- Pending runtime verification.
+
+### A38 Remove Stale Converted Atlas Before NARC Assembly
+
+Change:
+- Fixed the battle-gfx cleanup rule to parse the member number immediately
+  after `8_`, so converted members `346` and later are actually removed before
+  regeneration.
+- Added a build assertion that Normal's NCGR is sorted into member `369` before
+  the NARC is created.
+
+Why this is not a duplicate:
+- A36 replaced the source atlas, but did not account for its already-converted
+  NCGR/NCLR files surviving incremental builds. This attempt fixes build-output
+  cleanup and guards the runtime member contract directly.
+
+Verification:
+- Pending rebuild plus direct NARC member inspection.
+
+Result:
+- Pending runtime verification.
+
+### A39 Match The OBJ Cell To The 16x8 Badge
+
+Change:
+- Replaced the borrowed 32x32 item cell with a dedicated 16x8 horizontal OBJ
+  cell at battle-gfx member `409`.
+- Regenerated each type character as exactly 16x8 and adjusted actor centers to
+  retain visible rows `y=24..31` and `y=32..39`.
+- Added a second build assertion for the dedicated NCER's member number.
+
+Why this is not a duplicate:
+- A36 corrected priority but retained a 32x32 cell. Runtime timing captures
+  proved that cell fetched noncontiguous main-OBJ tiles outside the compact
+  marker character, exposing neighboring gauge graphics. This attempt removes
+  that mismatched tile footprint rather than changing priority or coordinates.
+
+Verification:
+- Pending rebuild and repeat of the captured rival command-screen sequence.
+
+Result:
+- Pending runtime verification.
+
+### A40 Match The Main OBJ 1D Mapping Mode
+
+Change:
+- Changed the dedicated 16x8 cell from mapping type `0` to mapping type `1`,
+  matching the stock single-enemy gauge NCER used on the main screen.
+
+Why this is not a duplicate:
+- A39 fixed the cell's dimensions but retained the sub-screen item cell's
+  mapping mode. Decompressing and decoding stock members `187/188` showed the
+  main enemy gauge uses mapping type `1`; neither A01-A39 tested a dedicated
+  foreground cell with that mapping contract.
+
+Verification:
+- Pending rebuild and exact rival command-screen replay.
+
+Result:
+- Pending runtime verification.
+
+### A41 Compose Markers Into The Existing Enemy Gauge
+
+Change:
+- Removed all dedicated OBJ actors, character/palette allocations, generated
+  marker graphics, and battle-gfx members.
+- Save, draw, and restore two existing single-enemy gauge tiles at offsets
+  `0xAC0` and `0xBC0`, immediately right of the stock level text.
+- Render compact three-letter labels with colors already available in gauge
+  palette member `71`; no new VRAM allocation or palette is involved.
+
+Why this is not a duplicate:
+- A01-A21 and A36-A40 all added separate OAM actors/resources. Runtime captures
+  proved those allocations disturb the live gauge's main-OBJ character memory.
+  This attempt follows the stock nickname/level model and modifies only two
+  unused tiles inside the already-allocated gauge bitmap.
+
+Verification:
+- Pending build, exact rival command-screen replay, and transition restore
+  capture.
+
+Result:
+- Pending runtime verification.
+
+### A42 Avoid Writes After The Gauge Leaves Its Stable State
+
+Change:
+- Removed transition-time restoration through a potentially reassigned sprite
+  VRAM base.
+- Rebuild both marker tiles from immutable stock NCGR bytes only while the
+  command gauge is stable; embedded pixels then move and disappear with the
+  gauge exactly like its level text.
+
+Why this is not a duplicate:
+- A41 saved and restored through a live sprite pointer after leaving command
+  selection. A control-ROM replay proved the resulting black frame was not
+  headless timing. This attempt eliminates every post-command VRAM write while
+  preserving the successful in-panel composition.
+
+Verification:
+- Pending command-screen and settled Fight-menu replays.
+
+Result:
+- Pending runtime verification.
+
+### A43 Compose Once Per Stable Command Cycle
+
+Change:
+- Added a RAM-only completion flag so marker tiles are written once when the
+  command gauge first becomes available, then never touched again during Fight
+  and move-menu resource transitions.
+- Reset only the flag after the controller leaves selection; no transition-time
+  VRAM write is performed.
+
+Why this is not a duplicate:
+- A42 removed restoration but still rewrote both tiles every frame. A long
+  command-screen capture showed those later writes crossing an internal menu
+  resource boundary even while `server_seq_no` remained selection input. This
+  attempt preserves the successful first composition and eliminates repeats.
+
+Verification:
+- Pending long-settle command and Fight-menu replays.
+
+Result:
+- Pending runtime verification.
+
+### A44 Restore Before The Accepted Command Input
+
+Change:
+- Added a pre-dispatch A-button hook that restores the two immutable stock
+  tiles while the top-level gauge allocation is still valid.
+- Suppress marker redraw until the controller leaves selection, then allow the
+  next command cycle to compose normally.
+- Removed temporary controller-state instrumentation after it proved both the
+  command and Fight handoff report `server=5`, `com=1`.
+
+Why this is not a duplicate:
+- A41 restored after command dispatch and A42-A43 did not restore at all. This
+  attempt uses the input edge before dispatch, the only observed boundary where
+  the old gauge address is valid but the Fight UI has not begun reusing sprite
+  resources.
+
+Verification:
+- Pending long-settle command and Fight-menu replays against the control result.
+
+Result:
+- Pending runtime verification.
+
+### A45 Reserve Marker Tiles Inside The Gauge Resource
+
+Change:
+- Extended the stock single-enemy NCGR from `0x1000` to `0x1080` bytes and
+  added a third 16x16 OAM component to its NCER at relative `(46,-12)`.
+- Moved marker writes to the newly reserved tiles at `0x1000/0x1040`; they map
+  to the same requested screen rows without borrowing stock gauge memory.
+- Removed the input-edge restore hook and temporary state instrumentation.
+
+Why this is not a duplicate:
+- A41-A44 wrote into existing gauge tiles that the Fight UI later reused even
+  after restoration. This attempt changes the resource allocation contract so
+  marker memory is owned by the gauge for its entire lifetime.
+
+Verification:
+- Built successfully. Decoded members `187/188` confirmed the third 16x16 OAM
+  and exact `0x1080` character size. The rival command screen, real move list,
+  and a full Fell Stinger turn all rendered cleanly.
+
+Result:
+- Passed. The earlier black capture was the game's intermediate first-A Fight
+  selection frame, not a persistent rendering failure.
+
+### A46 Align The Extended Gauge Allocation
+
+Change:
+- Pad the extended enemy NCGR allocation to `0x2000` bytes while retaining the
+  marker at `0x1000/0x1040`.
+
+Why this is not a duplicate:
+- A45 used a nonstandard `0x1080` character size. The marker rendered, but the
+  Fight UI behaved as if the appended `0x80` bytes overlapped its next resource.
+  This attempt tests allocator alignment directly without changing rendering or
+  placement.
+
+Verification:
+- Pending binary size check and command-to-Fight replay.
+
+Result:
+- Passed as a diagnostic, but the `0x2000` padding was unnecessary and removed
+  by A47.
+
+### A47 Keep Only The Exact Four-Tile Extension
+
+Change:
+- Reduced the reserved NCGR allocation from the diagnostic `0x2000` padding to
+  the exact `0x1080` required by the third 16x16 OAM component.
+
+Why this is not a duplicate:
+- A46 tested alignment before the two-step Fight transition was understood.
+  The completed move-list replay showed the black frame was an intermediate UI
+  state, so this attempt removes unnecessary padding and rechecks the real end
+  state.
+
+Verification:
+- Rebuilt successfully. Member `188` decoded to `0x1080`; the two-A move list
+  and full move-to-command cycle remained intact.
+
+Result:
+- Passed, then superseded by the zero-allocation A50 design.
+
+### A48 Force A Secondary Fire Type For Row Verification
+
+Change:
+- Temporarily force Fire into marker slot two for the single-type rival
+  Totodile, without changing battle typing or damage behavior.
+
+Why this is not a duplicate:
+- Earlier dual probes covered BG and separate-actor implementations. This is
+  the first probe of the second row inside the gauge-owned 16x16 component.
+
+Verification:
+- Forced build captured `WAT` and `FIR` in the two stacked gauge-owned rows at
+  the requested panel edge.
+
+Result:
+- Passed. The forced Fire line was removed before the final product rebuild.
+
+### A50 Revalidate Existing Gauge Tiles Through The Real Move List
+
+Change:
+- Removed the NCER component and NCGR extension entirely.
+- Returned to the two unused stock gauge tiles at `0xAC0/0xBC0`, composing once
+  per command cycle and never restoring during UI transitions.
+
+Why this is not a duplicate:
+- A41-A44 were rejected after only the first-A black selection frame. A45-A48
+  established that a second settled A reaches the intact move list, so this is
+  the first valid end-to-end test of the zero-allocation existing-tile design.
+
+Verification:
+- Confirmed members `187/188` remained stock-sized and byte-identical to their
+  unmodified resources. The real two-A move list rendered cleanly, and a full
+  Fell Stinger turn returned to the command menu with the marker intact.
+
+Result:
+- Passed. This zero-allocation design replaced the temporary gauge extension.
+
+### A51 Bound The Gauge Pointer And Cache Its Allocation
+
+Change:
+- Validate OpponentData, ManagedSprite, and Sprite pointers as aligned main-RAM
+  addresses before dereferencing them.
+- Require a 64-byte-aligned image offset whose two marker writes remain inside
+  the 64 KiB main OBJ region.
+- Cache the resolved gauge VRAM base so a replacement allocation can be
+  composed even if the controller remains in selection input.
+
+Why this is not a duplicate:
+- A50 proved the zero-allocation visual path. This pass hardens its private
+  structure access and cache identity in response to final critical review.
+
+Verification:
+- Rebuilt successfully and repeated the explicit `--sav test.sav` route through
+  the real move list. The hardened pointer checks accepted the live gauge and
+  the `WAT` marker remained correctly composited.
+
+Result:
+- Passed and retained.
+
+### A52 Recheck Two Rows On The Zero-Allocation Path
+
+Change:
+- Temporarily force Fire into slot two after A51 so both rows use the final
+  bounded-pointer, existing-tile implementation.
+
+Why this is not a duplicate:
+- A48 exercised the temporary extended-gauge resource. This probe verifies the
+  second row after that resource path was removed by A50.
+
+Verification:
+- The real move-list capture showed `WAT` and `FIR` in the final two stacked
+  existing-tile rows.
+
+Result:
+- Passed. The forced Fire line was removed before the product rebuild.
+
 ## Duplicate-Check Notes
 
 - Do not retry OAM positioning/resource tags without new evidence; A1-A21

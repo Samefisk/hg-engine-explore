@@ -165,7 +165,6 @@ OAM_FreeResourcePltt = 0x0200D968 |1;
 CATS_ActorPointerDelete_S = 0x0200D9DC |1;
 
 BG_LoadScreenTilemapData = 0x0201C0A8 | 1;
-BgCopyOrUncompressTilemapBufferRangeToVram = 0x0201BF94 | 1;
 ScheduleBgTilemapBufferTransfer = 0x0201EFBC | 1;
 ArcUtil_ScrnDataGet = 0x020079D8 | 1;
 
