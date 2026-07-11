@@ -1003,21 +1003,6 @@ static const OverworldWildEncounterLookupDataBlobHeader *OverworldWildSpawns_Get
     return (const OverworldWildEncounterLookupDataBlobHeader *)sOverworldWildEncounterLookupDataBlob;
 }
 
-static const OverworldWildEncounterLookupDataEntry *OverworldWildSpawns_GetLegacyEncounterLookupDataEntry(void)
-{
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
-        if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
-            UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
-        }
-        if (!HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 0)) {
-            return NULL;
-        }
-    }
-
-    return OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY;
-}
-
-
 typedef struct OverworldWildHeadbuttTreeTopScan {
     int centerX;
     int centerY;
@@ -1141,7 +1126,6 @@ static BOOL OverworldWildSpawns_HasPendingBattle(OverworldWildSpawnState *state)
 static BOOL OverworldWildSpawns_HasQueuedBattle(OverworldWildSpawnState *state);
 static BOOL OverworldWildSpawns_TryStartQueuedBattle(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_TryStartBattleFromAButton(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
-static BOOL OverworldWildSpawns_TryQueueBattleFromAButton(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_IsPlayerStableForBattle(FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_TryGetCustomJumpVector(
     int dx,
@@ -2366,8 +2350,13 @@ static BOOL OverworldWildSpawns_HasFrameMovementWork(OverworldWildSpawnState *st
 
 static BOOL OverworldWildSpawns_IsPresentationFieldContextCurrent(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
-    const OverworldWildHelperOverlayEntry *helperEntry =
-        OverworldWildSpawns_GetHelperOverlayEntry();
+    const OverworldWildHelperOverlayEntry *helperEntry;
+
+    if (fieldSystem == NULL
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        return FALSE;
+    }
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
 
     return helperEntry != NULL
         && helperEntry->isPresentationContextCurrent(fieldSystem, state);
@@ -5945,7 +5934,6 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
     if (state == NULL) {
         return;
     }
-    state->presentationRestorePending = TRUE;
     runtime = OW_WILD_RUNTIME(state);
     fieldSystem = state->movementFieldSystem;
     if (OverworldWildSpawns_IsPresentationFieldContextCurrent(state, fieldSystem)) {
@@ -5954,6 +5942,7 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
         return;
     }
 
+    state->presentationRestorePending = TRUE;
     /* The old manager is no longer safe to touch. Cancel code-owned tasks only. */
     OverworldWildSpawns_ResetAllMovementStateOnly(state, FALSE);
     OverworldWildSpawns_ClearQueuedHelpChildren(state);
@@ -5973,16 +5962,7 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(OverworldWil
 
 static void __attribute__((noinline)) OverworldWildSpawns_CleanupPresentationBeforeUnload(OverworldWildSpawnState *state)
 {
-    FieldSystem *fieldSystem;
-
     if (state == NULL || state->movementRuntimeState == NULL) {
-        return;
-    }
-
-    fieldSystem = state->movementFieldSystem;
-    if (fieldSystem != NULL
-        && OverworldWildSpawns_IsPresentationFieldContextCurrent(state, fieldSystem)) {
-        OverworldWildSpawns_ResetAllMovementCommands(state, TRUE);
         return;
     }
 
@@ -10436,7 +10416,10 @@ static void OverworldWildSpawns_DeferredBattleScriptTask(SysTask *task, void *da
     }
 
     fieldSystem = sOverworldWildDeferredBattleFieldSystem;
-    if (fieldSystem != NULL && fieldSystem == gFieldSysPtr && fieldSystem->taskman != NULL) {
+    if (fieldSystem == NULL
+        || fieldSystem != gFieldSysPtr
+        || fieldSystem->taskman != NULL) {
+        OverworldWildSpawns_CancelDeferredBattleScript();
         return;
     }
 
@@ -10540,11 +10523,9 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     sOverworldWildMovementFrameTaskExecuting = TRUE;
     fieldSystem = state->movementFieldSystem;
     if (fieldSystem != NULL && fieldSystem->taskman != NULL) {
-        OverworldWildSpawns_TryQueueBattleFromAButton(state, fieldSystem);
+        state->presentationRestorePending = TRUE;
+        /* Native transitions own the live map objects once the field is busy. */
         sOverworldWildMovementFrameTaskExecuting = FALSE;
-        if (OverworldWildSpawns_HasFrameMovementWork(state)) {
-            return;
-        }
         OverworldWildSpawns_StopFrameMovementTask();
         return;
     }
@@ -10883,8 +10864,6 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
 {
     const OverworldWildEncounterLookupDataBlobHeader *blob;
     const OverworldWildEncounterLookupDirectoryEntry *lookupEntry;
-    const OverworldWildEncounterLookupDataEntry *entry;
-    u32 i;
 
     if (fieldSystem == NULL || fieldSystem->location == NULL || encounterDataId == NULL) {
         return FALSE;
@@ -10899,17 +10878,6 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
     if (lookupEntry != NULL) {
         *encounterDataId = lookupEntry->dataId;
         return TRUE;
-    }
-
-    entry = OverworldWildSpawns_GetLegacyEncounterLookupDataEntry();
-    if (entry == NULL) {
-        return FALSE;
-    }
-    for (i = 0; i < entry->count; i++) {
-        if (entry->mapIds[i] == fieldSystem->location->mapId) {
-            *encounterDataId = entry->dataIds[i];
-            return TRUE;
-        }
     }
 
     return FALSE;
@@ -18026,6 +17994,7 @@ static int OverworldWildSpawns_FindBattleTalkSlot(
     OverworldWildSpawnState *state,
     LocalMapObject *talkedObject)
 {
+    MapObjectMan *mapObjectMan;
     LocalMapObject *playerObject;
     int playerX;
     int playerY;
@@ -18037,8 +18006,19 @@ static int OverworldWildSpawns_FindBattleTalkSlot(
 
     if (state == NULL
         || fieldSystem == NULL
+        || fieldSystem != gFieldSysPtr
+        || fieldSystem->location == NULL
+        || fieldSystem->mapObjectMan == NULL
         || fieldSystem->playerAvatar == NULL
         || fieldSystem->playerAvatar->mapObject == NULL) {
+        return -1;
+    }
+
+    mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (state->presentationRestorePending
+        || state->mapId != fieldSystem->location->mapId
+        || state->mapObjectMan != mapObjectMan
+        || state->mapObjects != mapObjectMan->objects) {
         return -1;
     }
 
@@ -18127,33 +18107,6 @@ static BOOL OverworldWildSpawns_TryStartBattleFromAButton(
     }
 
     if (!OverworldWildSpawns_TryStartBattleForSlotOrQueue(state, fieldSystem, slot)) {
-        return FALSE;
-    }
-
-    state->movementAButtonDown = TRUE;
-    return TRUE;
-}
-
-static BOOL OverworldWildSpawns_TryQueueBattleFromAButton(
-    OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem)
-{
-    int slot;
-
-    if ((PAD_Read() & PAD_BUTTON_A) == 0) {
-        state->movementAButtonDown = FALSE;
-        return FALSE;
-    }
-    if (state->movementAButtonDown) {
-        return FALSE;
-    }
-
-    slot = OverworldWildSpawns_FindBattleTalkSlot(fieldSystem, state, NULL);
-    if (slot < 0) {
-        return FALSE;
-    }
-
-    if (!OverworldWildSpawns_QueueBattleForSlot(state, fieldSystem, slot)) {
         return FALSE;
     }
 
@@ -18295,9 +18248,15 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
         OverworldWildSpawns_CancelDeferredBattleScript();
         OverworldWildCustomMovement_SetFieldSystem(NULL);
         OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state);
+#if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
+        OverworldWildSpawns_ClearContextLite(state);
+#endif
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
         OverworldWildSpawns_StopFrameMovementTask();
 #endif
+        state->mapId = MAP_NOTHING;
+        state->mapObjectMan = NULL;
+        state->mapObjects = NULL;
         state->presentationRestorePending = FALSE;
         return FALSE;
     }

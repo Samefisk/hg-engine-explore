@@ -53,44 +53,25 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     FieldSystem *fieldSystem = (FieldSystem *)data;
 
     if (fieldSystem != gFieldSysPtr) {
-        if (sFieldReadyTaskFieldSystem == fieldSystem) {
-            sFieldReadyTaskFieldSystem = NULL;
-            sOverworldWildSpawnState.battleGraceSteps = 0;
-        }
         DestroySysTask(task);
         return;
     }
 
     if (fieldSystem->taskman != NULL) {
+        sFieldReadyTaskMapId = MAP_NOTHING;
         return;
     }
-
-    if (fieldSystem->location != NULL
-        && sFieldReadyTaskMapId == (u16)fieldSystem->location->mapId
-        && sOverworldWildSpawnState.presentationRestorePending
-        && sOverworldWildSpawnState.battleGraceSteps == 0) {
-        goto refresh;
-    }
-
-    if (fieldSystem->location != NULL
-        && sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
-        if (sOverworldWildSpawnState.battleGraceSteps == 0) {
-            sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
-        } else {
-            sOverworldWildSpawnState.battleGraceSteps--;
-        }
-        if (sOverworldWildSpawnState.battleGraceSteps != 0) {
-            return;
-        }
-
-refresh:
+    if (sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
-        (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
-    } else if (sOverworldWildSpawnState.battleGraceSteps != 0) {
-        sOverworldWildSpawnState.battleGraceSteps--;
-        if (sOverworldWildSpawnState.battleGraceSteps != 0) {
-            return;
+        sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
+        if (sOverworldWildSpawnState.mapId != fieldSystem->location->mapId) {
+            sOverworldWildSpawnState.mapId = MAP_NOTHING;
         }
+        return;
+    }
+    if (sOverworldWildSpawnState.battleGraceSteps != 0) {
+        sOverworldWildSpawnState.battleGraceSteps--;
+        return;
     }
 
     MapTeleport_PollDebug(fieldSystem);
@@ -100,11 +81,13 @@ refresh:
 #endif
 }
 
-static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(void)
+static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad)
 {
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
-        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0)) {
-        return NULL;
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        if (!HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0)
+            || deferColdLoad) {
+            return NULL;
+        }
     }
 
     return OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
@@ -118,7 +101,12 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
 #else
     const OverworldWildSpawnsOverlayEntry *entry;
 
-    entry = OverworldWildSpawns_GetOverlayEntry();
+    if (fieldSystem->taskman != NULL
+        || sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId
+        || sOverworldWildSpawnState.battleGraceSteps != 0) {
+        return FALSE;
+    }
+    entry = OverworldWildSpawns_GetOverlayEntry(TRUE);
     if (entry == NULL) {
         return FALSE;
     }
@@ -156,7 +144,7 @@ u32 OverworldWildSpawns_PopPendingBattle(FieldSystem *fieldSystem, LocalMapObjec
 
     if (sOverworldWildSpawnState.pendingSpecies == SPECIES_NONE
         || sOverworldWildSpawnState.pendingLevel == 0) {
-        entry = OverworldWildSpawns_GetOverlayEntry();
+        entry = OverworldWildSpawns_GetOverlayEntry(FALSE);
         if (entry == NULL
             || !entry->tryPrimeBattleFromTalk(
                 fieldSystem,
@@ -350,7 +338,7 @@ void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bs
 
 void OverworldWildSpawns_CleanupPendingBattle(FieldSystem *fieldSystem, u32 battleResult)
 {
-    const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry();
+    const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry(FALSE);
     u8 disposition = OW_WILD_BATTLE_DISPOSITION_RETAIN;
     u32 battlePersonality = sBattleHpPersonality;
 
