@@ -1003,21 +1003,6 @@ static const OverworldWildEncounterLookupDataBlobHeader *OverworldWildSpawns_Get
     return (const OverworldWildEncounterLookupDataBlobHeader *)sOverworldWildEncounterLookupDataBlob;
 }
 
-static const OverworldWildEncounterLookupDataEntry *OverworldWildSpawns_GetLegacyEncounterLookupDataEntry(void)
-{
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
-        if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
-            UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
-        }
-        if (!HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA, 0)) {
-            return NULL;
-        }
-    }
-
-    return OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY;
-}
-
-
 typedef struct OverworldWildHeadbuttTreeTopScan {
     int centerX;
     int centerY;
@@ -2365,8 +2350,13 @@ static BOOL OverworldWildSpawns_HasFrameMovementWork(OverworldWildSpawnState *st
 
 static BOOL OverworldWildSpawns_IsPresentationFieldContextCurrent(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
-    const OverworldWildHelperOverlayEntry *helperEntry =
-        OverworldWildSpawns_GetHelperOverlayEntry();
+    const OverworldWildHelperOverlayEntry *helperEntry;
+
+    if (fieldSystem == NULL
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        return FALSE;
+    }
+    helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
 
     return helperEntry != NULL
         && helperEntry->isPresentationContextCurrent(fieldSystem, state);
@@ -10426,7 +10416,10 @@ static void OverworldWildSpawns_DeferredBattleScriptTask(SysTask *task, void *da
     }
 
     fieldSystem = sOverworldWildDeferredBattleFieldSystem;
-    if (fieldSystem != NULL && fieldSystem == gFieldSysPtr && fieldSystem->taskman != NULL) {
+    if (fieldSystem == NULL
+        || fieldSystem != gFieldSysPtr
+        || fieldSystem->taskman != NULL) {
+        OverworldWildSpawns_CancelDeferredBattleScript();
         return;
     }
 
@@ -10530,10 +10523,9 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     sOverworldWildMovementFrameTaskExecuting = TRUE;
     fieldSystem = state->movementFieldSystem;
     if (fieldSystem != NULL && fieldSystem->taskman != NULL) {
+        state->presentationRestorePending = TRUE;
+        /* Native transitions own the live map objects once the field is busy. */
         sOverworldWildMovementFrameTaskExecuting = FALSE;
-        if (OverworldWildSpawns_HasFrameMovementWork(state)) {
-            return;
-        }
         OverworldWildSpawns_StopFrameMovementTask();
         return;
     }
@@ -10872,8 +10864,6 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
 {
     const OverworldWildEncounterLookupDataBlobHeader *blob;
     const OverworldWildEncounterLookupDirectoryEntry *lookupEntry;
-    const OverworldWildEncounterLookupDataEntry *entry;
-    u32 i;
 
     if (fieldSystem == NULL || fieldSystem->location == NULL || encounterDataId == NULL) {
         return FALSE;
@@ -10888,17 +10878,6 @@ static BOOL OverworldWildSpawns_TryGetEncounterDataId(FieldSystem *fieldSystem, 
     if (lookupEntry != NULL) {
         *encounterDataId = lookupEntry->dataId;
         return TRUE;
-    }
-
-    entry = OverworldWildSpawns_GetLegacyEncounterLookupDataEntry();
-    if (entry == NULL) {
-        return FALSE;
-    }
-    for (i = 0; i < entry->count; i++) {
-        if (entry->mapIds[i] == fieldSystem->location->mapId) {
-            *encounterDataId = entry->dataIds[i];
-            return TRUE;
-        }
     }
 
     return FALSE;
