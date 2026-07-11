@@ -453,7 +453,7 @@ Result:
 ### A21 Built-In Mega Icon Probe From Battle-Input Lifecycle
 
 Change:
-- Pending.
+- Removed before completion in favor of the requested BG/tilemap prototype.
 - Reuse the A20 battle-input lifecycle probe, but swap only the probe
   char/palette resources from `TYPE_ICON_WATER_GFX` to the known built-in
   `MEGA_ICON_FIGHT_GFX`.
@@ -466,10 +466,37 @@ Why this is not a duplicate:
   format/indexing" from "the probe actor path is invisible for any graphic".
 
 Verification:
-- Pending.
+- Not run. The probe and all of its temporary OAM resources were removed.
 
 Result:
-- Pending.
+- Superseded.
+
+### A22 Command-Select BG Tilemap Markers
+
+Change:
+- Replaced the free-floating enemy type OAM actors with one 32x144, 4-bit
+  marker atlas containing four 8x8 tiles for each standard type.
+- Reused the existing LoadMegaOam hook inside BGCallback_CommandSelect to call
+  BattleSystem_UpdateEnemyTypeMarkers.
+- Loaded the atlas into reserved main BG0 character tiles and stamped one or
+  two marker rows with LoadRectToBgTilemapRect, followed by
+  ScheduleBgTilemapBufferTransfer.
+- Removed the lifecycle probe and the broad per-frame battle-context call.
+
+Why this is not a duplicate:
+- All previous display attempts used OAM actors. This uses the battle
+  background character/tilemap path and is tied to the proven command-select
+  BG lifecycle.
+
+Verification:
+- The generated atlas is a valid 32x144 indexed PNG with 16 palette entries.
+- ARM-target Clang syntax checking passed for all three changed battle C files;
+  only pre-existing libc declaration warnings were emitted.
+- A full Docker build could not start because this worktree has no rom.nds;
+  the Makefile stopped at its ROM-code check before compilation.
+
+Result:
+- Static verification passed. In-game placement remains unverified.
 
 ## Not Yet Tried
 
