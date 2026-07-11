@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import struct
 import zlib
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 LABELS = (
     "NOR", "FGT", "FLY", "PSN", "GND", "RCK", "BUG", "GHO", "STL",
     "FAI", "FIR", "WAT", "GRS", "ELC", "PSY", "ICE", "DRA", "DRK",
+    "NUL", "STR",
 )
 
 PALETTE = (
@@ -29,7 +31,7 @@ PALETTE = (
     (72, 184, 200),
 )
 
-TYPE_COLORS = (3, 4, 5, 6, 7, 7, 8, 9, 10, 11, 12, 5, 13, 14, 11, 15, 9, 1)
+TYPE_COLORS = (3, 4, 5, 6, 7, 7, 8, 9, 10, 11, 12, 5, 13, 14, 11, 15, 9, 1, 3, 15)
 
 FONT = {
     "A": ("010", "101", "111", "101", "101"),
@@ -59,7 +61,7 @@ def png_chunk(kind, data):
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
 
-def write_png(path):
+def build_png():
     width = 32
     height = len(LABELS) * 8
     pixels = [[0] * width for _ in range(height)]
@@ -89,16 +91,24 @@ def write_png(path):
         packed_rows.append(b"\x00" + packed)
     raw = b"".join(packed_rows)
     palette = b"".join(bytes(rgb) for rgb in PALETTE)
-    palette += bytes(768 - len(palette))
 
     data = b"\x89PNG\r\n\x1a\n"
     data += png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 4, 3, 0, 0, 0))
     data += png_chunk(b"PLTE", palette)
     data += png_chunk(b"IDAT", zlib.compress(raw, 9))
     data += png_chunk(b"IEND", b"")
-    path.write_bytes(data)
+    return data
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    write_png(root / "rawdata/weather_icons/8_369_enemy_type_marker_hud.png")
+    output = root / "rawdata/weather_icons/8_369_enemy_type_marker_hud.png"
+    data = build_png()
+    if args.check:
+        if not output.is_file() or output.read_bytes() != data:
+            raise SystemExit(f"stale generated asset: {output}")
+    else:
+        output.write_bytes(data)

@@ -1,13 +1,12 @@
 #include "../../include/battle.h"
 #include "../../include/constants/file.h"
 #include "../../include/sprite.h"
-#include "../../include/window.h"
 
 #define ENEMY_TYPE_MARKER_NONE 0xFF
-#define ENEMY_TYPE_MARKER_SLOT_COUNT 4
+#define ENEMY_TYPE_MARKER_SLOT_COUNT 2
 #define ENEMY_TYPE_MARKER_WIDTH 4
-#define ENEMY_TYPE_MARKER_BG GF_BGL_FRAME0_M
-#define ENEMY_TYPE_MARKER_TILE_BASE 0x380
+#define ENEMY_TYPE_MARKER_BG GF_BGL_FRAME1_M
+#define ENEMY_TYPE_MARKER_TILE_BASE 0x130
 #define ENEMY_TYPE_MARKER_PALETTE 12
 #define ENEMY_TYPE_MARKER_HEAP_ID 5
 
@@ -18,20 +17,19 @@ typedef struct EnemyTypeMarkerSlot {
 
 static EnemyTypeMarkerSlot sEnemyTypeMarkerSlots[ENEMY_TYPE_MARKER_SLOT_COUNT];
 static BOOL sEnemyTypeMarkerInitialized;
+static struct BattleSystem *sEnemyTypeMarkerOwner;
 
 static const u8 sEnemyTypeMarkerX[ENEMY_TYPE_MARKER_SLOT_COUNT] = {
-    14, 14,
     14, 14,
 };
 
 static const u8 sEnemyTypeMarkerY[ENEMY_TYPE_MARKER_SLOT_COUNT] = {
     4, 5,
-    9, 10,
 };
 
 static BOOL EnemyTypeMarker_IsDisplayableType(u8 type)
 {
-    return type <= TYPE_DARK;
+    return type <= TYPE_DARK || type == TYPE_STELLAR;
 }
 
 static void EnemyTypeMarker_AddType(u8 *types, u8 *count, u8 type)
@@ -76,10 +74,82 @@ static BOOL EnemyTypeMarker_ShouldShowBattler(struct BattleStruct *ctx, int batt
         && ctx->battlemon[battlerId].hp > 0;
 }
 
-static void EnemyTypeMarker_Init(struct BattleSystem *bsys)
+static void EnemyTypeMarker_ResetSlots(void)
 {
     int slot;
 
+    for (slot = 0; slot < ENEMY_TYPE_MARKER_SLOT_COUNT; slot++) {
+        sEnemyTypeMarkerSlots[slot].type = ENEMY_TYPE_MARKER_NONE;
+        sEnemyTypeMarkerSlots[slot].visible = FALSE;
+    }
+}
+
+static void EnemyTypeMarker_DrawSlot(struct BattleSystem *bsys, int slot, u8 type)
+{
+    u16 tilemap[ENEMY_TYPE_MARKER_WIDTH];
+    int tile;
+
+    for (tile = 0; tile < ENEMY_TYPE_MARKER_WIDTH; tile++) {
+        tilemap[tile] = ENEMY_TYPE_MARKER_TILE_BASE
+            + (type * ENEMY_TYPE_MARKER_WIDTH)
+            + tile
+            + (ENEMY_TYPE_MARKER_PALETTE << 12);
+    }
+    BgCopyOrUncompressTilemapBufferRangeToVram(
+        bsys->bgConfig,
+        ENEMY_TYPE_MARKER_BG,
+        tilemap,
+        sizeof(tilemap),
+        (sEnemyTypeMarkerY[slot] * 32) + sEnemyTypeMarkerX[slot]
+    );
+
+    sEnemyTypeMarkerSlots[slot].type = type;
+    sEnemyTypeMarkerSlots[slot].visible = TRUE;
+}
+
+static void EnemyTypeMarker_ClearSlot(struct BattleSystem *bsys, int slot)
+{
+    // These BG1 cells are transparent space beside the enemy status OBJ.
+    static const u16 blank[ENEMY_TYPE_MARKER_WIDTH] = {0};
+
+    if (!sEnemyTypeMarkerSlots[slot].visible) {
+        return;
+    }
+
+    BgCopyOrUncompressTilemapBufferRangeToVram(
+        bsys->bgConfig,
+        ENEMY_TYPE_MARKER_BG,
+        blank,
+        sizeof(blank),
+        (sEnemyTypeMarkerY[slot] * 32) + sEnemyTypeMarkerX[slot]
+    );
+    sEnemyTypeMarkerSlots[slot].type = ENEMY_TYPE_MARKER_NONE;
+    sEnemyTypeMarkerSlots[slot].visible = FALSE;
+}
+
+static void EnemyTypeMarker_ClearAll(struct BattleSystem *bsys)
+{
+    int slot;
+
+    if (!sEnemyTypeMarkerInitialized || bsys == NULL || bsys->bgConfig == NULL) {
+        return;
+    }
+
+    for (slot = 0; slot < ENEMY_TYPE_MARKER_SLOT_COUNT; slot++) {
+        EnemyTypeMarker_ClearSlot(bsys, slot);
+    }
+}
+
+void BattleSystem_PrepareEnemyTypeMarkers(struct BattleSystem *bsys, struct BattleStruct *ctx)
+{
+    if (bsys == NULL || ctx == NULL || bsys->bgConfig == NULL || bsys->palette == NULL) {
+        return;
+    }
+
+    // BG1 tiles 0x130-0x17F and palette bank 12 are unused by the stock rival
+    // command screen and Fell Stinger animation used for visual verification.
+    // Existing battle UI reloads palettes 8, 10, and 11; the message window
+    // occupies the lower screen while these cells live beside enemy gauges.
     GfGfxLoader_LoadCharData(
         ARC_BATTLE_GFX,
         ENEMY_TYPE_MARKER_GFX,
@@ -97,130 +167,63 @@ static void EnemyTypeMarker_Init(struct BattleSystem *bsys)
         ENEMY_TYPE_MARKER_HEAP_ID,
         0,
         0x20,
-        ENEMY_TYPE_MARKER_PALETTE * 0x20
+        ENEMY_TYPE_MARKER_PALETTE * 16
     );
 
-    for (slot = 0; slot < ENEMY_TYPE_MARKER_SLOT_COUNT; slot++) {
-        sEnemyTypeMarkerSlots[slot].type = ENEMY_TYPE_MARKER_NONE;
-        sEnemyTypeMarkerSlots[slot].visible = FALSE;
-    }
+    sEnemyTypeMarkerOwner = bsys;
     sEnemyTypeMarkerInitialized = TRUE;
+    EnemyTypeMarker_ResetSlots();
+    BattleSystem_UpdateEnemyTypeMarkers(bsys, ctx);
 }
 
-static BOOL EnemyTypeMarker_DrawSlot(struct BattleSystem *bsys, int slot, u8 type)
+void BattleSystem_ResetEnemyTypeMarkers(struct BattleSystem *bsys)
 {
-    u16 tilemap[ENEMY_TYPE_MARKER_WIDTH];
-    int tile;
-
-    if (sEnemyTypeMarkerSlots[slot].visible
-        && sEnemyTypeMarkerSlots[slot].type == type) {
-        return FALSE;
+    if (bsys == NULL || sEnemyTypeMarkerOwner == bsys) {
+        sEnemyTypeMarkerOwner = NULL;
+        sEnemyTypeMarkerInitialized = FALSE;
+        EnemyTypeMarker_ResetSlots();
     }
-
-    for (tile = 0; tile < ENEMY_TYPE_MARKER_WIDTH; tile++) {
-        tilemap[tile] = ENEMY_TYPE_MARKER_TILE_BASE
-            + (type * ENEMY_TYPE_MARKER_WIDTH)
-            + tile
-            + (ENEMY_TYPE_MARKER_PALETTE << 12);
-    }
-    LoadRectToBgTilemapRect(
-        bsys->bgConfig,
-        ENEMY_TYPE_MARKER_BG,
-        tilemap,
-        sEnemyTypeMarkerX[slot],
-        sEnemyTypeMarkerY[slot],
-        ENEMY_TYPE_MARKER_WIDTH,
-        1
-    );
-
-    sEnemyTypeMarkerSlots[slot].type = type;
-    sEnemyTypeMarkerSlots[slot].visible = TRUE;
-    return TRUE;
-}
-
-static BOOL EnemyTypeMarker_ClearSlot(struct BattleSystem *bsys, int slot)
-{
-    static const u16 blank[ENEMY_TYPE_MARKER_WIDTH] = {0};
-
-    if (!sEnemyTypeMarkerSlots[slot].visible) {
-        return FALSE;
-    }
-
-    LoadRectToBgTilemapRect(
-        bsys->bgConfig,
-        ENEMY_TYPE_MARKER_BG,
-        blank,
-        sEnemyTypeMarkerX[slot],
-        sEnemyTypeMarkerY[slot],
-        ENEMY_TYPE_MARKER_WIDTH,
-        1
-    );
-    sEnemyTypeMarkerSlots[slot].type = ENEMY_TYPE_MARKER_NONE;
-    sEnemyTypeMarkerSlots[slot].visible = FALSE;
-    return TRUE;
-}
-
-static void EnemyTypeMarker_ClearAll(struct BattleSystem *bsys)
-{
-    int slot;
-    BOOL changed = FALSE;
-
-    if (!sEnemyTypeMarkerInitialized || bsys == NULL || bsys->bgConfig == NULL) {
-        return;
-    }
-
-    for (slot = 0; slot < ENEMY_TYPE_MARKER_SLOT_COUNT; slot++) {
-        changed |= EnemyTypeMarker_ClearSlot(bsys, slot);
-    }
-    if (changed) {
-        ScheduleBgTilemapBufferTransfer(bsys->bgConfig, ENEMY_TYPE_MARKER_BG);
-    }
-    sEnemyTypeMarkerInitialized = FALSE;
 }
 
 void BattleSystem_UpdateEnemyTypeMarkers(struct BattleSystem *bsys, struct BattleStruct *ctx)
 {
-    int enemySlot;
     int maxBattlers;
-    BOOL changed = FALSE;
+    u8 types[2];
 
-    if (bsys == NULL || ctx == NULL || bsys->bgConfig == NULL || bsys->palette == NULL) {
+    if (bsys == NULL || ctx == NULL || bsys->bgConfig == NULL) {
         return;
     }
     if (ctx->fight_end_flag || ctx->server_seq_no == CONTROLLER_COMMAND_45) {
         EnemyTypeMarker_ClearAll(bsys);
+        BattleSystem_ResetEnemyTypeMarkers(bsys);
         return;
     }
-    if (!sEnemyTypeMarkerInitialized) {
-        EnemyTypeMarker_Init(bsys);
+    if (!sEnemyTypeMarkerInitialized || sEnemyTypeMarkerOwner != bsys) {
+        // Selection input is the first controller state where the main battle
+        // BG and battler gauges are fully live in every standard battle path.
+        if (ctx->server_seq_no < CONTROLLER_COMMAND_SELECTION_SCREEN_INPUT) {
+            return;
+        }
+        BattleSystem_PrepareEnemyTypeMarkers(bsys, ctx);
+        return;
     }
 
     maxBattlers = BattleWorkClientSetMaxGet(bsys);
-    for (enemySlot = 0; enemySlot < 2; enemySlot++) {
-        int battlerId = enemySlot == 0 ? BATTLER_ENEMY : BATTLER_ENEMY2;
-        int slot = enemySlot * 2;
-        u8 types[2];
-
-        if (!EnemyTypeMarker_ShouldShowBattler(ctx, battlerId, maxBattlers)) {
-            changed |= EnemyTypeMarker_ClearSlot(bsys, slot);
-            changed |= EnemyTypeMarker_ClearSlot(bsys, slot + 1);
-            continue;
-        }
-
-        EnemyTypeMarker_CollectTypes(&ctx->battlemon[battlerId], types);
-        if (types[0] == ENEMY_TYPE_MARKER_NONE) {
-            changed |= EnemyTypeMarker_ClearSlot(bsys, slot);
-        } else {
-            changed |= EnemyTypeMarker_DrawSlot(bsys, slot, types[0]);
-        }
-        if (types[1] == ENEMY_TYPE_MARKER_NONE) {
-            changed |= EnemyTypeMarker_ClearSlot(bsys, slot + 1);
-        } else {
-            changed |= EnemyTypeMarker_DrawSlot(bsys, slot + 1, types[1]);
-        }
+    if (!EnemyTypeMarker_ShouldShowBattler(ctx, BATTLER_ENEMY, maxBattlers)) {
+        EnemyTypeMarker_ClearSlot(bsys, 0);
+        EnemyTypeMarker_ClearSlot(bsys, 1);
+        return;
     }
 
-    if (changed) {
-        ScheduleBgTilemapBufferTransfer(bsys->bgConfig, ENEMY_TYPE_MARKER_BG);
+    EnemyTypeMarker_CollectTypes(&ctx->battlemon[BATTLER_ENEMY], types);
+    if (types[0] == ENEMY_TYPE_MARKER_NONE) {
+        EnemyTypeMarker_ClearSlot(bsys, 0);
+    } else {
+        EnemyTypeMarker_DrawSlot(bsys, 0, types[0]);
+    }
+    if (types[1] == ENEMY_TYPE_MARKER_NONE) {
+        EnemyTypeMarker_ClearSlot(bsys, 1);
+    } else {
+        EnemyTypeMarker_DrawSlot(bsys, 1, types[1]);
     }
 }

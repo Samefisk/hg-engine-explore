@@ -4093,6 +4093,8 @@ BOOL StrongWindsShouldWeaken(struct BattleSystem *bw, struct BattleStruct *sp, i
  */
 void LONG_CALL BattleBgExpansionLoader(struct BattleSystem *bsys);
 
+void BattleSystem_PrepareEnemyTypeMarkers(struct BattleSystem *bsys, struct BattleStruct *ctx);
+void BattleSystem_ResetEnemyTypeMarkers(struct BattleSystem *bsys);
 void BattleSystem_UpdateEnemyTypeMarkers(struct BattleSystem *bsys, struct BattleStruct *ctx);
 
 /**

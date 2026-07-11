@@ -890,6 +890,8 @@ void BattleEndRevertFormChange(struct BattleSystem *bw)
     u16 form;
     u16 newItems[6] = {0, 0, 0, 0, 0, 0};
 
+    BattleSystem_ResetEnemyTypeMarkers(bw);
+
     newBS.SideMega[0] = 0;
     newBS.SideMega[1] = 0;
     newBS.SideMega[2] = 0;

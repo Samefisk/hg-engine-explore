@@ -498,17 +498,242 @@ Verification:
 Result:
 - Static verification passed. In-game placement remains unverified.
 
-## Not Yet Tried
+### A23 Standard Controller Lifecycle Gate
 
-- Try a background/tilemap based display instead of OAM if main-screen OAM is
-  unsuitable in this overlay state.
+Change:
+- Moved one-time atlas preparation out of the Mega button hook and into the
+  common `BattleContext_Main` update, gated until command-selection input.
+- Added owner/reset state so later battles cannot inherit stale marker state.
+
+Why this is not a duplicate:
+- A22 depended on a Mega UI assembly hook. This uses the controller function
+  that the built ROM disassembly proved calls the marker updater every frame.
+
+Verification:
+- Full Docker ROM build passed.
+- The opt-in `test.sav` route reached the rival command screen after holding
+  Right and tapping A 75 times.
+- No marker appeared in `enemy_type_hud_fixed_command.png`.
+
+Result:
+- Lifecycle was fixed, but rendering still failed.
+
+### A24 BG0 VRAM Inspection
+
+Change:
+- No product-code change. Read main BG registers, character VRAM, tilemap
+  VRAM, and palette VRAM after reaching the command screen.
+
+Why this is not a duplicate:
+- Earlier memory probes inspected OAM actors. This directly inspected the new
+  BG implementation and separated loading from tilemap placement.
+
+Verification:
+- BG0 used character base 0 and screen base `0xF000`.
+- Atlas character bytes were present at `0x06007000`.
+- Intended tilemap cells at `0x0600F11C` remained zero.
+- The upstream `bg_window.c` implementation confirmed
+  `LoadRectToBgTilemapRect` silently returns when a BG has no tilemap buffer;
+  battle BG0 has no such buffer.
+
+Result:
+- Root cause identified: buffered tilemap helpers cannot modify this battle
+  layer.
+
+### A25 Forced-Water Restamp Probe
+
+Change:
+- Temporarily forced a Water marker at preparation, then on every controller
+  update, to test whether the stock renderer merely cleared a one-time write.
+
+Why this is not a duplicate:
+- A15 and A20 forced OAM actors. This forced the new BG tilemap representation
+  after its lifecycle was proven.
+
+Verification:
+- Full incremental builds passed for both variants.
+- Neither `enemy_type_hud_forced_water.png` nor
+  `enemy_type_hud_restamped.png` displayed a marker.
+
+Result:
+- Failed as expected from A24; both temporary probes were removed.
+
+### A26 Direct BG0 Screen-Range Upload
+
+Change:
+- Exported the stock `BgCopyOrUncompressTilemapBufferRangeToVram` symbol and
+  used it to upload only each marker's four tile entries, preserving all
+  surrounding screen data.
+
+Why this is not a duplicate:
+- A22-A25 used the unavailable CPU tilemap buffer. This is the first direct,
+  bounded screen-VRAM update.
+
+Verification:
+- VRAM contained `C3AC C3AD C3AE C3AF` at the intended Water-marker cells.
+- The marker remained invisible on BG0.
+
+Result:
+- Tilemap upload succeeded; palette placement and layer ordering remained.
+
+### A27 Palette Offset Correction
+
+Change:
+- Corrected palette destination units from bytes (`12 * 0x20`) to colors
+  (`12 * 16`).
+
+Why this is not a duplicate:
+- Earlier asset tests checked palette content and OAM loading. This corrects
+  the BG palette manager's destination-unit mismatch discovered through VRAM.
+
+Verification:
+- Palette bank 12 changed from untouched repeated values to the atlas's 16
+  expected BGR555 colors.
+- BG0 still did not show the marker.
+
+Result:
+- Palette loading fixed; higher-priority BG1 still masked BG0.
+
+### A28 Direct BG1 Type Markers
+
+Change:
+- Moved the atlas and bounded screen-range writes from BG0 to higher-priority
+  BG1. Kept the 32x8 marker at tile `(14, 4)`, with a second type at `(14, 5)`.
+
+Why this is not a duplicate:
+- A26 proved the same direct write on BG0 but also proved that layer was
+  occluded. This changes only the battle layer to test ordering.
+
+Verification:
+- Full Docker ROM build passed.
+- `enemy_type_hud_bg1.png` visibly showed `WAT` beside Totodile's gauge.
+- It also revealed an unwanted `NUL` marker from the `TYPE_TYPELESS` third
+  slot.
+
+Result:
+- First successful in-game rendering; one data filter remained.
+
+### A29 Typeless Filter And Persistent Visual Check
+
+Change:
+- Excluded `TYPE_TYPELESS` from ordinary displayed types while retaining
+  `TYPE_STELLAR` for a Stellar tera type.
+- Kept direct four-entry restamps so battle effects cannot clear a marker
+  without the next controller update restoring it.
+
+Why this is not a duplicate:
+- Type lookup was not changed speculatively: A28's successful screenshot
+  specifically demonstrated the typeless sentinel as the remaining defect.
+
+Verification:
+- Generator freshness check and `git diff --check` passed.
+- Full Docker ROM build passed.
+- Opt-in raw-save test used `--sav test.sav`, held Right for 180 frames, and
+  tapped A 90 times with checkpoints.
+- `enemy_type_hud_final_a75.png` shows one Water marker at command selection.
+- `enemy_type_hud_final_a80.png`, `_a85.png`, and `_a90.png` show it remains
+  visible while the turn begins and Fell Stinger animates.
+
+Result:
+- Passed. The single-type rival displays one compact marker; the adjacent
+  row remains transparent and available for a true second type.
+
+### A30 Unmodified-ROM Resource Ownership Audit
+
+Change:
+- Compared BG1 character VRAM, marker tilemap cells, and palette bank 12 on an
+  unmodified ROM using the identical opt-in `test.sav` rival route.
+- Rejected an initially selected physical range at `0x4C0` after review noted
+  text-BG map entries can address only tiles `0x000-0x3FF`.
+- Moved the atlas from tiles `0x380-0x3CF` to legal tiles `0x130-0x17F`.
+
+Why this is not a duplicate:
+- Earlier checks proved file indexing and runtime rendering. This is the first
+  direct before-feature ownership check against the same battle states.
+
+Verification:
+- The old range contained 680 nonzero bytes and was rejected.
+- A full legal-range audit found tiles `0x130-0x1CF` all zero at both command
+  selection and Fell Stinger; the selected subset is `0x130-0x17F`.
+- The two intended tilemap rows and palette bank 12 were zero before the
+  feature.
+
+Result:
+- Passed. The final range is based on observed unused stock resources rather
+  than the initial unverified reservation.
+
+### A31 Scripted Double-Battle Visual Harness
+
+Change:
+- Temporarily added an `AUTO_TEST=Y` double battle with Bulbasaur and
+  Charizard as dual-type enemy slots 1 and 2.
+
+Why this is not a duplicate:
+- The required rival save verifies a single monotype enemy. This attempted to
+  exercise both vertical rows and both enemy slots through the repo's native
+  scripted battle harness.
+
+Verification:
+- `build_tests.py enemy_type_hud_visual` selected the temporary scenario.
+- The debug ROM failed to link because the existing fixed `rom` region
+  overflowed by 2,752 bytes when `DEBUG_BATTLE_SCENARIOS` was enabled.
+
+Result:
+- Blocked before runtime by test-harness code size. The temporary scenario was
+  removed and is not part of the product diff.
+
+### A32 Forced Secondary-Type Row Probe
+
+Change:
+- Temporarily appended Fire after Totodile's real Water type in the normal ROM
+  to exercise the second marker row without the oversized debug harness.
+
+Why this is not a duplicate:
+- A28 exposed and removed a false `TYPE_TYPELESS` second row. This probe uses a
+  valid second type after the final BG1 path and legal tile range were chosen.
+
+Verification:
+- Normal Docker ROM build passed.
+- The opt-in rival route produced
+  `enemy_type_hud_dual_row_probe.png`, visibly showing `WAT` over `FIR` in the
+  two requested rows.
+
+Result:
+- Passed. The forced Fire line was removed before the final product build.
+
+### A33 Limit Markers To The Verified Primary Enemy Gauge
+
+Change:
+- Removed the unverified enemy-2 rows from the product implementation.
+- Retained one or two vertically stacked types for `BATTLER_ENEMY`, including
+  in double battles.
+
+Why this is not a duplicate:
+- A31 tried and could not launch a real double battle. Review then identified
+  enemy-2 placement and clearing as the only remaining unverified behavior.
+  This removes those writes instead of claiming unsupported coverage.
+
+Verification:
+- The requested mockup and all successful runtime captures target the primary
+  enemy gauge at tiles `(14,4)` and `(14,5)`.
+- A32 separately verified both rows at that gauge.
+- The final normal Docker build passed with generated-atlas validation included
+  in `all`.
+- `enemy_type_hud_primary_final.png` shows the shipped monotype behavior after
+  all temporary probes were removed.
+
+Result:
+- The final scope is the smallest fully evidenced implementation: the primary
+  enemy Pokemon's one or two types, without modifying a second HUD region.
 
 ## Duplicate-Check Notes
 
-- Do not retry "fix the type lookup" until the forced-Water debug result is
-  explained.
-- Do not retry `bsys->maxBattlers` versus `BattleWorkClientSetMaxGet` unless a
-  new screenshot proves the update path is actually drawing.
-- Do not retry the `server_seq_no >= CONTROLLER_COMMAND_42` hide-gate fix; it
-  was necessary but not sufficient.
-- Do not make `test.sav` the default. Raw save import is intentionally opt-in.
+- Do not retry OAM positioning/resource tags without new evidence; A1-A21
+  exhausted that path.
+- Do not use buffered tilemap helpers on battle BG0/BG1; A24 proved those
+  layers have no CPU tilemap buffer.
+- Direct screen-range uploads are the working bounded tilemap path.
+- Do not reuse BG1 tiles `0x380-0x3CF`; the unmodified battle populated them.
+- Do not display `TYPE_TYPELESS`; it is the empty third-type sentinel.
+- Do not make `test.sav` the verifier default. Raw save import remains opt-in
+  through the explicit `--sav test.sav` argument.

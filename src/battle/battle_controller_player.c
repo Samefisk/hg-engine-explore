@@ -87,6 +87,7 @@ BOOL LONG_CALL BattleContext_Main(struct BattleSystem *bsys, struct BattleStruct
 #endif
 
     sPlayerBattleCommands[ctx->server_seq_no](bsys, ctx);
+    BattleSystem_UpdateEnemyTypeMarkers(bsys, ctx);
 #ifdef DEBUG_BATTLE_SCENARIOS
     TestBattle_autoSelectPlayerMoves(bsys, ctx);
 #endif

@@ -312,9 +312,6 @@ void LoadMegaIcon(struct BI_PARAM *bip)
 
     OAMSpriteTemplate template = MegaIconObjParam; // memcpy should handle this
 
-    // LoadMegaOam hooks BGCallback_CommandSelect after its main BG setup.
-    BattleSystem_UpdateEnemyTypeMarkers(bip->bw, bip->bw->sp);
-
     newBS.CanMega = CheckCanDrawMegaButton(bip);
     if (!newBS.MegaOAM && CheckIsMega(bip))
     {
