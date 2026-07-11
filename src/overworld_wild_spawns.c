@@ -69,7 +69,8 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         && sFieldReadyTaskMapId == (u16)fieldSystem->location->mapId
         && sOverworldWildSpawnState.presentationRestorePending
         && sOverworldWildSpawnState.battleGraceSteps == 0) {
-        goto refresh;
+        /* Route same-map presentation restores through the normal settle delay. */
+        sFieldReadyTaskMapId = 0;
     }
 
     if (fieldSystem->location != NULL
@@ -83,7 +84,6 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
             return;
         }
 
-refresh:
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
         (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
     } else if (sOverworldWildSpawnState.battleGraceSteps != 0) {

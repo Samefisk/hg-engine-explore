@@ -95,9 +95,6 @@ void LONG_CALL UnloadOverlayByID(u32 ovyId) {
     BOOL cleanupMode = FALSE;
     PMiLoadedOverlay *table;
 
-    /* Settle wild-object presentation while the field renderer is still live. */
-    UnloadColdOverworldWildOverlaysFor(ovyId);
-
 unloadSecond:
     table = GetLoadedOverlaysInRegion(GetOverlayLoadDestination(ovyId));
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {

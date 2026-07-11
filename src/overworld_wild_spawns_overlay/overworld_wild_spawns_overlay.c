@@ -18295,9 +18295,15 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
         OverworldWildSpawns_CancelDeferredBattleScript();
         OverworldWildCustomMovement_SetFieldSystem(NULL);
         OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state);
+#if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
+        OverworldWildSpawns_ClearContextLite(state);
+#endif
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
         OverworldWildSpawns_StopFrameMovementTask();
 #endif
+        state->mapId = MAP_NOTHING;
+        state->mapObjectMan = NULL;
+        state->mapObjects = NULL;
         state->presentationRestorePending = FALSE;
         return FALSE;
     }
