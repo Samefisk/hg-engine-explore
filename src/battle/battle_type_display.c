@@ -1,295 +1,337 @@
 #include "../../include/battle.h"
-#include "../../include/constants/file.h"
 
-#define ENEMY_TYPE_ICON_SPRITE_TAG 22100
-#define ENEMY_TYPE_ICON_PAL_TAG 22110
-#define ENEMY_TYPE_ICON_CELL_TAG 22120
-#define ENEMY_TYPE_ICON_CELL_ANIM_TAG 22121
-#define ENEMY_TYPE_ICON_SLOT_COUNT 4
-#define ENEMY_TYPE_NONE 0xFF
+#define BATTLE_TYPE_MARKER_NONE 0xFF
+#define BATTLE_TYPE_MARKER_SIDE_COUNT 2
+#define BATTLE_TYPE_MARKER_SLOT_COUNT 2
+#define BATTLE_TYPE_MARKER_TILE_WORDS 32
+#define BATTLE_TYPE_MARKER_MAIN_OBJ_VRAM ((volatile u16 *)0x06400000)
+#define BATTLE_TYPE_MARKER_MAIN_OBJ_VRAM_SIZE 0x10000
+#define BATTLE_TYPE_MARKER_SINGLE_PLAYER_HP_BAR 0
+#define BATTLE_TYPE_MARKER_SINGLE_ENEMY_HP_BAR 1
+#define BATTLE_TYPE_MARKER_MAIN_RAM_START 0x02000000
+#define BATTLE_TYPE_MARKER_MAIN_RAM_END 0x02400000
 
-typedef struct EnemyTypeIconSlot {
-    CATS_ACT_PTR actor;
-    u8 type;
-} EnemyTypeIconSlot;
+// OpponentData embeds BattleHpBar at 0x28; its boxObj and type are at +4 and +0x25.
+#define BATTLE_TYPE_MARKER_BOX_OBJ_OFFSET 0x2C
+#define BATTLE_TYPE_MARKER_HP_BAR_TYPE_OFFSET 0x4D
+#define BATTLE_TYPE_MARKER_SPRITE_IMAGE_MAIN_VRAM_OFFSET 0xB8
 
-static EnemyTypeIconSlot sEnemyTypeIcons[ENEMY_TYPE_ICON_SLOT_COUNT] = {
-    {NULL, ENEMY_TYPE_NONE},
-    {NULL, ENEMY_TYPE_NONE},
-    {NULL, ENEMY_TYPE_NONE},
-    {NULL, ENEMY_TYPE_NONE},
+enum BattleTypeMarkerSide {
+    BATTLE_TYPE_MARKER_PLAYER,
+    BATTLE_TYPE_MARKER_ENEMY,
 };
 
-static BOOL sEnemyTypeIconCellLoaded = FALSE;
-
-static const s16 sEnemyTypeIconX[ENEMY_TYPE_ICON_SLOT_COUNT] = {
-    122, 154,
-    122, 154,
+static const u8 sBattleTypeMarkerBattler[BATTLE_TYPE_MARKER_SIDE_COUNT] = {
+    BATTLER_PLAYER, BATTLER_ENEMY,
 };
 
-static const s16 sEnemyTypeIconY[ENEMY_TYPE_ICON_SLOT_COUNT] = {
-    15, 15,
-    51, 51,
+static const u8 sBattleTypeMarkerHpBarType[BATTLE_TYPE_MARKER_SIDE_COUNT] = {
+    BATTLE_TYPE_MARKER_SINGLE_PLAYER_HP_BAR, BATTLE_TYPE_MARKER_SINGLE_ENEMY_HP_BAR,
 };
 
-static const u16 sEnemyTypeIconGfxByType[NUMBER_OF_MON_TYPES] = {
-    [TYPE_NORMAL] = TYPE_ICON_NORMAL_GFX,
-    [TYPE_FIGHTING] = TYPE_ICON_FIGHTING_GFX,
-    [TYPE_FLYING] = TYPE_ICON_FLYING_GFX,
-    [TYPE_POISON] = TYPE_ICON_POISON_GFX,
-    [TYPE_GROUND] = TYPE_ICON_GROUND_GFX,
-    [TYPE_ROCK] = TYPE_ICON_ROCK_GFX,
-    [TYPE_BUG] = TYPE_ICON_BUG_GFX,
-    [TYPE_GHOST] = TYPE_ICON_GHOST_GFX,
-    [TYPE_STEEL] = TYPE_ICON_STEEL_GFX,
-    [TYPE_FAIRY] = TYPE_ICON_FAIRY_GFX,
-    [TYPE_FIRE] = TYPE_ICON_FIRE_GFX,
-    [TYPE_WATER] = TYPE_ICON_WATER_GFX,
-    [TYPE_GRASS] = TYPE_ICON_GRASS_GFX,
-    [TYPE_ELECTRIC] = TYPE_ICON_ELECTRIC_GFX,
-    [TYPE_PSYCHIC] = TYPE_ICON_PSYCHIC_GFX,
-    [TYPE_ICE] = TYPE_ICON_ICE_GFX,
-    [TYPE_DRAGON] = TYPE_ICON_DRAGON_GFX,
-    [TYPE_DARK] = TYPE_ICON_DARK_GFX,
+static const u16 sBattleTypeMarkerVramOffset[BATTLE_TYPE_MARKER_SIDE_COUNT][BATTLE_TYPE_MARKER_SLOT_COUNT] = {
+    { 0x300, 0x400 },
+    { 0xAC0, 0xBC0 },
 };
 
-static const OAMSpriteTemplate sEnemyTypeIconTemplate = {
-    122,
-    15,
-    0,
-    0,
-    100,
-    0,
-    NNS_G2D_VRAM_TYPE_2DMAIN,
+static const char sEnemyTypeMarkerLabels[NUMBER_OF_MON_TYPES][4] = {
+    "NOR", "FGT", "FLY", "PSN", "GND", "RCK", "BUG", "GHO", "STL", "FAI",
+    "FIR", "WAT", "GRS", "ELC", "PSY", "ICE", "DRA", "DRK", "NUL", "STR",
+};
+
+// Reuse colors already present in the stock enemy-gauge OBJ palette.
+static const u8 sEnemyTypeMarkerColors[NUMBER_OF_MON_TYPES] = {
+    3, 9, 12, 13, 7, 7, 6, 11, 2, 13,
+    10, 12, 6, 8, 13, 12, 11, 1, 3, 11,
+};
+
+static const u8 sEnemyTypeMarkerGlyphs[26][5] = {
+    ['A' - 'A'] = {2, 5, 7, 5, 5},
+    ['B' - 'A'] = {6, 5, 6, 5, 6},
+    ['C' - 'A'] = {3, 4, 4, 4, 3},
+    ['D' - 'A'] = {6, 5, 5, 5, 6},
+    ['E' - 'A'] = {7, 4, 6, 4, 7},
+    ['F' - 'A'] = {7, 4, 6, 4, 4},
+    ['G' - 'A'] = {3, 4, 5, 5, 3},
+    ['H' - 'A'] = {5, 5, 7, 5, 5},
+    ['I' - 'A'] = {7, 2, 2, 2, 7},
+    ['K' - 'A'] = {5, 5, 6, 5, 5},
+    ['L' - 'A'] = {4, 4, 4, 4, 7},
+    ['N' - 'A'] = {5, 7, 7, 7, 5},
+    ['O' - 'A'] = {2, 5, 5, 5, 2},
+    ['P' - 'A'] = {6, 5, 6, 4, 4},
+    ['R' - 'A'] = {6, 5, 6, 5, 5},
+    ['S' - 'A'] = {3, 4, 2, 1, 6},
+    ['T' - 'A'] = {7, 2, 2, 2, 2},
+    ['U' - 'A'] = {5, 5, 5, 5, 7},
+    ['W' - 'A'] = {5, 5, 7, 7, 5},
+    ['Y' - 'A'] = {5, 5, 2, 2, 2},
+};
+
+static const u8 sBattleTypeMarkerOriginalTiles[BATTLE_TYPE_MARKER_SIDE_COUNT][BATTLE_TYPE_MARKER_SLOT_COUNT][BATTLE_TYPE_MARKER_TILE_WORDS * 2] = {
     {
-        ENEMY_TYPE_ICON_SPRITE_TAG,
-        ENEMY_TYPE_ICON_PAL_TAG,
-        ENEMY_TYPE_ICON_CELL_TAG,
-        ENEMY_TYPE_ICON_CELL_ANIM_TAG,
-        CLACT_U_HEADER_DATA_NONE,
-        CLACT_U_HEADER_DATA_NONE,
+        {
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x40, 0xFE, 0xFF, 0x00, 0x40, 0xFE, 0xFF,
+            0x00, 0x40, 0xFE, 0xFF, 0x00, 0x34, 0xF3, 0xFF,
+            0x00, 0xE4, 0xFF, 0xFF, 0x00, 0xE4, 0xFF, 0xFF,
+            0x00, 0xE4, 0xFF, 0xFF, 0x40, 0x33, 0xFF, 0xFF,
+        },
+        {
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
+            0x40, 0xFE, 0xFF, 0xFF, 0x40, 0x2E, 0x22, 0x22,
+            0x40, 0xFE, 0xFF, 0xFF, 0x14, 0x21, 0x22, 0x22,
+            0xE4, 0x22, 0x22, 0x22, 0xE4, 0x22, 0x22, 0x22,
+            0xE4, 0x22, 0x22, 0x22, 0x11, 0x22, 0x22, 0x22,
+        },
     },
-    1,
-    0,
+    {
+        {
+            0xFF, 0x4E, 0x00, 0x00, 0xFF, 0x4E, 0x00, 0x00,
+            0xFF, 0x33, 0x04, 0x00, 0xFF, 0xEF, 0x04, 0x00,
+            0xFF, 0xEF, 0x04, 0x00, 0xFF, 0xEF, 0x04, 0x00,
+            0xFF, 0x3F, 0x43, 0x00, 0xFF, 0xFF, 0x4E, 0x00,
+        },
+        {
+            0xFF, 0xFF, 0x4E, 0x00, 0xFF, 0xFF, 0x4E, 0x00,
+            0xFF, 0xFF, 0x33, 0x04, 0xFF, 0xFF, 0xEF, 0x04,
+            0xFF, 0xFF, 0xEF, 0x04, 0xFF, 0xFF, 0xEF, 0x04,
+            0xFF, 0xFF, 0x3F, 0x43, 0xFF, 0xFF, 0xFF, 0x4E,
+        },
+    },
+};
+struct BattleTypeMarkerSideState {
+    volatile u16 *gaugeVram;
+    u8 types[BATTLE_TYPE_MARKER_SLOT_COUNT];
+    BOOL drawn;
 };
 
-static BOOL EnemyTypeIcon_IsDisplayableType(u8 type)
+static struct {
+    struct BattleSystem *owner;
+    struct BattleTypeMarkerSideState side[BATTLE_TYPE_MARKER_SIDE_COUNT];
+} sBattleTypeMarkerState;
+
+static BOOL EnemyTypeMarker_IsDisplayableType(u8 type)
 {
-    return type < NUMBER_OF_MON_TYPES && sEnemyTypeIconGfxByType[type] != 0;
+    return type < NUMBER_OF_MON_TYPES && type != TYPE_TYPELESS;
 }
 
-static void EnemyTypeIcon_AddType(u8 *types, u8 *count, u8 type)
+static void EnemyTypeMarker_AddType(u8 *types, u8 *count, u8 type)
 {
     int i;
 
-    if (*count >= 2 || !EnemyTypeIcon_IsDisplayableType(type)) {
+    if (*count >= BATTLE_TYPE_MARKER_SLOT_COUNT || !EnemyTypeMarker_IsDisplayableType(type)) {
         return;
     }
-
     for (i = 0; i < *count; i++) {
         if (types[i] == type) {
             return;
         }
     }
-
     types[*count] = type;
     (*count)++;
 }
 
-static void EnemyTypeIcon_CollectTypes(struct BattlePokemon *mon, u8 *types)
+static void EnemyTypeMarker_CollectTypes(struct BattlePokemon *mon, u8 *types)
 {
     u8 count = 0;
 
-    types[0] = ENEMY_TYPE_NONE;
-    types[1] = ENEMY_TYPE_NONE;
-
+    types[0] = BATTLE_TYPE_MARKER_NONE;
+    types[1] = BATTLE_TYPE_MARKER_NONE;
     if (mon->is_currently_terastallized) {
-        EnemyTypeIcon_AddType(types, &count, mon->tera_type);
+        EnemyTypeMarker_AddType(types, &count, mon->tera_type);
         return;
     }
-
-    EnemyTypeIcon_AddType(types, &count, mon->type1);
-    EnemyTypeIcon_AddType(types, &count, mon->type2);
-    EnemyTypeIcon_AddType(types, &count, mon->type3);
+    EnemyTypeMarker_AddType(types, &count, mon->type1);
+    EnemyTypeMarker_AddType(types, &count, mon->type2);
+    // The compact gauge surface intentionally shows at most two distinct types.
+    EnemyTypeMarker_AddType(types, &count, mon->type3);
 }
 
-static BOOL EnemyTypeIcon_ShouldHideAll(struct BattleSystem *bsys, struct BattleStruct *ctx)
+static BOOL EnemyTypeMarker_IsValidMainRamRange(const void *pointer, u32 size)
 {
-    return bsys == NULL
-        || ctx == NULL
-        || ctx->fight_end_flag
-        || ctx->server_seq_no == CONTROLLER_COMMAND_45;
+    u32 address = (u32)pointer;
+
+    return address >= BATTLE_TYPE_MARKER_MAIN_RAM_START
+        && size <= BATTLE_TYPE_MARKER_MAIN_RAM_END - BATTLE_TYPE_MARKER_MAIN_RAM_START
+        && address <= BATTLE_TYPE_MARKER_MAIN_RAM_END - size
+        && (address & 3) == 0;
 }
 
-static BOOL EnemyTypeIcon_ShouldShowBattler(struct BattleStruct *ctx, int battlerId, int maxBattlers)
+static volatile u16 *EnemyTypeMarker_GetGaugeVram(struct BattleSystem *bsys, int side)
 {
-    return battlerId < maxBattlers
-        && ctx->battlemon[battlerId].species != 0
-        && ctx->battlemon[battlerId].hp > 0;
-}
+    u8 battler = sBattleTypeMarkerBattler[side];
+    u8 hpBarType = sBattleTypeMarkerHpBarType[side];
+    u8 *opponentData;
+    void *managedSprite;
+    u8 *sprite;
+    u32 imageVramOffset;
+    u32 writeEnd = sBattleTypeMarkerVramOffset[side][BATTLE_TYPE_MARKER_SLOT_COUNT - 1]
+        + (BATTLE_TYPE_MARKER_TILE_WORDS * sizeof(u16));
 
-static void EnemyTypeIcon_FreeSlot(void *crp, int slot)
-{
-    if (sEnemyTypeIcons[slot].actor == NULL) {
-        sEnemyTypeIcons[slot].type = ENEMY_TYPE_NONE;
-        return;
+    if (bsys == NULL || battler >= BattleWorkClientSetMaxGet(bsys)) {
+        return NULL;
     }
-
-    OAM_FreeResourceChar(crp, ENEMY_TYPE_ICON_SPRITE_TAG + slot);
-    OAM_FreeResourcePltt(crp, ENEMY_TYPE_ICON_PAL_TAG + slot);
-    CATS_ActorPointerDelete_S(sEnemyTypeIcons[slot].actor);
-    sEnemyTypeIcons[slot].actor = NULL;
-    sEnemyTypeIcons[slot].type = ENEMY_TYPE_NONE;
+    opponentData = bsys->opponentData[battler];
+    if (!EnemyTypeMarker_IsValidMainRamRange(opponentData, BATTLE_TYPE_MARKER_HP_BAR_TYPE_OFFSET + 1)
+     || opponentData[BATTLE_TYPE_MARKER_HP_BAR_TYPE_OFFSET] != hpBarType) {
+        return NULL;
+    }
+    managedSprite = *(void **)(opponentData + BATTLE_TYPE_MARKER_BOX_OBJ_OFFSET);
+    if (!EnemyTypeMarker_IsValidMainRamRange(managedSprite, sizeof(void *))) {
+        return NULL;
+    }
+    sprite = *(u8 **)managedSprite;
+    if (!EnemyTypeMarker_IsValidMainRamRange(sprite, BATTLE_TYPE_MARKER_SPRITE_IMAGE_MAIN_VRAM_OFFSET + sizeof(u32))) {
+        return NULL;
+    }
+    imageVramOffset = *(u32 *)(sprite + BATTLE_TYPE_MARKER_SPRITE_IMAGE_MAIN_VRAM_OFFSET);
+    if ((imageVramOffset & 0x3F) != 0
+     || writeEnd > BATTLE_TYPE_MARKER_MAIN_OBJ_VRAM_SIZE
+     || imageVramOffset > BATTLE_TYPE_MARKER_MAIN_OBJ_VRAM_SIZE - writeEnd) {
+        return NULL;
+    }
+    return BATTLE_TYPE_MARKER_MAIN_OBJ_VRAM + (imageVramOffset / sizeof(u16));
 }
 
-static BOOL EnemyTypeIcon_HasAnyActor(void)
+static void EnemyTypeMarker_WriteTiles(volatile u16 *dst, const u16 *src)
 {
-    int slot;
+    int i;
 
-    for (slot = 0; slot < ENEMY_TYPE_ICON_SLOT_COUNT; slot++) {
-        if (sEnemyTypeIcons[slot].actor != NULL) {
-            return TRUE;
+    for (i = 0; i < BATTLE_TYPE_MARKER_TILE_WORDS; i++) {
+        dst[i] = src[i];
+    }
+}
+
+static void EnemyTypeMarker_SetPixel(u8 *tiles, int x, int y, u8 color)
+{
+    int offset = ((x / 8) * 32) + (y * 4) + ((x % 8) / 2);
+
+    if (x & 1) {
+        tiles[offset] = (tiles[offset] & 0x0F) | (color << 4);
+    } else {
+        tiles[offset] = (tiles[offset] & 0xF0) | color;
+    }
+}
+
+static void EnemyTypeMarker_Render(u16 *tiles, u8 type)
+{
+    const char *label = sEnemyTypeMarkerLabels[type];
+    u8 *pixels = (u8 *)tiles;
+    u8 color = sEnemyTypeMarkerColors[type];
+    int character;
+    int x;
+    int y;
+
+    for (y = 0; y < 8; y++) {
+        for (x = 0; x < 16; x++) {
+            EnemyTypeMarker_SetPixel(pixels, x, y, (x == 0 || x == 15 || y == 0 || y == 7) ? 14 : color);
         }
     }
+    for (character = 0; character < 3; character++) {
+        const u8 *glyph = sEnemyTypeMarkerGlyphs[label[character] - 'A'];
 
-    return FALSE;
+        for (y = 0; y < 5; y++) {
+            for (x = 0; x < 3; x++) {
+                if (glyph[y] & (1 << (2 - x))) {
+                    EnemyTypeMarker_SetPixel(pixels, 2 + (character * 4) + x, 1 + y, 4);
+                }
+            }
+        }
+    }
 }
 
-static void EnemyTypeIcon_FreeSharedResources(void *crp)
+static void EnemyTypeMarker_DrawSlot(volatile u16 *gaugeVram, int side, int slot, u8 type)
 {
-    if (!sEnemyTypeIconCellLoaded || EnemyTypeIcon_HasAnyActor()) {
+    volatile u16 *target = gaugeVram + (sBattleTypeMarkerVramOffset[side][slot] / sizeof(u16));
+    u16 renderedTiles[BATTLE_TYPE_MARKER_TILE_WORDS];
+    int i;
+
+    for (i = 0; i < BATTLE_TYPE_MARKER_TILE_WORDS * 2; i++) {
+        ((u8 *)renderedTiles)[i] = sBattleTypeMarkerOriginalTiles[side][slot][i];
+    }
+    if (type != BATTLE_TYPE_MARKER_NONE) {
+        EnemyTypeMarker_Render(renderedTiles, type);
+    }
+    EnemyTypeMarker_WriteTiles(target, renderedTiles);
+}
+
+void BattleSystem_ResetEnemyTypeMarkers(struct BattleSystem *bsys)
+{
+    int side;
+
+    if (bsys != NULL && sBattleTypeMarkerState.owner != bsys) {
         return;
     }
-
-    OAM_FreeResourceCell(crp, ENEMY_TYPE_ICON_CELL_TAG);
-    OAM_FreeResourceCellAnm(crp, ENEMY_TYPE_ICON_CELL_ANIM_TAG);
-    sEnemyTypeIconCellLoaded = FALSE;
+    sBattleTypeMarkerState.owner = NULL;
+    for (side = 0; side < BATTLE_TYPE_MARKER_SIDE_COUNT; side++) {
+        sBattleTypeMarkerState.side[side].drawn = FALSE;
+        sBattleTypeMarkerState.side[side].gaugeVram = NULL;
+    }
 }
 
-static void EnemyTypeIcon_HideAll(void *crp)
+static BOOL EnemyTypeMarker_TypesMatch(const u8 *left, const u8 *right)
 {
     int slot;
 
-    if (crp == NULL) {
-        return;
+    for (slot = 0; slot < BATTLE_TYPE_MARKER_SLOT_COUNT; slot++) {
+        if (left[slot] != right[slot]) {
+            return FALSE;
+        }
     }
-
-    for (slot = 0; slot < ENEMY_TYPE_ICON_SLOT_COUNT; slot++) {
-        EnemyTypeIcon_FreeSlot(crp, slot);
-    }
-    EnemyTypeIcon_FreeSharedResources(crp);
+    return TRUE;
 }
 
-static void EnemyTypeIcon_LoadSharedResources(void *csp, void *crp)
+void BattleSystem_UpdateEnemyTypeMarkers(struct BattleSystem *bsys, struct BattleStruct *ctx)
 {
-    if (sEnemyTypeIconCellLoaded) {
+    int side;
+    int slot;
+
+    if (bsys == NULL || ctx == NULL || ctx->fight_end_flag
+     || ctx->server_seq_no != CONTROLLER_COMMAND_SELECTION_SCREEN_INPUT) {
+        BattleSystem_ResetEnemyTypeMarkers(bsys);
         return;
     }
-
-    OAM_LoadResourceCellArc(csp, crp, ARC_ITEM_GFX_DATA, 1, 0, ENEMY_TYPE_ICON_CELL_TAG);
-    OAM_LoadResourceCellAnmArc(csp, crp, ARC_ITEM_GFX_DATA, 0, 0, ENEMY_TYPE_ICON_CELL_ANIM_TAG);
-    sEnemyTypeIconCellLoaded = TRUE;
-}
-
-static void EnemyTypeIcon_ShowSlot(struct BattleSystem *bsys, void *csp, void *crp, int slot, u8 type)
-{
-    OAMSpriteTemplate template = sEnemyTypeIconTemplate;
-    u16 gfx = sEnemyTypeIconGfxByType[type];
-    void *pfd = BattleWorkPfdGet(bsys);
-
-    if (pfd == NULL) {
-        return;
+    if (sBattleTypeMarkerState.owner != bsys) {
+        BattleSystem_ResetEnemyTypeMarkers(NULL);
+        sBattleTypeMarkerState.owner = bsys;
     }
+    for (side = 0; side < BATTLE_TYPE_MARKER_SIDE_COUNT; side++) {
+        struct BattleTypeMarkerSideState *state = &sBattleTypeMarkerState.side[side];
+        volatile u16 *gaugeVram;
+        u8 battler = sBattleTypeMarkerBattler[side];
+        u8 types[BATTLE_TYPE_MARKER_SLOT_COUNT];
 
-    EnemyTypeIcon_LoadSharedResources(csp, crp);
-
-    OAM_LoadResourcePlttWorkArc(
-        pfd,
-        FADE_MAIN_OBJ,
-        csp,
-        crp,
-        ARC_BATTLE_GFX,
-        gfx + 1,
-        0,
-        1,
-        NNS_G2D_VRAM_TYPE_2DMAIN,
-        ENEMY_TYPE_ICON_PAL_TAG + slot
-    );
-    OAM_LoadResourceCharArc(
-        csp,
-        crp,
-        ARC_BATTLE_GFX,
-        gfx,
-        0,
-        NNS_G2D_VRAM_TYPE_2DMAIN,
-        ENEMY_TYPE_ICON_SPRITE_TAG + slot
-    );
-
-    template.x = sEnemyTypeIconX[slot];
-    template.y = sEnemyTypeIconY[slot];
-    template.id[CLACT_U_CHAR_RES] = ENEMY_TYPE_ICON_SPRITE_TAG + slot;
-    template.id[CLACT_U_PLTT_RES] = ENEMY_TYPE_ICON_PAL_TAG + slot;
-    template.id[CLACT_U_CELL_RES] = ENEMY_TYPE_ICON_CELL_TAG;
-    template.id[CLACT_U_CELLANM_RES] = ENEMY_TYPE_ICON_CELL_ANIM_TAG;
-
-    sEnemyTypeIcons[slot].actor = OAM_ObjectAdd_S(csp, crp, &template);
-    sEnemyTypeIcons[slot].type = type;
-
-    if (sEnemyTypeIcons[slot].actor != NULL) {
-        OAM_ObjectUpdate(sEnemyTypeIcons[slot].actor->act);
-    }
-}
-
-static void EnemyTypeIcon_SyncSlot(struct BattleSystem *bsys, void *csp, void *crp, int slot, u8 type)
-{
-    if (type == ENEMY_TYPE_NONE) {
-        EnemyTypeIcon_FreeSlot(crp, slot);
-        return;
-    }
-
-    if (sEnemyTypeIcons[slot].actor != NULL && sEnemyTypeIcons[slot].type == type) {
-        return;
-    }
-
-    EnemyTypeIcon_FreeSlot(crp, slot);
-    EnemyTypeIcon_ShowSlot(bsys, csp, crp, slot, type);
-}
-
-void BattleSystem_UpdateEnemyTypeIcons(struct BattleSystem *bsys, struct BattleStruct *ctx)
-{
-    int enemySlot;
-    int maxBattlers;
-    void *csp;
-    void *crp;
-
-    if (bsys == NULL) {
-        return;
-    }
-
-    csp = BattleWorkCATS_SYS_PTRGet(bsys);
-    crp = BattleWorkCATS_RES_PTRGet(bsys);
-    maxBattlers = BattleWorkClientSetMaxGet(bsys);
-
-    if (EnemyTypeIcon_ShouldHideAll(bsys, ctx) || csp == NULL || crp == NULL) {
-        EnemyTypeIcon_HideAll(crp);
-        return;
-    }
-
-    for (enemySlot = 0; enemySlot < 2; enemySlot++) {
-        int battlerId = enemySlot == 0 ? BATTLER_ENEMY : BATTLER_ENEMY2;
-        int slot = enemySlot * 2;
-        u8 types[2];
-
-        if (!EnemyTypeIcon_ShouldShowBattler(ctx, battlerId, maxBattlers)) {
-            EnemyTypeIcon_FreeSlot(crp, slot);
-            EnemyTypeIcon_FreeSlot(crp, slot + 1);
+        if (battler >= BattleWorkClientSetMaxGet(bsys)
+         || ctx->battlemon[battler].species == 0
+         || ctx->battlemon[battler].hp == 0) {
+            state->drawn = FALSE;
+            state->gaugeVram = NULL;
             continue;
         }
+        gaugeVram = EnemyTypeMarker_GetGaugeVram(bsys, side);
+        if (gaugeVram == NULL) {
+            state->drawn = FALSE;
+            state->gaugeVram = NULL;
+            continue;
+        }
+        EnemyTypeMarker_CollectTypes(&ctx->battlemon[battler], types);
 
-        EnemyTypeIcon_CollectTypes(&ctx->battlemon[battlerId], types);
-        EnemyTypeIcon_SyncSlot(bsys, csp, crp, slot, types[0]);
-        EnemyTypeIcon_SyncSlot(bsys, csp, crp, slot + 1, types[1]);
+        if (state->drawn && state->gaugeVram == gaugeVram
+         && EnemyTypeMarker_TypesMatch(state->types, types)) {
+            continue;
+        }
+        for (slot = 0; slot < BATTLE_TYPE_MARKER_SLOT_COUNT; slot++) {
+            EnemyTypeMarker_DrawSlot(gaugeVram, side, slot, types[slot]);
+            state->types[slot] = types[slot];
+        }
+        state->drawn = TRUE;
+        state->gaugeVram = gaugeVram;
     }
-
-    EnemyTypeIcon_FreeSharedResources(crp);
 }

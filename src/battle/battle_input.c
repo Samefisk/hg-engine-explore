@@ -41,10 +41,6 @@ struct newBattleStruct __attribute__((section (".data"))) newBS = {0};
 #define WEATHER_ICON_PAL_TAG 22057
 #define WEATHER_ICON_CELL_TAG 22058
 #define WEATHER_ICON_CELL_ANIM_TAG 22059
-#define ENEMY_TYPE_LIFECYCLE_PROBE_SPRITE_TAG 22200
-#define ENEMY_TYPE_LIFECYCLE_PROBE_PAL_TAG 22201
-#define ENEMY_TYPE_LIFECYCLE_PROBE_CELL_TAG 22202
-#define ENEMY_TYPE_LIFECYCLE_PROBE_CELL_ANIM_TAG 22203
 
 // values to return when rectangle is touched
 #define TOUCH_DATA_CANCEL 0
@@ -166,28 +162,6 @@ static const OAMSpriteTemplate WeatherIconObjParam = {
     0,
 };
 
-static CATS_ACT_PTR sEnemyTypeLifecycleProbeOAM = NULL;
-
-static const OAMSpriteTemplate EnemyTypeLifecycleProbeObjParam = {
-    122,
-    15,
-    0,
-    0,
-    100,
-    0,
-    NNS_G2D_VRAM_TYPE_2DSUB,
-    {
-        ENEMY_TYPE_LIFECYCLE_PROBE_SPRITE_TAG,
-        ENEMY_TYPE_LIFECYCLE_PROBE_PAL_TAG,
-        ENEMY_TYPE_LIFECYCLE_PROBE_CELL_TAG,
-        ENEMY_TYPE_LIFECYCLE_PROBE_CELL_ANIM_TAG,
-        CLACT_U_HEADER_DATA_NONE,
-        CLACT_U_HEADER_DATA_NONE,
-    },
-    1,
-    0,
-};
-
 /**
  *  @brief load resources for the icons to be displayed on the bottom screen of the fight menu in battles
  *
@@ -229,13 +203,6 @@ void Sub_PokeIconResourceLoad(struct BI_PARAM *bip)
     OAM_LoadResourceCellArc(csp, crp, ARC_ITEM_GFX_DATA, 1, 0, MEGA_ICON_CELL_TAG);
 
     OAM_LoadResourceCellAnmArc(csp, crp, ARC_ITEM_GFX_DATA, 0, 0, MEGA_ICON_CELL_ANIM_TAG);
-
-    OAM_LoadResourcePlttWorkArc(pfd, FADE_SUB_OBJ, csp, crp, ARC_BATTLE_GFX, MEGA_ICON_FIGHT_GFX + 1, 0, 1, NNS_G2D_VRAM_TYPE_2DSUB, ENEMY_TYPE_LIFECYCLE_PROBE_PAL_TAG);
-
-    OAM_LoadResourceCellArc(csp, crp, ARC_ITEM_GFX_DATA, 1, 0, ENEMY_TYPE_LIFECYCLE_PROBE_CELL_TAG);
-
-    OAM_LoadResourceCellAnmArc(csp, crp, ARC_ITEM_GFX_DATA, 0, 0, ENEMY_TYPE_LIFECYCLE_PROBE_CELL_ANIM_TAG);
-
 
     // weather
     if (bip->bw->sp->field_condition & WEATHER_ANY_ICONS)
@@ -331,16 +298,6 @@ void Sub_PokeIconResourceFree(struct BI_PARAM *bip)
         }
     }
 
-    if (sEnemyTypeLifecycleProbeOAM)
-    {
-        OAM_FreeResourceChar(crp, ENEMY_TYPE_LIFECYCLE_PROBE_SPRITE_TAG);
-        OAM_FreeResourceCell(crp, ENEMY_TYPE_LIFECYCLE_PROBE_CELL_TAG);
-        OAM_FreeResourceCellAnm(crp, ENEMY_TYPE_LIFECYCLE_PROBE_CELL_ANIM_TAG);
-        OAM_FreeResourcePltt(crp, ENEMY_TYPE_LIFECYCLE_PROBE_PAL_TAG);
-
-        CATS_ActorPointerDelete_S(sEnemyTypeLifecycleProbeOAM);
-        sEnemyTypeLifecycleProbeOAM = NULL;
-    }
 }
 
 /**
@@ -354,19 +311,6 @@ void LoadMegaIcon(struct BI_PARAM *bip)
     void *crp;
 
     OAMSpriteTemplate template = MegaIconObjParam; // memcpy should handle this
-
-    if (!sEnemyTypeLifecycleProbeOAM)
-    {
-        csp = BattleWorkCATS_SYS_PTRGet(bip->bw);
-        crp = BattleWorkCATS_RES_PTRGet(bip->bw);
-
-        OAM_LoadResourceCharArc(csp, crp, ARC_BATTLE_GFX, MEGA_ICON_FIGHT_GFX, 0, NNS_G2D_VRAM_TYPE_2DSUB, ENEMY_TYPE_LIFECYCLE_PROBE_SPRITE_TAG);
-        sEnemyTypeLifecycleProbeOAM = OAM_ObjectAdd_S(csp, crp, &EnemyTypeLifecycleProbeObjParam);
-        if (sEnemyTypeLifecycleProbeOAM)
-        {
-            OAM_ObjectUpdate(sEnemyTypeLifecycleProbeOAM->act);
-        }
-    }
 
     newBS.CanMega = CheckCanDrawMegaButton(bip);
     if (!newBS.MegaOAM && CheckIsMega(bip))

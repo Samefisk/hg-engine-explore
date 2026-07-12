@@ -2,6 +2,7 @@
 
 ROMNAME = rom.nds
 BUILDROM = test.nds
+.DEFAULT_GOAL := all
 
 define n
 
