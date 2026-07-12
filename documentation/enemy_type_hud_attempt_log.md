@@ -1102,6 +1102,123 @@ Verification:
 Result:
 - Passed. The forced Fire line was removed before the product rebuild.
 
+### A53 Composite Player Types Into Stock Gauge Tiles
+
+Change:
+- Generalized the zero-allocation gauge compositor to maintain independent
+  state for the primary player and enemy panels.
+- Added the two stock single-player gauge regions at `0x300` and `0x400`,
+  which map to 16x8 labels at screen coordinates `(128, 108)` and
+  `(128, 116)`.
+- Preserved the original player gauge pixels under both labels and retained
+  the existing enemy offsets and rendering behavior.
+
+Why this is not a duplicate:
+- A50-A52 only composited the primary enemy gauge. This is the first attempt
+  to place the same type treatment directly on the primary player's mirrored
+  status panel.
+- The player offsets are separate from the nickname ranges (`0x260-0x2FF`,
+  `0x360-0x3FF`, `0xA00-0xA5F`, and `0xB00-0xB5F`), status graphics
+  (`0x460-0x4DF`), HP graphics (`0xC20-0xDDF`), and EXP graphics
+  (`0x660-0x6FF` and `0xE00-0xEDF`).
+
+Verification:
+- The initial product build passed the explicit `--sav test.sav` rival route;
+  `WAT` and `FIR` remained visible through the command and move-list screens.
+
+Result:
+- Passed the initial rival-battle replay. `WAT` remained on the enemy panel
+  while `FIR` appeared at the requested left edge of the player panel through
+  the command and move-list transitions. Superseded by A54 lifecycle
+  hardening before final verification.
+
+### A54 Harden Paired Player And Enemy Marker State
+
+Change:
+- Resolve both single-battle gauges before writing either panel.
+- Track the owning battle system, each gauge allocation, and the last rendered
+  types so a same-allocation type change is not skipped.
+- Invalidate failed resolutions and derive the OBJ VRAM bound from each side's
+  actual final write instead of a shared literal.
+
+Why this is not a duplicate:
+- A51 hardened one enemy gauge pointer. This pass covers the new paired-gauge
+  state introduced by A53, including cross-battle ownership and synchronized
+  player/enemy composition.
+
+Verification:
+- Rebuilt successfully and replayed the explicit `--sav test.sav` rival route
+  through a complete turn. Both owner-aware caches redrew the correct labels
+  after returning to command selection.
+
+Result:
+- Passed, then refined by A56 so either side can fail independently.
+
+### A55 Force A Secondary Player Type For Row Verification
+
+Change:
+- Temporarily force Water into the player's second marker slot after normal
+  type collection, without changing battle typing or damage behavior.
+
+Why this is not a duplicate:
+- A52 verified two rows on the enemy gauge. This is the first runtime probe of
+  the new lower player-gauge region at `0x400`.
+
+Verification:
+- The first probe build rejected an incorrect `types[1]` array index at
+  compile time; no ROM was produced. Corrected it to `types[side][1]` and
+  reran the same probe. `player_type_hud_dual_row_probe.png` then showed both
+  player rows correctly. The probe was removed and the product ROM rebuilt.
+
+Result:
+- Passed. The rival-battle capture showed `FIR` and `WAT` stacked in the two
+  player-gauge regions without disturbing the nickname, HP bar, or panel
+  border. The forced Water line was removed before the product rebuild.
+
+### A56 Keep Player And Enemy Gauge Failures Independent
+
+Change:
+- Preserve the owner-aware per-side caches from A54, but invalidate an
+  unsupported or missing gauge independently instead of suppressing both
+  panels.
+
+Why this is not a duplicate:
+- A54 deliberately required both standard single-battle gauges before either
+  write. Critical review identified that Safari and Pal Park use nonstandard
+  player bars while retaining a standard enemy bar, so paired failure would
+  regress the existing enemy marker in those modes.
+
+Verification:
+- The restored product code rebuilt successfully and
+  `player_type_hud_final_product_00_command.png`,
+  `player_type_hud_final_product_01_move_list.png`, and
+  `player_type_hud_final_product_02_after_turn.png` show `FIR` and `WAT`
+  intact before and after a complete turn using explicit `--sav test.sav`.
+
+Result:
+- Passed the normal rival-battle route through the move list and a complete
+  turn. The compatibility failure branch is covered separately by A57.
+
+### A57 Simulate An Unsupported Player Gauge
+
+Change:
+- Temporarily require player HP-bar type `6` while running the standard rival
+  battle, forcing only the player-side resolver to reject its type `0` gauge.
+
+Why this is not a duplicate:
+- A56's normal replay showed both supported gauges. This probe directly
+  exercises the independent failure path intended for Safari/Pal Park-style
+  nonstandard player panels without requiring a separate save in those modes.
+
+Verification:
+- `player_type_hud_unsupported_player_probe.png` showed no player marker while
+  the enemy `WAT` marker remained visible, directly exercising the independent
+  rejection path.
+
+Result:
+- Passed. Restored the normal player HP-bar type before the final product
+  rebuild.
+
 ## Duplicate-Check Notes
 
 - Do not retry OAM positioning/resource tags without new evidence; A1-A21
