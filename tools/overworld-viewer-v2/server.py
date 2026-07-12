@@ -8,13 +8,18 @@ import gzip
 import hashlib
 import importlib.util
 import json
+import re
 import sys
+from email import policy
+from email.parser import BytesParser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
 from urllib.parse import parse_qs, urlparse
 
 import reliability
+import pokemon_data
+import pokemon_asset_writer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +32,8 @@ V2_ASSETS = {
     "/v2-assets/profiles.js": (STATIC_DIR / "profiles.js", "application/javascript; charset=utf-8"),
     "/v2-assets/routes.js": (STATIC_DIR / "routes.js", "application/javascript; charset=utf-8"),
     "/v2-assets/routes-sounds.js": (STATIC_DIR / "routes-sounds.js", "application/javascript; charset=utf-8"),
+    "/v2-assets/pokemon.js": (STATIC_DIR / "pokemon.js", "application/javascript; charset=utf-8"),
+    "/v2-assets/pokemon.css": (STATIC_DIR / "pokemon.css", "text/css; charset=utf-8"),
 }
 
 
@@ -52,6 +59,37 @@ def load_legacy_viewer() -> ModuleType:
 
 
 legacy = load_legacy_viewer()
+
+
+def parse_asset_stage_multipart(content_type: str, body: bytes) -> tuple[str, str, bytes]:
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise ValueError("asset staging requires multipart/form-data")
+    message = BytesParser(policy=policy.default).parsebytes(
+        b"Content-Type: " + content_type.encode("ascii")
+        + b"\r\nMIME-Version: 1.0\r\n\r\n" + body
+    )
+    fields: dict[str, str] = {}
+    upload: bytes | None = None
+    seen_parts: set[str] = set()
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if name not in {"file", "symbol", "slot"}:
+            raise ValueError("asset staging contains an unknown multipart field")
+        if name in seen_parts:
+            raise ValueError(f"asset staging contains duplicate {name} parts")
+        seen_parts.add(name)
+        if name == "file":
+            upload = part.get_payload(decode=True)
+            if part.get_filename() is None:
+                raise ValueError("asset staging file part requires a filename")
+        else:
+            content = part.get_content()
+            if not isinstance(content, str):
+                raise ValueError(f"asset staging {name} must be text")
+            fields[name] = content.strip()
+    if upload is None or seen_parts != {"symbol", "slot", "file"} or set(fields) != {"symbol", "slot"}:
+        raise ValueError("asset staging requires symbol, slot, and file")
+    return fields["symbol"], fields["slot"], upload
 
 
 class V2ViewerHandler(legacy.ViewerHandler):
@@ -80,6 +118,55 @@ class V2ViewerHandler(legacy.ViewerHandler):
                     )
                     return
                 self.send_bytes(body, content_type, cache_control="no-store")
+                return
+            pokemon_icon_match = re.fullmatch(r"/icons/(\d+)\.png", path)
+            if pokemon_icon_match:
+                with reliability.workspace_guard(ROOT):
+                    icon_path = pokemon_data.asset_path(
+                        ROOT, int(pokemon_icon_match.group(1), 10), "icon"
+                    )
+                    body = legacy.render_icon_png(icon_path) if icon_path else None
+                if icon_path is None:
+                    self.send_bytes(
+                        b"Pokemon icon not found\n",
+                        "text/plain; charset=utf-8",
+                        status=404,
+                        cache_control="no-store",
+                    )
+                    return
+                assert body is not None
+                etag = f'"sha256:{hashlib.sha256(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                self.send_bytes(body, "image/png", cache_control="no-cache", etag=etag)
+                return
+            pokemon_asset_match = re.fullmatch(
+                r"/pokemon-assets/(\d+)/(male-front|female-front|male-back|female-back|follower)\.png",
+                path,
+            )
+            if pokemon_asset_match:
+                with reliability.workspace_guard(ROOT):
+                    asset_path = pokemon_data.asset_path(
+                        ROOT,
+                        int(pokemon_asset_match.group(1), 10),
+                        pokemon_asset_match.group(2),
+                    )
+                    body = asset_path.read_bytes() if asset_path else None
+                if asset_path is None:
+                    self.send_bytes(
+                        b"Pokemon asset not found\n",
+                        "text/plain; charset=utf-8",
+                        status=404,
+                        cache_control="no-store",
+                    )
+                    return
+                assert body is not None
+                etag = f'"sha256:{hashlib.sha256(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                self.send_bytes(body, "image/png", cache_control="no-cache", etag=etag)
                 return
             if path == "/data.json":
                 with reliability.workspace_guard(ROOT):
@@ -115,6 +202,138 @@ class V2ViewerHandler(legacy.ViewerHandler):
                         "apiVersion": 2,
                         "legacyBackend": str(LEGACY_VIEWER_SOURCE.relative_to(ROOT)),
                     }
+                )
+                return
+            staged_asset_match = re.fullmatch(
+                r"/api/v2/pokemon-assets/staged/([0-9a-f]{32})", path
+            )
+            if staged_asset_match:
+                body = pokemon_asset_writer.staged_body(staged_asset_match.group(1))
+                if body is None:
+                    self.send_json({"error": "staged asset is missing or expired"}, status=404)
+                else:
+                    self.send_bytes(body, "image/png", cache_control="no-store")
+                return
+            if path == "/api/v2/pokemon-data":
+                with reliability.workspace_guard(ROOT):
+                    asset_snapshot = pokemon_data.asset_snapshot(ROOT)
+                    cached_payload, source_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: pokemon_data.build_dataset(
+                            ROOT, legacy, assets=asset_snapshot
+                        ),
+                        cache_key=f"pokemon-data:{asset_snapshot.revision}",
+                    )
+                    payload = dict(cached_payload)
+                    payload["sourceRevision"] = source_revision
+                    payload["optionRevision"] = source_revision
+                    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                    etag = f'"{hashlib.sha1(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+                self.send_bytes(
+                    gzip.compress(body, compresslevel=6) if accepts_gzip else body,
+                    "application/json; charset=utf-8",
+                    cache_control="no-cache",
+                    content_encoding="gzip" if accepts_gzip else None,
+                    etag=etag,
+                    vary="Accept-Encoding",
+                )
+                return
+            if path == "/api/v2/pokemon-editor-options":
+                with reliability.workspace_guard(ROOT):
+                    asset_snapshot = pokemon_data.asset_snapshot(ROOT)
+                    dataset, dataset_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: pokemon_data.build_dataset(
+                            ROOT, legacy, assets=asset_snapshot
+                        ),
+                        cache_key=f"pokemon-data:{asset_snapshot.revision}",
+                    )
+                    cached_payload, source_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: pokemon_data.build_editor_options(
+                            ROOT,
+                            legacy,
+                            assets=asset_snapshot,
+                            dataset=dataset,
+                        ),
+                        cache_key=f"pokemon-editor-options:{asset_snapshot.revision}",
+                    )
+                    if source_revision != dataset_revision:
+                        raise RuntimeError(
+                            "Pokémon source revision changed between index and option reads"
+                        )
+                    payload = dict(cached_payload)
+                    payload["sourceRevision"] = source_revision
+                    payload["optionRevision"] = source_revision
+                    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                    etag = f'"{hashlib.sha1(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+                self.send_bytes(
+                    gzip.compress(body, compresslevel=6) if accepts_gzip else body,
+                    "application/json; charset=utf-8",
+                    cache_control="no-cache",
+                    content_encoding="gzip" if accepts_gzip else None,
+                    etag=etag,
+                    vary="Accept-Encoding",
+                )
+                return
+            pokemon_detail_match = re.fullmatch(
+                r"/api/v2/pokemon-data/(SPECIES_[A-Z0-9_]+)", path, re.IGNORECASE
+            )
+            if pokemon_detail_match:
+                symbol = pokemon_detail_match.group(1).upper()
+                with reliability.workspace_guard(ROOT):
+                    asset_snapshot = pokemon_data.asset_snapshot(ROOT)
+                    dataset, dataset_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: pokemon_data.build_dataset(
+                            ROOT, legacy, assets=asset_snapshot
+                        ),
+                        cache_key=f"pokemon-data:{asset_snapshot.revision}",
+                    )
+                    cached_payload, source_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: pokemon_data.build_detail(
+                            ROOT,
+                            legacy,
+                            symbol,
+                            assets=asset_snapshot,
+                            dataset=dataset,
+                        ),
+                        cache_key=f"pokemon-detail:{symbol}:{asset_snapshot.revision}",
+                    )
+                    if source_revision != dataset_revision:
+                        raise RuntimeError(
+                            "Pokémon source revision changed between index and detail reads"
+                        )
+                    payload = dict(cached_payload)
+                    payload["sourceRevision"] = source_revision
+                    payload["optionRevision"] = source_revision
+                    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                    etag = f'"{hashlib.sha1(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+                self.send_bytes(
+                    gzip.compress(body, compresslevel=6) if accepts_gzip else body,
+                    "application/json; charset=utf-8",
+                    cache_control="no-cache",
+                    content_encoding="gzip" if accepts_gzip else None,
+                    etag=etag,
+                    vary="Accept-Encoding",
                 )
                 return
             if path == "/api/v2/workspace-meta":
@@ -159,6 +378,41 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 result = legacy.restart_server_soon()
             self.send_json(result)
             return
+        if path == "/api/v2/pokemon-assets/stage":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > pokemon_asset_writer.MAX_ASSET_BYTES + 65536:
+                    raise ValueError("asset staging request has an invalid size")
+                content_type = self.headers.get("Content-Type", "")
+                body = self.rfile.read(content_length)
+                symbol, slot, upload = parse_asset_stage_multipart(content_type, body)
+                with reliability.workspace_guard(ROOT):
+                    source_revision = reliability.current_revision(legacy, ROOT)
+                    expected_source = self.headers.get("If-Match")
+                    if expected_source and expected_source != source_revision:
+                        raise reliability.RevisionConflict(expected_source, source_revision)
+                    asset_revision = pokemon_data.asset_snapshot(ROOT, force=True).revision
+                    expected_asset = self.headers.get("X-Asset-Revision")
+                    if expected_asset and expected_asset != asset_revision:
+                        raise reliability.AssetRevisionConflict(expected_asset, asset_revision)
+                    result = pokemon_asset_writer.stage_asset(
+                        ROOT,
+                        symbol,
+                        slot,
+                        upload,
+                        source_revision=source_revision,
+                        asset_revision=asset_revision,
+                    )
+                self.send_json(result)
+            except reliability.AssetRevisionConflict as exc:
+                self.send_json({"error": str(exc), "code": "asset_revision_conflict", "assetRevision": exc.current}, status=409)
+            except reliability.RevisionConflict as exc:
+                self.send_json({"error": str(exc), "code": "revision_conflict", "sourceRevision": exc.current}, status=409)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, status=500)
+            return
         if path not in reliability.MUTATION_HANDLERS and path not in {"/api/v2/commit", "/build"}:
             super().do_POST()
             return
@@ -178,6 +432,16 @@ class V2ViewerHandler(legacy.ViewerHandler):
                     legacy, ROOT, path, body, expected_revision
                 )
             self.send_json(result)
+        except reliability.AssetRevisionConflict as exc:
+            self.send_json(
+                {
+                    "error": str(exc),
+                    "code": "asset_revision_conflict",
+                    "expectedRevision": exc.expected,
+                    "assetRevision": exc.current,
+                },
+                status=409,
+            )
         except reliability.RevisionConflict as exc:
             self.send_json(
                 {
@@ -194,6 +458,19 @@ class V2ViewerHandler(legacy.ViewerHandler):
             self.send_json({"error": str(exc)}, status=404)
         except Exception as exc:  # pragma: no cover - surfaced to the local browser
             self.send_json({"error": str(exc)}, status=500)
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+        match = re.fullmatch(r"/api/v2/pokemon-assets/staged/([0-9a-f]{32})", path)
+        if match:
+            self.send_json(
+                {
+                    "discarded": pokemon_asset_writer.discard_token(match.group(1)),
+                    "stagingToken": match.group(1),
+                }
+            )
+            return
+        self.send_json({"error": "not found"}, status=404)
 
 
 def serve(host: str, port: int) -> None:

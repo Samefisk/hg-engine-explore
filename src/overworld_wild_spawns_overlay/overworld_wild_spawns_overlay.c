@@ -1071,7 +1071,10 @@ typedef struct OverworldWildSpawnPrepContext {
 
 static BOOL OverworldWildSpawns_IsTileOccupiedByObject(FieldSystem *fieldSystem, int x, int y);
 static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverlayEntry(void);
-static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+static BOOL OverworldWildSpawns_OverlayOnPlayerStep(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    BOOL resumeOnly);
 static BOOL OverworldWildSpawns_OverlayTryPrimeBattleFromTalk(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
@@ -10523,7 +10526,6 @@ static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data)
     sOverworldWildMovementFrameTaskExecuting = TRUE;
     fieldSystem = state->movementFieldSystem;
     if (fieldSystem != NULL && fieldSystem->taskman != NULL) {
-        state->presentationRestorePending = TRUE;
         /* Native transitions own the live map objects once the field is busy. */
         sOverworldWildMovementFrameTaskExecuting = FALSE;
         OverworldWildSpawns_StopFrameMovementTask();
@@ -18311,15 +18313,33 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, OverworldWildSpawnState *state)
+static BOOL OverworldWildSpawns_OverlayOnPlayerStep(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    BOOL resumeOnly)
 {
+    MapObjectMan *mapObjectMan;
+
 #if OW_WILD_STEP_DIAGNOSTIC_ENTRY_ONLY
     (void)fieldSystem;
     (void)state;
     return FALSE;
 #endif
 
+    if (resumeOnly) {
+        gOverworldWildFieldIdleRearmPending = FALSE;
+    }
     if (OverworldWildSpawns_EnsureRuntimeState(state) == NULL) {
+        return FALSE;
+    }
+
+    mapObjectMan = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (resumeOnly
+        && state->mapId == fieldSystem->location->mapId
+        && (state->mapObjectMan != mapObjectMan
+            || mapObjectMan == NULL
+            || state->mapObjects != mapObjectMan->objects)) {
+        state->battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
         return FALSE;
     }
 
@@ -18335,6 +18355,9 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
     }
     if (!OverworldWildSpawns_ReconcileSpawnPresentations(state, fieldSystem)) {
         return FALSE;
+    }
+    if (resumeOnly) {
+        goto ensure_movement_task;
     }
 
 #if OW_WILD_STEP_DIAGNOSTIC_DROP_STALE_ONLY
@@ -18381,6 +18404,7 @@ static BOOL OverworldWildSpawns_OverlayOnPlayerStep(FieldSystem *fieldSystem, Ov
 
     OverworldWildSpawns_TryRefill(state, fieldSystem);
     OverworldWildSpawns_RevealNonPhantomObjects(state, fieldSystem);
+ensure_movement_task:
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK && OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
     if (OverworldWildSpawns_HasFrameMovementWork(state)
         || OverworldWildSpawns_HasCurrentMovementSpawns(state, fieldSystem)) {

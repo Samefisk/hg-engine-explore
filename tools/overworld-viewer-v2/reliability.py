@@ -16,15 +16,53 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable
 
+import pokemon_data
+import pokemon_writer
+import pokemon_evolution_writer
+import pokemon_learnset_writer
+import pokemon_form_writer
+import pokemon_asset_writer
+
 
 MUTATION_LOCK = threading.RLock()
 SERVER_RESTARTING = threading.Event()
-STABLE_READ_CACHE: dict[str, tuple[str, Any]] = {}
+STABLE_READ_CACHE_MAX_ENTRIES = 64
+STABLE_READ_CACHE: OrderedDict[str, tuple[str, Any]] = OrderedDict()
+STABLE_READ_CACHE_LOCK = threading.Lock()
+
+
+def _stable_cache_get(key: str | None) -> tuple[str, Any] | None:
+    if not key:
+        return None
+    with STABLE_READ_CACHE_LOCK:
+        value = STABLE_READ_CACHE.get(key)
+        if value is not None:
+            STABLE_READ_CACHE.move_to_end(key)
+        return value
+
+
+def _stable_cache_put(key: str | None, value: tuple[str, Any]) -> None:
+    if not key:
+        return
+    with STABLE_READ_CACHE_LOCK:
+        STABLE_READ_CACHE[key] = value
+        STABLE_READ_CACHE.move_to_end(key)
+        while len(STABLE_READ_CACHE) > STABLE_READ_CACHE_MAX_ENTRIES:
+            STABLE_READ_CACHE.popitem(last=False)
+
+
+def _purge_pokemon_stable_cache() -> None:
+    with STABLE_READ_CACHE_LOCK:
+        for key in list(STABLE_READ_CACHE):
+            if key.startswith("pokemon-"):
+                STABLE_READ_CACHE.pop(key, None)
 
 
 class RevisionConflict(ValueError):
@@ -34,6 +72,10 @@ class RevisionConflict(ValueError):
         super().__init__("Sources changed since this editor loaded. Reload before saving.")
         self.expected = expected
         self.current = current
+
+
+class AssetRevisionConflict(RevisionConflict):
+    """Raised when staged binary assets target an outdated asset snapshot."""
 
 
 class SourceReadConflict(RuntimeError):
@@ -62,7 +104,7 @@ def begin_restart() -> None:
 
 
 def mutation_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
-    """Return all files that any profile, encounter, or setting save can write."""
+    """Return all files that any atomic V2 commit domain can write."""
 
     paths = {
         legacy.BEHAVIOR_DATA_SOURCE,
@@ -72,6 +114,10 @@ def mutation_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
         legacy.ENCOUNTER_OVERRIDES_SOURCE,
     }
     paths.update(Path(setting["source"]) for setting in legacy.SPAWN_SETTING_BY_SYMBOL.values())
+    paths.update(pokemon_writer.mutation_source_paths(root))
+    paths.update(pokemon_evolution_writer.mutation_source_paths(root))
+    paths.update(pokemon_learnset_writer.mutation_source_paths(root))
+    paths.update(pokemon_form_writer.mutation_source_paths(root))
     return tuple(
         sorted(
             (Path(path).resolve() for path in paths),
@@ -84,6 +130,11 @@ def revision_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
     """Return every parsed source so a revision represents the full data model."""
 
     paths = {Path(path).resolve() for path in legacy.DATA_SOURCE_FILES}
+    # Pokémon data is read-only in the foundation editor, but it still belongs
+    # to the optimistic revision.  This makes a snapshot conflict if any joined
+    # personal, learnset, evolution, form, or graphics mapping changes while it
+    # is being assembled, without expanding the set of transactional writers.
+    paths.update(pokemon_data.source_paths(root))
     paths.update(mutation_source_paths(legacy, root))
     return tuple(sorted(paths, key=lambda path: path.relative_to(root).as_posix()))
 
@@ -141,7 +192,7 @@ def stable_source_read(
     after = ""
     for _ in range(attempts):
         before = current_revision(legacy, root)
-        cached = STABLE_READ_CACHE.get(cache_key) if cache_key else None
+        cached = _stable_cache_get(cache_key)
         if cached is not None and cached[0] == before:
             return cached[1], before
         if refresh_legacy_cache:
@@ -151,8 +202,7 @@ def stable_source_read(
         value = reader()
         after = current_revision(legacy, root)
         if before == after:
-            if cache_key:
-                STABLE_READ_CACHE[cache_key] = (after, value)
+            _stable_cache_put(cache_key, (after, value))
             return value, after
     raise SourceReadConflict(
         f"Sources changed repeatedly while reading ({before} -> {after}). Reload and try again."
@@ -211,39 +261,77 @@ def start_build_job(legacy: ModuleType, root: Path, open_after: bool = False) ->
     return legacy.build_status_payload()
 
 
-def _snapshot(paths: tuple[Path, ...]) -> dict[Path, bytes | None]:
-    return {path: path.read_bytes() if path.exists() else None for path in paths}
+@dataclass(frozen=True)
+class SnapshotEntry:
+    body: bytes | None
+    mode: int | None
+    asset: bool = False
 
 
-def _atomic_write(path: Path, body: bytes) -> None:
+def _snapshot(
+    paths: tuple[Path, ...],
+    *,
+    root: Path | None = None,
+    asset_paths: set[Path] | None = None,
+) -> dict[Path, SnapshotEntry]:
+    asset_paths = asset_paths or set()
+    result: dict[Path, SnapshotEntry] = {}
+    for path in paths:
+        if path in asset_paths:
+            assert root is not None
+            body, mode, _ = pokemon_asset_writer.read_asset_source(root, path)
+            result[path] = SnapshotEntry(body, mode, True)
+        elif path.exists():
+            result[path] = SnapshotEntry(
+                path.read_bytes(), path.stat().st_mode & 0o7777, False
+            )
+        else:
+            result[path] = SnapshotEntry(None, None, False)
+    return result
+
+
+def _atomic_write(path: Path, body: bytes, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.v2-{uuid.uuid4().hex}.tmp")
     try:
         temporary.write_bytes(body)
+        if mode is not None:
+            os.chmod(temporary, mode)
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
-def _restore(snapshot: dict[Path, bytes | None]) -> list[str]:
+def _restore(snapshot: dict[Path, SnapshotEntry], root: Path | None = None) -> list[str]:
     errors: list[str] = []
-    for path, body in snapshot.items():
+    for path, entry in snapshot.items():
         try:
-            if body is None:
+            if entry.asset:
+                assert root is not None
+                pokemon_asset_writer.replace_asset_source(
+                    root, path, entry.body, mode=entry.mode
+                )
+            elif entry.body is None:
                 path.unlink(missing_ok=True)
             else:
-                _atomic_write(path, body)
+                _atomic_write(path, entry.body, entry.mode)
         except Exception as exc:  # pragma: no cover - only filesystem failure
             errors.append(f"{path}: {exc}")
     return errors
 
 
-def _rollback(legacy: ModuleType, snapshot: dict[Path, bytes | None], original: Exception) -> None:
+def _rollback(
+    legacy: ModuleType,
+    snapshot: dict[Path, SnapshotEntry],
+    original: Exception,
+    *,
+    root: Path | None = None,
+) -> None:
     """Attempt every restore, always invalidate caches, and preserve both errors."""
 
     errors: list[str] = []
     try:
-        errors = _restore(snapshot)
+        errors = _restore(snapshot, root)
     finally:
         legacy.invalidate_data_cache()
     if errors:
@@ -328,6 +416,56 @@ COMMIT_STEPS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _canonicalize_pokemon_domain(payload: Any, *, evolution: bool = False) -> Any:
+    """Normalize public species aliases before dispatching a commit domain."""
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("records"), list):
+        return payload
+    normalized = dict(payload)
+    records: list[Any] = []
+    for raw_record in payload["records"]:
+        if not isinstance(raw_record, dict):
+            records.append(raw_record)
+            continue
+        record = dict(raw_record)
+        if isinstance(record.get("symbol"), str):
+            record["symbol"] = pokemon_writer.canonical_species_symbol(record["symbol"])
+        if evolution:
+            if isinstance(record.get("babySymbol"), str):
+                record["babySymbol"] = pokemon_writer.canonical_species_symbol(
+                    record["babySymbol"]
+                )
+            if isinstance(record.get("edges"), list):
+                record["edges"] = [
+                    {
+                        **edge,
+                        "targetSymbol": pokemon_writer.canonical_species_symbol(
+                            edge["targetSymbol"]
+                        ),
+                    }
+                    if isinstance(edge, dict)
+                    and isinstance(edge.get("targetSymbol"), str)
+                    else edge
+                    for edge in record["edges"]
+                ]
+        records.append(record)
+    normalized["records"] = records
+    return normalized
+
+
+def _pokemon_update_symbols(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    records = payload.get("records")
+    if not isinstance(records, list):
+        return []
+    return [
+        pokemon_writer.canonical_species_symbol(str(record.get("symbol", "")))
+        for record in records
+        if isinstance(record, dict) and record.get("symbol")
+    ]
+
+
 def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[str, Any]:
     """Commit every pending editor domain as one all-or-nothing transaction."""
 
@@ -337,31 +475,180 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
         raise ValueError(f"invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("commit payload must be an object")
+    pokemon_domains = {
+        "pokemonUpdates",
+        "pokemonEvolutionUpdates",
+        "pokemonLearnsetUpdates",
+        "pokemonFormUpdates",
+        "pokemonAssetUpdates",
+    }
+    known_domains = {key for key, _ in COMMIT_STEPS} | pokemon_domains
+    allowed_keys = known_domains | {"sourceRevision", "assetRevision"}
+    unknown_keys = set(payload) - allowed_keys
+    if unknown_keys:
+        raise ValueError(
+            "unknown commit payload keys: " + ", ".join(sorted(unknown_keys))
+        )
     expected_revision = payload.get("sourceRevision")
+    if not isinstance(expected_revision, str) or not expected_revision.strip():
+        raise ValueError("commit sourceRevision must be a non-empty string")
+    for domain in known_domains:
+        value = payload.get(domain)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError(f"commit domain {domain} must be an object")
     requested = [(key, handler) for key, handler in COMMIT_STEPS if payload.get(key) is not None]
-    if not requested:
+    pokemon_updates = _canonicalize_pokemon_domain(payload.get("pokemonUpdates"))
+    pokemon_evolution_updates = _canonicalize_pokemon_domain(
+        payload.get("pokemonEvolutionUpdates"), evolution=True
+    )
+    pokemon_learnset_updates = _canonicalize_pokemon_domain(
+        payload.get("pokemonLearnsetUpdates")
+    )
+    pokemon_form_updates = payload.get("pokemonFormUpdates")
+    pokemon_asset_updates = _canonicalize_pokemon_domain(payload.get("pokemonAssetUpdates"))
+    if (
+        not requested
+        and pokemon_updates is None
+        and pokemon_evolution_updates is None
+        and pokemon_learnset_updates is None
+        and pokemon_form_updates is None
+        and pokemon_asset_updates is None
+    ):
         raise ValueError("commit contains no changes")
 
-    sources = mutation_source_paths(legacy, root)
+    asset_mutation_paths = set(
+        pokemon_asset_writer.mutation_paths_for_payload(root, pokemon_asset_updates)
+    )
+    sources = tuple(
+        sorted(
+            {
+                *mutation_source_paths(legacy, root),
+                *asset_mutation_paths,
+            }
+        )
+    )
     with legacy.BUILD_LOCK:
         with workspace_guard(root):
             previous_revision = _validate_revision(legacy, root, expected_revision)
-            snapshot = _snapshot(sources)
+            # Non-asset commits reuse one internally coherent cached snapshot;
+            # asset-writing commits require synchronous pre/post scans.
+            previous_asset_snapshot = pokemon_data.asset_snapshot(
+                root, force=pokemon_asset_updates is not None
+            )
+            previous_asset_revision = previous_asset_snapshot.revision
+            if pokemon_asset_updates is not None:
+                expected_asset_revision = payload.get("assetRevision")
+                if expected_asset_revision != previous_asset_revision:
+                    raise AssetRevisionConflict(
+                        str(expected_asset_revision or ""), previous_asset_revision
+                    )
+            snapshot = _snapshot(
+                sources, root=root, asset_paths=asset_mutation_paths
+            )
             results: dict[str, dict[str, Any]] = {}
             try:
                 for key, handler_name in requested:
                     handler: Callable[[bytes], dict[str, Any]] = getattr(legacy, handler_name)
                     results[key] = dict(handler(_as_body(payload[key])))
+                if pokemon_updates is not None:
+                    results["pokemonUpdates"] = dict(
+                        pokemon_writer.apply_pokemon_updates(root, pokemon_updates)
+                    )
+                    legacy.invalidate_data_cache()
+                if pokemon_evolution_updates is not None:
+                    results["pokemonEvolutionUpdates"] = dict(
+                        pokemon_evolution_writer.apply_evolution_updates(
+                            root, pokemon_evolution_updates
+                        )
+                    )
+                    legacy.invalidate_data_cache()
+                if pokemon_learnset_updates is not None:
+                    results["pokemonLearnsetUpdates"] = dict(
+                        pokemon_learnset_writer.apply_learnset_updates(
+                            root, pokemon_learnset_updates
+                        )
+                    )
+                    legacy.invalidate_data_cache()
+                if pokemon_form_updates is not None:
+                    results["pokemonFormUpdates"] = dict(
+                        pokemon_form_writer.apply_form_updates(root, pokemon_form_updates)
+                    )
+                    legacy.invalidate_data_cache()
+                if pokemon_asset_updates is not None:
+                    results["pokemonAssetUpdates"] = dict(
+                        pokemon_asset_writer.apply_asset_updates(
+                            root,
+                            pokemon_asset_updates,
+                            source_revision=previous_revision,
+                            asset_revision=previous_asset_revision,
+                        )
+                    )
                 legacy.validate_override_profile_source()
                 # A complete parse catches cross-domain inconsistencies before the
                 # transaction is accepted. Any failure restores every source file.
                 legacy.build_data()
+                if any(payload.get(domain) is not None for domain in pokemon_domains):
+                    asset_view = (
+                        pokemon_data.asset_snapshot(root, force=True)
+                        if pokemon_asset_updates is not None
+                        else previous_asset_snapshot
+                    )
+                    pokemon_dataset = pokemon_data.build_dataset(
+                        root,
+                        legacy,
+                        assets=asset_view,
+                        validate_writable=True,
+                    )
+                    updated_symbols = set()
+                    for domain_payload in (
+                        pokemon_updates,
+                        pokemon_evolution_updates,
+                        pokemon_learnset_updates,
+                        pokemon_asset_updates,
+                    ):
+                        updated_symbols.update(_pokemon_update_symbols(domain_payload))
+                    if isinstance(pokemon_form_updates, dict):
+                        updated_symbols.update(
+                            pokemon_writer.canonical_species_symbol(record["baseSymbol"])
+                            for record in pokemon_form_updates.get("records", [])
+                            if isinstance(record, dict) and isinstance(record.get("baseSymbol"), str)
+                        )
+                    for symbol in sorted(updated_symbols):
+                        pokemon_data.build_detail(
+                            root,
+                            legacy,
+                            symbol,
+                            assets=asset_view,
+                            validate_writable=True,
+                            dataset=pokemon_dataset,
+                        )
                 next_revision = current_revision(legacy, root)
+                next_asset_revision = (
+                    asset_view.revision
+                    if any(payload.get(domain) is not None for domain in pokemon_domains)
+                    else previous_asset_revision
+                )
             except Exception as exc:
-                _rollback(legacy, snapshot, exc)
+                try:
+                    _rollback(legacy, snapshot, exc, root=root)
+                finally:
+                    pokemon_data.invalidate_asset_snapshot(root)
                 raise
 
             changed_domains = [key for key, result in results.items() if result.get("saved")]
+            asset_result = results.get("pokemonAssetUpdates", {})
+            asset_tokens = asset_result.pop("stagingTokens", [])
+            retained_tokens = asset_result.get("retainedStagingTokens", [])
+            if changed_domains and retained_tokens:
+                asset_tokens.extend(retained_tokens)
+                asset_result["retainedStagingTokens"] = []
+                asset_result["consumedIdenticalAssets"] = len(retained_tokens)
+                asset_result["message"] = (
+                    "identical staged assets consumed because the global transaction changed"
+                )
+            pokemon_asset_writer.finalize_tokens(asset_tokens)
+            if next_asset_revision != previous_asset_revision:
+                _purge_pokemon_stable_cache()
             return {
                 "apiVersion": 2,
                 "saved": bool(changed_domains),
@@ -370,6 +657,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
                 "changedDomains": changed_domains,
                 "previousRevision": previous_revision,
                 "sourceRevision": next_revision,
+                "assetRevision": next_asset_revision,
                 "transaction": "committed",
             }
 

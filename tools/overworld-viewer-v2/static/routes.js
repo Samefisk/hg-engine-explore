@@ -151,6 +151,8 @@ export function createRoutesController({
   setStatus = null,
   markDirty = null,
   confirmAction = null,
+  reportSelection = () => {},
+  openPokemonRecord = () => false,
 } = {}) {
   void api;
   const search = elementFrom(elements, "routeSearch");
@@ -521,11 +523,11 @@ export function createRoutesController({
       <span class="v2-route-method-species">${group.species.map((entry) => {
         const option = entry.option;
         const match = Boolean(query && (speciesSearchText(entry).includes(query) || compact(speciesSearchText(entry)).includes(compact(query))));
-        return `<button class="v2-route-sprite-button${match ? " is-search-match" : ""}" type="button"
+        return `<span class="v2-route-species-chip${match ? " is-search-match" : ""}"><button class="v2-route-sprite-button" type="button"
           data-route-wide-edit="${escapeHtml(group.key)}" data-route-id="${escapeHtml(route.id)}"
           data-species-identity="${escapeHtml(entry.identity)}" aria-label="Edit ${escapeHtml(option?.name || shortSpeciesSymbol(entry.symbol))} across this route">
           ${icon(option, "v2-route-sprite")}
-        </button>`;
+        </button></span>`;
       }).join("")}</span>
     </span>`;
   }
@@ -626,17 +628,20 @@ export function createRoutesController({
     const searchText = speciesSearchText(aggregate);
     const searchMatch = Boolean(model.query && (searchText.includes(model.query) || compact(searchText).includes(compact(model.query))));
     const meter = aggregate.hasRate ? Math.max(0, Math.min(100, normalizedRate)) : 0;
-    const compactChip = aggregate.hasRate && share < .18;
-    const compactTabIndex = compactChip ? ` tabindex="-1"` : "";
-    return `<div class="v2-encounter-chip${compactChip ? " is-compact" : ""}${changed ? " is-dirty" : ""}${aggregate.symbol === "SPECIES_NONE" ? " is-empty" : ""}${searchMatch ? " is-search-match" : ""}" style="--summary-weight:${share};--summary-rate:${meter}%">
+    const rateClass = meter <= 8 ? "rate-tiny" : meter <= 18 ? "rate-small" : meter <= 34 ? "rate-medium" : "rate-large";
+    const compactWidth = meter <= 0 ? 46 : Math.round(42 + (meter * 4));
+    const speciesLabel = aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol);
+    return `<div class="v2-encounter-chip ${rateClass}${changed ? " is-dirty" : ""}${aggregate.symbol === "SPECIES_NONE" ? " is-empty" : ""}${searchMatch ? " is-search-match" : ""}" style="--summary-rate:${meter}%;--summary-compact-width:${compactWidth}px">
       <button class="v2-encounter-chip-visual" type="button" data-route-group-edit="${escapeHtml(group.key)}"
         data-route-id="${escapeHtml(route.id)}" data-species-identity="${escapeHtml(aggregate.identity)}"
-        aria-label="Edit ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} entries in ${escapeHtml(group.label)}"${compactTabIndex}>
+        title="${escapeHtml(speciesLabel)}" aria-label="Edit ${escapeHtml(speciesLabel)} entries in ${escapeHtml(group.label)}">
         <strong>${escapeHtml(rate)}</strong>${icon(aggregate.option, "v2-summary-sprite")}<small>${escapeHtml(levels)}</small>
       </button>
       <input type="text" list="${ROUTE_SPECIES_LIST_ID}" value="${escapeHtml(shortSpeciesSymbol(aggregate.option?.symbol || aggregate.symbol))}"
         data-route-summary-species data-route-id="${escapeHtml(route.id)}" data-group-key="${escapeHtml(group.key)}"
-        data-species-identity="${escapeHtml(aggregate.identity)}" autocomplete="off" aria-label="Replace ${escapeHtml(aggregate.option?.name || shortSpeciesSymbol(aggregate.symbol))} in ${escapeHtml(group.label)}" aria-invalid="${invalid}"${compactTabIndex}>
+        data-species-identity="${escapeHtml(aggregate.identity)}" autocomplete="off" title="${escapeHtml(speciesLabel)}"
+        aria-label="Replace ${escapeHtml(speciesLabel)} in ${escapeHtml(group.label)}" aria-invalid="${invalid}">
+      ${aggregate.symbol !== "SPECIES_NONE" ? `<button class="v2-pokemon-jump v2-pokemon-jump--chip" type="button" data-open-pokemon="${escapeHtml(aggregate.option?.symbol || aggregate.symbol)}" aria-label="Open ${escapeHtml(speciesLabel)} in Pokémon Editor" title="Open in Pokémon Editor">↗</button>` : ""}
     </div>`;
   }
 
@@ -740,7 +745,7 @@ export function createRoutesController({
           ${targets.map((target) => {
             const isHighlighted = highlighted.includes(target);
             return `<article class="v2-entry-row${editor.wide && isHighlighted ? " is-highlighted" : ""}">
-          <div class="v2-entry-meta">${methodMark(target.groupKey)}<strong>#${escapeHtml(target.slot)}</strong><span>${target.weight == null ? "overlay" : `${escapeHtml(formatRate(target.weight))}%`}</span></div>
+          <div class="v2-entry-meta">${methodMark(target.groupKey)}<strong>#${escapeHtml(target.slot)}</strong><span>${target.weight == null ? "overlay" : `${escapeHtml(formatRate(target.weight))}%`}</span>${editor.wide && isHighlighted ? '<span class="v2-entry-highlight-label" aria-hidden="true">Target</span><span class="sr-only">Highlighted for group swap.</span>' : ""}</div>
           ${speciesInput(route.id, target)}
           <div class="v2-entry-levels">${target.levelPath
             ? inputNumber(route.id, target.levelPath, target.originalLevel, "Level", 0, 100)
@@ -921,6 +926,8 @@ export function createRoutesController({
     updateSelectedRouteRows();
     renderInspector();
     if (inspector) inspector.scrollTop = 0;
+    const route = currentRouteById(routeId);
+    reportSelection("routes", String(routeId), route?.name || `Route ${routeId}`);
     return true;
   }
 
@@ -1368,6 +1375,16 @@ export function createRoutesController({
   }, { signal: abort.signal });
 
   library?.addEventListener("click", (event) => {
+    const pokemon = event.target.closest("[data-open-pokemon]");
+    if (pokemon) {
+      const route = currentRouteById(pokemon.closest("[data-route-row]")?.dataset.routeRow || model.selectedRouteId);
+      openPokemonRecord(pokemon.dataset.openPokemon, {
+        view: "routes",
+        selection: String(route?.id ?? model.selectedRouteId ?? ""),
+        label: route?.name || "Route deck",
+      });
+      return;
+    }
     const override = event.target.closest('[data-action="open-route-override"]');
     if (override) {
       selectRoute(override.dataset.routeId);
@@ -1391,8 +1408,14 @@ export function createRoutesController({
       openEntryEditor(group.dataset.routeId, group.dataset.routeGroupEdit, group.dataset.speciesIdentity);
       return;
     }
-    const row = event.target.closest("[data-route-select]");
-    if (row) selectRoute(row.dataset.routeSelect);
+    const selector = event.target.closest("[data-route-select]");
+    if (selector) {
+      selectRoute(selector.dataset.routeSelect);
+      return;
+    }
+    const row = event.target.closest("[data-route-row]");
+    if (!row || event.target.closest('button, a[href], input, select, textarea, summary, label, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])')) return;
+    selectRoute(row.dataset.routeRow);
   }, { signal: abort.signal });
 
   inspector?.addEventListener("input", (event) => {
@@ -1462,6 +1485,16 @@ export function createRoutesController({
   }, { signal: abort.signal, capture: true });
 
   inspector?.addEventListener("click", async (event) => {
+    const pokemon = event.target.closest("[data-open-pokemon]");
+    if (pokemon) {
+      const route = selectedRoute();
+      openPokemonRecord(pokemon.dataset.openPokemon, {
+        view: "routes",
+        selection: String(route?.id ?? ""),
+        label: route?.name || "Route deck",
+      });
+      return;
+    }
     const wide = event.target.closest("[data-route-wide-edit]");
     if (wide) {
       openWideEntryEditor(wide.dataset.routeId, wide.dataset.routeWideEdit, wide.dataset.speciesIdentity);
@@ -1534,6 +1567,18 @@ export function createRoutesController({
     clearCommitted,
     reset,
     refresh,
+    navigationContext() {
+      const route = selectedRoute();
+      return { selection: String(route?.id ?? ""), label: route?.name || "" };
+    },
+    restoreSelection(routeId, options = {}) {
+      const selected = selectRoute(routeId);
+      if (selected && options.focus) {
+        inspector.tabIndex = -1;
+        requestAnimationFrame(() => inspector.focus({ preventScroll: true }));
+      }
+      return selected;
+    },
     destroy() {
       abort.abort();
     },

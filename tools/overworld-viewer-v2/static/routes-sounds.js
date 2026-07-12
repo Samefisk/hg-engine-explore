@@ -1145,6 +1145,8 @@ export function createSoundsController({
   setStatus = null,
   markDirty = null,
   confirmAction = null,
+  reportSelection = () => {},
+  openPokemonRecord = () => false,
 } = {}) {
   void markDirty;
   void confirmAction;
@@ -1318,7 +1320,7 @@ export function createSoundsController({
           <summary><span>Move uses</span><small>${aliases.length}</small></summary>
           <div class="v2-chip-list">${aliases.map((alias) => `
             <button type="button" data-move-preview="${escapeHtml(alias.moveId || "")}"${alias.moveId ? "" : " disabled"}
-              title="${escapeHtml(alias.commandText || alias.command || "Move sequence")}">${escapeHtml(alias.moveName || alias.moveSymbol)}</button>`).join("")}</div>
+              title="${escapeHtml(alias.commandText || alias.command || "Move sequence")}">${escapeHtml(alias.moveName || alias.moveSymbol)}</button>${alias.speciesSymbol ? `<button type="button" data-open-pokemon="${escapeHtml(alias.speciesSymbol)}">Open ${escapeHtml(alias.speciesName || shortSpeciesSymbol(alias.speciesSymbol))}</button>` : ""}`).join("")}</div>
         </details>` : ""}
       <details class="v2-disclosure">
         <summary><span>Local reference audio</span><small>${model.importedAudio.size ? `${model.importedAudio.size} loaded` : "Optional"}</small></summary>
@@ -1582,6 +1584,8 @@ export function createSoundsController({
     if (!button) return;
     model.selectedId = Number(button.dataset.soundSelect);
     render();
+    const effect = selectedEffect();
+    reportSelection("sounds", String(model.selectedId), displaySoundName(effect));
   }, { signal: abort.signal });
   inspector?.addEventListener("change", (event) => {
     if (event.target.matches("[data-sound-import]")) importFiles(event.target.files);
@@ -1590,6 +1594,15 @@ export function createSoundsController({
     const effect = selectedEffect();
     if (!effect) return;
     try {
+      const pokemon = event.target.closest("[data-open-pokemon]");
+      if (pokemon) {
+        openPokemonRecord(pokemon.dataset.openPokemon, {
+          view: "sounds",
+          selection: String(model.selectedId ?? ""),
+          label: displaySoundName(effect),
+        });
+        return;
+      }
       const move = event.target.closest("[data-move-preview]");
       if (move?.dataset.movePreview) {
         const alias = asArray(effect.moveAliases).find((item) => String(item.moveId) === move.dataset.movePreview);
@@ -1621,6 +1634,20 @@ export function createSoundsController({
     reset,
     refresh,
     stop,
+    navigationContext: () => ({
+      selection: String(model.selectedId ?? ""),
+      label: displaySoundName(selectedEffect()),
+    }),
+    restoreSelection(id, options = {}) {
+      if (!effectById(id)) return false;
+      model.selectedId = Number(id);
+      render();
+      if (options.focus) {
+        inspector.tabIndex = -1;
+        requestAnimationFrame(() => inspector.focus({ preventScroll: true }));
+      }
+      return true;
+    },
     destroy,
     ready: Promise.resolve(),
   };
