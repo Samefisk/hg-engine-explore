@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Wild Systems · Pokédex Workshop</title>
   <link rel="stylesheet" href="/v2-assets/v2.css">
+  <link rel="stylesheet" href="/v2-assets/pokemon.css">
   <script type="module" src="/v2-assets/v2.js"></script>
 </head>
 <body>
@@ -22,6 +23,9 @@
       </div>
 
       <nav id="workspaceNav" class="workspace-nav" aria-label="Workshop views" role="tablist">
+        <button id="pokemonTab" class="workspace-nav__button" type="button" role="tab" data-view="pokemon" aria-controls="pokemonView" aria-selected="false" tabindex="-1">
+          <span>Pokémon</span><small>Editor</small>
+        </button>
         <button id="profilesTab" class="workspace-nav__button is-active" type="button" role="tab" data-view="profiles" aria-controls="profilesView" aria-selected="true">
           <span>Profile</span><small>Deck</small>
         </button>
@@ -92,6 +96,16 @@
       </details>
     </header>
 
+    <nav id="deckContextBar" class="deck-context-bar" aria-label="Cross-workshop context" hidden>
+      <button id="returnToDeck" class="deck-context-bar__back" type="button">
+        <span aria-hidden="true">←</span><span>Return</span>
+      </button>
+      <span class="deck-context-bar__copy">
+        <small>Opened from</small><strong id="deckContextLabel">Workshop context</strong>
+      </span>
+      <button id="clearDeckContext" class="deck-context-bar__clear" type="button" aria-label="Clear cross-workshop context">×</button>
+    </nav>
+
     <section id="buildPanel" class="build-panel" aria-labelledby="buildPanelTitle" hidden>
       <header>
         <span><i aria-hidden="true"></i><strong id="buildPanelTitle">Build console</strong></span>
@@ -101,6 +115,45 @@
     </section>
 
     <main id="workspace" class="workspace" tabindex="-1">
+      <section id="pokemonView" class="view view--pokemon" role="tabpanel" aria-labelledby="pokemonTab" hidden>
+        <div class="pokemon-workbench pv2-pokemon-workbench">
+          <aside class="panel library-panel pokemon-library-panel pv2-pokemon-library-panel" aria-labelledby="pokemonLibraryTitle">
+            <header class="panel-heading">
+              <span><small>National index</small><strong id="pokemonLibraryTitle">Pokédex</strong></span>
+              <span id="pokemonLibraryCount" class="panel-count" aria-label="Pokémon record count">—</span>
+            </header>
+            <div class="library-tools pokemon-library-tools">
+              <label class="search-field" for="pokemonSearch">
+                <span class="sr-only">Search Pokémon</span>
+                <input id="pokemonSearch" type="search" placeholder="Search name, number, or symbol" autocomplete="off">
+              </label>
+              <label class="sr-only" for="pokemonTypeFilter">Pokémon type</label>
+              <select id="pokemonTypeFilter">
+                <option value="all">All types</option>
+              </select>
+              <label class="sr-only" for="pokemonStateFilter">Pokémon record scope</label>
+              <select id="pokemonStateFilter">
+                <option value="all">All records</option>
+                <option value="base">Base species</option>
+                <option value="forms">Forms</option>
+              </select>
+            </div>
+            <div id="pokemonLibrary" class="pokemon-library pv2-pokemon-library" aria-busy="true" aria-live="polite">
+              <div class="loading-card"><span aria-hidden="true"></span><p>Loading source-backed Pokémon records…</p></div>
+            </div>
+          </aside>
+
+          <section id="pokemonInspector" class="panel inspector-panel pokemon-inspector pv2-pokemon-inspector-panel pv2-pokemon-inspector" aria-label="Pokémon reference" aria-busy="true">
+            <div class="empty-state">
+              <span class="empty-state__glyph" aria-hidden="true">◈</span>
+              <h2>Loading Pokémon reference</h2>
+              <p>Reading the species and form records currently exposed by the Pokémon data endpoint.</p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
       <section id="profilesView" class="view view--profiles is-active" role="tabpanel" aria-labelledby="profilesTab">
         <div id="profileWorkbench" class="profile-workbench">
           <aside class="panel library-panel" aria-labelledby="profileLibraryTitle">
@@ -264,6 +317,14 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="commitStatus" class="commit-status" role="status" aria-live="polite" aria-atomic="true">
+    <span class="commit-status__mark" aria-hidden="true"></span>
+    <span>
+      <strong id="commitStatusHeading"></strong>
+      <small id="commitStatusDetail"></small>
+    </span>
   </div>
 
   <div id="toastRegion" class="toast-region" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions"></div>

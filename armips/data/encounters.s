@@ -123,9 +123,9 @@ superrodrate 0
 walklevels 2, 3, 2, 3, 3, 3, 2, 2, 4, 4, 4, 4
 
 // morning encounter slots
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 pokemon SPECIES_PIDGEY
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 pokemon SPECIES_PIDGEY
 pokemon SPECIES_DELIBIRD
 pokemon SPECIES_PIDGEY
@@ -137,9 +137,9 @@ pokemon SPECIES_RATTATA
 pokemon SPECIES_PIDGEY
 
 // day encounter slots
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 pokemon SPECIES_MANKEY
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 pokemon SPECIES_MANKEY
 pokemon SPECIES_MANKEY
 pokemon SPECIES_MANKEY
@@ -157,12 +157,12 @@ pokemon SPECIES_IGGLYBUFF
 pokemon SPECIES_IGGLYBUFF
 pokemon SPECIES_IGGLYBUFF
 pokemon SPECIES_RATTATA
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 pokemon SPECIES_RATTATA
 pokemon SPECIES_RATTATA
 pokemon SPECIES_RATTATA
 pokemon SPECIES_RATTATA
-pokemon SPECIES_HOOTHOOT
+pokemon SPECIES_SNORLAX
 
 // hoenn encounter slots
 pokemon SPECIES_PLUSLE

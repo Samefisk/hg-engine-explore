@@ -205,7 +205,7 @@ typedef struct OverworldWildSpawnState {
 } OverworldWildSpawnState;
 
 typedef struct OverworldWildSpawnsOverlayEntry {
-    BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+    BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, BOOL resumeOnly);
     BOOL (*tryPrimeBattleFromTalk)(
         FieldSystem *fieldSystem,
         OverworldWildSpawnState *state,
@@ -213,6 +213,8 @@ typedef struct OverworldWildSpawnsOverlayEntry {
     u8 (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
     void (*cleanupResidentData)(void);
 } OverworldWildSpawnsOverlayEntry;
+
+extern u8 gOverworldWildFieldIdleRearmPending;
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)
 

@@ -27,7 +27,6 @@
 typedef struct OverworldWildSavedHp {
     u32 personality;
     u16 hp;
-    u8 active;
 } OverworldWildSavedHp;
 
 static OverworldWildSpawnState sOverworldWildSpawnState = {
@@ -45,8 +44,11 @@ MapTeleportTransitionRuntimeState gMapTeleportTransitionState
     __attribute__((section(".map_teleport_runtime"), aligned(2))) = {0};
 static FieldSystem *sFieldReadyTaskFieldSystem;
 static u16 sFieldReadyTaskMapId;
+u8 gOverworldWildFieldIdleRearmPending;
 static u8 sBattleFlags;
 extern u32 space_for_setmondata;
+
+static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad);
 
 static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
 {
@@ -58,10 +60,11 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     }
 
     if (fieldSystem->taskman != NULL) {
-        sFieldReadyTaskMapId = MAP_NOTHING;
+        gOverworldWildFieldIdleRearmPending = TRUE;
         return;
     }
     if (sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
+        gOverworldWildFieldIdleRearmPending = FALSE;
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
         sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
         if (sOverworldWildSpawnState.mapId != fieldSystem->location->mapId) {
@@ -72,6 +75,9 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     if (sOverworldWildSpawnState.battleGraceSteps != 0) {
         sOverworldWildSpawnState.battleGraceSteps--;
         return;
+    }
+    if (gOverworldWildFieldIdleRearmPending) {
+        (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
     }
 
     MapTeleport_PollDebug(fieldSystem);
@@ -116,7 +122,11 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     return FALSE;
 #endif
 
-    return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState);
+    {
+        BOOL resumeOnly = gOverworldWildFieldIdleRearmPending;
+
+        return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState, resumeOnly);
+    }
 #endif
 }
 
@@ -180,7 +190,8 @@ static int OverworldWildSpawns_FindSavedHpSlot(u32 personality)
     int i;
 
     for (i = 0; i < OW_WILD_HP_SLOT_COUNT; i++) {
-        if (sSavedHp[i].active && sSavedHp[i].personality == personality) {
+        if (sSavedHp[i].personality != 0
+            && sSavedHp[i].personality == personality) {
             return i;
         }
     }
@@ -193,7 +204,7 @@ static int OverworldWildSpawns_FindFreeSavedHpSlot(void)
     int i;
 
     for (i = 0; i < OW_WILD_HP_SLOT_COUNT; i++) {
-        if (!sSavedHp[i].active) {
+        if (sSavedHp[i].personality == 0) {
             return i;
         }
     }
@@ -206,7 +217,7 @@ static void OverworldWildSpawns_ClearSavedHp(u32 personality)
     int slot = OverworldWildSpawns_FindSavedHpSlot(personality);
 
     if (slot >= 0) {
-        sSavedHp[slot].active = FALSE;
+        sSavedHp[slot].personality = 0;
     }
 }
 
@@ -225,7 +236,6 @@ static void OverworldWildSpawns_SaveHp(u32 personality, u16 hp)
 
     sSavedHp[slot].personality = personality;
     sSavedHp[slot].hp = hp;
-    sSavedHp[slot].active = TRUE;
 }
 
 static u16 OverworldWildSpawns_GetSavedHp(u32 personality)

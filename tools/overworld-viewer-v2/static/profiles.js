@@ -548,6 +548,8 @@ export function createProfilesController({
   setStatus = () => {},
   markDirty = () => {},
   confirmAction,
+  reportSelection = () => {},
+  openPokemonRecord = () => false,
 } = {}) {
   const root = elements.profilesView || elements.root || elements.container || elements.profiles;
   if (!(root instanceof Element)) throw new TypeError("createProfilesController requires elements.profilesView");
@@ -1290,18 +1292,14 @@ export function createProfilesController({
       || drafts.overrideNames.has(key)
       || drafts.overrideTargets.has(key)
       || removed;
-    const overrideTarget = override ? targetFor(profile) : null;
-    const membershipLabel = override
-      ? (overrideTarget.targetMode === "all" ? "all matching Pokémon" : `${overrideTarget.members.length} members`)
-      : `${membersFor(profile).length} members`;
     const dragEnabled = override && !profile.draftId && !filtered() && !ui.busy;
     const orderControls = override
       ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use keyboard controls" : "Clear filters to reorder"}"><span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><span class="pv2-drag-grip" aria-hidden="true">⋮⋮</span></span>`
       : "";
     const previewSpecies = profilePreviewSpecies(profile, override);
     const previewIcons = previewSpecies.length ? `
-      <span class="pv2-profile-icons" aria-hidden="true">
-        ${previewSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" width="16" height="16" loading="lazy" decoding="async" draggable="false">`).join("")}
+      <span class="pv2-profile-icons" aria-label="Open Pokémon records">
+        ${previewSpecies.map((species) => `<button type="button" data-action="open-pokemon" data-species="${escapeHtml(species.symbol)}" aria-label="Open ${escapeHtml(species.name)} in Pokémon Editor"><img src="${escapeHtml(species.iconUrl)}" alt="" width="16" height="16" loading="lazy" decoding="async" draggable="false"></button>`).join("")}
       </span>` : "";
     return `
       <li class="profile-row pv2-profile-row${selected ? " is-active is-selected" : ""}${removed ? " is-removed" : ""}${changed ? " is-changed" : ""}${override ? " override-profile" : ""}" data-profile-row data-profile-key="${escapeHtml(key)}">
@@ -1309,13 +1307,11 @@ export function createProfilesController({
         <button class="profile-select pv2-profile-select" type="button" data-action="select-profile" data-profile-key="${escapeHtml(key)}" aria-current="${selected ? "true" : "false"}">
           <span class="pv2-profile-heading">
             <span class="pv2-profile-copy">
-              <span class="profile-kind pv2-profile-kind">${override ? (profile.draftId ? "New override" : `Override ${index + 1}`) : (String(profile.index) === String(data.defaultClassIndex) ? "Default base" : "Base profile")}</span>
               <strong>${escapeHtml(nameFor(profile))}</strong>
-              <small>${escapeHtml(profile.symbol || "Unsaved layer")} · ${escapeHtml(membershipLabel)}</small>
             </span>
           </span>
-          ${previewIcons}
         </button>
+        ${previewIcons}
         ${removed ? `<button type="button" data-action="delete-profile" data-profile-key="${escapeHtml(key)}">Undo removal</button>` : ""}
       </li>`;
   }
@@ -2596,7 +2592,7 @@ export function createProfilesController({
     const headerIcons = headerSpecies.length || !override ? `
       <div class="pv2-editor-icons">
         ${override ? "" : renderMembershipControl(profile)}
-        ${headerSpecies.map((species) => `<img src="${escapeHtml(species.iconUrl)}" alt="" width="20" height="20" decoding="async" draggable="false">`).join("")}
+        ${headerSpecies.map((species) => `<button type="button" data-action="open-pokemon" data-species="${escapeHtml(species.symbol)}" aria-label="Open ${escapeHtml(species.name)} in Pokémon Editor"><img src="${escapeHtml(species.iconUrl)}" alt="" width="20" height="20" decoding="async" draggable="false"></button>`).join("")}
       </div>` : "";
     const actions = `
       ${!override && String(profile.index) !== String(data.defaultClassIndex) ? `<button type="button" data-action="convert-base-to-override" data-profile-key="${escapeHtml(key)}">Make override</button>` : ""}
@@ -2750,13 +2746,18 @@ export function createProfilesController({
     signalDirty();
   }
 
-  function setSelected(key) {
+  function setSelected(key, { focus = false, report = true } = {}) {
     if (!findProfile(key)) return;
     ui.selectedKey = key;
     ui.selectionHint = nameFor(findProfile(key));
     renderList();
     renderEditor();
     signalDirty();
+    if (report) reportSelection("profiles", key, ui.selectionHint);
+    if (focus) {
+      editorElement.tabIndex = -1;
+      requestAnimationFrame(() => editorElement.focus({ preventScroll: true }));
+    }
   }
 
   function moveOverride(key, delta) {
@@ -3092,6 +3093,13 @@ export function createProfilesController({
     if (action === "open-context-resolver") openContextResolver();
     else if (action === "close-context-resolver") closeContextResolver();
     else if (action === "select-profile") setSelected(key);
+    else if (action === "open-pokemon") {
+      openPokemonRecord(target.dataset.species, {
+        view: "profiles",
+        selection: ui.selectedKey,
+        label: nameFor(findProfile()),
+      });
+    }
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
     else if (action === "select-mode-tab") selectModeTab(target.dataset.modeTabSection, target.dataset.modeTab);
     else if (action === "move-up") moveOverride(key, -1);
@@ -3570,6 +3578,8 @@ export function createProfilesController({
     clearCommitted,
     reset,
     refresh,
+    navigationContext: () => ({ selection: ui.selectedKey, label: nameFor(findProfile()) }),
+    restoreSelection: (key, options = {}) => setSelected(key, { ...options, report: false }),
     destroy,
   });
 }
