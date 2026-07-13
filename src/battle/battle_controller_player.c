@@ -3,6 +3,7 @@
 #include "../../include/constants/battle_message_constants.h"
 #include "../../include/config.h"
 #include "../../include/overworld_wild_spawns.h"
+#include "../../include/type_mastery.h"
 
 #ifdef DEBUG_BATTLE_SCENARIOS
 #include "../../include/test_battle.h"
@@ -34,6 +35,16 @@ void overrideItemUsage(struct BattleSystem *bsys, struct BattleStruct *ctx)
 
 BOOL LONG_CALL BattleContext_Main(struct BattleSystem *bsys, struct BattleStruct *ctx)
 {
+#ifdef DEBUG_BATTLE_SCENARIOS
+    TestBattle_OverrideParties(bsys);
+#endif
+
+    if (!ctx->typeMasteryInitialized
+        && BattleWorkPokePartyGet(bsys, BATTLER_PLAYER) != NULL) {
+        TypeMastery_InitializeBattleStates(bsys, ctx);
+        ctx->typeMasteryInitialized = TRUE;
+    }
+
 #ifdef DEBUG_BATTLE_SCENARIOS
     if (!ctx->hasLoadedTerrainOver && ctx->terrainOverlay.type != TERRAIN_NONE && ctx->server_seq_no >= CONTROLLER_COMMAND_SELECTION_SCREEN_INIT &&
         bsys != NULL && bsys->bgConfig != NULL && bsys->bg_area != NULL && bsys->pal_area != NULL) {
@@ -89,6 +100,7 @@ BOOL LONG_CALL BattleContext_Main(struct BattleSystem *bsys, struct BattleStruct
     sPlayerBattleCommands[ctx->server_seq_no](bsys, ctx);
     BattleSystem_UpdateEnemyTypeMarkers(bsys, ctx);
 #ifdef DEBUG_BATTLE_SCENARIOS
+    TestBattle_ApplyBattleState(bsys, ctx);
     TestBattle_autoSelectPlayerMoves(bsys, ctx);
 #endif
 #if defined (DISABLE_ITEMS_IN_TRAINER_BATTLE)
