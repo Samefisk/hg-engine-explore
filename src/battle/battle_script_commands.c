@@ -7,6 +7,7 @@
 #include "../../include/overlay.h"
 #include "../../include/pokemon.h"
 #include "../../include/save.h"
+#include "../../include/type_mastery.h"
 #include "../../include/constants/ability.h"
 #include "../../include/constants/battle_script_constants.h"
 #include "../../include/constants/battle_message_constants.h"
@@ -1605,6 +1606,9 @@ void Task_DistributeExp_Extend(void *arg0, void *work)
     int exp_client_no = 0;
     struct BattleStruct *sp = expcalc->sp;
     BOOL shouldUseResultExp = FALSE;
+    BOOL trackTypeMasteryExp = FALSE;
+    u32 experienceBefore = 0;
+    u32 sequenceBefore = expcalc->seq_no;
 
     client_no = (sp->fainting_client >> 1) & 1;
 
@@ -1928,7 +1932,27 @@ void Task_DistributeExp_Extend(void *arg0, void *work)
     }
 
 _skipAllThis:
+    if (sequenceBefore == 0
+        && pp != NULL
+        && sel_mons_no < BattleWorkPokeCountGet(expcalc->bw, exp_client_no))
+    {
+        experienceBefore = GetMonData(pp, MON_DATA_EXPERIENCE, NULL);
+        trackTypeMasteryExp = TRUE;
+    }
+
     Task_DistributeExp(arg0, work);
+    if (trackTypeMasteryExp)
+    {
+        u32 experienceAfter = GetMonData(pp, MON_DATA_EXPERIENCE, NULL);
+
+        if (experienceAfter > experienceBefore)
+        {
+            TypeMastery_AwardPokemonExp(
+                TypeMastery_GetSaveData(SaveBlock2_get()),
+                pp,
+                experienceAfter - experienceBefore);
+        }
+    }
 #ifdef IMPLEMENT_RESULT_BASED_EXP
     if (expcalc->seq_no == 38)
     {

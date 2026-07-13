@@ -1,4 +1,4 @@
-// Test: Type Mastery Water - Water mastery requires a Water-type attacker
+// Test: a dual-type Pokémon splits its actual awarded EXP evenly between both types
 #include "fixture.h"
 
 #ifndef GET_TEST_CASE_ONLY
@@ -14,14 +14,21 @@ const struct TestBattleScenario BattleTests[] = {
     {
         .battleType = BATTLE_TYPE_SINGLE,
         .terrain = TERRAIN_NONE,
-        .playerTypeMastery = { .enabled = TRUE, .typeLevels = { [TYPE_WATER] = 5 } },
-        .playerParty = TM_NON_WATER_LEAD_MASTER_PARTY(MOVE_WATER_PULSE),
-        .enemyParty = TM_TARGET_PARTY,
+        .playerParty = {
+            TM_TEST_MON(SPECIES_LAPRAS, ABILITY_WATER_ABSORB, MOVE_WATER_PULSE, FULL_HP),
+            TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON,
+        },
+        .enemyParty = {
+            TM_TEST_MON(SPECIES_RATTATA, ABILITY_RUN_AWAY, MOVE_SPLASH, 1),
+            TM_TEST_MON(SPECIES_SNORLAX, ABILITY_IMMUNITY, MOVE_SPLASH, FULL_HP),
+            TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON,
+        },
         .playerScript = TM_PLAYER_ATTACK_SCRIPT,
         .enemyScript = TM_ENEMY_IDLE_SCRIPT,
         .expectations = {
-            TM_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, 5, 5, 2, 10),
             TM_BONUS_EXPECTATION(BATTLER_PLAYER_FIRST, 0),
+            TM_EXP_EXPECTATION(TYPE_WATER, 2),
+            TM_EXP_EXPECTATION(TYPE_ICE, 2),
         },
     },
 

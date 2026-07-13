@@ -14,7 +14,7 @@ const struct TestBattleScenario BattleTests[] = {
     {
         .battleType = BATTLE_TYPE_SINGLE,
         .terrain = TERRAIN_NONE,
-        .enemyTypeMastery = { .enabled = TRUE, .activeType = TYPE_WATER, .typeLevel = 5 },
+        .enemyTypeMastery = { .enabled = TRUE, .typeLevels = { [TYPE_WATER] = 5 } },
         .playerParty = TM_TARGET_PARTY,
         .enemyParty = TM_WATER_PARTY_MASTER(FULL_HP, MOVE_WATER_PULSE),
         .playerScript = TM_PLAYER_IDLE_SCRIPT,

@@ -32,7 +32,8 @@
 #define TM_WATER_PARTY_CORE(hpValue, moveValue) \
     { \
         TM_TEST_MON(SPECIES_BLASTOISE, ABILITY_DAMP, moveValue, hpValue), \
-        TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, \
+        TM_TEST_MON(SPECIES_WARTORTLE, ABILITY_DAMP, MOVE_SPLASH, FULL_HP), \
+        TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, \
     }
 
 #define TM_WATER_PARTY_SPECIALIST(hpValue, moveValue) \
@@ -40,7 +41,8 @@
         TM_TEST_MON(SPECIES_BLASTOISE, ABILITY_DAMP, moveValue, hpValue), \
         TM_TEST_MON(SPECIES_WARTORTLE, ABILITY_DAMP, MOVE_SPLASH, FULL_HP), \
         TM_TEST_MON(SPECIES_VAPOREON, ABILITY_WATER_ABSORB, MOVE_SPLASH, FULL_HP), \
-        TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, \
+        TM_TEST_MON(SPECIES_LAPRAS, ABILITY_WATER_ABSORB, MOVE_SPLASH, FULL_HP), \
+        TM_EMPTY_MON, TM_EMPTY_MON, \
     }
 
 #define TM_WATER_PARTY_MASTER(hpValue, moveValue) \
@@ -70,6 +72,13 @@
         TM_TEST_MON(SPECIES_VAPOREON, ABILITY_WATER_ABSORB, MOVE_SPLASH, FULL_HP), \
         TM_TEST_MON(SPECIES_LAPRAS, ABILITY_WATER_ABSORB, MOVE_SPLASH, FULL_HP), \
         TM_EMPTY_MON, TM_EMPTY_MON, \
+    }
+
+#define TM_WATER_ICE_PARTY(hpValue, moveValue) \
+    { \
+        TM_TEST_MON(SPECIES_LAPRAS, ABILITY_WATER_ABSORB, moveValue, hpValue), \
+        TM_TEST_MON(SPECIES_DEWGONG, ABILITY_THICK_FAT, MOVE_SPLASH, FULL_HP), \
+        TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, TM_EMPTY_MON, \
     }
 
 #define TM_NON_WATER_LEAD_MASTER_PARTY(moveValue) \
@@ -145,12 +154,12 @@
         }, \
     }
 
-#define TM_STATE_EXPECTATION(battlerValue, levelValue, countValue, multiplierValue, boonValue) \
+#define TM_TYPE_STATE_EXPECTATION(battlerValue, typeValue, levelValue, countValue, multiplierValue, boonValue) \
     { \
         .expectationType = EXPECTATION_TYPE_TYPE_MASTERY_STATE, \
         .battlerIDOrPartySlot = (battlerValue), \
         .expectationValue.typeMasteryState = { \
-            .activeType = TYPE_WATER, \
+            .type = (typeValue), \
             .typeLevel = (levelValue), \
             .matchingCount = (countValue), \
             .commitmentMultiplier = (multiplierValue), \
@@ -158,11 +167,23 @@
         }, \
     }
 
+#define TM_STATE_EXPECTATION(battlerValue, levelValue, countValue, multiplierValue, boonValue) \
+    TM_TYPE_STATE_EXPECTATION(battlerValue, TYPE_WATER, levelValue, countValue, multiplierValue, boonValue)
+
 #define TM_BONUS_EXPECTATION(battlerValue, bonusValue) \
     { \
         .expectationType = EXPECTATION_TYPE_TYPE_MASTERY_DAMAGE_BONUS, \
         .battlerIDOrPartySlot = (battlerValue), \
         .expectationValue.typeMasteryDamageBonus = (bonusValue), \
+    }
+
+#define TM_EXP_EXPECTATION(typeValue, divisorValue) \
+    { \
+        .expectationType = EXPECTATION_TYPE_TYPE_MASTERY_EXP, \
+        .expectationValue.typeMasteryExp = { \
+            .type = (typeValue), \
+            .divisor = (divisorValue), \
+        }, \
     }
 
 #define TM_HP_DAMAGE_EXPECTATION(battlerValue, ...) \

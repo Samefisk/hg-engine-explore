@@ -48,22 +48,28 @@ enum ExpectationType {
     EXPECTATION_TYPE_TYPE_MASTERY_STATE,
     EXPECTATION_TYPE_TYPE_MASTERY_DAMAGE_BONUS,
     EXPECTATION_TYPE_BATTLER_HP,
+    EXPECTATION_TYPE_TYPE_MASTERY_EXP,
 };
 
 struct PACKED TestTypeMasterySettings {
     u8 enabled;
-    u8 activeType;
-    u8 typeLevel;
     u8 reserved;
+    u8 typeLevels[TYPE_MASTERY_TYPE_COUNT];
 };
 
 struct PACKED TestTypeMasteryStateExpectation {
-    u8 activeType;
+    u8 type;
     u8 typeLevel;
     u8 matchingCount;
     u8 commitmentMultiplier;
     u8 boonLevel;
     u8 reserved[3];
+};
+
+struct PACKED TestTypeMasteryExpExpectation {
+    u8 type;
+    u8 divisor;
+    u8 reserved[2];
 };
 
 union ExpectationValue {
@@ -73,6 +79,7 @@ union ExpectationValue {
     u16 formID;
     struct TestTypeMasteryStateExpectation typeMasteryState;
     u32 typeMasteryDamageBonus;
+    struct TestTypeMasteryExpExpectation typeMasteryExp;
     u32 hpRemaining[16];
 };
 
@@ -203,6 +210,10 @@ BOOL LONG_CALL TestBattle_IsComplete();
 void LONG_CALL TestBattle_OverrideParties(struct BattleSystem *bsys);
 void LONG_CALL TestBattle_ApplyBattleState(struct BattleSystem *bsys, struct BattleStruct *sp);
 void LONG_CALL TestBattle_RecordTypeMasteryDamageBonus(u32 battler, u32 bonusPercent);
+void LONG_CALL TestBattle_RecordTypeMasteryExp(
+    u32 type,
+    u32 typeExp,
+    u32 pokemonExp);
 void LONG_CALL TestBattle_autoSelectPlayerMoves(struct BattleSystem *bsys, struct BattleStruct *ctx);
 
 #endif // DEBUG_BATTLE_SCENARIOS

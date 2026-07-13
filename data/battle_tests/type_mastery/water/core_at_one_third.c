@@ -14,13 +14,13 @@ const struct TestBattleScenario BattleTests[] = {
     {
         .battleType = BATTLE_TYPE_SINGLE,
         .terrain = TERRAIN_NONE,
-        .playerTypeMastery = { .enabled = TRUE, .activeType = TYPE_WATER, .typeLevel = 5 },
+        .playerTypeMastery = { .enabled = TRUE, .typeLevels = { [TYPE_WATER] = 5 } },
         .playerParty = TM_WATER_PARTY_CORE(51, MOVE_WATER_PULSE),
         .enemyParty = TM_TARGET_PARTY,
         .playerScript = TM_PLAYER_ATTACK_SCRIPT,
         .enemyScript = TM_ENEMY_IDLE_SCRIPT,
         .expectations = {
-            TM_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, 5, 1, 1, 5),
+            TM_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, 5, 2, 1, 5),
             TM_BONUS_EXPECTATION(BATTLER_PLAYER_FIRST, 5),
         },
     },

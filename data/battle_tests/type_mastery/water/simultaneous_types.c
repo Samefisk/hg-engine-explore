@@ -1,4 +1,4 @@
-// Test: Type Mastery Water - specialist boon activates at one-half HP
+// Test: Type Mastery caches and applies multiple qualified types at once
 #include "fixture.h"
 
 #ifndef GET_TEST_CASE_ONLY
@@ -14,14 +14,23 @@ const struct TestBattleScenario BattleTests[] = {
     {
         .battleType = BATTLE_TYPE_SINGLE,
         .terrain = TERRAIN_NONE,
-        .playerTypeMastery = { .enabled = TRUE, .typeLevels = { [TYPE_WATER] = 5 } },
-        .playerParty = TM_WATER_PARTY_SPECIALIST(77, MOVE_WATER_PULSE),
+        .playerTypeMastery = {
+            .enabled = TRUE,
+            .typeLevels = {
+                [TYPE_WATER] = 5,
+                [TYPE_ICE] = 4,
+                [TYPE_FIRE] = 3,
+            },
+        },
+        .playerParty = TM_WATER_ICE_PARTY(68, MOVE_WATER_PULSE),
         .enemyParty = TM_TARGET_PARTY,
         .playerScript = TM_PLAYER_ATTACK_SCRIPT,
         .enemyScript = TM_ENEMY_IDLE_SCRIPT,
         .expectations = {
-            TM_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, 5, 4, 2, 10),
-            TM_BONUS_EXPECTATION(BATTLER_PLAYER_FIRST, 10),
+            TM_TYPE_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, TYPE_WATER, 5, 2, 1, 5),
+            TM_TYPE_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, TYPE_ICE, 4, 2, 1, 4),
+            TM_TYPE_STATE_EXPECTATION(BATTLER_PLAYER_FIRST, TYPE_FIRE, 3, 0, 0, 0),
+            TM_BONUS_EXPECTATION(BATTLER_PLAYER_FIRST, 5),
         },
     },
 

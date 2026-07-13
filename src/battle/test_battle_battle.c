@@ -208,8 +208,7 @@ static void TestBattle_ApplyTypeMasterySettings(
         if (settings->enabled) {
             TypeMastery_BuildBattleState(
                 &sp->typeMastery[battler],
-                settings->activeType,
-                settings->typeLevel,
+                settings->typeLevels,
                 BattleWorkPokePartyGet(bsys, battler));
         }
     }
@@ -221,29 +220,30 @@ static void TestBattle_CheckTypeMasteryStateExpectations(struct BattleStruct *sp
         const struct Expectations *expectation =
             &gTestBattleScenario->expectations[gTestBattleScenario->expectationPassCount];
         const struct TestTypeMasteryStateExpectation *expected;
-        const TypeMasteryBattleState *actual;
+        const TypeMasteryTypeBattleState *actual;
 
         if (expectation->expectationType != EXPECTATION_TYPE_TYPE_MASTERY_STATE) {
             break;
         }
 
         expected = &expectation->expectationValue.typeMasteryState;
-        actual = TypeMastery_GetBattleStateForBattler(sp, expectation->battlerIDOrPartySlot);
+        actual = TypeMastery_GetTypeBattleStateForBattler(
+            sp,
+            expectation->battlerIDOrPartySlot,
+            expected->type);
         if (actual == NULL
-            || actual->activeType != expected->activeType
             || actual->typeLevel != expected->typeLevel
             || actual->matchingCount != expected->matchingCount
             || actual->commitmentMultiplier != expected->commitmentMultiplier
             || actual->boonLevel != expected->boonLevel) {
             if (actual != NULL) {
                 debug_printf(
-                    "TM state got %d/%d/%d/%d/%d expected %d/%d/%d/%d/%d\n",
-                    actual->activeType,
+                    "TM type %d state got %d/%d/%d/%d expected %d/%d/%d/%d\n",
+                    expected->type,
                     actual->typeLevel,
                     actual->matchingCount,
                     actual->commitmentMultiplier,
                     actual->boonLevel,
-                    expected->activeType,
                     expected->typeLevel,
                     expected->matchingCount,
                     expected->commitmentMultiplier,
@@ -365,6 +365,41 @@ void LONG_CALL TestBattle_RecordTypeMasteryDamageBonus(u32 battler, u32 bonusPer
             bonusPercent,
             expectation->battlerIDOrPartySlot,
             expectation->expectationValue.typeMasteryDamageBonus);
+    }
+}
+
+void LONG_CALL TestBattle_RecordTypeMasteryExp(
+    u32 type,
+    u32 typeExp,
+    u32 pokemonExp)
+{
+    const struct Expectations *expectation;
+    const struct TestTypeMasteryExpExpectation *expected;
+
+    if (!TestBattle_HasMoreExpectations()) {
+        return;
+    }
+
+    expectation =
+        &gTestBattleScenario->expectations[gTestBattleScenario->expectationPassCount];
+    if (expectation->expectationType != EXPECTATION_TYPE_TYPE_MASTERY_EXP) {
+        return;
+    }
+
+    expected = &expectation->expectationValue.typeMasteryExp;
+    if (pokemonExp > 0
+        && expected->divisor > 0
+        && type == expected->type
+        && typeExp == pokemonExp / expected->divisor) {
+        gTestBattleScenario->expectationPassCount++;
+    } else {
+        debug_printf(
+            "TM EXP type %d got %d/%d expected type %d divisor %d\n",
+            type,
+            typeExp,
+            pokemonExp,
+            expected->type,
+            expected->divisor);
     }
 }
 
