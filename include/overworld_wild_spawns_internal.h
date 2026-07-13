@@ -19,6 +19,7 @@
 #define OW_WILD_SPECIES_MASK 0x7FF
 #define OW_WILD_FORM_SHIFT 11
 #define OW_WILD_OBJECT_ID_START 0xE0
+#define OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID 0xF0
 #define OW_WILD_DISTANCE_DESPAWN_SAMPLES 2
 #define OW_WILD_DISTANCE_DESPAWN_TILES 16
 #define OW_WILD_STAGED_HOP_MOVEMENT_LIST_WORDS 72
@@ -112,6 +113,12 @@ typedef struct OverworldWildPresentationState {
     u16 managerRestoreMask;
 } OverworldWildPresentationState;
 
+typedef struct OverworldWildThrowState {
+    u8 targets[OW_WILD_MAX_SPAWNS];
+    u16 targetMask;
+    u16 carrierMask;
+} OverworldWildThrowState;
+
 typedef struct OverworldWildSavedShiny {
     u16 mapId;
     u16 speciesAndForm;
@@ -202,6 +209,7 @@ typedef struct OverworldWildSpawnState {
     u16 pendingMapGeneration;
     u16 pendingEncounterGeneration;
     u8 presentationRestorePending;
+    u16 captureTargetMask;
 } OverworldWildSpawnState;
 
 typedef struct OverworldWildSpawnsOverlayEntry {
@@ -212,9 +220,11 @@ typedef struct OverworldWildSpawnsOverlayEntry {
         LocalMapObject *talkedObject);
     u8 (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
     void (*cleanupResidentData)(void);
+    BOOL (*onPlayerFrame)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
 } OverworldWildSpawnsOverlayEntry;
 
 extern u8 gOverworldWildFieldIdleRearmPending;
+extern OverworldWildSpawnState sOverworldWildSpawnState;
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)
 

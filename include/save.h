@@ -355,6 +355,7 @@ u32 LONG_CALL PCModifiedFlags_GetIndexOfNthModifiedBox(u32 flags, u8 last);
 
 
 void *LONG_CALL SaveBlock2_get(void);
+void *LONG_CALL SaveArray_Get(SaveData *saveData, int id);
 struct SAVE_MISC_DATA *LONG_CALL Sav2_Misc_get(void *saveData);
 
 static inline TypeMasterySaveData *TypeMastery_GetSaveData(void *saveData)

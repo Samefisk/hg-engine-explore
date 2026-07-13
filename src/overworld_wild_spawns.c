@@ -23,13 +23,12 @@
 #define OW_WILD_FIELD_READY_INITIAL_SPAWN 0
 #define OW_WILD_DISABLE_PLAYER_STEP_HOOK 0
 #define OW_WILD_PLAYER_STEP_DIAGNOSTIC_LOAD_ONLY 0
-
 typedef struct OverworldWildSavedHp {
     u32 personality;
     u16 hp;
 } OverworldWildSavedHp;
 
-static OverworldWildSpawnState sOverworldWildSpawnState = {
+OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
     .pendingSlot = -1,
     .movementQueuedBattleSlot = -1,
@@ -81,7 +80,6 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     }
 
     MapTeleport_PollDebug(fieldSystem);
-
 #if OW_WILD_FIELD_READY_INITIAL_SPAWN
     OverworldWildSpawns_OnPlayerStep(fieldSystem);
 #endif
