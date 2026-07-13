@@ -5,6 +5,7 @@
 #include "constants/save.h"
 #include "rtc.h"
 #include "pokemon.h"
+#include "type_mastery.h"
 
 typedef enum GymmickType {
     GYMMICK_NONE,
@@ -119,6 +120,10 @@ struct SAVE_MISC_DATA
     // expanded fields - offset 0x2E0 and up
     struct PartyPokemon storedMons[NUM_OF_STORED_MONS];
     u8 isMonStored[NUM_OF_STORED_MONS];
+#ifndef DEBUG_BATTLE_SCENARIOS
+    // Battle tests inject mastery directly and retain the legacy test.sav layout.
+    TypeMasterySaveData typeMastery;
+#endif
 
 #endif
 
@@ -351,6 +356,31 @@ u32 LONG_CALL PCModifiedFlags_GetIndexOfNthModifiedBox(u32 flags, u8 last);
 
 void *LONG_CALL SaveBlock2_get(void);
 struct SAVE_MISC_DATA *LONG_CALL Sav2_Misc_get(void *saveData);
+
+static inline TypeMasterySaveData *TypeMastery_GetSaveData(void *saveData)
+{
+#if defined(ALLOW_SAVE_CHANGES) && !defined(DEBUG_BATTLE_SCENARIOS)
+    struct SAVE_MISC_DATA *misc;
+
+    if (saveData == NULL)
+    {
+        return NULL;
+    }
+
+    misc = Sav2_Misc_get(saveData);
+    if (misc == NULL)
+    {
+        return NULL;
+    }
+
+    TypeMastery_EnsureSaveData(&misc->typeMastery);
+    return &misc->typeMastery;
+#else
+    (void)saveData;
+    return NULL;
+#endif
+}
+
 struct ScriptState *LONG_CALL SavArray_Flags_get(void *saveData);
 struct PlayerProfile *LONG_CALL Sav2_PlayerData_GetProfileAddr(void *saveData);
 u8 *LONG_CALL SaveData_GetRepelPtr(void *saveData);
@@ -396,7 +426,7 @@ void *LONG_CALL PROC_GetWork(void *proc);
 
 // defined in src/save.c
 u32 LONG_CALL Sav2_Misc_sizeof(void);
-void LONG_CALL InitStoredMons(struct SAVE_MISC_DATA *saveMiscData);
+void LONG_CALL InitExpandedMiscData(struct SAVE_MISC_DATA *saveMiscData);
 void LONG_CALL Sav2_Misc_init_new_fields(struct SAVE_MISC_DATA *saveMiscData);
 u32 LONG_CALL sqrt(u32 num);
 

@@ -1477,6 +1477,8 @@ struct BattleStruct {
 
                BOOL gemBoostingMove;
                MoveConditionsFlags moveConditionsFlags[CLIENT_MAX];
+               TypeMasteryBattleState typeMastery[CLIENT_MAX];
+               BOOL typeMasteryInitialized;
 };
 
 enum {

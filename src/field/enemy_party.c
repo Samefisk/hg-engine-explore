@@ -504,11 +504,6 @@ void MakeTrainerPokemonParty(struct BATTLE_PARAM *bp, int num, int heapID)
 
     gf_srand(seed_tmp);
 
-#ifdef DEBUG_BATTLE_SCENARIOS
-    // Override parties with test scenario if enabled
-    TestBattle_OverrideParties(bp);
-#endif
-
     // Change battle forms for player party
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 6; j++) {

@@ -13,6 +13,9 @@
 #include "../../include/constants/species.h"
 #include "../../include/q412.h"
 
+#ifdef DEBUG_BATTLE_SCENARIOS
+#include "../../include/test_battle.h"
+#endif
 
 
 // function declarations
@@ -766,6 +769,23 @@ void CalcDamageOverall(void *bw, struct BattleStruct *sp) {
             debug_printf("[CalcBaseDamage] finalModifier: %d\n", finalModifier);
 #endif
         }
+    }
+
+    // 6.9.17 Water Type Mastery: Rising Tide
+    u8 waterMasteryBonus = TypeMastery_GetWaterDamageBonusPercent(sp, attacker, type);
+#ifdef DEBUG_BATTLE_SCENARIOS
+    TestBattle_RecordTypeMasteryDamageBonus(attacker, waterMasteryBonus);
+#endif
+    if (waterMasteryBonus != 0) {
+        u32 waterMasteryModifier = UQ412__1_0
+            + ((waterMasteryBonus * UQ412__1_0) / 100);
+        finalModifier = QMul_RoundUp(finalModifier, waterMasteryModifier);
+#ifdef DEBUG_DAMAGE_CALC
+        debug_printf("\n=================\n");
+        debug_printf("[CalcBaseDamage] 6.9.17 Water Type Mastery: Rising Tide\n");
+        debug_printf("[CalcBaseDamage] bonus: %d%%\n", waterMasteryBonus);
+        debug_printf("[CalcBaseDamage] finalModifier: %d\n", finalModifier);
+#endif
     }
 
     damage = QMul_RoundDown(damage, finalModifier);
