@@ -414,6 +414,7 @@ struct PartyMenu {
 u8 LONG_CALL MoveId_GetFieldEffectId(u16 move);
 void LONG_CALL PartyMenu_ContextMenuAddFieldMove(struct PartyMenu *wk, u16 move, u8 index);
 BOOL LONG_CALL FieldSystem_MapIsBattleTowerMultiPartnerSelectRoom(void *fieldSystem);
+void LONG_CALL PrintUIntOnWindow(void *messagePrinter, u32 number, u32 digits, u32 printingMode, void *window, u32 x, u32 y);
 
 u8 LONG_CALL sub_0207B0B0(struct PartyMenu *wk, u8 *buf);
 
