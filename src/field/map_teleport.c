@@ -1,10 +1,13 @@
 #include "../../include/map_teleport.h"
 
 #include "../../include/constants/buttons.h"
+#include "../../include/constants/file.h"
 #include "../../include/constants/maps.h"
 #include "../../include/constants/sndseq.h"
 #include "../../include/io_reg.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overlay.h"
+#include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/script.h"
 #include "../../include/sound.h"
 #include "../../include/task.h"
@@ -37,8 +40,9 @@ BOOL LONG_CALL Task_ScriptWarp(TaskManager *taskman);
 
 static BOOL sMapTeleportRequestPending;
 static u8 sMapTeleportDebugWasHeld;
-static u16 sMapTeleportPendingFrames;
+static u8 sMapTeleportPendingFrames;
 static MapTeleportDestination sMapTeleportPendingDestination;
+static u8 sOverworldWildPlayerFrameServiceActive;
 
 static MapTeleportResult MapTeleport_OverlayRequest(
     FieldSystem *fieldSystem,
@@ -46,6 +50,24 @@ static MapTeleportResult MapTeleport_OverlayRequest(
 static BOOL MapTeleport_StartPlainWarpTask(
     FieldSystem *fieldSystem,
     const MapTeleportDestination *destination);
+
+static void MapTeleport_PollOverworldWildPlayerFrame(FieldSystem *fieldSystem)
+{
+    const OverworldWildSpawnsOverlayEntry *entry;
+
+    if (!sOverworldWildPlayerFrameServiceActive
+        && (reg_PAD_KEYINPUT & PAD_BUTTON_R) != 0) {
+        return;
+    }
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
+        return;
+    }
+    entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
+    sOverworldWildPlayerFrameServiceActive = entry->onPlayerFrame(
+        fieldSystem,
+        &sOverworldWildSpawnState);
+}
 
 MapTeleportDestination gMapTeleportDebugDestination
     __attribute__((section(".map_teleport_debug_destination"), used)) = {
@@ -515,6 +537,8 @@ static void MapTeleport_PollDebugImpl(FieldSystem *fieldSystem)
     MapTeleportResult result;
     u16 count;
     u16 destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
+
+    MapTeleport_PollOverworldWildPlayerFrame(fieldSystem);
 
     if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
         MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);

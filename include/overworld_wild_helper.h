@@ -7,7 +7,7 @@
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 12
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 17
 
 #define OW_WILD_HELPER_DIRECTION_NONE 0xFF
 #define OW_WILD_HELPER_DIRECTION_UP 0
@@ -22,6 +22,22 @@
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT 0x01
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED 0x02
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_FALLBACK 0x04
+
+#define OW_WILD_HELPER_THROW_TARGET_NONE 0
+#define OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG 0x80
+#define OW_WILD_HELPER_THROW_TARGET_SLOT_MASK 0x3F
+#define OW_WILD_HELPER_THROW_TARGET_ENCODE(slot) ((u8)((slot) + 1))
+#define OW_WILD_HELPER_THROW_TARGET_ENCODE_CARRIED(slot) \
+    ((u8)(OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG | OW_WILD_HELPER_THROW_TARGET_ENCODE(slot)))
+#define OW_WILD_HELPER_THROW_TARGET_DECODE(value) \
+    ((u8)(((value) & OW_WILD_HELPER_THROW_TARGET_SLOT_MASK) - 1))
+#define OW_WILD_HELPER_THROW_RESERVATION_DECISIONS 120
+
+typedef enum OverworldWildHelperPickupThrowQuery {
+    OW_WILD_HELPER_PICKUP_THROW_QUERY_VALID,
+    OW_WILD_HELPER_PICKUP_THROW_QUERY_STABLE,
+    OW_WILD_HELPER_PICKUP_THROW_QUERY_RESERVED_NEAR,
+} OverworldWildHelperPickupThrowQuery;
 
 typedef struct OverworldWildRolledEncounter {
     u32 personality;
@@ -53,7 +69,6 @@ typedef struct OverworldWildPreparedSpawn {
     int savedShinySlot;
     u8 behaviorClass;
     u8 shiny;
-    u8 shinyCounterEligible;
     u8 behaviorLimitKey;
 } OverworldWildPreparedSpawn;
 
@@ -254,6 +269,53 @@ typedef BOOL (*OverworldWildHelperValidateDeferredBattleFunc)(
     OverworldWildSpawnState *state,
     int slot,
     u16 encounterGeneration);
+typedef BOOL (*OverworldWildHelperTryGetEncounterDataIdForMapFunc)(
+    u16 mapId,
+    int *encounterDataId);
+typedef BOOL (*OverworldWildHelperTryLoadEncounterDataFunc)(
+    u16 mapId,
+    int encounterDataId,
+    void *dest,
+    int size);
+typedef void (*OverworldWildHelperPrepareCaptureTargetFunc)(
+    OverworldWildSpawnState *state,
+    int slot);
+typedef BOOL (*OverworldWildHelperTickPlayerBallProjectileFunc)(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    OverworldWildPresentationState *presentation,
+    OverworldWildDespawnTelemetry *telemetry,
+    OverworldWildHelperResetSlotFunc resetSlot,
+    OverworldWildHelperPrepareCaptureTargetFunc prepareCaptureTarget);
+typedef void (*OverworldWildHelperCancelPlayerBallProjectileFunc)(
+    FieldSystem *fieldSystem);
+typedef BOOL (*OverworldWildHelperIsPlayerBallProjectileActiveFunc)(void);
+typedef void (*OverworldWildHelperCleanupResidentDataFunc)(
+    FieldSystem *fieldSystem);
+typedef u16 (*OverworldWildHelperClearPickupThrowStateFunc)(
+    OverworldWildSpawnState *state,
+    OverworldWildThrowState *throwState,
+    OverworldWildPresentationState *presentation,
+    int slot);
+typedef BOOL (*OverworldWildHelperQueryPickupThrowTargetFunc)(
+    OverworldWildSpawnState *state,
+    OverworldWildThrowState *throwState,
+    int carrierSlot,
+    int targetSlot,
+    u8 query,
+    u16 unstableMask);
+typedef BOOL (*OverworldWildHelperTryStartPickupThrowActionFunc)(
+    OverworldWildSpawnState *state,
+    OverworldWildThrowState *throwState,
+    OverworldWildPresentationState *presentation,
+    int slot,
+    u16 unstableMask);
+typedef BOOL (*OverworldWildHelperStartCarriedThrowTargetFunc)(
+    OverworldWildSpawnState *state,
+    OverworldWildThrowState *throwState,
+    OverworldWildPresentationState *presentation,
+    int carrierSlot,
+    int targetSlot);
 
 typedef struct OverworldWildHelperOverlayEntry {
     u32 magic;
@@ -271,6 +333,16 @@ typedef struct OverworldWildHelperOverlayEntry {
     OverworldWildHelperFinishBattleFunc finishBattle;
     OverworldWildHelperCreatePresentationObjectFunc createPresentationObject;
     OverworldWildHelperValidateDeferredBattleFunc validateDeferredBattle;
+    OverworldWildHelperTryGetEncounterDataIdForMapFunc tryGetEncounterDataIdForMap;
+    OverworldWildHelperTryLoadEncounterDataFunc tryLoadEncounterData;
+    OverworldWildHelperTickPlayerBallProjectileFunc tickPlayerBallProjectile;
+    OverworldWildHelperCancelPlayerBallProjectileFunc cancelPlayerBallProjectile;
+    OverworldWildHelperIsPlayerBallProjectileActiveFunc isPlayerBallProjectileActive;
+    OverworldWildHelperCleanupResidentDataFunc cleanupResidentData;
+    OverworldWildHelperClearPickupThrowStateFunc clearPickupThrowState;
+    OverworldWildHelperQueryPickupThrowTargetFunc queryPickupThrowTarget;
+    OverworldWildHelperTryStartPickupThrowActionFunc tryStartPickupThrowAction;
+    OverworldWildHelperStartCarriedThrowTargetFunc startCarriedThrowTarget;
 } OverworldWildHelperOverlayEntry;
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY \

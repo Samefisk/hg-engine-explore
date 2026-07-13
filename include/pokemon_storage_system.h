@@ -63,6 +63,7 @@ struct PACKED PokemonStorageSystem {
 };
 
 BOOL PCStorage_PlaceMonInBoxFirstEmptySlot(PCStorage* storage, u32 boxno, struct BoxPokemon *boxMon);
+BOOL LONG_CALL PCStorage_PlaceMonInFirstEmptySlotInAnyBox(PCStorage *storage, struct BoxPokemon *boxMon);
 void PCStorage_SetBoxModified(PCStorage *storage, u8 boxno);
 
 #endif // INCLUDE_POKEMON_STORAGE_SYSTEM_H
