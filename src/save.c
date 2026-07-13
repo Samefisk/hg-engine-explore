@@ -21,7 +21,7 @@ u32 LONG_CALL Sav2_Misc_sizeof(void)
 }
 
 
-void LONG_CALL InitExpandedMiscData(struct SAVE_MISC_DATA *saveMiscData)
+static void InitExpandedMiscData(struct SAVE_MISC_DATA *saveMiscData)
 {
 #ifdef ALLOW_SAVE_CHANGES
 

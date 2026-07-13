@@ -427,7 +427,6 @@ void *LONG_CALL PROC_GetWork(void *proc);
 
 // defined in src/save.c
 u32 LONG_CALL Sav2_Misc_sizeof(void);
-void LONG_CALL InitExpandedMiscData(struct SAVE_MISC_DATA *saveMiscData);
 void LONG_CALL Sav2_Misc_init_new_fields(struct SAVE_MISC_DATA *saveMiscData);
 u32 LONG_CALL sqrt(u32 num);
 
