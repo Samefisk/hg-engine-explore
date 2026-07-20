@@ -32,6 +32,18 @@ Builds and tests are opt-in unless the agent needs a build to validate its own w
 - When tests are requested, use the relevant test skill for this repo.
 - If a coding task finishes without an authorized build or test run, report that no build or tests were run because the keyword gate was not opened.
 
+## Local HeartGold Decompilation Reference
+
+When it is present, use `.codex-reference/pokeheartgold/` as the read-only vanilla HeartGold source reference for reverse-engineering and implementation work. It is a local, Git-excluded checkout of `pret/pokeheartgold`, and the local USA HeartGold ROM matches that project's expected SHA-1.
+
+- Prefer the named C/assembly source in `.codex-reference/pokeheartgold/` over raw Ghidra pseudocode.
+- Do not edit, stage, commit, or copy ROM-derived/generated artifacts from `.codex-reference/` into the project.
+- Read `.codex-reference/README.local.md` for the validated revision, pinned reference commit, important paths, and optional Ghidra workflow.
+- Search the reference for the relevant application, field, battle, save, overlay, or system code before inferring vanilla behavior from the hg-engine implementation alone.
+- Use Ghidra only for unresolved assembly, exact address matching, or behavior absent from the source reference. If Ghidra is needed, use an NDS-aware loader such as NTRGhidra so ARM9 overlays are included; importing only `arm9.bin` is insufficient for systems implemented in overlays.
+- For stock ARM9 binary analysis, prefer `build/arm9.bin`; `base/arm9.bin` may already contain hg-engine patches.
+- Do not run `make dumprom` merely to create a Ghidra reference. It begins with a clean and performs broad extraction/migration work.
+
 ## Agent Pool Usage
 
 Actively use agents and push them to the max. Default to helper-agent parallelism, and treat solo work as the exception for tiny, single-file, obvious edits.
