@@ -2808,7 +2808,8 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
         for (overrideProfileIndex = 0;
              overrideProfileIndex < OWBD_OVERRIDE_PROFILE_COUNT;
              overrideProfileIndex++) {
-            if (!OverworldWildSpawns_OverrideProfileTargetsContext(
+            if (overrideProfileIndex != forcedOverrideProfileIndex
+                && !OverworldWildSpawns_OverrideProfileTargetsContext(
                     behaviorData,
                     context,
                     &behaviorData->overrideProfiles[overrideProfileIndex])) {
@@ -2824,17 +2825,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
                     + overrideProfileIndex);
             }
         }
-    }
-
-    if (forcedOverrideProfileIndex >= 0
-        && forcedOverrideProfileIndex < OWBD_OVERRIDE_PROFILE_COUNT) {
-        /* A dedicated forced profile is authoritative, not a species/class patch. */
-        memset(&profile, 0, sizeof(profile));
-        OverworldWildSpawns_ApplyBehaviorOverride(
-            &profile,
-            &behaviorData->overrideProfiles[forcedOverrideProfileIndex]);
-        behaviorLimitKey = (u8)(OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE
-            + forcedOverrideProfileIndex);
     }
 
     if (profile.attentiveSpeed == 0) {
@@ -16199,7 +16189,8 @@ static u8 OverworldWildSpawns_CountActiveBehaviorLimitKey(
     }
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        if (state->spawns[i].active
+        if (i != OW_WILD_FOLLOWER_SLOT
+            && state->spawns[i].active
             && OW_WILD_RUNTIME(state)->movementBehaviorLimitKeys[i] == behaviorLimitKey) {
             count++;
         }
