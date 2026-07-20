@@ -8,7 +8,6 @@
 #include "../include/constants/species.h"
 #include "../include/battle.h"
 #include "../include/map_teleport.h"
-#include "../include/map_events_internal.h"
 #include "../include/overlay.h"
 #include "../include/script.h"
 #include "../include/task.h"
@@ -31,10 +30,6 @@ OverworldWildSpawnState sOverworldWildSpawnState = {
 
 static u32 sBattleHpPersonality;
 static u32 sBattlePersonalityOverrideValue;
-MapTeleportTemporaryReturnState gMapTeleportTemporaryReturnState
-    __attribute__((section(".map_teleport_runtime"), aligned(2))) = {0};
-MapTeleportTransitionRuntimeState gMapTeleportTransitionState
-    __attribute__((section(".map_teleport_runtime"), aligned(2))) = {0};
 static FieldSystem *sFieldReadyTaskFieldSystem;
 static u16 sFieldReadyTaskMapId;
 OverworldWildResidentData gOverworldWildResidentData;
@@ -86,11 +81,28 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         return;
     }
     if (sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
-        sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
-        sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
-        if (sOverworldWildSpawnState.mapId != fieldSystem->location->mapId) {
-            sOverworldWildSpawnState.mapId = MAP_NOTHING;
+        OverworldFieldMapHeaderChangeResult transitionResult;
+        u16 previousMapId = sFieldReadyTaskMapId;
+        u16 currentMapId = (u16)fieldSystem->location->mapId;
+
+        transitionResult = OverworldFieldService_OnMapHeaderChanged(
+            fieldSystem,
+            &sOverworldWildSpawnState,
+            previousMapId,
+            currentMapId);
+        if (transitionResult == OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE) {
+            /*
+             * Do not abandon KEEP actors while overlay 131 is cold. Keeping
+             * the old task map id makes this transition retry before any
+             * player-step processing can observe a half-migrated context.
+             */
+            gOverworldWildFieldIdleRearmPending |=
+                OW_WILD_FIELD_IDLE_REARM_PENDING
+                | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+            return;
         }
+
+        sFieldReadyTaskMapId = currentMapId;
         return;
     }
     if (sOverworldWildSpawnState.battleGraceSteps != 0) {
@@ -99,9 +111,12 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     }
     if (gOverworldWildFieldIdleRearmPending != 0) {
         (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
+        if (gOverworldWildFieldIdleRearmPending != 0) {
+            return;
+        }
     }
 
-    MapTeleport_PollDebug(fieldSystem);
+    OverworldFieldService_PollFrame(fieldSystem);
 #if OW_WILD_FIELD_READY_INITIAL_SPAWN
     OverworldWildSpawns_OnPlayerStep(fieldSystem);
 #endif

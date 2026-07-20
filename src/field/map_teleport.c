@@ -3,55 +3,363 @@
 #include "../../include/constants/buttons.h"
 #include "../../include/constants/file.h"
 #include "../../include/constants/maps.h"
-#include "../../include/constants/sndseq.h"
+#include "../../include/constants/species.h"
+#include "../../include/config.h"
 #include "../../include/io_reg.h"
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
+#include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_spawns_internal.h"
-#include "../../include/script.h"
-#include "../../include/sound.h"
-#include "../../include/task.h"
 
-#define MAP_TELEPORT_PENDING_TIMEOUT_FRAMES 240
-#define MAP_TELEPORT_DEBUG_KEYS (PAD_BUTTON_L | PAD_BUTTON_R)
-#define MAP_TELEPORT_BLACK_TRANSITION_SE SEQ_SE_DP_TELE
-#define MAP_TELEPORT_BLACK_FADE_STEPS 1
-#define MAP_TELEPORT_MASTER_BRIGHT_DARKEN 0x8000
-#define MAP_TELEPORT_MASTER_BRIGHT_MAX 16
-
-typedef struct MapTeleportPlainWarpTaskEnv {
-    u32 state;
-    Location location;
-} MapTeleportPlainWarpTaskEnv;
-
-typedef enum MapTeleportTransitionState {
-    MAP_TELEPORT_TRANSITION_INACTIVE = 0,
-    MAP_TELEPORT_TRANSITION_FADE_OUT,
-    MAP_TELEPORT_TRANSITION_START_WARP,
-    MAP_TELEPORT_TRANSITION_WAIT_WARP,
-    MAP_TELEPORT_TRANSITION_FADE_IN,
-} MapTeleportTransitionState;
-
-TaskManager *LONG_CALL FieldSystem_CreateTask(
-    FieldSystem *fieldSystem,
-    TaskFunc taskFunc,
-    void *env);
-BOOL LONG_CALL Task_ScriptWarp(TaskManager *taskman);
-
-static BOOL sMapTeleportRequestPending;
-static u8 sMapTeleportDebugWasHeld;
-static u8 sMapTeleportPendingFrames;
-static MapTeleportDestination sMapTeleportPendingDestination;
 static u8 sOverworldWildPlayerFrameServiceActive;
 
-static MapTeleportResult MapTeleport_OverlayRequest(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination);
-static BOOL MapTeleport_StartPlainWarpTask(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination);
+static BOOL OverworldFieldService_TryGetEncounterDataIdForMapImpl(
+    u16 mapId,
+    int *encounterDataId)
+{
+    const OverworldWildBehaviorOverlayEntry *behaviorEntry;
+    const OverworldWildEncounterLookupDataEntry *lookupEntry;
+    u32 i;
 
-static void MapTeleport_PollOverworldWildPlayerFrame(FieldSystem *fieldSystem)
+    if (mapId == MAP_NOTHING
+        || encounterDataId == NULL
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        || !OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE(
+            OVERWORLD_WILD_HELPER_OWNED_BEHAVIOR)) {
+        return FALSE;
+    }
+
+    behaviorEntry = OVERWORLD_WILD_BEHAVIOR_OVERLAY_ENTRY;
+    lookupEntry = OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY;
+    if (behaviorEntry->magic != OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC
+        || behaviorEntry->version != OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION
+        || behaviorEntry->size != sizeof(*behaviorEntry)
+        || lookupEntry->mapIds == NULL
+        || lookupEntry->dataIds == NULL
+        || lookupEntry->count != OWED_ENCOUNTER_AREA_COUNT) {
+        return FALSE;
+    }
+
+    for (i = 0; i < lookupEntry->count; i++) {
+        if (lookupEntry->mapIds[i] == mapId) {
+            *encounterDataId = lookupEntry->dataIds[i];
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL OverworldFieldService_IsCurrentPrimaryObject(
+    MapObjectMan *manager,
+    const OverworldWildSpawn *spawn,
+    int slot,
+    u16 previousMapId)
+{
+    LocalMapObject *object;
+    u32 objectAddress;
+    u32 objectsStart;
+    u32 objectsEnd;
+
+    if (!spawn->active) {
+        return TRUE;
+    }
+    object = spawn->object;
+    if (object == NULL || manager == NULL || manager->objects == NULL) {
+        return FALSE;
+    }
+
+    objectAddress = (u32)object;
+    objectsStart = (u32)manager->objects;
+    objectsEnd = objectsStart
+        + manager->object_count * sizeof(LocalMapObject);
+    return objectAddress >= objectsStart
+        && objectAddress < objectsEnd
+        && (objectAddress - objectsStart) % sizeof(LocalMapObject) == 0
+        && spawn->mapId == previousMapId
+        && spawn->objectId == OW_WILD_OBJECT_ID_START + slot
+        && (object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+        && (object->flags & MAPOBJECTFLAG_KEEP) != 0
+        && object->id == OW_WILD_OBJECT_ID_START + slot
+        && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT
+        && object->unkC == previousMapId;
+}
+
+static BOOL OverworldFieldService_IsEnabledMap(u16 mapId)
+{
+    int encounterDataId;
+
+    /*
+     * Encounter lookup is the authority for enabled destinations. If helper
+     * validation is unavailable, preservation fails closed and the resident
+     * caller takes its destructive transition fallback. The resolver's owned-
+     * behavior validation authenticates the complete helper ABI, including
+     * normalizeThrowPresentation used later by the transition path.
+     */
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        return FALSE;
+    }
+
+    return OverworldFieldService_TryGetEncounterDataIdForMap(
+        mapId,
+        &encounterDataId);
+}
+
+static BOOL OverworldFieldService_PrepareMapHeaderChange(
+    OverworldWildSpawnState *state,
+    OverworldWildMapHeaderChangeMode mode)
+{
+    const OverworldWildSpawnsOverlayEntry *entry;
+
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        return FALSE;
+    }
+    entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
+    if (entry->prepareMapHeaderChange == NULL) {
+        return FALSE;
+    }
+    entry->prepareMapHeaderChange(state, mode);
+    return TRUE;
+}
+
+static void OverworldFieldService_TransitionPlayerBall(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    int command)
+{
+    const OverworldWildHelperOverlayEntry *entry;
+
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
+        return;
+    }
+    entry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
+    if (entry->magic == OVERWORLD_WILD_HELPER_OVERLAY_MAGIC
+        && entry->version == OVERWORLD_WILD_HELPER_OVERLAY_VERSION
+        && entry->size == sizeof(*entry)
+        && entry->normalizeThrowPresentation != NULL) {
+        entry->normalizeThrowPresentation(fieldSystem, state, command);
+    }
+}
+
+static void OverworldFieldService_DiscardRetainedPrimaries(
+    MapObjectMan *manager,
+    OverworldWildSpawnState *state)
+{
+    LocalMapObject *object;
+    u32 objectIndex;
+    int slot;
+    BOOL overlayPrepared;
+
+    overlayPrepared = OverworldFieldService_PrepareMapHeaderChange(
+        state,
+        OW_WILD_MAP_HEADER_CHANGE_DISCARD);
+    if (!overlayPrepared) {
+        OverworldFieldService_TransitionPlayerBall(
+            gFieldSysPtr,
+            state,
+            OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_DISCARD);
+    }
+
+    /*
+     * Scan the authenticated manager instead of trusting a possibly stale
+     * logical pointer. The high object IDs and script ID are owned by this
+     * system, so this also removes a duplicated retained presentation.
+     */
+    if (manager != NULL && manager->objects != NULL) {
+        for (objectIndex = 0; objectIndex < manager->object_count; objectIndex++) {
+            object = &manager->objects[objectIndex];
+            if ((object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+                && object->id >= OW_WILD_OBJECT_ID_START
+                && object->id < OW_WILD_OBJECT_ID_START + OW_WILD_MAX_SPAWNS
+                && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT
+                && (object->flags & MAPOBJECTFLAG_KEEP) != 0) {
+                DeleteMapObject(object);
+            }
+        }
+    }
+
+    if (state == NULL) {
+        return;
+    }
+    state->battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
+    gOverworldWildResidentData.pendingFlags |=
+        OW_WILD_FIELD_IDLE_REARM_PENDING
+        | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+    if (!overlayPrepared) {
+        /*
+         * Keep encounter records until overlay 149 next runs its ordinary
+         * map-change clear; that path reserves and persists loaded shinies.
+         */
+        for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+            state->spawns[slot].object = NULL;
+        }
+        state->mapId = MAP_NOTHING;
+        state->captureTargetMask = 0;
+        state->pendingSlot = -1;
+        state->movementQueuedBattleSlot = -1;
+        state->pendingSpecies = SPECIES_NONE;
+        state->pendingLevel = 0;
+        state->pendingShiny = FALSE;
+        state->pendingMapGeneration = 0;
+        state->pendingEncounterGeneration = 0;
+        state->presentationRestorePending = FALSE;
+        return;
+    }
+
+    memset(state->spawns, 0, sizeof(state->spawns));
+    state->mapGeneration++;
+    if (state->mapGeneration == 0) {
+        state->mapGeneration = 1;
+    }
+    state->mapId = MAP_NOTHING;
+    state->mapObjectMan = NULL;
+    state->mapObjects = NULL;
+    state->movementFieldSystem = NULL;
+    state->pendingSlot = -1;
+    state->movementQueuedBattleSlot = -1;
+    state->pendingPersonality = 0;
+    state->pendingSpecies = SPECIES_NONE;
+    state->pendingLevel = 0;
+    state->pendingShiny = FALSE;
+    state->pendingMapGeneration = 0;
+    state->pendingEncounterGeneration = 0;
+    state->captureTargetMask = 0;
+    state->presentationRestorePending = FALSE;
+}
+
+static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChangedImpl(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    u16 previousMapId,
+    u16 currentMapId)
+{
+    const OverworldWildHelperOverlayEntry *helperEntry;
+    LocalMapObject *object;
+    MapObjectMan *manager;
+    u32 objectIndex;
+    int slot;
+
+    if (fieldSystem == NULL
+        || state == NULL
+        || previousMapId == currentMapId
+        || fieldSystem->location == NULL) {
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
+    }
+
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (fieldSystem->location->mapId != currentMapId
+        || fieldSystem->playerAvatar == NULL
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
+        || OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->prepareMapHeaderChange == NULL
+        || manager == NULL
+        || manager->objects == NULL
+        || state->mapId != previousMapId
+        || state->mapObjectMan != manager
+        || state->mapObjects != manager->objects) {
+        OverworldFieldService_DiscardRetainedPrimaries(
+            manager,
+            state);
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+    }
+
+    if (!OverworldFieldService_IsEnabledMap(currentMapId)) {
+        OverworldFieldService_DiscardRetainedPrimaries(
+            manager,
+            state);
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+    }
+    helperEntry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
+
+    for (objectIndex = 0; objectIndex < manager->object_count; objectIndex++) {
+        object = &manager->objects[objectIndex];
+        if ((object->flags & (MAPOBJECTFLAG_ACTIVE | MAPOBJECTFLAG_KEEP))
+                != (MAPOBJECTFLAG_ACTIVE | MAPOBJECTFLAG_KEEP)
+            || object->id < OW_WILD_OBJECT_ID_START
+            || object->id >= OW_WILD_OBJECT_ID_START + OW_WILD_MAX_SPAWNS
+            || object->scriptId != OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
+            continue;
+        }
+        slot = object->id - OW_WILD_OBJECT_ID_START;
+        if (!state->spawns[slot].active
+            || state->spawns[slot].object != object) {
+            OverworldFieldService_DiscardRetainedPrimaries(
+                manager,
+                state);
+            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+        }
+    }
+
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        if (!OverworldFieldService_IsCurrentPrimaryObject(
+                manager,
+                &state->spawns[slot],
+                slot,
+                previousMapId)) {
+            OverworldFieldService_DiscardRetainedPrimaries(
+                manager,
+                state);
+            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+        }
+    }
+
+    /* The overlay owns transient task/effect cleanup and far-sample reset. */
+    (void)OverworldFieldService_PrepareMapHeaderChange(
+        state,
+        OW_WILD_MAP_HEADER_CHANGE_PRESERVE);
+
+    state->mapGeneration++;
+    if (state->mapGeneration == 0) {
+        state->mapGeneration = 1;
+    }
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        OverworldWildSpawn *spawn = &state->spawns[slot];
+
+        if (!spawn->active) {
+            continue;
+        }
+        spawn->mapId = currentMapId;
+        spawn->object->unkC = currentMapId;
+    }
+
+    state->mapId = currentMapId;
+    state->mapObjectMan = manager;
+    state->mapObjects = manager->objects;
+    state->movementFieldSystem = fieldSystem;
+    state->pendingSlot = -1;
+    state->movementQueuedBattleSlot = -1;
+    state->pendingMapGeneration = 0;
+    state->pendingEncounterGeneration = 0;
+    state->battleGraceSteps = 0;
+    state->presentationRestorePending = FALSE;
+    (void)OverworldFieldService_PrepareMapHeaderChange(
+        state,
+        OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE);
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        if (!state->spawns[slot].active) {
+            continue;
+        }
+        if (state->movementBehaviorClasses[slot]
+            == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+            state->movementBehaviorClasses[slot] =
+                OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+        }
+        helperEntry->normalizeThrowPresentation(fieldSystem, state, slot);
+    }
+    helperEntry->normalizeThrowPresentation(
+        fieldSystem,
+        state,
+        OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME);
+    sOverworldWildPlayerFrameServiceActive = TRUE;
+    return OVERWORLD_FIELD_MAP_HEADER_CHANGE_PRESERVED;
+}
+
+/*
+ * Preserve the old field-overlay frame pump: the R-button fast path avoids
+ * loading overlay 149 until it is needed, while an in-progress player-ball
+ * action keeps receiving frames after R is released.
+ */
+static void OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
 {
     const OverworldWildSpawnsOverlayEntry *entry;
 
@@ -63,537 +371,17 @@ static void MapTeleport_PollOverworldWildPlayerFrame(FieldSystem *fieldSystem)
         (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
         return;
     }
+
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
     sOverworldWildPlayerFrameServiceActive = entry->onPlayerFrame(
         fieldSystem,
         &sOverworldWildSpawnState);
 }
 
-MapTeleportDestination gMapTeleportDebugDestination
-    __attribute__((section(".map_teleport_debug_destination"), used)) = {
-    MAP_T20,
-    0x02B7,
-    0x018D,
-    MAP_TELEPORT_DIRECTION_SOUTH,
-};
-
-MapTeleportDebugStatus gMapTeleportDebugStatus
-    __attribute__((section(".map_teleport_debug_status"), used)) = {
-    MAP_TELEPORT_DEBUG_STATUS_MAGIC,
-    MAP_TELEPORT_DEBUG_STATUS_VERSION,
-    sizeof(MapTeleportDebugStatus),
-    MAP_NOTHING,
-    0,
-    0,
-    MAP_TELEPORT_DIRECTION_SOUTH,
-    MAP_TELEPORT_RESULT_INVALID_FIELD,
-    0,
-    FALSE,
-    MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE,
-};
-
-static BOOL MapTeleport_IsMapIdValid(u16 mapId)
-{
-    return mapId > MAP_DIRECT4 && mapId <= MAP_T10R0801;
-}
-
-static BOOL MapTeleport_IsDirectionValid(u16 direction)
-{
-    return direction <= MAP_TELEPORT_DIRECTION_EAST;
-}
-
-static BOOL MapTeleport_DestinationUsesWarpId(
-    const MapTeleportDestination *destination)
-{
-    return destination != NULL
-        && destination->y == MAP_TELEPORT_DESTINATION_WARP_ID_Y;
-}
-
-static BOOL MapTeleport_IsDestinationValid(const MapTeleportDestination *destination)
-{
-    return destination != NULL
-        && MapTeleport_IsMapIdValid(destination->mapId)
-        && MapTeleport_IsDirectionValid(destination->direction);
-}
-
-static BOOL MapTeleport_IsFieldStructReady(FieldSystem *fieldSystem)
-{
-    if (fieldSystem == NULL
-        || fieldSystem != gFieldSysPtr
-        || fieldSystem->location == NULL
-        || fieldSystem->map_events == NULL
-        || fieldSystem->map_matrix == NULL) {
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-static BOOL MapTeleport_CurrentLocationDiffersFromTemporaryReturn(
-    FieldSystem *fieldSystem,
-    const MapTeleportTemporaryReturnState *temporaryReturn)
-{
-    return fieldSystem->location->mapId != temporaryReturn->returnMapId
-        || fieldSystem->location->x != temporaryReturn->returnX
-        || fieldSystem->location->z != temporaryReturn->returnY;
-}
-
-static u16 MapTeleport_AbsDiffU16(u16 a, u16 b)
-{
-    return a > b ? a - b : b - a;
-}
-
-static void MapTeleport_ArmTemporaryReturn(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *target,
-    MapTeleportTemporaryReturnState *temporaryReturn)
-{
-    if (target == NULL || temporaryReturn == NULL) {
-        return;
-    }
-
-    temporaryReturn->returnMapId = fieldSystem->location->mapId;
-    temporaryReturn->returnX = fieldSystem->location->x;
-    temporaryReturn->returnY = fieldSystem->location->z;
-    temporaryReturn->targetMapId = target->mapId;
-    temporaryReturn->lastX = 0;
-    temporaryReturn->lastY = 0;
-    temporaryReturn->returnDirection = fieldSystem->location->direction;
-    temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL;
-}
-
-static void MapTeleport_PlayBlackTransitionSE(void)
-{
-    GF_Snd_LoadSeqEx(
-        MAP_TELEPORT_BLACK_TRANSITION_SE,
-        NNS_SND_ARC_LOAD_ALL);
-    StopSE(MAP_TELEPORT_BLACK_TRANSITION_SE);
-    PlaySE(MAP_TELEPORT_BLACK_TRANSITION_SE);
-}
-
-static void MapTeleport_ConfirmTemporaryReturnArrival(
-    FieldSystem *fieldSystem,
-    MapTeleportTemporaryReturnState *temporaryReturn)
-{
-    if (temporaryReturn == NULL
-        || temporaryReturn->stepState
-            != MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL
-        || !MapTeleport_IsFieldStructReady(fieldSystem)) {
-        return;
-    }
-
-    if (fieldSystem->location->mapId != temporaryReturn->targetMapId
-        || !MapTeleport_CurrentLocationDiffersFromTemporaryReturn(
-            fieldSystem,
-            temporaryReturn)) {
-        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
-        return;
-    }
-
-    temporaryReturn->lastX = fieldSystem->location->x;
-    temporaryReturn->lastY = fieldSystem->location->z;
-    temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_STEPS + 1;
-}
-
-static BOOL MapTeleport_IsTemporaryReturnDestination(
-    const MapTeleportDestination *destination,
-    const MapTeleportTemporaryReturnState *temporaryReturn)
-{
-    return destination != NULL
-        && temporaryReturn != NULL
-        && !MapTeleport_DestinationUsesWarpId(destination)
-        && destination->mapId == temporaryReturn->returnMapId
-        && destination->x == temporaryReturn->returnX
-        && destination->y == temporaryReturn->returnY
-        && destination->direction == temporaryReturn->returnDirection;
-}
-
-static BOOL MapTeleport_TemporaryReturnBlocksRequest(
-    const MapTeleportDestination *destination)
-{
-    if (gMapTeleportTemporaryReturnState.stepState
-        <= MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL) {
-        return FALSE;
-    }
-
-    return !MapTeleport_IsTemporaryReturnDestination(
-        destination,
-        &gMapTeleportTemporaryReturnState);
-}
-
-static void MapTeleport_UpdateTemporaryReturn(
-    FieldSystem *fieldSystem,
-    MapTeleportTemporaryReturnState *temporaryReturn)
-{
-    MapTeleportDestination returnDestination;
-    MapTeleportResult result;
-
-    if (temporaryReturn == NULL
-        || temporaryReturn->stepState == MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE
-        || !MapTeleport_IsFieldStructReady(fieldSystem)
-        || fieldSystem->taskman != NULL) {
-        return;
-    }
-
-    if (temporaryReturn->stepState == MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL) {
-        return;
-    }
-
-    if (fieldSystem->location->mapId != temporaryReturn->targetMapId) {
-        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
-        return;
-    }
-
-    if (fieldSystem->location->x == temporaryReturn->lastX
-        && fieldSystem->location->z == temporaryReturn->lastY) {
-        return;
-    }
-
-    if (MapTeleport_AbsDiffU16(fieldSystem->location->x, temporaryReturn->lastX)
-        + MapTeleport_AbsDiffU16(fieldSystem->location->z, temporaryReturn->lastY) != 1) {
-        temporaryReturn->lastX = fieldSystem->location->x;
-        temporaryReturn->lastY = fieldSystem->location->z;
-        return;
-    }
-
-    if (temporaryReturn->stepState > 2) {
-        temporaryReturn->stepState--;
-        temporaryReturn->lastX = fieldSystem->location->x;
-        temporaryReturn->lastY = fieldSystem->location->z;
-        return;
-    }
-
-    returnDestination.mapId = temporaryReturn->returnMapId;
-    returnDestination.x = temporaryReturn->returnX;
-    returnDestination.y = temporaryReturn->returnY;
-    returnDestination.direction = temporaryReturn->returnDirection;
-    result = MapTeleport_OverlayRequest(fieldSystem, &returnDestination);
-    if (result != MAP_TELEPORT_RESULT_FIELD_BUSY) {
-        temporaryReturn->stepState = MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE;
-    }
-}
-
-static void MapTeleport_UpdateDebugStatus(FieldSystem *fieldSystem, BOOL ready)
-{
-    gMapTeleportDebugStatus.magic = MAP_TELEPORT_DEBUG_STATUS_MAGIC;
-    gMapTeleportDebugStatus.version = MAP_TELEPORT_DEBUG_STATUS_VERSION;
-    gMapTeleportDebugStatus.size = sizeof(MapTeleportDebugStatus);
-    gMapTeleportDebugStatus.ready = ready;
-
-    if (!ready || fieldSystem == NULL || fieldSystem->location == NULL) {
-        gMapTeleportDebugStatus.mapId = MAP_NOTHING;
-        gMapTeleportDebugStatus.x = 0;
-        gMapTeleportDebugStatus.y = 0;
-        gMapTeleportDebugStatus.direction = MAP_TELEPORT_DIRECTION_SOUTH;
-        gMapTeleportDebugStatus.destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
-        return;
-    }
-
-    gMapTeleportDebugStatus.mapId = fieldSystem->location->mapId;
-    gMapTeleportDebugStatus.x = fieldSystem->location->x;
-    gMapTeleportDebugStatus.y = fieldSystem->location->z;
-    gMapTeleportDebugStatus.direction = fieldSystem->location->direction;
-}
-
-static BOOL MapTeleport_PendingDestinationReached(FieldSystem *fieldSystem)
-{
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)
-        || fieldSystem->location->mapId != sMapTeleportPendingDestination.mapId) {
-        return FALSE;
-    }
-
-    return MapTeleport_DestinationUsesWarpId(&sMapTeleportPendingDestination)
-        || (fieldSystem->location->x == sMapTeleportPendingDestination.x
-            && fieldSystem->location->z == sMapTeleportPendingDestination.y);
-}
-
-static void MapTeleport_SetBlackFadeLevel(u8 level)
-{
-    u16 brightness;
-
-    if (level > MAP_TELEPORT_MASTER_BRIGHT_MAX) {
-        level = MAP_TELEPORT_MASTER_BRIGHT_MAX;
-    }
-
-    if (level == 0) {
-        brightness = 0;
-    } else {
-        brightness = MAP_TELEPORT_MASTER_BRIGHT_DARKEN | level;
-    }
-
-    reg_GX_MASTER_BRIGHT = brightness;
-    reg_GXS_DB_MASTER_BRIGHT = brightness;
-}
-
-static void MapTeleport_BeginTransition(void)
-{
-    gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_OUT;
-    gMapTeleportTransitionState.frame = 0;
-    MapTeleport_SetBlackFadeLevel(0);
-}
-
-static u8 MapTeleport_BlackFadeLevelFromFrame(u8 frame)
-{
-    if (frame == 0) {
-        return 0;
-    }
-
-    if (frame >= MAP_TELEPORT_BLACK_FADE_STEPS) {
-        return MAP_TELEPORT_MASTER_BRIGHT_MAX;
-    }
-
-    return (frame * MAP_TELEPORT_MASTER_BRIGHT_MAX
-        + MAP_TELEPORT_BLACK_FADE_STEPS - 1)
-        / MAP_TELEPORT_BLACK_FADE_STEPS;
-}
-
-static BOOL MapTeleport_FadeOutToBlack(void)
-{
-    if (gMapTeleportTransitionState.frame < MAP_TELEPORT_BLACK_FADE_STEPS) {
-        gMapTeleportTransitionState.frame++;
-    }
-
-    MapTeleport_SetBlackFadeLevel(
-        MapTeleport_BlackFadeLevelFromFrame(gMapTeleportTransitionState.frame));
-    return gMapTeleportTransitionState.frame >= MAP_TELEPORT_BLACK_FADE_STEPS;
-}
-
-static BOOL MapTeleport_FadeInFromBlack(void)
-{
-    if (gMapTeleportTransitionState.frame != 0) {
-        gMapTeleportTransitionState.frame--;
-    }
-
-    MapTeleport_SetBlackFadeLevel(
-        MapTeleport_BlackFadeLevelFromFrame(gMapTeleportTransitionState.frame));
-    return gMapTeleportTransitionState.frame == 0;
-}
-
-static BOOL MapTeleport_UpdateTransition(FieldSystem *fieldSystem)
-{
-    if (gMapTeleportTransitionState.state == MAP_TELEPORT_TRANSITION_INACTIVE) {
-        return FALSE;
-    }
-
-    if (!sMapTeleportRequestPending
-        && gMapTeleportTransitionState.state < MAP_TELEPORT_TRANSITION_WAIT_WARP) {
-        gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
-        gMapTeleportTransitionState.frame = 0;
-        MapTeleport_SetBlackFadeLevel(0);
-        return FALSE;
-    }
-
-    switch (gMapTeleportTransitionState.state) {
-    case MAP_TELEPORT_TRANSITION_FADE_OUT:
-        if (fieldSystem->taskman != NULL) {
-            return TRUE;
-        }
-
-        if (MapTeleport_FadeOutToBlack()) {
-            MapTeleport_PlayBlackTransitionSE();
-            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_START_WARP;
-        }
-        return TRUE;
-
-    case MAP_TELEPORT_TRANSITION_START_WARP:
-        if (fieldSystem->taskman != NULL) {
-            return TRUE;
-        }
-
-        MapTeleport_SetBlackFadeLevel(MAP_TELEPORT_MASTER_BRIGHT_MAX);
-        if (!MapTeleport_StartPlainWarpTask(fieldSystem, &sMapTeleportPendingDestination)) {
-            sMapTeleportRequestPending = FALSE;
-            sMapTeleportPendingFrames = 0;
-            gMapTeleportTransitionState.frame = MAP_TELEPORT_BLACK_FADE_STEPS;
-            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_IN;
-            return TRUE;
-        }
-        gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_WAIT_WARP;
-        return TRUE;
-
-    case MAP_TELEPORT_TRANSITION_WAIT_WARP:
-        MapTeleport_SetBlackFadeLevel(MAP_TELEPORT_MASTER_BRIGHT_MAX);
-        if (fieldSystem->taskman == NULL
-            && (MapTeleport_PendingDestinationReached(fieldSystem)
-                || !sMapTeleportRequestPending)) {
-            sMapTeleportRequestPending = FALSE;
-            sMapTeleportPendingFrames = 0;
-            MapTeleport_ConfirmTemporaryReturnArrival(
-                fieldSystem,
-                &gMapTeleportTemporaryReturnState);
-            gMapTeleportTransitionState.frame = MAP_TELEPORT_BLACK_FADE_STEPS;
-            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_FADE_IN;
-        }
-        return TRUE;
-
-    case MAP_TELEPORT_TRANSITION_FADE_IN:
-        if (MapTeleport_FadeInFromBlack()) {
-            gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
-        }
-        return TRUE;
-    }
-
-    gMapTeleportTransitionState.state = MAP_TELEPORT_TRANSITION_INACTIVE;
-    MapTeleport_SetBlackFadeLevel(0);
-    return FALSE;
-}
-
-static void MapTeleport_UpdatePending(FieldSystem *fieldSystem)
-{
-    if (!sMapTeleportRequestPending) {
-        return;
-    }
-
-    if (MapTeleport_PendingDestinationReached(fieldSystem)
-        && fieldSystem->taskman == NULL) {
-        sMapTeleportRequestPending = FALSE;
-        sMapTeleportPendingFrames = 0;
-        return;
-    }
-
-    if (sMapTeleportPendingFrames != 0) {
-        sMapTeleportPendingFrames--;
-        if (sMapTeleportPendingFrames == 0) {
-            sMapTeleportRequestPending = FALSE;
-        }
-    }
-}
-
-static BOOL MapTeleport_StartPlainWarpTask(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination)
-{
-    MapTeleportPlainWarpTaskEnv *env;
-
-    env = sys_AllocMemoryLo(11, sizeof(MapTeleportPlainWarpTaskEnv));
-    if (env == NULL) {
-        return FALSE;
-    }
-
-    env->state = 0;
-    env->location.mapId = destination->mapId;
-    if (MapTeleport_DestinationUsesWarpId(destination)) {
-        env->location.warpId = destination->x;
-        env->location.x = -1;
-        env->location.z = -1;
-    } else {
-        env->location.warpId = -1;
-        env->location.x = destination->x;
-        env->location.z = destination->y;
-    }
-    env->location.direction = destination->direction;
-    if (FieldSystem_CreateTask(fieldSystem, Task_ScriptWarp, env) == NULL) {
-        sys_FreeMemoryEz(env);
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-static MapTeleportResult MapTeleport_OverlayRequest(
-    FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination)
-{
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        return MAP_TELEPORT_RESULT_INVALID_FIELD;
-    }
-
-    MapTeleport_UpdatePending(fieldSystem);
-    if (gMapTeleportTransitionState.state != MAP_TELEPORT_TRANSITION_INACTIVE) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
-    if (sMapTeleportRequestPending) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
-    if (!MapTeleport_IsDestinationValid(destination)) {
-        return MAP_TELEPORT_RESULT_INVALID_DESTINATION;
-    }
-
-    if (MapTeleport_TemporaryReturnBlocksRequest(destination)) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
-    if (fieldSystem->taskman != NULL) {
-        return MAP_TELEPORT_RESULT_FIELD_BUSY;
-    }
-
-    sMapTeleportRequestPending = TRUE;
-    sMapTeleportPendingFrames = MAP_TELEPORT_PENDING_TIMEOUT_FRAMES;
-    sMapTeleportPendingDestination = *destination;
-    MapTeleport_BeginTransition();
-    return MAP_TELEPORT_RESULT_OK;
-}
-
-static BOOL MapTeleport_DebugKeysHeld(void)
-{
-    return (PAD_Read() & MAP_TELEPORT_DEBUG_KEYS) == MAP_TELEPORT_DEBUG_KEYS;
-}
-
-static void MapTeleport_PollDebugImpl(FieldSystem *fieldSystem)
-{
-    const MapTeleportDestination *destination;
-    MapTeleportResult result;
-    u16 count;
-    u16 destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE;
-
-    MapTeleport_PollOverworldWildPlayerFrame(fieldSystem);
-
-    if (!MapTeleport_IsFieldStructReady(fieldSystem)) {
-        MapTeleport_UpdateDebugStatus(fieldSystem, FALSE);
-        return;
-    }
-
-    MapTeleport_UpdateDebugStatus(fieldSystem, TRUE);
-    MapTeleport_UpdatePending(fieldSystem);
-    if (MapTeleport_UpdateTransition(fieldSystem)) {
-        return;
-    }
-
-    MapTeleport_UpdateTemporaryReturn(fieldSystem, &gMapTeleportTemporaryReturnState);
-    if (!MapTeleport_DebugKeysHeld()) {
-        sMapTeleportDebugWasHeld = FALSE;
-        return;
-    }
-
-    if (sMapTeleportDebugWasHeld) {
-        return;
-    }
-
-    sMapTeleportDebugWasHeld = TRUE;
-    if (gMapTeleportDebugStatus.destinationIndex
-        == MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED) {
-        destination = &gMapTeleportDebugDestination;
-        destinationIndex = MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED;
-    } else {
-        count = MapTeleport_GetEncounterDestinationCount();
-        if (count != 0) {
-            destinationIndex = gf_rand() % count;
-            destination = MapTeleport_GetEncounterDestinationByIndex(destinationIndex);
-        } else {
-            destination = NULL;
-        }
-    }
-
-    result = MapTeleport_OverlayRequest(fieldSystem, destination);
-    if (result == MAP_TELEPORT_RESULT_OK) {
-        MapTeleport_ArmTemporaryReturn(
-            fieldSystem,
-            destination,
-            &gMapTeleportTemporaryReturnState);
-    }
-    gMapTeleportDebugStatus.destinationIndex = destinationIndex;
-    gMapTeleportDebugStatus.requestResult = result;
-    gMapTeleportDebugStatus.requestCount++;
-}
-
-const MapTeleportOverlayEntry gMapTeleportOverlayEntry
-    __attribute__((section(".map_teleport_entry"), used)) = {
-    MAP_TELEPORT_OVERLAY_MAGIC,
-    MAP_TELEPORT_OVERLAY_VERSION,
-    sizeof(MapTeleportOverlayEntry),
-    MapTeleport_OverlayRequest,
-    NULL,
-    MapTeleport_PollDebugImpl,
+const OverworldFieldServiceEntry gOverworldFieldServiceEntry
+    __attribute__((section(".overworld_field_service_entry"), used)) = {
+    OVERWORLD_FIELD_SERVICE_MAGIC,
+    OverworldFieldService_OnMapHeaderChangedImpl,
+    OverworldFieldService_PollFrameImpl,
+    OverworldFieldService_TryGetEncounterDataIdForMapImpl,
 };

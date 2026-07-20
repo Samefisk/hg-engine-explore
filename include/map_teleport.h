@@ -4,240 +4,99 @@
 #include "types.h"
 
 typedef struct FieldSystem FieldSystem;
+typedef struct OverworldWildSpawnState OverworldWildSpawnState;
 
-#define MAP_TELEPORT_OVERLAY_ENTRY_ADDR 0x023C8000
-#define MAP_TELEPORT_OVERLAY_MAGIC 0x4D54504C
-#define MAP_TELEPORT_OVERLAY_VERSION 3
-#define MAP_TELEPORT_DEBUG_DESTINATION_ADDR 0x023C8014
-#define MAP_TELEPORT_DEBUG_STATUS_ADDR 0x023C801C
-#define MAP_TELEPORT_DEBUG_STATUS_MAGIC 0x4D545053
-#define MAP_TELEPORT_DEBUG_STATUS_VERSION 1
-#define MAP_TELEPORT_DEBUG_DESTINATION_INDEX_FORCED 0xFFFE
-#define MAP_TELEPORT_DEBUG_DESTINATION_INDEX_NONE 0xFFFF
-#define MAP_TELEPORT_ENCOUNTER_DESTINATION_ENTRY_ADDR 0x023C8034
-#define MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC 0x4D544544
-#define MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION 1
-#define MAP_TELEPORT_DESTINATION_WARP_ID_Y 0x03FF
-#define MAP_TELEPORT_TEMPORARY_RETURN_STEPS 10
+/*
+ * Overlay 131 used to expose the custom debug map-teleport service here.
+ * Keep the fixed address so resident code can reach field services without
+ * adding a direct overlay relocation. This service does not replace or alter
+ * the game's normal map-warp implementation.
+ */
+#define OVERWORLD_FIELD_SERVICE_ENTRY_ADDR 0x023C8000
+/* The version is encoded in the magic so resident validation is one compare. */
+#define OVERWORLD_FIELD_SERVICE_MAGIC 0x3146574F /* "OWF1" */
 
-typedef enum MapTeleportDirection {
-    MAP_TELEPORT_DIRECTION_NORTH = 0,
-    MAP_TELEPORT_DIRECTION_SOUTH = 1,
-    MAP_TELEPORT_DIRECTION_WEST = 2,
-    MAP_TELEPORT_DIRECTION_EAST = 3,
-} MapTeleportDirection;
+typedef enum OverworldFieldMapHeaderChangeResult {
+    OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE = 0,
+    OVERWORLD_FIELD_MAP_HEADER_CHANGE_PRESERVED,
+    OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED,
+} OverworldFieldMapHeaderChangeResult;
 
-// x/y are field Location coordinates consumed by the stock field warp task.
-// Pokegear/world-map display coordinates must be converted before calling.
-// If y is MAP_TELEPORT_DESTINATION_WARP_ID_Y, x is a game-authored warp id
-// for mapId and the stock warp task resolves the final landing coordinate.
-typedef struct MapTeleportDestination {
-    u16 mapId;
-    u16 x;
-    u16 y;
-    u16 direction;
-} MapTeleportDestination;
-
-typedef enum MapTeleportResult {
-    MAP_TELEPORT_RESULT_OK = 0,
-    MAP_TELEPORT_RESULT_OVERLAY_UNAVAILABLE,
-    MAP_TELEPORT_RESULT_INVALID_FIELD,
-    MAP_TELEPORT_RESULT_FIELD_BUSY,
-    MAP_TELEPORT_RESULT_INVALID_DESTINATION,
-    MAP_TELEPORT_RESULT_UNSAFE_LOADED_TILE,
-} MapTeleportResult;
-
-typedef enum MapTeleportTemporaryReturnStepState {
-    MAP_TELEPORT_TEMPORARY_RETURN_INACTIVE = 0,
-    MAP_TELEPORT_TEMPORARY_RETURN_WAITING_FOR_ARRIVAL,
-} MapTeleportTemporaryReturnStepState;
-
-typedef struct MapTeleportTemporaryReturnState {
-    u16 returnMapId;
-    u16 returnX;
-    u16 returnY;
-    u16 targetMapId;
-    u16 lastX;
-    u16 lastY;
-    u8 returnDirection;
-    u8 stepState;
-} MapTeleportTemporaryReturnState;
-
-typedef struct MapTeleportTransitionRuntimeState {
-    u8 state;
-    u8 frame;
-} MapTeleportTransitionRuntimeState;
-
-typedef MapTeleportResult (*MapTeleportRequestFunc)(
+typedef OverworldFieldMapHeaderChangeResult (*OverworldFieldMapHeaderChangedFunc)(
     FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination);
-typedef BOOL (*MapTeleportLoadedLandTileFunc)(FieldSystem *fieldSystem, u16 x, u16 y);
-typedef void (*MapTeleportDebugPollFunc)(FieldSystem *fieldSystem);
-typedef u16 (*MapTeleportEncounterDestinationCountFunc)(void);
-typedef const MapTeleportDestination *(*MapTeleportEncounterDestinationByIndexFunc)(u16 index);
-typedef const MapTeleportDestination *(*MapTeleportEncounterDestinationByMapIdFunc)(u16 mapId);
+    OverworldWildSpawnState *state,
+    u16 previousMapId,
+    u16 currentMapId);
+typedef void (*OverworldFieldPollFrameFunc)(FieldSystem *fieldSystem);
+typedef BOOL (*OverworldFieldTryGetEncounterDataIdForMapFunc)(
+    u16 mapId,
+    int *encounterDataId);
 
-typedef struct MapTeleportOverlayEntry {
+typedef struct OverworldFieldServiceEntry {
     u32 magic;
-    u16 version;
-    u16 size;
-    MapTeleportRequestFunc request;
-    MapTeleportLoadedLandTileFunc isLoadedLandTile;
-    MapTeleportDebugPollFunc pollDebug;
-} MapTeleportOverlayEntry;
+    OverworldFieldMapHeaderChangedFunc onMapHeaderChanged;
+    OverworldFieldPollFrameFunc pollFrame;
+    OverworldFieldTryGetEncounterDataIdForMapFunc tryGetEncounterDataIdForMap;
+} OverworldFieldServiceEntry;
 
-typedef struct MapTeleportDebugStatus {
-    u32 magic;
-    u16 version;
-    u16 size;
-    u16 mapId;
-    u16 x;
-    u16 y;
-    u16 direction;
-    u16 requestResult;
-    u16 requestCount;
-    u16 ready;
-    u16 destinationIndex;
-} MapTeleportDebugStatus;
+typedef char OverworldFieldServiceEntrySizeMustRemain16Bytes[
+    sizeof(OverworldFieldServiceEntry) == 16 ? 1 : -1];
 
-typedef struct MapTeleportEncounterDestinationEntry {
-    u32 magic;
-    u16 version;
-    u16 size;
-    u16 count;
-    u16 reserved;
-    MapTeleportEncounterDestinationByIndexFunc byIndex;
-    MapTeleportEncounterDestinationByMapIdFunc byMapId;
-} MapTeleportEncounterDestinationEntry;
+#define OVERWORLD_FIELD_SERVICE_ENTRY \
+    ((const OverworldFieldServiceEntry *)OVERWORLD_FIELD_SERVICE_ENTRY_ADDR)
 
-extern MapTeleportTemporaryReturnState gMapTeleportTemporaryReturnState;
-extern MapTeleportTransitionRuntimeState gMapTeleportTransitionState;
-
-#define MAP_TELEPORT_OVERLAY_ENTRY \
-    ((const MapTeleportOverlayEntry *)MAP_TELEPORT_OVERLAY_ENTRY_ADDR)
-#define MAP_TELEPORT_DEBUG_DESTINATION \
-    ((MapTeleportDestination *)MAP_TELEPORT_DEBUG_DESTINATION_ADDR)
-#define MAP_TELEPORT_DEBUG_STATUS \
-    ((const MapTeleportDebugStatus *)MAP_TELEPORT_DEBUG_STATUS_ADDR)
-#define MAP_TELEPORT_ENCOUNTER_DESTINATION_ENTRY \
-    ((const MapTeleportEncounterDestinationEntry *)MAP_TELEPORT_ENCOUNTER_DESTINATION_ENTRY_ADDR)
-
-static inline const MapTeleportOverlayEntry *MapTeleport_GetOverlayEntry(void)
+static inline const OverworldFieldServiceEntry *OverworldFieldService_GetEntry(void)
 {
-    const MapTeleportOverlayEntry *entry = MAP_TELEPORT_OVERLAY_ENTRY;
+    const OverworldFieldServiceEntry *entry = OVERWORLD_FIELD_SERVICE_ENTRY;
 
-    if (entry->magic != MAP_TELEPORT_OVERLAY_MAGIC
-        || entry->version != MAP_TELEPORT_OVERLAY_VERSION
-        || entry->size != sizeof(MapTeleportOverlayEntry)) {
+    if (entry->magic != OVERWORLD_FIELD_SERVICE_MAGIC) {
         return NULL;
     }
 
     return entry;
 }
 
-static inline MapTeleportResult MapTeleport_Request(
+static inline OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChanged(
     FieldSystem *fieldSystem,
-    const MapTeleportDestination *destination)
+    OverworldWildSpawnState *state,
+    u16 previousMapId,
+    u16 currentMapId)
 {
-    const MapTeleportOverlayEntry *entry = MapTeleport_GetOverlayEntry();
+    const OverworldFieldServiceEntry *entry = OverworldFieldService_GetEntry();
 
-    if (entry == NULL || entry->request == NULL) {
-        return MAP_TELEPORT_RESULT_OVERLAY_UNAVAILABLE;
+    if (entry == NULL || entry->onMapHeaderChanged == NULL) {
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
     }
 
-    return entry->request(fieldSystem, destination);
+    return entry->onMapHeaderChanged(
+        fieldSystem,
+        state,
+        previousMapId,
+        currentMapId);
 }
 
-// Only validates collision for the currently loaded map. Cross-map callers must
-// pass a vetted complete map and a known in-bounds land tile.
-static inline BOOL MapTeleport_IsLoadedLandTile(FieldSystem *fieldSystem, u16 x, u16 y)
+static inline void OverworldFieldService_PollFrame(FieldSystem *fieldSystem)
 {
-    const MapTeleportOverlayEntry *entry = MapTeleport_GetOverlayEntry();
+    const OverworldFieldServiceEntry *entry = OverworldFieldService_GetEntry();
 
-    if (entry == NULL || entry->isLoadedLandTile == NULL) {
-        return FALSE;
-    }
-
-    return entry->isLoadedLandTile(fieldSystem, x, y);
-}
-
-static inline void MapTeleport_PollDebug(FieldSystem *fieldSystem)
-{
-    const MapTeleportOverlayEntry *entry = MapTeleport_GetOverlayEntry();
-
-    if (entry == NULL || entry->pollDebug == NULL) {
+    if (entry == NULL || entry->pollFrame == NULL) {
         return;
     }
 
-    entry->pollDebug(fieldSystem);
+    entry->pollFrame(fieldSystem);
 }
 
-static inline const MapTeleportDebugStatus *MapTeleport_GetDebugStatus(void)
+static inline BOOL OverworldFieldService_TryGetEncounterDataIdForMap(
+    u16 mapId,
+    int *encounterDataId)
 {
-    const MapTeleportDebugStatus *status = MAP_TELEPORT_DEBUG_STATUS;
+    const OverworldFieldServiceEntry *entry = OverworldFieldService_GetEntry();
 
-    if (status->magic != MAP_TELEPORT_DEBUG_STATUS_MAGIC
-        || status->version != MAP_TELEPORT_DEBUG_STATUS_VERSION
-        || status->size != sizeof(MapTeleportDebugStatus)) {
-        return NULL;
+    if (entry == NULL || entry->tryGetEncounterDataIdForMap == NULL) {
+        return FALSE;
     }
 
-    return status;
-}
-
-static inline const MapTeleportEncounterDestinationEntry *
-MapTeleport_GetEncounterDestinationEntry(void)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MAP_TELEPORT_ENCOUNTER_DESTINATION_ENTRY;
-
-    if (entry->magic != MAP_TELEPORT_ENCOUNTER_DESTINATION_MAGIC
-        || entry->version != MAP_TELEPORT_ENCOUNTER_DESTINATION_VERSION
-        || entry->size != sizeof(MapTeleportEncounterDestinationEntry)) {
-        return NULL;
-    }
-
-    return entry;
-}
-
-static inline u16 MapTeleport_GetEncounterDestinationCount(void)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MapTeleport_GetEncounterDestinationEntry();
-
-    if (entry == NULL || entry->byIndex == NULL) {
-        return 0;
-    }
-
-    return entry->count;
-}
-
-// Encounter destination lookup pointers may refer to overlay-local scratch
-// storage. Copy the value or call MapTeleport_Request before another lookup.
-static inline const MapTeleportDestination *
-MapTeleport_GetEncounterDestinationByIndex(u16 index)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MapTeleport_GetEncounterDestinationEntry();
-
-    if (entry == NULL || entry->byIndex == NULL) {
-        return NULL;
-    }
-
-    return entry->byIndex(index);
-}
-
-static inline const MapTeleportDestination *
-MapTeleport_GetEncounterDestinationByMapId(u16 mapId)
-{
-    const MapTeleportEncounterDestinationEntry *entry =
-        MapTeleport_GetEncounterDestinationEntry();
-
-    if (entry == NULL || entry->byMapId == NULL) {
-        return NULL;
-    }
-
-    return entry->byMapId(mapId);
+    return entry->tryGetEncounterDataIdForMap(mapId, encounterDataId);
 }
 
 #endif // MAP_TELEPORT_H
