@@ -7516,6 +7516,7 @@ static void OverworldWildSpawns_PlayRamCrashFeedback(OverworldWildSpawnState *st
     PlaySE(OW_WILD_SPAWNER_ONIX_RAM_CRASH_SE);
 }
 
+#ifndef DISABLE_FOLLOWER_POKEMON
 static BOOL OverworldWildSpawns_IsActiveMapObjectAt(FieldSystem *fieldSystem, LocalMapObject *object, int x, int y)
 {
     return OverworldWildSpawns_IsCurrentMapObject(fieldSystem, object)
@@ -7523,13 +7524,16 @@ static BOOL OverworldWildSpawns_IsActiveMapObjectAt(FieldSystem *fieldSystem, Lo
         && (int)MapObject_GetCurrentX(object) == x
         && (int)MapObject_GetCurrentY(object) == y;
 }
+#endif
 
 static BOOL OverworldWildSpawns_IsRamCrashBattleTarget(FieldSystem *fieldSystem, int x, int y)
 {
+#ifndef DISABLE_FOLLOWER_POKEMON
     MapObjectMan *mapObjectMan;
     LocalMapObject *objects;
     LocalMapObject *followerObject;
     u32 i;
+#endif
 
     if (fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
         return FALSE;
@@ -7540,6 +7544,7 @@ static BOOL OverworldWildSpawns_IsRamCrashBattleTarget(FieldSystem *fieldSystem,
         return TRUE;
     }
 
+#ifndef DISABLE_FOLLOWER_POKEMON
     followerObject = fieldSystem->followMon.mapObject;
     if (OverworldWildSpawns_IsActiveMapObjectAt(fieldSystem, followerObject, x, y)) {
         return TRUE;
@@ -7559,6 +7564,7 @@ static BOOL OverworldWildSpawns_IsRamCrashBattleTarget(FieldSystem *fieldSystem,
             return TRUE;
         }
     }
+#endif
 
     return FALSE;
 }
