@@ -1855,6 +1855,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
+                | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION,
             OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_TARGET,
@@ -1876,8 +1877,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP,
-                0,
-                OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
+                OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
+                OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT,
                 0,
                 0,
                 0,

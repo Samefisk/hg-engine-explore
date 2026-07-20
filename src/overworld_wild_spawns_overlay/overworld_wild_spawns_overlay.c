@@ -1043,6 +1043,7 @@ static BOOL OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand(
     FieldSystem *fieldSystem,
     int slot);
 static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem);
+static BOOL OverworldWildSpawns_IsFieldContextAvailable(FieldSystem *fieldSystem);
 static BOOL OverworldWildSpawns_IsSurfBehavior(u8 behavior);
 static BOOL OverworldWildSpawns_IsHeadbuttTreeTopLocation(FieldSystem *fieldSystem, int x, int y);
 static BOOL OverworldWildSpawns_IsLandMapTile(FieldSystem *fieldSystem, int x, int y);
@@ -2827,14 +2828,13 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
 
     if (forcedOverrideProfileIndex >= 0
         && forcedOverrideProfileIndex < OWBD_OVERRIDE_PROFILE_COUNT) {
+        /* A dedicated forced profile is authoritative, not a species/class patch. */
+        memset(&profile, 0, sizeof(profile));
         OverworldWildSpawns_ApplyBehaviorOverride(
             &profile,
             &behaviorData->overrideProfiles[forcedOverrideProfileIndex]);
-        if (OverworldWildSpawns_OverrideSetsOverworldLimit(
-                &behaviorData->overrideProfiles[forcedOverrideProfileIndex])) {
-            behaviorLimitKey = (u8)(OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE
-                + forcedOverrideProfileIndex);
-        }
+        behaviorLimitKey = (u8)(OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE
+            + forcedOverrideProfileIndex);
     }
 
     if (profile.attentiveSpeed == 0) {
@@ -8344,7 +8344,10 @@ static void OverworldWildSpawns_HandleFinishedMovementCommand(OverworldWildSpawn
         }
     } else if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
         state->movementCooldowns[slot] =
-            primitives.chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+            slot == OW_WILD_FOLLOWER_SLOT
+                && primitives.chillLocomotion != OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+            ? OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN
+            : primitives.chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
             ? OverworldWildSpawns_GetBehaviorHopPauseFrames(
                 &profile,
                 state->movementSpotStates[slot])
@@ -11306,11 +11309,17 @@ static BOOL OverworldWildSpawns_IsEnabledMap(FieldSystem *fieldSystem)
 {
     int encounterDataId;
 
+    return OverworldWildSpawns_IsFieldContextAvailable(fieldSystem)
+        && OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId);
+}
+
+static BOOL OverworldWildSpawns_IsFieldContextAvailable(FieldSystem *fieldSystem)
+{
     return fieldSystem != NULL
         && fieldSystem->location != NULL
+        && fieldSystem->location->mapId != MAP_NOTHING
         && fieldSystem->mapObjectMan != NULL
-        && fieldSystem->playerAvatar != NULL
-        && OverworldWildSpawns_TryGetEncounterDataId(fieldSystem, &encounterDataId);
+        && fieldSystem->playerAvatar != NULL;
 }
 
 static BOOL OverworldWildSpawns_TryGetSpawnTerrain(FieldSystem *fieldSystem, int x, int y, OverworldWildSpawnTerrain *terrain)
@@ -16613,6 +16622,11 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
         return;
     }
 
+    /* Followers are valid everywhere; ordinary wild spawns are not. */
+    if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
+        return;
+    }
+
     if (state->spawnCooldown != 0) {
         state->spawnCooldown--;
         return;
@@ -17144,7 +17158,7 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     (void)state;
     sOverworldWildDiagnosticMapObjectMan = mapObjectMan;
     sOverworldWildDiagnosticMapObjects = mapObjects;
-    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
+    return OverworldWildSpawns_IsFieldContextAvailable(fieldSystem);
 #endif
 
 #if OW_WILD_UPDATE_DIAGNOSTIC_STATE_READ_ONLY
@@ -17153,7 +17167,7 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     sOverworldWildDiagnosticStateMapId = state != NULL ? state->mapId : MAP_NOTHING;
     sOverworldWildDiagnosticStateMapObjectMan = state != NULL ? state->mapObjectMan : NULL;
     sOverworldWildDiagnosticStateMapObjects = state != NULL ? state->mapObjects : NULL;
-    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
+    return OverworldWildSpawns_IsFieldContextAvailable(fieldSystem);
 #endif
 
 #if OW_WILD_UPDATE_DIAGNOSTIC_SETTER_ONLY
@@ -17161,12 +17175,12 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
     sOverworldWildDiagnosticMapObjectMan = mapObjectMan;
     sOverworldWildDiagnosticMapObjects = mapObjects;
     OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
-    return OverworldWildSpawns_IsEnabledMap(fieldSystem);
+    return OverworldWildSpawns_IsFieldContextAvailable(fieldSystem);
 #endif
 
     OverworldWildSpawns_LoadSavedShinies(state, fieldSystem);
 
-    if (!OverworldWildSpawns_IsEnabledMap(fieldSystem)) {
+    if (!OverworldWildSpawns_IsFieldContextAvailable(fieldSystem)) {
         OverworldWildCustomMovement_SetFieldSystem(NULL);
         OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, FALSE);
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
