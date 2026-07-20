@@ -785,6 +785,7 @@ BattleSystem_SetBattleOutcomeFlags = 0x0223BD20 | 1;
 ov12_022639B8 = 0x022639B8 | 1;
 
 FieldSystem_MapIsBattleTowerMultiPartnerSelectRoom = 0x02067584 | 1;
+sub_0203DF8C = 0x0203DF8C | 1;
 MoveId_GetFieldEffectId = 0x0207BCC0 | 1;
 PartyMenu_ContextMenuAddFieldMove = 0x0207D0A0 | 1;
 ClearFrameAndWindow2 = 0x0200E9BC | 1;

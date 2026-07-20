@@ -25,7 +25,9 @@ ANYBOX_HOOK_REGISTER = 2
 OUTER_FUNCTION_SIZE = 0x6C
 INNER_FUNCTION_SIZE = 0x8C
 OUTER_FUNCTION_SHA256 = "f9e2db914242c7d88e3c520214f0adb56939dd70a34e1f59cf70655befc96ae9"
-INNER_FUNCTION_SHA256 = "e83937713a4ce6c77ad3558eb6d3599b6650f79c0b74eec92834add9261693c8"
+INNER_FUNCTION_MEMCPY_BL_NORMALIZED_SHA256 = (
+    "8b5480d28330dc3fe3a3e7e7cc6b3bb78e66fad0b6f73b30902209a57e8f6291"
+)
 STOCK_RESTORE_BOX_MON_PP = bytes.fromhex(
     "f8 b5 82 b0 05 1c fb f7 85 fa 00 24 00 90 27 1c 01 ae "
     "21 1c 28 1c 36 31 3a 1c fb f7 af fe 00 28 0c d0 21 1c "
@@ -422,6 +424,20 @@ def thumb_bl_calls(code: bytes, address: int) -> list[tuple[int, int]]:
     return calls
 
 
+def thumb_bl_displacement_normalized_sha256(
+    code: bytes, call_offsets: list[int]
+) -> str:
+    """Hash exact machine code with selected BL displacements canonicalized."""
+    normalized = bytearray(code)
+    for offset in call_offsets:
+        require(
+            0 <= offset and offset + 4 <= len(normalized) and offset % 2 == 0,
+            "authenticated Thumb BL offset is outside the function",
+        )
+        normalized[offset : offset + 4] = struct.pack("<HH", 0xF000, 0xF800)
+    return hashlib.sha256(normalized).hexdigest()
+
+
 def encode_thumb_bl(site: int, target: int) -> bytes:
     displacement = target - (site + 4)
     require(displacement % 2 == 0, "adversarial Thumb BL target is unaligned")
@@ -482,17 +498,14 @@ def verify_linked_and_packaged_artifacts(
     )
     outer = elf_virtual_bytes(linked_elf, outer_address, outer_size)
     inner = elf_virtual_bytes(linked_elf, inner_address, inner_size)
+    expected_outer_calls = [(0x2A, inner_address)]
+    require(
+        thumb_bl_calls(outer, outer_address) == expected_outer_calls,
+        "linked AnyBox must contain exactly one BL and it must target inner placement",
+    )
     require(
         hashlib.sha256(outer).hexdigest() == OUTER_FUNCTION_SHA256,
         "linked AnyBox exact machine/control-flow contract drifted",
-    )
-    require(
-        hashlib.sha256(inner).hexdigest() == INNER_FUNCTION_SHA256,
-        "linked inner placement exact machine/control-flow contract drifted",
-    )
-    require(
-        thumb_bl_calls(outer, outer_address) == [(0x2A, inner_address)],
-        "linked AnyBox must contain exactly one BL and it must target inner placement",
     )
     restore_address = linker_thumb_symbol(linker_script, "RestoreBoxMonPP")
     require(
@@ -515,6 +528,11 @@ def verify_linked_and_packaged_artifacts(
     require(
         thumb_bl_calls(inner, inner_address) == expected_inner_calls,
         "linked inner placement call boundaries/control flow drifted",
+    )
+    require(
+        thumb_bl_displacement_normalized_sha256(inner, [0x58])
+        == INNER_FUNCTION_MEMCPY_BL_NORMALIZED_SHA256,
+        "linked inner placement exact machine/control-flow contract drifted",
     )
     require(
         inner.count(struct.pack("<I", restore_address | 1)) == 1
@@ -992,8 +1010,30 @@ def verify_artifact_adversarial_fixtures(
 ) -> int:
     outer_address = symbols["PCStorage_PlaceMonInFirstEmptySlotInAnyBox"][0]
     inner_address = symbols["PCStorage_PlaceMonInBoxFirstEmptySlot"][0]
+    memcpy_address = symbols["memcpy"][0]
     restore_address = linker_thumb_symbol(linker_script, "RestoreBoxMonPP")
     get_box_data = linker_thumb_symbol(linker_script, "GetBoxMonData")
+    core_address, _linked_flat = elf_flat_binary(linked_elf)
+
+    def coherent_machine_mutation(
+        address: int, replacement: bytes
+    ) -> tuple[bytes, bytes, bytes]:
+        mutated_elf = mutate_elf_range(linked_elf, address, replacement)
+        core_offset = address - core_address
+        require(
+            0 <= core_offset and core_offset + len(replacement) <= len(core),
+            "coherent mutation is outside build/output.bin",
+        )
+        mutated_core = bytearray(core)
+        mutated_core[core_offset : core_offset + len(replacement)] = replacement
+        package_offset = OVERLAY_129_CORE_OFFSET + core_offset
+        require(
+            package_offset + len(replacement) <= len(packaged_overlay),
+            "coherent mutation is outside packaged overlay 129",
+        )
+        mutated_package = bytearray(packaged_overlay)
+        mutated_package[package_offset : package_offset + len(replacement)] = replacement
+        return mutated_elf, bytes(mutated_core), bytes(mutated_package)
 
     def verify(
         elf: bytes = linked_elf,
@@ -1019,6 +1059,20 @@ def verify_artifact_adversarial_fixtures(
         encode_thumb_bl(outer_address + 0x2A, inner_address + 2),
     )
     expect_rejected(lambda: verify(elf=wrong_outer_bl), "outer BL targets wrong boundary")
+    fixtures += 1
+
+    wrong_inner_bl, wrong_inner_core, wrong_inner_package = coherent_machine_mutation(
+        inner_address + 0x58,
+        encode_thumb_bl(inner_address + 0x58, memcpy_address + 2),
+    )
+    expect_rejected(
+        lambda: verify(
+            elf=wrong_inner_bl,
+            output=wrong_inner_core,
+            package=wrong_inner_package,
+        ),
+        "coherent inner memcpy BL target drift",
+    )
     fixtures += 1
 
     extra_outer_restore = mutate_elf_range(

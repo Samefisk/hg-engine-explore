@@ -281,6 +281,14 @@ arm9 GF_Snd_LoadSeqEx 02004784 2
 
 arm9 StoreFieldSysPtr 0203E028 1
 
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+
+# sub_0203DF34: tear down the resident overworld-wild overlays before the
+# stock field-active flag at FieldSystem+0x6C is cleared.
+arm9 FieldSystem_LeaveFieldHook 0203DF34 1
+
+#endif
+
 
 #ifdef IMPLEMENT_BDHCAM_ROUTINE
 
