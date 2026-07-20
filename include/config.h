@@ -88,6 +88,11 @@
 #define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
 #define OVERWORLD_WILD_SPAWNS_RAM_CRASH_FEEDBACK_SCRIPT 2075
 
+// DISABLE_FOLLOWER_POKEMON keeps the lead party Pokemon hidden and inactive as
+// a walking follower. Its compatibility object and shared rendering helpers
+// remain available, and the separate trainer-companion system is unaffected.
+#define DISABLE_FOLLOWER_POKEMON
+
 // IMPLEMENT_CAPTURE_EXPERIENCE defines whether or not capturing wild pokemon will net experience
 // commenting this line out disables capture experience
 #define IMPLEMENT_CAPTURE_EXPERIENCE

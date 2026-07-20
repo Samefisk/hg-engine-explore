@@ -51,6 +51,10 @@ FAST_TEXT_PRINTING equ 0
 // note that the entry in `armips/data/trainers/trainertext.s` has to use `TEXT_DOUBLE_DEFEATED_IN_BATTLE_1`, but the overworld entries can remain the same.
 NO_PARTNER_DOUBLE_BATTLES equ 1
 
+// Keep the vanilla walking Pokemon hidden and inactive while preserving its
+// compatibility object. Partner trainers used by double battles are unaffected.
+DISABLE_FOLLOWER_POKEMON equ 1
+
 // APPLY_ANTIPIRACY will apply the typical anti-piracy code changes to your ROM automatically so that the game runs well on hardware (TWLmenu and R4 are both tested)
 // comment out the lines if you do not want anti-piracy to be applied to your ROM
 .definelabel APPLY_ANTIPIRACY, 0
