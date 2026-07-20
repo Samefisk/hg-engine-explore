@@ -53,5 +53,6 @@ void LONG_CALL DestroySysTask(SysTask *task);
 SysTask *LONG_CALL SysTask_CreateOnVBlankQueue(SysTaskFunc func, void *data, int priority);
 void LONG_CALL TaskManager_Call(TaskManager *taskman, TaskFunc taskFunc, void *env);
 BOOL LONG_CALL Task_TutorialBattle(TaskManager *taskManager);
+BOOL LONG_CALL sub_0203DF8C(FieldSystem *fieldSystem);
 
 #endif

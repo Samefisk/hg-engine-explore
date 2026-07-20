@@ -58,18 +58,21 @@ u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
     return result;
 }
 
-void LONG_CALL UnloadOverworldWildOverlays(void)
+BOOL LONG_CALL UnloadOverworldWildOverlays(void)
 {
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
+    return !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
+        && !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        && *(u32 *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR == 0;
 }
 
-static void UnloadColdOverworldWildOverlaysFor(u32 ovyId)
+static BOOL UnloadColdOverworldWildOverlaysFor(u32 ovyId)
 {
     if (IsOverworldWildOverlay(ovyId)) {
-        return;
+        return TRUE;
     }
 
-    UnloadOverworldWildOverlays();
+    return UnloadOverworldWildOverlays();
 }
 
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
@@ -164,7 +167,9 @@ u32 LONG_CALL HandleLoadOverlay(u32 ovyId, u32 loadType) {
 #endif // DEBUG_PRINT_OVERLAY_LOADS
 
 loadExtension:
-    UnloadColdOverworldWildOverlaysFor(ovyId);
+    if (!UnloadColdOverworldWildOverlaysFor(ovyId)) {
+        return FALSE;
+    }
 
     if (ovyId == OVERLAY_BATTLE_EXTENSION) {
 #ifdef DEBUG_PRINT_OVERLAY_LOADS

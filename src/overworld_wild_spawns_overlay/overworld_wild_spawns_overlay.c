@@ -813,28 +813,33 @@ typedef struct OverworldWildBehaviorDataBlob {
 
 static BOOL OverworldWildSpawns_CleanupResidentData(void)
 {
+    OverworldWildSpawnState *state = sOverworldWildLastState;
     BOOL helperLoaded = IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER);
 
-    if (helperLoaded
-        && !OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE(
-            OVERWORLD_WILD_HELPER_LIFECYCLE_PREPARE_CLEANUP,
-            sOverworldWildLastState != NULL
-                ? sOverworldWildLastState->movementFieldSystem
-                : NULL)) {
-        return FALSE;
-    }
     if (!helperLoaded && sOverworldWildHelperOverlayReady) {
         return FALSE;
     }
-    OverworldWildSpawns_CleanupPresentationBeforeUnload(sOverworldWildLastState);
-    sOverworldWildLastState = NULL;
+    if (helperLoaded
+        && !OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE(
+            sOverworldWildHelperOverlayReady
+                ? OVERWORLD_WILD_HELPER_OWNED_BEHAVIOR
+                : OVERWORLD_WILD_HELPER_VALIDATE_ONLY)) {
+        return FALSE;
+    }
+    if (sOverworldWildHelperOverlayReady
+        && !CanOverlayBeLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
+        return FALSE;
+    }
+    if (helperLoaded
+        && !OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE(
+            OVERWORLD_WILD_HELPER_LIFECYCLE_PREPARE_CLEANUP,
+            state != NULL
+                ? state->movementFieldSystem
+                : NULL)) {
+        return FALSE;
+    }
+    OverworldWildSpawns_CleanupPresentationBeforeUnload(state);
     OverworldWildSpawns_CleanupResidentTasks();
-
-    sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
-    sOverworldWildBehaviorDataBlob = NULL;
-
-    sOverworldWildBehaviorDataLoadAttempted = FALSE;
-
     if (helperLoaded
         && !OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE(
             sOverworldWildHelperOverlayReady
@@ -843,6 +848,21 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
             NULL)) {
         return FALSE;
     }
+    if (state != NULL && state->movementRuntimeState != NULL) {
+        OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
+
+        sys_FreeMemoryEz(runtime->movementBehaviorSlotCaches);
+        runtime->movementBehaviorSlotCaches = NULL;
+        sys_FreeMemoryEz(runtime);
+        state->movementRuntimeState = NULL;
+    }
+    sOverworldWildLastState = NULL;
+
+    sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
+    sOverworldWildBehaviorDataBlob = NULL;
+
+    sOverworldWildBehaviorDataLoadAttempted = FALSE;
+
     sOverworldWildHelperOverlayReady = 0;
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
     return TRUE;

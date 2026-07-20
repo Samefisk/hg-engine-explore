@@ -65,6 +65,13 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         return;
     }
 
+    if (!sub_0203DF8C(fieldSystem)) {
+        gOverworldWildFieldIdleRearmPending |=
+            OW_WILD_FIELD_IDLE_REARM_PENDING
+            | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+        return;
+    }
+
     if (fieldSystem->taskman != NULL) {
         if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
             OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->onFieldBusy(

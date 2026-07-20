@@ -2003,7 +2003,7 @@ def verify_core_control_flow(
 
     overlay_src = (repo / "src/overlay.c").read_text()
     start = overlay_src.index("u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)\n{")
-    end = overlay_src.index("\n}\n\nvoid LONG_CALL UnloadOverworldWildOverlays", start)
+    end = overlay_src.index("\n}\n", start)
     body = overlay_src[start:end]
     require(
         body.index("OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP()")

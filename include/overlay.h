@@ -27,7 +27,7 @@ u32 LONG_CALL FS_UnloadOverlay(u32 mode, u32 overlayID);
 
 // in src/overlay.c
 void LONG_CALL UnloadOverlayByID(u32 ovyId);
-void LONG_CALL UnloadOverworldWildOverlays(void);
+BOOL LONG_CALL UnloadOverworldWildOverlays(void);
 u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void);
 u32 LONG_CALL HandleLoadOverlay(u32 ovyId, u32 loadType);
 u32 LONG_CALL IsOverlayLoaded(u32 ovyId);

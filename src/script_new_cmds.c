@@ -56,7 +56,13 @@ static void Script_PrepareOverworldWildBattle(SCRIPTCONTEXT *ctx)
      * extension overlays. Once the battle data has been copied into base
      * state/script vars, release them before WildBattleSp loads battle code.
      */
-    UnloadOverworldWildOverlays();
+    if (!UnloadOverworldWildOverlays()) {
+        OverworldWildSpawns_CleanupPendingBattle(ctx->fsys, 0);
+        VarSet(ctx->fsys, VAR_SPECIAL_x8004, SPECIES_NONE);
+        VarSet(ctx->fsys, VAR_SPECIAL_x8005, 0);
+        VarSet(ctx->fsys, VAR_SPECIAL_x8006, FALSE);
+        return;
+    }
 
 #else
     (void)ctx;
