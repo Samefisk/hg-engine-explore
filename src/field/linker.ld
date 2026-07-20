@@ -20,6 +20,8 @@ SECTIONS {
                 KEEP(*(.map_teleport_debug_status))
                 . = ALIGN(4);
                 KEEP(*(.map_teleport_encounter_destination_entry))
+                . = 0x48;
+                KEEP(*(.test_battle_queue_entry))
                 . = ALIGN(4);
                 *(.init)
                 *(.text)

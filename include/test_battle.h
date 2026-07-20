@@ -9,10 +9,16 @@
 #define AI_SCRIPT_MAX_MOVES 8
 
 #define STATE_SCRIPT_IDX_MASK       0xF
-#define STATE_COMPLETE_BIT          (1 << 20)
-#define STATE_HAS_MORE_BIT          (1 << 21)
-#define STATE_TEST_INDEX_SHIFT      22
-#define STATE_TEST_INDEX_MASK       0x3FF
+#define STATE_QUEUED_BIT            (1 << 16)
+#define STATE_QUEUE_DELAY_SHIFT     17
+#define STATE_QUEUE_DELAY_MASK      0xF
+#define STATE_QUEUE_DELAY_FRAMES    10
+#define STATE_COMPLETE_BIT          (1 << 21)
+#define STATE_HAS_MORE_BIT          (1 << 22)
+#define STATE_TEST_INDEX_SHIFT      23
+#define STATE_TEST_INDEX_MASK       0x1FF
+
+#define TEST_BATTLE_FIELD_QUEUE_ENTRY 0x023C8049
 
 // Battle action for scripted tests
 struct PACKED BattleAction {
@@ -39,6 +45,31 @@ enum ExpectationType {
     EXPECTATION_TYPE_MESSAGE,
     EXPECTATION_TYPE_ATTACK_MESSAGE,
     EXPECTATION_OVERWORLD_FORM,
+    EXPECTATION_TYPE_TYPE_MASTERY_STATE,
+    EXPECTATION_TYPE_TYPE_MASTERY_DAMAGE_BONUS,
+    EXPECTATION_TYPE_BATTLER_HP,
+    EXPECTATION_TYPE_TYPE_MASTERY_EXP,
+};
+
+struct PACKED TestTypeMasterySettings {
+    u8 enabled;
+    u8 reserved;
+    u8 typeLevels[TYPE_MASTERY_TYPE_COUNT];
+};
+
+struct PACKED TestTypeMasteryStateExpectation {
+    u8 type;
+    u8 typeLevel;
+    u8 matchingCount;
+    u8 commitmentMultiplier;
+    u8 boonLevel;
+    u8 reserved[3];
+};
+
+struct PACKED TestTypeMasteryExpExpectation {
+    u8 type;
+    u8 divisor;
+    u8 reserved[2];
 };
 
 union ExpectationValue {
@@ -46,6 +77,10 @@ union ExpectationValue {
     u32 hpRecovered[16];
     u32 messageID;  // TODO: switch to string
     u16 formID;
+    struct TestTypeMasteryStateExpectation typeMasteryState;
+    u32 typeMasteryDamageBonus;
+    struct TestTypeMasteryExpExpectation typeMasteryExp;
+    u32 hpRemaining[16];
 };
 
 struct Expectations {
@@ -62,7 +97,10 @@ struct PACKED TestBattleScenario {
     u32 weather;                              // WEATHER_RAIN, WEATHER_SANDSTORM, etc.
     u32 fieldCondition;                       // FIELD_CONDITION_TRICK_ROOM_INIT, etc.
     u8 terrain;                               // GRASSY_TERRAIN, MISTY_TERRAIN, etc.
-    u8 _padding[3];                           // Compiler adds 3 bytes padding to align struct to 4-byte boundary
+    u8 useProductionTypeMastery;              // Preserve normal save/trainer metadata initialization
+    u16 enemyTrainerId;                       // Optional production trainer ID for metadata tests
+    struct TestTypeMasterySettings playerTypeMastery;
+    struct TestTypeMasterySettings enemyTypeMastery;
     struct TestBattlePokemon playerParty[6];  // Player party
     struct TestBattlePokemon enemyParty[6];   // Enemy's party
 
@@ -101,14 +139,81 @@ struct PACKED TestBattleScenario {
 #define TEST_CASE_KNOWN_FAILING (-3)
 
 #ifdef DEBUG_BATTLE_SCENARIOS
+extern u32 gTestBattleState;
+extern struct TestBattleScenario *gTestBattleScenario;
+
+static inline int TestBattle_StateGetScriptIndex(int battler)
+{
+    return (gTestBattleState >> (battler * 4)) & STATE_SCRIPT_IDX_MASK;
+}
+
+static inline void TestBattle_StateSetScriptIndex(int battler, int value)
+{
+    int shift = battler * 4;
+    gTestBattleState = (gTestBattleState & ~(STATE_SCRIPT_IDX_MASK << shift))
+        | ((value & STATE_SCRIPT_IDX_MASK) << shift);
+}
+
+static inline void TestBattle_StateIncrementScriptIndex(int battler)
+{
+    TestBattle_StateSetScriptIndex(battler, TestBattle_StateGetScriptIndex(battler) + 1);
+}
+
+static inline int TestBattle_StateGetCurrentTestIndex(void)
+{
+    return (gTestBattleState >> STATE_TEST_INDEX_SHIFT) & STATE_TEST_INDEX_MASK;
+}
+
+static inline void TestBattle_StateSetCurrentTestIndex(int value)
+{
+    gTestBattleState = (gTestBattleState & ~(STATE_TEST_INDEX_MASK << STATE_TEST_INDEX_SHIFT))
+        | ((value & STATE_TEST_INDEX_MASK) << STATE_TEST_INDEX_SHIFT);
+}
+
+static inline BOOL TestBattle_StateIsComplete(void)
+{
+    return (gTestBattleState & STATE_COMPLETE_BIT) != 0;
+}
+
+static inline void TestBattle_StateSetComplete(BOOL complete)
+{
+    if (complete) {
+        gTestBattleState |= STATE_COMPLETE_BIT;
+    } else {
+        gTestBattleState &= ~STATE_COMPLETE_BIT;
+    }
+}
+
+static inline BOOL TestBattle_StateHasMoreTests(void)
+{
+    return (gTestBattleState & STATE_HAS_MORE_BIT) != 0;
+}
+
+static inline void TestBattle_StateSetHasMoreTests(BOOL hasMore)
+{
+    if (hasMore) {
+        gTestBattleState |= STATE_HAS_MORE_BIT;
+    } else {
+        gTestBattleState &= ~STATE_HAS_MORE_BIT;
+    }
+}
+
+static inline void TestBattle_StateResetScriptIndices(void)
+{
+    gTestBattleState &= ~0xFFFF;
+}
+
 struct TestBattleScenario *LONG_CALL TestBattle_GetCurrentScenario();
 void LONG_CALL SendValueThroughCommunicationSendHole(int value);
 BOOL LONG_CALL TestBattle_HasMoreExpectations();
-BOOL LONG_CALL TestBattle_HasMoreTests();
 BOOL LONG_CALL TestBattle_IsComplete();
-void LONG_CALL TestBattle_QueueNextTest();
-void LONG_CALL TestBattle_OverrideParties(struct BATTLE_PARAM *bp);
-void LONG_CALL TestBattle_ApplyBattleState(struct BattleStruct *sp);
+void LONG_CALL TestBattle_OverrideParties(struct BattleSystem *bsys);
+void LONG_CALL TestBattle_ApplyBattleState(struct BattleSystem *bsys, struct BattleStruct *sp);
+void LONG_CALL TestBattle_RecordTypeMasteryDamageBonus(u32 battler, u32 bonusPercent);
+void LONG_CALL TestBattle_RecordTypeMasteryExp(
+    u32 type,
+    u32 typeExp,
+    u32 pokemonExp);
 void LONG_CALL TestBattle_autoSelectPlayerMoves(struct BattleSystem *bsys, struct BattleStruct *ctx);
 
 #endif // DEBUG_BATTLE_SCENARIOS

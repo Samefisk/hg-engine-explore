@@ -747,6 +747,13 @@ RemoveWindow = 0x0201D520 | 1;
 DestroyMsgData = 0x0200BB44 | 1;
 OS_ResetSystem = 0x020D3B84;
 AddWindow = 0x0201D4F8 | 1;
+GetBgTilemapBuffer = 0x0201CC08 | 1;
+BgGetCharPtr = 0x0201CB4C | 1;
+BG_LoadCharTilesData = 0x0201C0C0 | 1;
+MessageFormat_New_Custom = 0x0200BD18 | 1;
+MessageFormat_Delete = 0x0200BDA0 | 1;
+BufferIntegerAsString = 0x0200BFCC | 1;
+StringExpandPlaceholders = 0x0200CBBC | 1;
 
 ov12_0224DD18 = 0x0224DD18 | 1;
 ov12_0224D7EC = 0x0224D7EC | 1;

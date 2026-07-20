@@ -1,0 +1,8 @@
+TYPE MASTERY  {STRVAR_1 50, 0, 0}/3
+{STRVAR_1 0, 0, 0}   LV {STRVAR_1 50, 1, 0}   {STRVAR_1 50, 2, 0}/{STRVAR_1 50, 3, 0}
+{STRVAR_1 0, 0, 0}   LV 5   MAX
+L/R: PAGE   X/B: BACK
+TYPE COMMITMENT
+TYPE                 PARTY   LV   BOON
+No active type commitments.
+TIERS: 2-3 / 4-5 / 6

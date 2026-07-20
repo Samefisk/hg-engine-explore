@@ -1,6 +1,11 @@
 #include "include/config.h"
 #include "include/debug.h"
 
+#ifdef ALLOW_SAVE_CHANGES
+arm9 TypeMastery_PartyMenuInput_Hook 0207930C 1
+0051 TypeMastery_TrainerCardInput_Hook 021E5DC8 1
+#endif
+
 #overlay 1 is loaded in at 021E5900
 #overlay 2 is loaded in at 02245B80
 #overlay 12 is loaded in at 022378C0

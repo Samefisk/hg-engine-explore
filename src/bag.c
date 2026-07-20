@@ -570,34 +570,24 @@ u32 IsPlayerOnIce(u32 collision) // run to determine if the player is on ice
     return FALSE;
 }
 
-#ifdef DEBUG_BATTLE_SCENARIOS
-u8 queueUpAutoBattleScript = 0;
-u8 pendingNextTest = 0;
-#endif
-
 BOOL IsPlayerOnLadder(void)
 {
+#ifdef DEBUG_BATTLE_SCENARIOS
+    if (gFieldSysPtr != NULL) {
+        void (*tryQueueNextTest)(void *) =
+            (void (*)(void *))TEST_BATTLE_FIELD_QUEUE_ENTRY;
+        tryQueueNextTest(gFieldSysPtr);
+    }
+    return FALSE;
+#else
     if (gFieldSysPtr == NULL)
         return TRUE;
     u32 collision = GetMetatileBehaviorAt(gFieldSysPtr, gFieldSysPtr->location->x, gFieldSysPtr->location->z);
     u32 mapId = gFieldSysPtr->location->mapId;
-#ifdef DEBUG_BATTLE_SCENARIOS
-    if (queueUpAutoBattleScript == 0) {
-        EventSet_Script(gFieldSysPtr, 2073, NULL);
-        TestBattle_QueueNextTest();
-        queueUpAutoBattleScript = 1;
-    } else if (pendingNextTest >= 10) {
-        // delay 10 frames to give time for memory to clean up
-        EventSet_Script(gFieldSysPtr, 2073, NULL);
-        TestBattle_QueueNextTest();
-        pendingNextTest = 0;
-    } else if (TestBattle_HasMoreTests()) {
-        pendingNextTest++;
-    }
-#endif
     // ladder collisions
     // bugsy gym
     // slowpoke well entry
     // battle tower
     return (collision == 0x3C || collision == 0x3D || collision == 0x3E || mapId == 114 || mapId == 180 || (mapId >= 265 && mapId <= 271));
+#endif
 }
