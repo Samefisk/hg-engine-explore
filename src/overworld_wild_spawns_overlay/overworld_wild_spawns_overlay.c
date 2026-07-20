@@ -15706,6 +15706,7 @@ static BOOL OverworldWildSpawns_FinalizePreparedSpawn(
     OverworldWildPreparedSpawn *prepared)
 {
     struct PlayerProfile *profile;
+    BOOL isFollower = slot == OW_WILD_FOLLOWER_SLOT;
 
     if (state == NULL
         || fieldSystem == NULL
@@ -15720,24 +15721,30 @@ static BOOL OverworldWildSpawns_FinalizePreparedSpawn(
         &prepared->encounter,
         terrain,
         prepared->shiny,
-        slot == OW_WILD_FOLLOWER_SLOT
+        isFollower
             ? OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON
             : -1,
         &prepared->behaviorClass,
         &prepared->behaviorLimitKey,
         &prepared->playerBallCatchValue);
-    if (OverworldWildSpawns_IsBehaviorLimitKeyAtOverworldLimit(
+    if (!isFollower
+        && OverworldWildSpawns_IsBehaviorLimitKeyAtOverworldLimit(
             state,
             prepared->behaviorLimitKey,
             &prepared->behaviorProfile)) {
         return FALSE;
     }
+    /*
+     * Followers prefer their configured destination, but retain the player
+     * tile supplied by TrySpawnFollower when wild placement rules reject it.
+     */
     if (!OverworldWildSpawns_TryApplySpawnDestination(
             state,
             fieldSystem,
             terrain,
             &prepared->behaviorProfile,
-            &prepared->position)) {
+            &prepared->position)
+        && !isFollower) {
         return FALSE;
     }
     OverworldWildSpawns_PrepareSpawnStartup(
@@ -15747,6 +15754,10 @@ static BOOL OverworldWildSpawns_FinalizePreparedSpawn(
         &prepared->behaviorProfile,
         &prepared->position,
         &prepared->startup);
+    if (isFollower) {
+        /* Party ownership supplies the canonical personality and shiny state. */
+        return TRUE;
+    }
     profile = Sav2_PlayerData_GetProfileAddr(fieldSystem->savedata);
     if (profile == NULL) {
         return FALSE;
@@ -16341,7 +16352,8 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
 
 static BOOL OverworldWildSpawns_TrySpawnFollower(
     OverworldWildSpawnState *state,
-    FieldSystem *fieldSystem)
+    FieldSystem *fieldSystem,
+    BOOL *hasCandidate)
 {
     struct Party *party;
     struct PartyPokemon *pokemon;
@@ -16350,6 +16362,9 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
     u32 personality;
     BOOL shiny;
 
+    if (hasCandidate != NULL) {
+        *hasCandidate = FALSE;
+    }
     if (state == NULL
         || fieldSystem == NULL
         || fieldSystem->savedata == NULL
@@ -16376,6 +16391,9 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
     if (encounter.species == SPECIES_NONE || encounter.level == 0) {
         return FALSE;
     }
+    if (hasCandidate != NULL) {
+        *hasCandidate = TRUE;
+    }
 
     memset(&prepared, 0, sizeof(prepared));
     prepared.encounter = encounter;
@@ -16392,8 +16410,6 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
         return FALSE;
     }
 
-    /* Party ownership can differ from the player profile used for wild PID finalization. */
-    prepared.encounter.personality = personality;
     return OverworldWildSpawns_SpawnPreparedEncounter(
         state,
         fieldSystem,
@@ -16612,14 +16628,24 @@ static void OverworldWildSpawns_DespawnFarMons(OverworldWildSpawnState *state, F
 
 static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldSystem *fieldSystem)
 {
+    BOOL followerCandidate = FALSE;
     int slot;
     u8 rollMask = 0;
     BOOL spawned = FALSE;
 
-    if (OverworldWildSpawns_TrySpawnFollower(state, fieldSystem)) {
-        state->justSpawned = TRUE;
-        state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
-        return;
+    if (!state->spawns[OW_WILD_FOLLOWER_SLOT].active) {
+        if (OverworldWildSpawns_TrySpawnFollower(
+                state,
+                fieldSystem,
+                &followerCandidate)) {
+            state->justSpawned = TRUE;
+            state->spawnCooldown = OW_WILD_REFILL_COOLDOWN_STEPS;
+            return;
+        }
+        if (followerCandidate) {
+            /* Never let an ordinary spawn consume this refill before the follower. */
+            return;
+        }
     }
 
     /* Followers are valid everywhere; ordinary wild spawns are not. */
