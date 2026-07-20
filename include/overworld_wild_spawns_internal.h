@@ -226,6 +226,14 @@ typedef struct OverworldWildResidentData {
     u16 savedHp[OW_WILD_MAX_SPAWNS];
 } OverworldWildResidentData;
 
+extern OverworldWildResidentData gOverworldWildResidentData;
+
+typedef enum OverworldWildMapHeaderChangeMode {
+    OW_WILD_MAP_HEADER_CHANGE_PRESERVE = 0,
+    OW_WILD_MAP_HEADER_CHANGE_DISCARD,
+    OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE,
+} OverworldWildMapHeaderChangeMode;
+
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(
         FieldSystem *fieldSystem,
@@ -242,7 +250,13 @@ typedef struct OverworldWildSpawnsOverlayEntry {
         FieldSystem *fieldSystem,
         OverworldWildSpawnState *state,
         OverworldWildResidentData *residentData);
+    void (*prepareMapHeaderChange)(
+        OverworldWildSpawnState *state,
+        OverworldWildMapHeaderChangeMode mode);
 } OverworldWildSpawnsOverlayEntry;
+
+typedef char OverworldWildSpawnsOverlayEntrySizeMustRemain28Bytes[
+    sizeof(OverworldWildSpawnsOverlayEntry) == 28 ? 1 : -1];
 
 extern OverworldWildSpawnState sOverworldWildSpawnState;
 

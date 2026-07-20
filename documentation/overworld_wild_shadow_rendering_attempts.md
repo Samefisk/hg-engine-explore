@@ -12058,3 +12058,49 @@ Build result:
 - Copied `test.nds` to
   `/Users/christofferandersen/Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test1719.nds`.
 - `test.nds` was opened by the UI server.
+
+### S145 - Defer Native Shadow Reconciliation After Retained Transition
+
+Hypothesis:
+
+- A retained map-header transition preserves each Pokemon map object, but its
+  native shadow effect still holds a snapshot of the old map ID. After that
+  effect observes the identity change and self-deletes, the separate
+  `MAPOBJECTFLAG_UNK15` shadow-present/ownership latch remains stale.
+- Recreating/reconciling the shadow during canonicalization is too early: the
+  old effect needs one field frame to observe the identity change and delete
+  itself.
+- Arm a one-frame runtime restore after successful canonicalization, then on
+  the next player-frame service pass clear the stale `MAPOBJECTFLAG_UNK15`
+  shadow-present/ownership latch on authenticated active primaries before
+  calling the existing `OverworldWildSpawns_ReconcileNativeShadow` helper. The
+  reconciler preserves or recomputes the legitimate `MAPOBJECTFLAG_UNK20`
+  terrain/render state.
+
+Files/symbols:
+
+- `src/field/map_teleport.c`
+  - `OverworldFieldService_OnMapHeaderChangedImpl`
+- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c`
+  - `OverworldWildOverlayRuntimeState`
+  - `OverworldWildSpawns_DetachAllMovementStateOnContextLoss`
+  - `OverworldWildSpawns_PrepareMapHeaderChange`
+  - `OverworldWildSpawns_OverlayOnPlayerFrame`
+
+Expected result:
+
+- Retained Pokemon recover their stock native shadows on the frame after the
+  previous shadow effect has had time to self-delete.
+- Ordinary movement and the established long-hop presentation remain
+  unchanged; there is no broad per-movement flag clear and no carrier object.
+
+Build result:
+
+- V2 UI build succeeded in `0:37`.
+- Overlay 149 packaged size was `0xA7BA`; the ABI gate reported 28 bytes.
+- Copied the ROM to Delta as `test2224.nds`.
+- `test.nds` was opened by the V2 UI.
+
+Runtime result:
+
+- Pending user verification; the successful build was not runtime-tested.

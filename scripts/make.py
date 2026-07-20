@@ -158,6 +158,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         'OverworldWildSpawns_CleanupResidentData',
         'OverworldWildSpawns_OverlayOnPlayerFrame',
         'OverworldWildSpawns_OverlayOnFieldBusy',
+        'OverworldWildSpawns_PrepareMapHeaderChange',
     ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
@@ -188,7 +189,10 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
     if len(overlay) < expected_entry_size:
         raise RuntimeError('overlay 149 is shorter than its exported ABI entry')
 
-    actual_callbacks = struct.unpack_from('<6I', overlay)
+    actual_callbacks = struct.unpack_from(
+        f'<{len(callback_names)}I',
+        overlay,
+    )
     expected_callbacks = tuple(symbols[name][0] | 1 for name in callback_names)
     if actual_callbacks != expected_callbacks:
         raise RuntimeError(
@@ -197,6 +201,59 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
     digest = hashlib.sha256(overlay).hexdigest()
     print(
         f'overlay 149 ABI gate: entry=0x{entry_address:08X} '
+        f'size={entry_size} sha256={digest}'
+    )
+
+
+def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
+    entry_name = 'gOverworldFieldServiceEntry'
+    callback_names = [
+        'OverworldFieldService_OnMapHeaderChangedImpl',
+        'OverworldFieldService_PollFrameImpl',
+        'OverworldFieldService_TryGetEncounterDataIdForMapImpl',
+    ]
+    symbols = {}
+    output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+            symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
+
+    missing = [name for name in [entry_name, *callback_names] if name not in symbols]
+    if missing:
+        raise RuntimeError(
+            'overlay 131 field-service ABI gate is missing linked symbols: '
+            + ', '.join(missing)
+        )
+    entry_address, entry_size = symbols[entry_name]
+    expected_entry_size = 16
+    if entry_address != 0x023C8000 or entry_size != expected_entry_size:
+        raise RuntimeError(
+            f'overlay 131 field-service ABI entry changed: address=0x{entry_address:08X} '
+            f'size={entry_size}, expected address=0x023C8000 size={expected_entry_size}'
+        )
+
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 131 differs from its linked binary')
+    if len(overlay) < expected_entry_size:
+        raise RuntimeError('overlay 131 is shorter than its field-service ABI entry')
+
+    actual_entry = struct.unpack_from('<4I', overlay)
+    expected_entry = (
+        0x3146574F,
+        *(symbols[name][0] | 1 for name in callback_names),
+    )
+    if actual_entry != expected_entry:
+        raise RuntimeError(
+            'overlay 131 field-service ABI entry does not exactly match its magic and linked callbacks'
+        )
+    digest = hashlib.sha256(overlay).hexdigest()
+    print(
+        f'overlay 131 field-service ABI gate: entry=0x{entry_address:08X} '
         f'size={entry_size} sha256={digest}'
     )
 
@@ -548,6 +605,12 @@ def writeall():
             y9Table.write(struct.pack('<I', 0)) # uncompressed
         if newOverlay == 149:
             VerifyOverworldWildSpawnsOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 131:
+            VerifyOverworldFieldServiceOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,

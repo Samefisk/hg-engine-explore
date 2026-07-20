@@ -39,7 +39,6 @@ u16 LONG_CALL MapHeader_GetMapSec(u32 map_no);
 #define OW_WILD_HELPER_SPAWN_POSITION_STRIDE 73
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
-#define OW_WILD_HELPER_ENCOUNTER_LOOKUP_MAX_BLOB_SIZE 0x4000
 #define OW_WILD_HELPER_THROW_CARRIED_Y_OFFSET_FX32 (0x10000 / 2)
 #define OW_WILD_HELPER_PLAYER_BALL_TAG 87
 #define OW_WILD_HELPER_PLAYER_BALL_WHITE_TAG 231
@@ -162,12 +161,6 @@ u16 LONG_CALL MapHeader_GetMapSec(u32 map_no);
 #define OW_WILD_BATTLE_RESULT_TRY_FLEE 0x80
 #define OW_WILD_HELPER_PAL_PARAM_SHINY 1
 #define OW_WILD_HELPER_PAL_PARAM_ENABLE 2
-#define OW_WILD_HELPER_ENCOUNTER_DATA_SIZE 196
-#define OW_WILD_HELPER_ENCOUNTER_DATA_OLD_ROD_RATE_OFFSET 3
-#define OW_WILD_HELPER_ENCOUNTER_DATA_GOOD_ROD_RATE_OFFSET 4
-#define OW_WILD_HELPER_ENCOUNTER_DATA_SUPER_ROD_RATE_OFFSET 5
-#define OW_WILD_HELPER_SPARSE_RECORD_HEADER_SIZE 4
-#define OW_WILD_HELPER_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET 24
 #define OW_WILD_HELPER_NELEMS(array) (sizeof(array) / sizeof((array)[0]))
 #define OverworldWildHelper_LoadHeadbuttDataByMapId(callbacks, context, mapId, offset, dest, size) \
     OverworldWildHelper_LoadArchiveData(callbacks, context, ARC_HEADBUTT_TREES, mapId, offset, dest, size)
@@ -240,12 +233,6 @@ void LONG_CALL MTX_RotZ33_(
 void LONG_CALL G3_MultMtx33_(
     const OverworldWildHelperRotationMatrix *matrix);
 extern const s16 FX_SinCosTable_[];
-
-typedef struct OverworldWildHelperSparseEncounterSection {
-    u8 mask;
-    u8 targetOffset;
-    u8 size;
-} OverworldWildHelperSparseEncounterSection;
 
 typedef union OverworldWildHelperPlayerBallScratch {
     /* IMPACT owns this arm until the target palette has been restored. */
@@ -382,24 +369,10 @@ static const OverworldWildHelperCoordOffset sOverworldWildHelperCardinalOffsets[
     { 1, 0 },
 };
 
-static const OverworldWildHelperSparseEncounterSection sOverworldWildHelperSparseEncounterSections[] = {
-    { OWED_SECTION_LAND_LEVELS, 8, 12 },
-    { OWED_SECTION_LAND_MORNING, 20, 24 },
-    { OWED_SECTION_LAND_DAY, 44, 24 },
-    { OWED_SECTION_LAND_NIGHT, 68, 24 },
-    { OWED_SECTION_SURF, 100, 20 },
-    { OWED_SECTION_OLD_ROD, 128, 20 },
-    { OWED_SECTION_GOOD_ROD, 148, 20 },
-    { OWED_SECTION_SUPER_ROD, 168, 20 },
-};
-
 #if OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH
 // Stored as cursor + 1 so zero can mean uninitialized after the helper overlay is loaded.
 static u16 sOverworldWildHelperSpawnPositionCursor[2];
 #endif
-static void *sOverworldWildHelperEncounterLookupDataBlob;
-static u32 sOverworldWildHelperEncounterLookupDataBlobSize;
-static BOOL sOverworldWildHelperEncounterLookupLoadAttempted;
 static OverworldWildHelperPlayerBallProjectileState sOverworldWildHelperPlayerBallProjectile;
 static BOOL sOverworldWildHelperPlayerBallRWasDown;
 static BOOL sOverworldWildHelperPlayerBallInputArmed = TRUE;
@@ -427,294 +400,6 @@ static int OverworldWildHelper_Max(int lhs, int rhs)
 static int OverworldWildHelper_Min(int lhs, int rhs)
 {
     return lhs < rhs ? lhs : rhs;
-}
-
-static BOOL OverworldWildHelper_IsEncounterLookupRangeValid(
-    u32 offset,
-    u32 size,
-    u32 totalSize)
-{
-    return offset <= totalSize && size <= totalSize - offset;
-}
-
-static u32 OverworldWildHelper_ComputeEncounterLookupChecksum(
-    const u8 *blob,
-    u32 size)
-{
-    u32 checksum = 0;
-    u32 i;
-
-    for (i = 0; i < size; i++) {
-        if (i >= OW_WILD_HELPER_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET
-            && i < OW_WILD_HELPER_ENCOUNTER_LOOKUP_CHECKSUM_OFFSET + sizeof(u32)) {
-            continue;
-        }
-        checksum += blob[i];
-    }
-
-    return checksum;
-}
-
-static BOOL OverworldWildHelper_IsSparseEncounterRecordValid(
-    const u8 *record,
-    u32 size)
-{
-    u32 recordOffset;
-    u32 i;
-
-    if (record == NULL || size < OW_WILD_HELPER_SPARSE_RECORD_HEADER_SIZE) {
-        return FALSE;
-    }
-
-    recordOffset = OW_WILD_HELPER_SPARSE_RECORD_HEADER_SIZE;
-    for (i = 0; i < OW_WILD_HELPER_NELEMS(sOverworldWildHelperSparseEncounterSections); i++) {
-        const OverworldWildHelperSparseEncounterSection *section =
-            &sOverworldWildHelperSparseEncounterSections[i];
-        if ((record[3] & section->mask) == 0) {
-            continue;
-        }
-        if (!OverworldWildHelper_IsEncounterLookupRangeValid(
-                recordOffset,
-                section->size,
-                size)) {
-            return FALSE;
-        }
-        recordOffset += section->size;
-    }
-
-    return recordOffset == size;
-}
-
-static BOOL OverworldWildHelper_DecodeEncounterLookupDataBlob(void)
-{
-    const OverworldWildEncounterLookupDataBlobHeader *header;
-    const u8 *base;
-    u32 directorySize;
-    u32 i;
-
-    if (sOverworldWildHelperEncounterLookupDataBlob == NULL
-        || sOverworldWildHelperEncounterLookupDataBlobSize < sizeof(*header)) {
-        return FALSE;
-    }
-
-    base = (const u8 *)sOverworldWildHelperEncounterLookupDataBlob;
-    header = (const OverworldWildEncounterLookupDataBlobHeader *)base;
-    if (header->magic != OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC
-        || header->version != OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION
-        || header->headerSize != sizeof(OverworldWildEncounterLookupDataBlobHeader)
-        || header->recordCount != OWED_ENCOUNTER_AREA_COUNT
-        || header->directoryEntrySize != sizeof(OverworldWildEncounterLookupDirectoryEntry)) {
-        return FALSE;
-    }
-    directorySize = (u32)header->recordCount * (u32)header->directoryEntrySize;
-
-    if (header->totalSize != sOverworldWildHelperEncounterLookupDataBlobSize
-        || header->flags != 0
-        || header->checksum != OverworldWildHelper_ComputeEncounterLookupChecksum(
-            base,
-            sOverworldWildHelperEncounterLookupDataBlobSize)
-        || header->directoryOffset < header->headerSize
-        || (header->directoryOffset & 3) != 0
-        || !OverworldWildHelper_IsEncounterLookupRangeValid(
-            header->directoryOffset,
-            directorySize,
-            header->totalSize)
-        || header->payloadOffset != header->directoryOffset + directorySize
-        || header->payloadOffset > header->totalSize) {
-        return FALSE;
-    }
-
-    for (i = 0; i < header->recordCount; i++) {
-        const OverworldWildEncounterLookupDirectoryEntry *entry =
-            (const OverworldWildEncounterLookupDirectoryEntry *)(base
-                + header->directoryOffset
-                + i * sizeof(*entry));
-        if (entry->flags != 0
-            || entry->size < OW_WILD_HELPER_SPARSE_RECORD_HEADER_SIZE
-            || entry->offset < header->payloadOffset
-            || !OverworldWildHelper_IsEncounterLookupRangeValid(
-                entry->offset,
-                entry->size,
-                header->totalSize)
-            || !OverworldWildHelper_IsSparseEncounterRecordValid(
-                base + entry->offset,
-                entry->size)) {
-            return FALSE;
-        }
-    }
-
-    return TRUE;
-}
-
-static const OverworldWildEncounterLookupDataBlobHeader *
-OverworldWildHelper_GetEncounterLookupDataBlob(void)
-{
-    void *narc;
-    u32 size;
-
-    if (!sOverworldWildHelperEncounterLookupLoadAttempted) {
-        sOverworldWildHelperEncounterLookupLoadAttempted = TRUE;
-        narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
-        if (narc == NULL) {
-            return NULL;
-        }
-        if (NARC_GetFileCount(narc)
-            <= CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_LOOKUP) {
-            NARC_dtor(narc);
-            return NULL;
-        }
-        size = NARC_GetMemberSize(
-            narc,
-            CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_LOOKUP);
-        if (size >= sizeof(OverworldWildEncounterLookupDataBlobHeader)
-            && size <= OW_WILD_HELPER_ENCOUNTER_LOOKUP_MAX_BLOB_SIZE) {
-            sOverworldWildHelperEncounterLookupDataBlob =
-                sys_AllocMemory(HEAPID_WORLD, size);
-        }
-        if (sOverworldWildHelperEncounterLookupDataBlob != NULL) {
-            NARC_ReadWholeMember(
-                narc,
-                CODE_ADDON_OVERWORLD_WILD_ENCOUNTER_LOOKUP,
-                sOverworldWildHelperEncounterLookupDataBlob);
-            sOverworldWildHelperEncounterLookupDataBlobSize = size;
-        }
-        NARC_dtor(narc);
-        if (sOverworldWildHelperEncounterLookupDataBlob == NULL
-            || !OverworldWildHelper_DecodeEncounterLookupDataBlob()) {
-            sys_FreeMemoryEz(sOverworldWildHelperEncounterLookupDataBlob);
-            sOverworldWildHelperEncounterLookupDataBlob = NULL;
-            sOverworldWildHelperEncounterLookupDataBlobSize = 0;
-        }
-    }
-
-    return (const OverworldWildEncounterLookupDataBlobHeader *)
-        sOverworldWildHelperEncounterLookupDataBlob;
-}
-
-static const OverworldWildEncounterLookupDirectoryEntry *
-OverworldWildHelper_FindEncounterLookupEntry(
-    const OverworldWildEncounterLookupDataBlobHeader *blob,
-    u16 mapId,
-    int encounterDataId,
-    BOOL matchEncounterDataId)
-{
-    const u8 *base;
-    u32 i;
-
-    if (blob == NULL) {
-        return NULL;
-    }
-
-    base = (const u8 *)blob;
-    for (i = 0; i < blob->recordCount; i++) {
-        const OverworldWildEncounterLookupDirectoryEntry *entry =
-            (const OverworldWildEncounterLookupDirectoryEntry *)(base
-                + blob->directoryOffset
-                + i * sizeof(*entry));
-        if (entry->mapId == mapId
-            && (!matchEncounterDataId || entry->dataId == encounterDataId)) {
-            return entry;
-        }
-    }
-
-    return NULL;
-}
-
-static BOOL OverworldWildHelper_TryGetEncounterDataIdForMap(
-    u16 mapId,
-    int *encounterDataId)
-{
-    const OverworldWildEncounterLookupDirectoryEntry *entry;
-
-    if (mapId == MAP_NOTHING || encounterDataId == NULL) {
-        return FALSE;
-    }
-
-    entry = OverworldWildHelper_FindEncounterLookupEntry(
-        OverworldWildHelper_GetEncounterLookupDataBlob(),
-        mapId,
-        0,
-        FALSE);
-    if (entry == NULL) {
-        return FALSE;
-    }
-
-    *encounterDataId = entry->dataId;
-    return TRUE;
-}
-
-static BOOL OverworldWildHelper_TryCopySparseEncounterRecord(
-    const OverworldWildEncounterLookupDataBlobHeader *blob,
-    const OverworldWildEncounterLookupDirectoryEntry *entry,
-    void *dest,
-    int size)
-{
-    const u8 *record;
-    u8 *destBytes;
-    u32 recordOffset;
-    u32 i;
-    u32 j;
-
-    if (blob == NULL
-        || entry == NULL
-        || dest == NULL
-        || size != OW_WILD_HELPER_ENCOUNTER_DATA_SIZE) {
-        return FALSE;
-    }
-
-    record = (const u8 *)blob + entry->offset;
-    if (!OverworldWildHelper_IsSparseEncounterRecordValid(record, entry->size)) {
-        return FALSE;
-    }
-
-    memset(dest, 0, size);
-    destBytes = (u8 *)dest;
-    destBytes[OW_WILD_HELPER_ENCOUNTER_DATA_OLD_ROD_RATE_OFFSET] = record[0];
-    destBytes[OW_WILD_HELPER_ENCOUNTER_DATA_GOOD_ROD_RATE_OFFSET] = record[1];
-    destBytes[OW_WILD_HELPER_ENCOUNTER_DATA_SUPER_ROD_RATE_OFFSET] = record[2];
-
-    recordOffset = OW_WILD_HELPER_SPARSE_RECORD_HEADER_SIZE;
-    for (i = 0; i < OW_WILD_HELPER_NELEMS(sOverworldWildHelperSparseEncounterSections); i++) {
-        const OverworldWildHelperSparseEncounterSection *section =
-            &sOverworldWildHelperSparseEncounterSections[i];
-        if ((record[3] & section->mask) == 0) {
-            continue;
-        }
-        for (j = 0; j < section->size; j++) {
-            destBytes[section->targetOffset + j] = record[recordOffset + j];
-        }
-        recordOffset += section->size;
-    }
-
-    return TRUE;
-}
-
-static BOOL OverworldWildHelper_TryLoadEncounterData(
-    u16 mapId,
-    int encounterDataId,
-    void *dest,
-    int size)
-{
-    const OverworldWildEncounterLookupDataBlobHeader *blob;
-    const OverworldWildEncounterLookupDirectoryEntry *entry;
-
-    if (mapId == MAP_NOTHING
-        || encounterDataId < 0
-        || encounterDataId > 0xFFFF) {
-        return FALSE;
-    }
-
-    blob = OverworldWildHelper_GetEncounterLookupDataBlob();
-    entry = OverworldWildHelper_FindEncounterLookupEntry(
-        blob,
-        mapId,
-        encounterDataId,
-        TRUE);
-    return OverworldWildHelper_TryCopySparseEncounterRecord(
-        blob,
-        entry,
-        dest,
-        size);
 }
 
 static int OverworldWildHelper_DirectionDeltaX(u8 direction)
@@ -2303,7 +1988,7 @@ static BOOL OverworldWildHelper_PrepareCapturedPokemonFrame(
             pokemon,
             profile,
             ITEM_POKE_BALL,
-            MapHeader_GetMapSec(spawn->mapId),
+            MapHeader_GetMapSec((u16)projectile->targetY),
             value,
             HEAPID_WORLD);
         break;
@@ -2529,17 +2214,20 @@ static void OverworldWildHelper_RestoreCaptureTargetPalette(
     if (!projectile->targetWhiteActive) {
         return;
     }
-    if (projectile->targetZ != 0
-        && OverworldWildHelper_IsPlayerBallCaptureTargetCurrent(
+    if (!OverworldWildHelper_IsPlayerBallCaptureTargetCurrent(
             fieldSystem,
             projectile->state)) {
-        targetActor = ov01_021F72DC(
-            projectile->state->spawns[projectile->impactSlot].object);
-        if (targetActor != NULL) {
-            *(u32 *)((u8 *)targetActor
-                + OW_WILD_HELPER_FIELD_ACTOR_PALETTE_KEY_OFFSET) =
-                (u32)projectile->targetZ;
-        }
+        return;
+    }
+    targetActor = ov01_021F72DC(
+        projectile->state->spawns[projectile->impactSlot].object);
+    if (targetActor == NULL) {
+        return;
+    }
+    if (projectile->targetZ != 0) {
+        *(u32 *)((u8 *)targetActor
+            + OW_WILD_HELPER_FIELD_ACTOR_PALETTE_KEY_OFFSET) =
+            (u32)projectile->targetZ;
     }
     projectile->targetZ = 0;
     projectile->targetWhiteActive = FALSE;
@@ -2968,6 +2656,7 @@ static BOOL OverworldWildHelper_StartPlayerBallImpact(
     projectile->totalFrames = OW_WILD_HELPER_PLAYER_BALL_IMPACT_FRAMES;
     projectile->impactSlot = (s8)slot;
     projectile->impactEncounterGeneration = encounterGeneration;
+    projectile->targetY = state->spawns[slot].mapId;
     projectile->shakeChecks = shakeChecks;
     projectile->shakeIndex = 0;
     projectile->targetHadPassThrough =
@@ -3162,6 +2851,32 @@ static void OverworldWildHelper_ApplyPlayerBallRender(void)
     MapObject_ClearBits(object, BIT_VANISH);
 }
 
+static LocalMapObject *OverworldWildHelper_CreatePlayerBallObject(
+    FieldSystem *fieldSystem)
+{
+    LocalMapObject *playerObject = fieldSystem->playerAvatar->mapObject;
+    LocalMapObject *object;
+
+    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
+    object = CreateSpecialFieldObjectWithParams(
+        fieldSystem->mapObjectMan,
+        MapObject_GetCurrentX(playerObject),
+        MapObject_GetCurrentY(playerObject),
+        playerObject->curFacing,
+        OW_WILD_HELPER_PLAYER_BALL_TAG,
+        OW_WILD_MOVE_STOCK_IDLE,
+        fieldSystem->location->mapId,
+        0,
+        0,
+        0);
+    if (object == NULL) {
+        return NULL;
+    }
+    MapObject_SetID(object, OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID);
+    MapObject_SetBits(object, MAPOBJECTFLAG_UNK18 | MAPOBJECTFLAG_UNK20);
+    return object;
+}
+
 static BOOL OverworldWildHelper_TryStartPlayerBallCharge(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state)
@@ -3188,25 +2903,10 @@ static BOOL OverworldWildHelper_TryStartPlayerBallCharge(
         return FALSE;
     }
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
-    OverworldWildCustomMovement_SetFieldSystem(fieldSystem);
-    object = CreateSpecialFieldObjectWithParams(
-        manager,
-        MapObject_GetCurrentX(playerObject),
-        MapObject_GetCurrentY(playerObject),
-        playerObject->curFacing,
-        OW_WILD_HELPER_PLAYER_BALL_TAG,
-        OW_WILD_MOVE_STOCK_IDLE,
-        fieldSystem->location->mapId,
-        0,
-        0,
-        0);
+    object = OverworldWildHelper_CreatePlayerBallObject(fieldSystem);
     if (object == NULL) {
         return FALSE;
     }
-
-    MapObject_SetID(object, OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID);
-    MapObject_SetBits(object, MAPOBJECTFLAG_UNK18 | MAPOBJECTFLAG_UNK20);
-    MapObject_ClearBits(object, BIT_VANISH);
     projectile->fieldSystem = fieldSystem;
     projectile->state = state;
     projectile->manager = manager;
@@ -3257,6 +2957,7 @@ static BOOL OverworldWildHelper_TryLaunchPlayerBallProjectile(
     projectile->mapGeneration = state->mapGeneration;
     projectile->phase = OW_WILD_HELPER_PLAYER_BALL_PHASE_FLYING;
     projectile->elapsedFrames = 0;
+    projectile->targetHadPassThrough = playerObject->curFacing;
     projectile->startX = (s32)object->posVec[0];
     projectile->startY = (s32)object->posVec[1];
     projectile->startZ = (s32)object->posVec[2];
@@ -3305,6 +3006,7 @@ static void OverworldWildHelper_RenderPlayerBallOnCaptureTarget(
     ballObject->hCurr = targetObject->hCurr;
     ballObject->faceVec[1] = (u32)height;
     ballObject->unk88[1] = ballObject->faceVec[1];
+    MapObject_ClearBits(ballObject, BIT_VANISH);
 }
 
 static void OverworldWildHelper_ApplyPlayerBallRotation(s16 rotation)
@@ -3788,6 +3490,20 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
         return FALSE;
     }
+    if (sOverworldWildHelperPlayerBallProjectile.phase
+            != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE
+        && sOverworldWildHelperPlayerBallProjectile.objectId == 0) {
+        if (fieldSystem->taskman != NULL
+            || fieldSystem->location == NULL
+            || sOverworldWildHelperPlayerBallProjectile.mapId
+                != fieldSystem->location->mapId) {
+            return TRUE;
+        }
+        sOverworldWildHelperPlayerBallProjectile.objectId =
+            OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
+        OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        return FALSE;
+    }
     if (fieldSystem->taskman != NULL) {
         sOverworldWildHelperPlayerBallInputArmed = FALSE;
         sOverworldWildHelperPlayerBallChargeFrames = 0;
@@ -3943,6 +3659,8 @@ static LocalMapObject *OverworldWildHelper_GetPlayerBallProjectileObject(void)
 {
     return sOverworldWildHelperPlayerBallProjectile.phase
             != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE
+            && sOverworldWildHelperPlayerBallProjectile.objectId
+                == OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID
         ? sOverworldWildHelperPlayerBallProjectile.object
         : NULL;
 }
@@ -3954,10 +3672,6 @@ static void OverworldWildHelper_CleanupResidentData(FieldSystem *fieldSystem)
     sOverworldWildHelperPlayerBallInputArmed = FALSE;
     sOverworldWildHelperPlayerBallStaleCheckDone = FALSE;
     sOverworldWildHelperPlayerBallChargeFrames = 0;
-    sys_FreeMemoryEz(sOverworldWildHelperEncounterLookupDataBlob);
-    sOverworldWildHelperEncounterLookupDataBlob = NULL;
-    sOverworldWildHelperEncounterLookupDataBlobSize = 0;
-    sOverworldWildHelperEncounterLookupLoadAttempted = FALSE;
 }
 
 static void OverworldWildHelper_NormalizeThrowPresentation(
@@ -3965,9 +3679,133 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
     OverworldWildSpawnState *state,
     int slot)
 {
+    OverworldWildHelperPlayerBallProjectileState *projectile =
+        &sOverworldWildHelperPlayerBallProjectile;
     LocalMapObject *object;
     int x;
     int y;
+
+    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_DISCARD) {
+        if (projectile->objectId == 0) {
+            projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
+        }
+        OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        return;
+    }
+    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_SUSPEND) {
+        if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
+            return;
+        }
+        if (projectile->objectId == 0) {
+            return;
+        }
+        if (projectile->objectId != OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID
+            || projectile->state != state) {
+            OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+            return;
+        }
+        OverworldWildHelper_RestoreCaptureTargetPalette(fieldSystem);
+        if (OverworldWildHelper_IsPlayerBallProjectileObjectCurrent(
+                fieldSystem)) {
+            OverworldWildHelper_DetachPlayerBallRotation(projectile->object);
+        } else {
+            projectile->object = NULL;
+        }
+        projectile->objectId = 0;
+        return;
+    }
+    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME) {
+        if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
+            return;
+        }
+        if (projectile->objectId != 0
+            || projectile->state != state
+            || !OverworldWildHelper_IsPresentationContextCurrent(
+                fieldSystem,
+                state)
+            || (projectile->phase >= OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
+                && (!OverworldWildHelper_IsExactObject(
+                        fieldSystem,
+                        state,
+                        projectile->impactSlot)
+                    || state->spawns[projectile->impactSlot]
+                            .encounterGeneration
+                        != projectile->impactEncounterGeneration))) {
+            projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
+            OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+            return;
+        }
+        if (fieldSystem->playerAvatar == NULL
+            || fieldSystem->playerAvatar->mapObject == NULL
+            || fieldSystem->playerAvatar->mapObject->curFacing > 3
+            || (object = OverworldWildHelper_CreatePlayerBallObject(
+                    fieldSystem)) == NULL) {
+            projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
+            OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+            return;
+        }
+        projectile->fieldSystem = fieldSystem;
+        projectile->manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+        projectile->objects = projectile->manager->objects;
+        projectile->object = object;
+        projectile->mapId = fieldSystem->location->mapId;
+        projectile->mapGeneration = state->mapGeneration;
+        projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
+        if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_FLYING) {
+            s16 rotation = projectile->rotation;
+
+            projectile->object->curFacing = projectile->targetHadPassThrough;
+            projectile->object->nextFacing = projectile->targetHadPassThrough;
+            OverworldWildHelper_ApplyPlayerBallRender();
+            OverworldWildHelper_ApplyPlayerBallRotation(rotation);
+        }
+        if ((projectile->phase > OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
+                && projectile->phase
+                    != OW_WILD_HELPER_PLAYER_BALL_PHASE_BREAKOUT)
+            || (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
+                && projectile->elapsedFrames
+                    >= OW_WILD_HELPER_PLAYER_BALL_IMPACT_DESCENT_FRAME)) {
+            OverworldWildHelper_ReservePlayerBallCaptureTarget(state);
+        } else if (projectile->phase
+            == OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT) {
+            state->captureTargetMask |=
+                (u16)(1u << projectile->impactSlot);
+        }
+        if (projectile->targetHadPassThrough
+            && (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_BREAKOUT
+                || (projectile->phase
+                        == OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
+                    && projectile->elapsedFrames
+                        < OW_WILD_HELPER_PLAYER_BALL_IMPACT_DESCENT_FRAME))) {
+            MapObject_SetBits(
+                state->spawns[projectile->impactSlot].object,
+                MAPOBJECTFLAG_UNK18);
+        }
+        if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
+            && projectile->elapsedFrames
+                <= OW_WILD_HELPER_PLAYER_BALL_IMPACT_DESCENT_FRAME
+                    + OW_WILD_HELPER_PLAYER_BALL_SECOND_FLASH_EXTRA_FRAMES) {
+            OverworldWildHelper_RestoreCaptureTargetPalette(fieldSystem);
+            OverworldWildHelper_PrepareCaptureWhiteBall(fieldSystem);
+            OverworldWildHelper_ApplyCaptureTargetWhite(fieldSystem);
+            if (projectile->elapsedFrames
+                    > OW_WILD_HELPER_PLAYER_BALL_IMPACT_FLASH_FRAMES
+                && projectile->elapsedFrames
+                    <= OW_WILD_HELPER_PLAYER_BALL_IMPACT_APEX_FRAME) {
+                OverworldWildHelper_RestoreCaptureWhiteBall(fieldSystem);
+            }
+        } else if (projectile->phase
+                == OW_WILD_HELPER_PLAYER_BALL_PHASE_SHAKING
+            && projectile->shakeIndex == 3
+            && projectile->elapsedFrames != 0
+            && projectile->elapsedFrames
+                <= OW_WILD_HELPER_PLAYER_BALL_CAUGHT_WHITE_FRAMES) {
+            ChangeMapObjSprite(
+                projectile->object,
+                OW_WILD_HELPER_PLAYER_BALL_WHITE_TAG);
+        }
+        return;
+    }
 
     if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || !OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
@@ -4898,7 +4736,8 @@ static LocalMapObject *OverworldWildHelper_CreatePresentationObject(
     object->yPrev = y;
     object->posVec[0] = (u32)((s32)x * 0x10000 + 0x8000);
     object->posVec[2] = (u32)((s32)y * 0x10000 + 0x8000);
-    object->flags &= ~(BIT_VANISH | MAPOBJECTFLAG_UNK8);
+    object->flags = (object->flags & ~(BIT_VANISH | MAPOBJECTFLAG_UNK8))
+        | MAPOBJECTFLAG_KEEP;
     return object;
 }
 
@@ -4998,8 +4837,8 @@ static void OverworldWildHelper_AppendFleeFallbackDirections(
     OverworldWildHelper_FinishBattle, \
     OverworldWildHelper_CreatePresentationObject, \
     OverworldWildHelper_ValidateDeferredBattle, \
-    OverworldWildHelper_TryGetEncounterDataIdForMap, \
-    OverworldWildHelper_TryLoadEncounterData, \
+    NULL, \
+    NULL, \
     OverworldWildHelper_TickPlayerBallProjectile, \
     OverworldWildHelper_CancelPlayerBallProjectile, \
     OverworldWildHelper_GetPlayerBallProjectileObject, \

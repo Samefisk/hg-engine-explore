@@ -31,11 +31,9 @@ static BOOL IsOverworldWildOverlay(u32 ovyId)
         || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
 }
 
-static void ResetMapTeleportOverlayState(void)
+static void ResetOverworldFieldServiceState(void)
 {
-    *(u32 *)MAP_TELEPORT_OVERLAY_ENTRY_ADDR = 0;
-    gMapTeleportTransitionState.state = 0;
-    gMapTeleportTransitionState.frame = 0;
+    *(u32 *)OVERWORLD_FIELD_SERVICE_ENTRY_ADDR = 0;
 }
 
 u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
@@ -105,7 +103,7 @@ unloadSecond:
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
         if (table[i].active == TRUE && table[i].id == ovyId) {
             if (ovyId == OVERLAY_FIELD_EXTENSION) {
-                ResetMapTeleportOverlayState();
+                ResetOverworldFieldServiceState();
             }
             if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
                 && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {

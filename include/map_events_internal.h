@@ -62,8 +62,24 @@ typedef struct MAP_EVENTS {
     COORD_EVENT *coord_events;
     u8 event_data[0x800];
     u8 script_header[0x100];
-    //ENC_DATA wildEncounters; // we'll get there when we get there
+    u8 wildEncounters[196];
 } MAP_EVENTS;
+
+#define MAP_EVENTS_WILD_ENCOUNTERS_OFFSET 0x920
+#define MAP_EVENTS_WILD_ENCOUNTERS_SIZE 196
+
+typedef char MapEventsWildEncountersOffsetMustRemain0x920[
+    offsetof(MAP_EVENTS, wildEncounters) == MAP_EVENTS_WILD_ENCOUNTERS_OFFSET ? 1 : -1];
+typedef char MapEventsWildEncountersSizeMustRemain196[
+    sizeof(((MAP_EVENTS *)0)->wildEncounters) == MAP_EVENTS_WILD_ENCOUNTERS_SIZE ? 1 : -1];
+typedef char MapEventsSizeMustIncludeWildEncountersTail[
+    sizeof(MAP_EVENTS) == MAP_EVENTS_WILD_ENCOUNTERS_OFFSET
+            + MAP_EVENTS_WILD_ENCOUNTERS_SIZE
+        ? 1
+        : -1];
+
+BOOL LONG_CALL MapHeader_HasWildEncounters(u32 mapId);
+u8 LONG_CALL MapHeader_GetWildEncounterBank(u32 mapId);
 
 
 
@@ -103,7 +119,8 @@ typedef enum MapObjectFlagBits {
     MAPOBJECTFLAG_UNK7 = (1 << 7),
     MAPOBJECTFLAG_UNK8 = (1 << 8),
     MAPOBJECTFLAG_UNK9 = (1 << 9),
-    MAPOBJECTFLAG_UNK10 = (1 << 10),
+    MAPOBJECTFLAG_KEEP = (1 << 10),
+    MAPOBJECTFLAG_UNK10 = MAPOBJECTFLAG_KEEP,
     MAPOBJECTFLAG_UNK11 = (1 << 11),
     MAPOBJECTFLAG_UNK12 = (1 << 12),
     MAPOBJECTFLAG_UNK13 = (1 << 13),

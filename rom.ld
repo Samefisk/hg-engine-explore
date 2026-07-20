@@ -54,6 +54,8 @@ NARC_dtor = 0x0200770C | 1;
 NARC_ReadWholeMember = 0x0200778C | 1;
 NARC_GetMemberSize = 0x020077E8 | 1;
 ArchiveDataLoadOfs = 0x02007560 | 1;
+MapHeader_HasWildEncounters = 0x0203B324 | 1;
+MapHeader_GetWildEncounterBank = 0x0203B344 | 1;
 /*sqrt = 0x0200048A | 1;*/
 
 /*Pokemon*/

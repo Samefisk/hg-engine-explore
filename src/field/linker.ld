@@ -13,13 +13,7 @@ SECTIONS {
 
                 __text_start = . ;
                 . = ALIGN(4);
-                KEEP(*(.map_teleport_entry))
-                . = ALIGN(4);
-                KEEP(*(.map_teleport_debug_destination))
-                . = ALIGN(4);
-                KEEP(*(.map_teleport_debug_status))
-                . = ALIGN(4);
-                KEEP(*(.map_teleport_encounter_destination_entry))
+                KEEP(*(.overworld_field_service_entry))
                 . = ALIGN(4);
                 *(.init)
                 *(.text)
