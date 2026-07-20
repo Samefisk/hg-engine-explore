@@ -23,18 +23,12 @@
 #define OW_WILD_FIELD_READY_INITIAL_SPAWN 0
 #define OW_WILD_DISABLE_PLAYER_STEP_HOOK 0
 #define OW_WILD_PLAYER_STEP_DIAGNOSTIC_LOAD_ONLY 0
-typedef struct OverworldWildSavedHp {
-    u32 personality;
-    u16 hp;
-} OverworldWildSavedHp;
-
 OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
     .pendingSlot = -1,
     .movementQueuedBattleSlot = -1,
 };
 
-static OverworldWildSavedHp sSavedHp[OW_WILD_HP_SLOT_COUNT];
 static u32 sBattleHpPersonality;
 static u32 sBattlePersonalityOverrideValue;
 MapTeleportTemporaryReturnState gMapTeleportTemporaryReturnState
@@ -43,8 +37,18 @@ MapTeleportTransitionRuntimeState gMapTeleportTransitionState
     __attribute__((section(".map_teleport_runtime"), aligned(2))) = {0};
 static FieldSystem *sFieldReadyTaskFieldSystem;
 static u16 sFieldReadyTaskMapId;
-u8 gOverworldWildFieldIdleRearmPending;
-static u8 sBattleFlags;
+OverworldWildResidentData gOverworldWildResidentData;
+__asm__(
+    ".global gOverworldWildFieldIdleRearmPending\n"
+    ".set gOverworldWildFieldIdleRearmPending, gOverworldWildResidentData\n"
+    ".global gOverworldWildBattleFlags\n"
+    ".set gOverworldWildBattleFlags, gOverworldWildResidentData + 1\n"
+    ".global gOverworldWildSavedHp\n"
+    ".set gOverworldWildSavedHp, gOverworldWildResidentData + 2\n");
+#define gOverworldWildFieldIdleRearmPending \
+    (gOverworldWildResidentData.pendingFlags)
+#define gOverworldWildBattleFlags (gOverworldWildResidentData.battleFlags)
+#define gOverworldWildSavedHp (gOverworldWildResidentData.savedHp)
 extern u32 space_for_setmondata;
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad);
@@ -54,16 +58,27 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     FieldSystem *fieldSystem = (FieldSystem *)data;
 
     if (fieldSystem != gFieldSysPtr) {
+        if (sFieldReadyTaskFieldSystem == fieldSystem) {
+            sFieldReadyTaskFieldSystem = NULL;
+        }
         DestroySysTask(task);
         return;
     }
 
     if (fieldSystem->taskman != NULL) {
-        gOverworldWildFieldIdleRearmPending = TRUE;
+        if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+            OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->onFieldBusy(
+                fieldSystem,
+                &sOverworldWildSpawnState,
+                &gOverworldWildResidentData);
+        } else {
+            gOverworldWildFieldIdleRearmPending |=
+                OW_WILD_FIELD_IDLE_REARM_PENDING
+                | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+        }
         return;
     }
     if (sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId) {
-        gOverworldWildFieldIdleRearmPending = FALSE;
         sFieldReadyTaskMapId = (u16)fieldSystem->location->mapId;
         sOverworldWildSpawnState.battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
         if (sOverworldWildSpawnState.mapId != fieldSystem->location->mapId) {
@@ -75,7 +90,7 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         sOverworldWildSpawnState.battleGraceSteps--;
         return;
     }
-    if (gOverworldWildFieldIdleRearmPending) {
+    if (gOverworldWildFieldIdleRearmPending != 0) {
         (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
     }
 
@@ -105,6 +120,12 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
 #else
     const OverworldWildSpawnsOverlayEntry *entry;
 
+    if (sFieldReadyTaskFieldSystem != fieldSystem) {
+        gOverworldWildFieldIdleRearmPending |=
+            OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+        OverworldWildSpawns_OnFieldSystemReady(fieldSystem);
+        return FALSE;
+    }
     if (fieldSystem->taskman != NULL
         || sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId
         || sOverworldWildSpawnState.battleGraceSteps != 0) {
@@ -120,11 +141,10 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     return FALSE;
 #endif
 
-    {
-        BOOL resumeOnly = gOverworldWildFieldIdleRearmPending;
-
-        return entry->onPlayerStep(fieldSystem, &sOverworldWildSpawnState, resumeOnly);
-    }
+    return entry->onPlayerStep(
+        fieldSystem,
+        &sOverworldWildSpawnState,
+        &gOverworldWildResidentData);
 #endif
 }
 
@@ -134,12 +154,15 @@ void OverworldWildSpawns_OnFieldSystemReady(FieldSystem *fieldSystem)
     (void)fieldSystem;
 #else
     if (sFieldReadyTaskFieldSystem != fieldSystem) {
-        sFieldReadyTaskMapId = 0;
-        CreateSysTask(
+        SysTask *task = CreateSysTask(
             OverworldWildSpawns_FieldReadyTask,
             fieldSystem,
             OW_WILD_FIELD_READY_DELAY_FRAMES);
-        sFieldReadyTaskFieldSystem = fieldSystem;
+
+        if (task != NULL) {
+            sFieldReadyTaskMapId = 0;
+            sFieldReadyTaskFieldSystem = fieldSystem;
+        }
     }
 #endif
 }
@@ -170,10 +193,10 @@ u32 OverworldWildSpawns_PopPendingBattle(FieldSystem *fieldSystem, LocalMapObjec
     space_for_setmondata = pendingSpecies >> OW_WILD_FORM_SHIFT;
     sBattlePersonalityOverrideValue = sOverworldWildSpawnState.pendingPersonality;
     sBattleHpPersonality = sOverworldWildSpawnState.pendingPersonality;
-    sBattleFlags = OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE
+    gOverworldWildBattleFlags = OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE
         | OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE;
     if (sOverworldWildSpawnState.pendingShiny) {
-        sBattleFlags |= OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE;
+        gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE;
     }
 
     sOverworldWildSpawnState.pendingSpecies = SPECIES_NONE;
@@ -188,35 +211,13 @@ static int OverworldWildSpawns_FindSavedHpSlot(u32 personality)
     int i;
 
     for (i = 0; i < OW_WILD_HP_SLOT_COUNT; i++) {
-        if (sSavedHp[i].personality != 0
-            && sSavedHp[i].personality == personality) {
+        if (sOverworldWildSpawnState.spawns[i].active
+            && sOverworldWildSpawnState.spawns[i].personality == personality) {
             return i;
         }
     }
 
     return -1;
-}
-
-static int OverworldWildSpawns_FindFreeSavedHpSlot(void)
-{
-    int i;
-
-    for (i = 0; i < OW_WILD_HP_SLOT_COUNT; i++) {
-        if (sSavedHp[i].personality == 0) {
-            return i;
-        }
-    }
-
-    return 0;
-}
-
-static void OverworldWildSpawns_ClearSavedHp(u32 personality)
-{
-    int slot = OverworldWildSpawns_FindSavedHpSlot(personality);
-
-    if (slot >= 0) {
-        sSavedHp[slot].personality = 0;
-    }
 }
 
 static void OverworldWildSpawns_SaveHp(u32 personality, u16 hp)
@@ -229,11 +230,10 @@ static void OverworldWildSpawns_SaveHp(u32 personality, u16 hp)
 
     slot = OverworldWildSpawns_FindSavedHpSlot(personality);
     if (slot < 0) {
-        slot = OverworldWildSpawns_FindFreeSavedHpSlot();
+        return;
     }
 
-    sSavedHp[slot].personality = personality;
-    sSavedHp[slot].hp = hp;
+    gOverworldWildSavedHp[slot] = hp;
 }
 
 static u16 OverworldWildSpawns_GetSavedHp(u32 personality)
@@ -244,7 +244,7 @@ static u16 OverworldWildSpawns_GetSavedHp(u32 personality)
         return 0;
     }
 
-    return sSavedHp[slot].hp;
+    return gOverworldWildSavedHp[slot];
 }
 
 static u16 OverworldWildSpawns_ClampBattleHp(const struct BattlePokemon *mon, u16 hp)
@@ -260,79 +260,38 @@ static u16 OverworldWildSpawns_ClampBattleHp(const struct BattlePokemon *mon, u1
     return hp;
 }
 
-static void OverworldWildSpawns_TryApplySavedBattleHp(struct BattleSystem *bsys, struct BattleStruct *ctx)
+static struct BattlePokemon * __attribute__((noinline)) OverworldWildSpawns_FindTrackedEnemy(
+    struct BattleSystem *bsys,
+    struct BattleStruct *ctx)
 {
-    int battler;
-    u16 hp;
+    struct BattlePokemon *mon = &ctx->battlemon[BATTLER_ENEMY];
 
-    if (bsys == NULL
-        || ctx == NULL
-        || (sBattleFlags & OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE) == 0
-        || (sBattleFlags & OW_WILD_BATTLE_FLAG_HP_APPLIED) != 0
-        || ctx->server_seq_no < CONTROLLER_COMMAND_SELECTION_SCREEN_INIT) {
-        return;
+    if (BATTLER_ENEMY < bsys->maxBattlers
+        && mon->personal_rnd == sBattleHpPersonality) {
+        return mon;
     }
-
-    hp = OverworldWildSpawns_GetSavedHp(sBattleHpPersonality);
-    if (hp == 0) {
-        sBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
-        return;
+    mon += 2;
+    if (BATTLER_ENEMY + 2 < bsys->maxBattlers
+        && mon->personal_rnd == sBattleHpPersonality) {
+        return mon;
     }
-
-    for (battler = BATTLER_ENEMY; battler < CLIENT_MAX; battler += 2) {
-        if (battler >= bsys->maxBattlers
-            || ctx->battlemon[battler].personal_rnd != sBattleHpPersonality) {
-            continue;
-        }
-
-        hp = OverworldWildSpawns_ClampBattleHp(&ctx->battlemon[battler], hp);
-        if (hp != 0) {
-            ctx->battlemon[battler].hp = hp;
-            sBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
-        }
-        return;
-    }
-}
-
-static void OverworldWildSpawns_TryRecordFledBattleHp(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome)
-{
-    int battler;
-
-    if (bsys == NULL
-        || ctx == NULL
-        || (sBattleFlags & OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE) == 0
-        || (sBattleFlags & OW_WILD_BATTLE_FLAG_HP_RECORDED) != 0
-        || battleOutcome != OW_WILD_BATTLE_OUTCOME_PLAYER_FLED) {
-        return;
-    }
-
-    for (battler = BATTLER_ENEMY; battler < CLIENT_MAX; battler += 2) {
-        u16 hp;
-
-        if (battler >= bsys->maxBattlers
-            || ctx->battlemon[battler].personal_rnd != sBattleHpPersonality) {
-            continue;
-        }
-
-        hp = OverworldWildSpawns_ClampBattleHp(&ctx->battlemon[battler], (u16)ctx->battlemon[battler].hp);
-        if (hp != 0) {
-            OverworldWildSpawns_SaveHp(sBattleHpPersonality, hp);
-            sBattleFlags |= OW_WILD_BATTLE_FLAG_HP_RECORDED;
-        }
-        return;
-    }
+    return NULL;
 }
 
 BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL *shiny)
 {
-    if ((sBattleFlags & OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE) == 0) {
+    if ((gOverworldWildBattleFlags
+            & (OVERWORLD_WILD_BATTLE_FLAG_SUPPRESS_PERSONALITY_OVERRIDE
+                | OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE))
+        != OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE) {
         return FALSE;
     }
 
     *personality = sBattlePersonalityOverrideValue;
-    *shiny = (sBattleFlags & OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE) != 0;
+    *shiny = (gOverworldWildBattleFlags
+        & OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE) != 0;
     sBattlePersonalityOverrideValue = 0;
-    sBattleFlags &= (u8)~(OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE
+    gOverworldWildBattleFlags &= (u8)~(OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE
         | OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE);
 
     return TRUE;
@@ -340,15 +299,51 @@ BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL
 
 void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome)
 {
-    OverworldWildSpawns_TryApplySavedBattleHp(bsys, ctx);
-    OverworldWildSpawns_TryRecordFledBattleHp(bsys, ctx, battleOutcome);
+    struct BattlePokemon *mon;
+    u16 hp;
+
+    if (bsys == NULL
+        || ctx == NULL
+        || (gOverworldWildBattleFlags
+            & OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE) == 0) {
+        return;
+    }
+
+    if ((gOverworldWildBattleFlags & OW_WILD_BATTLE_FLAG_HP_APPLIED) == 0
+        && ctx->server_seq_no >= CONTROLLER_COMMAND_SELECTION_SCREEN_INIT) {
+        hp = OverworldWildSpawns_GetSavedHp(sBattleHpPersonality);
+        if (hp == 0) {
+            gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
+        } else {
+            mon = OverworldWildSpawns_FindTrackedEnemy(bsys, ctx);
+            if (mon != NULL) {
+                hp = OverworldWildSpawns_ClampBattleHp(mon, hp);
+                if (hp != 0) {
+                    mon->hp = hp;
+                    gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
+                }
+            }
+        }
+    }
+
+    if ((gOverworldWildBattleFlags & OW_WILD_BATTLE_FLAG_HP_RECORDED) == 0
+        && battleOutcome == OW_WILD_BATTLE_OUTCOME_PLAYER_FLED) {
+        mon = OverworldWildSpawns_FindTrackedEnemy(bsys, ctx);
+        if (mon != NULL) {
+            hp = OverworldWildSpawns_ClampBattleHp(mon, (u16)mon->hp);
+            if (hp != 0) {
+                OverworldWildSpawns_SaveHp(sBattleHpPersonality, hp);
+                gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_RECORDED;
+            }
+        }
+    }
 }
 
 void OverworldWildSpawns_CleanupPendingBattle(FieldSystem *fieldSystem, u32 battleResult)
 {
     const OverworldWildSpawnsOverlayEntry *entry = OverworldWildSpawns_GetOverlayEntry(FALSE);
     u8 disposition = OW_WILD_BATTLE_DISPOSITION_RETAIN;
-    u32 battlePersonality = sBattleHpPersonality;
+    int battleSlot = sOverworldWildSpawnState.pendingSlot;
 
     if (entry != NULL) {
         disposition = entry->cleanupPendingBattle(
@@ -363,12 +358,14 @@ void OverworldWildSpawns_CleanupPendingBattle(FieldSystem *fieldSystem, u32 batt
 
     if (disposition == OW_WILD_BATTLE_DISPOSITION_DEFEATED
         || disposition == OW_WILD_BATTLE_DISPOSITION_CAUGHT) {
-        OverworldWildSpawns_ClearSavedHp(battlePersonality);
+        if (battleSlot >= 0 && battleSlot < OW_WILD_HP_SLOT_COUNT) {
+            gOverworldWildSavedHp[battleSlot] = 0;
+        }
     }
 
     sBattlePersonalityOverrideValue = 0;
     sBattleHpPersonality = 0;
-    sBattleFlags = 0;
+    gOverworldWildBattleFlags = 0;
 }
 
 #endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS

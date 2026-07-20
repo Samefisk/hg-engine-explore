@@ -65,7 +65,7 @@ function icon(species, className = "v2-mon-icon", alt = "") {
   return `<img class="${escapeHtml(className)}" src="${escapeHtml(species.iconUrl)}" alt="${escapeHtml(alt)}" loading="lazy">`;
 }
 
-function methodMark(key) {
+export function methodMark(key) {
   const common = 'viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
   const icons = {
     grass: `<svg ${common}><path d="M4 14c5 0 9-3 11-9-6 0-10 3-11 9Z"/><path d="M5 15c2-3 5-5 9-7"/></svg>`,
@@ -82,6 +82,7 @@ function methodMark(key) {
     hoenn: `<svg ${common}><path d="M8 15V5l7-1v9"/><circle cx="6" cy="15" r="2"/><circle cx="13" cy="13" r="2"/></svg>`,
     sinnoh: `<svg ${common}><path d="M7 15V6l7 2v6"/><circle cx="5" cy="15" r="2"/><circle cx="12" cy="14" r="2"/></svg>`,
     swarms: `<svg ${common}><path d="M10 2v4M10 14v4M2 10h4M14 10h4M4.4 4.4l2.8 2.8M12.8 12.8l2.8 2.8M15.6 4.4l-2.8 2.8M7.2 12.8l-2.8 2.8"/></svg>`,
+    override: `<svg ${common}><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="2.2"/></svg>`,
   };
   return `<span class="v2-method-mark" data-method="${escapeHtml(key)}" aria-hidden="true">${icons[key] || escapeHtml(METHOD_META.get(key)?.short || "•")}</span>`;
 }
@@ -184,6 +185,15 @@ export function createRoutesController({
     overrideEditor: false,
     spawnEditor: false,
   };
+
+  function featureAvailable(name) {
+    const capability = model.data?.capabilities?.[name];
+    if (capability === false) return false;
+    if (capability && typeof capability === "object") {
+      return capability.available !== false && capability.enabled !== false && capability.writable !== false;
+    }
+    return true;
+  }
 
   function signalDirty() {
     if (typeof markDirty === "function") markDirty();
@@ -356,6 +366,8 @@ export function createRoutesController({
       maxLevel,
       enabled: Number(minLevel) !== 0,
       kind: "slot",
+      locationTableKey: table.mapId !== undefined ? `${table.key}:${table.mapId}` : table.key,
+      locationTableLabel: table.mapSymbol || table.mapName || "",
     };
   }
 
@@ -369,11 +381,13 @@ export function createRoutesController({
       });
     });
     [...asArray(route.slotTables), ...asArray(route.headbuttTables)].forEach((table) => {
+      const targets = asArray(table.slots).map((slot) => targetFromSlot(route, table, slot));
+      const existing = groups.get(table.key);
       groups.set(table.key, {
         key: table.key,
         label: METHOD_META.get(table.key)?.label || table.label,
-        targets: asArray(table.slots).map((slot) => targetFromSlot(route, table, slot)),
-        treeCount: table.treeCount,
+        targets: existing ? [...existing.targets, ...targets] : targets,
+        treeCount: Number(existing?.treeCount || 0) + Number(table.treeCount || 0),
       });
     });
     if (asArray(route.swarms).length) {
@@ -404,6 +418,87 @@ export function createRoutesController({
       });
     }
     return SOURCE_ORDER.map((key) => groups.get(key)).filter(Boolean);
+  }
+
+  function locationLevelText(targets) {
+    const ranges = targets.flatMap((target) => {
+      if (target.level !== undefined && Number(target.level) > 0) return [[Number(target.level), Number(target.level)]];
+      if (Number(target.minLevel) > 0 && Number(target.maxLevel) > 0) return [[Number(target.minLevel), Number(target.maxLevel)]];
+      return [];
+    });
+    if (!ranges.length) return "—";
+    const minimum = Math.min(...ranges.map(([value]) => value));
+    const maximum = Math.max(...ranges.map(([, value]) => value));
+    return minimum === maximum ? `Lv ${minimum}` : `Lv ${minimum}–${maximum}`;
+  }
+
+  function locationsForPokemon({ symbol = "", baseSymbol = "", form = 0 } = {}) {
+    const identity = speciesIdentity(baseSymbol || symbol, form);
+    return model.routes.flatMap((route) => {
+      const override = currentOverride(route);
+      if (override) {
+        if (speciesIdentity(override.species, override.form || 0) !== identity) return [];
+        return [{
+          routeId: String(route.id),
+          routeName: route.name,
+          mapLabel: mapLabel(route),
+          methods: [{ key: "override", label: "Route-only", chance: 100, levels: "Configured slots", conditional: false }],
+          allPokemonGroups: [{
+            key: "override",
+            label: "Route-only",
+            species: [{
+              name: displaySpecies(override.species, override.form || 0).name,
+              iconUrl: displaySpecies(override.species, override.form || 0).iconUrl,
+              symbol: override.species,
+              form: Number(override.form || 0),
+            }],
+          }],
+        }];
+      }
+
+      const methods = [];
+      sourceGroups(route).forEach((group) => {
+        const enabledTargets = group.targets.filter((target) => target.enabled);
+        if (group.key === "swarms") {
+          const matches = enabledTargets.filter((target) => speciesIdentity(target.symbol, target.form) === identity);
+          matches.forEach((target) => {
+            methods.push({ key: "swarms", label: target.groupLabel || group.label, chance: null, levels: "—", conditional: true });
+          });
+          return;
+        }
+        const tables = new Map();
+        enabledTargets.forEach((target) => {
+          const tableKey = target.locationTableKey || group.key;
+          if (!tables.has(tableKey)) tables.set(tableKey, []);
+          tables.get(tableKey).push(target);
+        });
+        tables.forEach((targets) => {
+          const matches = targets.filter((target) => speciesIdentity(target.symbol, target.form) === identity);
+          if (!matches.length) return;
+          const totalWeight = targets.reduce((total, target) => total + (Number(target.weight) || 0), 0);
+          const matchingWeight = matches.reduce((total, target) => total + (Number(target.weight) || 0), 0);
+          const tableLabel = matches.find((target) => target.locationTableLabel)?.locationTableLabel || "";
+          methods.push({
+            key: group.key,
+            label: tableLabel ? `${group.label} · ${tableLabel}` : group.label,
+            chance: totalWeight > 0 ? matchingWeight / totalWeight * 100 : null,
+            levels: locationLevelText(matches),
+            conditional: ["hoenn", "sinnoh"].includes(group.key),
+          });
+        });
+      });
+      const allPokemonGroups = sidebarGroups(route).map((group) => ({
+        key: group.key,
+        label: group.label,
+        species: group.species.map((entry) => ({
+          name: entry.option?.name || shortSpeciesSymbol(entry.symbol),
+          iconUrl: entry.option?.iconUrl || "",
+          symbol: entry.symbol,
+          form: Number(entry.form || 0),
+        })),
+      }));
+      return methods.length ? [{ routeId: String(route.id), routeName: route.name, mapLabel: mapLabel(route), methods, allPokemonGroups }] : [];
+    });
   }
 
   function uniqueTargetSpecies(targets, allowed = null) {
@@ -488,7 +583,7 @@ export function createRoutesController({
     if (!filters) return;
     filters.innerHTML = `
       <legend class="sr-only">Encounter method filters</legend>
-      <button class="v2-route-settings-trigger" type="button" data-action="open-spawn-settings">Spawn settings</button>
+      ${featureAvailable("spawnSettings") ? `<button class="v2-route-settings-trigger" type="button" data-action="open-spawn-settings">Spawn settings</button>` : ""}
       ${ROUTE_METHODS.map((method) => {
         const active = model.methodFilters.has(method.key);
         return `<button class="filter-chip v2-route-filter${active ? " is-active" : ""}" type="button"
@@ -499,6 +594,7 @@ export function createRoutesController({
   }
 
   function renderOverrideButton(route, compact = false) {
+    if (!featureAvailable("routeOverrides")) return "";
     const current = currentOverride(route);
     const option = current ? displaySpecies(current.species, current.form || 0) : null;
     const changed = model.overrideDrafts.has(String(route.id));
@@ -760,7 +856,7 @@ export function createRoutesController({
   }
 
   function renderOverrideDialog(route) {
-    if (!model.overrideEditor) return "";
+    if (!model.overrideEditor || !featureAvailable("routeOverrides")) return "";
     const current = currentOverride(route);
     const option = current ? displaySpecies(current.species, current.form || 0) : null;
     const invalid = model.invalidInputs.has(invalidKey("route-override", route.id));
@@ -835,7 +931,7 @@ export function createRoutesController({
   }
 
   function renderSpawnDialog() {
-    if (!model.spawnEditor) return "";
+    if (!model.spawnEditor || !featureAvailable("spawnSettings")) return "";
     return `<dialog class="v2-route-dialog v2-spawn-dialog" data-route-spawn-dialog aria-labelledby="v2SpawnDialogTitle">
       <div class="v2-route-dialog-shell">
         <header><div><span class="v2-eyebrow">Global configuration</span><h2 id="v2SpawnDialogTitle">Overworld spawn settings</h2></div>
@@ -1250,7 +1346,7 @@ export function createRoutesController({
   function commitPayload() {
     const payload = {};
     if (model.encounterDrafts.size || model.overrideDrafts.size) payload.encounters = routePayload();
-    if (model.spawnDrafts.size) payload.spawnSettings = { changes: Object.fromEntries(model.spawnDrafts) };
+    if (featureAvailable("spawnSettings") && model.spawnDrafts.size) payload.spawnSettings = { changes: Object.fromEntries(model.spawnDrafts) };
     return payload;
   }
 
@@ -1275,6 +1371,20 @@ export function createRoutesController({
 
   function refresh(nextData = null) {
     model.data = currentData(appState, nextData);
+    if (!featureAvailable("routeOverrides")) {
+      model.overrideDrafts.clear();
+      model.overrideEditor = false;
+      for (const key of model.invalidInputs.keys()) {
+        if (key.startsWith("route-override:")) model.invalidInputs.delete(key);
+      }
+    }
+    if (!featureAvailable("spawnSettings")) {
+      model.spawnDrafts.clear();
+      model.spawnEditor = false;
+      for (const key of model.invalidInputs.keys()) {
+        if (key.startsWith("spawn:") || key.startsWith("spawn-range:")) model.invalidInputs.delete(key);
+      }
+    }
     model.routes = asArray(model.data.routes);
     model.routesById = new Map(model.routes.map((route) => [String(route.id), route]));
     model.baselines.clear();
@@ -1357,6 +1467,7 @@ export function createRoutesController({
   filters?.addEventListener("click", (event) => {
     const action = event.target.closest("[data-action]")?.dataset.action;
     if (action === "open-spawn-settings") {
+      if (!featureAvailable("spawnSettings")) return;
       model.spawnEditor = true;
       model.entryEditor = null;
       model.overrideEditor = false;
@@ -1387,6 +1498,7 @@ export function createRoutesController({
     }
     const override = event.target.closest('[data-action="open-route-override"]');
     if (override) {
+      if (!featureAvailable("routeOverrides")) return;
       selectRoute(override.dataset.routeId);
       model.overrideEditor = true;
       model.entryEditor = null;
@@ -1515,6 +1627,7 @@ export function createRoutesController({
     const route = selectedRoute();
     if (!action || !route) return;
     if (action === "open-route-override") {
+      if (!featureAvailable("routeOverrides")) return;
       model.overrideEditor = true;
       model.entryEditor = null;
       model.spawnEditor = false;
@@ -1529,6 +1642,7 @@ export function createRoutesController({
       const dialog = inspector.querySelector("[data-route-spawn-dialog]");
       closeDialogIfValid(dialog, () => { model.spawnEditor = false; });
     } else if (action === "set-route-override") {
+      if (!featureAvailable("routeOverrides")) return;
       const input = inspector.querySelector("[data-route-override-input]");
       const option = resolveSpecies(input?.value);
       const invalid = !option || option.symbol === "SPECIES_NONE";
@@ -1537,6 +1651,7 @@ export function createRoutesController({
       if (invalid) notify(setStatus, "Choose a valid Pokémon for the route-only encounter.", "error");
       else setRouteOverride(route, option);
     } else if (action === "clear-route-override") {
+      if (!featureAvailable("routeOverrides")) return;
       await clearRouteOverride(route);
     } else if (action === "swap-entry-highlighted") {
       applyWideSpecies(route, true);
@@ -1563,6 +1678,7 @@ export function createRoutesController({
       return model.invalidInputs.values().next().value || "";
     },
     speciesSymbolsForPool,
+    locationsForPokemon,
     commitPayload,
     clearCommitted,
     reset,

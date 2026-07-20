@@ -79,6 +79,7 @@ struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts tha
     { .tag =   85, .gfx =  92, .callback_params = 0x0820},
     { .tag =   86, .gfx =  93, .callback_params = 0x0020},
     { .tag =   87, .gfx =  94, .callback_params = 0x0420},
+    { .tag =  231, .gfx = 1554, .callback_params = 0x0420}, // capture-success white Poké Ball
     { .tag =   97, .gfx =  70, .callback_params = 0x1C60},
     { .tag =   98, .gfx =  72, .callback_params = 0x1881},
     { .tag =   99, .gfx =  54, .callback_params = 0x0000},
@@ -267,7 +268,6 @@ struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts tha
     { .tag =  412, .gfx = 199, .callback_params = 0x0000},
     { .tag =  413, .gfx = 196, .callback_params = 0x0000},
     { .tag =  349, .gfx = 243, .callback_params = 0x5C00},
-    { .tag =  230, .gfx = 1553, .callback_params = OVERWORLD_SIZE_SMALL}, // long-hop native shadow carrier
     { .tag =  234, .gfx = 242, .callback_params = 0x0024},
     { .tag =  350, .gfx = 229, .callback_params = 0x0024},
     { .tag =  376, .gfx = 230, .callback_params = 0x0024},
@@ -1683,12 +1683,13 @@ struct OVERWORLD_TAG gOWTagToFileNum[] = // skip down a bit to see the parts tha
 // used for HoF/pokeathlon overworlds
 struct OVERWORLD_TAG *grab_overworld_ptr(u16 tag)
 {
-    int i = 0;
-    while (gOWTagToFileNum[i].tag != 0xFFFF)
-    {
-        if (gOWTagToFileNum[i].tag == tag)
-            return &gOWTagToFileNum[i];
-        i++;
+    struct OVERWORLD_TAG *entry = gOWTagToFileNum;
+
+    while (entry->tag != 0xFFFF) {
+        if (entry->tag == tag) {
+            return entry;
+        }
+        entry++;
     }
     return &gOWTagToFileNum[2]; // default error failure
 }

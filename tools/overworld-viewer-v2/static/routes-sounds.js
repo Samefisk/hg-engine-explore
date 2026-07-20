@@ -19,13 +19,28 @@ const ROUTE_METHOD_BY_RATE = new Map(ROUTE_METHODS.flatMap((method) => method.ra
 
 const SOUND_FILTERS = [
   ["all", "All"],
-  ["effects", "Sound effects"],
-  ["moves", "Moves"],
-  ["field", "Field"],
+  ["named", "Named"],
   ["battle", "Battle"],
-  ["tester", "Tester"],
-  ["extra", "Extra sequences"],
+  ["moves", "Moves"],
+  ["overworld", "Overworld"],
+  ["interface", "Interface"],
+  ["activities", "Activities"],
+  ["events", "Events"],
+  ["jingles", "Jingles"],
 ];
+
+const SOUND_INTERFACE_BANKS = new Set([
+  "BANK_BASIC", "BANK_SE_BAG", "BANK_SE_ZUKAN", "BANK_SE_TOWNMAP",
+  "BANK_SE_TRCARD", "BANK_SE_NAMEIN", "BANK_SE_POKELIST", "BANK_SE_IMAGE",
+]);
+const SOUND_ACTIVITY_BANKS = new Set([
+  "BANK_SE_THLON", "BANK_SE_THLON_OPED", "BANK_SE_HIROBA", "BANK_SE_NUTMIXER",
+  "BANK_SE_SLOT", "BANK_SE_COIN", "BANK_SE_PLANTER", "BANK_SE_DIG", "BANK_SE_SCRATCH",
+]);
+const SOUND_EVENT_BANKS = new Set([
+  "BANK_SE_TRADE", "BANK_SE_SHIP", "BANK_SE_EVENT", "BANK_SE_DENDO",
+  "BANK_SE_SEKIBAN", "BANK_SE_PHC",
+]);
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -1156,21 +1171,34 @@ export function createSoundsController({
   const inspector = elementFrom(elements, "soundInspector");
   const statusElement = elementFrom(elements, "soundStatus");
   const abort = new AbortController();
+  const GAME_FRAME_RATE = 60;
 
   const model = {
     payload: null,
     effects: [],
     selectedId: null,
+    pendingSelectionId: null,
     query: "",
     filter: "all",
     importedAudio: new Map(),
     audio: null,
+    keyboardAudio: null,
     objectUrl: null,
     fetchAbort: null,
     audioContext: null,
     playbackNodes: [],
+    timelineDuration: 0,
+    timelineTime: 0,
+    timelineSeekable: false,
+    scrubbing: false,
+    playheadFrame: null,
+    playGeneration: 0,
     loadGeneration: 0,
   };
+
+  if (search) search.value = "";
+  library?.setAttribute("role", "listbox");
+  library?.setAttribute("aria-label", "Sound sequences. Use arrow keys to move and autoplay.");
 
   function setSoundStatus(message, tone = "ready") {
     if (statusElement) {
@@ -1184,34 +1212,77 @@ export function createSoundsController({
   }
 
   function selectedEffect() {
-    return effectById(model.selectedId) || model.effects[0] || null;
+    return effectById(model.selectedId);
+  }
+
+  function preferredSemanticAlias(effect) {
+    const aliases = asArray(effect?.semanticAliases);
+    return aliases.find((alias) => alias.kind === "catalog") || aliases[0] || null;
+  }
+
+  function soundCategory(effect) {
+    const name = String(effect.name || "").toUpperCase();
+    const bank = String(effect.bank || "");
+    const groups = asArray(effect.groups).join(" ").toUpperCase();
+    const semanticCategories = new Set(asArray(effect.semanticAliases).map((alias) => alias.category));
+    if (name.includes("DUMMY")) return "internal";
+    if (name.startsWith("SEQ_ME_")) return "jingles";
+    if (
+      semanticCategories.has("Battle capture")
+      || semanticCategories.has("Battle interface")
+      || semanticCategories.has("Pokémon battle")
+    ) return "battle";
+    if (semanticCategories.has("Overworld")) return "overworld";
+    if (semanticCategories.has("Pokémon state")) return "events";
+    if (semanticCategories.has("Jingle")) return "jingles";
+    if (effect.isMoveSoundEffect || asArray(effect.moveAliases).length) return "moves";
+    if (SOUND_ACTIVITY_BANKS.has(bank)) return "activities";
+    if (SOUND_EVENT_BANKS.has(bank)) return "events";
+    if (SOUND_INTERFACE_BANKS.has(bank)) return "interface";
+    if (bank.includes("BATTLE")) return "battle";
+    if (bank.includes("FIELD")) return "overworld";
+    if (groups.includes("BATTLE")) return "battle";
+    if (groups.includes("FIELD")) return "overworld";
+    return "interface";
   }
 
   function groupLabel(effect) {
-    const bank = String(effect.bank || "");
-    const groups = asArray(effect.groups);
-    if (effect.isMoveSoundEffect) return "Move";
-    if (!effect.isSoundEffect && String(effect.name || "").startsWith("SEQ_ME_")) return "ME";
-    if (bank === "BANK_BASIC") return "Basic";
-    if (groups.some((group) => group.includes("FIELD"))) return "Field";
-    if (groups.some((group) => group.includes("BATTLE"))) return "Battle";
-    return groups[0]?.replace(/^GROUP_SE_/, "") || bank.replace(/^BANK_SE_/, "") || "Sequence";
+    return ({
+      moves: "Move",
+      battle: "Battle",
+      overworld: "Overworld",
+      interface: "Interface",
+      activities: "Activity",
+      events: "Event",
+      jingles: "Jingle",
+      internal: "Internal",
+    })[soundCategory(effect)] || "Sequence";
   }
 
   function matchesFilter(effect) {
-    const bank = String(effect.bank || "").toUpperCase();
-    const groups = asArray(effect.groups).join(" ").toUpperCase();
-    if (model.filter === "effects") return Boolean(effect.isSoundEffect);
-    if (model.filter === "moves") return Boolean(effect.isMoveSoundEffect || asArray(effect.moveAliases).length);
-    if (model.filter === "field") return bank.includes("FIELD") || groups.includes("FIELD");
-    if (model.filter === "battle") return bank.includes("BATTLE") || groups.includes("BATTLE");
-    if (model.filter === "tester") return Boolean(effect.inTesterRange);
-    if (model.filter === "extra") return !effect.isSoundEffect;
-    return true;
+    const category = soundCategory(effect);
+    if (category === "internal") return false;
+    if (model.filter === "named") return asArray(effect.semanticAliases).length > 0;
+    return model.filter === "all" || model.filter === category;
+  }
+
+  const SOUND_SEARCH_STOP_WORDS = new Set(["sound", "sounds", "effect", "effects", "sfx"]);
+
+  function normalizeSoundSearchText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function soundSearchTokens(query) {
+    return normalizeSoundSearchText(query)
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token && !SOUND_SEARCH_STOP_WORDS.has(token));
   }
 
   function soundSearchText(effect) {
-    return [
+    return normalizeSoundSearchText([
       effect.id,
       effect.name,
       effect.shortName,
@@ -1219,18 +1290,31 @@ export function createSoundsController({
       effect.bank,
       effect.player,
       ...asArray(effect.groups),
+      ...asArray(effect.semanticAliases).flatMap((alias) => [
+        alias.label,
+        alias.symbol,
+        alias.sequenceSymbol,
+        alias.category,
+        ...asArray(alias.searchTerms),
+        ...asArray(alias.sourceFiles),
+      ]),
       ...asArray(effect.moveAliases).flatMap((alias) => [
         alias.moveName,
         alias.moveSymbol,
         alias.command,
         alias.commandText,
       ]),
-    ].join(" ").toLowerCase();
+    ].join(" "));
   }
 
   function visibleEffects() {
-    return model.effects.filter((effect) => matchesFilter(effect)
-      && (!model.query || soundSearchText(effect).includes(model.query)));
+    const queryTokens = soundSearchTokens(model.query);
+    return model.effects.filter((effect) => {
+      if (!matchesFilter(effect)) return false;
+      if (!queryTokens.length) return true;
+      const searchText = soundSearchText(effect);
+      return queryTokens.every((token) => searchText.includes(token));
+    });
   }
 
   function renderFilters() {
@@ -1241,6 +1325,9 @@ export function createSoundsController({
   }
 
   function displaySoundName(effect) {
+    if (!effect) return "";
+    const semantic = preferredSemanticAlias(effect);
+    if (semantic?.label) return semantic.label;
     const aliases = [];
     asArray(effect.moveAliases).forEach((alias) => {
       if (alias.moveName && !aliases.includes(alias.moveName)) aliases.push(alias.moveName);
@@ -1248,22 +1335,56 @@ export function createSoundsController({
     return aliases.slice(0, 2).join(", ") || effect.shortName || effect.name;
   }
 
-  function renderLibrary() {
-    if (!library) return;
+  function renderLibrary({ reportChange = false } = {}) {
+    if (!library) return false;
     const visible = visibleEffects();
+    const previousId = model.selectedId;
     if (!visible.some((effect) => Number(effect.id) === Number(model.selectedId))) {
-      model.selectedId = visible[0]?.id ?? model.effects[0]?.id ?? null;
+      model.selectedId = visible[0]?.id ?? null;
+    }
+    const selectionChanged = Number(previousId) !== Number(model.selectedId)
+      || (previousId == null) !== (model.selectedId == null);
+    if (selectionChanged) {
+      stop({ announce: false });
+      if (reportChange) {
+        const effect = selectedEffect();
+        reportSelection("sounds", String(effect?.id ?? ""), displaySoundName(effect));
+      }
     }
     library.innerHTML = visible.length ? visible.map((effect) => `
       <button class="v2-library-row v2-sound-row${Number(effect.id) === Number(model.selectedId) ? " is-selected" : ""}"
-        type="button" data-sound-select="${escapeHtml(effect.id)}">
+        type="button" role="option" aria-selected="${Number(effect.id) === Number(model.selectedId)}"
+        tabindex="${Number(effect.id) === Number(model.selectedId) ? "0" : "-1"}" data-sound-select="${escapeHtml(effect.id)}">
         <span class="v2-library-id">${escapeHtml(effect.id)}</span>
         <span class="v2-library-copy">
           <strong>${escapeHtml(displaySoundName(effect))}</strong>
-          <small>${escapeHtml([effect.bank, effect.player].filter(Boolean).join(" · ") || effect.fileName)}</small>
+          <small>${escapeHtml(preferredSemanticAlias(effect)?.category || effect.name || effect.fileName)}</small>
         </span>
         <span class="v2-library-tag">${escapeHtml(groupLabel(effect))}</span>
       </button>`).join("") : `<p class="v2-empty">No sounds match the current filters.</p>`;
+    return selectionChanged;
+  }
+
+  function selectVisibleEffect(effect, { focus = false, autoplay = false } = {}) {
+    if (!effect) return false;
+    const changed = Number(effect.id) !== Number(model.selectedId);
+    if (changed) stop({ announce: false });
+    model.selectedId = Number(effect.id);
+    library?.querySelectorAll("[data-sound-select]").forEach((row) => {
+      const selected = Number(row.dataset.soundSelect) === Number(model.selectedId);
+      row.classList.toggle("is-selected", selected);
+      row.setAttribute("aria-selected", String(selected));
+      row.tabIndex = selected ? 0 : -1;
+    });
+    if (changed) renderInspector();
+    const row = library?.querySelector(`[data-sound-select="${CSS.escape(String(effect.id))}"]`);
+    if (focus && row) {
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "nearest" });
+    }
+    reportSelection("sounds", String(model.selectedId), displaySoundName(effect));
+    if (autoplay) scheduleKeyboardPlayback(effect);
+    return true;
   }
 
   function importedAudioFor(effect) {
@@ -1290,6 +1411,7 @@ export function createSoundsController({
       return;
     }
     const aliases = asArray(effect.moveAliases);
+    const semanticAliases = asArray(effect.semanticAliases);
     const local = importedAudioFor(effect);
     inspector.innerHTML = `
       <header class="v2-inspector-header">
@@ -1301,13 +1423,23 @@ export function createSoundsController({
         <span class="v2-change-chip">${escapeHtml(groupLabel(effect))}</span>
       </header>
       <div class="v2-sound-actions">
-        <button type="button" data-sound-action="real"${effect.hasSseq ? "" : " disabled"}>Play real</button>
-        <button type="button" data-sound-action="raw"${effect.hasSseq ? "" : " disabled"}>Play raw SEQ</button>
+        <button type="button" data-sound-action="sequence"${effect.hasSseq ? "" : " disabled"}>Play rendered sequence</button>
         <button type="button" data-sound-action="approx">Approximate</button>
         <button type="button" data-sound-action="local"${local ? "" : " disabled"}>Play imported</button>
         <button type="button" data-sound-action="stop">Stop</button>
       </div>
-      <canvas class="v2-waveform" data-sound-waveform width="720" height="112" aria-label="Sound waveform"></canvas>
+      <div class="v2-waveform-shell">
+        <div class="v2-waveform-stage" data-sound-timeline-stage style="--timeline-position: 0%">
+          <canvas class="v2-waveform" data-sound-waveform width="720" height="112" aria-label="Sound waveform; duration not loaded"></canvas>
+          <span class="v2-waveform-cursor" data-sound-cursor aria-hidden="true"></span>
+          <output class="v2-waveform-cursor-time" data-sound-cursor-time aria-hidden="true" title="Frame counts use 60 fps">Play to inspect</output>
+          <input class="v2-waveform-scrubber" data-sound-scrubber type="range" min="0" max="1" step="0.001" value="0"
+            aria-label="Sound timeline position" aria-valuetext="Play the sound to inspect its timeline" title="Arrow keys seek 1%; Shift+Arrow seeks 10%. Frame counts use 60 fps." disabled>
+        </div>
+        <div class="v2-waveform-axis" data-sound-time-axis role="img" aria-label="Audio timeline; play the sound to measure its duration">
+          <span style="--timeline-tick: 0%">0.0s</span><span class="v2-waveform-axis__pending">Play to measure</span><span style="--timeline-tick: 100%">—</span>
+        </div>
+      </div>
       <div class="v2-readonly-grid">
         ${detailField("Bank", effect.bank)}
         ${detailField("Player", effect.player)}
@@ -1315,6 +1447,12 @@ export function createSoundsController({
         ${detailField("Priority", [effect.channelPriority, effect.playerPriority].filter((value) => value != null).join(" / "))}
         ${detailField("SSEQ", effect.hasSseq ? `${effect.sseqBytes} bytes` : "Missing")}
       </div>
+      ${semanticAliases.length ? `
+        <details class="v2-disclosure" open>
+          <summary><span>Known uses</span><small>${semanticAliases.length}</small></summary>
+          <div class="v2-semantic-sound-list">${semanticAliases.map((alias) => `
+            <div><strong>${escapeHtml(alias.label)}</strong><small>${escapeHtml([alias.category, alias.symbol].filter(Boolean).join(" · "))}</small></div>`).join("")}</div>
+        </details>` : ""}
       ${aliases.length ? `
         <details class="v2-disclosure" open>
           <summary><span>Move uses</span><small>${aliases.length}</small></summary>
@@ -1343,6 +1481,179 @@ export function createSoundsController({
     return inspector?.querySelector("[data-sound-waveform]") || null;
   }
 
+  function waveformTimeAxis() {
+    return inspector?.querySelector("[data-sound-time-axis]") || null;
+  }
+
+  function waveformStage() {
+    return inspector?.querySelector("[data-sound-timeline-stage]") || null;
+  }
+
+  function waveformScrubber() {
+    return inspector?.querySelector("[data-sound-scrubber]") || null;
+  }
+
+  function waveformCursorTime() {
+    return inspector?.querySelector("[data-sound-cursor-time]") || null;
+  }
+
+  function formatWaveformTime(seconds, duration) {
+    const value = Math.max(0, Number(seconds) || 0);
+    const step = duration / 4;
+    if (step < 0.01) return `${value.toFixed(3)}s`;
+    if (step < 0.1) return `${value.toFixed(2)}s`;
+    if (duration < 10) return `${value.toFixed(1)}s`;
+    if (duration < 60) return `${value.toFixed(0)}s`;
+    const rounded = Math.round(value);
+    const minutes = Math.floor(rounded / 60);
+    const remaining = rounded % 60;
+    return `${minutes}:${String(remaining).padStart(2, "0")}`;
+  }
+
+  function formatCursorTime(seconds) {
+    const milliseconds = Math.max(0, Math.round((Number(seconds) || 0) * 1000));
+    if (milliseconds < 60000) return `${(milliseconds / 1000).toFixed(3)}s`;
+    const minutes = Math.floor(milliseconds / 60000);
+    const remainder = (milliseconds % 60000) / 1000;
+    return `${minutes}:${remainder.toFixed(3).padStart(6, "0")}`;
+  }
+
+  function timelineFrame(seconds) {
+    return Math.max(0, Math.round((Number(seconds) || 0) * GAME_FRAME_RATE));
+  }
+
+  function formatTimelinePoint(seconds) {
+    return `${formatCursorTime(seconds)} · ${timelineFrame(seconds)}f`;
+  }
+
+  function activeTimelineMedia() {
+    if (model.audio?.src) return model.audio;
+    if (model.keyboardAudio?.src || model.keyboardAudio?.currentSrc) return model.keyboardAudio;
+    return null;
+  }
+
+  function setTimelineTime(time, { seek = false } = {}) {
+    const duration = Number(model.timelineDuration);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const next = Math.max(0, Math.min(duration, Number(time) || 0));
+    model.timelineTime = next;
+    const ratio = duration ? next / duration : 0;
+    const stage = waveformStage();
+    const scrubber = waveformScrubber();
+    const readout = waveformCursorTime();
+    stage?.style.setProperty("--timeline-position", `${ratio * 100}%`);
+    if (scrubber) {
+      scrubber.value = String(next);
+      scrubber.setAttribute("aria-valuenow", next.toFixed(3));
+      scrubber.setAttribute(
+        "aria-valuetext",
+        `${formatCursorTime(next)}, frame ${timelineFrame(next)}, of ${formatCursorTime(duration)}, ${timelineFrame(duration)} frames at ${GAME_FRAME_RATE} frames per second`,
+      );
+    }
+    if (readout) readout.textContent = `${formatTimelinePoint(next)} / ${formatTimelinePoint(duration)}`;
+    if (seek && model.timelineSeekable) {
+      const media = activeTimelineMedia();
+      if (media && Number.isFinite(media.duration) && media.duration > 0) media.currentTime = next;
+    }
+  }
+
+  function configureTimeline(duration = null, { seekable = true } = {}) {
+    const seconds = Number(duration);
+    const stage = waveformStage();
+    const scrubber = waveformScrubber();
+    const readout = waveformCursorTime();
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      model.timelineDuration = 0;
+      model.timelineTime = 0;
+      model.timelineSeekable = false;
+      model.scrubbing = false;
+      if (stage) {
+        stage.dataset.ready = "false";
+        stage.dataset.seekable = "false";
+        stage.style.setProperty("--timeline-position", "0%");
+      }
+      if (scrubber) {
+        scrubber.disabled = true;
+        scrubber.max = "1";
+        scrubber.value = "0";
+        scrubber.removeAttribute("aria-valuenow");
+        scrubber.setAttribute("aria-valuetext", "Play the sound to inspect its timeline");
+      }
+      if (readout) readout.textContent = "Play to inspect";
+      return;
+    }
+    model.timelineDuration = seconds;
+    model.timelineSeekable = Boolean(seekable);
+    if (stage) {
+      stage.dataset.ready = "true";
+      stage.dataset.seekable = String(Boolean(seekable));
+    }
+    if (scrubber) {
+      scrubber.max = String(seconds);
+      scrubber.step = "0.001";
+      scrubber.disabled = !seekable;
+      scrubber.setAttribute("aria-valuemax", seconds.toFixed(3));
+    }
+    if (!seekable) {
+      model.timelineTime = 0;
+      stage?.style.setProperty("--timeline-position", "0%");
+      if (scrubber) {
+        scrubber.value = "0";
+        scrubber.setAttribute("aria-valuetext", `Approximate preview, ${formatCursorTime(seconds)}, ${timelineFrame(seconds)} frames at ${GAME_FRAME_RATE} frames per second`);
+      }
+      if (readout) readout.textContent = `Approx. ${formatTimelinePoint(seconds)}`;
+      return;
+    }
+    setTimelineTime(model.timelineTime);
+  }
+
+  function setTimelineFromPointer(event) {
+    const scrubber = waveformScrubber();
+    if (!scrubber || scrubber.disabled || !model.timelineSeekable) return;
+    const bounds = scrubber.getBoundingClientRect();
+    if (!bounds.width) return;
+    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    setTimelineTime(model.timelineDuration * ratio, { seek: true });
+  }
+
+  function stopPlayheadTracking() {
+    if (model.playheadFrame != null) cancelAnimationFrame(model.playheadFrame);
+    model.playheadFrame = null;
+  }
+
+  function startPlayheadTracking(media, generation) {
+    stopPlayheadTracking();
+    const track = () => {
+      if (generation !== model.playGeneration || media !== activeTimelineMedia()) return;
+      if (!model.scrubbing) setTimelineTime(media.currentTime);
+      if (!media.paused && !media.ended) model.playheadFrame = requestAnimationFrame(track);
+      else model.playheadFrame = null;
+    };
+    track();
+  }
+
+  function drawTimeAxis(duration = null, options = {}) {
+    const axis = waveformTimeAxis();
+    const canvas = waveformCanvas();
+    const seconds = Number(duration);
+    if (!axis) return;
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      configureTimeline();
+      axis.dataset.ready = "false";
+      axis.setAttribute("aria-label", "Audio timeline; play the sound to measure its duration");
+      axis.innerHTML = `<span style="--timeline-tick: 0%">0.0s</span><span class="v2-waveform-axis__pending">Play to measure</span><span style="--timeline-tick: 100%">—</span>`;
+      if (canvas) canvas.setAttribute("aria-label", "Sound waveform; duration not loaded");
+      return;
+    }
+    configureTimeline(seconds, options);
+    axis.dataset.ready = "true";
+    axis.setAttribute("aria-label", `Audio timeline from 0 to ${seconds.toFixed(2)} seconds`);
+    axis.innerHTML = [0, 0.25, 0.5, 0.75, 1]
+      .map((fraction) => `<span style="--timeline-tick: ${fraction * 100}%">${escapeHtml(formatWaveformTime(seconds * fraction, seconds))}</span>`)
+      .join("");
+    if (canvas) canvas.setAttribute("aria-label", `Sound waveform, ${seconds.toFixed(2)} seconds`);
+  }
+
   function drawBars(values, color = "#3b82f6") {
     const canvas = waveformCanvas();
     const context = canvas?.getContext?.("2d");
@@ -1365,7 +1676,7 @@ export function createSoundsController({
     });
   }
 
-  function drawPlaceholder(effect) {
+  function drawPlaceholderBars(effect) {
     if (!effect) return drawBars([]);
     const name = String(effect.name || "");
     const values = Array.from({ length: 64 }, (_, index) => {
@@ -1373,6 +1684,11 @@ export function createSoundsController({
       return 0.12 + ((Number(effect.id || 0) * 17 + char * 7 + index * 29) % 83) / 100;
     });
     drawBars(values, "#64748b");
+  }
+
+  function drawPlaceholder(effect) {
+    drawTimeAxis();
+    drawPlaceholderBars(effect);
   }
 
   async function ensureAudioContext() {
@@ -1383,33 +1699,47 @@ export function createSoundsController({
     return model.audioContext;
   }
 
-  async function drawBlobWaveform(blob) {
+  function drawAudioBufferWaveform(buffer) {
+    const samples = buffer.getChannelData(0);
+    const bucketCount = 128;
+    const bucketSize = Math.max(1, Math.floor(samples.length / bucketCount));
+    const values = Array.from({ length: bucketCount }, (_, bucket) => {
+      let peak = 0;
+      const start = bucket * bucketSize;
+      const end = Math.min(samples.length, start + bucketSize);
+      for (let index = start; index < end; index += 1) peak = Math.max(peak, Math.abs(samples[index]));
+      return peak;
+    });
+    drawBars(values);
+    drawTimeAxis(buffer.duration);
+  }
+
+  async function drawBlobWaveform(blob, generation = model.playGeneration) {
     try {
       const context = await ensureAudioContext();
       const buffer = await context.decodeAudioData(await blob.arrayBuffer());
-      const samples = buffer.getChannelData(0);
-      const bucketCount = 128;
-      const bucketSize = Math.max(1, Math.floor(samples.length / bucketCount));
-      const values = Array.from({ length: bucketCount }, (_, bucket) => {
-        let peak = 0;
-        const start = bucket * bucketSize;
-        const end = Math.min(samples.length, start + bucketSize);
-        for (let index = start; index < end; index += 1) peak = Math.max(peak, Math.abs(samples[index]));
-        return peak;
-      });
-      drawBars(values);
+      if (generation !== model.playGeneration) return;
+      drawAudioBufferWaveform(buffer);
     } catch (_error) {
-      drawPlaceholder(selectedEffect());
+      if (generation === model.playGeneration) drawPlaceholderBars(selectedEffect());
     }
   }
 
-  function stop() {
+  function stop({ announce = true, preserveTimeline = false } = {}) {
+    model.playGeneration += 1;
+    stopPlayheadTracking();
+    model.scrubbing = false;
     model.fetchAbort?.abort();
     model.fetchAbort = null;
     if (model.audio) {
       model.audio.pause();
       model.audio.currentTime = 0;
       model.audio = null;
+    }
+    if (model.keyboardAudio) {
+      model.keyboardAudio.pause();
+      model.keyboardAudio.removeAttribute("src");
+      model.keyboardAudio.load();
     }
     if (model.objectUrl) {
       URL.revokeObjectURL(model.objectUrl);
@@ -1424,26 +1754,53 @@ export function createSoundsController({
       }
     });
     model.playbackNodes = [];
-    setSoundStatus("Stopped.");
+    if (!preserveTimeline && model.timelineDuration > 0 && model.timelineSeekable) setTimelineTime(0);
+    if (announce) setSoundStatus("Stopped.");
   }
 
-  async function playBlob(blob, label) {
-    stop();
+  async function playBlob(blob, label, { generation = null, startTime = model.timelineTime } = {}) {
+    if (generation == null) {
+      stop({ announce: false, preserveTimeline: true });
+      generation = model.playGeneration;
+    }
+    if (generation !== model.playGeneration) return;
     model.objectUrl = URL.createObjectURL(blob);
     if (typeof Audio !== "function") throw new Error("HTML audio playback is unavailable");
-    model.audio = new Audio(model.objectUrl);
-    model.audio.preload = "auto";
-    model.audio.addEventListener("ended", () => setSoundStatus(`Finished ${label}.`), { once: true });
-    const [, playback] = await Promise.allSettled([drawBlobWaveform(blob), model.audio.play()]);
+    const audio = new Audio(model.objectUrl);
+    model.audio = audio;
+    audio.preload = "auto";
+    audio.addEventListener("loadedmetadata", () => {
+      if (generation !== model.playGeneration || model.audio !== audio) return;
+      drawTimeAxis(audio.duration);
+      setTimelineTime(startTime, { seek: true });
+    }, { once: true });
+    audio.addEventListener("playing", () => {
+      if (generation === model.playGeneration && model.audio === audio) startPlayheadTracking(audio, generation);
+    });
+    audio.addEventListener("ended", () => {
+      if (generation === model.playGeneration && model.audio === audio) {
+        stopPlayheadTracking();
+        setTimelineTime(audio.duration);
+        setSoundStatus(`Finished ${label}.`);
+      }
+    }, { once: true });
+    void drawBlobWaveform(blob, generation);
+    const playback = await Promise.allSettled([audio.play()]).then(([result]) => result);
+    if (generation !== model.playGeneration) return;
     if (playback.status === "rejected") throw playback.reason;
     setSoundStatus(`Playing ${label}.`, "success");
   }
 
-  async function playUrl(url, label) {
-    stop();
+  async function playUrl(url, label, { startTime = model.timelineTime } = {}) {
+    stop({ announce: false, preserveTimeline: true });
+    const generation = model.playGeneration;
     const controller = new AbortController();
     model.fetchAbort = controller;
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 20000);
     setSoundStatus(`Rendering ${label}…`);
     try {
       const response = await fetch(url, { cache: "no-store", signal: controller.signal });
@@ -1457,26 +1814,76 @@ export function createSoundsController({
         }
         throw new Error(message);
       }
-      await playBlob(await response.blob(), label);
+      await playBlob(await response.blob(), label, { generation, startTime });
     } catch (error) {
-      const message = error.name === "AbortError" ? "Sound rendering timed out." : error.message;
-      setSoundStatus(message, "error");
+      if (generation === model.playGeneration) {
+        const message = error.name === "AbortError"
+          ? (timedOut ? "Sound rendering timed out." : "Playback cancelled.")
+          : error.message;
+        setSoundStatus(message, "error");
+      }
     } finally {
       clearTimeout(timeout);
       if (model.fetchAbort === controller) model.fetchAbort = null;
     }
   }
 
-  async function playReal(effect) {
-    const alias = asArray(effect?.moveAliases).find((item) => item.moveId);
-    if (alias) {
-      await playUrl(
-        `/move-sound-effects/${encodeURIComponent(alias.moveId)}.wav`,
-        `${alias.moveName || effect.name} move preview`,
-      );
-    } else if (effect?.hasSseq) {
-      await playUrl(`/sound-effects/${encodeURIComponent(effect.id)}.wav`, effect.name);
+  function scheduleKeyboardPlayback(effect) {
+    stop({ announce: false });
+    if (!effect?.hasSseq) {
+      setSoundStatus(`${displaySoundName(effect)} has no renderable SSEQ.`, "error");
+      return;
     }
+    if (typeof Audio !== "function") {
+      setSoundStatus("HTML audio playback is unavailable in this browser.", "error");
+      return;
+    }
+    const generation = model.playGeneration;
+    const label = `${displaySoundName(effect)} rendered sequence`;
+    if (!model.keyboardAudio) model.keyboardAudio = new Audio();
+    const audio = model.keyboardAudio;
+    audio.muted = false;
+    audio.src = `/sound-effects/${encodeURIComponent(effect.id)}.wav`;
+    audio.preload = "auto";
+    drawPlaceholder(effect);
+    audio.onloadedmetadata = () => {
+      if (generation !== model.playGeneration) return;
+      drawTimeAxis(audio.duration);
+      void fetch(audio.src)
+        .then((response) => response.ok ? response.blob() : Promise.reject(new Error("Waveform unavailable")))
+        .then((blob) => drawBlobWaveform(blob, generation))
+        .catch(() => {});
+    };
+    audio.onplaying = () => {
+      if (generation === model.playGeneration) {
+        startPlayheadTracking(audio, generation);
+        setSoundStatus(`Playing ${label}.`, "success");
+      }
+    };
+    audio.onended = () => {
+      if (generation === model.playGeneration) {
+        stopPlayheadTracking();
+        setTimelineTime(audio.duration);
+        setSoundStatus(`Finished ${label}.`);
+      }
+    };
+    audio.onerror = () => {
+      if (generation === model.playGeneration) setSoundStatus(`Could not play ${label}.`, "error");
+    };
+    setSoundStatus(`Rendering ${label}…`);
+    // Start the real media request inside the keyboard gesture. Browsers do not
+    // reliably preserve autoplay permission across a timer and source swap.
+    audio.play()?.catch?.((error) => {
+      if (generation === model.playGeneration) setSoundStatus(`Could not play sound: ${error.message}`, "error");
+    });
+  }
+
+  async function playSequence(effect) {
+    if (!effect?.hasSseq) return;
+    await playUrl(
+      `/sound-effects/${encodeURIComponent(effect.id)}.wav`,
+      `${displaySoundName(effect)} rendered sequence`,
+    );
   }
 
   async function playApproximate(effect) {
@@ -1491,6 +1898,8 @@ export function createSoundsController({
       const base = 170 + (Number(effect.id || 0) % 38) * 17;
       const pulses = String(effect.name || "").includes("KIRAKIRA") ? 5 : 3;
       const duration = 0.42;
+      drawPlaceholder(effect);
+      drawTimeAxis(duration, { seekable: false });
       for (let index = 0; index < pulses; index += 1) {
         const oscillator = context.createOscillator();
         const gain = context.createGain();
@@ -1520,12 +1929,15 @@ export function createSoundsController({
       model.importedAudio.set(key, file);
       count += 1;
     });
+    stop({ announce: false });
     renderInspector();
     setSoundStatus(`${count} local audio file${count === 1 ? "" : "s"} loaded.`, "success");
   }
 
   async function refresh(payload = null) {
     const generation = ++model.loadGeneration;
+    const previousId = model.selectedId;
+    stop({ announce: false });
     setSoundStatus("Loading sound effects…");
     try {
       const statePayload = payload?.effects
@@ -1535,15 +1947,27 @@ export function createSoundsController({
       if (generation !== model.loadGeneration) return controller;
       model.payload = next || {};
       model.effects = asArray(next?.effects);
-      if (!effectById(model.selectedId)) {
+      const pendingId = model.pendingSelectionId;
+      model.pendingSelectionId = null;
+      if (pendingId != null && effectById(pendingId)) {
+        model.selectedId = Number(pendingId);
+      } else if (!effectById(model.selectedId)) {
         model.selectedId = next?.tester?.initial || model.effects[0]?.id || null;
       }
       render();
+      if ((previousId != null || pendingId != null)
+        && (Number(previousId) !== Number(model.selectedId) || model.selectedId == null)) {
+        const effect = selectedEffect();
+        reportSelection("sounds", String(effect?.id ?? ""), displaySoundName(effect));
+      }
       setSoundStatus(`${model.effects.length} sound sequences loaded.`, "success");
     } catch (error) {
       if (generation !== model.loadGeneration) return controller;
       model.effects = [];
+      model.selectedId = null;
+      model.pendingSelectionId = null;
       render();
+      if (previousId != null) reportSelection("sounds", "", "");
       setSoundStatus(`Could not load sounds: ${error.message}`, "error");
     }
     return controller;
@@ -1552,7 +1976,7 @@ export function createSoundsController({
   function clearCommitted() {}
 
   function reset() {
-    stop();
+    stop({ announce: false });
     model.query = "";
     model.filter = "all";
     if (search) search.value = "";
@@ -1562,38 +1986,101 @@ export function createSoundsController({
   function destroy() {
     abort.abort();
     model.loadGeneration += 1;
-    stop();
+    stop({ announce: false });
     model.audioContext?.close?.();
     model.audioContext = null;
+    model.keyboardAudio = null;
     model.importedAudio.clear();
   }
 
   search?.addEventListener("input", () => {
     model.query = search.value.trim().toLowerCase();
-    renderLibrary();
-    renderInspector();
+    if (renderLibrary({ reportChange: true })) renderInspector();
   }, { signal: abort.signal });
   filters?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sound-filter]");
     if (!button) return;
     model.filter = button.dataset.soundFilter;
-    render();
+    renderFilters();
+    if (renderLibrary({ reportChange: true })) renderInspector();
   }, { signal: abort.signal });
   library?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sound-select]");
     if (!button) return;
-    model.selectedId = Number(button.dataset.soundSelect);
-    render();
-    const effect = selectedEffect();
-    reportSelection("sounds", String(model.selectedId), displaySoundName(effect));
+    selectVisibleEffect(effectById(button.dataset.soundSelect), { focus: true });
+  }, { signal: abort.signal });
+  library?.addEventListener("keydown", (event) => {
+    const row = event.target.closest("[data-sound-select]");
+    if (!row) return;
+    const visible = visibleEffects();
+    if (!visible.length) return;
+    const current = visible.findIndex((effect) => Number(effect.id) === Number(row.dataset.soundSelect));
+    let next = current < 0 ? 0 : current;
+    if (["ArrowDown", "ArrowRight"].includes(event.key)) next = Math.min(visible.length - 1, next + 1);
+    else if (["ArrowUp", "ArrowLeft"].includes(event.key)) next = Math.max(0, next - 1);
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = visible.length - 1;
+    else return;
+    event.preventDefault();
+    selectVisibleEffect(visible[next], { focus: true, autoplay: next !== current });
   }, { signal: abort.signal });
   inspector?.addEventListener("change", (event) => {
     if (event.target.matches("[data-sound-import]")) importFiles(event.target.files);
+    else if (event.target.matches("[data-sound-scrubber]")) {
+      model.scrubbing = false;
+      setTimelineTime(event.target.value, { seek: true });
+      setSoundStatus(`Selected ${formatTimelinePoint(model.timelineTime)} of ${formatTimelinePoint(model.timelineDuration)} at ${GAME_FRAME_RATE} fps.`);
+    }
+  }, { signal: abort.signal });
+  inspector?.addEventListener("input", (event) => {
+    if (event.target.matches("[data-sound-scrubber]")) setTimelineTime(event.target.value, { seek: true });
+  }, { signal: abort.signal });
+  inspector?.addEventListener("pointerdown", (event) => {
+    const scrubber = event.target.closest("[data-sound-scrubber]");
+    if (!scrubber || scrubber.disabled) return;
+    event.preventDefault();
+    model.scrubbing = true;
+    scrubber.focus({ preventScroll: true });
+    scrubber.setPointerCapture?.(event.pointerId);
+    setTimelineFromPointer(event);
+  }, { signal: abort.signal });
+  inspector?.addEventListener("pointermove", (event) => {
+    if (model.scrubbing && event.target.closest("[data-sound-scrubber]")) setTimelineFromPointer(event);
+  }, { signal: abort.signal });
+  inspector?.addEventListener("pointerup", (event) => {
+    const scrubber = event.target.closest("[data-sound-scrubber]");
+    if (!scrubber || !model.scrubbing) return;
+    setTimelineFromPointer(event);
+    scrubber.releasePointerCapture?.(event.pointerId);
+    model.scrubbing = false;
+    setSoundStatus(`Selected ${formatTimelinePoint(model.timelineTime)} of ${formatTimelinePoint(model.timelineDuration)} at ${GAME_FRAME_RATE} fps.`);
+  }, { signal: abort.signal });
+  inspector?.addEventListener("pointercancel", (event) => {
+    if (event.target.matches("[data-sound-scrubber]")) model.scrubbing = false;
+  }, { signal: abort.signal });
+  inspector?.addEventListener("keydown", (event) => {
+    if (!event.target.matches("[data-sound-scrubber]") || event.key === "Tab") return;
+    const duration = Number(model.timelineDuration);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    let next = model.timelineTime;
+    const fine = Math.max(0.01, duration / 100);
+    const coarse = Math.max(0.1, duration / 10);
+    if (["ArrowLeft", "ArrowDown"].includes(event.key)) next -= event.shiftKey ? coarse : fine;
+    else if (["ArrowRight", "ArrowUp"].includes(event.key)) next += event.shiftKey ? coarse : fine;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = duration;
+    else return;
+    event.preventDefault();
+    setTimelineTime(next, { seek: true });
   }, { signal: abort.signal });
   inspector?.addEventListener("click", async (event) => {
     const effect = selectedEffect();
     if (!effect) return;
     try {
+      if (event.target.matches("[data-sound-scrubber]")) {
+        event.preventDefault();
+        return;
+      }
       const pokemon = event.target.closest("[data-open-pokemon]");
       if (pokemon) {
         openPokemonRecord(pokemon.dataset.openPokemon, {
@@ -1609,12 +2096,12 @@ export function createSoundsController({
         await playUrl(
           `/move-sound-effects/${encodeURIComponent(move.dataset.movePreview)}.wav`,
           `${alias?.moveName || effect.name} move preview`,
+          { startTime: 0 },
         );
         return;
       }
       const action = event.target.closest("[data-sound-action]")?.dataset.soundAction;
-      if (action === "real") await playReal(effect);
-      else if (action === "raw") await playUrl(`/sound-effects/${encodeURIComponent(effect.id)}.wav`, `${effect.name} raw sequence`);
+      if (action === "sequence") await playSequence(effect);
       else if (action === "approx") await playApproximate(effect);
       else if (action === "local") {
         const file = importedAudioFor(effect);
@@ -1635,13 +2122,22 @@ export function createSoundsController({
     refresh,
     stop,
     navigationContext: () => ({
-      selection: String(model.selectedId ?? ""),
+      selection: String(model.selectedId ?? model.pendingSelectionId ?? ""),
       label: displaySoundName(selectedEffect()),
     }),
     restoreSelection(id, options = {}) {
-      if (!effectById(id)) return false;
+      if (!effectById(id)) {
+        if (!model.effects.length && Number.isFinite(Number(id))) {
+          model.pendingSelectionId = Number(id);
+          return true;
+        }
+        return false;
+      }
+      model.pendingSelectionId = null;
+      const changed = Number(model.selectedId) !== Number(id);
+      if (changed) stop({ announce: false });
       model.selectedId = Number(id);
-      render();
+      if (changed) render();
       if (options.focus) {
         inspector.tabIndex = -1;
         requestAnimationFrame(() => inspector.focus({ preventScroll: true }));

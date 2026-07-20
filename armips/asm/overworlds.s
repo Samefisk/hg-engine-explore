@@ -77,6 +77,94 @@ OverworldWildSpawns_IsPokemonPaletteObjectId:
     bl 0x0205F97C
 .endarea
 
+// ov01_021F8E70 resolves a sprite's render-offset mode with a linear scan on
+// every draw. Wild objects cache the authenticated mode plus one in the first
+// byte past the stock renderer's 0x18-byte private state (object + 0x120).
+// Keep the stock lookup for an empty cache and for every object outside the
+// three reserved wild-object ID ranges.
+.org 0x021F8E70
+.area 0x98, 0x00
+OverworldWildSpawns_ApplyCachedRenderOffset:
+    push {r3, r4, r5, r6, lr}
+    sub sp, #0xC
+    add r5, r1, #0
+    add r6, r0, #0
+    add r1, sp, #0
+    add r4, r2, #0
+    bl 0x0205F96C // MapObject_CopyFacingVector
+
+    // Only C0-C9, D0-D9, and E0-E9 are custom wild presentation objects.
+    ldr r0, [r6, #8]
+    sub r0, #0xC0
+    cmp r0, #0x29
+    bhi @@stockLookup
+    mov r1, #0xF
+    and r0, r1
+    cmp r0, #9
+    bhi @@stockLookup
+
+    add r0, r6, #0
+    add r0, #0xF8
+    add r0, #0x28
+    ldrb r0, [r0]
+    cmp r0, #0
+    beq @@stockLookup
+    cmp r0, #0x40
+    bhi @@stockLookup
+    sub r0, #1
+    b @@applyMode
+
+@@stockLookup:
+    add r0, r6, #0
+    bl 0x0205F25C // MapObject_GetSpriteID
+    bl 0x021FA298 // exact stock render-offset mode lookup
+
+@@applyMode:
+    cmp r0, #0xA
+    bne @@normalMode
+
+    // Mode 10: up/down move Z by one unit; left/right move X by ten.
+    cmp r5, #3
+    bhi @@done
+    mov r0, #1
+    cmp r5, #1
+    bls @@applyDelta
+    mov r0, #0xA
+    b @@applyDelta
+
+@@normalMode:
+    // Every other mode only offsets X for left/right by two units.
+    cmp r5, #2
+    bcc @@done
+    cmp r5, #3
+    bhi @@done
+    mov r0, #2
+
+@@applyDelta:
+    lsl r0, #0xC
+    mov r1, #1
+    tst r5, r1
+    beq @@positiveDelta
+    neg r0, r0
+
+@@positiveDelta:
+    cmp r5, #1
+    bls @@applyZ
+    ldr r1, [r4]
+    add r0, r1
+    str r0, [r4]
+    b @@done
+
+@@applyZ:
+    ldr r1, [r4, #8]
+    add r0, r1
+    str r0, [r4, #8]
+
+@@done:
+    add sp, #0xC
+    pop {r3, r4, r5, r6, pc}
+.endarea
+
 .org 0x022061BA
 .area 0x04, 0x00
     bl 0x021F771C
@@ -156,6 +244,41 @@ OverworldWildSpawns_TransitionDispatchThumbThunk:
 
 
 .open "base/arm9.bin", 0x02000000
+
+// Keep the exact personal-parameter hot path resident while overlay 150 owns
+// the archive cache. Its stock envelope starts with an 8-byte Thumb dispatcher
+// and mutable inline target initialized to an exact resident fallback thunk.
+.org 0x0206FBE8
+.area 0x08, 0x00
+    ldr r3, =pokepersonalparaget_fallback | 1
+    bx r3
+    .pool
+.endarea
+
+.org 0x0206FBF0
+.area 0x18, 0x00
+pokepersonalparaget_fallback:
+    mov r2, r1
+    mov r1, #0
+    b 0x0206FBC4 // PokeFormNoPersonalParaGet; form zero is exact identity
+.endarea
+
+// Dispatch the expanded level-up learnset loader through a resident pointer.
+// The original function owns 0x02071FC8..0x02071FDB. Its final word is now a
+// data-only slot, initialized to the exact C fallback and published to overlay
+// 150 only after that overlay has authenticated and opened the validated NARC.
+.org 0x02071FC8
+.area 0x10, 0x00
+    ldr r3, =0x02071FD8
+    ldr r3, [r3]
+    bx r3
+    .pool
+.endarea
+
+.org 0x02071FD8
+.area 0x04, 0x00
+    .word loadleveluplearnset_handlealternateform_fallback | 1
+.endarea
 
 .org 0x0206A330
 .word NUM_OF_MONS

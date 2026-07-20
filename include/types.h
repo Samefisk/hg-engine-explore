@@ -138,7 +138,14 @@ void *LONG_CALL sys_AllocMemoryLo(u32 heap_id, u32 size);
 void *LONG_CALL NARC_ctor(u32 narc_id, u32 heap_id);
 void LONG_CALL NARC_dtor(void *narc);
 u32 LONG_CALL NARC_GetMemberSize(void *narc, u32 member_no);
+u16 LONG_CALL NARC_GetFileCount(void *narc);
 void LONG_CALL NARC_ReadWholeMember(void *narc, u32 member_no, void *dest);
+void LONG_CALL NARC_ReadFromMember(
+    void *narc,
+    u32 member_no,
+    u32 offset,
+    u32 size,
+    void *dest);
 
 void LONG_CALL MIi_CpuClearFast(u32 value, void *dest, u32 size);
 u16 LONG_CALL GF_CalcCRC16(const void *data, u32 size);

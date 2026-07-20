@@ -53,12 +53,26 @@ NARC_FILES += $(BATTLEHUD_NARC)
 MOVEDATA_DIR := $(BUILD)/a011
 MOVEDATA_NARC := $(BUILD_NARC)/a011.narc
 MOVEDATA_TARGET := $(FILESYS)/a/0/1/1
-MOVEDATA_DEPENDENCIES := armips/data/moves.s
+MOVEDATA_DEPENDENCIES := \
+	armips/data/moves.s \
+	armips/include/macros.s \
+	armips/include/utf-8.txt \
+	armips/include/constants.s \
+	armips/include/config.s \
+	armips/include/movemacros.s \
+	asm/include/debug.inc \
+	asm/include/moves.inc \
+	asm/include/move_effects.inc \
+	scripts/create_narc_atomic.py \
+	tools/narcpy.py
 MOVEDATA_NAMES_DIR := $(BUILD)/rawtext/750 $(BUILD)/rawtext/751 $(BUILD)/rawtext/003 $(BUILD)/rawtext/749
 
 $(MOVEDATA_NARC): $(MOVEDATA_DEPENDENCIES)
-	$(ARMIPS) $^
-	$(NARCHIVE) create $@ $(MOVEDATA_DIR) -nf
+	$(ARMIPS) armips/data/moves.s
+	$(PYTHON) scripts/create_narc_atomic.py \
+		--narcpy tools/narcpy.py \
+		--source $(MOVEDATA_DIR) \
+		--output $@
 
 NARC_FILES += $(MOVEDATA_NARC)
 REQUIRED_DIRECTORIES += $(MOVEDATA_DIR) $(MOVEDATA_NAMES_DIR)
@@ -510,6 +524,12 @@ $(OVERWORLD_DATA_NARC):$(OVERWORLD_DATA_DEPENDENCIES)
 	$(ARMIPS) $^
 	$(NARCHIVE) create $@ $(OVERWORLD_DATA_DIR) -nf
 
+# monoverworlds.s produces this code-addon member alongside the overworld NARC.
+# Keep it as an explicit target so metadata generation cannot race that side effect.
+$(BUILD)/a028/9_09: $(OVERWORLD_DATA_NARC)
+	@test -s $@ || $(ARMIPS) $(OVERWORLD_DATA_DEPENDENCIES)
+	@test -s $@
+
 NARC_FILES += $(OVERWORLD_DATA_NARC)
 REQUIRED_DIRECTORIES += $(OVERWORLD_DATA_DIR)
 
@@ -532,12 +552,13 @@ $(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV%/00.swav:$(SDAT_DEPENDENCIES_DIR)/%.wav
 # move the swav/sbnk over
 # swar rebuilding is handled by sdattool
 # reorder cries 387+ to be numerical order in the FileBlock.json and InfoBlock.json
-$(SDAT_BUILD):$(SDAT_SWAR_OBJS) scripts/rebuild_json.py
+$(SDAT_BUILD):$(SDAT_SWAR_OBJS) scripts/rebuild_json.py scripts/prepare_overworld_capture_sound.py
 	$(SDATTOOL) -u $(SDAT_TARGET) $(SDAT_DIR)
 	cp -rf $(SDAT_OBJ_DIR)/* $(SDAT_FILES_DIR)
 	@# trigger rebuild here
 	rm -rf $(SDAT_FILES_DIR)/WAVARC/*.swar
 	$(PYTHON) scripts/rebuild_json.py
+	$(PYTHON) scripts/prepare_overworld_capture_sound.py $(SDAT_DIR)
 	$(SDATTOOL) -b $@ $(SDAT_DIR)
 
 NARC_FILES += $(SDAT_BUILD)

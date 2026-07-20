@@ -7,6 +7,7 @@ import argparse
 import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import re
 import sys
@@ -16,6 +17,8 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
 from urllib.parse import parse_qs, urlparse
+
+from PIL import Image
 
 import reliability
 import pokemon_data
@@ -59,6 +62,27 @@ def load_legacy_viewer() -> ModuleType:
 
 
 legacy = load_legacy_viewer()
+
+
+def render_normal_battle_palette(body: bytes, palette_path: Path | None) -> bytes:
+    """Apply the normal front palette to indexed back-sprite pixels, as the game does."""
+
+    if palette_path is None:
+        return body
+    try:
+        with Image.open(io.BytesIO(body)) as sprite, Image.open(palette_path) as palette:
+            normal_palette = palette.getpalette()
+            if sprite.mode != "P" or palette.mode != "P" or normal_palette is None:
+                return body
+            rendered = sprite.copy()
+            rendered.putpalette(normal_palette)
+            output = io.BytesIO()
+            transparency = sprite.info.get("transparency")
+            options = {"transparency": transparency} if transparency is not None else {}
+            rendered.save(output, format="PNG", **options)
+            return output.getvalue()
+    except (OSError, ValueError):
+        return body
 
 
 def parse_asset_stage_multipart(content_type: str, body: bytes) -> tuple[str, str, bytes]:
@@ -147,12 +171,21 @@ class V2ViewerHandler(legacy.ViewerHandler):
             )
             if pokemon_asset_match:
                 with reliability.workspace_guard(ROOT):
+                    species_value = int(pokemon_asset_match.group(1), 10)
+                    asset_kind = pokemon_asset_match.group(2)
                     asset_path = pokemon_data.asset_path(
                         ROOT,
-                        int(pokemon_asset_match.group(1), 10),
-                        pokemon_asset_match.group(2),
+                        species_value,
+                        asset_kind,
                     )
                     body = asset_path.read_bytes() if asset_path else None
+                    if body is not None and asset_kind in {"male-back", "female-back"}:
+                        palette_path = pokemon_data.asset_path(
+                            ROOT,
+                            species_value,
+                            "male-front" if asset_kind == "male-back" else "female-front",
+                        )
+                        body = render_normal_battle_palette(body, palette_path)
                 if asset_path is None:
                     self.send_bytes(
                         b"Pokemon asset not found\n",
@@ -201,6 +234,7 @@ class V2ViewerHandler(legacy.ViewerHandler):
                         "service": "overworld-viewer-v2",
                         "apiVersion": 2,
                         "legacyBackend": str(LEGACY_VIEWER_SOURCE.relative_to(ROOT)),
+                        "capabilities": legacy.source_capabilities(),
                     }
                 )
                 return
@@ -208,10 +242,23 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 r"/api/v2/pokemon-assets/staged/([0-9a-f]{32})", path
             )
             if staged_asset_match:
-                body = pokemon_asset_writer.staged_body(staged_asset_match.group(1))
-                if body is None:
+                preview = pokemon_asset_writer.staged_preview(staged_asset_match.group(1))
+                if preview is None:
                     self.send_json({"error": "staged asset is missing or expired"}, status=404)
                 else:
+                    body, symbol, slot = preview
+                    if slot in {"maleBack", "femaleBack"}:
+                        species_value = pokemon_asset_writer.species_values(ROOT).get(symbol)
+                        palette_path = (
+                            pokemon_data.asset_path(
+                                ROOT,
+                                species_value,
+                                "male-front" if slot == "maleBack" else "female-front",
+                            )
+                            if species_value is not None
+                            else None
+                        )
+                        body = render_normal_battle_palette(body, palette_path)
                     self.send_bytes(body, "image/png", cache_control="no-store")
                 return
             if path == "/api/v2/pokemon-data":
@@ -342,6 +389,7 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 self.send_json(payload)
                 return
             if path == "/api/v2/resolve":
+                reliability.require_capability(legacy, "profiles")
                 query = parse_qs(urlparse(self.path).query)
                 with reliability.workspace_guard(ROOT):
                     payload, source_revision = reliability.stable_source_read(
@@ -360,6 +408,17 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 return
         except reliability.SourceReadConflict as exc:
             self.send_json({"error": str(exc), "code": "source_read_conflict"}, status=409)
+            return
+        except reliability.CapabilityUnavailable as exc:
+            self.send_json(
+                {
+                    "error": str(exc),
+                    "code": "capability_unavailable",
+                    "capability": exc.capability,
+                    "missingSources": exc.missing_sources,
+                },
+                status=409,
+            )
             return
         except ValueError as exc:
             self.send_json({"error": str(exc)}, status=400)
@@ -449,6 +508,16 @@ class V2ViewerHandler(legacy.ViewerHandler):
                     "code": "revision_conflict",
                     "expectedRevision": exc.expected,
                     "sourceRevision": exc.current,
+                },
+                status=409,
+            )
+        except reliability.CapabilityUnavailable as exc:
+            self.send_json(
+                {
+                    "error": str(exc),
+                    "code": "capability_unavailable",
+                    "capability": exc.capability,
+                    "missingSources": exc.missing_sources,
                 },
                 status=409,
             )

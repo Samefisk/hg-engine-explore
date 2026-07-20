@@ -28,7 +28,6 @@ u8 gCleanupOverlayList[][4] =
 static BOOL IsOverworldWildOverlay(u32 ovyId)
 {
     return ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
-        || ovyId == OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA
         || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
 }
 
@@ -39,26 +38,29 @@ static void ResetMapTeleportOverlayState(void)
     gMapTeleportTransitionState.frame = 0;
 }
 
-static void ClearOverworldWildBehaviorDataEffects(void)
+u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
 {
-    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
-        OVERWORLD_WILD_CUSTOM_JUMP_SHADOW_ENTRY->clear();
+    const OverworldWildBehaviorOverlayEntry *entry =
+        OVERWORLD_WILD_BEHAVIOR_OVERLAY_ENTRY;
+    u32 result;
+
+    if (entry->magic != OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC
+        || entry->version != OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION
+        || entry->size != sizeof(*entry)
+        || !OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE()) {
+        return FALSE;
     }
+    OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP();
+    result = FS_UnloadOverlay(0, OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
+    if (result) {
+        *(u32 *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR = 0;
+    }
+    return result;
 }
 
 void LONG_CALL UnloadOverworldWildOverlays(void)
 {
-    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
-        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
-    }
-
-    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
-        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
-    }
-    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA)) {
-        ClearOverworldWildBehaviorDataEffects();
-        UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_BEHAVIOR_DATA);
-    }
+    UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
 }
 
 static void UnloadColdOverworldWildOverlaysFor(u32 ovyId)
@@ -104,8 +106,10 @@ unloadSecond:
             }
             if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
                 && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {
-                ClearOverworldWildBehaviorDataEffects();
-                OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData();
+                if (!OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData()) {
+                    /* Teardown still owns 149/150/151; retry before overlap. */
+                    return;
+                }
             }
             FreeOverlayAllocation(&table[i]);
             break;
@@ -170,6 +174,10 @@ loadExtension:
     }
 
     if (!CanOverlayBeLoaded(ovyId)) {
+        if (IsOverlayLoaded(ovyId)) {
+            result = FALSE;
+            goto loadLinkedExtension;
+        }
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
         debug_printf("ERROR: Can't load in overlay_%04d.bin.\n", ovyId);
         PrintLoadedOverlays(ovyId);
@@ -223,7 +231,8 @@ loadExtension:
         break;
     default:
         GF_ASSERT(0);
-        return FALSE;
+        result = FALSE;
+        break;
     }
 
     if (overlayRegion == 1 || overlayRegion == 2) {
@@ -231,6 +240,9 @@ loadExtension:
     }
 
     if (result == FALSE) {
+        /* The slot reservation owns nothing when the SDK load fails. */
+        loadedOverlays[i].active = FALSE;
+        loadedOverlays[i].id = 0;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
         debug_printf("Failed to load overlay_%04d.bin.\n", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
@@ -238,10 +250,15 @@ loadExtension:
         return FALSE;
     }
 
+loadLinkedExtension:
     for (i = 0; i < NELEMS(gLinkedOverlayList); i++)
     {
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
+            if (result == FALSE
+                && IsOverlayLoaded(gLinkedOverlayList[i].ext_id)) {
+                return FALSE;
+            }
             ovyId = gLinkedOverlayList[i].ext_id;
             loadType = 2;
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
@@ -251,7 +268,7 @@ loadExtension:
         }
     }
 
-    return TRUE;
+    return result;
 }
 
 

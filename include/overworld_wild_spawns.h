@@ -7,10 +7,12 @@
 struct BattleStruct;
 struct BattleSystem;
 
-#define OVERWORLD_WILD_BATTLE_SHINY_OTID 0
 #define OVERWORLD_WILD_SHINY_BASE_ODDS 8192
 #define OVERWORLD_WILD_PENDING_BATTLE_LEVEL_SHIFT 16
 #define OVERWORLD_WILD_PENDING_BATTLE_SHINY_SHIFT 24
+#define OVERWORLD_WILD_BATTLE_FLAG_SUPPRESS_PERSONALITY_OVERRIDE 0x20
+
+extern u8 gOverworldWildBattleFlags;
 
 BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem);
 void OverworldWildSpawns_OnFieldSystemReady(FieldSystem *fieldSystem);

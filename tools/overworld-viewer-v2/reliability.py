@@ -82,6 +82,59 @@ class SourceReadConflict(RuntimeError):
     """Raised when external edits prevent a coherent source snapshot."""
 
 
+class CapabilityUnavailable(ValueError):
+    """Raised when a requested editor domain has no backing source system."""
+
+    def __init__(self, capability: str, details: dict[str, Any] | None = None):
+        details = details or {}
+        reason = str(details.get("reason") or f"{capability} is unavailable")
+        super().__init__(reason)
+        self.capability = capability
+        self.missing_sources = list(details.get("missingSources") or [])
+
+
+def source_capabilities(legacy: ModuleType) -> dict[str, dict[str, Any]]:
+    provider = getattr(legacy, "source_capabilities", None)
+    if not callable(provider):
+        return {}
+    capabilities = provider()
+    return capabilities if isinstance(capabilities, dict) else {}
+
+
+def require_capability(legacy: ModuleType, capability: str) -> None:
+    details = source_capabilities(legacy).get(capability)
+    if details is not None and not details.get("available", False):
+        raise CapabilityUnavailable(capability, details)
+
+
+PROFILE_COMMIT_DOMAINS = {"profiles", "profileMemberships", "profileOverrides"}
+
+
+def validate_commit_domains(legacy: ModuleType, domains: set[str]) -> None:
+    """Reparse only the optional source systems touched by a transaction."""
+
+    if domains & PROFILE_COMMIT_DOMAINS:
+        legacy.validate_override_profile_source()
+        legacy.build_data(include_routes=False, include_spawn_settings=False)
+    if "encounters" in domains:
+        legacy.build_route_only_data(
+            include_routes=True,
+            include_spawn_settings=False,
+        )
+    if "spawnSettings" in domains:
+        legacy.build_route_only_data(
+            include_routes=False,
+            include_spawn_settings=True,
+        )
+
+
+def payload_requests_route_overrides(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    overrides = payload.get("overrides")
+    return isinstance(overrides, dict) and bool(overrides)
+
+
 @contextmanager
 def workspace_guard(root: Path):
     """Serialize V2 readers/writers across threads and V2 server processes."""
@@ -380,6 +433,30 @@ def transactional_mutation(
     handler_name = MUTATION_HANDLERS.get(path)
     if handler_name is None:
         raise ValueError(f"unsupported mutation endpoint: {path}")
+    domain_by_path = {
+        "/save-profiles": "profiles",
+        "/save-profile-memberships": "profileMemberships",
+        "/manage-profiles": "profiles",
+        "/save-profile-overrides": "profileOverrides",
+        "/save-encounters": "encounters",
+        "/save-spawn-settings": "spawnSettings",
+    }
+    domain = domain_by_path[path]
+    capability_by_domain = {
+        "profiles": "profiles",
+        "profileMemberships": "profiles",
+        "profileOverrides": "profiles",
+        "encounters": "routes",
+        "spawnSettings": "spawnSettings",
+    }
+    require_capability(legacy, capability_by_domain[domain])
+    if domain == "encounters":
+        try:
+            encounter_payload = json.loads(body.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError(f"invalid JSON: {exc}") from exc
+        if payload_requests_route_overrides(encounter_payload):
+            require_capability(legacy, "routeOverrides")
     handler: Callable[[bytes], dict[str, Any]] = getattr(legacy, handler_name)
     sources = mutation_source_paths(legacy, root)
     # The legacy build job owns BUILD_LOCK for its entire lifetime. Take it
@@ -390,8 +467,7 @@ def transactional_mutation(
             snapshot = _snapshot(sources)
             try:
                 result = dict(handler(body))
-                legacy.validate_override_profile_source()
-                legacy.build_data()
+                validate_commit_domains(legacy, {domain})
                 next_revision = current_revision(legacy, root)
             except Exception as exc:
                 _rollback(legacy, snapshot, exc)
@@ -516,6 +592,28 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
     ):
         raise ValueError("commit contains no changes")
 
+    capability_by_domain = {
+        "profiles": "profiles",
+        "profileMemberships": "profiles",
+        "profileOverrides": "profiles",
+        "encounters": "routes",
+        "spawnSettings": "spawnSettings",
+        "pokemonUpdates": "pokemon",
+        "pokemonEvolutionUpdates": "pokemon",
+        "pokemonLearnsetUpdates": "pokemon",
+        "pokemonFormUpdates": "pokemon",
+        "pokemonAssetUpdates": "pokemon",
+    }
+    requested_domains = {
+        domain for domain in known_domains if payload.get(domain) is not None
+    }
+    for capability in {
+        capability_by_domain[domain] for domain in requested_domains
+    }:
+        require_capability(legacy, capability)
+    if payload_requests_route_overrides(payload.get("encounters")):
+        require_capability(legacy, "routeOverrides")
+
     asset_mutation_paths = set(
         pokemon_asset_writer.mutation_paths_for_payload(root, pokemon_asset_updates)
     )
@@ -583,10 +681,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
                             asset_revision=previous_asset_revision,
                         )
                     )
-                legacy.validate_override_profile_source()
-                # A complete parse catches cross-domain inconsistencies before the
-                # transaction is accepted. Any failure restores every source file.
-                legacy.build_data()
+                validate_commit_domains(legacy, requested_domains)
                 if any(payload.get(domain) is not None for domain in pokemon_domains):
                     asset_view = (
                         pokemon_data.asset_snapshot(root, force=True)

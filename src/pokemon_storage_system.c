@@ -66,9 +66,7 @@ void PCStorage_InitializeBoxes(PCStorage *storage) {
 BOOL PCStorage_PlaceMonInFirstEmptySlotInAnyBox(PCStorage *storage, struct BoxPokemon *boxMon) {
     s32 i = storage->curBox;
     do {
-        RestoreBoxMonPP(boxMon);
         if (PCStorage_PlaceMonInBoxFirstEmptySlot(storage, i, boxMon)) {
-            PCStorage_SetBoxModified(storage, i);
             return TRUE;
         }
         i++;

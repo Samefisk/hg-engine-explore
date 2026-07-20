@@ -602,6 +602,13 @@ def _purge_expired_locked() -> None:
 
 
 def staged_body(token: str) -> bytes | None:
+    preview = staged_preview(token)
+    return preview[0] if preview else None
+
+
+def staged_preview(token: str) -> tuple[bytes, str, str] | None:
+    """Return validated staged bytes plus the identity needed to render previews."""
+
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         return None
     try:
@@ -623,7 +630,9 @@ def staged_body(token: str) -> bytes | None:
                 body = source.read()
         except (FileNotFoundError, OSError):
             return None
-        return body if hashlib.sha256(body).hexdigest() == staged.digest else None
+        if hashlib.sha256(body).hexdigest() != staged.digest:
+            return None
+        return body, staged.symbol, staged.slot
 
 
 def discard_token(token: str) -> bool:

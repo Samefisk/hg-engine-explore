@@ -7,6 +7,7 @@ from pathlib import Path
 
 SYMBOLS = [
     "gOverworldWildCustomMovementDescriptor",
+    "LoadLevelUpLearnset_HandleAlternateForm_Fallback",
 ]
 
 

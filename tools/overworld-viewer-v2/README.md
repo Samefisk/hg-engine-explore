@@ -1,7 +1,7 @@
 # Overworld Wild Tools V2
 
-V2 is a separate Pokédex Workshop application for the overworld behavior
-toolchain. Its frontend is built from a clean DOM and purpose-built workflows;
+V2 is a shareable Pokédex Workshop application with optional overworld tools.
+Its frontend is built from a clean DOM and purpose-built workflows;
 it does not render or skin the legacy UI. Behind that frontend it reuses the
 proven parser, writers, build controls, ROM launcher, and audio renderer so data
 semantics do not drift. The existing viewer remains unchanged.
@@ -11,11 +11,47 @@ semantics do not drift. The existing viewer remains unchanged.
 From the repository root:
 
 ```bash
+OPEN_PAGE=0 scripts/keyboard-maestro-start-overworld-viewer.sh
+```
+
+This installs and starts a per-user macOS LaunchAgent with `KeepAlive`, so V2
+survives the terminal or Codex task that launched it and restarts after a crash.
+Open <http://127.0.0.1:8766/>.
+
+For foreground development and debugging, run:
+
+```bash
 python3 tools/overworld-viewer-v2/server.py
 ```
 
-Open <http://127.0.0.1:8766/>. Use `--host` or `--port` to override the local
-binding.
+Use `--host` or `--port` to override the foreground server's local binding.
+
+## Sharing and reduced mode
+
+The application discovers workspace capabilities at runtime. A project does
+not need the Overworld Behavior Profile system in order to open the Pokédex
+Workshop. Missing optional source groups remove their corresponding deck from
+navigation; they do not prevent the remaining decks from loading.
+
+- **Pokédex Workshop** requires the standard species, personal-data,
+  learnset, evolution, and asset sources used by the Pokémon data API.
+- **Route Deck** is available when encounter sources can be parsed. Profile
+  headers, override assignments, and spawn-setting sources are optional.
+- **Profile Deck** appears only when the overworld behavior profile sources are
+  present and readable.
+- **Sound Deck and build utilities** remain capability-gated by their own
+  source and tool requirements.
+
+The server returns partial workspace data together with a `capabilities`
+manifest. Consumers must use that manifest instead of assuming every deck is
+installed. A stale URL or saved selection for an unavailable deck falls back to
+the first available deck (normally Pokédex Workshop). Pokémon-only commits are
+validated independently and do not require Profile Deck infrastructure.
+
+Keep `scripts/overworld_behavior_profile_viewer.py` beside the shared V2 server:
+it is still the compatibility adapter for route/profile source formats. Its
+presence does not mean a project must contain the optional overworld profile
+sources themselves.
 
 ## What V2 changes
 
@@ -82,6 +118,14 @@ The V2-only API surface is:
 “Saved” means the source transaction committed and the complete source model
 parsed successfully. It does not mean a ROM was built. Build and Open NDS
 remain explicit, separate actions in the header.
+
+Open NDS uses the platform file opener by default. To launch a specific
+emulator, set `NDS_OPEN_COMMAND`; include `{rom}` where the absolute ROM path
+belongs, or omit it to append the path automatically. For example:
+
+```bash
+NDS_OPEN_COMMAND='melonDS {rom}' python3 tools/overworld-viewer-v2/server.py
+```
 
 Run one source-writing viewer process for a workspace at a time. V2 instances
 coordinate with each other through an interprocess workspace lock; the legacy

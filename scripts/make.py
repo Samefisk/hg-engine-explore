@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import struct
 import sys
+import hashlib
 from datetime import datetime
 import _io
 import ndspy.codeCompression
@@ -148,7 +149,59 @@ def GetSectionSize(section_file: str, section_name: str) -> int:
     return 0
 
 
-def Hook(rom: _io.BufferedReader, space: int, hookAt: int, register=0, memAddress=0):
+def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
+    entry_name = 'gOverworldWildSpawnsOverlayEntry'
+    callback_names = [
+        'OverworldWildSpawns_OverlayOnPlayerStep',
+        'OverworldWildSpawns_OverlayTryPrimeBattleFromTalk',
+        'OverworldWildSpawns_OverlayCleanupPendingBattle',
+        'OverworldWildSpawns_CleanupResidentData',
+        'OverworldWildSpawns_OverlayOnPlayerFrame',
+        'OverworldWildSpawns_OverlayOnFieldBusy',
+    ]
+    symbols = {}
+    output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+            symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
+
+    missing = [name for name in [entry_name, *callback_names] if name not in symbols]
+    if missing:
+        raise RuntimeError(
+            'overlay 149 ABI gate is missing linked symbols: ' + ', '.join(missing)
+        )
+    entry_address, entry_size = symbols[entry_name]
+    expected_entry_size = len(callback_names) * 4
+    if entry_address != 0x023CD000 or entry_size != expected_entry_size:
+        raise RuntimeError(
+            f'overlay 149 ABI entry changed: address=0x{entry_address:08X} '
+            f'size={entry_size}, expected address=0x023CD000 size={expected_entry_size}'
+        )
+
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 149 differs from its linked binary')
+    if len(overlay) < expected_entry_size:
+        raise RuntimeError('overlay 149 is shorter than its exported ABI entry')
+
+    actual_callbacks = struct.unpack_from('<6I', overlay)
+    expected_callbacks = tuple(symbols[name][0] | 1 for name in callback_names)
+    if actual_callbacks != expected_callbacks:
+        raise RuntimeError(
+            'overlay 149 exported ABI entry does not exactly match its linked callbacks'
+        )
+    digest = hashlib.sha256(overlay).hexdigest()
+    print(
+        f'overlay 149 ABI gate: entry=0x{entry_address:08X} '
+        f'size={entry_size} sha256={digest}'
+    )
+
+
+def Hook(rom: _io.BufferedReader, space: int, hookAt: int, register=0, memAddress=0, reentrant=False):
     # Align 2
     if hookAt & 1:
         hookAt -= 1
@@ -170,22 +223,39 @@ def Hook(rom: _io.BufferedReader, space: int, hookAt: int, register=0, memAddres
         if (memAddress & 0x08000000):
             print("Error:  Need to specify a memory address (02XXXXXX) for total function replacement instead of an absolute offset.")
             sys.exit(1)
-        immediate = int((space - (memAddress + 0xE)) / 2)
+        immediateBase = memAddress + (0x18 if reentrant else 0xE)
+        immediate = int((space - immediateBase) / 2)
         immediateHigher = (immediate >> 11) & 0x3FF
         immediateLower = immediate & 0x7FF
-        # requires 0x1C of space
-        # see documentation/testing_hook.s for the assembly here
-        data = bytes([0x60, 0xB4, 0x04, 0x4D, 0x76, 0x46, 0x2E, 0x60, 0x60, 0xBC,
-            # memAddress > space would result in negative immediate
-            # i suppose all higher bits would be set and this wouldn't be necessary, but this is a mind safety deal i fear
-            immediateHigher & 0xFF, (0xF0 | ((immediateHigher >> 8) & 0x3) | (0x4 if (memAddress+0xE) > space else 0)),
-            immediateLower & 0xFF, (0xF8 | ((immediateLower >> 8) & 0x7)),
-            0x01, 0x49, 0x09, 0x68, 0x8F, 0x46])
+        if reentrant:
+            # Save this invocation's LR on its current mode stack, then copy
+            # arguments 5-8 into an aligned call frame for the replacement.
+            # This keeps total replacements with stack arguments ABI-correct.
+            data = bytes([
+                0x10, 0xB5,       # push {r4, lr}
+                0x84, 0xB0,       # sub sp, #0x10
+                0x06, 0x9C, 0x00, 0x94, # arg 5: [sp, #0x18] -> [sp]
+                0x07, 0x9C, 0x01, 0x94, # arg 6: [sp, #0x1C] -> [sp, #4]
+                0x08, 0x9C, 0x02, 0x94, # arg 7: [sp, #0x20] -> [sp, #8]
+                0x09, 0x9C, 0x03, 0x94, # arg 8: [sp, #0x24] -> [sp, #0xC]
+                immediateHigher & 0xFF, (0xF0 | ((immediateHigher >> 8) & 0x3) | (0x4 if immediateBase > space else 0)),
+                immediateLower & 0xFF, (0xF8 | ((immediateLower >> 8) & 0x7)),
+                0x04, 0xB0,       # add sp, #0x10
+                0x10, 0xBD])      # pop {r4, pc}
+        else:
+            # requires 0x1C of space
+            # see documentation/testing_hook.s for the assembly here
+            data = bytes([0x60, 0xB4, 0x04, 0x4D, 0x76, 0x46, 0x2E, 0x60, 0x60, 0xBC,
+                # memAddress > space would result in negative immediate
+                # i suppose all higher bits would be set and this wouldn't be necessary, but this is a mind safety deal i fear
+                immediateHigher & 0xFF, (0xF0 | ((immediateHigher >> 8) & 0x3) | (0x4 if immediateBase > space else 0)),
+                immediateLower & 0xFF, (0xF8 | ((immediateLower >> 8) & 0x7)),
+                0x01, 0x49, 0x09, 0x68, 0x8F, 0x46])
+            data += ((memAddress + 0x18).to_bytes(4, 'little'))
         #print(f"bl construction: space = {space:08X}, hookAt = {hookAt:06X}, memAddress = {memAddress:08X}, immediate = {immediate:06X}, {immediateHigher:03X} {immediateLower:03X}")
         #for i in range(0, len(data)):
         #    print(f"{data[i]:02X}", end=' ')
         #print("")
-        data += ((memAddress + 0x18).to_bytes(4, 'little'))
 
     rom.write(bytes(data))
 
@@ -364,6 +434,9 @@ def hook():
                 else:
                     files, symbol, address = line.split()
                     register = "255"
+                reentrant = register.lower() == "reentrant"
+                if reentrant:
+                    register = "255"
                 #offset = int(address, 16) - 0x08000000
                 try:
                     code = table[symbol]
@@ -378,7 +451,7 @@ def hook():
                     with open("base/overarm9.bin", 'rb+') as y9Table:
                         y9Table.seek((int(files)*0x20)+0x4) # read the overlay memory address for offset calculation
                         offset = int(address, 16) - struct.unpack_from("<I", y9Table.read(4))[0] if int(address, 16) & 0x02000000 else int(address, 16) - 0x08000000
-                Hook(rom2, code, offset, int(register), int(address, 16))
+                Hook(rom2, code, offset, int(register), int(address, 16), reentrant)
                 rom2.close()
 
 
@@ -473,6 +546,12 @@ def writeall():
             y9Table.write(struct.pack('<I', 0)) # initend
             y9Table.write(struct.pack('<I', newOverlay)) # file id
             y9Table.write(struct.pack('<I', 0)) # uncompressed
+        if newOverlay == 149:
+            VerifyOverworldWildSpawnsOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
         #print(f"{OVERLAYS[i]} written to overlay {newOverlay}...")
 
     # all of the individual overlays

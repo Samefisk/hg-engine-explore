@@ -23,6 +23,8 @@ import os
 import pty
 import re
 import select
+import shlex
+import shutil
 import signal
 import struct
 import subprocess
@@ -57,6 +59,7 @@ MOVE_ANIM_DIR = ROOT / "armips/move/move_anim"
 MOVES_DATA_SOURCE = ROOT / "armips/data/moves.s"
 SOUND_RENDER_SAMPLE_RATE = 44100
 SOUND_RENDER_MAX_SECONDS = 16.0
+NDS_SOUND_HEARTBEAT_RATE = 33513982.0 / (64.0 * 2728.0)
 MOVE_SOUND_FRAME_RATE = 60.0
 MOVE_SOUND_MAX_SECONDS = 16.0
 MOVE_SOUND_WAITSTATE_FRAMES = 12
@@ -3311,7 +3314,9 @@ def apply_spawn_setting_changes(body: bytes) -> dict:
     if not changes:
         return {"saved": False, "message": "No changes"}
 
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
+    expressions, species_order = parse_define_expressions(
+        [path for path in DEFINE_SOURCE_FILES if path.exists()]
+    )
     macros = evaluate_defines(expressions)
     species = parse_species(expressions, macros, species_order)
     valid_species = {
@@ -3382,17 +3387,28 @@ def apply_encounter_changes(body: bytes) -> dict:
     changes, override_changes = parse_encounter_save_payload(body)
     if not changes and not override_changes:
         return {"saved": False, "message": "No changes"}
+    capabilities = source_capabilities()
+    if not capabilities["routes"]["available"]:
+        raise ValueError(capabilities["routes"]["reason"])
+    if override_changes and not capabilities["routeOverrides"]["available"]:
+        raise ValueError(capabilities["routeOverrides"]["reason"])
 
-    raw_overlay = OVERLAY_SOURCE.read_text()
+    raw_overlay = OVERLAY_SOURCE.read_text() if OVERLAY_SOURCE.exists() else ""
     source = strip_c_comments(join_line_continuations(raw_overlay))
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
+    expressions, species_order = parse_define_expressions(
+        [path for path in DEFINE_SOURCE_FILES if path.exists()]
+    )
     macros = evaluate_defines(expressions)
     species = parse_species(expressions, macros, species_order)
     encounter_species_options = build_encounter_species_options(species, macros)
     species_by_symbol = {entry["symbol"]: entry for entry in encounter_species_options}
     valid_species = {entry["symbol"] for entry in encounter_species_options}
     valid_species.add("SPECIES_NONE")
-    headbutt_by_map_id = parse_headbutt_encounters(species_by_symbol, macros)
+    headbutt_by_map_id = (
+        parse_headbutt_encounters(species_by_symbol, macros)
+        if HEADBUTT_SOURCE.exists()
+        else {}
+    )
     routes = parse_route_encounters(
         species_by_symbol,
         macros,
@@ -3470,7 +3486,11 @@ def apply_encounter_changes(body: bytes) -> dict:
                 else:
                     pending["values"][field] = parse_int_range(raw_value, field, 0, 100)
 
-    saved_overrides = read_route_encounter_overrides()
+    saved_overrides = (
+        read_route_encounter_overrides()
+        if override_changes
+        else empty_route_encounter_overrides()
+    )
     if override_changes:
         for route_id, operation in override_changes.items():
             if route_id not in route_by_id:
@@ -3529,25 +3549,29 @@ def apply_encounter_changes(body: bytes) -> dict:
     if encounters_changed:
         ENCOUNTERS_SOURCE.write_text(updated)
 
-    headbutt_lines = HEADBUTT_SOURCE.read_text(encoding="latin-1").splitlines(True)
-    for line_no, pending in pending_headbutt_by_line.items():
-        item = pending["item"]
-        ending = line_ending(headbutt_lines[line_no])
-        values = pending["values"]
-        species = values.get("species", item["species"]["symbol"])
-        form = values.get("form", item.get("form", 0))
-        min_level = values.get("minLevel", item["minLevel"])
-        max_level = values.get("maxLevel", item["maxLevel"])
-        if min_level > max_level:
-            raise ValueError(f"min level cannot be greater than max level on line {line_no + 1}")
-        if form:
-            headbutt_lines[line_no] = f"    headbuttencounterwithform {species}, {form}, {min_level}, {max_level}{ending}"
-        else:
-            headbutt_lines[line_no] = f"    headbuttencounter {species}, {min_level}, {max_level}{ending}"
-    headbutt_updated = "".join(headbutt_lines)
-    headbutt_changed = headbutt_updated != HEADBUTT_SOURCE.read_text(encoding="latin-1")
-    if headbutt_changed:
-        HEADBUTT_SOURCE.write_text(headbutt_updated, encoding="latin-1")
+    headbutt_changed = False
+    if pending_headbutt_by_line:
+        if not HEADBUTT_SOURCE.exists():
+            raise ValueError("Headbutt encounter sources are not installed in this workspace")
+        headbutt_lines = HEADBUTT_SOURCE.read_text(encoding="latin-1").splitlines(True)
+        for line_no, pending in pending_headbutt_by_line.items():
+            item = pending["item"]
+            ending = line_ending(headbutt_lines[line_no])
+            values = pending["values"]
+            species = values.get("species", item["species"]["symbol"])
+            form = values.get("form", item.get("form", 0))
+            min_level = values.get("minLevel", item["minLevel"])
+            max_level = values.get("maxLevel", item["maxLevel"])
+            if min_level > max_level:
+                raise ValueError(f"min level cannot be greater than max level on line {line_no + 1}")
+            if form:
+                headbutt_lines[line_no] = f"    headbuttencounterwithform {species}, {form}, {min_level}, {max_level}{ending}"
+            else:
+                headbutt_lines[line_no] = f"    headbuttencounter {species}, {min_level}, {max_level}{ending}"
+        headbutt_updated = "".join(headbutt_lines)
+        headbutt_changed = headbutt_updated != HEADBUTT_SOURCE.read_text(encoding="latin-1")
+        if headbutt_changed:
+            HEADBUTT_SOURCE.write_text(headbutt_updated, encoding="latin-1")
 
     override_routes = saved_overrides.setdefault("routes", {})
     for route_id, operation in override_changes.items():
@@ -3776,22 +3800,138 @@ def data_source_metadata() -> dict[str, str]:
     }
 
 
+def source_capabilities() -> dict[str, dict]:
+    """Describe independently usable viewer subsystems for this workspace.
+
+    The Pokédex and encounter sources predate the optional overworld profile
+    runtime.  Keep their availability independent so forks without that
+    runtime can still use the parts of the workshop backed by their sources.
+    """
+
+    def capability(
+        required: list[Path] | tuple[Path, ...],
+        *,
+        optional: list[Path] | tuple[Path, ...] = (),
+        label: str,
+    ) -> dict:
+        missing = [
+            str(path.relative_to(ROOT))
+            for path in required
+            if not path.exists()
+        ]
+        missing_optional = [
+            str(path.relative_to(ROOT))
+            for path in optional
+            if not path.exists()
+        ]
+        available = not missing
+        return {
+            "available": available,
+            "writable": available,
+            "missingSources": missing,
+            "missingOptionalSources": missing_optional,
+            "reason": None if available else f"{label} sources are not installed in this workspace",
+        }
+
+    pokemon_required = (
+        ROOT / "include/config.h",
+        MONDATA_SOURCE,
+        BABYMONS_SOURCE,
+        EVODATA_SOURCE,
+        ARMIPS_CONSTANTS,
+        ARMIPS_CONFIG,
+        ROOT / "asm/include/species.inc",
+        ROOT / "asm/include/abilities.inc",
+        ROOT / "asm/include/items.inc",
+        ROOT / "asm/include/moves.inc",
+        ROOT / "data/BaseExperienceTable.c",
+        ROOT / "data/HiddenAbilityTable.c",
+        ROOT / "data/learnsets/learnsets.json",
+    )
+    route_required = (
+        ENCOUNTERS_SOURCE,
+        SPECIES_HEADER,
+        MAPS_HEADER,
+        ARMIPS_SPECIES_INC,
+        ARMIPS_CONSTANTS,
+        ARMIPS_CONFIG,
+    )
+    profile_required = (
+        OVERLAY_SOURCE,
+        HELPER_SOURCE,
+        BEHAVIOR_DATA_SOURCE,
+        BEHAVIOR_DATA_HEADER,
+        SPAWNS_PUBLIC_HEADER,
+        SPAWNS_INTERNAL_HEADER,
+    )
+    spawn_required = tuple(
+        dict.fromkeys(
+            [Path(setting["source"]) for setting in SPAWN_SETTING_BY_SYMBOL.values()]
+            + [SPECIES_HEADER, ARMIPS_SPECIES_INC, ARMIPS_CONSTANTS, ARMIPS_CONFIG]
+        )
+    )
+    capabilities = {
+        "pokemon": capability(
+            pokemon_required,
+            optional=(POKEGRA_MK, POKE_FORM_DATA),
+            label="Pokémon editor",
+        ),
+        "routes": capability(
+            route_required,
+            optional=(HEADBUTT_SOURCE, ENCOUNTER_LOOKUP_SOURCE, ENCOUNTER_OVERRIDES_SOURCE),
+            label="Route deck",
+        ),
+        "profiles": capability(profile_required, label="Profile deck"),
+        "spawnSettings": capability(spawn_required, label="Overworld spawn settings"),
+        "routeOverrides": capability(
+            (OVERLAY_SOURCE, HELPER_SOURCE, BEHAVIOR_DATA_HEADER, ENCOUNTER_LOOKUP_SOURCE),
+            optional=(ENCOUNTER_OVERRIDES_SOURCE,),
+            label="Overworld route-only encounters",
+        ),
+    }
+    if not capabilities["routes"]["available"]:
+        capabilities["routeOverrides"].update(
+            {
+                "available": False,
+                "writable": False,
+                "reason": "Route-only encounters require an available Route deck",
+            }
+        )
+    return capabilities
+
+
 def profile_error_payload(exc: Exception | None) -> dict | None:
     if exc is None:
         return None
+    message = str(exc).replace(f"{ROOT}{os.sep}", "").replace(str(ROOT), ".")
     return {
         "type": type(exc).__name__,
-        "message": str(exc),
+        "message": message,
     }
 
 
-def build_route_only_data(profile_error: Exception | None = None) -> dict:
-    raw_overlay = OVERLAY_SOURCE.read_text()
+def build_route_only_data(
+    profile_error: Exception | None = None,
+    *,
+    include_routes: bool | None = None,
+    include_spawn_settings: bool | None = None,
+) -> dict:
+    raw_overlay = OVERLAY_SOURCE.read_text() if OVERLAY_SOURCE.exists() else ""
     source = strip_c_comments(join_line_continuations(raw_overlay))
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
+    expressions, species_order = parse_define_expressions(
+        [path for path in DEFINE_SOURCE_FILES if path.exists()]
+    )
     macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values, destination_values = parse_behavior_data_enums()
+    macros.update(
+        evaluate_armips_equ(
+            [path for path in (ARMIPS_CONFIG, ARMIPS_CONSTANTS) if path.exists()]
+        )
+    )
+    terrain_values, destination_values = (
+        parse_behavior_data_enums()
+        if BEHAVIOR_DATA_HEADER.exists()
+        else ({}, {})
+    )
     macros.update(terrain_values)
     macros.update(destination_values)
 
@@ -3810,19 +3950,47 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
     species_options = build_encounter_species_options(species, macros)
     apply_species_family_metadata(species_options, baby_by_symbol, evolution_edges)
     encounter_species_by_symbol = {entry["symbol"]: entry for entry in species_options}
-    headbutt_by_map_id = parse_headbutt_encounters(encounter_species_by_symbol, macros)
-    routes = parse_route_encounters(
-        encounter_species_by_symbol,
-        macros,
-        parse_encounter_area_maps(source, macros),
-        headbutt_by_map_id,
+    capabilities = source_capabilities()
+    if include_routes is None:
+        include_routes = capabilities["routes"]["available"]
+    if include_spawn_settings is None:
+        include_spawn_settings = capabilities["spawnSettings"]["available"]
+    headbutt_by_map_id = (
+        parse_headbutt_encounters(encounter_species_by_symbol, macros)
+        if include_routes and HEADBUTT_SOURCE.exists()
+        else {}
     )
-    attach_route_encounter_overrides(routes)
-    spawn_settings = parse_spawn_settings(macros, encounter_species_by_symbol)
+    routes = (
+        parse_route_encounters(
+            encounter_species_by_symbol,
+            macros,
+            parse_encounter_area_maps(source, macros),
+            headbutt_by_map_id,
+        )
+        if include_routes and capabilities["routes"]["available"]
+        else []
+    )
+    if routes and capabilities["routeOverrides"]["available"]:
+        attach_route_encounter_overrides(routes)
+    spawn_settings = (
+        parse_spawn_settings(macros, encounter_species_by_symbol)
+        if include_spawn_settings and capabilities["spawnSettings"]["available"]
+        else []
+    )
+    profile_capability = dict(capabilities["profiles"])
+    profile_capability.update(
+        {
+            "available": False,
+            "writable": False,
+            "reason": profile_capability["reason"] or "Profile deck sources could not be parsed",
+        }
+    )
+    capabilities["profiles"] = profile_capability
 
     return {
         "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "source": data_source_metadata(),
+        "capabilities": capabilities,
         "profilesAvailable": False,
         "profileError": profile_error_payload(profile_error),
         "fields": [],
@@ -3866,7 +4034,16 @@ def build_route_only_data(profile_error: Exception | None = None) -> dict:
     }
 
 
-def build_data() -> dict:
+def build_data(
+    *,
+    include_routes: bool | None = None,
+    include_spawn_settings: bool | None = None,
+) -> dict:
+    capabilities = source_capabilities()
+    if include_routes is None:
+        include_routes = capabilities["routes"]["available"]
+    if include_spawn_settings is None:
+        include_spawn_settings = capabilities["spawnSettings"]["available"]
     raw_overlay = OVERLAY_SOURCE.read_text()
     source = strip_c_comments(join_line_continuations(raw_overlay))
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
@@ -3912,15 +4089,28 @@ def build_data() -> dict:
     species_options = build_encounter_species_options(species, macros)
     apply_species_family_metadata(species_options, baby_by_symbol, evolution_edges)
     encounter_species_by_symbol = {entry["symbol"]: entry for entry in species_options}
-    headbutt_by_map_id = parse_headbutt_encounters(encounter_species_by_symbol, macros)
-    routes = parse_route_encounters(
-        encounter_species_by_symbol,
-        macros,
-        parse_encounter_area_maps(source, macros),
-        headbutt_by_map_id,
+    headbutt_by_map_id = (
+        parse_headbutt_encounters(encounter_species_by_symbol, macros)
+        if include_routes and HEADBUTT_SOURCE.exists()
+        else {}
     )
-    attach_route_encounter_overrides(routes)
-    spawn_settings = parse_spawn_settings(macros, encounter_species_by_symbol)
+    routes = (
+        parse_route_encounters(
+            encounter_species_by_symbol,
+            macros,
+            parse_encounter_area_maps(source, macros),
+            headbutt_by_map_id,
+        )
+        if include_routes and capabilities["routes"]["available"]
+        else []
+    )
+    if routes and capabilities["routeOverrides"]["available"]:
+        attach_route_encounter_overrides(routes)
+    spawn_settings = (
+        parse_spawn_settings(macros, encounter_species_by_symbol)
+        if include_spawn_settings and capabilities["spawnSettings"]["available"]
+        else []
+    )
 
     assignments = []
     default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
@@ -4057,6 +4247,7 @@ def build_data() -> dict:
     return {
         "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "source": data_source_metadata(),
+        "capabilities": capabilities,
         "profilesAvailable": True,
         "profileError": None,
         "fields": [
@@ -4123,6 +4314,82 @@ def invalidate_data_cache() -> None:
     cached_render_icon_png.cache_clear()
 
 
+def build_workspace_data() -> dict:
+    """Assemble independently optional profile, route, and spawn datasets."""
+
+    capabilities = source_capabilities()
+    profile_error: Exception | None = None
+    payload: dict | None = None
+    if capabilities["profiles"]["available"]:
+        try:
+            payload = build_data(
+                include_routes=False,
+                include_spawn_settings=False,
+            )
+        except Exception as exc:
+            profile_error = exc
+    else:
+        profile_error = RuntimeError(capabilities["profiles"]["reason"])
+
+    if payload is None:
+        payload = build_route_only_data(
+            profile_error,
+            include_routes=False,
+            include_spawn_settings=False,
+        )
+
+    assembled_capabilities = {
+        key: dict(value) for key, value in payload["capabilities"].items()
+    }
+
+    if capabilities["routes"]["available"]:
+        try:
+            route_payload = build_route_only_data(
+                profile_error,
+                include_routes=True,
+                include_spawn_settings=False,
+            )
+            payload["routes"] = route_payload["routes"]
+            payload["counts"]["routes"] = len(route_payload["routes"])
+            assembled_capabilities["routes"] = route_payload["capabilities"]["routes"]
+            assembled_capabilities["routeOverrides"] = route_payload["capabilities"]["routeOverrides"]
+        except Exception as exc:
+            assembled_capabilities["routes"] = {
+                **capabilities["routes"],
+                "available": False,
+                "writable": False,
+                "reason": "Route deck sources could not be parsed",
+            }
+            assembled_capabilities["routeOverrides"] = {
+                **capabilities["routeOverrides"],
+                "available": False,
+                "writable": False,
+                "reason": "Route-only encounters require an available Route deck",
+            }
+            payload["routeError"] = profile_error_payload(exc)
+
+    if capabilities["spawnSettings"]["available"]:
+        try:
+            spawn_payload = build_route_only_data(
+                profile_error,
+                include_routes=False,
+                include_spawn_settings=True,
+            )
+            payload["spawnSettings"] = spawn_payload["spawnSettings"]
+            assembled_capabilities["spawnSettings"] = spawn_payload["capabilities"]["spawnSettings"]
+        except Exception as exc:
+            assembled_capabilities["spawnSettings"] = {
+                **capabilities["spawnSettings"],
+                "available": False,
+                "writable": False,
+                "reason": "Overworld spawn settings could not be parsed",
+            }
+            payload["spawnSettingsError"] = profile_error_payload(exc)
+
+    payload["capabilities"] = assembled_capabilities
+    return payload
+
+
 def cached_data_json() -> dict[str, bytes | str]:
     key = data_source_key()
     with DATA_CACHE_LOCK:
@@ -4133,10 +4400,7 @@ def cached_data_json() -> dict[str, bytes | str]:
                 "etag": DATA_JSON_CACHE["etag"],
             }
         cached_icon_paths.cache_clear()
-        try:
-            payload = build_data()
-        except Exception as exc:
-            payload = build_route_only_data(exc)
+        payload = build_workspace_data()
         body = json.dumps(payload, separators=(",", ":")).encode()
         gzip_body = gzip.compress(body, compresslevel=6)
         etag = f'"{hashlib.sha1(body).hexdigest()}"'
@@ -6094,12 +6358,126 @@ def run_command_with_pty(command: list[str], on_output=None, startup_timeout: in
 def open_test_nds() -> dict:
     if not TEST_NDS.exists():
         raise FileNotFoundError("test.nds does not exist yet")
+
+    rom_path = str(TEST_NDS)
+    configured_command = os.environ.get("NDS_OPEN_COMMAND", "").strip()
+    if configured_command:
+        # Parse into argv without invoking a shell. Quoted executable paths are
+        # therefore supported without allowing shell operators to execute.
+        try:
+            command = shlex.split(configured_command, posix=os.name != "nt")
+        except ValueError as exc:
+            raise RuntimeError(f"NDS_OPEN_COMMAND could not be parsed: {exc}") from exc
+        if os.name == "nt":
+            # Non-POSIX shlex preserves Windows path separators, but also
+            # preserves matching outer quotes. Remove only those outer quotes;
+            # the argv remains shell-free and embedded characters stay intact.
+            command = [
+                argument[1:-1]
+                if len(argument) >= 2
+                and argument[0] == argument[-1]
+                and argument[0] in {'"', "'"}
+                else argument
+                for argument in command
+            ]
+        if not command or not command[0].strip():
+            raise RuntimeError("NDS_OPEN_COMMAND does not contain an executable")
+        has_rom_placeholder = any("{rom}" in argument for argument in command)
+        command = [argument.replace("{rom}", rom_path) for argument in command]
+        if not has_rom_placeholder:
+            command.append(rom_path)
+        launcher = f"NDS_OPEN_COMMAND ({command[0]})"
+        popen_options = {
+            "cwd": ROOT,
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if os.name == "nt":
+            creation_flags = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0)
+            )
+            if creation_flags:
+                popen_options["creationflags"] = creation_flags
+        else:
+            popen_options["start_new_session"] = True
+        try:
+            process = subprocess.Popen(command, **popen_options)
+        except OSError as exc:
+            raise RuntimeError(
+                f"ROM launcher '{command[0]}' could not start: {exc}. "
+                "Check NDS_OPEN_COMMAND and the emulator path."
+            ) from exc
+        try:
+            return_code = process.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            # Reap the detached emulator after it eventually exits without
+            # keeping the HTTP request open for the entire emulator session.
+            threading.Thread(target=process.wait, daemon=True).start()
+        else:
+            if return_code != 0:
+                raise RuntimeError(
+                    f"ROM launcher '{command[0]}' exited with status {return_code}. "
+                    "Check NDS_OPEN_COMMAND and the emulator path."
+                )
+        return {
+            "opened": True,
+            "path": rom_path,
+            "launcher": launcher,
+            "message": f"Requested test.nds open via {launcher}",
+        }
     if sys.platform == "darwin":
-        command = ["open", str(TEST_NDS)]
+        command = ["open", rom_path]
+        launcher = "macOS open"
+    elif os.name == "nt":
+        try:
+            os.startfile(rom_path)  # type: ignore[attr-defined]
+        except OSError as exc:
+            raise RuntimeError(
+                f"Windows could not open test.nds: {exc}. "
+                "Associate .nds files with an emulator or set NDS_OPEN_COMMAND."
+            ) from exc
+        launcher = "Windows shell"
+        return {
+            "opened": True,
+            "path": rom_path,
+            "launcher": launcher,
+            "message": f"Requested test.nds open via {launcher}",
+        }
     else:
-        command = ["xdg-open", str(TEST_NDS)]
-    subprocess.run(command, cwd=ROOT, check=True)
-    return {"opened": True, "path": str(TEST_NDS)}
+        xdg_open = shutil.which("xdg-open")
+        gio = shutil.which("gio")
+        if xdg_open:
+            command = [xdg_open, rom_path]
+            launcher = "xdg-open"
+        elif gio:
+            command = [gio, "open", rom_path]
+            launcher = "gio open"
+        else:
+            raise RuntimeError(
+                "No desktop file opener is available. Install xdg-utils or gio, "
+                "or set NDS_OPEN_COMMAND to your emulator command."
+            )
+
+    try:
+        subprocess.run(command, cwd=ROOT, check=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"ROM launcher '{command[0]}' was not found. "
+            "Install it or set NDS_OPEN_COMMAND to an available emulator command."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ROM launcher '{command[0]}' exited with status {exc.returncode}. "
+            "Check the .nds file association or set NDS_OPEN_COMMAND."
+        ) from exc
+    return {
+        "opened": True,
+        "path": rom_path,
+        "launcher": launcher,
+        "message": f"Requested test.nds open via {launcher}",
+    }
 
 
 def crc16_ccitt_false(data: bytes | bytearray | memoryview) -> int:
@@ -6273,6 +6651,229 @@ def sound_effect_constants() -> dict[str, int]:
     return constants
 
 
+SOUND_EFFECT_CATALOG_ALIASES: dict[str, tuple[str, tuple[str, ...], str]] = {
+    # These names follow the actual battle capture task and overlay-7 ball
+    # animation events. Breakout is indirect: the capture task reuses the
+    # Pokémon send-out controller, whose breakout path plays BOWA2.
+    "SEQ_SE_DP_NAGERU": (
+        "Battle Poké Ball throw",
+        ("pokeball", "poke ball", "battle capture", "throw ball"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_BOWA4": (
+        "Battle Poké Ball opens and draws in target",
+        ("pokeball", "poke ball", "battle capture", "ball opens", "draw in pokemon", "pull in pokemon"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_BOWA2": (
+        "Battle Pokémon reappears / Poké Ball breakout",
+        ("pokeball", "poke ball", "battle capture", "capture failed", "breakout", "escape from ball", "reappear"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_BOWA": (
+        "Battle Poké Ball shake",
+        ("pokeball", "poke ball", "battle capture", "ball shake", "capture shake"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_GETTING": (
+        "Battle Poké Ball capture success click",
+        (
+            "pokeball",
+            "poke ball",
+            "poké ball",
+            "battle capture",
+            "capture success",
+            "successful capture",
+            "capture click",
+            "capture check",
+            "capture check sound",
+            "capture confirmed",
+            "successful catch",
+            "gotcha",
+            "caught",
+        ),
+        "Battle capture",
+    ),
+    # BALL_ANIM_FALL's overlay-7 timed table plays KON at frames 1 and 8,
+    # followed by KON2/KON3/KON4 at frames 14/18/20. KON is also the trainer
+    # battle deflection sound, so it must not be presented as merely impact 1.
+    "SEQ_SE_DP_KON": (
+        "Battle Poké Ball landing impacts 1–2 / trainer deflect",
+        ("pokeball", "poke ball", "battle capture", "ball landing", "landing impact", "trainer block", "deflect"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_KON2": (
+        "Battle Poké Ball landing impact 3",
+        ("pokeball", "poke ball", "battle capture", "ball landing", "landing impact"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_KON3": (
+        "Battle Poké Ball landing impact 4",
+        ("pokeball", "poke ball", "battle capture", "ball landing", "landing impact"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_KON4": (
+        "Battle Poké Ball final landing settle",
+        ("pokeball", "poke ball", "battle capture", "ball landing", "final settle", "impact"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_REAPOKE": (
+        "Pokémon reappear",
+        ("pokemon reappear", "pokémon reappear", "battle transition"),
+        "Pokémon battle",
+    ),
+    "SEQ_SE_DP_PINPON": (
+        "Out of Safari/Sport Balls alert",
+        ("out of balls", "safari balls", "sport balls", "warning"),
+        "Battle interface",
+    ),
+    "SEQ_ME_POKEGET": (
+        "Pokémon obtained fanfare after capture",
+        ("battle capture", "pokemon obtained", "pokémon obtained", "capture success", "gotcha", "caught"),
+        "Jingle",
+    ),
+    "SEQ_GS_WIN2": (
+        "Battle capture victory cue",
+        ("battle capture", "capture victory", "gotcha", "caught"),
+        "Battle capture",
+    ),
+    "SEQ_SE_PL_KIRAKIRA": (
+        "Shiny sparkle",
+        ("shiny pokemon", "shiny pokémon", "spawn sparkle"),
+        "Overworld",
+    ),
+    "SEQ_SE_PL_W467109": (
+        "Giratina form change",
+        ("giratina", "form change", "forme change"),
+        "Pokémon state",
+    ),
+    "SEQ_SE_PL_W363": (
+        "Shaymin form change",
+        ("shaymin", "form change", "forme change"),
+        "Pokémon state",
+    ),
+}
+
+SOUND_EFFECT_CATALOG_SOURCE_FILES: dict[str, tuple[str, ...]] = {
+    "SEQ_SE_DP_NAGERU": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_BOWA4": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_BOWA2": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_BOWA": ("base/overlay/overlay_0007.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_GETTING": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_KON": ("base/overlay/overlay_0007.bin", "base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_KON2": ("base/overlay/overlay_0007.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_KON3": ("base/overlay/overlay_0007.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_KON4": ("base/overlay/overlay_0007.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_PINPON": (
+        "data/battle_scripts/subscripts/subscript_0011_THROW_POKEBALL.s",
+        "data/battle_scripts/subscripts/subscript_0275_THROW_SAFARI_BALL.s",
+    ),
+    "SEQ_ME_POKEGET": ("data/text/197.txt", "include/constants/sndseq.h"),
+    "SEQ_GS_WIN2": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_PL_KIRAKIRA": (
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+    ),
+}
+
+
+def semantic_sound_alias_label(symbol: str) -> str:
+    overworld = symbol.startswith("OW_WILD_")
+    stem = symbol.removesuffix("_SE")
+    if "_PLAYER_BALL_" in stem:
+        stem = "POKE_BALL_" + stem.split("_PLAYER_BALL_", 1)[1]
+    elif stem.startswith("OW_WILD_SPAWNER_"):
+        stem = stem.removeprefix("OW_WILD_SPAWNER_")
+    elif stem.startswith("MAP_"):
+        stem = stem.removeprefix("MAP_")
+    words = []
+    for word in stem.split("_"):
+        if word == "POKE":
+            words.append("Poké")
+        elif word in {"UFO", "PC"}:
+            words.append(word)
+        else:
+            words.append(word.lower())
+    label = " ".join(words).capitalize().replace("Poké ball", "Poké Ball")
+    return f"Overworld {label}" if overworld else label
+
+
+def semantic_sound_alias_search_terms(symbol: str, label: str) -> list[str]:
+    terms = [label, symbol]
+    if re.search(r"(?:^|_)BALL(?:_|$)", symbol):
+        terms.extend(("pokeball", "poke ball", "poké ball", "capture"))
+    if "CHARGE" in symbol:
+        terms.extend(("capture check", "aim pulse"))
+    if "BREAKOUT" in symbol:
+        terms.extend(("capture failed", "escape from ball"))
+    if "CAUGHT" in symbol:
+        terms.extend(("capture success", "capture check", "caught"))
+    return list(dict.fromkeys(terms))
+
+
+@lru_cache(maxsize=1)
+def source_sound_effect_aliases() -> dict[str, list[dict]]:
+    """Return semantic aliases declared by active C sources, grouped by SEQ symbol."""
+    aliases: dict[str, dict[str, dict]] = {}
+    define_re = re.compile(
+        r"^\s*#define\s+([A-Za-z0-9_]+)\s+(SEQ_(?:SE|ME)_[A-Za-z0-9_]+)\s*$",
+        flags=re.MULTILINE,
+    )
+    for source_root in (ROOT / "src", ROOT / "data"):
+        if not source_root.exists():
+            continue
+        paths = sorted(path for pattern in ("*.c", "*.h") for path in source_root.rglob(pattern))
+        for path in paths:
+            try:
+                text = strip_c_comments(join_line_continuations(path.read_text()))
+            except (OSError, UnicodeDecodeError):
+                continue
+            relative = str(path.relative_to(ROOT))
+            for alias_symbol, sequence_symbol in define_re.findall(text):
+                if alias_symbol.startswith("OW_WILD_") and (
+                    "_PLAYER_BALL_" in alias_symbol
+                    or "_POKE_BALL_" in alias_symbol
+                ):
+                    # These are implementation placeholders in the optional
+                    # overworld projectile feature, not canonical sound names.
+                    continue
+                label = semantic_sound_alias_label(alias_symbol)
+                category = "Overworld" if alias_symbol.startswith(("OW_WILD_", "MAP_")) else "Source alias"
+                by_symbol = aliases.setdefault(sequence_symbol, {})
+                alias = by_symbol.setdefault(alias_symbol, {
+                    "label": label,
+                    "symbol": alias_symbol,
+                    "sequenceSymbol": sequence_symbol,
+                    "category": category,
+                    "kind": "source",
+                    "searchTerms": semantic_sound_alias_search_terms(alias_symbol, label),
+                    "sourceFiles": [],
+                })
+                if relative not in alias["sourceFiles"]:
+                    alias["sourceFiles"].append(relative)
+    return {
+        sequence_symbol: sorted(by_symbol.values(), key=lambda alias: (alias["label"], alias["symbol"]))
+        for sequence_symbol, by_symbol in aliases.items()
+    }
+
+
+def sound_effect_semantic_aliases() -> dict[str, list[dict]]:
+    aliases = source_sound_effect_aliases()
+    for sequence_symbol, (label, search_terms, category) in SOUND_EFFECT_CATALOG_ALIASES.items():
+        rows = aliases.setdefault(sequence_symbol, [])
+        if any(row["label"] == label for row in rows):
+            continue
+        rows.append({
+            "label": label,
+            "symbol": sequence_symbol,
+            "sequenceSymbol": sequence_symbol,
+            "category": category,
+            "kind": "catalog",
+            "searchTerms": list(search_terms),
+            "sourceFiles": list(SOUND_EFFECT_CATALOG_SOURCE_FILES.get(sequence_symbol, ())),
+        })
+    return aliases
+
+
 def sound_effect_group_map(info_block: dict) -> dict[int, list[str]]:
     by_id: dict[int, list[str]] = {}
     for group in info_block.get("groupInfo", []):
@@ -6369,7 +6970,11 @@ def is_extra_sound_sequence_info(name: str, bank: str, file_name: str) -> bool:
         return False
     if name.startswith("SEQ_SE_"):
         return False
-    return name.startswith("SEQ_ME_") or bank.startswith("BANK_SE_")
+    return (
+        name in SOUND_EFFECT_CATALOG_ALIASES
+        or name.startswith("SEQ_ME_")
+        or bank.startswith("BANK_SE_")
+    )
 
 
 def sound_effect_metadata_payload() -> dict:
@@ -6378,6 +6983,7 @@ def sound_effect_metadata_payload() -> dict:
     seq_info: list[dict] = []
     groups_by_id: dict[int, list[str]] = {}
     move_aliases_by_seq_id = move_sound_effect_aliases()
+    semantic_aliases_by_name = sound_effect_semantic_aliases()
     if SDAT_INFO_BLOCK.exists():
         info_block = json.loads(SDAT_INFO_BLOCK.read_text())
         seq_info = info_block.get("seqInfo", [])
@@ -6420,6 +7026,7 @@ def sound_effect_metadata_payload() -> dict:
             "isSoundEffect": is_sound_effect,
             "isMoveSoundEffect": is_move_sound_effect_name(name) or bool(move_aliases_by_seq_id.get(seq_id)),
             "moveAliases": move_aliases_by_seq_id.get(seq_id, []),
+            "semanticAliases": semantic_aliases_by_name.get(name, []),
             "inTesterRange": (
                 first_id is not None
                 and end_id is not None
@@ -6759,8 +7366,90 @@ def signed8(value: int) -> int:
     return value - 0x100 if value & 0x80 else value
 
 
+def signed16(value: int) -> int:
+    value = int(value) & 0xFFFF
+    return value - 0x10000 if value & 0x8000 else value
+
+
 def deterministic_random_value(event) -> int:
     return int(round((int(event.randMin) + int(event.randMax)) / 2))
+
+
+def nds_sequence_gain(value: int | float) -> float:
+    """Convert a Nitro sequence volume byte to its decibel-square gain."""
+    normalized = max(0.0, min(1.0, float(value) / 127.0))
+    return normalized * normalized
+
+
+def nds_attack_coefficient(value: int) -> int:
+    value = max(0, min(127, int(value)))
+    if value < 109:
+        return 255 - value
+    return (0, 1, 5, 14, 26, 38, 51, 63, 73, 84, 92, 100, 109, 116, 123, 127, 132, 137, 143)[127 - value]
+
+
+def nds_decay_step(value: int) -> int:
+    value = max(0, min(127, int(value)))
+    if value == 127:
+        return 0xFFFF
+    if value == 126:
+        return 0x3C00
+    if value < 50:
+        return value * 2 + 1
+    return 0x1E00 // (126 - value)
+
+
+def nds_sustain_attenuation(value: int) -> int:
+    value = max(0, min(127, int(value)))
+    if value == 0:
+        return -92544
+    centibels = max(-722, round(400 * math.log10(value / 127.0)))
+    return centibels * 128
+
+
+def nds_envelope_points(
+    note_def,
+    key_off_sample: int,
+    total_samples: int,
+    attack: int | None = None,
+    decay: int | None = None,
+    sustain: int | None = None,
+    release: int | None = None,
+) -> list[tuple[int, float]]:
+    """Approximate Nitro's 192 Hz attack/decay/sustain/release channel state."""
+    attack_coefficient = nds_attack_coefficient(note_def.attack if attack is None else attack)
+    decay_step = nds_decay_step(note_def.decay if decay is None else decay)
+    sustain_attenuation = nds_sustain_attenuation(note_def.sustain if sustain is None else sustain)
+    release_step = nds_decay_step(note_def.release if release is None else release)
+    heartbeat_samples = SOUND_RENDER_SAMPLE_RATE / NDS_SOUND_HEARTBEAT_RATE
+    attenuation = -92544
+    state = "attack"
+    points: list[tuple[int, float]] = []
+    heartbeat = 0
+    while True:
+        sample_offset = int(round(heartbeat * heartbeat_samples))
+        if sample_offset >= total_samples:
+            break
+        if sample_offset >= key_off_sample:
+            state = "release"
+        if state == "attack":
+            attenuation = -((-attenuation * attack_coefficient) >> 8)
+            if attenuation == 0:
+                state = "decay"
+        elif state == "decay":
+            attenuation = max(sustain_attenuation, attenuation - decay_step)
+            if attenuation <= sustain_attenuation:
+                state = "sustain"
+        elif state == "release":
+            attenuation = max(-92544, attenuation - release_step)
+        gain = 10 ** (attenuation / 25600.0)
+        if state == "release" and attenuation <= -92544:
+            gain = 0.0
+        points.append((sample_offset, gain))
+        if state == "release" and attenuation <= -92544:
+            break
+        heartbeat += 1
+    return points or [(0, 1.0)]
 
 
 def pitch_at_sample(pitch_points: list[tuple[int, float]], sample_index: int, point_index: int) -> tuple[float, int]:
@@ -6769,19 +7458,31 @@ def pitch_at_sample(pitch_points: list[tuple[int, float]], sample_index: int, po
     return pitch_points[point_index][1], point_index
 
 
-def render_psg_note(note_def, pitch: float, duration_samples: int, pitch_points: list[tuple[int, float]] | None = None) -> list[int]:
+def render_psg_note(
+    note_def,
+    pitch: float,
+    duration_samples: int,
+    pitch_points: list[tuple[int, float]] | None = None,
+    release_rate: int | None = None,
+) -> list[int]:
     import ndspy.soundBank as sound_bank
 
     if duration_samples <= 0:
         duration_samples = int(0.08 * SOUND_RENDER_SAMPLE_RATE)
     pitch_points = pitch_points or [(0, pitch)]
+    release_step = nds_decay_step(note_def.release if release_rate is None else release_rate)
+    release_heartbeats = max(1, math.ceil(92544 / max(1, release_step)))
+    release_samples = int(math.ceil(release_heartbeats * SOUND_RENDER_SAMPLE_RATE / NDS_SOUND_HEARTBEAT_RATE))
+    output_samples = min(
+        int(SOUND_RENDER_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE),
+        duration_samples + release_samples,
+    )
     if note_def.type == sound_bank.NoteType.PSG_WHITE_NOISE:
         seed = (int(round(pitch * 256)) * 1103515245 + duration_samples) & 0x7FFFFFFF
         out = []
-        for index in range(duration_samples):
+        for _index in range(output_samples):
             seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
-            fade = max(0.0, 1.0 - index / max(1, duration_samples))
-            out.append(int(((seed & 0xFFFF) - 32768) * 0.42 * fade))
+            out.append(int(((seed & 0xFFFF) - 32768) * 0.42))
         return out
 
     duty_options = (0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.0)
@@ -6789,12 +7490,11 @@ def render_psg_note(note_def, pitch: float, duration_samples: int, pitch_points:
     out = []
     phase = 0.0
     point_index = 0
-    for index in range(duration_samples):
+    for index in range(output_samples):
         current_pitch, point_index = pitch_at_sample(pitch_points, index, point_index)
         frequency = 440.0 * (2 ** ((current_pitch - 69) / 12))
         phase = (phase + frequency / SOUND_RENDER_SAMPLE_RATE) % 1.0
-        fade = max(0.0, 1.0 - index / max(1, duration_samples))
-        out.append(int((18000 if phase < duty else -18000) * fade))
+        out.append(18000 if phase < duty else -18000)
     return out
 
 
@@ -6804,6 +7504,7 @@ def render_pcm_note(
     pitch: float,
     duration_samples: int,
     pitch_points: list[tuple[int, float]] | None = None,
+    release_rate: int | None = None,
 ) -> list[int]:
     archive_index = int(note_def.waveArchiveIDID)
     if archive_index < 0 or archive_index >= len(wave_archives) or not wave_archives[archive_index]:
@@ -6818,11 +7519,17 @@ def render_pcm_note(
     initial_pitch_ratio = 2 ** ((initial_pitch - int(note_def.pitch)) / 12)
     initial_source_step = max(0.01, source_rate * initial_pitch_ratio / SOUND_RENDER_SAMPLE_RATE)
     source_duration = int(len(source) / initial_source_step)
-    release_samples = int(0.018 * SOUND_RENDER_SAMPLE_RATE)
+    release_step = nds_decay_step(note_def.release if release_rate is None else release_rate)
+    release_heartbeats = max(1, math.ceil(92544 / max(1, release_step)))
+    release_samples = int(math.ceil(release_heartbeats * SOUND_RENDER_SAMPLE_RATE / NDS_SOUND_HEARTBEAT_RATE))
     if is_looped:
         out_len = max(duration_samples + release_samples, int(0.035 * SOUND_RENDER_SAMPLE_RATE))
     else:
-        out_len = min(source_duration, max(1, duration_samples + release_samples))
+        # A Nitro note duration marks key-off; it does not truncate a one-shot
+        # SWAV. The channel continues through the source while its SBNK release
+        # envelope runs. Cutting at duration + 18 ms removed most of short,
+        # low-pitched effects such as the successful-capture click.
+        out_len = int(SOUND_RENDER_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE)
     out_len = min(out_len, int(SOUND_RENDER_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE))
 
     out = []
@@ -6869,25 +7576,31 @@ def mix_note_into(
     gain: float,
     pan: int,
     control_points: list[tuple[int, float, int]] | None = None,
+    envelope_points: list[tuple[int, float]] | None = None,
 ) -> None:
     if not samples:
         return
     control_points = control_points or [(0, gain, pan)]
-    needed = start + len(samples)
+    audible_length = len(samples)
+    if envelope_points and envelope_points[-1][1] <= 0.0:
+        audible_length = min(audible_length, envelope_points[-1][0])
+    if audible_length <= 0:
+        return
+    needed = start + audible_length
     if needed > len(mix_left):
         mix_left.extend([0.0] * (needed - len(mix_left)))
     if needed > len(mix_right):
         mix_right.extend([0.0] * (needed - len(mix_right)))
-    release = min(len(samples), int(0.012 * SOUND_RENDER_SAMPLE_RATE))
     control_index = 0
-    for index, sample in enumerate(samples):
+    envelope_index = 0
+    for index, sample in enumerate(samples[:audible_length]):
         while control_index + 1 < len(control_points) and index >= control_points[control_index + 1][0]:
             control_index += 1
+        while envelope_points and envelope_index + 1 < len(envelope_points) and index >= envelope_points[envelope_index + 1][0]:
+            envelope_index += 1
         _, current_gain, current_pan = control_points[control_index]
         left_gain, right_gain = stereo_pan_gains(current_pan)
-        envelope = 1.0
-        if release and index >= len(samples) - release:
-            envelope = (len(samples) - index) / release
+        envelope = envelope_points[envelope_index][1] if envelope_points else 1.0
         value = sample * current_gain * envelope
         mix_left[start + index] += value * left_gain
         mix_right[start + index] += value * right_gain
@@ -7029,6 +7742,73 @@ def note_pitch_points(
     return deduped
 
 
+def add_pitch_vibrato_points(
+    pitch_points: list[tuple[int, float]],
+    duration_samples: int,
+    depth: int,
+    speed: int,
+    vibrato_range: int,
+    delay: int,
+) -> list[tuple[int, float]]:
+    if depth <= 0 or speed <= 0 or vibrato_range <= 0:
+        return pitch_points
+    heartbeat_samples = SOUND_RENDER_SAMPLE_RATE / NDS_SOUND_HEARTBEAT_RATE
+    max_samples = int(SOUND_RENDER_MAX_SECONDS * SOUND_RENDER_SAMPLE_RATE)
+    phase = 0
+    base_index = 0
+    combined = list(pitch_points)
+    heartbeat = 0
+    while True:
+        sample_offset = int(round(heartbeat * heartbeat_samples))
+        if sample_offset >= max_samples:
+            break
+        base_pitch, base_index = pitch_at_sample(pitch_points, sample_offset, base_index)
+        if heartbeat < delay:
+            adjustment = 0.0
+        else:
+            sine_value = math.sin((phase / 32768.0) * math.tau) * 127.0
+            adjustment_64ths = math.trunc(sine_value * vibrato_range * depth / 256.0)
+            adjustment = adjustment_64ths / 64.0
+            phase = (phase + (speed << 6)) & 0x7FFF
+        combined.append((sample_offset, base_pitch + adjustment))
+        heartbeat += 1
+    combined.sort(key=lambda item: item[0])
+    deduped: list[tuple[int, float]] = []
+    for sample_offset, pitch in combined:
+        if deduped and deduped[-1][0] == sample_offset:
+            deduped[-1] = (sample_offset, pitch)
+        else:
+            deduped.append((sample_offset, pitch))
+    return deduped
+
+
+def add_sweep_pitch_points(
+    pitch_points: list[tuple[int, float]],
+    duration_samples: int,
+    duration_ticks: int,
+    sweep_pitch: int,
+) -> list[tuple[int, float]]:
+    sweep_pitch = signed16(sweep_pitch)
+    duration_ticks = max(0, int(duration_ticks))
+    if sweep_pitch == 0 or duration_ticks == 0:
+        return pitch_points
+    base_index = 0
+    combined = list(pitch_points)
+    for tick in range(duration_ticks + 1):
+        sample_offset = int(round(duration_samples * tick / duration_ticks))
+        base_pitch, base_index = pitch_at_sample(pitch_points, sample_offset, base_index)
+        adjustment = (sweep_pitch * (duration_ticks - tick) / duration_ticks) / 64.0
+        combined.append((sample_offset, base_pitch + adjustment))
+    combined.sort(key=lambda item: item[0])
+    deduped: list[tuple[int, float]] = []
+    for sample_offset, pitch in combined:
+        if deduped and deduped[-1][0] == sample_offset:
+            deduped[-1] = (sample_offset, pitch)
+        else:
+            deduped.append((sample_offset, pitch))
+    return deduped
+
+
 def note_control_points(
     track_events: list,
     start_index: int,
@@ -7044,7 +7824,7 @@ def note_control_points(
     import ndspy.soundSequence as sound_sequence
 
     def gain_for(volume: int, expr: int) -> float:
-        return base_gain * max(0.0, min(1.0, volume / 127.0)) * max(0.0, min(1.0, expr / 127.0))
+        return base_gain * nds_sequence_gain(volume) * nds_sequence_gain(expr)
 
     points: list[tuple[int, float, int]] = [(0, gain_for(track_volume, expression), combine_pan(pan, note_pan))]
     elapsed = duration_samples if note_wait else 0
@@ -7114,7 +7894,8 @@ def render_sound_effect_wav(seq_id: int) -> bytes:
     bank = load_sbnk(bank_name)
     bank_info = sdat_bank_info_by_name().get(bank_name, {})
     wave_archives = [name for name in bank_info.get("wa", [])]
-    sequence_gain = max(0.0, min(1.2, (float(info.get("vol") or 100) / 127.0) * 0.75))
+    sequence_volume = info.get("vol")
+    sequence_gain = nds_sequence_gain(100 if sequence_volume is None else sequence_volume) * 0.75
     mix_left: list[float] = []
     mix_right: list[float] = []
     global_tempo = first_sseq_tempo(events)
@@ -7132,6 +7913,16 @@ def render_sound_effect_wav(seq_id: int) -> bytes:
         pitch_bend_range = 2
         transpose = 0
         note_wait = False
+        vibrato_depth = 0
+        vibrato_speed = 16
+        vibrato_range = 1
+        vibrato_type = 0
+        vibrato_delay = 0
+        sweep_pitch = 0
+        attack_rate: int | None = None
+        decay_rate: int | None = None
+        sustain_rate: int | None = None
+        release_rate: int | None = None
         cursor = 0
         for event_index, event in enumerate(track_events):
             if isinstance(event, sound_sequence.TempoSequenceEvent):
@@ -7154,6 +7945,26 @@ def render_sound_effect_wav(seq_id: int) -> bytes:
                 pitch_bend = signed8(int(event.value))
             elif isinstance(event, sound_sequence.MonoPolySequenceEvent):
                 note_wait = bool(int(event.value))
+            elif isinstance(event, sound_sequence.VibratoDepthSequenceEvent):
+                vibrato_depth = int(event.value)
+            elif isinstance(event, sound_sequence.VibratoSpeedSequenceEvent):
+                vibrato_speed = int(event.value)
+            elif isinstance(event, sound_sequence.VibratoRangeSequenceEvent):
+                vibrato_range = int(event.value)
+            elif isinstance(event, sound_sequence.VibratoTypeSequenceEvent):
+                vibrato_type = int(event.value)
+            elif isinstance(event, sound_sequence.VibratoDelaySequenceEvent):
+                vibrato_delay = int(event.value)
+            elif isinstance(event, sound_sequence.SweepPitchSequenceEvent):
+                sweep_pitch = signed16(int(event.value))
+            elif isinstance(event, sound_sequence.AttackRateSequenceEvent):
+                attack_rate = int(event.value)
+            elif isinstance(event, sound_sequence.DecayRateSequenceEvent):
+                decay_rate = int(event.value)
+            elif isinstance(event, sound_sequence.SustainRateSequenceEvent):
+                sustain_rate = int(event.value)
+            elif isinstance(event, sound_sequence.ReleaseRateSequenceEvent):
+                release_rate = int(event.value)
             elif isinstance(event, sound_sequence.RandomSequenceEvent):
                 random_value = deterministic_random_value(event)
                 if event.subType == 0xC0:
@@ -7191,18 +8002,40 @@ def render_sound_effect_wav(seq_id: int) -> bytes:
                     duration,
                     note_wait,
                 )
+                pitch_points = add_sweep_pitch_points(
+                    pitch_points,
+                    duration,
+                    int(event.duration),
+                    sweep_pitch,
+                )
+                if vibrato_type == 0:
+                    pitch_points = add_pitch_vibrato_points(
+                        pitch_points,
+                        duration,
+                        vibrato_depth,
+                        vibrato_speed,
+                        vibrato_range,
+                        vibrato_delay,
+                    )
                 effective_pitch = pitch_points[0][1]
                 note_def = note_definition_for_pitch(bank.instruments[instrument_id], base_pitch)
                 if note_def is None:
                     continue
                 if note_def.type == sound_bank.NoteType.PCM:
-                    samples = render_pcm_note(note_def, wave_archives, effective_pitch, duration, pitch_points)
+                    samples = render_pcm_note(
+                        note_def,
+                        wave_archives,
+                        effective_pitch,
+                        duration,
+                        pitch_points,
+                        release_rate,
+                    )
                 else:
-                    samples = render_psg_note(note_def, effective_pitch, duration, pitch_points)
+                    samples = render_psg_note(note_def, effective_pitch, duration, pitch_points, release_rate)
                 base_gain = (
                     sequence_gain
-                    * max(0.0, min(1.0, global_volume / 127.0))
-                    * max(0.0, min(1.0, event.velocity / 127.0))
+                    * nds_sequence_gain(global_volume)
+                    * nds_sequence_gain(event.velocity)
                 )
                 control_points = note_control_points(
                     track_events,
@@ -7216,7 +8049,25 @@ def render_sound_effect_wav(seq_id: int) -> bytes:
                     len(samples),
                     note_wait,
                 )
-                mix_note_into(mix_left, mix_right, cursor, samples, base_gain, combine_pan(pan, int(getattr(note_def, "pan", 64))), control_points)
+                envelope_points = nds_envelope_points(
+                    note_def,
+                    duration,
+                    len(samples),
+                    attack_rate,
+                    decay_rate,
+                    sustain_rate,
+                    release_rate,
+                )
+                mix_note_into(
+                    mix_left,
+                    mix_right,
+                    cursor,
+                    samples,
+                    base_gain,
+                    combine_pan(pan, int(getattr(note_def, "pan", 64))),
+                    control_points,
+                    envelope_points,
+                )
                 if note_wait:
                     cursor += duration
 
@@ -14888,7 +15739,9 @@ HTML = r"""<!doctype html>
       const meta = [effect.bank, effect.player].filter(Boolean).join(" · ");
       const moveLabel = soundMoveAliasLabel(effect);
       const displayName = moveLabel || effect.shortName || effect.name;
-      const detailName = moveLabel ? `${effect.shortName || effect.name} · ${meta || effect.fileName || ""}` : (meta || effect.fileName || "");
+      const detailName = moveLabel
+        ? `${effect.shortName || effect.name} · ${meta || effect.fileName || ""}`
+        : (meta || effect.fileName || "");
       return `
         <button class="sound-row ${active ? "active" : ""}" type="button" data-sound-id="${esc(effect.id)}">
           <span class="sound-row-id">${esc(effect.id)}</span>

@@ -14,6 +14,8 @@
 #define OW_WILD_FISH_SLOT_START (OW_WILD_HEADBUTT_SLOT_START + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
 #define OW_WILD_MAX_SAVED_SHINIES 2
+#define OW_WILD_PREVIOUS_TILE_UNLOCKED 0
+#define OW_WILD_PREVIOUS_TILE_LOCKED 1
 #define OW_WILD_SAVED_SHINY_ACTIVE 0x80
 #define OW_WILD_SAVED_SHINY_TERRAIN_MASK 0x7F
 #define OW_WILD_SPECIES_MASK 0x7FF
@@ -24,6 +26,12 @@
 #define OW_WILD_DISTANCE_DESPAWN_TILES 16
 #define OW_WILD_STAGED_HOP_MOVEMENT_LIST_WORDS 72
 #define OW_WILD_FIELD_READY_DELAY_FRAMES 90
+#define OW_WILD_FIELD_IDLE_REARM_PENDING 0x01
+#define OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING 0x02
+/* Reconciliation may identify one logical slot that is safe to quarantine. */
+#define OW_WILD_RECONCILE_RETRY 0
+#define OW_WILD_RECONCILE_COMPLETE 1
+#define OW_WILD_RECONCILE_POISONED_SLOT_BASE 2
 
 typedef enum OverworldWildDespawnReason {
     OW_WILD_DESPAWN_REASON_NONE = 0,
@@ -212,18 +220,30 @@ typedef struct OverworldWildSpawnState {
     u16 captureTargetMask;
 } OverworldWildSpawnState;
 
+typedef struct OverworldWildResidentData {
+    u8 pendingFlags;
+    u8 battleFlags;
+    u16 savedHp[OW_WILD_MAX_SPAWNS];
+} OverworldWildResidentData;
+
 typedef struct OverworldWildSpawnsOverlayEntry {
-    BOOL (*onPlayerStep)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, BOOL resumeOnly);
+    BOOL (*onPlayerStep)(
+        FieldSystem *fieldSystem,
+        OverworldWildSpawnState *state,
+        OverworldWildResidentData *residentData);
     BOOL (*tryPrimeBattleFromTalk)(
         FieldSystem *fieldSystem,
         OverworldWildSpawnState *state,
         LocalMapObject *talkedObject);
     u8 (*cleanupPendingBattle)(FieldSystem *fieldSystem, OverworldWildSpawnState *state, u16 battleResult);
-    void (*cleanupResidentData)(void);
+    BOOL (*cleanupResidentData)(void);
     BOOL (*onPlayerFrame)(FieldSystem *fieldSystem, OverworldWildSpawnState *state);
+    void (*onFieldBusy)(
+        FieldSystem *fieldSystem,
+        OverworldWildSpawnState *state,
+        OverworldWildResidentData *residentData);
 } OverworldWildSpawnsOverlayEntry;
 
-extern u8 gOverworldWildFieldIdleRearmPending;
 extern OverworldWildSpawnState sOverworldWildSpawnState;
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)

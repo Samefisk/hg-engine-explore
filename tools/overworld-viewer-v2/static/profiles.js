@@ -336,9 +336,18 @@ const FIELD_SECTIONS = Object.freeze([
 const LIFECYCLE_SECTION_IDS = Object.freeze(["spawn", "chill", "alert", "active", "tired"]);
 const LIFECYCLE_SECTION_ID_SET = new Set(LIFECYCLE_SECTION_IDS);
 const LIFECYCLE_TAB_SUMMARY_FIELDS = Object.freeze({
-  chill: Object.freeze(["chillState", "chillAction"]),
-  active: Object.freeze(["attentiveState", "movementStyle"]),
-  tired: Object.freeze(["tiredState", "specialAction"]),
+  chill: Object.freeze([
+    Object.freeze({ field: "chillState", tabId: "behavior" }),
+    Object.freeze({ field: "chillAction", tabId: "movement" }),
+  ]),
+  active: Object.freeze([
+    Object.freeze({ field: "attentiveState", tabId: "behavior" }),
+    Object.freeze({ field: "movementStyle", tabId: "movement" }),
+  ]),
+  tired: Object.freeze([
+    Object.freeze({ field: "tiredState", tabId: "behavior" }),
+    Object.freeze({ field: "specialAction", tabId: "movement" }),
+  ]),
 });
 
 const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
@@ -558,14 +567,22 @@ export function createProfilesController({
   let data = normalizeData(state.profileData || state.data || state.appData);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   state.profileDrafts = drafts;
-  const lifecycleSectionsByProfile = state.profileLifecycleSections instanceof Map
+  const legacyLifecycleSections = state.profileLifecycleSections instanceof Map
     ? state.profileLifecycleSections
-    : new Map();
-  state.profileLifecycleSections = lifecycleSectionsByProfile;
-  const branchTabsByProfile = state.profileBranchTabs instanceof Map
+    : null;
+  const legacyBranchTabs = state.profileBranchTabs instanceof Map
     ? state.profileBranchTabs
-    : new Map();
-  state.profileBranchTabs = branchTabsByProfile;
+    : null;
+  const initialProfileKey = String(state.selectedProfileKey || "");
+  state.profileLifecycleSection = String(
+    state.profileLifecycleSection || legacyLifecycleSections?.get(initialProfileKey) || "",
+  );
+  const branchTabSelections = state.profileModeTabs instanceof Map
+    ? state.profileModeTabs
+    : new Map(legacyBranchTabs?.get(initialProfileKey) || []);
+  state.profileModeTabs = branchTabSelections;
+  delete state.profileLifecycleSections;
+  delete state.profileBranchTabs;
 
   const ui = {
     search: "",
@@ -2120,14 +2137,9 @@ export function createProfilesController({
     return markup ? `<div class="pv2-root-field-grid">${markup}</div>` : "";
   }
 
-  function selectedModeTab(profile, sectionId, tabs) {
-    const key = profileKey(profile);
-    const selections = branchTabsByProfile.get(key) || new Map();
-    const stored = selections.get(sectionId);
-    const selected = tabs.find((tab) => tab.id === stored) || tabs[0];
-    selections.set(sectionId, selected.id);
-    branchTabsByProfile.set(key, selections);
-    return selected;
+  function selectedModeTab(sectionId, tabs) {
+    const stored = branchTabSelections.get(sectionId);
+    return tabs.find((tab) => tab.id === stored) || tabs[0];
   }
 
   function renderModeTabs(profile, section, descriptors) {
@@ -2137,7 +2149,7 @@ export function createProfilesController({
       return { ...tab, descriptors: tabDescriptors, parentDescriptor };
     }).filter((tab) => tab.parentDescriptor && profileCanEditField(profile, tab.parentDescriptor.field));
     if (tabs.length < 2) return "";
-    const selected = selectedModeTab(profile, section.id, tabs);
+    const selected = selectedModeTab(section.id, tabs);
     const tabHeaders = tabs.map((tab) => {
       const active = tab.id === selected.id;
       return `<div class="pv2-mode-tab${active ? " is-active" : ""}">
@@ -2232,33 +2244,43 @@ export function createProfilesController({
       </details>`;
   }
 
-  function lifecycleTabSummary(profile, sectionId) {
-    const fields = LIFECYCLE_TAB_SUMMARY_FIELDS[sectionId];
-    if (!fields) return "";
-    return fields.map((field) => {
+  function lifecycleTabSummaryParts(profile, section) {
+    const descriptors = LIFECYCLE_TAB_SUMMARY_FIELDS[section.id];
+    if (!descriptors) return [];
+    return descriptors.map(({ field, tabId }) => {
       const raw = fieldRaw(profile, field);
+      let label;
       if (raw) {
         const option = fieldOptions(field, raw, profile).find((candidate) => valueRaw(candidate) === raw);
-        return valueLabel(option || raw);
+        label = valueLabel(option || raw);
+      } else {
+        label = isOverrideProfile(profile) ? "Inherit" : "Not set";
       }
-      return isOverrideProfile(profile) ? "Inherit" : "Not set";
-    }).join(" / ");
+      return {
+        field,
+        tabId,
+        label,
+        available: section.subtabs?.some((tab) => tab.id === tabId) && profileCanEditField(profile, field),
+      };
+    });
   }
 
   function renderLifecycleTabs(profile, sections, override) {
     if (!sections.length) return "";
-    const key = profileKey(profile);
-    const storedSection = lifecycleSectionsByProfile.get(key);
+    const storedSection = state.profileLifecycleSection;
     const preferred = sections.find((section) => section.id === storedSection)
       || sections.find((section) => section.id === "spawn")
       || sections[0];
-    lifecycleSectionsByProfile.set(key, preferred.id);
     const tabs = sections.map((section) => {
       const selected = section.id === preferred.id;
       const count = sectionCountInfo(section, override);
       const label = section.title.replace(/ state$/i, "");
-      const summary = lifecycleTabSummary(profile, section.id);
-      return `<button class="pv2-lifecycle-tab" type="button" role="tab" id="pv2-lifecycle-tab-${escapeHtml(section.id)}" aria-controls="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-selected="${selected}" aria-label="${escapeHtml([section.title, summary, count.spoken].filter(Boolean).join(", "))}" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-tab" data-lifecycle-tab="${escapeHtml(section.id)}"><span aria-hidden="true"><strong>${escapeHtml(label)}</strong>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</span><em aria-hidden="true">${escapeHtml(count.compact)}</em></button>`;
+      const summaryParts = lifecycleTabSummaryParts(profile, section);
+      const summary = summaryParts.map((part) => part.label).join(" / ");
+      const summaryNav = summaryParts.length ? `<span class="pv2-lifecycle-summary-nav" role="group" aria-label="${escapeHtml(`${section.title} shortcuts`)}">${summaryParts.map((part, index) => `${index ? `<i aria-hidden="true">/</i>` : ""}${part.available
+        ? `<button type="button" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-mode" data-lifecycle-section="${escapeHtml(section.id)}" data-mode-target="${escapeHtml(part.tabId)}" aria-label="${escapeHtml(`Open ${section.title} ${part.tabId === "behavior" ? "Behavior" : "Movement style"} options (${part.label})`)}">${escapeHtml(part.label)}</button>`
+        : `<span>${escapeHtml(part.label)}</span>`}`).join("")}</span>` : "";
+      return `<div class="pv2-lifecycle-tab-shell${selected ? " is-selected" : ""}" data-lifecycle-theme="${escapeHtml(section.id)}" role="presentation"><button class="pv2-lifecycle-tab" type="button" role="tab" id="pv2-lifecycle-tab-${escapeHtml(section.id)}" aria-controls="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-selected="${selected}" aria-label="${escapeHtml([section.title, summary, count.spoken].filter(Boolean).join(", "))}" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-tab" data-lifecycle-tab="${escapeHtml(section.id)}"><span aria-hidden="true"><strong>${escapeHtml(label)}</strong></span><em aria-hidden="true">${escapeHtml(count.compact)}</em></button>${summaryNav}</div>`;
     }).join("");
     const panels = sections.map((section) => {
       const selected = section.id === preferred.id;
@@ -2311,25 +2333,39 @@ export function createProfilesController({
 
   function selectLifecycleTab(sectionId, focus = true) {
     if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)) return;
-    const profile = findProfile();
-    if (!profile) return;
-    const key = profileKey(profile);
-    lifecycleSectionsByProfile.set(key, sectionId);
+    if (!findProfile()) return;
+    state.profileLifecycleSection = sectionId;
     renderEditor();
-    if (focus) focusSectionNavigation(lifecycleSectionsByProfile.get(key));
+    if (focus) focusSectionNavigation(sectionId);
   }
 
   function selectModeTab(sectionId, tabId, focus = true) {
     const profile = findProfile();
     const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
     if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
-    const key = profileKey(profile);
-    const selections = branchTabsByProfile.get(key) || new Map();
-    selections.set(sectionId, tabId);
-    branchTabsByProfile.set(key, selections);
+    branchTabSelections.set(sectionId, tabId);
     renderEditor();
     if (focus) {
       editorElement.querySelector(`[data-mode-tab-section="${CSS.escape(sectionId)}"][data-mode-tab="${CSS.escape(tabId)}"]`)?.focus({ preventScroll: true });
+    }
+  }
+
+  function selectLifecycleMode(sectionId, tabId, focus = true) {
+    if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)) return;
+    const profile = findProfile();
+    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
+    if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
+    state.profileLifecycleSection = sectionId;
+    branchTabSelections.set(sectionId, tabId);
+    renderEditor();
+    if (focus) {
+      const target = editorElement.querySelector(`[data-mode-tab-section="${CSS.escape(sectionId)}"][data-mode-tab="${CSS.escape(tabId)}"]`);
+      if (target) {
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      } else {
+        focusSectionNavigation(sectionId);
+      }
     }
   }
 
@@ -2717,22 +2753,6 @@ export function createProfilesController({
     requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
   }
 
-  function rekeyLifecycleSection(oldKey, newKey) {
-    if (!oldKey || !newKey || oldKey === newKey || !lifecycleSectionsByProfile.has(oldKey)) return;
-    if (!lifecycleSectionsByProfile.has(newKey)) {
-      lifecycleSectionsByProfile.set(newKey, lifecycleSectionsByProfile.get(oldKey));
-    }
-    lifecycleSectionsByProfile.delete(oldKey);
-  }
-
-  function rekeyBranchTabs(oldKey, newKey) {
-    if (!oldKey || !newKey || oldKey === newKey || !branchTabsByProfile.has(oldKey)) return;
-    if (!branchTabsByProfile.has(newKey)) {
-      branchTabsByProfile.set(newKey, branchTabsByProfile.get(oldKey));
-    }
-    branchTabsByProfile.delete(oldKey);
-  }
-
   function renderAll() {
     if (ui.destroyed) return;
     if (!ui.selectedKey || !findProfile(ui.selectedKey)) {
@@ -2826,8 +2846,6 @@ export function createProfilesController({
       drafts.baseFields.delete(oldKey);
     }
     for (const [species, target] of drafts.memberships) if (target === oldKey) drafts.memberships.set(species, newKey);
-    rekeyLifecycleSection(oldKey, newKey);
-    rekeyBranchTabs(oldKey, newKey);
     if (ui.selectedKey === oldKey) ui.selectedKey = newKey;
   }
 
@@ -2848,8 +2866,6 @@ export function createProfilesController({
     drafts.overrideFields.delete(key);
     drafts.overrideNames.delete(key);
     drafts.overrideTargets.delete(key);
-    lifecycleSectionsByProfile.delete(key);
-    branchTabsByProfile.delete(key);
     drafts.removedOverrides.delete(key);
     drafts.overrideOrder = drafts.overrideOrder.filter((item) => item !== key);
     for (const [species, target] of drafts.memberships) if (target === key) drafts.memberships.delete(species);
@@ -3021,8 +3037,6 @@ export function createProfilesController({
     const key = profileKey(profile);
     if (profile.draftId) {
       drafts.newOverrides = drafts.newOverrides.filter((item) => item.draftId !== profile.draftId);
-      lifecycleSectionsByProfile.delete(key);
-      branchTabsByProfile.delete(key);
       if (ui.selectedKey === key) ui.selectedKey = "";
       renderAll();
       return;
@@ -3101,6 +3115,7 @@ export function createProfilesController({
       });
     }
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
+    else if (action === "select-lifecycle-mode") selectLifecycleMode(target.dataset.lifecycleSection, target.dataset.modeTarget);
     else if (action === "select-mode-tab") selectModeTab(target.dataset.modeTabSection, target.dataset.modeTab);
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
@@ -3214,9 +3229,7 @@ export function createProfilesController({
         }
       }
       if (modeTabSelect) {
-        const selections = branchTabsByProfile.get(profileKey(profile)) || new Map();
-        selections.set(modeTabSelect.dataset.modeTabSection, modeTabSelect.dataset.modeTabSelect);
-        branchTabsByProfile.set(profileKey(profile), selections);
+        branchTabSelections.set(modeTabSelect.dataset.modeTabSection, modeTabSelect.dataset.modeTabSelect);
       }
       setField(profile, fieldKey, nextRaw);
       renderEditor(); renderList(); signalDirty();
@@ -3440,17 +3453,9 @@ export function createProfilesController({
     const domains = committedDomains(committed);
     ui.selectionHint = nameFor(findProfile());
     if (domains.has("profileOverrides")) {
-      ui.pendingLifecycleProfiles = overrideProfiles().map((profile) => {
-        const key = profileKey(profile);
-        const modeTabs = branchTabsByProfile.get(key);
-        return {
-          key,
-          name: nameFor(profile),
-          section: lifecycleSectionsByProfile.get(key) || "",
-          modeTabs: modeTabs?.size ? new Map(modeTabs) : null,
-          selected: ui.selectedKey === key,
-        };
-      }).filter((entry) => entry.section || entry.modeTabs || entry.selected);
+      ui.pendingLifecycleProfiles = overrideProfiles()
+        .filter((profile) => ui.selectedKey === profileKey(profile))
+        .map((profile) => ({ key: profileKey(profile), name: nameFor(profile), selected: true }));
     }
     if (domains.has("profiles")) drafts.baseFields.clear();
     if (domains.has("profileMemberships")) drafts.memberships.clear();
@@ -3467,11 +3472,6 @@ export function createProfilesController({
 
   function reset() {
     ui.selectionHint = nameFor(findProfile());
-    drafts.newOverrides.forEach((draft) => {
-      const key = `draft:${draft.draftId}`;
-      lifecycleSectionsByProfile.delete(key);
-      branchTabsByProfile.delete(key);
-    });
     ui.pendingLifecycleProfiles = [];
     drafts.baseFields.clear();
     drafts.overrideFields.clear();
@@ -3497,13 +3497,6 @@ export function createProfilesController({
       if (!baseKeys.has(target) || !data.assignments.some((item) => item.species?.symbol === species)) drafts.memberships.delete(species);
     }
     drafts.overrideOrder = drafts.overrideOrder.filter((key) => overrideKeys.has(key));
-    const profileKeys = new Set(allProfiles().map(profileKey));
-    for (const key of lifecycleSectionsByProfile.keys()) {
-      if (!profileKeys.has(key)) lifecycleSectionsByProfile.delete(key);
-    }
-    for (const key of branchTabsByProfile.keys()) {
-      if (!profileKeys.has(key)) branchTabsByProfile.delete(key);
-    }
   }
 
   function refresh(nextData) {
@@ -3517,14 +3510,6 @@ export function createProfilesController({
         const promoted = overridesByName.get(pending.name.trim().toLowerCase());
         if (!promoted) continue;
         const promotedKey = profileKey(promoted);
-        rekeyLifecycleSection(pending.key, promotedKey);
-        rekeyBranchTabs(pending.key, promotedKey);
-        if (pending.section && !lifecycleSectionsByProfile.has(promotedKey)) {
-          lifecycleSectionsByProfile.set(promotedKey, pending.section);
-        }
-        if (pending.modeTabs?.size && !branchTabsByProfile.has(promotedKey)) {
-          branchTabsByProfile.set(promotedKey, pending.modeTabs);
-        }
         if (pending.selected) {
           ui.selectedKey = promotedKey;
           ui.selectionHint = nameFor(promoted);

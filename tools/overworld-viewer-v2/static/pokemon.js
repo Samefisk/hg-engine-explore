@@ -1,3 +1,5 @@
+import { methodMark as routeMethodMark } from "/v2-assets/routes.js";
+
 /*
  * Overworld Viewer V2 — Pokédex Index
  *
@@ -37,7 +39,7 @@ const ASSET_SLOTS = Object.freeze([
   ["femaleBack", "Female back"],
 ]);
 const STORAGE_SELECTION_KEY = "ow-v2-pokemon-selection";
-const STORAGE_SECTIONS_KEY = "ow-v2-pokemon-sections";
+const STORAGE_SECTION_KEY = "ow-v2-pokemon-sections";
 const STORAGE_SEARCH_KEY = "ow-v2-pokemon-search";
 const STORAGE_TYPE_KEY = "ow-v2-pokemon-type";
 const STORAGE_SCOPE_KEY = "ow-v2-pokemon-scope";
@@ -505,11 +507,21 @@ export function createPokemonController({
   libraryElement.classList.add("pv2-pokemon-library");
   inspectorElement.classList.add("pv2-pokemon-inspector");
 
-  const storedSections = readStorage(STORAGE_SECTIONS_KEY, {});
-  const sectionBySpecies = state.pokemonSections instanceof Map
-    ? state.pokemonSections
-    : new Map(Object.entries(isRecord(storedSections) ? storedSections : {}));
-  state.pokemonSections = sectionBySpecies;
+  const storedSelection = readStorage(STORAGE_SELECTION_KEY, "");
+  const storedSections = readStorage(STORAGE_SECTION_KEY, "entry");
+  const legacySections = state.pokemonSections instanceof Map
+    ? Object.fromEntries(state.pokemonSections)
+    : isRecord(storedSections) ? storedSections : {};
+  const legacySelection = state.selectedPokemonKey || (typeof storedSelection === "string" ? storedSelection : "");
+  const initialSection = [
+    state.pokemonSection,
+    typeof storedSections === "string" ? storedSections : "",
+    legacySections[legacySelection],
+    "entry",
+  ].find((candidate) => DOMAIN_TABS.some(([key]) => key === candidate));
+  let activeSection = initialSection || "entry";
+  state.pokemonSection = activeSection;
+  if (typeof storedSections !== "string") writeStorage(STORAGE_SECTION_KEY, activeSection);
   const drafts = state.pokemonDrafts instanceof Map ? state.pokemonDrafts : new Map();
   state.pokemonDrafts = drafts;
   const learnsetDrafts = state.pokemonLearnsetDrafts instanceof Map ? state.pokemonLearnsetDrafts : new Map();
@@ -529,7 +541,6 @@ export function createPokemonController({
   const moveWindowBySpecies = new Map();
   const familyStageSummaries = new Map();
   let projectedFamilyGraphCache = null;
-  const storedSelection = readStorage(STORAGE_SELECTION_KEY, "");
   const storedSearch = readStorage(STORAGE_SEARCH_KEY, "");
   const storedType = readStorage(STORAGE_TYPE_KEY, "all");
   const storedScope = readStorage(STORAGE_SCOPE_KEY, "all");
@@ -1605,9 +1616,25 @@ export function createPokemonController({
     return { changed, errors: fieldErrors.length + groupErrors.length };
   }
 
-  function activeDomain(species) {
-    const stored = sectionBySpecies.get(species.__key);
-    return DOMAIN_TABS.some(([key]) => key === stored) ? stored : "entry";
+  function setActiveDomain(key) {
+    if (!DOMAIN_TABS.some(([tabKey]) => tabKey === key)) return false;
+    activeSection = key;
+    state.pokemonSection = key;
+    writeStorage(STORAGE_SECTION_KEY, key);
+    return true;
+  }
+
+  function activeDomain(_species) {
+    return activeSection;
+  }
+
+  function syncInspectorTypeTheme(species) {
+    const typeKeys = species
+      ? effectiveTypes(species).map((type) => visualTypeKey(type.key)).filter(Boolean)
+      : [];
+    inspectorElement.dataset.primaryType = typeKeys[0] || "unknown";
+    if (typeKeys[1]) inspectorElement.dataset.secondaryType = typeKeys[1];
+    else delete inspectorElement.dataset.secondaryType;
   }
 
   function filterOptions() {
@@ -1666,11 +1693,12 @@ export function createPokemonController({
     const invalid = speciesInvalid(species);
     const name = effectiveName(species);
     const types = effectiveTypes(species);
+    const typeKeys = types.map((type) => visualTypeKey(type.key)).filter(Boolean);
     const displayAlreadyNamesForm = /\([^()]+\)/.test(name) || /\([^()]+\)/.test(species.__name);
     const candidateFormCopy = species.__formName || (species.__isForm && !displayAlreadyNamesForm ? humanize(species.__symbol.replace(`${species.baseSymbol || ""}_`, "")) : "");
     const formCopy = displayIncludesFormLabel(name, candidateFormCopy) ? "" : candidateFormCopy;
     const optionId = `pv2-pokemon-option-${species.__key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-    return `<li><button id="${escapeHtml(optionId)}" role="option" aria-selected="${selected}" class="pv2-pokemon-row${selected ? " is-selected" : ""}${changed ? " is-changed" : ""}${invalid ? " is-invalid" : ""}" type="button" tabindex="${species.__key === ui.rovingKey ? "0" : "-1"}" data-pokemon-select="${escapeHtml(species.__key)}" aria-current="${selected ? "true" : "false"}">
+    return `<li><button id="${escapeHtml(optionId)}" role="option" aria-selected="${selected}" class="pv2-pokemon-row${selected ? " is-selected" : ""}${changed ? " is-changed" : ""}${invalid ? " is-invalid" : ""}" type="button" tabindex="${species.__key === ui.rovingKey ? "0" : "-1"}" data-pokemon-select="${escapeHtml(species.__key)}" data-primary-type="${escapeHtml(typeKeys[0] || "unknown")}"${typeKeys[1] ? ` data-secondary-type="${escapeHtml(typeKeys[1])}"` : ""} aria-current="${selected ? "true" : "false"}">
       <span class="pv2-pokemon-row-number">${escapeHtml(dexLabel(species))}</span>
       ${renderSprite(species)}
       <span class="pv2-pokemon-row-copy"><strong>${escapeHtml(name)}</strong>${formCopy ? `<small>${escapeHtml(formCopy)}</small>` : ""}</span>
@@ -2136,6 +2164,8 @@ export function createPokemonController({
     const access = recordFieldAccess(species, descriptor);
     const validation = changed ? (speciesValidationErrors(species).find((error) => error.path === descriptor.path)?.message || fieldError(species, descriptor)) : "";
     const label = descriptorLabel(descriptor);
+    const statKey = statVisualKey(descriptor);
+    const typeKey = /battle\.types\./i.test(descriptor.path) ? visualTypeKey(value) : "";
     const id = `pv2-pokemon-field-${species.__symbol}-${descriptor.path}`.replace(/[^a-zA-Z0-9_-]/g, "-");
     const errorId = `${id}-error`;
     const helpId = `${id}-help`;
@@ -2170,7 +2200,7 @@ export function createPokemonController({
       const { minimum, maximum } = stringBounds(descriptor);
       control = `<input type="text" ${common} value="${escapeHtml(value)}"${Number.isFinite(minimum) ? ` minlength="${minimum}"` : ""}${Number.isFinite(maximum) ? ` maxlength="${maximum}"` : ""}>`;
     }
-    return `<div class="pv2-pokemon-edit-field${changed ? " is-changed" : ""}${validation ? " is-invalid" : ""}${aggregateInvalid ? " is-aggregate-invalid" : ""}${access.writable ? "" : " is-readonly"}" data-pokemon-field-shell="${escapeHtml(descriptor.path)}">
+    return `<div class="pv2-pokemon-edit-field${changed ? " is-changed" : ""}${validation ? " is-invalid" : ""}${aggregateInvalid ? " is-aggregate-invalid" : ""}${access.writable ? "" : " is-readonly"}" data-pokemon-field-shell="${escapeHtml(descriptor.path)}"${statKey ? ` data-stat="${statKey}"` : ""}${typeKey ? ` data-type-value="${escapeHtml(typeKey)}"` : ""}>
       <div class="pv2-pokemon-field-heading"><label for="${id}"><strong>${escapeHtml(label)}</strong>${descriptor.unit && !/genderratio|gender_ratio/i.test(descriptor.path) ? `<small>${escapeHtml(descriptor.unit)}</small>` : ""}</label><button type="button" data-pokemon-revert-field="${escapeHtml(descriptor.path)}" ${changed ? "" : "hidden"}>Revert</button></div>
       ${control}
       <p id="${errorId}" class="pv2-pokemon-field-error" ${validation ? "" : "hidden"}>${escapeHtml(validation)}</p>
@@ -2195,8 +2225,78 @@ export function createPokemonController({
     return `<div class="pv2-pokemon-entry-preview-line"><strong>${escapeHtml(dexLabel(species))} · ${escapeHtml(name)}</strong></div><div class="pv2-pokemon-entry-preview-line"><span>${escapeHtml(details)}</span></div><div class="pv2-pokemon-entry-preview-line"><p>${escapeHtml(entry)}</p></div>`;
   }
 
+  function pokemonFormIndex(species) {
+    const value = Number(firstDefined(species?.formIndex, species?.form?.index, species?.formMetadata?.formIndex, 0));
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function formatLocationChance(value) {
+    if (value === null || value === undefined || value === "") return "—";
+    if (!Number.isFinite(Number(value))) return "—";
+    const rounded = Math.round(Number(value) * 10) / 10;
+    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`;
+  }
+
+  function renderLocationRoster(groups) {
+    return `<div class="pv2-pokemon-location-roster">${groups.map((group) => {
+      const names = group.species.map((entry) => entry.name).join(", ");
+      return `<span class="v2-route-method-group" role="group" aria-label="${escapeHtml(group.label)}: ${escapeHtml(names)}" title="${escapeHtml(group.label)}">
+        ${routeMethodMark(group.key)}<span class="v2-route-method-species">${group.species.map((entry) => `<span class="v2-route-species-chip" title="${escapeHtml(entry.name)}">${entry.iconUrl ? `<img class="v2-route-sprite" src="${escapeHtml(entry.iconUrl)}" alt="" loading="lazy" decoding="async">` : `<span class="v2-mon-icon--empty" aria-hidden="true"></span>`}</span>`).join("")}</span>
+      </span>`;
+    }).join("")}</div>`;
+  }
+
+  function renderLocations(species) {
+    const routeController = state.controllers?.routes;
+    const routeAvailability = state.controllerAvailability?.routes || {};
+    if (typeof routeController?.locationsForPokemon !== "function") {
+      const loading = ["pending", "loading"].includes(routeAvailability.status) && routeAvailability.available !== false;
+      const reason = textValue(
+        routeAvailability.reason,
+        state.workspaceDataError,
+        "This project does not expose route encounter data.",
+      );
+      return `<section class="pv2-pokemon-locations" aria-labelledby="pv2-pokemon-locations-title">
+        <header><div><span class="pv2-pokemon-eyebrow">Encounter index</span><h4 id="pv2-pokemon-locations-title">Location</h4></div><small>${loading ? "Loading routes" : "Not available"}</small></header>
+        <div class="pv2-pokemon-location-empty is-unavailable"><span aria-hidden="true">${loading ? "…" : "⊘"}</span><strong>${loading ? "Loading catch locations" : "Location data unavailable"}</strong><small>${loading ? "Route encounter data is still loading." : escapeHtml(reason)}</small></div>
+      </section>`;
+    }
+    const locations = routeController.locationsForPokemon({
+      symbol: species.__symbol,
+      baseSymbol: baseSymbolFor(species),
+      form: pokemonFormIndex(species),
+    }) || [];
+    const methodCount = locations.reduce((total, location) => total + location.methods.length, 0);
+    const bodies = locations.map((location) => `<tbody><tr>
+      <th scope="row"><a href="#routes/${encodeURIComponent(location.routeId)}"><span>#${escapeHtml(location.routeId)}</span><strong>${escapeHtml(location.routeName)}</strong><small>${escapeHtml(location.mapLabel)}</small><b aria-hidden="true">↗</b></a></th>
+      <td class="pv2-pokemon-location-details" colspan="3"><div>${location.methods.map((method) => {
+        const chance = formatLocationChance(method.chance);
+        return `<div class="pv2-pokemon-location-record" role="group" aria-label="${escapeHtml(method.label)}; chance ${chance}; levels ${method.levels}${method.conditional ? "; conditional encounter" : ""}">
+          <div class="pv2-pokemon-location-method" aria-hidden="true">${routeMethodMark(method.key)}<span><strong>${escapeHtml(method.label)}</strong>${method.conditional ? `<small>Conditional encounter</small>` : ""}</span></div>
+          <strong aria-hidden="true">${escapeHtml(chance)}</strong><span aria-hidden="true">${escapeHtml(method.levels)}</span>
+        </div>`;
+      }).join("")}</div></td>
+      <td class="pv2-pokemon-location-roster-cell">${renderLocationRoster(location.allPokemonGroups || [])}</td>
+    </tr></tbody>`).join("");
+    return `<section class="pv2-pokemon-locations" aria-labelledby="pv2-pokemon-locations-title">
+      <header><div><span class="pv2-pokemon-eyebrow">Encounter index</span><h4 id="pv2-pokemon-locations-title">Location</h4></div><small>${locations.length} route${locations.length === 1 ? "" : "s"} · ${methodCount} method${methodCount === 1 ? "" : "s"}</small></header>
+      ${bodies ? `<div class="pv2-pokemon-location-table-wrap"><table><thead><tr><th scope="col">Route</th><th scope="col">Method</th><th scope="col">Chance</th><th scope="col">Levels</th><th scope="col">All Pokémon</th></tr></thead>${bodies}</table></div>` : `<div class="pv2-pokemon-location-empty"><span aria-hidden="true">⌖</span><strong>No configured catch locations</strong><small>This Pokémon is not present in any enabled encounter table.</small></div>`}
+    </section>`;
+  }
+
   function statDescriptors() {
     return descriptorsFor("battle").filter((descriptor) => /basestats|base_stats|\.stats\./i.test(descriptor.path));
+  }
+
+  function statVisualKey(descriptor) {
+    const identity = compact(`${descriptor?.path || ""} ${descriptorLabel(descriptor || {})}`);
+    if (/specialattack|spattack|spatk/.test(identity)) return "sp-attack";
+    if (/specialdefense|spdefense|spdef/.test(identity)) return "sp-defense";
+    if (/(^|basestats|evyields?)hp/.test(identity)) return "hp";
+    if (/speed/.test(identity)) return "speed";
+    if (/attack/.test(identity)) return "attack";
+    if (/defense/.test(identity)) return "defense";
+    return "";
   }
 
   function renderBattleMetrics(species) {
@@ -2208,7 +2308,7 @@ export function createPokemonController({
     const evInvalid = speciesGroupValidationErrors(species).some((error) => error.group === "ev");
     return `<div class="pv2-pokemon-stat-summary"><div class="pv2-pokemon-stat-total"><small>Base stat total</small><strong>${total}</strong></div><div class="pv2-pokemon-stat-bars">${stats.map((descriptor, index) => {
       const percent = Math.max(0, Math.min(100, values[index] / 255 * 100));
-      return `<div><span>${escapeHtml(descriptorLabel(descriptor))}</span><i><b style="--pv2-stat-width:${percent}%"></b></i><strong>${values[index]}</strong></div>`;
+      return `<div data-stat="${statVisualKey(descriptor)}"><span>${escapeHtml(descriptorLabel(descriptor))}</span><i><b style="--pv2-stat-width:${percent}%"></b></i><strong>${values[index]}</strong></div>`;
     }).join("") || `<p>No base-stat fields are registered.</p>`}</div><div class="pv2-pokemon-ev-total"><small>EV yield total</small><strong class="${evInvalid ? "is-invalid" : ""}">${evTotal}</strong></div></div>`;
   }
 
@@ -2236,6 +2336,7 @@ export function createPokemonController({
         const groupErrorId = `${groupId}-error`;
         return `<section class="pv2-pokemon-editor-group${composite ? " is-composite" : ""}${groupChanged ? " is-changed" : ""}${errorCount ? " is-invalid" : ""}" data-editor-group="${group.key}" role="group" tabindex="-1" aria-labelledby="${groupId}-label" aria-invalid="${Boolean(errorCount)}"${compositeErrors.length ? ` aria-describedby="${groupErrorId}"` : ""}><header><h4 id="${groupId}-label">${escapeHtml(group.label)}</h4><div><small data-group-state>${escapeHtml(stateCopy)}</small><button type="button" data-pokemon-revert-group="${group.key}" ${groupChanged ? "" : "hidden"}>Revert group</button></div></header><div class="pv2-pokemon-edit-grid">${group.fields.map((descriptor) => renderEditorField(species, descriptor, { aggregateErrorId: group.key === "ev" && compositeErrors.length ? groupErrorId : "" })).join("")}</div><p id="${groupErrorId}" class="pv2-pokemon-group-error" data-group-error ${compositeErrors.length ? "" : "hidden"}>${escapeHtml(compositeErrors[0]?.message || "")}</p></section>`;
       }).join("")}</div>
+      ${domain === "entry" ? renderLocations(species) : ""}
       <p class="pv2-pokemon-save-note">Changes remain in the workspace draft until the global Save action commits them.</p>
     </section>`;
   }
@@ -2546,6 +2647,7 @@ export function createPokemonController({
   }
 
   function refreshEditorDerived(species) {
+    syncInspectorTypeTheme(species);
     const errorByPath = new Map(speciesValidationErrors(species).map((error) => [error.path, error.message]));
     const aggregateEvError = speciesGroupValidationErrors(species).find((error) => error.group === "ev");
     const changeCountElement = inspectorElement.querySelector("[data-editor-change-count]");
@@ -2568,6 +2670,7 @@ export function createPokemonController({
       const validation = changed ? (errorByPath.get(descriptor.path) || fieldError(species, descriptor)) : "";
       const aggregateInvalid = /evyield|ev_yield/i.test(descriptor.path) && Boolean(aggregateEvError);
       const aggregateErrorId = aggregateInvalid ? inspectorElement.querySelector('[data-editor-group="ev"] [data-group-error]')?.id : "";
+      if (/battle\.types\./i.test(descriptor.path)) shell.dataset.typeValue = visualTypeKey(fieldValue(species, descriptor));
       shell.classList.toggle("is-changed", changed);
       shell.classList.toggle("is-invalid", Boolean(validation));
       shell.classList.toggle("is-aggregate-invalid", Boolean(aggregateInvalid));
@@ -2655,6 +2758,7 @@ export function createPokemonController({
   function renderInspector() {
     closeCombobox();
     const species = selectedSpecies();
+    syncInspectorTypeTheme(species);
     if (!species) {
       inspectorElement.innerHTML = `<div class="pv2-pokemon-empty pv2-pokemon-empty--center"><span aria-hidden="true">◇</span><strong>Select a Pokémon</strong><small>Choose a full row from the index to inspect its source-backed record.</small></div>`;
       return;
@@ -2675,12 +2779,15 @@ export function createPokemonController({
             : renderFoundationDomain(species, active);
     inspectorElement.innerHTML = `${renderIdentity(species)}
       ${renderInspectorDraftBanner(species)}
-      <div class="pv2-pokemon-tabs" role="tablist" aria-label="Pokémon data domains">
-        ${DOMAIN_TABS.map(([key, label]) => `<button type="button" role="tab" id="pv2-pokemon-tab-${key}" aria-controls="pv2-pokemon-panel-${key}" aria-selected="${key === active}" tabindex="${key === active ? "0" : "-1"}" data-pokemon-tab="${key}">${renderTabContent(species, key, label)}</button>`).join("")}
+      <div class="pv2-pokemon-tabbar">
+        <span class="pv2-pokemon-tab-current" role="img" aria-label="Current Pokémon: ${escapeHtml(effectiveName(species))}" title="${escapeHtml(effectiveName(species))}">${species.__iconUrl ? `<img src="${escapeHtml(species.__iconUrl)}" alt="" draggable="false">` : `<span aria-hidden="true">◇</span>`}</span>
+        <div class="pv2-pokemon-tabs" role="tablist" aria-label="Pokémon data domains">
+          ${DOMAIN_TABS.map(([key, label]) => `<button type="button" role="tab" id="pv2-pokemon-tab-${key}" aria-controls="pv2-pokemon-panel-${key}" aria-selected="${key === active}" tabindex="${key === active ? "0" : "-1"}" data-pokemon-tab="${key}">${renderTabContent(species, key, label)}</button>`).join("")}
+        </div>
       </div>
       <label class="pv2-pokemon-section-select"><span>Data section</span><select data-pokemon-section-select>${DOMAIN_TABS.map(([key, label]) => `<option value="${key}" ${key === active ? "selected" : ""}>${escapeHtml(sectionOptionLabel(species, key, label))}</option>`).join("")}</select></label>
       <section class="pv2-pokemon-tabpanel" id="pv2-pokemon-panel-${active}" role="tabpanel" aria-labelledby="pv2-pokemon-tab-${active}">
-        ${domainMarkup}
+        ${domainMarkup}${active === "entry" && !(model.writeDomains.includes(active) && descriptorsFor(active).length) ? renderLocations(species) : ""}
       </section>
       ${renderTechnical(species)}`;
     const renderedFormValue = active === "forms" ? formValueFor(species) : null;
@@ -2920,9 +3027,7 @@ export function createPokemonController({
 
   function selectDomain(key, { focus = false } = {}) {
     const species = selectedSpecies();
-    if (!species || !DOMAIN_TABS.some(([tabKey]) => tabKey === key)) return;
-    sectionBySpecies.set(species.__key, key);
-    writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
+    if (!species || !setActiveDomain(key)) return;
     renderInspector();
     if (focus) inspectorElement.querySelector(`[data-pokemon-tab="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
   }
@@ -2935,14 +3040,13 @@ export function createPokemonController({
     state.selectedPokemonKey = first.species.__key;
     writeStorage(STORAGE_SELECTION_KEY, first.species.__key);
     const domain = first.path.split(".")[0];
-    sectionBySpecies.set(first.species.__key, domain);
+    setActiveDomain(domain);
     const movePath = first.path.match(/^moves\.(levelMoves|machineMoves|tutorMoves|eggMoves)\.(\d+)\.(move|level)$/);
     if (movePath) {
       moveTabBySpecies.set(first.species.__symbol, movePath[1]);
       moveSearchBySpecies.set(first.species.__symbol, "");
       moveWindowBySpecies.set(`${first.species.__symbol}:${movePath[1]}`, Math.max(0, Number(movePath[2]) - 5));
     }
-    writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
     root.classList.remove("is-mobile-library-open");
     renderLibrary();
     renderInspector();
@@ -2981,9 +3085,8 @@ export function createPokemonController({
     ui.selectedKey = first.species.__key;
     ui.rovingKey = first.species.__key;
     state.selectedPokemonKey = first.species.__key;
-    sectionBySpecies.set(first.species.__key, "assets");
+    setActiveDomain("assets");
     writeStorage(STORAGE_SELECTION_KEY, first.species.__key);
-    writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
     renderLibrary();
     renderInspector();
     const slot = first.path.split(".")[1];
@@ -3248,8 +3351,7 @@ export function createPokemonController({
     if (formBase && root.contains(formBase)) {
       const target = model.species.find((candidate) => candidate.__symbol === formBase.dataset.formOpenBase && !candidate.__isForm);
       if (target) {
-        sectionBySpecies.set(target.__key, "forms");
-        writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
+        setActiveDomain("forms");
         selectSpecies(target.__key);
         requestAnimationFrame(() => inspectorElement.querySelector("[data-form-reversion]:not(:disabled)")?.focus({ preventScroll: true }));
       }
@@ -3259,8 +3361,7 @@ export function createPokemonController({
     if (formRecord && root.contains(formRecord)) {
       const target = model.species.find((candidate) => candidate.__key === formRecord.dataset.formSelect);
       if (target) {
-        sectionBySpecies.set(target.__key, "forms");
-        writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
+        setActiveDomain("forms");
         selectSpecies(target.__key, { focus: true });
       }
       return;
@@ -3318,8 +3419,7 @@ export function createPokemonController({
       const key = familyMember.dataset.familyEvolutionSelect;
       const target = model.species.find((candidate) => candidate.__key === key);
       if (target) {
-        sectionBySpecies.set(target.__key, "evolution");
-        writeStorage(STORAGE_SECTIONS_KEY, Object.fromEntries(sectionBySpecies));
+        setActiveDomain("evolution");
         selectSpecies(target.__key, { focus: true });
       }
       return;
@@ -3883,7 +3983,10 @@ export function createPokemonController({
     }
     if (nextRevision) lastWorkspaceRevision = nextRevision;
     if (nextAssetRevision) lastWorkspaceAssetRevision = nextAssetRevision;
-    return ensureLoad();
+    return Promise.resolve(ensureLoad()).then((result) => {
+      if (!ui.destroyed && Array.isArray(payload?.routes)) renderInspector();
+      return result;
+    });
   }
 
   function destroy() {
@@ -4021,6 +4124,7 @@ export function createPokemonController({
     clearCommitted,
     reset,
     refresh,
+    refreshContext: renderInspector,
     openRecord,
     navigationContext,
     focusFirstInvalid: navigateToFirstInvalid,

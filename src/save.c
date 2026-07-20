@@ -94,10 +94,13 @@ BOOL LONG_CALL CheckScriptFlag(u16 flag_id)
 // hardware sqrt implementation using the gpio registers + debug options
 u32 LONG_CALL sqrt(u32 num)
 {
+#ifdef DEBUG_SQRT
+    u8 buf[64];
+#endif
+
     reg_CP_SQRT_PARAM_L = num;
     reg_CP_SQRTCNT = 0; // start sqrt calculation
 
-    u8 buf[64];
 #ifdef DEBUG_SQRT
     sprintf(buf, "[SQRT]   PARAM = %08X\n", reg_CP_SQRT_PARAM_L);
     debugsyscall(buf);
@@ -110,7 +113,6 @@ u32 LONG_CALL sqrt(u32 num)
 #endif
     }
 
-    ((volatile u32 *)buf)[0] = reg_CP_SQRT_RESULT; // keep the hardware result read alive
 #ifdef DEBUG_SQRT
     sprintf(buf, "[SQRT]  RESULT = %08X\n", reg_CP_SQRT_RESULT);
     debugsyscall(buf);

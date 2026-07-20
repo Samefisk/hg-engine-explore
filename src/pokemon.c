@@ -15,6 +15,7 @@
 #include "../include/constants/weather_numbers.h"
 #include "../include/debug.h"
 #include "../include/overworld_wild_spawns.h"
+#include "../include/overworld_wild_behavior_data.h"
 #include "../include/overlay.h"
 #include "../include/rtc.h"
 #include "../include/save.h"
@@ -1686,10 +1687,6 @@ void LONG_CALL CreateBoxMonData(struct BoxPokemon *boxmon, int species, int leve
 
     if (OverworldWildSpawns_ConsumeBattlePersonalityOverride(&rnd, &overworldShiny)) {
         rndflag = TRUE;
-        if (overworldShiny) {
-            idflag = ID_SET;
-            id = OVERWORLD_WILD_BATTLE_SHINY_OTID;
-        }
     }
 #endif
     if (!rndflag) {
@@ -2596,27 +2593,10 @@ BOOL LONG_CALL GetMonMachineMoveCompat(struct PartyPokemon *pp, u16 machineMoveI
 /**
  * @brief loads level up data for a mon. reads from data/generated/LevelupLearnsets.c
  */
-void LONG_CALL LoadLevelUpLearnset_HandleAlternateForm(int species, int form, u32 *levelUpLearnset)
+void LONG_CALL LoadLevelUpLearnset_HandleAlternateForm_Fallback(
+    int species,
+    int form,
+    u32 *levelUpLearnset)
 {
     ArchiveDataLoadOfs(levelUpLearnset, ARC_LEVELUP_LEARNSETS, 0, PokeOtherFormMonsNoGet(species, form) * MAX_LEVELUP_MOVES * sizeof(u32), MAX_LEVELUP_MOVES * sizeof(u32));
-
-#ifdef BLOCK_LEARNING_UNIMPLEMENTED_MOVES
-    // shift moves to skip the unimplemented ones
-    int writeIndex = 0;
-    for (int readIndex = 0; readIndex < MAX_LEVELUP_MOVES; readIndex++) {
-        u32 entry = levelUpLearnset[readIndex];
-        u16 move = LEVEL_UP_LEARNSET_MOVE(entry);
-
-        if (move == LEVEL_UP_LEARNSET_END) {
-            levelUpLearnset[writeIndex] = entry;
-            break;
-        }
-
-        // keep the move
-        if (!IsMoveUnimplemented(move)) {
-            levelUpLearnset[writeIndex] = entry;
-            writeIndex++;
-        }
-    }
-#endif
 }

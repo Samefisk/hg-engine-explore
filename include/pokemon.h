@@ -1064,6 +1064,8 @@ u8 LONG_CALL GetMonNature(struct PartyPokemon *pp);
  *  @return data requested
  */
 u32 LONG_CALL PokePersonalParaGet(int species, int parameter);
+u32 LONG_CALL PokePersonalParaGet_Fallback(int species, int parameter);
+u32 LONG_CALL GetPersonalAttr(const void *baseStats, int parameter);
 
 /**
  *  @brief get the experience required to reach a specific level for a species
@@ -1182,9 +1184,8 @@ BOOL LONG_CALL does_species_have_dimorphism(u32 species);
  *  @param ball caught ball
  *  @param encounterType encounter type
  *  @param heapId heap to use for memory allocations
- *  @return
  */
-BOOL LONG_CALL sub_020720FC(struct PartyPokemon *pp, void *profile, u16 item, u16 ball, u32 encounterType, int heapId);
+void LONG_CALL sub_020720FC(struct PartyPokemon *pp, void *profile, u16 item, u16 ball, u32 encounterType, int heapId);
 
 /**
  *  @brief update pokédex status for the given PartyPokemon's species
@@ -1220,7 +1221,7 @@ BOOL LONG_CALL GrabAndRegisterUnownForm(EncounterInfo *encounterInfo);
 
 // shiny convenience macro
 #define SHINY_VALUE(otid, pid) (((otid & 0xffff0000) >> 16) ^ (otid & 0xffff) ^ ((pid & 0xffff0000) >> 16) ^ (pid & 0xffff))
-#define SHINY_CHECK(otid, pid) (SHINY_VALUE(otid, pid) <= SHINY_ODDS)
+#define SHINY_CHECK(otid, pid) (SHINY_VALUE(otid, pid) < SHINY_ODDS)
 
 /**
  *  @brief check if PartyPokemon is shiny
@@ -1435,6 +1436,10 @@ void LONG_CALL RestoreBoxMonPP(struct BoxPokemon *boxMon);
  *  @param levelUpLearnset u32 array to store the level up learnset to
  */
 void LONG_CALL LoadLevelUpLearnset_HandleAlternateForm(int species, int form, u32 *levelUpLearnset);
+void LONG_CALL LoadLevelUpLearnset_HandleAlternateForm_Fallback(
+    int species,
+    int form,
+    u32 *levelUpLearnset);
 
 /**
  *  @brief try appending a move to a mon's learnset

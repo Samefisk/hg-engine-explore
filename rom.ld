@@ -78,6 +78,8 @@ BoxMonSetFastModeOn = 0x0206DDD8 |1;
 BoxMonSetFastModeOff = 0x0206DE00 |1;
 SetBoxMonData = 0x0206ED70 |1;
 PokePersonalParaGet = 0x0206FBE8 |1;
+PokePersonalParaGet_Fallback = 0x0206FBF0 |1;
+GetPersonalAttr = 0x0206FAA8 |1;
 BoxMonInit = 0x0206DD0C |1;
 PokeLevelExpGet = 0x0206FD00 |1;
 Daycare_GetBoxMonI = 0x0206BDB0 |1;
@@ -318,6 +320,7 @@ GF_RTC_GetTimeOfDayWildParamByHour = 0x0201485C | 1;
 
 
 /* map object funcs */
+sub_0203DC64 = 0x0203DC64 | 1;
 GetMapObjectByID = 0x0205EE60 | 1;
 MapObject_GetMovement = 0x0205F264 | 1;
 MapObject_GetGfxID = 0x0205F25C | 1;
@@ -358,12 +361,18 @@ MapObject_GetCurrentY = 0x0205F934 | 1;
 MapObject_SetCurrentY = 0x0205F938 | 1;
 MapObject_SetFlag29 = 0x0205F89C | 1;
 sub_02069DC8 = 0x02069DC8 | 1;
+ov01_021F72DC = 0x021F72DC | 1;
 ov01_021F9048 = 0x021F9048 | 1;
+ov01_021F9318 = 0x021F9318 | 1;
+sub_020603F8 = 0x020603F8 | 1;
 ov01_021F1450 = 0x021F1450 | 1;
 ov01_021F146C = 0x021F146C | 1;
 ov01_021F1588 = 0x021F1588 | 1;
 ov01_021F1620 = 0x021F1620 | 1;
 ov01_021F1640 = 0x021F1640 | 1;
+MTX_RotZ33_ = 0x020CB108 | 1;
+G3_MultMtx33_ = 0x020CF548;
+FX_SinCosTable_ = 0x021094DC;
 ov01_021FC748 = 0x021FC748 | 1;
 ov01_021FCFEC = 0x021FCFEC | 1;
 ov01_021FCB14 = 0x021FCB14 | 1;
@@ -429,6 +438,8 @@ MapObject_IsSingleMovementActive = 0x0205F648 | 1;
 MapObject_IsMovementDirectionBlocked = 0x02060BB8 | 1;
 MapObject_StartMovementCommandInternal = 0x0206214C | 1;
 MapObject_StartMovementCommand = 0x0206217C | 1;
+MapObject_ClearHeldMovementIfActive = 0x020621C0 | 1;
+MapObject_ClearHeldMovement = 0x020621F0 | 1;
 MapObject_StartMovementList = 0x02062214 | 1;
 MapObject_MovementListTaskIsFinished = 0x02062260 | 1;
 MapObject_CleanupMovementListTask = 0x0206226C | 1;
@@ -453,9 +464,12 @@ FS_SetDefaultDMA = 0x020D86D8;
 LoadOverlayNormal = 0x02007180 | 1;
 LoadOverlayNoInit = 0x02007188 | 1;
 LoadOverlayNoInitAsync = 0x020071C0 | 1;
+FS_UnloadOverlay = 0x020D8DB4;
 
 GetSoundDataPointer = 0x020043F8 | 1;
 NNS_SndArcLoadSeq = 0x020C9DC4;
+GF_SndHeapSaveState = 0x020046E8 | 1;
+GF_SndHeapLoadState = 0x02004714 | 1;
 GF_SndHeapGetFreeSize = 0x0200472C | 1;
 NNS_SndArcLoadSeqEx = 0x020C9E48;
 
@@ -548,6 +562,9 @@ ServerMoveAIInit = 0x0224E384 | 1;
 DumpMoveTableData = 0x02073300 | 1;
 
 GF_ExpHeap_FndGetTotalFreeSize = 0x0201ABEC | 1;
+NARC_GetFileCount = 0x020078E8 | 1;
+NARC_ReadFromMember = 0x0200782C | 1;
+LoadLevelUpLearnset_HandleAlternateForm = 0x02071FC8 | 1;
 
 /*Link_QueueIsEmpty = 0x0224ED48 | 1;*/
 Link_CheckTimeout = 0x0224ED9C | 1;

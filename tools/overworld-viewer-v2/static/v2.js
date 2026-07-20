@@ -13,10 +13,19 @@ const state = {
   conflict: false,
   busy: false,
   commitInert: false,
-  activeView: localStorage.getItem("ow-v2-view") || "profiles",
+  activeView: localStorage.getItem("ow-v2-view") || "pokemon",
   controllers: {},
+  availableViews: new Set(WORKSPACE_VIEWS),
+  controllerAvailability: Object.fromEntries(WORKSPACE_VIEWS.map((name) => [name, {
+    available: true,
+    status: name === "pokemon" ? "loading" : "pending",
+    reason: "",
+  }])),
+  workspaceDataError: "",
   navigationContext: null,
   applyingLocation: false,
+  buildServerAvailable: false,
+  latestBuildStatus: null,
 };
 
 let pokemonSelectionKey = (() => {
@@ -78,13 +87,115 @@ const elements = {};
   "commitStatusHeading", "commitStatusDetail",
 ].forEach((id) => { elements[id] = byId(id); });
 
+function capabilitySource(data, name) {
+  const capabilities = data?.capabilities;
+  const candidates = [
+    capabilities?.views?.[name],
+    capabilities?.[name],
+    data?.[`${name}Capability`],
+    data?.[`${name}Available`],
+  ];
+  if (name === "profiles") candidates.push(data?.profilesAvailable);
+  return candidates.find((value) => value !== undefined && value !== null);
+}
+
+function normalizedViewCapability(data, name) {
+  const source = capabilitySource(data, name);
+  const label = {
+    pokemon: "Pokémon Editor",
+    profiles: "Profile Deck",
+    routes: "Route Deck",
+    sounds: "Sound Deck",
+  }[name] || name;
+  const fallbackReason = name === "profiles"
+    ? data?.profileError?.message
+    : data?.[`${name}Error`]?.message || data?.[`${name}Error`];
+  if (source === false) return { available: false, reason: String(fallbackReason || `${label} sources are not available in this project.`) };
+  if (source && typeof source === "object") {
+    const available = source.available !== false && source.enabled !== false && source.readable !== false;
+    return {
+      available,
+      reason: String(source.reason || source.message || fallbackReason || (available ? "" : `${label} sources are not available in this project.`)),
+    };
+  }
+  return { available: true, reason: "" };
+}
+
+function firstAvailableView(preferred = "pokemon") {
+  if (state.availableViews.has(preferred)) return preferred;
+  return WORKSPACE_VIEWS.find((name) => state.availableViews.has(name)) || "";
+}
+
+function viewIsAvailable(name) {
+  return state.availableViews.has(name);
+}
+
+function destroyUnavailableController(name) {
+  const controller = state.controllers[name];
+  if (!controller) return;
+  controller.destroy?.();
+  delete state.controllers[name];
+}
+
+function applyWorkspaceCapabilities(data, { failed = false } = {}) {
+  const next = {};
+  WORKSPACE_VIEWS.forEach((name) => {
+    let capability = normalizedViewCapability(data, name);
+    if (failed && ["profiles", "routes"].includes(name)) {
+      capability = { available: false, reason: state.workspaceDataError || "Workspace data could not be loaded." };
+    }
+    const previous = state.controllerAvailability[name] || {};
+    next[name] = {
+      ...capability,
+      status: capability.available ? previous.status || "pending" : "unavailable",
+    };
+  });
+  state.controllerAvailability = next;
+  state.availableViews = new Set(WORKSPACE_VIEWS.filter((name) => next[name].available));
+  elements.workspaceNav.style.setProperty("--workspace-view-count", String(Math.max(1, state.availableViews.size)));
+
+  WORKSPACE_VIEWS.forEach((name) => {
+    const available = state.availableViews.has(name);
+    const tab = elements.workspaceNav.querySelector(`[data-view="${name}"]`);
+    if (tab) {
+      tab.hidden = !available;
+      tab.disabled = !available;
+      tab.setAttribute("aria-disabled", String(!available));
+      if (!available && next[name].reason) tab.title = next[name].reason;
+      else tab.removeAttribute("title");
+    }
+    elements[`${name}View`]?.toggleAttribute("data-view-unavailable", !available);
+    if (!available) destroyUnavailableController(name);
+  });
+  state.controllers.pokemon?.refreshContext?.();
+
+  if (!viewIsAvailable(state.activeView)) {
+    const fallback = firstAvailableView();
+    if (fallback) {
+      activateView(fallback);
+      writeLocation(fallback, fallback === "pokemon" ? state.selectedPokemonKey : "", "replace");
+    }
+  }
+}
+
 function messageFromResult(result, response) {
   return result?.error || result?.message || `HTTP ${response.status}`;
 }
 
+function offlineRequestError(error) {
+  const wrapped = new Error("V2 server is offline. Restart it, then reload this page.", { cause: error });
+  wrapped.isConnectionFailure = true;
+  return wrapped;
+}
+
 const api = {
   async get(path, options = {}) {
-    const response = await fetch(path, { cache: "no-store", ...options });
+    let response;
+    try {
+      response = await fetch(path, { cache: "no-store", ...options });
+    } catch (error) {
+      throw offlineRequestError(error);
+    }
     const result = await response.json();
     if (!response.ok) throw new Error(messageFromResult(result, response));
     return result;
@@ -97,11 +208,16 @@ const api = {
       if (!state.revision) throw new Error("The workspace revision is not loaded yet.");
       headers.set("If-Match", state.revision);
     }
-    const response = await fetch(path, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+    let response;
+    try {
+      response = await fetch(path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      throw offlineRequestError(error);
+    }
     const result = await response.json();
     if (response.status === 409) {
       state.conflict = true;
@@ -326,8 +442,9 @@ function setBusy(busy, { inert = false } = {}) {
   if (busy && inert) setWorkspaceInert(true);
   state.busy = busy;
   elements.app.toggleAttribute("aria-busy", busy);
-  [elements.saveAll, elements.resetDraft, elements.buildRom, elements.openNds]
+  [elements.saveAll, elements.resetDraft]
     .forEach((control) => { control.disabled = busy; });
+  updateBuildControls();
   markDirty();
   if (!busy && state.commitInert) setWorkspaceInert(false);
 }
@@ -452,7 +569,11 @@ function controllerSelection(view) {
 }
 
 function activateView(view, { historyMode = "none", selection = "", focus = false } = {}) {
-  state.activeView = WORKSPACE_VIEWS.includes(view) ? view : "profiles";
+  const nextView = WORKSPACE_VIEWS.includes(view) && viewIsAvailable(view)
+    ? view
+    : firstAvailableView();
+  if (!nextView) return state.activeView;
+  state.activeView = nextView;
   localStorage.setItem("ow-v2-view", state.activeView);
   elements.app.dataset.view = state.activeView;
   elements.workspaceNav.querySelectorAll("[data-view]").forEach((button) => {
@@ -481,6 +602,7 @@ function activateView(view, { historyMode = "none", selection = "", focus = fals
     viewElement.tabIndex = -1;
     requestAnimationFrame(() => viewElement.focus({ preventScroll: true }));
   }
+  return state.activeView;
 }
 
 function bindNavigation() {
@@ -493,7 +615,7 @@ function bindNavigation() {
   });
   elements.workspaceNav.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    const tabs = [...elements.workspaceNav.querySelectorAll("[data-view]")];
+    const tabs = [...elements.workspaceNav.querySelectorAll("[data-view]:not([hidden]):not(:disabled)")];
     const current = tabs.indexOf(document.activeElement);
     if (current < 0) return;
     event.preventDefault();
@@ -530,6 +652,7 @@ function controllerContext() {
 }
 
 function ensurePokemonController() {
+  if (!viewIsAvailable("pokemon")) return null;
   if (!state.controllers.pokemon) {
     state.controllers.pokemon = createPokemonController(controllerContext());
   }
@@ -537,6 +660,7 @@ function ensurePokemonController() {
 }
 
 function rebuildPokemonController(symbol) {
+  if (!viewIsAvailable("pokemon")) return null;
   state.selectedPokemonKey = symbol;
   localStorage.setItem(POKEMON_SELECTION_KEY, JSON.stringify(symbol));
   const current = state.controllers.pokemon;
@@ -554,6 +678,10 @@ function rebuildPokemonController(symbol) {
 }
 
 function openPokemonRecord(symbol, origin = {}) {
+  if (!viewIsAvailable("pokemon")) {
+    setStatus(state.controllerAvailability.pokemon?.reason || "Pokémon Editor is not available in this project.", "error");
+    return false;
+  }
   const normalized = String(symbol || "").trim().toUpperCase();
   if (!validPokemonSymbol(normalized)) {
     setStatus("That Pokémon record does not have a source symbol.", "error");
@@ -581,14 +709,23 @@ function returnToOrigin() {
   if (!context?.originView) return;
   const { originView, originSelection } = context;
   storeNavigationContext(null);
-  activateView(originView, { selection: originSelection, focus: true });
-  writeLocation(originView, originSelection, "push");
+  const active = activateView(originView, { selection: originSelection, focus: true });
+  writeLocation(active, active === originView ? originSelection : "", "push");
 }
 
 function applyLocation(descriptor) {
   if (!descriptor) return;
+  let redirected = false;
   state.applyingLocation = true;
   try {
+    if (!viewIsAvailable(descriptor.view)) {
+      const fallback = firstAvailableView();
+      if (fallback) {
+        activateView(fallback);
+        redirected = true;
+      }
+      return;
+    }
     if (descriptor.view === "pokemon") {
       if (descriptor.originView && descriptor.originView !== "pokemon") {
         storeNavigationContext({
@@ -610,15 +747,41 @@ function applyLocation(descriptor) {
     }
   } finally {
     state.applyingLocation = false;
+    if (redirected) {
+      writeLocation(state.activeView, state.activeView === "pokemon" ? state.selectedPokemonKey : controllerSelection(state.activeView).selection, "replace");
+    }
   }
 }
 
-function ensureLegacyControllers() {
-  if (!state.controllers.profiles) {
-    state.controllers.profiles = createProfilesController(controllerContext());
-    state.controllers.routes = createRoutesController(controllerContext());
-    state.controllers.sounds = createSoundsController(controllerContext());
-  }
+function ensureWorkspaceController(name) {
+  if (!viewIsAvailable(name)) return null;
+  if (state.controllers[name]) return state.controllers[name];
+  const factories = {
+    profiles: createProfilesController,
+    routes: createRoutesController,
+    sounds: createSoundsController,
+  };
+  const factory = factories[name];
+  if (!factory) return null;
+  state.controllers[name] = factory(controllerContext());
+  state.controllerAvailability[name] = {
+    ...state.controllerAvailability[name],
+    status: "ready",
+  };
+  return state.controllers[name];
+}
+
+function ensureAvailableWorkspaceControllers(data) {
+  ["profiles", "routes", "sounds"].forEach((name) => {
+    const controller = ensureWorkspaceController(name);
+    controller?.refresh?.(data);
+    if (controller) {
+      state.controllerAvailability[name] = {
+        ...state.controllerAvailability[name],
+        status: "ready",
+      };
+    }
+  });
 }
 
 async function loadData({ keepStatus = false } = {}) {
@@ -633,12 +796,13 @@ async function loadData({ keepStatus = false } = {}) {
   state.data = data;
   state.revision = data.sourceRevision;
   state.conflict = false;
+  state.workspaceDataError = "";
 
-  ensureLegacyControllers();
-  await Promise.resolve(ensurePokemonController().refresh?.(data)).catch((error) => {
+  applyWorkspaceCapabilities(data);
+  ensureAvailableWorkspaceControllers(data);
+  await Promise.resolve(ensurePokemonController()?.refresh?.(data)).catch((error) => {
     setStatus(`Pokémon Editor failed to refresh: ${error.message}`, "error");
   });
-  ["profiles", "routes", "sounds"].forEach((name) => state.controllers[name]?.refresh?.(data));
   markDirty();
 }
 
@@ -793,16 +957,35 @@ async function resetAllDrafts() {
 }
 
 function applyBuildStatus(status) {
+  state.buildServerAvailable = true;
+  state.latestBuildStatus = status || {};
   const running = Boolean(status?.running);
   const output = status?.output || status?.error || "";
   elements.buildOutput.textContent = output;
   elements.buildPanel.hidden = !elements.showBuildLog.checked;
-  elements.buildRom.disabled = running || state.busy;
   elements.buildRom.textContent = running ? "Building…" : "Build ROM";
+  updateBuildControls();
   if (running) setStatus(status.latestLine || "Building ROM…", "busy");
   if (!running && status?.ok === true) setStatus("ROM build complete", "success");
   if (!running && status?.ok === false) setStatus("ROM build failed", "error");
   return running;
+}
+
+function updateBuildControls() {
+  const running = Boolean(state.latestBuildStatus?.running);
+  const hasRom = state.latestBuildStatus?.testNdsExists === true;
+  elements.buildRom.disabled = state.busy || running;
+  elements.openNds.disabled = state.busy || running || !state.buildServerAvailable || !hasRom;
+
+  if (!state.buildServerAvailable) {
+    elements.openNds.title = "V2 server is offline or has not responded. Reload after restarting it.";
+  } else if (running) {
+    elements.openNds.title = "Open NDS is unavailable while the ROM is building.";
+  } else if (!hasRom) {
+    elements.openNds.title = "Build the ROM first; test.nds does not exist yet.";
+  } else {
+    elements.openNds.removeAttribute("title");
+  }
 }
 
 async function pollBuild() {
@@ -810,7 +993,13 @@ async function pollBuild() {
     const status = await api.get(`/build-status?ts=${Date.now()}`);
     if (applyBuildStatus(status)) window.setTimeout(pollBuild, 900);
   } catch (error) {
-    setStatus(`Build status unavailable: ${error.message}`, "error");
+    state.buildServerAvailable = false;
+    updateBuildControls();
+    if (error.isConnectionFailure) {
+      setStatus("V2 server is offline. Restart it, then reload this page.", "error");
+    } else {
+      setStatus(`Build status unavailable: ${error.message}`, "error");
+    }
   }
 }
 
@@ -822,7 +1011,13 @@ async function startBuild() {
     applyBuildStatus(status);
     window.setTimeout(pollBuild, 700);
   } catch (error) {
-    setStatus(`Build failed to start: ${error.message}`, "error");
+    if (error.isConnectionFailure) {
+      state.buildServerAvailable = false;
+      updateBuildControls();
+      setStatus("V2 server is offline. Restart it, then reload this page.", "error");
+    } else {
+      setStatus(`Build failed to start: ${error.message}`, "error");
+    }
   }
 }
 
@@ -832,8 +1027,14 @@ async function openNds() {
   try {
     const result = await api.post("/open-test-nds", {});
     setStatus(result.message || "Opened test.nds", "success");
+    toast(result.message || "Opened test.nds", "success");
   } catch (error) {
-    setStatus(`Open failed: ${error.message}`, "error");
+    if (error.isConnectionFailure) {
+      state.buildServerAvailable = false;
+      setStatus("V2 server is offline. Restart it, then reload this page.", "error");
+    } else {
+      setStatus(`Open failed: ${error.message}`, "error");
+    }
   } finally {
     setBusy(false);
   }
@@ -934,31 +1135,53 @@ async function boot() {
   elements.buildPanel.hidden = !elements.showBuildLog.checked;
   bindNavigation();
   bindGlobalActions();
+  updateBuildControls();
   if (initialLocation) applyLocation(initialLocation);
   else {
     activateView(state.activeView);
     writeLocation(state.activeView, controllerSelection(state.activeView).selection, "replace");
   }
   try {
-    Promise.resolve(ensurePokemonController().refresh?.()).catch((error) => {
+    Promise.resolve(ensurePokemonController()?.refresh?.()).catch((error) => {
       setStatus(`Pokémon Editor failed to load: ${error.message}`, "error");
     });
   } catch (error) {
     setStatus(`Pokémon Editor failed to initialize: ${error.message}`, "error");
   }
-  try {
-    await Promise.all([loadData(), loadShiny(), pollBuild()]);
-    if (initialLocation && initialLocation.view !== "pokemon" && initialLocation.selection) {
-      state.controllers[initialLocation.view]?.restoreSelection?.(initialLocation.selection);
+  const [workspaceResult] = await Promise.allSettled([loadData(), loadShiny(), pollBuild()]);
+  if (workspaceResult.status === "rejected") {
+    const error = workspaceResult.reason;
+    state.workspaceDataError = String(error?.message || error || "Workspace data unavailable");
+    applyWorkspaceCapabilities({
+      profilesAvailable: false,
+      routesAvailable: false,
+      profileError: { message: state.workspaceDataError },
+      routeError: { message: state.workspaceDataError },
+    }, { failed: true });
+    try {
+      await Promise.resolve(ensureWorkspaceController("sounds")?.refresh?.());
+    } catch (soundError) {
+      applyWorkspaceCapabilities({
+        profilesAvailable: false,
+        capabilities: {
+          pokemon: state.controllerAvailability.pokemon,
+          profiles: { available: false, reason: state.workspaceDataError },
+          routes: { available: false, reason: state.workspaceDataError },
+          sounds: { available: false, reason: String(soundError?.message || soundError || "Sound data unavailable") },
+        },
+      }, { failed: true });
     }
-    const activeSelection = state.activeView === "pokemon"
-      ? state.selectedPokemonKey
-      : controllerSelection(state.activeView).selection;
-    writeLocation(state.activeView, activeSelection, "replace");
-  } catch (error) {
-    setStatus(`Profile and route workspace failed to load: ${error.message}`, "error");
     renderShellLoadError(error);
+    if (state.activeView === "pokemon" && viewIsAvailable("pokemon")) {
+      setStatus("Pokémon Editor available · optional workspace decks unavailable", "ready");
+    }
+  } else if (initialLocation && initialLocation.view !== "pokemon" && initialLocation.selection && viewIsAvailable(initialLocation.view)) {
+    state.controllers[initialLocation.view]?.restoreSelection?.(initialLocation.selection);
   }
+  const activeSelection = state.activeView === "pokemon"
+    ? state.selectedPokemonKey
+    : controllerSelection(state.activeView).selection;
+  writeLocation(state.activeView, activeSelection, "replace");
 }
 
 state.reloadData = loadData;

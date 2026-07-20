@@ -121,11 +121,22 @@ LEVELUPLEARNSET_OBJS := $(patsubst %.c,%.o,$(LEVELUPLEARNSET_DEPENDENCIES))
 LEVELUPLEARNSET_BIN := $(patsubst $(LEARNSET_OUTPUT_DIR)/%.c,$(LEVELUPLEARNSET_DIR)/%.bin,$(LEVELUPLEARNSET_DEPENDENCIES))
 $(LEVELUPLEARNSET_DEPENDENCIES): $(LEARNSETS_HEADER)
 
-$(LEVELUPLEARNSET_NARC): $(LEARNSETS_HEADER)
+.DELETE_ON_ERROR: $(LEVELUPLEARNSET_NARC)
+$(LEVELUPLEARNSET_NARC): $(LEARNSETS_HEADER) $(LEVELUPLEARNSET_DEPENDENCIES) $(BUILD_NARC)/a011.narc scripts/filter_levelup_learnsets.py scripts/create_narc_atomic.py tools/narcpy.py include/config.h include/battle.h armips/include/movemacros.s
 	@echo "writing levelup moves..."
 	$(CC) $(CFLAGS) -c $(LEVELUPLEARNSET_DEPENDENCIES) -o $(LEVELUPLEARNSET_OBJS)
 	$(OBJCOPY) -O binary $(LEVELUPLEARNSET_OBJS) $(LEVELUPLEARNSET_BIN)
-	$(NARCHIVE) create $@ $(LEVELUPLEARNSET_DIR) -nf
+	$(PYTHON_NO_VENV) scripts/filter_levelup_learnsets.py \
+		--learnsets $(LEVELUPLEARNSET_BIN) \
+		--move-data-dir $(MOVEDATA_DIR) \
+		--constants $(LEARNSETS_HEADER) \
+		--config include/config.h \
+		--battle-header include/battle.h \
+		--move-macros armips/include/movemacros.s
+	$(PYTHON) scripts/create_narc_atomic.py \
+		--narcpy tools/narcpy.py \
+		--source $(LEVELUPLEARNSET_DIR) \
+		--output $@
 
 NARC_FILES += $(LEVELUPLEARNSET_NARC)
 REQUIRED_DIRECTORIES += $(LEVELUPLEARNSET_DIR)
@@ -198,3 +209,35 @@ $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN): $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPEND
 	$(PYTHON) $(OVERWORLD_WILD_BLOB_VALIDATOR) --owed $@ --owed-source include/overworld_wild_behavior_data.h --encounter-narc $(BUILD_NARC)/encounters.narc
 
 NARC_FILES += $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN)
+
+OVERWORLD_WILD_SPAWN_METADATA_TARGET := $(BUILD)/a028/9_19
+OVERWORLD_WILD_SPAWN_METADATA_GENERATOR := scripts/build_overworld_wild_spawn_metadata.py
+OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER := include/overworld_wild_behavior_data.h
+OVERWORLD_WILD_SPAWN_METADATA_DEPENDENCIES := $(BUILD_NARC)/mondata.narc $(BUILD_NARC)/overworld_properties.narc $(BUILD)/a028/9_09 $(SPECIES_TO_OW_GFX_BIN) $(POKEFORMDATATBL_BIN) build/field/overworld_table.o base/overlay/overlay_0001.bin $(OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER) $(OVERWORLD_WILD_SPAWN_METADATA_GENERATOR) $(VENV_ACTIVATE)
+OVERWORLD_WILD_SPAWN_METADATA_BIN := build/OverworldWildSpawnMetadata.bin
+
+$(OVERWORLD_WILD_SPAWN_METADATA_BIN): $(OVERWORLD_WILD_SPAWN_METADATA_DEPENDENCIES)
+	@echo "writing overworld wild spawn metadata..."
+	@mkdir -p $(dir $@)
+	$(PYTHON) $(OVERWORLD_WILD_SPAWN_METADATA_GENERATOR) \
+		--mondata-narc $(BUILD_NARC)/mondata.narc \
+		--overworld-properties-narc $(BUILD_NARC)/overworld_properties.narc \
+		--form-counts $(BUILD)/a028/9_09 \
+		--base-models $(SPECIES_TO_OW_GFX_BIN) \
+		--form-species $(POKEFORMDATATBL_BIN) \
+		--render-table build/field/overworld_table.o \
+		--render-descriptors base/overlay/overlay_0001.bin \
+		--format-header $(OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER) \
+		--output $@
+	$(PYTHON) $(OVERWORLD_WILD_SPAWN_METADATA_GENERATOR) \
+		--mondata-narc $(BUILD_NARC)/mondata.narc \
+		--overworld-properties-narc $(BUILD_NARC)/overworld_properties.narc \
+		--form-counts $(BUILD)/a028/9_09 \
+		--base-models $(SPECIES_TO_OW_GFX_BIN) \
+		--form-species $(POKEFORMDATATBL_BIN) \
+		--render-table build/field/overworld_table.o \
+		--render-descriptors base/overlay/overlay_0001.bin \
+		--format-header $(OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER) \
+		--verify $@
+
+NARC_FILES += $(OVERWORLD_WILD_SPAWN_METADATA_BIN)

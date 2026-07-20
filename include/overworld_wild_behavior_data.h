@@ -3,12 +3,35 @@
 
 #include "types.h"
 
+typedef struct FieldSystem FieldSystem;
+struct LocalMapObject;
+struct OverworldWildSpawnState;
+struct OverworldWildThrowState;
+struct OverworldWildBehaviorPrimitives;
+
 #define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR 0x023C3000
 #define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR 0x023C3000
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE_ADDR 0x023C3059
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP_ADDR 0x023C3101
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 33
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
+#define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
+#define OVERWORLD_WILD_SPAWN_METADATA_VERSION 2
+#define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_MAGIC 0x4F57534F
+#define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_VERSION 2
+#define OVERWORLD_WILD_LEARNSET_CACHE_OVERLAY_MAGIC 0x4F574C43
+#define OVERWORLD_WILD_LEARNSET_CACHE_OVERLAY_VERSION 1
+#define OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_MAGIC 0x4F575043
+#define OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_VERSION 1
+#define OVERWORLD_WILD_LEVELUP_LEARNSET_DISPATCH_SLOT_ADDR 0x02071FD8
+#define OVERWORLD_WILD_PERSONAL_PARAM_DISPATCH_SLOT_ADDR 0x0206FBEC
+#define OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR 0x023C30E0
+#define OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY_ADDR 0x023C30EC
+#define OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM 31
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
 #define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 1
 #define OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM 2
@@ -328,6 +351,15 @@ typedef struct OverworldWildEncounterLookupDataEntry {
     u16 count;
 } OverworldWildEncounterLookupDataEntry;
 
+typedef BOOL (*OverworldWildValidateBehaviorOverlayFunc)(void);
+typedef void (*OverworldWildCleanupBehaviorOverlayFunc)(void);
+
+typedef struct OverworldWildBehaviorOverlayEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+} OverworldWildBehaviorOverlayEntry;
+
 typedef void *(*OverworldWildCreateCustomJumpShadowEffectFunc)(
     void *effectContext,
     void *object);
@@ -338,12 +370,171 @@ typedef struct OverworldWildCustomJumpShadowEntry {
     OverworldWildClearCustomJumpShadowEffectFunc clear;
 } OverworldWildCustomJumpShadowEntry;
 
-#define OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY \
-    ((const OverworldWildBehaviorDataOverlayEntry *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR)
+typedef u8 (*OverworldWildGetPlayerBallCatchValueFunc)(u8 catchRate);
+typedef u8 (*OverworldWildCalculatePlayerBallShakesFunc)(u8 catchValue);
+typedef u32 (*OverworldWildFinalizeSpawnPersonalityFunc)(
+    u32 personality,
+    u32 trainerId,
+    BOOL shiny);
+typedef int (*OverworldWildFindCapturedPokemonDestinationFunc)(
+    FieldSystem *fieldSystem);
+typedef int (*OverworldWildFindBattleTalkSlotFunc)(
+    FieldSystem *fieldSystem,
+    struct OverworldWildSpawnState *state,
+    struct LocalMapObject *talkedObject,
+    u16 excludedMask);
+
+typedef struct OverworldWildCaptureUtilitiesEntry {
+    OverworldWildGetPlayerBallCatchValueFunc getCatchValue;
+    OverworldWildCalculatePlayerBallShakesFunc calculateShakes;
+    OverworldWildFinalizeSpawnPersonalityFunc finalizePersonality;
+    OverworldWildFindCapturedPokemonDestinationFunc findDestination;
+    OverworldWildFindBattleTalkSlotFunc findBattleTalkSlot;
+} OverworldWildCaptureUtilitiesEntry;
+
+typedef struct OverworldWildSpawnMetadata {
+    u16 spriteId;
+    u16 followerParam;
+    u8 type1;
+    u8 type2;
+    u8 catchValue;
+    u8 renderModePlusOne;
+} OverworldWildSpawnMetadata;
+
+typedef struct OverworldWildSpawnMetadataException {
+    u16 species;
+    u8 form;
+    u8 reserved;
+    OverworldWildSpawnMetadata metadata;
+} OverworldWildSpawnMetadataException;
+
+typedef struct OverworldWildSpawnMetadataBlobHeader {
+    u32 magic;
+    u16 version;
+    u16 headerSize;
+    u32 totalSize;
+    u32 baseOffset;
+    u16 baseCount;
+    u16 baseRecordSize;
+    u32 exceptionsOffset;
+    u16 exceptionCount;
+    u16 exceptionRecordSize;
+    u16 formSpeciesBaseCount;
+    u16 flags;
+    u32 checksum;
+} OverworldWildSpawnMetadataBlobHeader;
+
+typedef BOOL (*OverworldWildTryGetSpawnMetadataFunc)(
+    u16 species,
+    u8 form,
+    OverworldWildSpawnMetadata *metadata);
+typedef void (*OverworldWildCleanupSpawnMetadataFunc)(void);
+typedef u32 (*OverworldWildGetSpawnSpriteIdFunc)(u16 species, u8 form);
+typedef void (*OverworldWildApplySpawnRenderParamsFunc)(
+    struct LocalMapObject *object,
+    u16 species,
+    u8 form,
+    u32 spriteId,
+    BOOL shiny);
+typedef struct OverworldWildSpawnMetadataOverlayEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+    OverworldWildTryGetSpawnMetadataFunc tryGet;
+    OverworldWildCleanupSpawnMetadataFunc cleanup;
+    OverworldWildGetSpawnSpriteIdFunc getSpriteId;
+    OverworldWildApplySpawnRenderParamsFunc applyRenderParams;
+} OverworldWildSpawnMetadataOverlayEntry;
+
+typedef void (*OverworldWildLoadLevelUpLearnsetFunc)(
+    int species,
+    int form,
+    u32 *levelUpLearnset);
+typedef BOOL (*OverworldWildWarmLevelUpLearnsetCacheFunc)(void);
+typedef struct OverworldWildLearnsetCacheOverlayEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+    OverworldWildLoadLevelUpLearnsetFunc load;
+    OverworldWildWarmLevelUpLearnsetCacheFunc warm;
+} OverworldWildLearnsetCacheOverlayEntry;
+
+typedef BOOL (*OverworldWildQueryPickupThrowTargetFunc)(
+    struct OverworldWildSpawnState *state,
+    struct OverworldWildThrowState *throwState,
+    int carrierSlot,
+    int targetSlot,
+    u8 query,
+    u16 unstableMask);
+typedef BOOL (*OverworldWildStartSpawnerMovementFunc)(
+    struct OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    const u8 *directions,
+    int directionCount,
+    const OverworldWildBehaviorProfile *profile,
+    const struct OverworldWildBehaviorPrimitives *primitives);
+typedef BOOL (*OverworldWildTryResolveOverlapFunc)(
+    struct OverworldWildSpawnState *state,
+    struct OverworldWildThrowState *throwState,
+    u16 unstableMask,
+    OverworldWildQueryPickupThrowTargetFunc queryTarget,
+    OverworldWildStartSpawnerMovementFunc startMovement);
+typedef struct OverworldWildOverlapResolverEntry {
+    OverworldWildTryResolveOverlapFunc tryResolve;
+} OverworldWildOverlapResolverEntry;
+
+typedef u32 (*OverworldWildGetPersonalParamFunc)(int species, int parameter);
+typedef struct OverworldWildPersonalCacheOverlayEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+    OverworldWildGetPersonalParamFunc getParam;
+} OverworldWildPersonalCacheOverlayEntry;
+
+#define gOverworldWildLevelUpLearnsetLoader \
+    (*(volatile OverworldWildLoadLevelUpLearnsetFunc *) \
+        OVERWORLD_WILD_LEVELUP_LEARNSET_DISPATCH_SLOT_ADDR)
+#define gOverworldWildPersonalParamLoader \
+    (*(volatile OverworldWildGetPersonalParamFunc *) \
+        OVERWORLD_WILD_PERSONAL_PARAM_DISPATCH_SLOT_ADDR)
+
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_ENTRY \
+    ((const OverworldWildBehaviorOverlayEntry *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR)
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE \
+    ((OverworldWildValidateBehaviorOverlayFunc)OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE_ADDR)
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP \
+    ((OverworldWildCleanupBehaviorOverlayFunc)OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP_ADDR)
 #define OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY \
-    ((const OverworldWildEncounterLookupDataEntry *)OVERWORLD_WILD_LEGACY_ENCOUNTER_LOOKUP_ENTRY_ADDR)
+    ((const OverworldWildEncounterLookupDataEntry *)(OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR \
+        + sizeof(OverworldWildBehaviorOverlayEntry)))
 #define OVERWORLD_WILD_CUSTOM_JUMP_SHADOW_ENTRY \
     ((const OverworldWildCustomJumpShadowEntry *)(OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR \
+        + sizeof(OverworldWildBehaviorOverlayEntry) \
         + sizeof(OverworldWildEncounterLookupDataEntry)))
+#define OVERWORLD_WILD_CAPTURE_UTILITIES_ENTRY \
+    ((const OverworldWildCaptureUtilitiesEntry *)(OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR \
+        + sizeof(OverworldWildBehaviorOverlayEntry) \
+        + sizeof(OverworldWildEncounterLookupDataEntry) \
+        + sizeof(OverworldWildCustomJumpShadowEntry)))
+#define OVERWORLD_WILD_SPAWN_METADATA_ENTRY \
+    ((const OverworldWildSpawnMetadataOverlayEntry *)(OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR \
+        + sizeof(OverworldWildBehaviorOverlayEntry) \
+        + sizeof(OverworldWildEncounterLookupDataEntry) \
+        + sizeof(OverworldWildCustomJumpShadowEntry) \
+        + sizeof(OverworldWildCaptureUtilitiesEntry)))
+#define OVERWORLD_WILD_LEARNSET_CACHE_ENTRY \
+    ((const OverworldWildLearnsetCacheOverlayEntry *)(OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR \
+        + sizeof(OverworldWildBehaviorOverlayEntry) \
+        + sizeof(OverworldWildEncounterLookupDataEntry) \
+        + sizeof(OverworldWildCustomJumpShadowEntry) \
+        + sizeof(OverworldWildCaptureUtilitiesEntry) \
+        + sizeof(OverworldWildSpawnMetadataOverlayEntry)))
+#define OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY \
+    ((const OverworldWildOverlapResolverEntry *) \
+        OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY_ADDR)
+#define OVERWORLD_WILD_PERSONAL_CACHE_ENTRY \
+    ((const OverworldWildPersonalCacheOverlayEntry *) \
+        OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR)
 
 #endif // OVERWORLD_WILD_BEHAVIOR_DATA_H

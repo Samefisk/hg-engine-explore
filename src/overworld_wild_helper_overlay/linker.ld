@@ -15,6 +15,20 @@ SECTIONS {
                 . = ALIGN(4);
                 KEEP(*(.overworld_wild_helper_entry))
                 . = ALIGN(4);
+                KEEP(*(.overworld_wild_helper_validate))
+                . = ALIGN(4);
+                ASSERT(. <= ORIGIN(rom) + 0xF8,
+                    "overworld wild helper validator overlaps flee fallback ABI");
+                . = ORIGIN(rom) + 0xF8;
+                KEEP(*(.overworld_wild_helper_flee_fallback_entry))
+                ASSERT(gOverworldWildHelperFleeFallbackEntry
+                        == ORIGIN(rom) + 0xF8,
+                    "overworld wild helper flee fallback ABI moved");
+                ASSERT(. <= ORIGIN(rom) + 0x100,
+                    "overworld wild helper flee fallback exceeds ABI gap");
+                . = ORIGIN(rom) + 0x100;
+                KEEP(*(.overworld_wild_helper_lifecycle))
+                . = ALIGN(4);
                 *(.init)
                 *(.text)
                 *(.ctors)

@@ -244,7 +244,7 @@ $(foreach folder, $(CODE_BUILD_DIRS), $(eval $(call FOLDER_CREATE_DEFINE,$(folde
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
 $1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS)) -c $2 -o $1
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d
@@ -278,6 +278,20 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(MAKE) move_narc
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
 	$(NARCHIVE) create $(FILESYS)/a/0/2/8 $(BUILD)/a028/ -nf
+	$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py \
+		--source src/pokemon_storage_system.c \
+		--config include/config.h \
+		--save-constants include/constants/save.h \
+		--party-header include/party_menu.h \
+		--arm9 $(BASE)/arm9.bin \
+		--linker-script rom.ld \
+		--hooks hooks \
+		--linked-object $(LINK) \
+		--core-binary $(OUTPUT) \
+		--packaged-overlay129 $(BASE)/overlay/overlay_0129.bin \
+		--overlay-table $(BASE)/overarm9.bin
+	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
+		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
 	@echo "Making ROM..."
 	$(NDSTOOL) -c $(BUILDROM) -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
 	@echo "Done.  See output $(BUILDROM)."
@@ -471,6 +485,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "overworld wild encounter lookup:"
 	cp $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET)
+
+	@echo "overworld wild spawn metadata:"
+	cp $(OVERWORLD_WILD_SPAWN_METADATA_BIN) $(OVERWORLD_WILD_SPAWN_METADATA_TARGET)
 
 	@echo "species to ow gfx table:"
 	cp $(SPECIES_TO_OW_GFX_BIN) $(SPECIES_TO_OW_GFX_TARGET)

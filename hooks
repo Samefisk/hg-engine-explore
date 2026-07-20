@@ -25,7 +25,7 @@ arm9 PokeIconIndexGetByMonsNumber 080741BC 3
 arm9 PokeIconCgxPatternGet 080742CC 1
 arm9 IconPalGet 08074364 2
 arm9 ItemDataTableLoad 08078138 1
-arm9 CreateBoxMonData 0206DED0
+arm9 CreateBoxMonData 0206DED0 reentrant
 arm9 LoadEggMoves 0806C488 2
 #arm9 InheritMoves 0206C510 3 # come back later for egg move expansion
 arm9 GetMonEvolution 02070E34
@@ -544,7 +544,6 @@ arm9 ItemToMachineMoveIndex 0207804C 1
 arm9 ItemToMachineMove 02078000 1
 arm9 MoveIsHM 02078024 1
 arm9 GetMonMachineMoveCompat 0207224C 2
-arm9 LoadLevelUpLearnset_HandleAlternateForm 02071FC8 3
 0015 Bag_PrintMachineMoveLabel 021FE914
 0001 GetLearnableTutorMoves 02202D40 3
 arm9 PartyMenu_LearnMoveToSlot 0208254C 3

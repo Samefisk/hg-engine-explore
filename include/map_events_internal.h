@@ -220,6 +220,7 @@ typedef struct OVERWORLD_REQUEST_FLAGS {
 
 
 LocalMapObject * LONG_CALL GetMapObjectByID(void *arr, int id);
+BOOL LONG_CALL sub_0203DC64(FieldSystem *fieldSystem, LocalMapObject **localMapObject);
 int LONG_CALL MapObject_GetMovement(LocalMapObject *mapObject);
 u32 LONG_CALL MapObject_GetGfxID(LocalMapObject *mapObject);
 void LONG_CALL MapObject_SetGfxID(LocalMapObject *mapObject, u32 spriteId);
@@ -253,7 +254,10 @@ void LONG_CALL MapObject_SetCurrentY(LocalMapObject* object, u32 y);
 void LONG_CALL MapObject_SetCurrentX(LocalMapObject* object, u32 x);
 void LONG_CALL MapObject_SetFlag29(LocalMapObject* object, BOOL set);
 void LONG_CALL sub_02069DC8(LocalMapObject *mapObject, BOOL enable_bit);
+void *LONG_CALL ov01_021F72DC(LocalMapObject *mapObject);
 void LONG_CALL ov01_021F9048(LocalMapObject* map_object);
+const u16 *LONG_CALL ov01_021F9318(LocalMapObject *mapObject);
+void LONG_CALL sub_020603F8(LocalMapObject *mapObject, u8 previousBehavior, u8 currentBehavior, const u16 *descriptor);
 BOOL LONG_CALL ov01_02203A48(LocalMapObject *mapObject, int emoteId);
 void LONG_CALL ov01_02203AB4(FieldSystem *fieldSystem, LocalMapObject *mapObject, int emoteId);
 void *LONG_CALL ov01_021F1450(void *effectContext, int effectId);
@@ -372,6 +376,8 @@ void LONG_CALL MapObject_ClearSingleMovementActive(LocalMapObject *obj);
 BOOL LONG_CALL MapObject_IsMovementDirectionBlocked(LocalMapObject *obj, u32 direction);
 void LONG_CALL MapObject_StartMovementCommandInternal(LocalMapObject *obj, u32 movementCommand);
 void LONG_CALL MapObject_StartMovementCommand(LocalMapObject *obj, u32 movementCommand);
+BOOL LONG_CALL MapObject_ClearHeldMovementIfActive(LocalMapObject *obj);
+void LONG_CALL MapObject_ClearHeldMovement(LocalMapObject *obj);
 u32 LONG_CALL MapObject_MovementCommandFromDirection(u32 direction, u32 movementCommand);
 BOOL LONG_CALL MapObject_UpdateMovementCommand(LocalMapObject *obj);
 BOOL LONG_CALL MapObject_RefreshHeightFromTerrain(LocalMapObject *obj);

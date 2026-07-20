@@ -185,11 +185,11 @@
 #define reg_CP_DIVREM_RESULT       (*(REGType64v *)0x40002A8)
 #define reg_CP_DIVREM_RESULT_L     (*(u32 *)0x40002A8)
 #define reg_CP_DIVREM_RESULT_H     (*(u32 *)0x40002Ac)
-#define reg_CP_SQRTCNT             (*(u16 *)0x40002B0)
-#define reg_CP_SQRT_RESULT         (*(u32 *)0x40002B4)
+#define reg_CP_SQRTCNT             (*(vu16 *)0x40002B0)
+#define reg_CP_SQRT_RESULT         (*(vu32 *)0x40002B4)
 #define reg_CP_SQRT_PARAM          (*(REGType64v *)0x40002B8)
-#define reg_CP_SQRT_PARAM_L        (*(u32 *)0x40002B8)
-#define reg_CP_SQRT_PARAM_H        (*(u32 *)0x40002Bc)
+#define reg_CP_SQRT_PARAM_L        (*(vu32 *)0x40002B8)
+#define reg_CP_SQRT_PARAM_H        (*(vu32 *)0x40002Bc)
 
 #define reg_GX_POWCNT              (*(u16 *)0x4000304)
 
