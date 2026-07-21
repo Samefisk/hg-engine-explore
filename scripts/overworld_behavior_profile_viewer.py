@@ -32,6 +32,7 @@ import sys
 import threading
 import time
 import wave
+from collections import OrderedDict
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -189,6 +190,9 @@ DATA_JSON_CACHE = {
     "gzip": b"",
     "etag": "",
 }
+MACRO_LABEL_CACHE_LOCK = threading.Lock()
+MACRO_LABEL_CACHE_MAX_CONTEXTS = 4
+MACRO_LABEL_CACHES: OrderedDict[int, tuple[dict[str, int], dict[tuple[str, int | None, str | None], str]]] = OrderedDict()
 
 PROFILE_FIELDS = [
     "chillState",
@@ -882,7 +886,78 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveCircleRadius",
 }
 
+# Override profiles may transform numeric byte fields produced by earlier
+# layers. Signed values adjust the stored byte, while /< and /> impose an
+# inclusive lower or upper bound respectively. Exact values remain unprefixed.
+RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(NUMERIC_PROFILE_FIELDS & set(OVERRIDE_SYMBOL_BY_FIELD))
+BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
+    "chillSpeed",
+    "attentiveSpeed",
+    "tiredSpeed",
+    "range",
+    "hopPause",
+    "teleportTime",
+    "teleportPause",
+    "hopTime",
+    "hopSpinSpeed",
+    "spawnHopTime",
+    "attentiveHopSpinSpeed",
+    "ramAccelerationSteps",
+    "attentiveHopPause",
+    "attentiveTeleportTime",
+    "attentiveTeleportPause",
+    "attentiveRamAccelerationSteps",
+    "tiredHopPause",
+    "tiredTeleportTime",
+    "tiredTeleportPause",
+    "tiredRamAccelerationSteps",
+    "attentiveChaseBoostDistance",
+    "attentiveChaseBoostSpeed",
+    "attentiveCircleRadius",
+})
+MOVEMENT_SPEED_FIELDS = frozenset({"chillSpeed", "attentiveSpeed", "tiredSpeed"})
+RELATIVE_OVERRIDE_DELTA_MIN = -127
+RELATIVE_OVERRIDE_DELTA_MAX = 127
+RELATIVE_OVERRIDE_RAW_RE = re.compile(r"^[+-]\d+$")
+AT_LEAST_OVERRIDE_RAW_RE = re.compile(r"^/<(\d+)$")
+AT_MOST_OVERRIDE_RAW_RE = re.compile(r"^/>(\d+)$")
+
+
+def is_relative_override_raw(field: str, raw: str) -> bool:
+    return field in RELATIVE_OVERRIDE_PROFILE_FIELDS and RELATIVE_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+
+
+def is_at_least_override_raw(field: str, raw: str) -> bool:
+    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and AT_LEAST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+
+
+def is_at_most_override_raw(field: str, raw: str) -> bool:
+    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and AT_MOST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+
+
+def is_numeric_override_operator_raw(field: str, raw: str) -> bool:
+    return is_relative_override_raw(field, raw) or is_at_least_override_raw(field, raw) or is_at_most_override_raw(field, raw)
+
+
+def relative_override_fields_from_raws(profile_raws: dict[str, str]) -> set[str]:
+    return {
+        field
+        for field, raw in profile_raws.items()
+        if is_relative_override_raw(field, raw)
+    }
+
+
+def at_least_override_fields_from_raws(profile_raws: dict[str, str]) -> set[str]:
+    return {field for field, raw in profile_raws.items() if is_at_least_override_raw(field, raw)}
+
+
+def at_most_override_fields_from_raws(profile_raws: dict[str, str]) -> set[str]:
+    return {field for field, raw in profile_raws.items() if is_at_most_override_raw(field, raw)}
+
 NUMERIC_PROFILE_FIELD_OPTION_MAX = {
+    "chillSpeed": 4,
+    "attentiveSpeed": 4,
+    "tiredSpeed": 4,
     "alertTime": 255,
     "alertChance": 100,
     "hopMinDistance": 12,
@@ -898,10 +973,19 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "spawnDestinationMinDistance": 8,
     "spawnDestinationMaxDistance": 8,
     "ramAccelerationSteps": 32,
-    "ramMaxSpeed": 4,
+    # Shared storage: Movement Chain reads this as a 0..255-frame pause, while
+    # RAM consumers independently clamp it to their 0..4 speed tier.
+    "ramMaxSpeed": 255,
     "attentiveChaseBoostDistance": 32,
     "attentiveChaseBoostSpeed": 4,
     "attentiveCircleRadius": 8,
+}
+NUMERIC_PROFILE_FIELD_OPTION_MIN = {
+    "chillSpeed": 1,
+    "attentiveSpeed": 1,
+    "tiredSpeed": 1,
+    "spawnDestinationMinDistance": 1,
+    "spawnDestinationMaxDistance": 1,
 }
 
 for _profile_field, _source_field in {
@@ -921,6 +1005,11 @@ for _profile_field, _source_field in {
     "tiredRamMaxSpeed": "ramMaxSpeed",
 }.items():
     NUMERIC_PROFILE_FIELD_OPTION_MAX[_profile_field] = NUMERIC_PROFILE_FIELD_OPTION_MAX[_source_field]
+
+# Unlike the shared chill-state byte above, these state-specific fields are
+# exclusively RAM speed tiers.
+NUMERIC_PROFILE_FIELD_OPTION_MAX["attentiveRamMaxSpeed"] = 4
+NUMERIC_PROFILE_FIELD_OPTION_MAX["tiredRamMaxSpeed"] = 4
 
 
 class ParseError(RuntimeError):
@@ -1235,7 +1324,7 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
     return " ".join(part.capitalize() for part in text.split())
 
 
-def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
+def _uncached_macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     label_overrides = {
         "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
@@ -1291,6 +1380,36 @@ def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[
     return humanize_symbol(symbol)
 
 
+def macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
+    """Resolve a display label once per parsed macro table.
+
+    A workspace snapshot asks for the same few hundred labels tens of thousands
+    of times while expanding per-species profile data.  The parsed macro table
+    is immutable for that snapshot, so an identity-scoped cache avoids repeating
+    the linear prefix/value search without ever sharing labels across revisions.
+    """
+
+    context_key = id(macros)
+    label_key = (symbol, value, field)
+    with MACRO_LABEL_CACHE_LOCK:
+        context = MACRO_LABEL_CACHES.get(context_key)
+        if context is not None and context[0] is macros and label_key in context[1]:
+            MACRO_LABEL_CACHES.move_to_end(context_key)
+            return context[1][label_key]
+
+    label = _uncached_macro_label(symbol, value, field, macros)
+    with MACRO_LABEL_CACHE_LOCK:
+        context = MACRO_LABEL_CACHES.get(context_key)
+        if context is None or context[0] is not macros:
+            context = (macros, {})
+            MACRO_LABEL_CACHES[context_key] = context
+        context[1][label_key] = label
+        MACRO_LABEL_CACHES.move_to_end(context_key)
+        while len(MACRO_LABEL_CACHES) > MACRO_LABEL_CACHE_MAX_CONTEXTS:
+            MACRO_LABEL_CACHES.popitem(last=False)
+    return label
+
+
 def make_value(raw: str, field: str | None, macros: dict[str, int]) -> dict:
     raw = clean_token(raw)
     value = None
@@ -1325,6 +1444,12 @@ def numeric(value: dict) -> int | None:
 def canonical_profile_value_raw(value: dict, field: str) -> str:
     evaluated = numeric(value)
     if field in NUMERIC_PROFILE_FIELDS and evaluated is not None:
+        if is_relative_override_raw(field, value.get("raw", "")):
+            return f"{evaluated:+d}"
+        if is_at_least_override_raw(field, value.get("raw", "")):
+            return f"/<{evaluated}"
+        if is_at_most_override_raw(field, value.get("raw", "")):
+            return f"/>{evaluated}"
         return str(evaluated)
     return value.get("raw", "")
 
@@ -1333,23 +1458,65 @@ def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for field, value in profile.items():
         if field in NUMERIC_PROFILE_FIELDS and numeric(value) is not None:
-            raw = str(numeric(value))
+            if is_relative_override_raw(field, value.get("raw", "")):
+                raw = f"{numeric(value):+d}"
+            elif is_at_least_override_raw(field, value.get("raw", "")):
+                raw = f"/<{numeric(value)}"
+            elif is_at_most_override_raw(field, value.get("raw", "")):
+                raw = f"/>{numeric(value)}"
+            else:
+                raw = str(numeric(value))
             result[field] = {**value, "raw": raw, "symbol": None, "label": raw}
         else:
             result[field] = copy.deepcopy(value)
     return result
 
 
-def canonical_profile_change_raw(field: str, raw: str, macros: dict[str, int]) -> str:
+def canonical_profile_change_raw(
+    field: str,
+    raw: str,
+    macros: dict[str, int],
+    *,
+    allow_relative: bool = False,
+) -> str:
     cleaned = clean_token(raw)
     if cleaned == "":
         return ""
     if field not in NUMERIC_PROFILE_FIELDS:
         return cleaned
+    if RELATIVE_OVERRIDE_RAW_RE.fullmatch(cleaned):
+        if not allow_relative:
+            raise ValueError(f"relative values are only valid in override profiles: {field}")
+        if field not in RELATIVE_OVERRIDE_PROFILE_FIELDS:
+            raise ValueError(f"field cannot use a relative override value: {field}")
+        delta = int(cleaned, 10)
+        if delta == 0:
+            return ""
+        if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+            raise ValueError(
+                f"relative override for {field} must be between {RELATIVE_OVERRIDE_DELTA_MIN:+d} and {RELATIVE_OVERRIDE_DELTA_MAX:+d}"
+            )
+        return f"{delta:+d}"
+    bound_match = AT_LEAST_OVERRIDE_RAW_RE.fullmatch(cleaned) or AT_MOST_OVERRIDE_RAW_RE.fullmatch(cleaned)
+    if bound_match:
+        if not allow_relative:
+            raise ValueError(f"numeric override operators are only valid in override profiles: {field}")
+        if field not in BOUNDED_OVERRIDE_PROFILE_FIELDS:
+            raise ValueError(f"field cannot use a numeric override operator: {field}")
+        threshold = int(bound_match.group(1), 10)
+        maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+        minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+        if threshold < minimum or threshold > maximum:
+            raise ValueError(f"override bound for {field} must be between {minimum} and {maximum}")
+        return f"/{cleaned[1]}{threshold}"
     value = make_value(cleaned, field, macros)
     evaluated = numeric(value)
     if evaluated is None:
         raise ValueError(f"invalid numeric value for {field}: {raw}")
+    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+    if evaluated < minimum or evaluated > maximum:
+        raise ValueError(f"value for {field} must be between {minimum} and {maximum}")
     return str(evaluated)
 
 
@@ -1411,7 +1578,38 @@ def parse_mask(raw: str, macros: dict[str, int], override_fields: dict[str, str]
 
 
 def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
-    if len(items) == 2 and isinstance(items[1], list):
+    relative_mask_raw = "0"
+    relative_mask2_raw = "0"
+    relative_mask3_raw = "0"
+    at_least_mask_raw = "0"
+    at_least_mask2_raw = "0"
+    at_least_mask3_raw = "0"
+    at_most_mask_raw = "0"
+    at_most_mask2_raw = "0"
+    at_most_mask3_raw = "0"
+    if len(items) == 13 and isinstance(items[3], list):
+        mask_raw = str(items[0])
+        mask2_raw = str(items[1])
+        mask3_raw = str(items[2])
+        profile_items = items[3]
+        relative_mask_raw = str(items[4])
+        relative_mask2_raw = str(items[5])
+        relative_mask3_raw = str(items[6])
+        at_least_mask_raw = str(items[7])
+        at_least_mask2_raw = str(items[8])
+        at_least_mask3_raw = str(items[9])
+        at_most_mask_raw = str(items[10])
+        at_most_mask2_raw = str(items[11])
+        at_most_mask3_raw = str(items[12])
+    elif len(items) == 7 and isinstance(items[3], list):
+        mask_raw = str(items[0])
+        mask2_raw = str(items[1])
+        mask3_raw = str(items[2])
+        profile_items = items[3]
+        relative_mask_raw = str(items[4])
+        relative_mask2_raw = str(items[5])
+        relative_mask3_raw = str(items[6])
+    elif len(items) == 2 and isinstance(items[1], list):
         mask_raw = str(items[0])
         mask2_raw = "0"
         mask3_raw = "0"
@@ -1431,6 +1629,69 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     mask = parse_mask(mask_raw, macros, OVERRIDE1_FIELDS)
     mask2 = parse_mask(mask2_raw, macros, OVERRIDE2_FIELDS)
     mask3 = parse_mask(mask3_raw, macros, OVERRIDE3_FIELDS)
+    relative_mask = parse_mask(relative_mask_raw, macros, OVERRIDE1_FIELDS)
+    relative_mask2 = parse_mask(relative_mask2_raw, macros, OVERRIDE2_FIELDS)
+    relative_mask3 = parse_mask(relative_mask3_raw, macros, OVERRIDE3_FIELDS)
+    at_least_mask = parse_mask(at_least_mask_raw, macros, OVERRIDE1_FIELDS)
+    at_least_mask2 = parse_mask(at_least_mask2_raw, macros, OVERRIDE2_FIELDS)
+    at_least_mask3 = parse_mask(at_least_mask3_raw, macros, OVERRIDE3_FIELDS)
+    at_most_mask = parse_mask(at_most_mask_raw, macros, OVERRIDE1_FIELDS)
+    at_most_mask2 = parse_mask(at_most_mask2_raw, macros, OVERRIDE2_FIELDS)
+    at_most_mask3 = parse_mask(at_most_mask3_raw, macros, OVERRIDE3_FIELDS)
+    profile = parse_profile(profile_items, macros)
+    mask_fields = {bit.get("field") for parsed in (mask, mask2, mask3) for bit in parsed["bits"] if bit.get("field")}
+    relative_fields = {bit.get("field") for parsed in (relative_mask, relative_mask2, relative_mask3) for bit in parsed["bits"] if bit.get("field")}
+    at_least_fields = {bit.get("field") for parsed in (at_least_mask, at_least_mask2, at_least_mask3) for bit in parsed["bits"] if bit.get("field")}
+    at_most_fields = {bit.get("field") for parsed in (at_most_mask, at_most_mask2, at_most_mask3) for bit in parsed["bits"] if bit.get("field")}
+    for operator_name, operator_fields, supported_fields in (
+        ("relative", relative_fields, RELATIVE_OVERRIDE_PROFILE_FIELDS),
+        ("at-least", at_least_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        ("at-most", at_most_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
+    ):
+        inactive = sorted(operator_fields - mask_fields)
+        if inactive:
+            raise ParseError(f"{operator_name} override masks include inactive fields: {', '.join(inactive)}")
+        unsupported = sorted(operator_fields - supported_fields)
+        if unsupported:
+            raise ParseError(f"{operator_name} override masks include non-numeric fields: {', '.join(unsupported)}")
+    overlap = (relative_fields & at_least_fields) | (relative_fields & at_most_fields) | (at_least_fields & at_most_fields)
+    if overlap:
+        raise ParseError(f"override operator masks overlap for: {', '.join(sorted(overlap))}")
+    for field in relative_fields:
+        stored_raw = clean_token(profile[field].get("raw", ""))
+        explicit_delta = re.fullmatch(r"OW_WILD_BEHAVIOR_RELATIVE\(\s*([+-]?\d+)\s*\)", stored_raw)
+        stored_value = numeric(profile[field])
+        delta = int(explicit_delta.group(1), 10) if explicit_delta else (
+            None if stored_value is None else ((stored_value + 128) % 256) - 128
+        )
+        if delta is None or delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+            raise ParseError(f"relative override for {field} is outside signed byte range")
+        profile[field]["raw"] = f"{delta:+d}"
+        profile[field]["value"] = delta
+        profile[field]["label"] = f"{delta:+d}"
+        profile[field]["symbol"] = None
+    for operator, fields, wrapper in (
+        ("/<", at_least_fields, "OW_WILD_BEHAVIOR_AT_LEAST"),
+        ("/>", at_most_fields, "OW_WILD_BEHAVIOR_AT_MOST"),
+    ):
+        for field in fields:
+            stored_raw = clean_token(profile[field].get("raw", ""))
+            explicit_threshold = re.fullmatch(rf"{wrapper}\(\s*(\d+)\s*\)", stored_raw)
+            canonical_threshold = re.fullmatch(rf"{re.escape(operator)}(\d+)", stored_raw)
+            stored_value = numeric(profile[field])
+            threshold = (
+                int(explicit_threshold.group(1), 10)
+                if explicit_threshold
+                else (int(canonical_threshold.group(1), 10) if canonical_threshold else stored_value)
+            )
+            maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+            minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+            if threshold is None or threshold < minimum or threshold > maximum:
+                raise ParseError(f"{operator} override for {field} must be between {minimum} and {maximum}")
+            profile[field]["raw"] = f"{operator}{threshold}"
+            profile[field]["value"] = threshold
+            profile[field]["label"] = f"{operator}{threshold}"
+            profile[field]["symbol"] = None
     labels = mask["labels"] + mask2["labels"] + mask3["labels"]
     extra_raws = [extra["displayRaw"] for extra in (mask2, mask3) if extra["displayRaw"] != "0"]
     mask_raw_summary = mask["displayRaw"] if not extra_raws else " / ".join([mask["displayRaw"], *extra_raws])
@@ -1438,9 +1699,21 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         "mask": mask,
         "mask2": mask2,
         "mask3": mask3,
+        "relativeMask": relative_mask,
+        "relativeMask2": relative_mask2,
+        "relativeMask3": relative_mask3,
+        "relativeFields": sorted(relative_fields),
+        "atLeastMask": at_least_mask,
+        "atLeastMask2": at_least_mask2,
+        "atLeastMask3": at_least_mask3,
+        "atLeastFields": sorted(at_least_fields),
+        "atMostMask": at_most_mask,
+        "atMostMask2": at_most_mask2,
+        "atMostMask3": at_most_mask3,
+        "atMostFields": sorted(at_most_fields),
         "maskLabels": labels,
         "maskRaw": mask_raw_summary,
-        "profile": parse_profile(profile_items, macros),
+        "profile": profile,
     }
 
 
@@ -1468,7 +1741,7 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
     expected_member_start = 0
     profiles = []
     for order, entry in enumerate(entries, 1):
-        if len(entry) == 8 and isinstance(entry[0], list):
+        if len(entry) in {8, 11, 17} and isinstance(entry[0], list):
             member_start = numeric(make_value(str(entry[1]), None, macros))
             member_count = numeric(make_value(str(entry[2]), None, macros))
             target_mode = make_value(str(entry[3]), None, macros)
@@ -1604,6 +1877,10 @@ def parse_behavior_overrides(source: str, macros: dict[str, int], group_labels: 
                 behavior = parse_behavior_override([entry[1], entry[2], entry[3]], macros)
             elif len(entry) == 5:
                 behavior = parse_behavior_override([entry[1], entry[2], entry[3], entry[4]], macros)
+            elif len(entry) == 8:
+                behavior = parse_behavior_override(entry[1:], macros)
+            elif len(entry) == 14:
+                behavior = parse_behavior_override(entry[1:], macros)
             else:
                 raise ParseError("behavior override initializer shape changed")
             override = {
@@ -1910,7 +2187,10 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
             for symbol in profile_option_symbols_for_prefix(field, macros):
                 add_value_option(options, seen, symbol, field, macros)
         elif field in NUMERIC_PROFILE_FIELDS:
-            for value in range(0, NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64) + 1):
+            for value in range(
+                NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0),
+                NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64) + 1,
+            ):
                 add_value_option(options, seen, str(value), field, macros)
         if field not in CANONICAL_PROFILE_FIELD_RAWS:
             for profile in class_profiles:
@@ -1998,6 +2278,9 @@ def clone_profile(profile: dict[str, dict]) -> dict[str, dict]:
 
 def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
     changes = []
+    relative_fields = set(override.get("relativeFields") or [])
+    at_least_fields = set(override.get("atLeastFields") or [])
+    at_most_fields = set(override.get("atMostFields") or [])
     for bit in (
         override["mask"]["bits"]
         + override.get("mask2", {"bits": []})["bits"]
@@ -2008,6 +2291,30 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
             continue
         before = profile[field]
         after = copy.deepcopy(override["profile"][field])
+        if field in relative_fields:
+            before_numeric = numeric(before)
+            delta = numeric(after)
+            if before_numeric is None or delta is None:
+                continue
+            field_maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+            field_minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+            resolved = max(field_minimum, min(field_maximum, before_numeric + delta))
+            after = make_value(str(resolved), field, {})
+            after["label"] = str(resolved)
+        elif field in at_least_fields or field in at_most_fields:
+            before_numeric = numeric(before)
+            threshold = numeric(after)
+            if before_numeric is None or threshold is None:
+                continue
+            field_maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+            if field in at_least_fields:
+                resolved = max(before_numeric, threshold)
+            else:
+                resolved = min(before_numeric, threshold)
+            field_minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+            resolved = max(field_minimum, min(field_maximum, resolved))
+            after = make_value(str(resolved), field, {})
+            after["label"] = str(resolved)
         profile[field] = after
         changes.append(
             {
@@ -2015,6 +2322,10 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
                 "label": FIELD_LABELS[field],
                 "before": before,
                 "after": after,
+                "relative": field in relative_fields,
+                "delta": copy.deepcopy(override["profile"][field]) if field in relative_fields else None,
+                "operator": "atLeast" if field in at_least_fields else ("atMost" if field in at_most_fields else ("relative" if field in relative_fields else "absolute")),
+                "operand": copy.deepcopy(override["profile"][field]) if field in at_least_fields or field in at_most_fields else None,
             }
         )
     return changes
@@ -2033,6 +2344,18 @@ def behavior_override_field_keys(behavior: dict) -> list[str]:
             seen.add(field)
             fields.append(field)
     return fields
+
+
+def behavior_override_relative_field_keys(behavior: dict) -> list[str]:
+    return list(behavior.get("relativeFields") or [])
+
+
+def behavior_override_at_least_field_keys(behavior: dict) -> list[str]:
+    return list(behavior.get("atLeastFields") or [])
+
+
+def behavior_override_at_most_field_keys(behavior: dict) -> list[str]:
+    return list(behavior.get("atMostFields") or [])
 
 
 def behavior_override_profile_signature(behavior: dict) -> list[tuple[str, str]]:
@@ -2117,12 +2440,6 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             }
         )
 
-    if numeric(profile["attentiveSpeed"]) == 0:
-        set_field("attentiveSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
-    if numeric(profile["chillSpeed"]) == 0:
-        set_field("chillSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT")
-    if numeric(profile["tiredSpeed"]) == 0:
-        set_field("tiredSpeed", profile["chillSpeed"]["raw"])
     for allow_field, min_field, max_field in (
         ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
         ("attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"),
@@ -2133,18 +2450,14 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
         }:
             set_field(allow_field, "OW_WILD_BEHAVIOR_BOOL_YES")
-        if numeric(profile[min_field]) == 0:
-            set_field(min_field, "1")
-        if numeric(profile[max_field]) == 0:
-            set_field(max_field, profile[min_field]["raw"])
         if (numeric(profile[max_field]) or 0) < (numeric(profile[min_field]) or 0):
             set_field(max_field, profile[min_field]["raw"])
-    if numeric(profile["spawnDestinationMinDistance"]) == 0:
+    if (numeric(profile["spawnDestinationMinDistance"]) or 0) < 1:
         set_field("spawnDestinationMinDistance", "1")
     elif (numeric(profile["spawnDestinationMinDistance"]) or 0) > 8:
         set_field("spawnDestinationMinDistance", "8")
-    if numeric(profile["spawnDestinationMaxDistance"]) == 0:
-        set_field("spawnDestinationMaxDistance", "5")
+    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < 1:
+        set_field("spawnDestinationMaxDistance", "1")
     elif (numeric(profile["spawnDestinationMaxDistance"]) or 0) > 8:
         set_field("spawnDestinationMaxDistance", "8")
     if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
@@ -2164,15 +2477,6 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
         }:
             set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_NO")
-    for teleport_time_field, teleport_pause_field in (
-        ("teleportTime", "teleportPause"),
-        ("attentiveTeleportTime", "attentiveTeleportPause"),
-        ("tiredTeleportTime", "tiredTeleportPause"),
-    ):
-        if numeric(profile[teleport_time_field]) == 0:
-            set_field(teleport_time_field, "OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES")
-        if numeric(profile[teleport_pause_field]) == 0:
-            set_field(teleport_pause_field, "OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES")
     if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
         set_field("tiredState", "OW_WILD_BEHAVIOR_KIND_ASLEEP")
         set_field("stamina", "1")
@@ -4200,6 +4504,7 @@ def build_data(
 
     for override in variable_overrides:
         order = override["order"]
+        runtime_owned_override = order - 1 == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -1)
         override_name = override_profile_names.get(order, "")
         override_name = override_name or f"Override #{order}: {override['summary']}"
         matching_count = sum(
@@ -4219,8 +4524,10 @@ def build_data(
                 "symbol": f"OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_{order}",
                 "name": override_name,
                 "customName": override_profile_names.get(order, ""),
-                "canRename": True,
-                "canDelete": True,
+                "canRename": not runtime_owned_override,
+                "canDelete": not runtime_owned_override,
+                "relativeOverridesAllowed": True,
+                "numericOverrideOperatorsAllowed": True,
                 "override": override["behavior"],
                 "profile": profile_numeric_view(override_profile),
                 "primitives": {},
@@ -4255,6 +4562,22 @@ def build_data(
             for field in PROFILE_FIELDS
         ],
         "overrideFieldKeys": sorted(OVERRIDE_SYMBOL_BY_FIELD),
+        "numericProfileFieldKeys": sorted(NUMERIC_PROFILE_FIELDS),
+        "relativeOverrideFieldKeys": sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS),
+        "numericOverrideOperatorFieldKeys": sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS),
+        "boundedOverrideOperatorFieldKeys": sorted(BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        "numericOverrideOperandMaximums": {
+            field: NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+            for field in sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS)
+        },
+        "numericOverrideOperandMinimums": {
+            field: 1
+            for field in sorted(MOVEMENT_SPEED_FIELDS)
+        },
+        "relativeOverrideDeltaRange": {
+            "min": RELATIVE_OVERRIDE_DELTA_MIN,
+            "max": RELATIVE_OVERRIDE_DELTA_MAX,
+        },
         "counts": {
             "species": len(assignments),
             "classes": len(classes),
@@ -4312,6 +4635,8 @@ def invalidate_data_cache() -> None:
         DATA_JSON_CACHE.update({"key": None, "body": b"", "gzip": b"", "etag": ""})
     cached_icon_paths.cache_clear()
     cached_render_icon_png.cache_clear()
+    with MACRO_LABEL_CACHE_LOCK:
+        MACRO_LABEL_CACHES.clear()
 
 
 def build_workspace_data() -> dict:
@@ -4494,6 +4819,21 @@ def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
     value_indent = indent + "    "
     values = ",\n".join(f"{value_indent}{raws[field]}" for field in PROFILE_FIELDS)
     return f"{{\n{values},\n{indent}}}"
+
+
+def override_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
+    """Make numeric operator storage explicit and reviewable in C initializers."""
+    result = {}
+    for field, raw in raws.items():
+        if is_relative_override_raw(field, raw):
+            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({int(raw, 10):+d})"
+        elif is_at_least_override_raw(field, raw):
+            result[field] = f"OW_WILD_BEHAVIOR_AT_LEAST({int(raw[2:], 10)})"
+        elif is_at_most_override_raw(field, raw):
+            result[field] = f"OW_WILD_BEHAVIOR_AT_MOST({int(raw[2:], 10)})"
+        else:
+            result[field] = raw
+    return result
 
 
 def format_mask_expression(mask_fields: set[str], indent: str, word: int = 1) -> str:
@@ -4809,6 +5149,9 @@ def consolidate_named_override_profiles(raw_source: str, preferred_profile_order
             raw_values(profile["behavior"]["profile"]),
             profile_entry_indent,
             profile["name"],
+            relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
+            at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
+            at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
         )
         for profile in kept_profiles
     )
@@ -4840,6 +5183,19 @@ def write_behavior_data_source(raw_source: str, raw_header: str | None = None) -
     counts = behavior_blob_counts(raw_source)
     if raw_header is None:
         raw_header = BEHAVIOR_DATA_HEADER.read_text()
+    if "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON" in raw_header:
+        follower_orders = [
+            order
+            for order, name in parse_override_profile_entry_names(raw_source).items()
+            if name.casefold() == "follower pokemon"
+        ]
+        if len(follower_orders) != 1:
+            raise ParseError("runtime-owned Follower Pokemon override must exist exactly once")
+        raw_header = replace_define_value(
+            raw_header,
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON",
+            follower_orders[0] - 1,
+        )
     BEHAVIOR_DATA_SOURCE.write_text(raw_source)
     BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(raw_header, counts))
     invalidate_data_cache()
@@ -5288,15 +5644,31 @@ def format_behavior_override_rule(
     profile_raws: dict[str, str],
     indent: str = "    ",
     name: str = "",
+    relative_fields: set[str] | None = None,
+    at_least_fields: set[str] | None = None,
+    at_most_fields: set[str] | None = None,
 ) -> str:
     inner = indent + "    "
+    relative_fields = relative_fields or set()
+    at_least_fields = at_least_fields or set()
+    at_most_fields = at_most_fields or set()
+    storage_raws = override_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
-        f"{inner}{format_profile_initializer(profile_raws, inner)},\n"
+        f"{inner}{format_profile_initializer(storage_raws, inner)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
         f"{indent}}}"
     )
 
@@ -5306,14 +5678,30 @@ def format_behavior_override_profile(
     profile_raws: dict[str, str],
     indent: str = "    ",
     name: str = "",
+    relative_fields: set[str] | None = None,
+    at_least_fields: set[str] | None = None,
+    at_most_fields: set[str] | None = None,
 ) -> str:
     inner = indent + "    "
+    relative_fields = relative_fields or set()
+    at_least_fields = at_least_fields or set()
+    at_most_fields = at_most_fields or set()
+    storage_raws = override_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
-        f"{inner}{format_profile_initializer(profile_raws, inner)},\n"
+        f"{inner}{format_profile_initializer(storage_raws, inner)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
         f"{indent}}}"
     )
 
@@ -5327,6 +5715,9 @@ def format_behavior_override_member_profile(
     profile_raws: dict[str, str],
     indent: str = "    ",
     name: str = "",
+    relative_fields: set[str] | None = None,
+    at_least_fields: set[str] | None = None,
+    at_most_fields: set[str] | None = None,
 ) -> str:
     mode_symbol = {
         "disabled": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED",
@@ -5334,6 +5725,10 @@ def format_behavior_override_member_profile(
         "all": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL",
     }[target_mode]
     inner = indent + "    "
+    relative_fields = relative_fields or set()
+    at_least_fields = at_least_fields or set()
+    at_most_fields = at_most_fields or set()
+    storage_raws = override_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
@@ -5343,7 +5738,16 @@ def format_behavior_override_member_profile(
         f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
-        f"{inner}{format_profile_initializer(profile_raws, inner)},\n"
+        f"{inner}{format_profile_initializer(storage_raws, inner)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(relative_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_least_fields, inner, 3)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
+        f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
         f"{indent}}}"
     )
 
@@ -5558,6 +5962,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
     macros.update(terrain_values)
     macros.update(destination_values)
     valid_species = {entry["symbol"] for entry in parse_species(expressions, macros, species_order)}
+    runtime_owned_override_order = macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -2) + 1
+    if runtime_owned_override_order in removals or runtime_owned_override_order in renames:
+        raise ValueError("the runtime-owned Follower Pokemon override cannot be renamed or deleted")
 
     class_profiles = [
         parse_profile(entry, macros)
@@ -5569,12 +5976,12 @@ def apply_profile_override_changes(body: bytes) -> dict:
     valid_options = valid_change_options(macros, class_profiles)
     for addition in additions:
         addition["fields"] = {
-            field: canonical_profile_change_raw(field, raw, macros)
+            field: canonical_profile_change_raw(field, raw, macros, allow_relative=True)
             for field, raw in addition["fields"].items()
         }
     edits = {
         order: {
-            field: canonical_profile_change_raw(field, raw, macros)
+            field: canonical_profile_change_raw(field, raw, macros, allow_relative=True)
             for field, raw in field_changes.items()
         }
         for order, field_changes in edits.items()
@@ -5591,6 +5998,18 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 raise ValueError(f"invalid override field: {field}")
             if field not in OVERRIDE_SYMBOL_BY_FIELD:
                 raise ValueError(f"field cannot be used in override profiles: {field}")
+            if raw and is_numeric_override_operator_raw(field, raw):
+                if is_relative_override_raw(field, raw):
+                    delta = int(raw, 10)
+                    if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+                        raise ValueError(f"invalid relative value for {field}: {raw}")
+                else:
+                    threshold = int(raw[2:], 10)
+                    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+                    minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+                    if threshold < minimum or threshold > maximum:
+                        raise ValueError(f"invalid override bound for {field}: {raw}")
+                continue
             if raw and raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
 
@@ -5672,12 +6091,24 @@ def apply_profile_override_changes(body: bytes) -> dict:
         def behavior_from_fields(fields: dict[str, str]) -> dict:
             profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
             profile_raws.update(fields)
+            relative_fields = relative_override_fields_from_raws(profile_raws)
+            at_least_fields = at_least_override_fields_from_raws(profile_raws)
+            at_most_fields = at_most_override_fields_from_raws(profile_raws)
             return parse_behavior_override(
                 [
                     format_mask_expression(set(fields), "", 1),
                     format_mask_expression(set(fields), "", 2),
                     format_mask_expression(set(fields), "", 3),
                     [profile_raws[field] for field in PROFILE_FIELDS],
+                    format_mask_expression(relative_fields, "", 1),
+                    format_mask_expression(relative_fields, "", 2),
+                    format_mask_expression(relative_fields, "", 3),
+                    format_mask_expression(at_least_fields, "", 1),
+                    format_mask_expression(at_least_fields, "", 2),
+                    format_mask_expression(at_least_fields, "", 3),
+                    format_mask_expression(at_most_fields, "", 1),
+                    format_mask_expression(at_most_fields, "", 2),
+                    format_mask_expression(at_most_fields, "", 3),
                 ],
                 macros,
             )
@@ -5783,6 +6214,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
                     raw_values(profile["behavior"]["profile"]),
                     profile_entry_indent,
                     profile["name"],
+                    relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
+                    at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
+                    at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
                 )
             )
         # Keep the fixed C blob layout standard-compliant even when every
@@ -5900,12 +6334,24 @@ def apply_profile_override_changes(body: bytes) -> dict:
             fields = {field: raw for field, raw in fields.items() if raw}
             profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
             profile_raws.update(fields)
+            relative_fields = relative_override_fields_from_raws(profile_raws)
+            at_least_fields = at_least_override_fields_from_raws(profile_raws)
+            at_most_fields = at_most_override_fields_from_raws(profile_raws)
             profiles_model[profile_order - 1]["behavior"] = parse_behavior_override(
                 [
                     format_mask_expression(set(fields.keys()), "", 1),
                     format_mask_expression(set(fields.keys()), "", 2),
                     format_mask_expression(set(fields.keys()), "", 3),
                     [profile_raws[field] for field in PROFILE_FIELDS],
+                    format_mask_expression(relative_fields, "", 1),
+                    format_mask_expression(relative_fields, "", 2),
+                    format_mask_expression(relative_fields, "", 3),
+                    format_mask_expression(at_least_fields, "", 1),
+                    format_mask_expression(at_least_fields, "", 2),
+                    format_mask_expression(at_least_fields, "", 3),
+                    format_mask_expression(at_most_fields, "", 1),
+                    format_mask_expression(at_most_fields, "", 2),
+                    format_mask_expression(at_most_fields, "", 3),
                 ],
                 macros,
             )
@@ -5923,6 +6369,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
             fields = {field: raw for field, raw in change["fields"].items() if raw}
             profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
             profile_raws.update(fields)
+            relative_fields = relative_override_fields_from_raws(profile_raws)
+            at_least_fields = at_least_override_fields_from_raws(profile_raws)
+            at_most_fields = at_most_override_fields_from_raws(profile_raws)
             profiles_model.append(
                 {
                     "behavior": parse_behavior_override(
@@ -5931,6 +6380,15 @@ def apply_profile_override_changes(body: bytes) -> dict:
                             format_mask_expression(set(fields.keys()), "", 2),
                             format_mask_expression(set(fields.keys()), "", 3),
                             [profile_raws[field] for field in PROFILE_FIELDS],
+                            format_mask_expression(relative_fields, "", 1),
+                            format_mask_expression(relative_fields, "", 2),
+                            format_mask_expression(relative_fields, "", 3),
+                            format_mask_expression(at_least_fields, "", 1),
+                            format_mask_expression(at_least_fields, "", 2),
+                            format_mask_expression(at_least_fields, "", 3),
+                            format_mask_expression(at_most_fields, "", 1),
+                            format_mask_expression(at_most_fields, "", 2),
+                            format_mask_expression(at_most_fields, "", 3),
                         ],
                         macros,
                     ),
@@ -6055,6 +6513,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 raw_values(profile["behavior"]["profile"]),
                 profile_entry_indent,
                 profile["name"],
+                relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
+                at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
+                at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
             )
             for profile in kept_profiles
         )
@@ -6097,7 +6558,15 @@ def apply_profile_override_changes(body: bytes) -> dict:
             if raw:
                 profile_raws[field] = raw
                 mask_fields.add(field)
-        return format_behavior_override_rule(match_raws, mask_fields, profile_raws, name=name)
+        return format_behavior_override_rule(
+            match_raws,
+            mask_fields,
+            profile_raws,
+            name=name,
+            relative_fields=relative_override_fields_from_raws(profile_raws),
+            at_least_fields=at_least_override_fields_from_raws(profile_raws),
+            at_most_fields=at_most_override_fields_from_raws(profile_raws),
+        )
 
     formatted_rules = []
     for index, change in enumerate(additions, 1):
@@ -6167,6 +6636,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
             {**{profile_field: "0" for profile_field in PROFILE_FIELDS}, **fields},
             profile_indent,
             renames.get(order, group_renames.get(override_name, override_name)),
+            relative_fields=relative_override_fields_from_raws(fields),
+            at_least_fields=at_least_override_fields_from_raws(fields),
+            at_most_fields=at_most_override_fields_from_raws(fields),
         )
         replacements.append((entry_span[0], entry_span[1], replacement))
     for order in sorted(set(removals), reverse=True):
@@ -14956,8 +15428,8 @@ HTML = r"""<!doctype html>
       chillAllowedTile2: "Optional second tile type this Chill behavior may target.",
       attentiveAllowedTile2: "Optional second tile type this Active behavior may target.",
       tiredAllowedTile2: "Optional second tile type this Tired behavior may target.",
-      hopTime: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 uses the default 4.",
-      spawnHopTime: "Ticks for the forced off-screen spawn hop. 0 uses the default 4.",
+      hopTime: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
+      spawnHopTime: "Ticks for the forced off-screen spawn hop. 0 is immediate.",
       hopSpinSpeed: "Ticks per 90-degree facing turn during Chill Hop. 0 disables spin. Max 15.",
       attentiveHopSpinSpeed: "Ticks per 90-degree facing turn during Active Hop. 0 disables spin. Max 15.",
       overworldLimit: "Maximum active spawns for this profile or override bucket. 0 is unlimited.",
@@ -17161,7 +17633,7 @@ HTML = r"""<!doctype html>
       if (spawnStateUsesHopTime(spawnStateRaw) || (isOverrideProfile(item) && !spawnStateRaw)) {
         fields.push(profileEditFieldItem(item, "spawnHopTime", {
           className: "profile-suboption-field",
-          hint: "Ticks for the forced off-screen spawn hop. 0 keeps the default 4. Hop turn speed is edited under Chill.",
+          hint: "Ticks for the forced off-screen spawn hop. 0 is immediate. Hop turn speed is edited under Chill.",
         }));
       }
       fields.push(profileFieldItem(SPAWN_DESTINATION_TYPE_FIELD, profileEditSpawnDestinationTypeField(item)));
@@ -17371,7 +17843,7 @@ HTML = r"""<!doctype html>
           }),
           profileEditFieldItem(item, suboptionFields.hopTime, {
             className: "profile-suboption-field",
-            hint: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 keeps the current/default 4.",
+            hint: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
           }),
           profileEditFieldItem(item, suboptionFields.hopSpinSpeed, {
             className: "profile-suboption-field",
@@ -17380,7 +17852,7 @@ HTML = r"""<!doctype html>
           }),
           profileEditFieldItem(item, suboptionFields.hopPause, {
             className: "profile-suboption-field",
-            hint: "Ticks to wait after each Hop before the next movement decision. 0 keeps the existing/default pause.",
+            hint: "Ticks to wait after each Hop before the next movement decision. 0 removes the pause.",
           }),
         );
       }

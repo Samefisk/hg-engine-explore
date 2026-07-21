@@ -69,7 +69,7 @@ class RevisionConflict(ValueError):
     """Raised when an edit was based on an out-of-date source revision."""
 
     def __init__(self, expected: str, current: str):
-        super().__init__("Sources changed since this editor loaded. Reload before saving.")
+        super().__init__("Sources changed since this editor loaded. Rebase pending edits onto the latest revision before saving.")
         self.expected = expected
         self.current = current
 

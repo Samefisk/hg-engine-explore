@@ -1369,16 +1369,16 @@ export function createRoutesController({
     notify(setStatus, "Route and spawn drafts reset.");
   }
 
-  function refresh(nextData = null) {
+  function refresh(nextData = null, { preserveDrafts = false } = {}) {
     model.data = currentData(appState, nextData);
-    if (!featureAvailable("routeOverrides")) {
+    if (!featureAvailable("routeOverrides") && !preserveDrafts) {
       model.overrideDrafts.clear();
       model.overrideEditor = false;
       for (const key of model.invalidInputs.keys()) {
         if (key.startsWith("route-override:")) model.invalidInputs.delete(key);
       }
     }
-    if (!featureAvailable("spawnSettings")) {
+    if (!featureAvailable("spawnSettings") && !preserveDrafts) {
       model.spawnDrafts.clear();
       model.spawnEditor = false;
       for (const key of model.invalidInputs.keys()) {
@@ -1393,6 +1393,49 @@ export function createRoutesController({
     model.speciesByLookup.clear();
     model.speciesByBaseForm.clear();
     model.species.forEach(registerSpecies);
+    if (preserveDrafts) {
+      for (const key of [...model.invalidInputs.keys()]) {
+        if (key.startsWith("rebase:")) model.invalidInputs.delete(key);
+      }
+      for (const [key, value] of [...model.encounterDrafts]) {
+        if (model.baselines.has(key)) {
+          if (model.baselines.get(key) === String(value)) model.encounterDrafts.delete(key);
+          continue;
+        }
+        const [routeId, path] = splitBaselineKey(key);
+        model.invalidInputs.set(`rebase:${routeId}:${path}`, `A drafted Route ${routeId} value no longer exists in the latest source (${path}).`);
+      }
+      for (const routeId of model.overrideDrafts.keys()) {
+        if (!model.routesById.has(String(routeId))) {
+          model.invalidInputs.set(`rebase:${routeId}:route-override`, `The drafted Route ${routeId} override is preserved, but that route no longer exists in the latest source.`);
+        }
+      }
+      if (!featureAvailable("routeOverrides")) {
+        for (const routeId of model.overrideDrafts.keys()) {
+          model.invalidInputs.set(`rebase:${routeId}:route-override`, `The drafted Route ${routeId} override is preserved, but route overrides are unavailable in the latest source.`);
+        }
+      }
+      const latestSpawnValues = new Map();
+      asArray(model.data.spawnSettings).forEach((group) => asArray(group.settings).forEach((setting) => {
+        const fields = setting.kind === "testSpawn" ? asArray(setting.fields) : [setting];
+        fields.forEach((field) => {
+          const value = field.kind === "species" ? (field.symbolValue || field.raw) : (field.value ?? field.raw);
+          latestSpawnValues.set(field.symbol, String(value ?? ""));
+        });
+      }));
+      for (const [symbol, value] of [...model.spawnDrafts]) {
+        if (latestSpawnValues.has(symbol)) {
+          if (latestSpawnValues.get(symbol) === String(value)) model.spawnDrafts.delete(symbol);
+          continue;
+        }
+        model.invalidInputs.set(`rebase:spawn:${symbol}`, `The drafted spawn setting ${symbol} no longer exists in the latest source.`);
+      }
+      if (!featureAvailable("spawnSettings")) {
+        for (const symbol of model.spawnDrafts.keys()) {
+          model.invalidInputs.set(`rebase:spawn:${symbol}`, `The drafted spawn setting ${symbol} is preserved, but spawn settings are unavailable in the latest source.`);
+        }
+      }
+    }
     if (!model.routesById.has(String(model.selectedRouteId))) model.selectedRouteId = model.routes[0]?.id ?? null;
     render();
     return controller;
@@ -1683,6 +1726,9 @@ export function createRoutesController({
     clearCommitted,
     reset,
     refresh,
+    refreshPreservingDrafts(nextData) {
+      return refresh(nextData, { preserveDrafts: true });
+    },
     navigationContext() {
       const route = selectedRoute();
       return { selection: String(route?.id ?? ""), label: route?.name || "" };

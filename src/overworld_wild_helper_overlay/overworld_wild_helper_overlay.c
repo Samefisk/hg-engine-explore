@@ -2477,7 +2477,8 @@ static int OverworldWildHelper_FindPlayerBallHit(
         s32 distanceSquared;
         s32 entry;
 
-        if (!OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
+        if (i == OW_WILD_FOLLOWER_SLOT
+            || !OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
             continue;
         }
         targetObject = state->spawns[i].object;
@@ -2555,7 +2556,8 @@ static BOOL OverworldWildHelper_TryApplyPlayerBallAimAssist(
         s32 forward;
         s32 cross;
 
-        if (!OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
+        if (i == OW_WILD_FOLLOWER_SLOT
+            || !OverworldWildHelper_IsExactObject(fieldSystem, state, i)) {
             continue;
         }
         targetObject = state->spawns[i].object;
@@ -2617,6 +2619,7 @@ static BOOL OverworldWildHelper_StartPlayerBallImpact(
 
     if (slot < 0
         || slot >= OW_WILD_MAX_SPAWNS
+        || slot == OW_WILD_FOLLOWER_SLOT
         || state == NULL
         || calculateShakes == NULL
         || state->mapGeneration != projectile->mapGeneration
@@ -3907,6 +3910,8 @@ static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
         || carrierSlot >= OW_WILD_MAX_SPAWNS
         || targetSlot < 0
         || targetSlot >= OW_WILD_MAX_SPAWNS
+        || carrierSlot == OW_WILD_FOLLOWER_SLOT
+        || targetSlot == OW_WILD_FOLLOWER_SLOT
         || carrierSlot == targetSlot
         || !state->spawns[targetSlot].active
         || state->spawns[targetSlot].object == NULL
@@ -4101,6 +4106,7 @@ static BOOL OverworldWildHelper_TryStartPickupThrowAction(
         || presentation == NULL
         || slot < 0
         || slot >= OW_WILD_MAX_SPAWNS
+        || slot == OW_WILD_FOLLOWER_SLOT
         || throwState->targets[slot] != OW_WILD_HELPER_THROW_TARGET_NONE
         || ((throwState->targetMask | throwState->carrierMask) & (1u << slot)) != 0) {
         return FALSE;
@@ -4712,9 +4718,6 @@ static LocalMapObject *OverworldWildHelper_CreatePresentationObject(
     }
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     MapObject_SetScript(object, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT);
-    if (range == 0) {
-        range = 32;
-    }
     MapObject_SetXRange(object, range);
     MapObject_SetYRange(object, range);
     OVERWORLD_WILD_SPAWN_METADATA_ENTRY->applyRenderParams(

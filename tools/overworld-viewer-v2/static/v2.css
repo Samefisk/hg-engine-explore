@@ -27,6 +27,50 @@
   --ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.pv2-stale-drafts {
+  margin: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #a6322c) 62%, var(--line));
+  border-left: 4px solid var(--danger, #a6322c);
+  background: color-mix(in srgb, var(--danger, #a6322c) 7%, var(--paper-strong));
+  padding: 14px;
+}
+
+.pv2-stale-drafts > header,
+.pv2-stale-drafts li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pv2-stale-drafts h3,
+.pv2-stale-drafts p {
+  margin: 0;
+}
+
+.pv2-stale-drafts > p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.pv2-stale-drafts ul {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv2-stale-drafts li {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.pv2-stale-drafts li span {
+  display: grid;
+  gap: 2px;
+}
+
 /* Route Deck V2 -------------------------------------------------------- */
 
 .view--routes .two-pane-workbench {
@@ -4855,8 +4899,57 @@ button {
   font-weight: 700 !important;
 }
 
-.pv2-field > select {
+.pv2-value-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv2-value-control > select {
+  width: 100%;
+  min-width: 0;
   min-height: 38px;
+}
+
+.pv2-numeric-combobox {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.pv2-numeric-combobox input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border-color: #b5b2aa;
+  background: #fffdf7;
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.pv2-numeric-combobox input::placeholder {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.pv2-numeric-error {
+  color: #9d2924;
+  font: 750 8px/1.2 var(--mono);
+}
+
+.pv2-numeric-error:empty {
+  display: none;
+}
+
+.pv2-numeric-combobox input[aria-invalid="true"] {
+  border-color: #b92720;
+  box-shadow: 0 0 0 1px rgba(185, 39, 32, .18);
 }
 
 .pv2-range-controls {
@@ -4893,9 +4986,8 @@ button {
   color: #995719;
 }
 
-.pv2-range-control > select {
+.pv2-range-control > .pv2-value-control {
   min-width: 0;
-  min-height: 38px;
 }
 
 .pv2-range-field.is-invalid,
@@ -4993,9 +5085,8 @@ button {
   color: #995719;
 }
 
-.pv2-composite-control > select {
+.pv2-composite-control > .pv2-value-control {
   min-width: 0;
-  min-height: 38px;
 }
 
 @container (max-width: 760px) {
@@ -5041,6 +5132,15 @@ button {
 
   .pv2-composite-controls {
     grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  }
+
+  .pv2-range-control .pv2-value-control,
+  .pv2-composite-control .pv2-value-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pv2-field > .pv2-value-control {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -5111,6 +5211,11 @@ button {
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 8px;
+}
+
+#profileInspector .pv2-numeric-combobox input.field-control {
+  height: 38px;
+  min-height: 38px;
 }
 
 #profileInspector .pv2-mode-tab-select select.field-control {
@@ -6107,10 +6212,10 @@ td select {
   top: max(12px, env(safe-area-inset-top));
   left: 50%;
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  width: min(520px, calc(100vw - 24px));
+  width: min(620px, calc(100vw - 24px));
   height: auto;
   padding: 10px 12px;
   overflow: visible;
@@ -6126,6 +6231,14 @@ td select {
   transform: translateX(-50%);
 }
 
+.commit-status.has-action {
+  pointer-events: auto;
+}
+
+.commit-status__copy {
+  min-width: 0;
+}
+
 .commit-status__mark {
   width: 10px;
   height: 10px;
@@ -6134,11 +6247,95 @@ td select {
   background: var(--cyan);
 }
 
-.commit-status > span:last-child,
 .commit-status strong,
 .commit-status small {
   display: block;
   min-width: 0;
+}
+
+.commit-status__elapsed {
+  min-width: 36px;
+  color: #a9dce1;
+  font: 800 10px/1 var(--mono);
+  text-align: right;
+}
+
+.commit-status__progress {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 12%);
+}
+
+.commit-status__progress i {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cyan);
+  animation: commit-progress 1.25s ease-in-out infinite alternate;
+}
+
+.commit-status:not([data-kind="busy"]) .commit-status__progress {
+  display: none;
+}
+
+.commit-status[data-phase="refresh"] .commit-status__progress i {
+  width: 68%;
+  background: #72c38a;
+}
+
+.commit-status[data-kind="busy"] .commit-status__mark {
+  animation: commit-pulse 1s ease-in-out infinite alternate;
+}
+
+.commit-status__action {
+  grid-column: 2 / -1;
+  justify-self: start;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #9fa7a4;
+  border-radius: 2px;
+  background: #f3efe6;
+  color: #292d2e;
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.commit-status__action:hover,
+.commit-status__action:focus-visible {
+  border-color: #fff;
+  background: #fff;
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+@keyframes commit-progress {
+  from { transform: translateX(-8%); }
+  to { transform: translateX(172%); }
+}
+
+@keyframes commit-pulse {
+  from { box-shadow: 0 0 0 0 rgb(117 209 218 / 0%); }
+  to { box-shadow: 0 0 0 5px rgb(117 209 218 / 20%); }
+}
+
+#saveAll.is-saving {
+  border-color: #78cbd2;
+  background: #273f42;
+  color: #f7ffff;
+  opacity: 1;
+  box-shadow: inset 0 -2px 0 rgb(120 203 210 / 30%);
+}
+
+#saveAll .count-badge.is-elapsed {
+  min-width: 30px;
+  border-color: #9fe0e5;
+  background: #e7fbfc;
+  color: #173b3e;
 }
 
 .commit-status strong {
@@ -6687,6 +6884,16 @@ td select {
 
   .commit-status__mark {
     background: Highlight;
+  }
+
+  .commit-status__progress i {
+    background: Highlight;
+  }
+
+  .commit-status__action {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
   }
 
   .commit-status small {
