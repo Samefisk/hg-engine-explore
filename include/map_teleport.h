@@ -27,7 +27,7 @@ typedef OverworldFieldMapHeaderChangeResult (*OverworldFieldMapHeaderChangedFunc
     OverworldWildSpawnState *state,
     u16 previousMapId,
     u16 currentMapId);
-typedef void (*OverworldFieldPollFrameFunc)(FieldSystem *fieldSystem);
+typedef BOOL (*OverworldFieldPollFrameFunc)(FieldSystem *fieldSystem);
 typedef BOOL (*OverworldFieldTryGetEncounterDataIdForMapFunc)(
     u16 mapId,
     int *encounterDataId);
@@ -83,8 +83,11 @@ static inline void OverworldFieldService_PollFrame(FieldSystem *fieldSystem)
         return;
     }
 
-    entry->pollFrame(fieldSystem);
+    (void)entry->pollFrame(fieldSystem);
 }
+
+/* A NULL frame is reserved for transient field-service teardown. */
+BOOL OverworldFieldService_ShutdownTransientServices(void);
 
 static inline BOOL OverworldFieldService_TryGetEncounterDataIdForMap(
     u16 mapId,

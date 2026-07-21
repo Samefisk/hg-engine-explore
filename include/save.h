@@ -88,6 +88,10 @@ typedef struct BerryPot {
 #define OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC_V1 0x4F57
 #define OVERWORLD_WILD_SHINY_COUNTER_SAVE_MAGIC 0x4F58
 #define OVERWORLD_WILD_SAVED_SHINY_BYTES 12
+#define CUSTOM_FOLLOWER_SELECTION_SAVE_MAGIC 0x4653
+#define CUSTOM_FOLLOWER_SELECTION_SAVE_VERSION 1
+#define CUSTOM_FOLLOWER_PARTY_SLOT_COUNT 6
+#define CUSTOM_FOLLOWER_PARTY_SLOT_NONE 0xFF
 
 struct SAVE_MISC_DATA
 {
@@ -98,7 +102,9 @@ struct SAVE_MISC_DATA
     /* 0x270 */ u16 rivalName[8]; // 7 + 1
     /* 0x280 */ u8 unk_0280[8]; // 3 chunks of size (4, 2, 2)
     /* 0x288 */ u8 overworldWildSavedShinies[OVERWORLD_WILD_SAVED_SHINY_BYTES];
-    /* 0x294 */ u8 filler_0294[4];
+    /* 0x294 */ u16 customFollowerSelectionMagic;
+    /* 0x296 */ u8 customFollowerPartySlot;
+    /* 0x297 */ u8 customFollowerSelectionVersion;
     /* 0x298 */ u16 favoriteMonSpecies;
     /* 0x29A */ u8 favoriteMonForm:7;
                 u8 favoriteMonIsEgg:1;
@@ -399,6 +405,48 @@ void *LONG_CALL PROC_GetWork(void *proc);
 u32 LONG_CALL Sav2_Misc_sizeof(void);
 void LONG_CALL InitStoredMons(struct SAVE_MISC_DATA *saveMiscData);
 void LONG_CALL Sav2_Misc_init_new_fields(struct SAVE_MISC_DATA *saveMiscData);
+static inline u8 SaveMisc_GetCustomFollowerPartySlot(
+    struct SAVE_MISC_DATA *saveMiscData)
+{
+    if (saveMiscData == NULL) {
+        return CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    }
+    if (saveMiscData->customFollowerSelectionMagic
+            != CUSTOM_FOLLOWER_SELECTION_SAVE_MAGIC
+        || saveMiscData->customFollowerSelectionVersion
+            != CUSTOM_FOLLOWER_SELECTION_SAVE_VERSION) {
+        /* Preserve the previous custom follower's slot-zero behavior. */
+        saveMiscData->customFollowerSelectionMagic =
+            CUSTOM_FOLLOWER_SELECTION_SAVE_MAGIC;
+        saveMiscData->customFollowerPartySlot = 0;
+        saveMiscData->customFollowerSelectionVersion =
+            CUSTOM_FOLLOWER_SELECTION_SAVE_VERSION;
+    }
+    if (saveMiscData->customFollowerPartySlot
+            >= CUSTOM_FOLLOWER_PARTY_SLOT_COUNT
+        && saveMiscData->customFollowerPartySlot
+            != CUSTOM_FOLLOWER_PARTY_SLOT_NONE) {
+        saveMiscData->customFollowerPartySlot =
+            CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    }
+    return saveMiscData->customFollowerPartySlot;
+}
+
+static inline void SaveMisc_SetCustomFollowerPartySlot(
+    struct SAVE_MISC_DATA *saveMiscData,
+    u8 partySlot)
+{
+    if (saveMiscData == NULL
+        || (partySlot >= CUSTOM_FOLLOWER_PARTY_SLOT_COUNT
+            && partySlot != CUSTOM_FOLLOWER_PARTY_SLOT_NONE)) {
+        return;
+    }
+    saveMiscData->customFollowerSelectionMagic =
+        CUSTOM_FOLLOWER_SELECTION_SAVE_MAGIC;
+    saveMiscData->customFollowerPartySlot = partySlot;
+    saveMiscData->customFollowerSelectionVersion =
+        CUSTOM_FOLLOWER_SELECTION_SAVE_VERSION;
+}
 u32 LONG_CALL sqrt(u32 num);
 
 // convenience variable/flag access functions

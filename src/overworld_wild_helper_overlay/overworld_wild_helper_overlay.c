@@ -6,6 +6,7 @@
 #include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_spawns.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/overlay.h"
@@ -3491,6 +3492,24 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
         sOverworldWildHelperPlayerBallInputArmed = FALSE;
         sOverworldWildHelperPlayerBallChargeFrames = 0;
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        return FALSE;
+    }
+    if (OverworldFollowerSelector_IsReleaseGated()
+        || (OverworldFollowerSelector_IsDirectLoaded()
+            && OverworldFollowerSelector_Validate()
+            && OverworldFollowerSelector_IsActive())) {
+        /*
+         * The selector reads physical L/R so it remains usable with L=A.
+         * Once its pending hold begins, those shoulders must not also arm,
+         * charge, launch, or cancel the custom Player Ball.
+         */
+        sOverworldWildHelperPlayerBallInputArmed = FALSE;
+        sOverworldWildHelperPlayerBallChargeFrames = 0;
+        sOverworldWildHelperPlayerBallChargeSoundTimer = 0;
+        if (sOverworldWildHelperPlayerBallProjectile.phase
+                != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
+            OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        }
         return FALSE;
     }
     if (sOverworldWildHelperPlayerBallProjectile.phase

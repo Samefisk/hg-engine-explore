@@ -25,15 +25,43 @@ u8 gCleanupOverlayList[][4] =
     {OVERLAY_BATTLE_EXTENSION, OVERLAY_BATTLECONTROLLER_BEFOREMOVE, OVERLAY_SERVERBEFOREACT, OVERLAY_BATTLECONTROLLER_MOVEEND},
 };
 
+/*
+ * Tail-call overlay 131's poll(NULL) teardown callback.  The naked form keeps
+ * the failure contract inside overlay 129's extremely small remaining budget:
+ * the callback returns directly to this function's caller in r0.
+ */
+BOOL __attribute__((naked))
+OverworldFieldService_ShutdownTransientServices(void)
+{
+    __asm__(
+        "ldr r3, =0x023C8000\n"
+        "ldr r2, [r3]\n"
+        "ldr r1, =0x3146574F\n"
+        "cmp r2, r1\n"
+        "bne 1f\n"
+        "ldr r3, [r3, #8]\n"
+        "cmp r3, #0\n"
+        "beq 1f\n"
+        "mov r0, #0\n"
+        "bx r3\n"
+        "1:\n"
+        "mov r0, #1\n"
+        "bx lr\n");
+}
+
 static BOOL IsOverworldWildOverlay(u32 ovyId)
 {
     return ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
         || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
 }
 
-static void ResetOverworldFieldServiceState(void)
+static BOOL ResetOverworldFieldServiceState(void)
 {
+    if (!OverworldFieldService_ShutdownTransientServices()) {
+        return FALSE;
+    }
     *(u32 *)OVERWORLD_FIELD_SERVICE_ENTRY_ADDR = 0;
+    return TRUE;
 }
 
 u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
@@ -58,6 +86,9 @@ u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
 
 BOOL LONG_CALL UnloadOverworldWildOverlays(void)
 {
+    if (!OverworldFieldService_ShutdownTransientServices()) {
+        return FALSE;
+    }
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
     return !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
         && !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
@@ -103,7 +134,9 @@ unloadSecond:
     for (i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
         if (table[i].active == TRUE && table[i].id == ovyId) {
             if (ovyId == OVERLAY_FIELD_EXTENSION) {
-                ResetOverworldFieldServiceState();
+                if (!ResetOverworldFieldServiceState()) {
+                    return;
+                }
             }
             if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
                 && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {

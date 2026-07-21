@@ -218,6 +218,7 @@ typedef struct OverworldWildSpawnState {
     u16 pendingMapGeneration;
     u16 pendingEncounterGeneration;
     u8 presentationRestorePending;
+    u8 activeFollowerPartySlot;
     u16 captureTargetMask;
 } OverworldWildSpawnState;
 
@@ -228,6 +229,8 @@ typedef struct OverworldWildResidentData {
 } OverworldWildResidentData;
 
 extern OverworldWildResidentData gOverworldWildResidentData;
+/* Exact byte alias exported by overlay 129 for cross-overlay relocations. */
+extern u8 gOverworldWildFieldIdleRearmPending;
 
 typedef enum OverworldWildMapHeaderChangeMode {
     OW_WILD_MAP_HEADER_CHANGE_PRESERVE = 0,

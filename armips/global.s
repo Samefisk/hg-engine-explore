@@ -16,6 +16,7 @@
 .include "armips/asm/syntheticoverlay.s" // code for loading in the synthetic overlay
 .include "armips/asm/overworld_wild_movement.s" // custom movement descriptor for visible wild Pokemon
 .include "armips/asm/disable_follower_pokemon.s" // disable the vanilla walking follower presentation and gameplay
+.include "armips/asm/overworld_follower_selector.s" // hold-Y custom follower selector input hook
 .include "armips/asm/trainers.s" // code for fixing the trainer ai accessing move data
 .include "armips/asm/cries.s" // code for remapping species to the file in the sdat
 .include "armips/asm/user_config.s" // user configurable code

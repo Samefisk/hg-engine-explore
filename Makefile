@@ -244,7 +244,7 @@ $(foreach folder, $(CODE_BUILD_DIRS), $(eval $(call FOLDER_CREATE_DEFINE,$(folde
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
 $1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d

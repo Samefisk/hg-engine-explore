@@ -15,6 +15,18 @@ SECTIONS {
                 . = ALIGN(4);
                 KEEP(*(.overworld_field_service_entry))
                 . = ALIGN(4);
+                KEEP(*(.overworld_follower_selector_input_hook))
+                ASSERT(OverworldFollowerSelector_FieldInputUpdateHook
+                        == ORIGIN(rom) + 0x10,
+                    "overworld follower selector input hook moved");
+                ASSERT(. <= ORIGIN(rom) + 0x148,
+                    "overworld follower selector hook exceeds ABI reserve");
+                . = ORIGIN(rom) + 0x148;
+                KEEP(*(.overworld_follower_selector_state))
+                ASSERT(gOverworldFollowerSelectorStateStorage
+                        == ORIGIN(rom) + 0x148,
+                    "overworld follower selector state moved");
+                . = ALIGN(4);
                 *(.init)
                 *(.text)
                 *(.ctors)

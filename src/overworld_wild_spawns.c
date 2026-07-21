@@ -1,5 +1,4 @@
 #include "../include/overworld_wild_spawns_internal.h"
-
 #include "../include/config.h"
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
@@ -26,6 +25,7 @@ OverworldWildSpawnState sOverworldWildSpawnState = {
     .mapId = MAP_NOTHING,
     .pendingSlot = -1,
     .movementQueuedBattleSlot = -1,
+    .activeFollowerPartySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE,
 };
 
 static u32 sBattleHpPersonality;
@@ -36,10 +36,15 @@ OverworldWildResidentData gOverworldWildResidentData;
 __asm__(
     ".global gOverworldWildFieldIdleRearmPending\n"
     ".set gOverworldWildFieldIdleRearmPending, gOverworldWildResidentData\n"
+    ".type gOverworldWildFieldIdleRearmPending, %object\n"
     ".global gOverworldWildBattleFlags\n"
     ".set gOverworldWildBattleFlags, gOverworldWildResidentData + 1\n"
+    ".type gOverworldWildBattleFlags, %object\n"
+    ".size gOverworldWildBattleFlags, 1\n"
     ".global gOverworldWildSavedHp\n"
-    ".set gOverworldWildSavedHp, gOverworldWildResidentData + 2\n");
+    ".set gOverworldWildSavedHp, gOverworldWildResidentData + 2\n"
+    ".type gOverworldWildSavedHp, %object\n"
+    ".size gOverworldWildSavedHp, 20\n");
 #define gOverworldWildFieldIdleRearmPending \
     (gOverworldWildResidentData.pendingFlags)
 #define gOverworldWildBattleFlags (gOverworldWildResidentData.battleFlags)

@@ -2009,12 +2009,21 @@ static void OverworldWildSpawns_ClearSlotAndSaveShiny(OverworldWildSpawnState *s
     OverworldWildSpawns_ResetSlotState(state, slot, deleteObject);
 }
 
-static void OverworldWildSpawns_QuarantinePoisonedPresentation(
+static BOOL OverworldWildSpawns_QuarantinePoisonedPresentation(
     FieldSystem *fieldSystem,
     int slot)
 {
-    MapObjectMan *manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    MapObjectMan *manager;
+    BOOL quarantined = FALSE;
     int i;
+
+    if (fieldSystem == NULL || fieldSystem->mapObjectMan == NULL) {
+        return FALSE;
+    }
+    manager = (MapObjectMan *)fieldSystem->mapObjectMan;
+    if (manager->objects == NULL) {
+        return FALSE;
+    }
 
     for (i = 0; i < (int)manager->object_count; i++) {
         LocalMapObject *object = &manager->objects[i];
@@ -2023,8 +2032,10 @@ static void OverworldWildSpawns_QuarantinePoisonedPresentation(
             && object->id == OW_WILD_OBJECT_ID_START + slot
             && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
             DeleteMapObject(object);
+            quarantined = TRUE;
         }
     }
+    return quarantined;
 }
 
 static BOOL OverworldWildSpawns_ReconcileSpawnPresentations(
@@ -2061,7 +2072,9 @@ static BOOL OverworldWildSpawns_ReconcileSpawnPresentations(
                 & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot)) != 0) {
             return FALSE;
         }
-        OverworldWildSpawns_QuarantinePoisonedPresentation(fieldSystem, slot);
+        (void)OverworldWildSpawns_QuarantinePoisonedPresentation(
+            fieldSystem,
+            slot);
         OverworldWildSpawns_ClearSlotAndSaveShiny(state, slot, TRUE);
     }
 }
@@ -11315,6 +11328,9 @@ static void OverworldWildSpawns_ResetSlotState(
     state->spawns[slot].terrain = 0;
     state->spawns[slot].shiny = FALSE;
     state->spawns[slot].active = FALSE;
+    if (slot == OW_WILD_FOLLOWER_SLOT) {
+        state->activeFollowerPartySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    }
     OW_WILD_RUNTIME(state)->playerBallCatchValues[slot] = 0;
     state->captureTargetMask &=
         (u16)~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
@@ -16459,17 +16475,145 @@ static BOOL OverworldWildSpawns_SpawnOne(OverworldWildSpawnState *state, FieldSy
         &prepared);
 }
 
+static struct PartyPokemon *OverworldWildSpawns_GetSelectedFollowerPokemon(
+    FieldSystem *fieldSystem,
+    u8 *partySlot)
+{
+    struct Party *party;
+    struct PartyPokemon *pokemon;
+    u8 selectedSlot;
+
+    if (partySlot != NULL) {
+        *partySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    }
+    if (fieldSystem == NULL || fieldSystem->savedata == NULL) {
+        return NULL;
+    }
+    selectedSlot = SaveMisc_GetCustomFollowerPartySlot(
+        Sav2_Misc_get(fieldSystem->savedata));
+    party = SaveData_GetPlayerPartyPtr(fieldSystem->savedata);
+    if (party == NULL
+        || selectedSlot >= CUSTOM_FOLLOWER_PARTY_SLOT_COUNT
+        || selectedSlot >= party->count) {
+        return NULL;
+    }
+    pokemon = Party_GetMonByIndex(party, selectedSlot);
+    if (pokemon == NULL
+        || GetMonData(pokemon, MON_DATA_SPECIES, NULL) == SPECIES_NONE
+        || GetMonData(pokemon, MON_DATA_IS_EGG, NULL) != FALSE
+        || GetMonData(pokemon, MON_DATA_LEVEL, NULL) == 0
+        || GetMonData(pokemon, MON_DATA_HP, NULL) == 0) {
+        return NULL;
+    }
+    if (partySlot != NULL) {
+        *partySlot = selectedSlot;
+    }
+    return pokemon;
+}
+
+static BOOL OverworldWildSpawns_RemoveFollower(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem)
+{
+    OverworldWildSpawn *spawn;
+    LocalMapObject *object = NULL;
+
+    if (state == NULL) {
+        return FALSE;
+    }
+    spawn = &state->spawns[OW_WILD_FOLLOWER_SLOT];
+    if (!spawn->active) {
+        state->activeFollowerPartySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+        return TRUE;
+    }
+
+    if (OverworldWildSpawns_IsCurrentSpawnObject(fieldSystem, spawn)) {
+        object = spawn->object;
+    } else if (OverworldWildSpawns_IsFieldContextAvailable(fieldSystem)
+        && ((MapObjectMan *)fieldSystem->mapObjectMan)->objects != NULL
+        && spawn->mapId == fieldSystem->location->mapId
+        && OverworldWildSpawns_QuarantinePoisonedPresentation(
+            fieldSystem,
+            OW_WILD_FOLLOWER_SLOT)) {
+        /* A verified ID/script match was removed without trusting the pointer. */
+    } else {
+        /* Preserve logical ownership until presentation reconciliation is safe. */
+        state->presentationRestorePending = TRUE;
+        if (state->movementRuntimeState != NULL) {
+            OW_WILD_RUNTIME(state)->spawnPresentations.managerRestoreMask |=
+                OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(OW_WILD_FOLLOWER_SLOT);
+        }
+        gOverworldWildResidentData.pendingFlags |=
+            OW_WILD_FIELD_IDLE_REARM_PENDING
+            | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
+        return FALSE;
+    }
+
+    OverworldWildSpawns_ResetSlotState(
+        state,
+        OW_WILD_FOLLOWER_SLOT,
+        TRUE);
+    if (object != NULL) {
+        DeleteMapObject(object);
+        OW_WILD_PERF_INC(sOverworldWildPerfMapObjectDeletesThisFrame);
+    }
+    state->activeFollowerPartySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_FollowerMatchesSelection(
+    OverworldWildSpawnState *state,
+    struct PartyPokemon *pokemon,
+    u8 partySlot)
+{
+    OverworldWildSpawn *spawn = &state->spawns[OW_WILD_FOLLOWER_SLOT];
+
+    return spawn->active
+        && state->activeFollowerPartySlot == partySlot
+        && spawn->species == GetMonData(pokemon, MON_DATA_SPECIES, NULL)
+        && spawn->form == GetMonData(pokemon, MON_DATA_FORM, NULL)
+        && spawn->level == GetMonData(pokemon, MON_DATA_LEVEL, NULL)
+        && spawn->personality
+            == GetMonData(pokemon, MON_DATA_PERSONALITY, NULL)
+        && spawn->shiny == MonIsShiny(pokemon);
+}
+
+static BOOL OverworldWildSpawns_ReconcileFollowerSelection(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem)
+{
+    struct PartyPokemon *pokemon;
+    u8 partySlot;
+
+    if (!state->spawns[OW_WILD_FOLLOWER_SLOT].active) {
+        state->activeFollowerPartySlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+        return TRUE;
+    }
+    pokemon = OverworldWildSpawns_GetSelectedFollowerPokemon(
+        fieldSystem,
+        &partySlot);
+    if (pokemon == NULL
+        || !OverworldWildSpawns_FollowerMatchesSelection(
+            state,
+            pokemon,
+            partySlot)) {
+        return OverworldWildSpawns_RemoveFollower(state, fieldSystem);
+    }
+    return TRUE;
+}
+
 static BOOL OverworldWildSpawns_TrySpawnFollower(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
     BOOL *hasCandidate)
 {
-    struct Party *party;
     struct PartyPokemon *pokemon;
     OverworldWildRolledEncounter encounter;
     OverworldWildPreparedSpawn prepared;
     u32 personality;
     BOOL shiny;
+    u8 partySlot;
+    BOOL spawned;
 
     if (hasCandidate != NULL) {
         *hasCandidate = FALSE;
@@ -16482,12 +16626,10 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
         return FALSE;
     }
 
-    party = SaveData_GetPlayerPartyPtr(fieldSystem->savedata);
-    if (party == NULL || party->count == 0) {
-        return FALSE;
-    }
-    pokemon = Party_GetMonByIndex(party, 0);
-    if (pokemon == NULL || GetMonData(pokemon, MON_DATA_IS_EGG, NULL)) {
+    pokemon = OverworldWildSpawns_GetSelectedFollowerPokemon(
+        fieldSystem,
+        &partySlot);
+    if (pokemon == NULL) {
         return FALSE;
     }
 
@@ -16497,9 +16639,6 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
     personality = GetMonData(pokemon, MON_DATA_PERSONALITY, NULL);
     encounter.personality = personality;
     shiny = MonIsShiny(pokemon);
-    if (encounter.species == SPECIES_NONE || encounter.level == 0) {
-        return FALSE;
-    }
     if (hasCandidate != NULL) {
         *hasCandidate = TRUE;
     }
@@ -16519,12 +16658,16 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
         return FALSE;
     }
 
-    return OverworldWildSpawns_SpawnPreparedEncounter(
+    spawned = OverworldWildSpawns_SpawnPreparedEncounter(
         state,
         fieldSystem,
         OW_WILD_SPAWN_TERRAIN_LAND,
         OW_WILD_FOLLOWER_SLOT,
         &prepared);
+    if (spawned) {
+        state->activeFollowerPartySlot = partySlot;
+    }
+    return spawned;
 }
 
 static void OverworldWildSpawns_ApplyHelpChildSpawnState(
@@ -16742,6 +16885,11 @@ static void OverworldWildSpawns_TryRefill(OverworldWildSpawnState *state, FieldS
     u8 rollMask = 0;
     BOOL spawned = FALSE;
 
+    if (!OverworldWildSpawns_ReconcileFollowerSelection(
+            state,
+            fieldSystem)) {
+        return;
+    }
     if (!state->spawns[OW_WILD_FOLLOWER_SLOT].active) {
         if (OverworldWildSpawns_TrySpawnFollower(
                 state,
