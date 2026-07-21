@@ -1,6 +1,7 @@
 #include "../../include/overworld_follower_selector.h"
 
 #include "../../include/constants/file.h"
+#include "../../include/constants/item.h"
 #include "../../include/constants/species.h"
 #include "../../include/pokemon.h"
 #include "../../include/save.h"
@@ -12,7 +13,13 @@
 #define FOLLOWER_SELECTOR_CHAR_RES_BASE 0x7F20
 #define FOLLOWER_SELECTOR_SHARED_RES_ID 0x7F30
 #define FOLLOWER_SELECTOR_PALETTE_RES_ID 0x7F31
+#define FOLLOWER_SELECTOR_ITEM_SHARED_RES_ID 0x7F32
+#define FOLLOWER_SELECTOR_ITEM_PALETTE_RES_ID 0x7F33
 #define FOLLOWER_SELECTOR_ICON_PALETTE_COUNT 3
+#define FOLLOWER_SELECTOR_ITEM_ICON_CHAR_MEMBER (ITEM_POKE_BALL * 2 + 2)
+#define FOLLOWER_SELECTOR_ITEM_ICON_PLTT_MEMBER (ITEM_POKE_BALL * 2 + 3)
+#define FOLLOWER_SELECTOR_ITEM_ICON_ANIM_MEMBER 0
+#define FOLLOWER_SELECTOR_ITEM_ICON_CELL_MEMBER 1
 #define FOLLOWER_SELECTOR_FX32_ONE (1 << FX32_SHIFT)
 #define FOLLOWER_SELECTOR_DISABLED_SCALE \
     (FOLLOWER_SELECTOR_FX32_ONE * 3 / 4)
@@ -79,11 +86,15 @@ typedef struct FollowerSelectorUIState {
     FollowerSelectorResource *paletteResource;
     FollowerSelectorResource *cellResource;
     FollowerSelectorResource *animResource;
+    FollowerSelectorResource *itemPaletteResource;
+    FollowerSelectorResource *itemCellResource;
+    FollowerSelectorResource *itemAnimResource;
     FollowerSelectorSlotVisual slots[FOLLOWER_SELECTOR_PARTY_SIZE];
     FieldSystem *fieldSystem;
     u8 selectedSlot;
     u8 eligibleMask;
     u8 paletteTransferred;
+    u8 itemPaletteTransferred;
     u8 isOpen;
     u8 frame;
 } FollowerSelectorUIState;
@@ -272,6 +283,11 @@ static void FollowerSelectorUI_DestroyResources(void)
         sub_0200B0A8(sFollowerSelectorUI.paletteResource);
         sFollowerSelectorUI.paletteTransferred = FALSE;
     }
+    if (sFollowerSelectorUI.itemPaletteTransferred
+        && sFollowerSelectorUI.itemPaletteResource != NULL) {
+        sub_0200B0A8(sFollowerSelectorUI.itemPaletteResource);
+        sFollowerSelectorUI.itemPaletteTransferred = FALSE;
+    }
     for (resourceType = FOLLOWER_SELECTOR_GFX_COUNT - 1;
          resourceType >= 0;
          resourceType--) {
@@ -293,7 +309,7 @@ void OverworldFollowerSelectorUI_Close(void)
 
 static BOOL FollowerSelectorUI_CreateManagers(void)
 {
-    static const u8 capacities[FOLLOWER_SELECTOR_GFX_COUNT] = { 6, 1, 1, 1 };
+    static const u8 capacities[FOLLOWER_SELECTOR_GFX_COUNT] = { 6, 2, 2, 2 };
     int resourceType;
 
     for (resourceType = 0;
@@ -313,6 +329,8 @@ static BOOL FollowerSelectorUI_CreateManagers(void)
 
 static BOOL FollowerSelectorUI_LoadSharedResources(void)
 {
+    int slot;
+
     sFollowerSelectorUI.paletteResource = AddPlttResObjFromNarc(
         sFollowerSelectorUI.resourceManagers[FOLLOWER_SELECTOR_GFX_PLTT],
         ARC_POKEICON,
@@ -347,7 +365,53 @@ static BOOL FollowerSelectorUI_LoadSharedResources(void)
         FOLLOWER_SELECTOR_SHARED_RES_ID,
         FOLLOWER_SELECTOR_GFX_ANIM,
         FOLLOWER_SELECTOR_HEAP_ID);
-    return sFollowerSelectorUI.animResource != NULL;
+    if (sFollowerSelectorUI.animResource == NULL) {
+        return FALSE;
+    }
+    for (slot = 0; slot < FOLLOWER_SELECTOR_PARTY_SIZE; slot++) {
+        if (sFollowerSelectorUI.slots[slot].species == SPECIES_NONE) {
+            break;
+        }
+    }
+    if (slot == FOLLOWER_SELECTOR_PARTY_SIZE) {
+        return TRUE;
+    }
+
+    sFollowerSelectorUI.itemPaletteResource = AddPlttResObjFromNarc(
+        sFollowerSelectorUI.resourceManagers[FOLLOWER_SELECTOR_GFX_PLTT],
+        ARC_ITEM_GFX_DATA,
+        FOLLOWER_SELECTOR_ITEM_ICON_PLTT_MEMBER,
+        FALSE,
+        FOLLOWER_SELECTOR_ITEM_PALETTE_RES_ID,
+        NNS_G2D_VRAM_TYPE_2DMAIN,
+        1,
+        FOLLOWER_SELECTOR_HEAP_ID);
+    if (sFollowerSelectorUI.itemPaletteResource == NULL
+        || !sub_0200B00C(sFollowerSelectorUI.itemPaletteResource)) {
+        return FALSE;
+    }
+    sFollowerSelectorUI.itemPaletteTransferred = TRUE;
+
+    sFollowerSelectorUI.itemCellResource = AddCellOrAnimResObjFromNarc(
+        sFollowerSelectorUI.resourceManagers[FOLLOWER_SELECTOR_GFX_CELL],
+        ARC_ITEM_GFX_DATA,
+        FOLLOWER_SELECTOR_ITEM_ICON_CELL_MEMBER,
+        FALSE,
+        FOLLOWER_SELECTOR_ITEM_SHARED_RES_ID,
+        FOLLOWER_SELECTOR_GFX_CELL,
+        FOLLOWER_SELECTOR_HEAP_ID);
+    if (sFollowerSelectorUI.itemCellResource == NULL) {
+        return FALSE;
+    }
+    sFollowerSelectorUI.itemAnimResource = AddCellOrAnimResObjFromNarc(
+        sFollowerSelectorUI.resourceManagers[FOLLOWER_SELECTOR_GFX_ANIM],
+        ARC_ITEM_GFX_DATA,
+        FOLLOWER_SELECTOR_ITEM_ICON_ANIM_MEMBER,
+        FALSE,
+        FOLLOWER_SELECTOR_ITEM_SHARED_RES_ID,
+        FOLLOWER_SELECTOR_GFX_ANIM,
+        FOLLOWER_SELECTOR_HEAP_ID);
+    return sFollowerSelectorUI.itemAnimResource != NULL;
 }
 
 static BOOL FollowerSelectorUI_CreateSlotSprite(int partySlot)
@@ -357,14 +421,24 @@ static BOOL FollowerSelectorUI_CreateSlotSprite(int partySlot)
     FollowerSelectorSpriteTemplate template;
     VecFx32 scale;
     int charResourceId = FOLLOWER_SELECTOR_CHAR_RES_BASE + partySlot;
-    u32 iconMember = PokeIconIndexGetByMonsNumber(
-        visual->species,
-        visual->isEgg,
-        visual->form);
+    BOOL isEmpty = visual->species == SPECIES_NONE;
+    int iconNarc = isEmpty ? ARC_ITEM_GFX_DATA : ARC_POKEICON;
+    int paletteResourceId = isEmpty
+        ? FOLLOWER_SELECTOR_ITEM_PALETTE_RES_ID
+        : FOLLOWER_SELECTOR_PALETTE_RES_ID;
+    int sharedResourceId = isEmpty
+        ? FOLLOWER_SELECTOR_ITEM_SHARED_RES_ID
+        : FOLLOWER_SELECTOR_SHARED_RES_ID;
+    u32 iconMember = isEmpty
+        ? FOLLOWER_SELECTOR_ITEM_ICON_CHAR_MEMBER
+        : PokeIconIndexGetByMonsNumber(
+            visual->species,
+            visual->isEgg,
+            visual->form);
 
     visual->charResource = AddCharResObjFromNarc(
         sFollowerSelectorUI.resourceManagers[FOLLOWER_SELECTOR_GFX_CHAR],
-        ARC_POKEICON,
+        iconNarc,
         iconMember,
         FALSE,
         charResourceId,
@@ -378,9 +452,9 @@ static BOOL FollowerSelectorUI_CreateSlotSprite(int partySlot)
     CreateSpriteResourcesHeader(
         &visual->header,
         charResourceId,
-        FOLLOWER_SELECTOR_PALETTE_RES_ID,
-        FOLLOWER_SELECTOR_SHARED_RES_ID,
-        FOLLOWER_SELECTOR_SHARED_RES_ID,
+        paletteResourceId,
+        sharedResourceId,
+        sharedResourceId,
         -1,
         -1,
         FALSE,
@@ -407,7 +481,12 @@ static BOOL FollowerSelectorUI_CreateSlotSprite(int partySlot)
     }
     Sprite_SetPalIndexRespectVramOffset(
         visual->sprite,
-        GetMonIconPalette(visual->species, visual->form, visual->isEgg));
+        isEmpty
+            ? 0
+            : GetMonIconPalette(
+                visual->species,
+                visual->form,
+                visual->isEgg));
     scale.x = visual->eligible
         ? FOLLOWER_SELECTOR_FX32_ONE
         : FOLLOWER_SELECTOR_DISABLED_SCALE;
