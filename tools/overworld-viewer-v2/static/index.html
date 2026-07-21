@@ -45,7 +45,7 @@
       <div class="header-actions" aria-label="Draft actions">
         <button id="resetDraft" class="button button--quiet" type="button" disabled>Reset</button>
         <button id="saveAll" class="button button--primary" type="button" disabled>
-          Save <span id="pendingCount" class="count-badge" aria-label="0 pending changes">0</span>
+          <span id="saveAllLabel">Save</span> <span id="pendingCount" class="count-badge" aria-label="0 pending changes">0</span>
         </button>
       </div>
 
@@ -319,12 +319,15 @@
     </main>
   </div>
 
-  <div id="commitStatus" class="commit-status" role="status" aria-live="polite" aria-atomic="true">
+  <div id="commitStatus" class="commit-status" role="group" aria-label="Save progress">
     <span class="commit-status__mark" aria-hidden="true"></span>
-    <span>
+    <span class="commit-status__copy">
       <strong id="commitStatusHeading"></strong>
       <small id="commitStatusDetail"></small>
     </span>
+    <output id="commitStatusElapsed" class="commit-status__elapsed" aria-hidden="true"></output>
+    <span class="commit-status__progress" aria-hidden="true"><i></i></span>
+    <button id="commitStatusAction" class="commit-status__action" type="button" hidden></button>
   </div>
 
   <div id="toastRegion" class="toast-region" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions"></div>

@@ -1218,12 +1218,19 @@ export function createPokemonController({
     return promise;
   }
 
-  async function ensureLearnsetDetail(species, force = false) {
+  async function ensureLearnsetDetail(species, force = false, { rejectOnError = false } = {}) {
     const requestedRevision = model.sourceRevision;
     const requestedAssetRevision = model.assetRevision;
     const detailKey = detailCacheKey(requestedRevision, requestedAssetRevision, species.__symbol);
     const existing = learnsetDetails.get(detailKey);
-    if (existing?.status === "loading" && !force) return existing.promise;
+    if (existing?.status === "loading" && !force) {
+      if (!rejectOnError) return existing.promise;
+      return existing.promise.then((detail) => {
+        if (detail !== null) return detail;
+        const failed = learnsetDetails.get(detailKey);
+        throw new Error(failed?.error || "Pokémon detail refresh failed.");
+      });
+    }
     if (existing?.status === "ready" && !force) return existing.data;
     const record = { status: "loading", data: existing?.data || null, error: "", promise: null };
     const promise = requestJson(`/api/v2/pokemon-data/${encodeURIComponent(species.__symbol)}`)
@@ -1232,7 +1239,7 @@ export function createPokemonController({
         const responseAssetRevision = textValue(payload?.assetRevision, requestedAssetRevision);
         if (model.sourceRevision !== requestedRevision || responseRevision !== requestedRevision || model.assetRevision !== requestedAssetRevision || responseAssetRevision !== requestedAssetRevision) {
           learnsetDetails.delete(detailKey);
-          if (model.sourceRevision !== requestedRevision || model.assetRevision !== requestedAssetRevision) return ensureLearnsetDetail(species, true);
+          if (model.sourceRevision !== requestedRevision || model.assetRevision !== requestedAssetRevision) return ensureLearnsetDetail(species, true, { rejectOnError });
           throw new Error("Pokémon detail source or asset revision changed; reload the editor detail.");
         }
         const detail = normalizeLearnset(firstDefined(payload?.learnset, payload?.pokemon?.learnset, payload?.data?.learnset, {}));
@@ -1246,6 +1253,7 @@ export function createPokemonController({
       .catch((error) => {
         learnsetDetails.set(detailKey, { status: "error", revision: requestedRevision, assetRevision: requestedAssetRevision, data: null, error: textValue(error?.message, error, "Learnset detail unavailable"), promise: null });
         if (!ui.destroyed && selectedSpecies()?.__symbol === species.__symbol) renderInspector();
+        if (rejectOnError) throw error;
         return null;
       });
     record.promise = promise;
@@ -1514,11 +1522,27 @@ export function createPokemonController({
 
   function validationErrors() {
     const bySymbol = new Map(model.species.map((species) => [species.__symbol, species]));
+    const staleSymbols = new Map();
+    const noteStale = (store, domain) => {
+      for (const symbol of store.keys()) {
+        if (!bySymbol.has(symbol)) staleSymbols.set(symbol, domain);
+      }
+    };
+    noteStale(drafts, "record");
+    noteStale(learnsetDrafts, "moves");
+    noteStale(evolutionDrafts, "evolution");
+    noteStale(formDrafts, "forms");
+    noteStale(assetDrafts, "assets");
+    const staleErrors = [...staleSymbols].map(([symbol, domain]) => ({
+      species: { __symbol: symbol, __name: symbol.replace(/^SPECIES_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()), __key: "" },
+      path: "stale",
+      message: `Preserved ${domain} draft no longer has a Pokémon in the latest source. Reset or restore that source record before saving.`,
+    }));
     const fieldErrors = [...drafts.keys()].flatMap((symbol) => {
       const species = bySymbol.get(symbol);
       return species ? speciesValidationErrors(species).concat(speciesGroupValidationErrors(species)).map((error) => ({ ...error, species })) : [];
     });
-    return fieldErrors.concat(learnsetValidationErrors(), evolutionValidationErrors(), formValidationErrors(), assetValidationErrors());
+    return staleErrors.concat(fieldErrors, learnsetValidationErrors(), evolutionValidationErrors(), formValidationErrors(), assetValidationErrors());
   }
 
   function signalDirty() {
@@ -3035,6 +3059,11 @@ export function createPokemonController({
   function navigateToFirstInvalid() {
     const first = validationErrors()[0];
     if (!first) return;
+    if (!first.species?.__key) {
+      inspectorElement.focus({ preventScroll: true });
+      setStatus(first.message, "error");
+      return;
+    }
     ui.selectedKey = first.species.__key;
     ui.rovingKey = first.species.__key;
     state.selectedPokemonKey = first.species.__key;
@@ -3938,7 +3967,7 @@ export function createPokemonController({
     signalDirty();
   }
 
-  function ensureLoad(force = false) {
+  function ensureLoad(force = false, { rejectOnError = false } = {}) {
     if (loadPromise && !force) return loadPromise;
     const generation = ++loadGeneration;
     ui.busy = true;
@@ -3957,12 +3986,42 @@ export function createPokemonController({
           setStatus(`Pokédex index unavailable: ${ui.error}`, "error");
           renderAll();
         }
+        if (rejectOnError) throw error;
         return null;
       });
     return loadPromise;
   }
 
-  function refresh(payload) {
+  function syncWorkspaceRevision(sourceRevision, assetRevision = "") {
+    const nextRevision = textValue(sourceRevision, "");
+    const nextAssetRevision = textValue(assetRevision, "");
+    if (nextRevision) {
+      const previousRevision = model.sourceRevision;
+      if (previousRevision && previousRevision !== nextRevision) {
+        const options = editorOptionsByRevision.get(previousRevision);
+        editorOptionsByRevision.delete(previousRevision);
+        if (options?.status === "ready") {
+          editorOptionsByRevision.set(nextRevision, { ...options, sourceRevision: nextRevision });
+        }
+        const previousPrefix = `${previousRevision}:${model.assetRevision}:`;
+        for (const [key, entry] of [...learnsetDetails.entries()]) {
+          if (!key.startsWith(previousPrefix)) continue;
+          learnsetDetails.delete(key);
+          if (entry?.status === "ready") {
+            learnsetDetails.set(`${nextRevision}:${model.assetRevision}:${key.slice(previousPrefix.length)}`, { ...entry, revision: nextRevision });
+          }
+        }
+      }
+      model.sourceRevision = nextRevision;
+      lastWorkspaceRevision = nextRevision;
+    }
+    if (nextAssetRevision) {
+      model.assetRevision = nextAssetRevision;
+      lastWorkspaceAssetRevision = nextAssetRevision;
+    }
+  }
+
+  function refresh(payload, { strict = false } = {}) {
     if (looksLikePokemonPayload(payload)) {
       if (!loadPromise) loadPromise = Promise.resolve(payload);
       applyPayload(payload);
@@ -3975,18 +4034,24 @@ export function createPokemonController({
     if (sourceChanged || assetChanged) {
       if (nextRevision) lastWorkspaceRevision = nextRevision;
       if (nextAssetRevision) lastWorkspaceAssetRevision = nextAssetRevision;
-      return ensureLoad(true).then(async (result) => {
+      return ensureLoad(true, { rejectOnError: strict }).then(async (result) => {
         const species = selectedSpecies();
-        if (species && ["moves", "evolution", "forms", "assets"].includes(activeDomain(species))) await ensureLearnsetDetail(species);
+        if (species && ["moves", "evolution", "forms", "assets"].includes(activeDomain(species))) {
+          await ensureLearnsetDetail(species, false, { rejectOnError: strict });
+        }
         return result;
       });
     }
     if (nextRevision) lastWorkspaceRevision = nextRevision;
     if (nextAssetRevision) lastWorkspaceAssetRevision = nextAssetRevision;
-    return Promise.resolve(ensureLoad()).then((result) => {
+    return Promise.resolve(ensureLoad(false, { rejectOnError: strict })).then((result) => {
       if (!ui.destroyed && Array.isArray(payload?.routes)) renderInspector();
       return result;
     });
+  }
+
+  function refreshStrict(payload) {
+    return refresh(payload, { strict: true });
   }
 
   function destroy() {
@@ -4083,7 +4148,7 @@ export function createPokemonController({
     const transaction = isRecord(committed) && isRecord(committed.domains) ? committed : null;
     const committedAssetRevision = textValue(transaction?.assetRevision);
     if (committedAssetRevision && committedAssetRevision !== model.assetRevision) pendingCommittedAssetRevision = committedAssetRevision;
-    const domains = committed ? (Array.isArray(committed) ? committed : (committed.changedDomains || Object.keys(committed))) : ["pokemonUpdates", "pokemonLearnsetUpdates", "pokemonEvolutionUpdates", "pokemonFormUpdates", "pokemonAssetUpdates"];
+    const domains = committed ? (Array.isArray(committed) ? committed : (committed.requestedDomains || committed.changedDomains || Object.keys(committed))) : ["pokemonUpdates", "pokemonLearnsetUpdates", "pokemonEvolutionUpdates", "pokemonFormUpdates", "pokemonAssetUpdates"];
     const assetResult = transaction?.domains?.pokemonAssetUpdates;
     clearDrafts(assetResult ? domains.filter((domain) => domain !== "pokemonAssetUpdates") : domains, { discardAssets: false });
     if (!assetResult) return;
@@ -4124,6 +4189,8 @@ export function createPokemonController({
     clearCommitted,
     reset,
     refresh,
+    refreshStrict,
+    syncWorkspaceRevision,
     refreshContext: renderInspector,
     openRecord,
     navigationContext,

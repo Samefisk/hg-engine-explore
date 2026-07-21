@@ -748,7 +748,7 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfi
         OW_WILD_BEHAVIOR_BOOL_YES,
         1,
         2,
-        0,
+        OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES,
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE,
@@ -767,7 +767,7 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfi
         OW_WILD_BEHAVIOR_BOOL_YES,
         1,
         2,
-        0,
+        OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES,
         OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES,
@@ -775,18 +775,18 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfi
         OW_WILD_BEHAVIOR_BOOL_YES,
         1,
         2,
-        0,
+        OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES,
         OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES,
         OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES,
         OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED,
+        OW_WILD_SPAWNER_CUSTOM_JUMP_FRAMES_PER_TILE,
         0,
         0,
         0,
+        OW_WILD_SPAWNER_CUSTOM_JUMP_FRAMES_PER_TILE,
         0,
-        0,
-        0,
-        0,
+        1,
         0,
         0,
     };
@@ -869,6 +869,51 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
     return TRUE;
 }
 
+static BOOL OverworldWildSpawns_AreOverrideOperatorMasksValid(
+    const OverworldWildBehaviorOverrideProfile *profile);
+
+static BOOL OverworldWildSpawns_AreProfileMovementSpeedsValid(
+    const OverworldWildBehaviorProfile *profile)
+{
+    return profile != NULL
+        && profile->chillSpeed >= OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+        && profile->chillSpeed <= OW_WILD_SPAWNER_MOVEMENT_SPEED_4
+        && profile->attentiveSpeed >= OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+        && profile->attentiveSpeed <= OW_WILD_SPAWNER_MOVEMENT_SPEED_4
+        && profile->tiredSpeed >= OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+        && profile->tiredSpeed <= OW_WILD_SPAWNER_MOVEMENT_SPEED_4;
+}
+
+static BOOL OverworldWildSpawns_AreExactOverrideMovementSpeedsValid(
+    const OverworldWildBehaviorOverrideProfile *profile)
+{
+    u32 operatorMask;
+
+    if (profile == NULL) {
+        return FALSE;
+    }
+    operatorMask = profile->relativeMask | profile->atLeastMask | profile->atMostMask;
+    if ((profile->mask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
+        && !(operatorMask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
+        && (profile->profile.chillSpeed < OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+            || profile->profile.chillSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4)) {
+        return FALSE;
+    }
+    if ((profile->mask & OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED)
+        && !(operatorMask & OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED)
+        && (profile->profile.attentiveSpeed < OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+            || profile->profile.attentiveSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4)) {
+        return FALSE;
+    }
+    if ((profile->mask & OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED)
+        && !(operatorMask & OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED)
+        && (profile->profile.tiredSpeed < OW_WILD_SPAWNER_MOVEMENT_SPEED_1
+            || profile->profile.tiredSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4)) {
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob, u32 *loadedSize)
 {
     void *narc;
@@ -909,6 +954,7 @@ static BOOL OverworldWildSpawns_DecodeBehaviorDataBlob(void)
 {
     const OverworldWildBehaviorDataBlob *blob;
     const OverworldWildBehaviorDataBlobHeader *header;
+    int i;
 
     blob = (const OverworldWildBehaviorDataBlob *)sOverworldWildBehaviorDataBlob;
     header = &blob->header;
@@ -917,6 +963,19 @@ static BOOL OverworldWildSpawns_DecodeBehaviorDataBlob(void)
         || header->headerSize != sizeof(OverworldWildBehaviorDataBlobHeader)
         || header->blobSize != sizeof(OverworldWildBehaviorDataBlob)) {
         return FALSE;
+    }
+
+    for (i = 0; i < OWBD_CLASS_PROFILE_COUNT; i++) {
+        if (!OverworldWildSpawns_AreProfileMovementSpeedsValid(&blob->classProfiles[i])) {
+            return FALSE;
+        }
+    }
+    for (i = 0; i < OWBD_OVERRIDE_PROFILE_COUNT; i++) {
+        const OverworldWildBehaviorOverrideProfile *profile = &blob->overrideProfiles[i];
+        if (!OverworldWildSpawns_AreOverrideOperatorMasksValid(profile)
+            || !OverworldWildSpawns_AreExactOverrideMovementSpeedsValid(profile)) {
+            return FALSE;
+        }
     }
 
     return TRUE;
@@ -2192,9 +2251,7 @@ static u8 OverworldWildSpawns_GetPhantomTeleportMoveFrames(
         profile->attentiveTeleportTime,
         profile->tiredTeleportTime);
 
-    return teleportTime != 0
-        ? teleportTime
-        : OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES;
+    return teleportTime;
 }
 
 static u8 OverworldWildSpawns_GetPhantomTeleportPauseFrames(
@@ -2213,9 +2270,7 @@ static u8 OverworldWildSpawns_GetPhantomTeleportPauseFrames(
         profile->attentiveTeleportPause,
         profile->tiredTeleportPause);
 
-    return teleportPause != 0
-        ? teleportPause
-        : OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES;
+    return teleportPause;
 }
 
 static BOOL OverworldWildSpawns_BehaviorUsesAsleep(u8 behavior)
@@ -2698,12 +2753,121 @@ static const u8 sOverworldWildBehaviorOverrideFieldOffsets[] = {
     OW_WILD_PROFILE_OFFSET(chainPauseAction),
 };
 
+/* Zero marks a field that is not eligible for numeric override operators. */
+static const u8 sOverworldWildBehaviorRelativeFieldMaximums[] = {
+    0, 0, 0, 64, 0, 64, 0, 64, 4, 4, 64, 0, 0, 0, 0, 0, 4,
+    0, 0, 100, 255, 0, 0, 0, 0, 12, 12, 255, 64, 255, 0, 8, 8, 32, 255,
+    0, 0, 0, 0, 0, 0, 0, 0, 12, 12, 255, 64, 255, 32, 4, 0, 12, 12,
+    255, 64, 255, 32, 4, 10, 64, 32, 4, 15, 64, 15, 8, 0, 0, 0,
+};
+
+static const u8 sOverworldWildBehaviorRelativeFieldMinimums[] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+};
+
+/* Bounds are only exposed where later invariant repair cannot change them. */
+static const u8 sOverworldWildBehaviorBoundedFieldMaximums[] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 64, 0, 0, 0, 0, 0, 4,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 64, 255, 0, 0, 0, 32,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 64, 255, 32, 0, 0,
+    0, 0, 255, 64, 255, 32, 0, 0, 64, 32, 4, 15, 64, 15, 8, 0, 0,
+    0,
+};
+
+typedef char OverworldWildBehaviorRelativeMaximumCountMustMatchFieldCount[
+    NELEMS(sOverworldWildBehaviorRelativeFieldMaximums)
+        == NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)
+        ? 1
+        : -1];
+typedef char OverworldWildBehaviorRelativeMinimumCountMustMatchFieldCount[
+    NELEMS(sOverworldWildBehaviorRelativeFieldMinimums)
+        == NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)
+        ? 1
+        : -1];
+typedef char OverworldWildBehaviorBoundedMaximumCountMustMatchFieldCount[
+    NELEMS(sOverworldWildBehaviorBoundedFieldMaximums)
+        == NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)
+        ? 1
+        : -1];
+
+static BOOL OverworldWildSpawns_IsMovementSpeedField(u8 fieldIndex)
+{
+    return fieldIndex == 8 || fieldIndex == 9 || fieldIndex == 16;
+}
+
+static BOOL OverworldWildSpawns_IsOverrideOperatorMaskValid(
+    u32 activeMask,
+    u32 operatorMask,
+    u32 allowedMask,
+    u8 fieldIndex,
+    const OverworldWildBehaviorProfile *overrideProfile,
+    const u8 *fieldMaximums)
+{
+    const u8 *overrideBytes = (const u8 *)overrideProfile;
+
+    if ((activeMask & ~allowedMask) != 0 || (operatorMask & ~allowedMask) != 0) {
+        return FALSE;
+    }
+    while (operatorMask != 0 && fieldIndex < NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)) {
+        if ((operatorMask & 1u)
+            && (!(activeMask & 1u)
+                || fieldMaximums[fieldIndex] == 0
+                || (fieldMaximums == sOverworldWildBehaviorRelativeFieldMaximums
+                    && overrideBytes[sOverworldWildBehaviorOverrideFieldOffsets[fieldIndex]] == 0x80)
+                || (fieldMaximums == sOverworldWildBehaviorBoundedFieldMaximums
+                    && overrideBytes[sOverworldWildBehaviorOverrideFieldOffsets[fieldIndex]]
+                        > fieldMaximums[fieldIndex])
+                || (fieldMaximums == sOverworldWildBehaviorBoundedFieldMaximums
+                    && OverworldWildSpawns_IsMovementSpeedField(fieldIndex)
+                    && overrideBytes[sOverworldWildBehaviorOverrideFieldOffsets[fieldIndex]] == 0))) {
+            return FALSE;
+        }
+        activeMask >>= 1;
+        operatorMask >>= 1;
+        fieldIndex++;
+    }
+    return operatorMask == 0;
+}
+
+static BOOL OverworldWildSpawns_AreOverrideOperatorMasksValid(
+    const OverworldWildBehaviorOverrideProfile *profile)
+{
+    if (profile == NULL
+        || ((profile->relativeMask & profile->atLeastMask) != 0)
+        || ((profile->relativeMask & profile->atMostMask) != 0)
+        || ((profile->atLeastMask & profile->atMostMask) != 0)
+        || ((profile->relativeMask2 & profile->atLeastMask2) != 0)
+        || ((profile->relativeMask2 & profile->atMostMask2) != 0)
+        || ((profile->atLeastMask2 & profile->atMostMask2) != 0)
+        || ((profile->relativeMask3 & profile->atLeastMask3) != 0)
+        || ((profile->relativeMask3 & profile->atMostMask3) != 0)
+        || ((profile->atLeastMask3 & profile->atMostMask3) != 0)) {
+        return FALSE;
+    }
+    return OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask, profile->relativeMask, 0x07FFFFFF, 0, &profile->profile, sOverworldWildBehaviorRelativeFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask2, profile->relativeMask2, 0x00007FFF, 27, &profile->profile, sOverworldWildBehaviorRelativeFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask3, profile->relativeMask3, 0x07FFFFFF, 42, &profile->profile, sOverworldWildBehaviorRelativeFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask, profile->atLeastMask, 0x07FFFFFF, 0, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask2, profile->atLeastMask2, 0x00007FFF, 27, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask3, profile->atLeastMask3, 0x07FFFFFF, 42, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask, profile->atMostMask, 0x07FFFFFF, 0, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask2, profile->atMostMask2, 0x00007FFF, 27, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums)
+        && OverworldWildSpawns_IsOverrideOperatorMaskValid(profile->mask3, profile->atMostMask3, 0x07FFFFFF, 42, &profile->profile, sOverworldWildBehaviorBoundedFieldMaximums);
+}
+
 #undef OW_WILD_PROFILE_OFFSET
 
 static void OverworldWildSpawns_ApplyBehaviorOverrideMask(
     OverworldWildBehaviorProfile *profile,
     const OverworldWildBehaviorProfile *overrideProfile,
     u32 mask,
+    u32 relativeMask,
+    u32 atLeastMask,
+    u32 atMostMask,
     u8 fieldIndex)
 {
     u8 *profileBytes = (u8 *)profile;
@@ -2712,9 +2876,30 @@ static void OverworldWildSpawns_ApplyBehaviorOverrideMask(
     while (mask != 0 && fieldIndex < NELEMS(sOverworldWildBehaviorOverrideFieldOffsets)) {
         if (mask & 1u) {
             u8 offset = sOverworldWildBehaviorOverrideFieldOffsets[fieldIndex];
-            profileBytes[offset] = overrideBytes[offset];
+            if (relativeMask & 1u) {
+                int adjusted = (int)profileBytes[offset] + (int)(s8)overrideBytes[offset];
+                int minimum = sOverworldWildBehaviorRelativeFieldMinimums[fieldIndex];
+                int maximum = sOverworldWildBehaviorRelativeFieldMaximums[fieldIndex];
+                if (adjusted < minimum) {
+                    adjusted = minimum;
+                } else if (adjusted > maximum) {
+                    adjusted = maximum;
+                }
+                profileBytes[offset] = (u8)adjusted;
+            } else if ((atLeastMask & 1u) || (atMostMask & 1u)) {
+                if ((atLeastMask & 1u) && profileBytes[offset] < overrideBytes[offset]) {
+                    profileBytes[offset] = overrideBytes[offset];
+                } else if ((atMostMask & 1u) && profileBytes[offset] > overrideBytes[offset]) {
+                    profileBytes[offset] = overrideBytes[offset];
+                }
+            } else {
+                profileBytes[offset] = overrideBytes[offset];
+            }
         }
         mask >>= 1;
+        relativeMask >>= 1;
+        atLeastMask >>= 1;
+        atMostMask >>= 1;
         fieldIndex++;
     }
 }
@@ -2727,9 +2912,9 @@ static void OverworldWildSpawns_ApplyBehaviorOverride(
         return;
     }
 
-    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask, 0);
-    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask2, 27);
-    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask3, 42);
+    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask, overrideProfile->relativeMask, overrideProfile->atLeastMask, overrideProfile->atMostMask, 0);
+    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask2, overrideProfile->relativeMask2, overrideProfile->atLeastMask2, overrideProfile->atMostMask2, 27);
+    OverworldWildSpawns_ApplyBehaviorOverrideMask(profile, &overrideProfile->profile, overrideProfile->mask3, overrideProfile->relativeMask3, overrideProfile->atLeastMask3, overrideProfile->atMostMask3, 42);
 }
 
 static BOOL OverworldWildSpawns_OverrideSetsOverworldLimit(
@@ -2827,15 +3012,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
         }
     }
 
-    if (profile.attentiveSpeed == 0) {
-        profile.attentiveSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
-    }
-    if (profile.chillSpeed == 0) {
-        profile.chillSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
-    }
-    if (profile.tiredSpeed == 0) {
-        profile.tiredSpeed = profile.chillSpeed;
-    }
     if (!OverworldWildSpawns_IsValidBehaviorKind(profile.chillState)) {
         profile.chillState = OW_WILD_BEHAVIOR_KIND_IDLE;
     }
@@ -2866,12 +3042,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     if (profile.hopAllowNonCardinal > OW_WILD_BEHAVIOR_BOOL_YES) {
         profile.hopAllowNonCardinal = OW_WILD_BEHAVIOR_BOOL_YES;
     }
-    if (profile.hopMinDistance == 0) {
-        profile.hopMinDistance = 1;
-    }
-    if (profile.hopMaxDistance == 0) {
-        profile.hopMaxDistance = profile.hopMinDistance;
-    }
     if (profile.hopMaxDistance < profile.hopMinDistance) {
         profile.hopMaxDistance = profile.hopMinDistance;
     }
@@ -2880,12 +3050,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     }
     if (profile.chainPauseAction > OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND) {
         profile.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE;
-    }
-    if (profile.teleportTime == 0) {
-        profile.teleportTime = OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES;
-    }
-    if (profile.teleportPause == 0) {
-        profile.teleportPause = OW_WILD_SPAWNER_PHANTOM_STALK_POST_TELEPORT_COOLDOWN_FRAMES;
     }
     if (profile.attentiveCircleRadius > OW_WILD_SPAWNER_CIRCLE_PLAYER_MAX_RADIUS) {
         profile.attentiveCircleRadius = OW_WILD_SPAWNER_CIRCLE_PLAYER_MAX_RADIUS;
@@ -2929,9 +3093,6 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
         && profile.restTime == 0) {
         profile.restTime = 1;
     }
-    if (profile.range == 0) {
-        profile.range = OW_WILD_SPAWNER_MOVEMENT_RANGE;
-    }
     if (profile.jumpLevel > OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH) {
         profile.jumpLevel = OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH;
     }
@@ -2951,16 +3112,14 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_ResolveBehaviorProfileFo
     if (profile.spawnDestination > OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER) {
         profile.spawnDestination = OW_WILD_SPAWN_DESTINATION_POOL;
     }
-    if (profile.spawnDestinationMinDistance == 0) {
+    if (profile.spawnDestinationMinDistance < OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE) {
         profile.spawnDestinationMinDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE;
-    }
-    if (profile.spawnDestinationMinDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
+    } else if (profile.spawnDestinationMinDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
         profile.spawnDestinationMinDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
     }
-    if (profile.spawnDestinationMaxDistance == 0) {
-        profile.spawnDestinationMaxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
-    }
-    if (profile.spawnDestinationMaxDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
+    if (profile.spawnDestinationMaxDistance < OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE) {
+        profile.spawnDestinationMaxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE;
+    } else if (profile.spawnDestinationMaxDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
         profile.spawnDestinationMaxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
     }
     if (profile.spawnDestinationMaxDistance < profile.spawnDestinationMinDistance) {
@@ -3398,25 +3557,16 @@ static u8 OverworldWildSpawns_GetBehaviorHopPauseFrames(
 {
     u8 hopPause;
 
-    if (profile != NULL) {
-        hopPause = OverworldWildSpawns_SelectStateMovementByte(
-            spotState,
-            profile->hopPause,
-            profile->attentiveHopPause,
-            profile->tiredHopPause);
-        if (hopPause != 0) {
-            return hopPause;
-        }
+    if (profile == NULL) {
+        return OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES;
     }
-    if (profile != NULL && OverworldWildSpawns_IsCanopyHopperTreeTopProfile(profile)) {
-        if (spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-            return OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN;
-        }
-        if (spotState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-            return OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
-        }
-    }
-    return OW_WILD_SPAWNER_CANOPY_HOPPER_COOLDOWN_FRAMES;
+
+    hopPause = OverworldWildSpawns_SelectStateMovementByte(
+        spotState,
+        profile->hopPause,
+        profile->attentiveHopPause,
+        profile->tiredHopPause);
+    return hopPause;
 }
 
 static u8 OverworldWildSpawns_GetBehaviorHopSpinSpeed(
@@ -3797,21 +3947,13 @@ static u8 OverworldWildSpawns_GetMovementSpeedForState(
     }
 
     if (spotState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-        return profile->chillSpeed != 0
-            ? profile->chillSpeed
-            : OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
+        return profile->chillSpeed;
     }
     if (spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED) {
-        return profile->tiredSpeed != 0
-            ? profile->tiredSpeed
-            : OverworldWildSpawns_GetMovementSpeedForState(
-                profile,
-                OW_WILD_SPAWNER_SPOT_STATE_CHILL);
+        return profile->tiredSpeed;
     }
 
-    return profile->attentiveSpeed != 0
-        ? profile->attentiveSpeed
-        : OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
+    return profile->attentiveSpeed;
 }
 
 static BOOL OverworldWildSpawns_CurrentSpotUsesRamLocomotion(
@@ -4951,9 +5093,6 @@ static void OverworldWildSpawns_EnsurePhantomFlickerObjectAtPosition(
     MapObject_SetID(flickerObject, objectId);
     OverworldWildSpawns_SetObjectPassThrough(flickerObject, TRUE);
     range = OverworldWildSpawns_GetBehaviorProfile(state, slot).range;
-    if (range == 0) {
-        range = OW_WILD_SPAWNER_MOVEMENT_RANGE;
-    }
     MapObject_SetXRange(flickerObject, range);
     MapObject_SetYRange(flickerObject, range);
     OverworldWildSpawns_ApplyPokemonRenderParams(
@@ -6829,9 +6968,6 @@ static BOOL OverworldWildSpawns_TryGetCirclePlayerMovementTarget(
     }
 
     radius = profile->attentiveCircleRadius;
-    if (radius == 0) {
-        radius = 1;
-    }
     currentIsTarget = OverworldWildSpawns_IsCirclePlayerTargetTile(
         objectX,
         objectY,
@@ -7177,9 +7313,6 @@ static BOOL OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand(
             OverworldWildSpawns_Abs(dx),
             OverworldWildSpawns_Abs(dy)) >= profile->attentiveChaseBoostDistance) {
         boostedProfile = *profile;
-        if (boostedProfile.attentiveSpeed == 0) {
-            boostedProfile.attentiveSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT;
-        }
         if (boostedProfile.attentiveSpeed < profile->attentiveChaseBoostSpeed) {
             boostedProfile.attentiveSpeed = profile->attentiveChaseBoostSpeed;
         }
@@ -7303,9 +7436,7 @@ static BOOL OverworldWildSpawns_TryStartPhantomTeleportToTile(
     movementDistance = OverworldWildSpawns_Max(
         OverworldWildSpawns_Abs(targetX - objectX),
         OverworldWildSpawns_Abs(targetY - objectY));
-    moveFrames = teleportTime != 0
-        ? teleportTime
-        : OW_WILD_SPAWNER_PHANTOM_STALK_TELEPORT_MOVE_FRAMES;
+    moveFrames = teleportTime;
 
     OverworldWildSpawns_ClearPhantomFlickerObject(state, slot, TRUE);
     OverworldWildSpawns_SetPreviousTile(state, slot, objectX, objectY);
@@ -11593,9 +11724,6 @@ static u8 OverworldWildSpawns_GetBehaviorHopMinDistance(
         profile->hopMinDistance,
         profile->attentiveHopMinDistance,
         profile->tiredHopMinDistance);
-    if (minDistance == 0) {
-        return OW_WILD_SPAWNER_CUSTOM_JUMP_MIN_TILES;
-    }
     return minDistance;
 }
 
@@ -11614,9 +11742,6 @@ static u8 OverworldWildSpawns_GetBehaviorHopMaxDistance(
         profile->hopMaxDistance,
         profile->attentiveHopMaxDistance,
         profile->tiredHopMaxDistance);
-    if (maxDistance == 0) {
-        return OW_WILD_SPAWNER_CUSTOM_JUMP_MAX_TILES;
-    }
     if (maxDistance < minDistance) {
         return minDistance;
     }
@@ -13956,9 +14081,6 @@ static BOOL OverworldWildSpawns_StartPreparedCustomJumpCommand(
         && OverworldWildSpawns_IsHeadbuttTreeTopLocation(fieldSystem, objectX, objectY);
     state->movementFieldSystem = fieldSystem;
     framesPerTile = profile->hopTime;
-    if (framesPerTile == 0) {
-        framesPerTile = OW_WILD_SPAWNER_CUSTOM_JUMP_FRAMES_PER_TILE;
-    }
     if (distance < OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP
         || distance > OW_WILD_SPAWNER_CUSTOM_JUMP_MAX_TILES) {
         return FALSE;
@@ -14946,10 +15068,6 @@ static LocalMapObject *OverworldWildSpawns_CreateObject(
 
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *object, u8 range)
 {
-    if (range == 0) {
-        range = OW_WILD_SPAWNER_MOVEMENT_RANGE;
-    }
-
     MapObject_SetXRange(object, range);
     MapObject_SetYRange(object, range);
 }
@@ -15313,7 +15431,7 @@ static void OverworldWildSpawns_GetPlayerRelativeSpawnDistanceRange(
         minDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
     }
     if (maxDistance < OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE) {
-        maxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
+        maxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE;
     } else if (maxDistance > OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE) {
         maxDistance = OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE;
     }

@@ -144,8 +144,8 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     id: "hop-timing-chill",
     label: "Hop timing",
     fields: Object.freeze([
-      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
-      Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Chill only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero is immediate" }),
+      Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Chill only. Zero removes the pause" }),
       Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
     ]),
   }),
@@ -153,8 +153,8 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     id: "hop-timing-active",
     label: "Hop timing",
     fields: Object.freeze([
-      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
-      Object.freeze({ key: "attentiveHopPause", label: "Pause", unit: "frames", note: "Active only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero is immediate" }),
+      Object.freeze({ key: "attentiveHopPause", label: "Pause", unit: "frames", note: "Active only. Zero removes the pause" }),
       Object.freeze({ key: "attentiveHopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Active only. Zero disables spinning" }),
     ]),
   }),
@@ -162,8 +162,8 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     id: "hop-timing-tired",
     label: "Hop timing",
     fields: Object.freeze([
-      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero uses the default travel time" }),
-      Object.freeze({ key: "tiredHopPause", label: "Pause", unit: "frames", note: "Tired only. Zero uses the fallback cooldown" }),
+      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero is immediate" }),
+      Object.freeze({ key: "tiredHopPause", label: "Pause", unit: "frames", note: "Tired only. Zero removes the pause" }),
       Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
     ]),
   }),
@@ -171,24 +171,24 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     id: "teleport-timing-chill",
     label: "Teleport timing",
     fields: Object.freeze([
-      Object.freeze({ key: "teleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
-      Object.freeze({ key: "teleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+      Object.freeze({ key: "teleportTime", label: "Travel time", unit: "frames", note: "Zero is immediate" }),
+      Object.freeze({ key: "teleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
     ]),
   }),
   "teleport-timing-active": Object.freeze({
     id: "teleport-timing-active",
     label: "Teleport timing",
     fields: Object.freeze([
-      Object.freeze({ key: "attentiveTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
-      Object.freeze({ key: "attentiveTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+      Object.freeze({ key: "attentiveTeleportTime", label: "Travel time", unit: "frames", note: "Zero is immediate" }),
+      Object.freeze({ key: "attentiveTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
     ]),
   }),
   "teleport-timing-tired": Object.freeze({
     id: "teleport-timing-tired",
     label: "Teleport timing",
     fields: Object.freeze([
-      Object.freeze({ key: "tiredTeleportTime", label: "Travel time", unit: "frames", note: "Zero uses the default teleport duration" }),
-      Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero uses the default post-teleport cooldown" }),
+      Object.freeze({ key: "tiredTeleportTime", label: "Travel time", unit: "frames", note: "Zero is immediate" }),
+      Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
     ]),
   }),
   "ram-tuning-chill": Object.freeze({
@@ -493,6 +493,13 @@ function normalizeData(input) {
   return {
     fields: [],
     overrideFieldKeys: [],
+    numericProfileFieldKeys: [],
+    relativeOverrideFieldKeys: [],
+    numericOverrideOperatorFieldKeys: [],
+    boundedOverrideOperatorFieldKeys: [],
+    numericOverrideOperandMaximums: {},
+    numericOverrideOperandMinimums: {},
+    relativeOverrideDeltaRange: { min: -127, max: 127 },
     editOptions: {},
     labels: {},
     classes: [],
@@ -567,6 +574,8 @@ export function createProfilesController({
   let data = normalizeData(state.profileData || state.data || state.appData);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   state.profileDrafts = drafts;
+  const invalidNumericOperatorInputs = new Set();
+  let formulaRefreshTimer = null;
   const legacyLifecycleSections = state.profileLifecycleSections instanceof Map
     ? state.profileLifecycleSections
     : null;
@@ -1117,7 +1126,7 @@ export function createProfilesController({
           ? { ...option, label: `${valueRaw(option)} — RAM clamps to 4; Chain pause ${valueRaw(option)} frames` }
           : option);
     }
-    if (currentRaw && !options.some((option) => valueRaw(option) === currentRaw)) {
+    if (currentRaw && !isNumericOverrideRaw(currentRaw) && !options.some((option) => valueRaw(option) === currentRaw)) {
       options.push({
         raw: currentRaw,
         label: fieldKey === "ramMaxSpeed" && usesRam && Number(currentRaw) > 4
@@ -1126,6 +1135,138 @@ export function createProfilesController({
       });
     }
     return options;
+  }
+
+  function isRelativeOverrideRaw(raw) {
+    return /^[+-]\d+$/.test(String(raw || ""));
+  }
+
+  function parseNumericOverrideRaw(raw) {
+    const value = String(raw || "");
+    if (isRelativeOverrideRaw(value)) return { kind: "adjust", operand: Number(value) };
+    const bound = value.match(/^\/([<>])(\d+)$/);
+    if (!bound) return null;
+    return { kind: bound[1] === "<" ? "atLeast" : "atMost", operand: Number(bound[2]) };
+  }
+
+  function isNumericOverrideRaw(raw) {
+    return Boolean(parseNumericOverrideRaw(raw));
+  }
+
+  function numericOperatorStateLabel(raw, changed) {
+    const operator = parseNumericOverrideRaw(raw);
+    if (!operator) return "";
+    if (operator.kind === "adjust") {
+      return `${changed ? "Edited adjustment" : "Adjusts earlier stored value"} by ${raw}; the stored result is clamped to this field's valid range`;
+    }
+    if (operator.kind === "atLeast") {
+      return `${changed ? "Edited minimum" : "Raises the earlier stored value"} to no less than ${operator.operand}`;
+    }
+    return `${changed ? "Edited maximum" : "Lowers the earlier stored value"} to no greater than ${operator.operand}`;
+  }
+
+  function numericOperatorVisibleNote(raw) {
+    const operator = parseNumericOverrideRaw(raw);
+    if (!operator) return "";
+    if (operator.kind === "adjust") return `adjust ${raw}`;
+    return operator.kind === "atLeast"
+      ? `at least ${operator.operand} (/<${operator.operand})`
+      : `at most ${operator.operand} (/>${operator.operand})`;
+  }
+
+  function numericOverridePermissions(profile, fieldKey) {
+    const numericFields = data.numericProfileFieldKeys?.length
+      ? data.numericProfileFieldKeys
+      : (data.numericOverrideOperatorFieldKeys?.length
+        ? data.numericOverrideOperatorFieldKeys
+        : data.relativeOverrideFieldKeys);
+    const boundedFields = data.boundedOverrideOperatorFieldKeys || [];
+    const profileAllows = isOverrideProfile(profile)
+      && profile?.numericOverrideOperatorsAllowed !== false
+      && profile?.relativeOverridesAllowed !== false;
+    return {
+      adjust: profileAllows && numericFields.includes(fieldKey),
+      bounds: profileAllows && boundedFields.includes(fieldKey),
+    };
+  }
+
+  function isNumericProfileField(fieldKey) {
+    const numericFields = data.numericProfileFieldKeys?.length
+      ? data.numericProfileFieldKeys
+      : data.numericOverrideOperatorFieldKeys;
+    return numericFields.includes(fieldKey);
+  }
+
+  function numericOverrideAllowed(profile, fieldKey, kind = null, permissions = null) {
+    const resolvedPermissions = permissions || numericOverridePermissions(profile, fieldKey);
+    if (kind === "adjust") return resolvedPermissions.adjust;
+    if (kind === "atLeast" || kind === "atMost") return resolvedPermissions.bounds;
+    return resolvedPermissions.adjust || resolvedPermissions.bounds;
+  }
+
+  function numericInputProfile(input, fallbackProfile = null) {
+    const owningKey = input?.dataset?.profileKey || "";
+    return owningKey ? findProfile(owningKey) : fallbackProfile;
+  }
+
+  function numericInputPermissions(input, profile, fieldKey) {
+    if (input?.dataset?.numericAdjust !== undefined && input?.dataset?.numericBounds !== undefined) {
+      return {
+        adjust: input.dataset.numericAdjust === "true",
+        bounds: input.dataset.numericBounds === "true",
+      };
+    }
+    return numericOverridePermissions(profile, fieldKey);
+  }
+
+  function relativeFieldDeltaBounds() {
+    return {
+      min: Number(data.relativeOverrideDeltaRange?.min ?? -127),
+      max: Number(data.relativeOverrideDeltaRange?.max ?? 127),
+    };
+  }
+
+  function numericOverrideOperandBounds(fieldKey, options, kind) {
+    if (kind === "adjust") return relativeFieldDeltaBounds();
+    const optionMaximum = Math.max(0, ...options.map((option) => Number(valueRaw(option))).filter(Number.isFinite));
+    const fieldMaximum = Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum ?? 64);
+    const minimum = Number(data.numericOverrideOperandMinimums?.[fieldKey] ?? 0);
+    return { min: minimum, max: Math.min(fieldMaximum, optionMaximum || fieldMaximum) };
+  }
+
+  function renderProfileSelectOptions(options, selectedRaw, allowInherit = false) {
+    const selected = String(selectedRaw || "");
+    const renderOptions = (items) => items.map((option) => {
+      const optionRaw = valueRaw(option);
+      return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === selected ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
+    }).join("");
+    const inherit = allowInherit ? `<option value="" ${selected ? "" : "selected"}>Inherit</option>` : "";
+    return `${inherit}${renderOptions(options)}`;
+  }
+
+  function renderProfileValueEditor(profile, fieldKey, options, selectedRaw, instance, label, descriptionId, allowInherit = isOverrideProfile(profile), attributes = "") {
+    const permissions = numericOverridePermissions(profile, fieldKey);
+    if (!isNumericProfileField(fieldKey)) {
+      return `<select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
+        ${renderProfileSelectOptions(options, selectedRaw, allowInherit, permissions)}
+      </select>`;
+    }
+    const listId = `pv2-numeric-options-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const errorId = `pv2-numeric-error-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const syntax = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : ""].filter(Boolean).join(", ");
+    const title = syntax
+      ? `Clear to inherit. Type an exact value, ${syntax}.`
+      : (allowInherit
+        ? "Clear to inherit, or type an exact whole-number value."
+        : "Type an exact whole-number value.");
+    return `<span class="pv2-numeric-combobox">
+      <input class="field-control" type="text" inputmode="text" autocomplete="off" spellcheck="false" list="${escapeHtml(listId)}" value="${escapeHtml(selectedRaw)}" placeholder="${allowInherit ? "Inherit" : "Value"}" title="${escapeHtml(title)}" aria-errormessage="${escapeHtml(errorId)}" data-profile-value data-profile-numeric-entry data-profile-key="${escapeHtml(profileKey(profile))}" data-profile-allow-inherit="${allowInherit ? "true" : "false"}" data-numeric-adjust="${permissions.adjust ? "true" : "false"}" data-numeric-bounds="${permissions.bounds ? "true" : "false"}" data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
+      <datalist id="${escapeHtml(listId)}">
+        ${allowInherit ? `<option value="Inherit"></option>` : ""}
+        ${options.map((option) => `<option value="${escapeHtml(valueRaw(option))}" label="${escapeHtml(valueLabel(option))}"></option>`).join("")}
+      </datalist>
+      <small id="${escapeHtml(errorId)}" class="pv2-numeric-error" role="status" aria-live="polite"></small>
+    </span>`;
   }
 
   function spawnDestinationPlayerInfo(raw) {
@@ -1446,8 +1587,7 @@ export function createProfilesController({
     const inheritedChillAmbiguous = scope === "chill" && inherited
       && !inheritedChillRam
       && !inheritedChillChain;
-    const effectiveMovementStyles = inherited ? effectiveFieldCandidates(profile, parentField) : [raw];
-    const usesMovementSpeed = effectiveMovementStyles.some((style) => style === LOCOMOTION.wander || style === LOCOMOTION.ram);
+    const usesMovementSpeed = inherited || raw === LOCOMOTION.wander || raw === LOCOMOTION.ram;
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -1465,7 +1605,7 @@ export function createProfilesController({
         if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
       });
     };
-    append([fields.speed], usesMovementSpeed, { label: "Movement speed" });
+    if (usesMovementSpeed) append([fields.speed], true, { label: "Movement speed" });
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
@@ -1595,6 +1735,8 @@ export function createProfilesController({
         ? (hasOverride ? "Edited override" : "Will inherit")
         : (hasOverride ? "Overrides base" : "Inherited"))
       : (changed ? "Edited value" : "Saved value");
+    const numericOperator = parseNumericOverrideRaw(stateRaw);
+    if (override && numericOperator) stateLabel = numericOperatorStateLabel(stateRaw, changed);
     if (presentation.inactive) stateLabel = `${stateLabel}; currently inactive`;
     const instance = presentation.instance || fieldKey;
     const label = fieldLabelForProfile(profile, fieldKey, presentation);
@@ -1607,11 +1749,12 @@ export function createProfilesController({
     const description = [
       unit ? `Unit: ${unit}.` : "",
       `Status: ${stateLabel}.`,
-      hasContextBase ? `Base value: ${baseLabel}.` : "",
+      hasContextBase ? `Context class base value: ${baseLabel}.` : "",
     ].filter(Boolean).join(" ");
     const stateMarkup = `<span id="${escapeHtml(descriptionId)}" class="sr-only">${escapeHtml(description)}</span>`;
     const visibleMeta = [
       unit ? `<span class="pv2-field-unit" aria-hidden="true">${escapeHtml(unit)}</span>` : "",
+      override && numericOperator ? `<span class="pv2-field-note pv2-field-note--operator" aria-hidden="true">${escapeHtml(numericOperatorVisibleNote(stateRaw))}</span>` : "",
       presentation.inactive ? `<span class="pv2-field-note" aria-hidden="true">inactive</span>` : "",
       hasContextBase ? `<span class="field-base base-value pv2-field-base" aria-hidden="true">(${escapeHtml(baseLabel)})</span>` : "",
     ].filter(Boolean).join("");
@@ -1620,19 +1763,25 @@ export function createProfilesController({
       : stateMarkup;
     const tabIndex = Number.isInteger(presentation.tabIndex) ? ` tabindex="${presentation.tabIndex}"` : "";
     return `
-      <label class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
           ${metaMarkup}
         </span>
-        <select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}"${presentation.compound ? ` data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""}${tabIndex} aria-label="${escapeHtml(label)}" aria-describedby="${escapeHtml(descriptionId)}">
-          ${allowInherit ? `<option value="" ${selectedRaw ? "" : "selected"}>Inherit</option>` : ""}
-          ${selectOptions.map((option) => {
-            const optionRaw = valueRaw(option);
-            return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(selectedRaw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
-          }).join("")}
-        </select>
-      </label>`;
+        <span class="pv2-value-control">
+          ${renderProfileValueEditor(
+            profile,
+            fieldKey,
+            selectOptions,
+            selectedRaw,
+            instance,
+            label,
+            descriptionId,
+            allowInherit,
+            `${presentation.compound ? `data-profile-compound="${escapeHtml(presentation.compound)}"` : ""}${presentation.scope ? ` data-compound-scope="${escapeHtml(presentation.scope)}"` : ""}${tabIndex} aria-label="${escapeHtml(label)}" aria-describedby="${escapeHtml(descriptionId)}"`,
+          )}
+        </span>
+      </div>`;
   }
 
   function renderFieldControl(profile, fieldKey, presentation = {}) {
@@ -1663,6 +1812,7 @@ export function createProfilesController({
       && fieldRaw(profile, "movementStyle")
       && fieldRaw(profile, "movementStyle") !== LOCOMOTION.hop;
     if (standaloneThrowRange) return "";
+    if (isNumericOverrideRaw(minimumRaw) || isNumericOverrideRaw(maximumRaw)) return "";
 
     let pairs = [{ minimumRaw, maximumRaw }];
     if (isOverrideProfile(profile) && (!minimumRaw || !maximumRaw)) {
@@ -1677,6 +1827,8 @@ export function createProfilesController({
         };
       });
     }
+
+    if (pairs.some((pair) => isNumericOverrideRaw(pair.minimumRaw) || isNumericOverrideRaw(pair.maximumRaw))) return "";
 
     const invalid = pairs.some((pair) => {
       const minimum = fieldNumericValue(range.min, pair.minimumRaw);
@@ -1710,6 +1862,7 @@ export function createProfilesController({
           ? (hasOverride ? "Edited override" : "Will inherit")
           : (hasOverride ? "Overrides base" : "Inherited"))
         : (changed ? "Edited value" : "Saved value");
+      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed);
       if (inactive) stateLabel = `${stateLabel}; currently inactive`;
       const instance = `${presentation.instance}:${control.fieldKey}`;
       const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -1731,6 +1884,7 @@ export function createProfilesController({
         description,
         hasContextBase,
         baseLabel,
+        operatorNote: numericOperatorVisibleNote(raw),
         options: fieldOptions(control.fieldKey, raw, profile, control.node || {}),
       };
     });
@@ -1749,23 +1903,30 @@ export function createProfilesController({
           <strong>${escapeHtml(rangeNode.range.label)}</strong>
           <small class="pv2-field-meta">
             ${rangeNode.range.unit ? `<span class="pv2-field-unit">${escapeHtml(rangeNode.range.unit)}</span>` : ""}
+            ${controls.some((control) => control.operatorNote) ? `<span class="pv2-field-note">resolved pairs normalize after ordered layers</span>` : ""}
             ${inactive ? `<span class="pv2-field-note">inactive</span>` : ""}
             ${hasContextBase ? `<span class="field-base base-value pv2-field-base">(${escapeHtml(baseLabels.join("–"))})</span>` : ""}
           </small>
         </span>
         <span class="pv2-range-controls" role="group" aria-label="${escapeHtml(rangeNode.range.label)}">
           ${controls.map((control) => `
-            <label class="pv2-range-control" data-range-state="${escapeHtml(control.state)}">
-              <span>${escapeHtml(control.shortLabel)}</span>
+            <div class="pv2-range-control" data-range-state="${escapeHtml(control.state)}">
+              <span>${escapeHtml(control.shortLabel)}${control.operatorNote ? `<small class="pv2-field-note">${escapeHtml(control.operatorNote)}</small>` : ""}</span>
               <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
-              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.fieldKey)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${rangeNode.range.label}, ${control.role.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError ? ` ${errorId}` : ""}`)}" aria-invalid="${Boolean(rangeError)}">
-                ${override ? `<option value="" ${control.raw ? "" : "selected"}>Inherit</option>` : ""}
-                ${control.options.map((option) => {
-                  const optionRaw = valueRaw(option);
-                  return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(control.raw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
-                }).join("")}
-              </select>
-            </label>`).join("")}
+              <span class="pv2-value-control">
+                ${renderProfileValueEditor(
+                  profile,
+                  control.fieldKey,
+                  control.options,
+                  control.raw,
+                  control.instance,
+                  `${rangeNode.range.label}, ${control.role.toLowerCase()}`,
+                  control.descriptionId,
+                  override,
+                  `aria-label="${escapeHtml(`${rangeNode.range.label}, ${control.role.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError ? ` ${errorId}` : ""}`)}" aria-invalid="${Boolean(rangeError)}"`,
+                )}
+              </span>
+            </div>`).join("")}
           ${rangeError ? `<small id="${escapeHtml(errorId)}" class="pv2-range-error">${escapeHtml(rangeError)}</small>` : ""}
         </span>
       </div>`;
@@ -1795,6 +1956,7 @@ export function createProfilesController({
           ? (hasOverride ? "Edited override" : "Will inherit")
           : (hasOverride ? "Overrides base" : "Inherited"))
         : (changed ? "Edited value" : "Saved value");
+      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed);
       if (inactive) stateLabel = `${stateLabel}; currently inactive`;
       const instance = `${presentation.instance}:${definition.key}`;
       const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -1820,6 +1982,7 @@ export function createProfilesController({
         description,
         hasContextBase,
         baseLabel,
+        operatorNote: numericOperatorVisibleNote(raw),
         rangeMember,
         options: fieldOptions(definition.key, raw, profile, node),
       };
@@ -1836,17 +1999,23 @@ export function createProfilesController({
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong>${inactive ? `<small class="pv2-field-meta"><span class="pv2-field-note">inactive</span></small>` : ""}</span>
         <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
           ${controls.map((control) => `
-            <label class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
-              <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
+            <div class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
+              <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.operatorNote ? `<small class="pv2-field-note">${escapeHtml(control.operatorNote)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
               <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
-              <select class="field-control" data-profile-value data-field-key="${escapeHtml(control.key)}" data-field-instance="${escapeHtml(control.instance)}" aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError && control.rangeMember ? ` ${rangeErrorId}` : ""}`)}" aria-invalid="${Boolean(rangeError && control.rangeMember)}">
-                ${override ? `<option value="" ${control.raw ? "" : "selected"}>Inherit</option>` : ""}
-                ${control.options.map((option) => {
-                  const optionRaw = valueRaw(option);
-                  return `<option value="${escapeHtml(optionRaw)}" ${optionRaw === String(control.raw) ? "selected" : ""}>${escapeHtml(valueLabel(option))}</option>`;
-                }).join("")}
-              </select>
-            </label>`).join("")}
+              <span class="pv2-value-control">
+                ${renderProfileValueEditor(
+                  profile,
+                  control.key,
+                  control.options,
+                  control.raw,
+                  control.instance,
+                  `${compositeNode.composite.label}, ${control.label.toLowerCase()}`,
+                  control.descriptionId,
+                  override,
+                  `aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError && control.rangeMember ? ` ${rangeErrorId}` : ""}`)}" aria-invalid="${Boolean(rangeError && control.rangeMember)}"`,
+                )}
+              </span>
+            </div>`).join("")}
           ${rangeError ? `<small id="${escapeHtml(rangeErrorId)}" class="pv2-range-error">${escapeHtml(rangeError)}</small>` : ""}
         </span>
       </div>`;
@@ -2409,15 +2578,54 @@ export function createProfilesController({
   }
 
   function profileValidationErrors() {
+    const baseKeys = new Set(baseProfiles().map(profileKey));
+    const overrideKeys = new Set(savedOverrideProfiles().map(profileKey));
+    const speciesSymbols = new Set(data.assignments.map((item) => item.species?.symbol).filter(Boolean));
     const errors = [];
+    if (invalidNumericOperatorInputs.size) errors.push("Finish entering every numeric override operator before saving");
+    for (const key of drafts.baseFields.keys()) {
+      if (!baseKeys.has(key)) errors.push(`A drafted base profile no longer exists in the latest source (${key})`);
+    }
+    for (const store of [drafts.overrideFields, drafts.overrideNames, drafts.overrideTargets]) {
+      for (const key of store.keys()) {
+        if (!overrideKeys.has(key)) errors.push(`A drafted override profile no longer exists in the latest source (${key})`);
+      }
+    }
+    for (const key of drafts.removedOverrides) {
+      if (!overrideKeys.has(key)) errors.push(`A drafted override removal no longer matches the latest source (${key})`);
+    }
+    for (const [species, target] of drafts.memberships) {
+      if (!speciesSymbols.has(species)) errors.push(`A drafted profile member no longer exists in the latest source (${species})`);
+      if (!baseKeys.has(target)) errors.push(`A drafted membership target no longer exists in the latest source (${target})`);
+    }
+    for (const key of drafts.overrideOrder) {
+      if (!overrideKeys.has(key)) errors.push(`A reordered override profile no longer exists in the latest source (${key})`);
+    }
     allProfiles().forEach((profile) => {
       if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
+      const editedFields = profile.draftId
+        ? new Map(Object.entries(profile.fields || {}))
+        : (fieldDraftMap(profile) || new Map());
+      editedFields.forEach((raw, fieldKey) => {
+        const operator = parseNumericOverrideRaw(raw);
+        if (!operator) return;
+        if (!numericOverrideAllowed(profile, fieldKey, operator.kind)) {
+          errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} cannot use numeric override operators`);
+          return;
+        }
+        const options = fieldOptions(fieldKey, raw, profile, {});
+        const bounds = numericOverrideOperandBounds(fieldKey, options, operator.kind);
+        if (!Number.isInteger(operator.operand) || operator.operand < bounds.min || operator.operand > bounds.max) {
+          errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} ${operator.kind === "adjust" ? "adjustment" : "bound"} must be between ${bounds.min} and ${bounds.max}`);
+        }
+      });
       PROFILE_FIELD_RANGES.forEach((range) => {
         const error = profileFieldRangeError(profile, range);
         if (error) errors.push(`${nameFor(profile)} — ${error}`);
       });
       if (!canUseRamLocomotion(profile)) return;
       const raw = fieldRaw(profile, "ramMaxSpeed");
+      if (isNumericOverrideRaw(raw)) return;
       const option = (data.editOptions?.ramMaxSpeed || []).find((candidate) => valueRaw(candidate) === raw);
       const numeric = Number(option?.value ?? raw);
       if (Number.isFinite(numeric) && numeric > 4) errors.push(`${nameFor(profile)} RAM max speed must be between 0 and 4`);
@@ -2438,6 +2646,65 @@ export function createProfilesController({
       errors.push(...matchErrors(target.match, target.targetMode !== "all"));
     });
     return unique(errors);
+  }
+
+  function staleDraftEntries() {
+    const baseKeys = new Set(baseProfiles().map(profileKey));
+    const overrideKeys = new Set(savedOverrideProfiles().map(profileKey));
+    const speciesSymbols = new Set(data.assignments.map((item) => item.species?.symbol).filter(Boolean));
+    const entries = new Map();
+    const addProfile = (key, kind) => entries.set(`profile|${key}`, {
+      id: `profile|${key}`,
+      label: String(key).replace(/^(?:base|override:name|override:profile):/, ""),
+      detail: `${kind} profile no longer exists in the latest source`,
+    });
+    for (const key of drafts.baseFields.keys()) if (!baseKeys.has(key)) addProfile(key, "Base");
+    for (const store of [drafts.overrideFields, drafts.overrideNames, drafts.overrideTargets]) {
+      for (const key of store.keys()) if (!overrideKeys.has(key)) addProfile(key, "Override");
+    }
+    for (const key of drafts.removedOverrides) if (!overrideKeys.has(key)) addProfile(key, "Override");
+    for (const [species, target] of drafts.memberships) {
+      if (!speciesSymbols.has(species) || !baseKeys.has(target)) entries.set(`membership|${species}`, {
+        id: `membership|${species}`,
+        label: humanizeRaw(species),
+        detail: !speciesSymbols.has(species) ? "Pokémon no longer exists in the latest source" : "Membership target no longer exists in the latest source",
+      });
+    }
+    for (const key of drafts.overrideOrder) {
+      if (!overrideKeys.has(key)) entries.set(`order|${key}`, {
+        id: `order|${key}`,
+        label: String(key).replace(/^(?:override:name|override:profile):/, ""),
+        detail: "Reordered override no longer exists in the latest source",
+      });
+    }
+    return [...entries.values()];
+  }
+
+  function renderStaleDraftRecovery() {
+    const entries = staleDraftEntries();
+    if (!entries.length) return "";
+    return `<section class="pv2-stale-drafts" data-stale-drafts tabindex="-1" aria-labelledby="pv2-stale-drafts-title">
+      <header><div><p class="eyebrow">Preserved draft recovery</p><h3 id="pv2-stale-drafts-title">Unmatched edits</h3></div><span>${entries.length}</span></header>
+      <p>These edits no longer have a source target. They remain untouched until you discard them individually.</p>
+      <ul>${entries.map((entry) => `<li><span><strong>${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.detail)}</small></span><button class="is-danger" type="button" data-action="discard-stale-draft" data-stale-draft-id="${escapeHtml(entry.id)}">Discard this edit</button></li>`).join("")}</ul>
+    </section>`;
+  }
+
+  async function discardStaleDraft(id) {
+    const [kind, ...parts] = String(id || "").split("|");
+    const key = parts.join("|");
+    if (!kind || !key || !staleDraftEntries().some((entry) => entry.id === id)) return;
+    const confirmed = await askConfirmation("Discard only this unmatched draft edit? All other pending edits will remain.", {
+      title: "Discard unmatched edit?",
+      confirmLabel: "Discard this edit",
+      dangerous: true,
+    });
+    if (!confirmed) return;
+    if (kind === "profile") dropProfileDraft(key);
+    else if (kind === "membership") drafts.memberships.delete(key);
+    else if (kind === "order") drafts.overrideOrder = drafts.overrideOrder.filter((item) => item !== key);
+    renderAll();
+    announce("Unmatched draft edit discarded. Other pending edits remain.");
   }
 
   function renderTargetBuilder(profile, mode = "override") {
@@ -2616,9 +2883,12 @@ export function createProfilesController({
   }
 
   function renderEditor() {
+    // Any editor rerender discards transient, invalid number text. Valid values
+    // have already been copied into the draft by the input handler.
+    invalidNumericOperatorInputs.clear();
     const profile = findProfile();
     if (!profile) {
-      editorElement.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a profile</h2><p>Choose a base or override profile from the library.</p></div>`;
+      editorElement.innerHTML = `${renderStaleDraftRecovery()}<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a profile</h2><p>Choose a base or override profile from the library.</p></div>`;
       return;
     }
     const key = profileKey(profile);
@@ -2634,8 +2904,9 @@ export function createProfilesController({
       ${!override && String(profile.index) !== String(data.defaultClassIndex) ? `<button type="button" data-action="convert-base-to-override" data-profile-key="${escapeHtml(key)}">Make override</button>` : ""}
       <button type="button" data-action="rename-profile" data-profile-key="${escapeHtml(key)}" ${profile.canRename === false ? "disabled" : ""}>Rename</button>
       <button type="button" data-action="duplicate-profile" data-profile-key="${escapeHtml(key)}">Duplicate</button>
-      <button class="is-danger" type="button" data-action="delete-profile" data-profile-key="${escapeHtml(key)}" ${!override && profile.canDelete === false ? "disabled" : ""}>${removed ? "Undo removal" : "Delete"}</button>`;
+      <button class="is-danger" type="button" data-action="delete-profile" data-profile-key="${escapeHtml(key)}" ${profile.canDelete === false ? "disabled" : ""}>${removed ? "Undo removal" : "Delete"}</button>`;
     editorElement.innerHTML = `
+      ${renderStaleDraftRecovery()}
       <header class="inspector-header v2-inspector-header pv2-editor-head">
         <div class="pv2-editor-identity">
           <div class="pv2-editor-title-copy"><p class="eyebrow">${override ? "Ordered override" : "Base profile"}</p><h2>${escapeHtml(nameFor(profile))}</h2><p>${escapeHtml(profile.symbol || "New unsaved override")}</p></div>
@@ -3042,6 +3313,7 @@ export function createProfilesController({
       return;
     }
     if (isOverrideProfile(profile)) {
+      if (profile.canDelete === false) return;
       if (drafts.removedOverrides.has(key)) drafts.removedOverrides.delete(key);
       else if (await askConfirmation(`Remove ${nameFor(profile)} when changes are saved?`, { dangerous: true, confirmLabel: "Remove override" })) drafts.removedOverrides.add(key);
       renderAll();
@@ -3126,6 +3398,7 @@ export function createProfilesController({
     else if (action === "rename-profile" && profile) renameDialog(profile);
     else if (action === "duplicate-profile" && profile) duplicateProfile(profile);
     else if (action === "delete-profile" && profile) deleteProfile(profile);
+    else if (action === "discard-stale-draft") discardStaleDraft(target.dataset.staleDraftId);
     else if (action === "close-dialog") closeDialog();
     else if (action === "add-target" && profile) addTarget(profile);
     else if (action === "inspect-species") {
@@ -3164,8 +3437,103 @@ export function createProfilesController({
     } else if (action === "resolve-context") resolveContext();
   }
 
+  function updateNumericOverrideInput(input, fallbackProfile, { render = true } = {}) {
+    if (!input.matches("[data-profile-numeric-entry]")) return false;
+    const profile = numericInputProfile(input, fallbackProfile);
+    if (!profile) {
+      input.setAttribute("aria-invalid", "true");
+      const staleError = input.closest(".pv2-numeric-combobox")?.querySelector(".pv2-numeric-error");
+      if (staleError) staleError.textContent = "This field is no longer active. Reopen its profile before editing.";
+      return true;
+    }
+    const fieldKey = input.dataset.fieldKey;
+    const fieldInstance = input.dataset.fieldInstance;
+    const permissions = numericInputPermissions(input, profile, fieldKey);
+    const invalidKey = `${profileKey(profile)}|${fieldKey}|${fieldInstance}`;
+    const error = input.closest(".pv2-numeric-combobox")?.querySelector(".pv2-numeric-error");
+    const rawInput = input.value.trim();
+    const raw = /^inherit$/i.test(rawInput) ? "" : rawInput;
+    const fail = (message) => {
+      invalidNumericOperatorInputs.add(invalidKey);
+      input.setAttribute("aria-invalid", "true");
+      if (error) error.textContent = message;
+      signalDirty();
+      return true;
+    };
+    if (!raw) {
+      if (input.dataset.profileAllowInherit !== "true") return fail("A whole-number value is required.");
+      invalidNumericOperatorInputs.delete(invalidKey);
+      input.setAttribute("aria-invalid", "false");
+      if (error) error.textContent = "";
+      input.value = "";
+      setField(profile, fieldKey, "");
+      if (!render) {
+        signalDirty();
+        return true;
+      }
+      renderEditor(); renderList(); signalDirty();
+      return true;
+    }
+    const list = document.getElementById(input.getAttribute("list") || "");
+    const exactRawValues = new Set([...(list?.options || [])]
+      .map((option) => String(option.value))
+      .filter((value) => value && value.toLowerCase() !== "inherit"));
+    const exactOptions = [...exactRawValues]
+      .map((value) => Number(value))
+      .filter(Number.isFinite)
+      .map((value) => ({ raw: String(value) }));
+    const operator = parseNumericOverrideRaw(raw);
+    let canonical = raw;
+    if (operator) {
+      if (!numericOverrideAllowed(profile, fieldKey, operator.kind, permissions)) {
+        return fail(permissions.adjust
+          ? "Use +N or -N for this field; bound formulas are unavailable."
+          : "Formulas are not available for this value.");
+      }
+      const bounds = numericOverrideOperandBounds(fieldKey, exactOptions, operator.kind);
+      if (!Number.isInteger(operator.operand) || operator.operand < bounds.min || operator.operand > bounds.max) {
+        return fail(`${operator.kind === "adjust" ? "Adjustment" : "Bound"} must be between ${bounds.min} and ${bounds.max}.`);
+      }
+      canonical = operator.kind === "adjust"
+        ? (operator.operand === 0 ? "" : (operator.operand > 0 ? `+${operator.operand}` : String(operator.operand)))
+        : (operator.kind === "atLeast" ? `/<${operator.operand}` : `/>${operator.operand}`);
+    } else {
+      const exact = Number(raw);
+      const exactNumbers = [...exactRawValues].map(Number).filter(Number.isFinite);
+      const optionMinimum = exactNumbers.length ? Math.min(...exactNumbers) : 0;
+      const optionMaximum = exactNumbers.length ? Math.max(...exactNumbers) : 64;
+      const minimum = Number(data.numericOverrideOperandMinimums?.[fieldKey] ?? optionMinimum);
+      const maximum = Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum);
+      if (!Number.isInteger(exact) || exact < minimum || exact > maximum) {
+        const formulaExamples = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : ""]
+          .filter(Boolean)
+          .join(", ");
+        return fail(`Value must be a whole number between ${minimum} and ${maximum}${formulaExamples ? `, or a formula such as ${formulaExamples}` : ""}.`);
+      }
+      canonical = String(exact);
+    }
+    invalidNumericOperatorInputs.delete(invalidKey);
+    input.setAttribute("aria-invalid", "false");
+    if (error) error.textContent = "";
+    input.value = canonical;
+    setField(profile, fieldKey, canonical);
+    if (!render) {
+      signalDirty();
+      return true;
+    }
+    renderEditor(); renderList(); signalDirty();
+    const focusTarget = editorElement.querySelector(`[data-profile-numeric-entry][data-field-instance="${CSS.escape(fieldInstance)}"]`);
+    focusTarget?.focus({ preventScroll: true });
+    focusTarget?.select();
+    return true;
+  }
+
   function onInput(event) {
-    if (event.target === elements.profileSearch) {
+    if (updateNumericOverrideInput(event.target, findProfile(), { render: false })) {
+      if (formulaRefreshTimer !== null) window.clearTimeout(formulaRefreshTimer);
+      formulaRefreshTimer = null;
+      return;
+    } else if (event.target === elements.profileSearch) {
       ui.search = event.target.value;
       renderList();
     } else if (event.target.matches("[data-member-search]")) {
@@ -3178,6 +3546,28 @@ export function createProfilesController({
         input?.setSelectionRange(ui.memberQuery.length, ui.memberQuery.length);
       }
     }
+  }
+
+  function refreshAfterFormulaCommit(delay = 0) {
+    if (formulaRefreshTimer !== null) window.clearTimeout(formulaRefreshTimer);
+    formulaRefreshTimer = window.setTimeout(() => {
+      formulaRefreshTimer = null;
+      const active = document.activeElement;
+      const fieldInstance = active?.dataset?.fieldInstance || "";
+      const isFormula = Boolean(active?.matches?.("[data-profile-numeric-entry]"));
+      const isValue = Boolean(active?.matches?.("[data-profile-value]"));
+      const selectionStart = isFormula ? active.selectionStart : null;
+      const selectionEnd = isFormula ? active.selectionEnd : null;
+      renderEditor();
+      renderList();
+      if (!fieldInstance || (!isFormula && !isValue)) return;
+      const selector = `${isFormula ? "[data-profile-numeric-entry]" : "[data-profile-value]"}[data-field-instance="${CSS.escape(fieldInstance)}"]`;
+      const replacement = editorElement.querySelector(selector);
+      replacement?.focus({ preventScroll: true });
+      if (isFormula && Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) {
+        replacement?.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }, delay);
   }
 
   function onChange(event) {
@@ -3198,9 +3588,14 @@ export function createProfilesController({
       renderEditor();
       return;
     }
-    if (event.target.matches("[data-profile-value]") && profile) {
+    if (updateNumericOverrideInput(event.target, profile, { render: false })) {
+      if (event.target.getAttribute("aria-invalid") !== "true") refreshAfterFormulaCommit();
+      return;
+    }
+    if (event.target.matches("[data-profile-value]:not([data-profile-numeric-entry])") && profile) {
       const fieldKey = event.target.dataset.fieldKey;
       const fieldInstance = event.target.dataset.fieldInstance;
+      invalidNumericOperatorInputs.delete(`${profileKey(profile)}|${fieldKey}|${fieldInstance}`);
       const compound = event.target.dataset.profileCompound;
       const scope = event.target.dataset.compoundScope;
       const parentGroup = event.target.closest("[data-option-parent]");
@@ -3209,8 +3604,8 @@ export function createProfilesController({
       const modeTabSelect = event.target.closest("[data-mode-tab-select]");
       const wasParentControl = Boolean(event.target.closest(".pv2-option-parent"));
       const beforeChildren = parentGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
-      let nextRaw = event.target.value;
       const currentRaw = fieldRaw(profile, fieldKey);
+      let nextRaw = event.target.value;
       if (compound === "spawn-destination-type" && nextRaw) {
         const currentInfo = spawnDestinationPlayerInfo(currentRaw);
         const preferredDistance = currentInfo && spawnDestinationTypeKey(currentRaw) === nextRaw ? currentInfo.distance : null;
@@ -3271,6 +3666,11 @@ export function createProfilesController({
     else if (event.target === elements.profileContextShiny) ui.context.shiny = event.target.checked;
   }
 
+  function onFocusOut(event) {
+    if (!event.target.matches("[data-profile-numeric-entry]")) return;
+    if (event.target.getAttribute("aria-invalid") !== "true") refreshAfterFormulaCommit();
+  }
+
   function onToggle(event) {
     const section = event.target;
     if (!(section instanceof HTMLDetailsElement) || !section.matches("details[data-section-id]")) return;
@@ -3300,6 +3700,22 @@ export function createProfilesController({
   }
 
   function onKeyDown(event) {
+    const expressionInput = event.target.closest("[data-profile-numeric-entry]");
+    if (expressionInput && event.key === "Enter") {
+      event.preventDefault();
+      updateNumericOverrideInput(expressionInput, findProfile());
+      return;
+    }
+    if (expressionInput && event.key === "Escape") {
+      event.preventDefault();
+      const fieldInstance = expressionInput.dataset.fieldInstance;
+      const profile = numericInputProfile(expressionInput, findProfile());
+      if (profile) invalidNumericOperatorInputs.delete(`${profileKey(profile)}|${expressionInput.dataset.fieldKey}|${fieldInstance}`);
+      renderEditor();
+      editorElement.querySelector(`[data-profile-numeric-entry][data-field-instance="${CSS.escape(fieldInstance)}"]`)?.focus({ preventScroll: true });
+      announce("Value restored to its last valid state.");
+      return;
+    }
     if (event.key === "Escape" && !resolverDrawerElement.hidden) {
       event.preventDefault();
       closeContextResolver();
@@ -3376,6 +3792,7 @@ export function createProfilesController({
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
   root.addEventListener("change", onChange);
+  root.addEventListener("focusout", onFocusOut);
   root.addEventListener("toggle", onToggle, true);
   root.addEventListener("submit", onSubmit);
   root.addEventListener("keydown", onKeyDown);
@@ -3486,17 +3903,28 @@ export function createProfilesController({
   }
 
   function pruneDrafts() {
-    const baseKeys = new Set(baseProfiles().map(profileKey));
-    const overrideKeys = new Set(savedOverrideProfiles().map(profileKey));
-    for (const key of drafts.baseFields.keys()) if (!baseKeys.has(key)) drafts.baseFields.delete(key);
-    for (const store of [drafts.overrideFields, drafts.overrideNames, drafts.overrideTargets]) {
-      for (const key of store.keys()) if (!overrideKeys.has(key)) store.delete(key);
+    // Keep unmatched draft keys so validation can surface source deletions, but
+    // discard edits that the refreshed source now satisfies. This is important
+    // after conflict recovery: an idempotent save must not stay permanently dirty.
+    const profilesByKey = new Map([...baseProfiles(), ...savedOverrideProfiles()].map((profile) => [profileKey(profile), profile]));
+    for (const store of [drafts.baseFields, drafts.overrideFields]) {
+      for (const [key, fields] of store) {
+        const profile = profilesByKey.get(key);
+        if (!profile) continue;
+        for (const [fieldKey, raw] of fields) {
+          if (String(raw) === originalFieldRaw(profile, fieldKey)) fields.delete(fieldKey);
+        }
+        if (!fields.size) store.delete(key);
+      }
     }
-    for (const key of drafts.removedOverrides) if (!overrideKeys.has(key)) drafts.removedOverrides.delete(key);
-    for (const [species, target] of drafts.memberships) {
-      if (!baseKeys.has(target) || !data.assignments.some((item) => item.species?.symbol === species)) drafts.memberships.delete(species);
+    for (const [key, name] of drafts.overrideNames) {
+      const profile = profilesByKey.get(key);
+      if (profile && String(name) === String(profile.name || profile.symbol || "")) drafts.overrideNames.delete(key);
     }
-    drafts.overrideOrder = drafts.overrideOrder.filter((key) => overrideKeys.has(key));
+    for (const [key, target] of drafts.overrideTargets) {
+      const profile = profilesByKey.get(key);
+      if (profile && JSON.stringify(cloneTarget(target)) === JSON.stringify(sourceTarget(profile))) drafts.overrideTargets.delete(key);
+    }
   }
 
   function refresh(nextData) {
@@ -3526,10 +3954,12 @@ export function createProfilesController({
   function destroy() {
     if (ui.destroyed) return;
     ui.destroyed = true;
+    if (formulaRefreshTimer !== null) window.clearTimeout(formulaRefreshTimer);
     contextAbortController?.abort();
     root.removeEventListener("click", onClick);
     root.removeEventListener("input", onInput);
     root.removeEventListener("change", onChange);
+    root.removeEventListener("focusout", onFocusOut);
     root.removeEventListener("toggle", onToggle, true);
     root.removeEventListener("submit", onSubmit);
     root.removeEventListener("keydown", onKeyDown);
@@ -3559,6 +3989,11 @@ export function createProfilesController({
     hasInvalid: () => profileValidationErrors().length > 0,
     validationCount: () => profileValidationErrors().length,
     validationMessage: () => profileValidationErrors()[0] || "",
+    focusFirstInvalid: () => {
+      const target = editorElement.querySelector("[data-stale-drafts], [aria-invalid='true']") || editorElement;
+      target.tabIndex = -1;
+      requestAnimationFrame(() => target.focus({ preventScroll: true }));
+    },
     commitPayload,
     clearCommitted,
     reset,

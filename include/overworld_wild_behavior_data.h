@@ -16,7 +16,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 33
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 35
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -205,11 +205,23 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     u16 mask2;
     u32 mask3;
     OverworldWildBehaviorProfile profile;
+    u32 relativeMask;
+    u16 relativeMask2;
+    u32 relativeMask3;
+    u32 atLeastMask;
+    u16 atLeastMask2;
+    u32 atLeastMask3;
+    u32 atMostMask;
+    u16 atMostMask2;
+    u32 atMostMask3;
 } OverworldWildBehaviorOverrideProfile;
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
+#define OW_WILD_BEHAVIOR_RELATIVE(value) ((u8)(s8)(value))
+#define OW_WILD_BEHAVIOR_AT_LEAST(value) ((u8)(value))
+#define OW_WILD_BEHAVIOR_AT_MOST(value) ((u8)(value))
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)

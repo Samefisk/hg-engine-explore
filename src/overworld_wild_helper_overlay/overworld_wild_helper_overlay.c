@@ -4718,9 +4718,6 @@ static LocalMapObject *OverworldWildHelper_CreatePresentationObject(
     }
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     MapObject_SetScript(object, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT);
-    if (range == 0) {
-        range = 32;
-    }
     MapObject_SetXRange(object, range);
     MapObject_SetYRange(object, range);
     OVERWORLD_WILD_SPAWN_METADATA_ENTRY->applyRenderParams(

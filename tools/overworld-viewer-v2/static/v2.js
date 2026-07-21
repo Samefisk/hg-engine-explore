@@ -11,6 +11,7 @@ const state = {
   data: null,
   revision: "",
   conflict: false,
+  conflictRevision: "",
   busy: false,
   commitInert: false,
   activeView: localStorage.getItem("ow-v2-view") || "pokemon",
@@ -48,6 +49,7 @@ Object.defineProperty(state, "selectedPokemonKey", {
 });
 
 const MUTATION_PATHS = new Set([
+  "/api/v2/commit",
   "/save-profiles",
   "/save-profile-memberships",
   "/manage-profiles",
@@ -84,7 +86,8 @@ const elements = {};
   "soundStatus", "shinyCounter", "refreshShiny", "resetShiny", "maxShiny",
   "reservedShinies", "toastRegion", "confirmDialog", "deckContextBar",
   "returnToDeck", "clearDeckContext", "deckContextLabel", "commitStatus",
-  "commitStatusHeading", "commitStatusDetail",
+  "commitStatusHeading", "commitStatusDetail", "commitStatusElapsed", "commitStatusAction",
+  "saveAllLabel",
 ].forEach((id) => { elements[id] = byId(id); });
 
 function capabilitySource(data, name) {
@@ -188,15 +191,38 @@ function offlineRequestError(error) {
   return wrapped;
 }
 
+const API_TIMEOUT_MS = 60000;
+
+async function timedJsonRequest(path, options = {}, timeoutMs = API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(path, { ...options, signal: controller.signal });
+    const result = await response.json();
+    return { response, result };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const wrapped = new Error(`The server did not respond within ${Math.round(timeoutMs / 1000)} seconds.`, { cause: error });
+      wrapped.isTimeout = true;
+      throw wrapped;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 const api = {
   async get(path, options = {}) {
     let response;
+    let result;
     try {
-      response = await fetch(path, { cache: "no-store", ...options });
+      ({ response, result } = await timedJsonRequest(path, { cache: "no-store", ...options }));
     } catch (error) {
+      if (error?.isTimeout) throw error;
+      if (error instanceof SyntaxError) throw new Error("The V2 server returned an unreadable response.", { cause: error });
       throw offlineRequestError(error);
     }
-    const result = await response.json();
     if (!response.ok) throw new Error(messageFromResult(result, response));
     return result;
   },
@@ -204,26 +230,43 @@ const api = {
   async post(path, payload = {}, options = {}) {
     const headers = new Headers({ "Content-Type": "application/json", ...(options.headers || {}) });
     if (MUTATION_PATHS.has(path)) {
-      if (state.conflict) throw new Error("Sources changed. Reload before saving this draft.");
+      if (state.conflict) throw new Error("Sources changed. Your draft is preserved and must be applied to the latest revision.");
       if (!state.revision) throw new Error("The workspace revision is not loaded yet.");
       headers.set("If-Match", state.revision);
     }
     let response;
+    let result;
     try {
-      response = await fetch(path, {
+      ({ response, result } = await timedJsonRequest(path, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
-      });
+      }));
     } catch (error) {
-      throw offlineRequestError(error);
+      const wrapped = error?.isTimeout
+        ? error
+        : error instanceof SyntaxError
+          ? new Error("The V2 server response ended before save confirmation.", { cause: error })
+          : offlineRequestError(error);
+      if (MUTATION_PATHS.has(path)) wrapped.isOutcomeUnknown = true;
+      throw wrapped;
     }
-    const result = await response.json();
-    if (response.status === 409) {
+    const recoverableConflict = response.status === 409
+      && ["revision_conflict", "asset_revision_conflict"].includes(result?.code);
+    if (recoverableConflict) {
       state.conflict = true;
-      setStatus("Sources changed outside this editor. Reload before saving.", "error");
+      state.conflictRevision = String(result.sourceRevision || state.revision || "");
+      setStatus("Sources changed outside this editor. Your draft is preserved.", "error");
     }
-    if (!response.ok) throw new Error(messageFromResult(result, response));
+    if (!response.ok) {
+      const error = new Error(messageFromResult(result, response));
+      error.status = response.status;
+      error.code = result?.code || "";
+      error.isConflict = recoverableConflict;
+      error.currentRevision = String(result?.sourceRevision || "");
+      error.currentAssetRevision = String(result?.assetRevision || "");
+      throw error;
+    }
     if (result.sourceRevision) state.revision = result.sourceRevision;
     return result;
   },
@@ -262,19 +305,72 @@ function toast(message, kind = "info") {
 }
 
 let commitStatusTimer = 0;
+let commitElapsedTimer = 0;
+let commitStartedAt = 0;
+let commitRecoveryAction = null;
 
-function showCommitStatus(message, detail, kind = "busy", { dismissAfter = 0 } = {}) {
+function formatElapsed(milliseconds) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+function updateCommitElapsed() {
+  if (!commitStartedAt) return;
+  const elapsed = formatElapsed(performance.now() - commitStartedAt);
+  elements.commitStatusElapsed.value = elapsed;
+  elements.pendingCount.textContent = elapsed;
+  elements.pendingCount.setAttribute("aria-label", `Save running for ${elapsed}`);
+}
+
+function startCommitElapsed() {
+  window.clearInterval(commitElapsedTimer);
+  commitStartedAt = performance.now();
+  elements.saveAll.classList.add("is-saving");
+  elements.saveAll.setAttribute("aria-busy", "true");
+  elements.saveAllLabel.textContent = "Saving";
+  elements.pendingCount.hidden = false;
+  elements.pendingCount.classList.add("is-elapsed");
+  updateCommitElapsed();
+  commitElapsedTimer = window.setInterval(updateCommitElapsed, 1000);
+}
+
+function stopCommitElapsed() {
+  window.clearInterval(commitElapsedTimer);
+  commitElapsedTimer = 0;
+  commitStartedAt = 0;
+  elements.saveAll.classList.remove("is-saving");
+  elements.saveAll.removeAttribute("aria-busy");
+  elements.saveAllLabel.textContent = "Save";
+  elements.pendingCount.classList.remove("is-elapsed");
+}
+
+function setCommitRecovery(label = "", action = null) {
+  commitRecoveryAction = typeof action === "function" ? action : null;
+  elements.commitStatusAction.textContent = label;
+  elements.commitStatusAction.hidden = !commitRecoveryAction;
+  elements.commitStatus.classList.toggle("has-action", Boolean(commitRecoveryAction));
+}
+
+function showCommitStatus(message, detail, kind = "busy", { dismissAfter = 0, phase = "", actionLabel = "", action = null } = {}) {
   window.clearTimeout(commitStatusTimer);
   commitStatusTimer = 0;
   elements.commitStatus.dataset.kind = kind;
+  elements.commitStatus.dataset.phase = phase;
   elements.commitStatus.classList.add("is-visible");
   elements.commitStatusHeading.textContent = message;
   elements.commitStatusDetail.textContent = detail;
+  setCommitRecovery(actionLabel, action);
+  if (kind === "error" && commitRecoveryAction) {
+    requestAnimationFrame(() => elements.commitStatusAction.focus({ preventScroll: true }));
+  }
   if (dismissAfter > 0) {
     commitStatusTimer = window.setTimeout(() => {
       elements.commitStatus.classList.remove("is-visible");
       elements.commitStatusHeading.textContent = "";
       elements.commitStatusDetail.textContent = "";
+      elements.commitStatusElapsed.value = "";
+      setCommitRecovery();
       commitStatusTimer = 0;
     }, dismissAfter);
   }
@@ -771,10 +867,17 @@ function ensureWorkspaceController(name) {
   return state.controllers[name];
 }
 
-function ensureAvailableWorkspaceControllers(data) {
+function ensureAvailableWorkspaceControllers(data, refreshOnly = null, { preserveDrafts = false } = {}) {
+  const requested = refreshOnly ? new Set(refreshOnly) : null;
   ["profiles", "routes", "sounds"].forEach((name) => {
+    const existed = Boolean(state.controllers[name]);
     const controller = ensureWorkspaceController(name);
-    controller?.refresh?.(data);
+    if (!requested || requested.has(name) || !existed) {
+      const refresh = preserveDrafts && existed && controller?.refreshPreservingDrafts
+        ? controller.refreshPreservingDrafts
+        : controller?.refresh;
+      refresh?.call(controller, data);
+    }
     if (controller) {
       state.controllerAvailability[name] = {
         ...state.controllerAvailability[name],
@@ -784,25 +887,45 @@ function ensureAvailableWorkspaceControllers(data) {
   });
 }
 
-async function loadData({ keepStatus = false } = {}) {
+async function loadData({
+  keepStatus = false,
+  refreshOnly = null,
+  throwOnControllerRefreshError = false,
+  allowDraftRebase = false,
+  preserveDraftCapabilities = false,
+} = {}) {
   if (!keepStatus) setStatus("Loading workspace…", "busy");
   const data = await api.get(`/data.json?ts=${Date.now()}`);
   if (!data.sourceRevision) throw new Error("V2 data did not include a source revision.");
 
-  if (state.revision && data.sourceRevision !== state.revision && totalChangeCount() > 0) {
+  if (!allowDraftRebase && state.revision && data.sourceRevision !== state.revision && totalChangeCount() > 0) {
     state.conflict = true;
-    throw new Error("Sources changed while this draft was open. Reload before saving.");
+    state.conflictRevision = data.sourceRevision;
+    throw new Error("Sources changed while this draft was open. Your draft is still preserved.");
   }
   state.data = data;
   state.revision = data.sourceRevision;
   state.conflict = false;
+  state.conflictRevision = "";
   state.workspaceDataError = "";
 
-  applyWorkspaceCapabilities(data);
-  ensureAvailableWorkspaceControllers(data);
-  await Promise.resolve(ensurePokemonController()?.refresh?.(data)).catch((error) => {
-    setStatus(`Pokémon Editor failed to refresh: ${error.message}`, "error");
-  });
+  if (!preserveDraftCapabilities) applyWorkspaceCapabilities(data);
+  ensureAvailableWorkspaceControllers(data, refreshOnly, { preserveDrafts: preserveDraftCapabilities });
+  const refreshPokemon = !refreshOnly || new Set(refreshOnly).has("pokemon");
+  const pokemonController = ensurePokemonController();
+  if (refreshPokemon) {
+    try {
+      const refresh = throwOnControllerRefreshError && pokemonController?.refreshStrict
+        ? pokemonController.refreshStrict(data)
+        : pokemonController?.refresh?.(data);
+      await Promise.resolve(refresh);
+    } catch (error) {
+      setStatus(`Pokémon Editor failed to refresh: ${error.message}`, "error");
+      if (throwOnControllerRefreshError) throw error;
+    }
+  } else {
+    pokemonController?.syncWorkspaceRevision?.(data.sourceRevision, data.assetRevision);
+  }
   markDirty();
 }
 
@@ -834,6 +957,36 @@ function collectCommitDomains() {
   return domains;
 }
 
+const COMMIT_DOMAIN_CONTROLLERS = Object.freeze({
+  profiles: "profiles",
+  profileMemberships: "profiles",
+  profileOverrides: "profiles",
+  encounters: "routes",
+  spawnSettings: "routes",
+  pokemonUpdates: "pokemon",
+  pokemonEvolutionUpdates: "pokemon",
+  pokemonLearnsetUpdates: "pokemon",
+  pokemonFormUpdates: "pokemon",
+  pokemonAssetUpdates: "pokemon",
+});
+
+function commitControllerNames(domains) {
+  const domainNames = Array.isArray(domains) ? domains : Object.keys(domains || {});
+  return [...new Set(domainNames.map((domain) => COMMIT_DOMAIN_CONTROLLERS[domain]).filter(Boolean))];
+}
+
+function controllerDisplayName(name) {
+  return ({ profiles: "Profile Deck", routes: "Route Deck", sounds: "Sound Deck", pokemon: "Pokémon Editor" })[name] || name;
+}
+
+function clearCommittedControllers(controllerNames, result, requestedDomains = []) {
+  controllerNames.forEach((name) => {
+    const controller = state.controllers[name];
+    if (!controller?.clearCommitted) return;
+    controller.clearCommitted(name === "pokemon" ? { ...result, requestedDomains } : undefined);
+  });
+}
+
 function commitFeedback(result) {
   const assetResult = result?.domains?.pokemonAssetUpdates || {};
   const changedAssets = Number(assetResult.changedAssets) || 0;
@@ -860,6 +1013,182 @@ function commitFeedback(result) {
     toastKind: "success",
     saved: true,
   };
+}
+
+async function retryCommittedRefresh(result, controllerNames) {
+  setBusy(true, { inert: true });
+  startCommitElapsed();
+  setStatus("Source saved · refreshing affected decks…", "busy");
+  showCommitStatus(
+    "Source is already saved",
+    `Refreshing ${controllerNames.map(controllerDisplayName).join(" and ")}.`,
+    "busy",
+    { phase: "refresh" },
+  );
+  let feedback = null;
+  try {
+    await loadData({ keepStatus: true, refreshOnly: controllerNames, throwOnControllerRefreshError: true });
+    feedback = commitFeedback(result);
+  } catch (error) {
+    feedback = {
+      message: `Source saved · refresh failed: ${error.message}`,
+      detail: `${error.message} Your source changes are safe. Retry only refreshes the editor view.`,
+      kind: "error",
+      actionLabel: "Retry refresh",
+      action: () => retryCommittedRefresh(result, controllerNames),
+    };
+  } finally {
+    stopCommitElapsed();
+    setBusy(false, { inert: true });
+  }
+  setStatus(feedback.message, feedback.kind);
+  showCommitStatus(
+    feedback.message,
+    feedback.detail || "Affected decks are synchronized and editing is unlocked.",
+    feedback.kind,
+    feedback.action ? { actionLabel: feedback.actionLabel, action: feedback.action } : { dismissAfter: 6200 },
+  );
+}
+
+async function checkUnknownSaveOutcome(originalRevision) {
+  setBusy(true, { inert: true });
+  startCommitElapsed();
+  setStatus("Checking the workspace revision…", "busy");
+  showCommitStatus("Checking save status", "No source files will be written during this check.", "busy", { phase: "verify" });
+  let feedback;
+  try {
+    const data = await api.get(`/data.json?ts=${Date.now()}`);
+    if (data.sourceRevision === originalRevision) {
+      state.conflict = false;
+      feedback = {
+        message: "No source change detected",
+        detail: "The draft is still here and it is safe to retry the save.",
+        kind: "ready",
+        actionLabel: "Retry save",
+        action: saveAllChanges,
+      };
+    } else {
+      state.conflict = true;
+      state.conflictRevision = data.sourceRevision;
+      feedback = {
+        message: "The source revision changed",
+        detail: "The earlier save may already have completed. Review the latest source underneath your preserved draft before deciding whether to save it again.",
+        kind: "error",
+        actionLabel: "Review latest",
+        action: () => applyDraftToLatestRevision(data.sourceRevision, { reviewOnly: true }),
+      };
+    }
+  } catch (error) {
+    feedback = {
+      message: `Status check failed: ${error.message}`,
+      detail: "The draft is preserved. Check the server before trying to save again.",
+      kind: "error",
+      actionLabel: "Check again",
+      action: () => checkUnknownSaveOutcome(originalRevision),
+    };
+  } finally {
+    stopCommitElapsed();
+    setBusy(false, { inert: true });
+  }
+  setStatus(feedback.message, feedback.kind);
+  showCommitStatus(
+    feedback.message,
+    feedback.detail,
+    feedback.kind,
+    feedback.action ? { actionLabel: feedback.actionLabel, action: feedback.action } : {},
+  );
+}
+
+async function applyDraftToLatestRevision(revision = state.conflictRevision, { reviewOnly = false } = {}) {
+  const latestRevision = String(revision || "");
+  if (!latestRevision) {
+    showCommitStatus(
+      "Latest revision unavailable",
+      "Your draft is still preserved. Check the server, then try saving again.",
+      "error",
+      { actionLabel: "Check status", action: () => checkUnknownSaveOutcome(state.revision) },
+    );
+    return;
+  }
+  const changeCount = totalChangeCount();
+  if (!reviewOnly) {
+    const confirmed = await confirmAction({
+      title: "Apply your draft to the latest source?",
+      message: `All ${changeCount} pending change${changeCount === 1 ? "" : "s"} stay intact. The editor will first refresh the latest source underneath them, then save your draft; where the same value changed elsewhere, your drafted value takes precedence.`,
+      confirmLabel: "Apply my draft",
+    });
+    if (!confirmed) return;
+  }
+  let controllerNames;
+  try {
+    controllerNames = commitControllerNames(collectCommitDomains());
+  } catch (error) {
+    setStatus(`Draft could not be prepared: ${error.message}`, "error");
+    toast("Your draft is still preserved.", "error");
+    return;
+  }
+
+  setBusy(true, { inert: true });
+  startCommitElapsed();
+  const refreshControllerNames = controllerNames;
+  setStatus("Refreshing the latest source beneath your draft…", "busy");
+  showCommitStatus(
+    "Rebasing preserved draft",
+    "Refreshing current source data while keeping every pending edit in memory.",
+    "busy",
+    { phase: "refresh" },
+  );
+  try {
+    await loadData({
+      keepStatus: true,
+      refreshOnly: refreshControllerNames,
+      throwOnControllerRefreshError: true,
+      allowDraftRebase: true,
+      preserveDraftCapabilities: true,
+    });
+  } catch (error) {
+    state.conflict = true;
+    state.conflictRevision = latestRevision;
+    setStatus(`Latest source could not be loaded: ${error.message}`, "error");
+    showCommitStatus(
+      "Draft still preserved",
+      `${error.message} No pending edit was discarded or written.`,
+      "error",
+      { actionLabel: "Try again", action: () => applyDraftToLatestRevision(state.conflictRevision) },
+    );
+    return;
+  } finally {
+    stopCommitElapsed();
+    setBusy(false, { inert: true });
+  }
+
+  if (totalValidationCount() > 0) {
+    const message = firstValidationMessage();
+    setStatus(`Draft needs review · ${message}`, "error");
+    showCommitStatus(
+      "Draft preserved on the latest source",
+      `${message}. The incompatible item remains preserved and has not been written; review the owning deck or reset the draft when you no longer need it.`,
+      "error",
+    );
+    const [owner, controller] = firstValidationOwner() || [];
+    if (owner && WORKSPACE_VIEWS.includes(owner)) {
+      activateView(owner, { historyMode: "push", focus: true });
+      controller?.focusFirstInvalid?.();
+    }
+    return;
+  }
+  if (reviewOnly) {
+    setStatus(`Latest source loaded · ${changeCount} draft change${changeCount === 1 ? "" : "s"} still pending`, "pending");
+    showCommitStatus(
+      "Latest source loaded beneath your draft",
+      "Nothing was written or discarded. Review the pending values, then save only if they still need to be applied.",
+      "pending",
+      { actionLabel: "Save draft", action: saveAllChanges },
+    );
+    return;
+  }
+  setStatus("Draft rebased · saving…", "busy");
+  await saveAllChanges();
 }
 
 async function saveAllChanges() {
@@ -895,47 +1224,108 @@ async function saveAllChanges() {
   }
   if (!Object.keys(domains).length) return;
   if (state.conflict) {
-    setStatus("Reload required before this draft can be saved.", "error");
+    setStatus("Source changed; your draft is preserved.", "error");
+    showCommitStatus(
+      "Source changed; draft preserved",
+      "Apply the same pending edits to the latest source without reloading or discarding anything.",
+      "error",
+      { actionLabel: "Apply to latest", action: () => applyDraftToLatestRevision() },
+    );
     return;
   }
 
   let finalFeedback = null;
+  let committedResult = null;
   let shouldBuild = false;
+  const submittedControllerNames = commitControllerNames(domains);
+  let refreshControllerNames = submittedControllerNames;
+  const originalRevision = state.revision;
+  const changeCount = totalChangeCount();
   setBusy(true, { inert: true });
-  setStatus("Validating and saving one transaction…", "busy");
-  showCommitStatus("Saving changes…", "Validating revisions and committing one source transaction.", "busy");
+  startCommitElapsed();
+  setStatus(`Saving ${changeCount} change${changeCount === 1 ? "" : "s"}…`, "busy");
+  showCommitStatus(
+    `Saving ${changeCount} change${changeCount === 1 ? "" : "s"}`,
+    "Validating the current revision and writing one atomic source transaction.",
+    "busy",
+    { phase: "commit" },
+  );
   try {
     const result = await api.post("/api/v2/commit", {
       sourceRevision: state.revision,
       ...domains,
     });
+    committedResult = result;
     state.revision = result.sourceRevision;
-    Object.entries(state.controllers).forEach(([name, controller]) => controller?.clearCommitted?.(name === "pokemon" ? result : undefined));
-    await loadData({ keepStatus: true });
+    clearCommittedControllers(submittedControllerNames, result, Object.keys(domains));
+    refreshControllerNames = commitControllerNames(result.changedDomains || []);
+    shouldBuild = result.saved && elements.autoBuild.checked;
+    if (result.saved) {
+      setStatus("Source committed · refreshing affected decks…", "busy");
+      showCommitStatus(
+        "Source files saved",
+        `Refreshing ${refreshControllerNames.map(controllerDisplayName).join(" and ")} only.`,
+        "busy",
+        { phase: "refresh" },
+      );
+      await loadData({ keepStatus: true, refreshOnly: refreshControllerNames, throwOnControllerRefreshError: true });
+    }
     finalFeedback = commitFeedback(result);
-    shouldBuild = finalFeedback.saved && elements.autoBuild.checked;
   } catch (error) {
-    finalFeedback = {
-      message: `Save failed: ${error.message}`,
-      toastMessage: error.message,
-      kind: "error",
-      toastKind: "error",
-      saved: false,
-    };
+    if (committedResult) {
+      finalFeedback = {
+        message: `Source saved · view refresh failed: ${error.message}`,
+        toastMessage: "Source saved, but the editor view needs to refresh.",
+        kind: "error",
+        toastKind: "error",
+        saved: true,
+        refreshFailed: true,
+      };
+    } else {
+      finalFeedback = {
+        message: error.isOutcomeUnknown
+          ? "Save result not confirmed"
+          : error.isConflict
+            ? `Source changed; ${changeCount} pending change${changeCount === 1 ? " is" : "s are"} preserved`
+            : `Save failed: ${error.message}`,
+        toastMessage: error.isConflict ? "Source changed; nothing in your draft was discarded." : error.message,
+        kind: "error",
+        toastKind: "error",
+        saved: false,
+        outcomeUnknown: Boolean(error.isOutcomeUnknown),
+        conflict: Boolean(error.isConflict || state.conflict),
+      };
+    }
   } finally {
+    stopCommitElapsed();
     setBusy(false, { inert: true });
     if (finalFeedback) {
       setStatus(finalFeedback.message, finalFeedback.kind);
       toast(finalFeedback.toastMessage, finalFeedback.toastKind);
+      const retryAction = finalFeedback.refreshFailed
+        ? () => retryCommittedRefresh(committedResult, refreshControllerNames)
+        : finalFeedback.outcomeUnknown
+          ? () => checkUnknownSaveOutcome(originalRevision)
+        : finalFeedback.conflict
+            ? () => applyDraftToLatestRevision(state.conflictRevision)
+            : (!committedResult ? saveAllChanges : null);
       showCommitStatus(
-        finalFeedback.message,
-        finalFeedback.kind === "error"
-          ? "Save stopped. Your draft is preserved and the workspace is unlocked."
+        finalFeedback.outcomeUnknown ? "Save result not confirmed" : finalFeedback.message,
+        finalFeedback.outcomeUnknown
+          ? "The connection ended before confirmation. Your draft is preserved; check the workspace revision before saving again."
+          : finalFeedback.refreshFailed
+          ? "The source transaction completed. Retry to synchronize the editor without saving again."
+          : finalFeedback.conflict
+            ? "Nothing was discarded. Apply your pending edits on top of the latest source when you are ready; your edited values will take precedence on overlap."
+          : finalFeedback.kind === "error"
+            ? "Save stopped before confirmation. Your draft remains in the workspace."
           : finalFeedback.saved
             ? "Source verification completed and the workspace is unlocked."
             : "The draft was cleared; source files were unchanged.",
         finalFeedback.kind,
-        { dismissAfter: 6200 }
+        retryAction
+          ? { actionLabel: finalFeedback.refreshFailed ? "Retry refresh" : finalFeedback.outcomeUnknown ? "Check status" : finalFeedback.conflict ? "Apply to latest" : "Retry save", action: retryAction }
+          : { dismissAfter: 6200 },
       );
     }
   }
@@ -1075,6 +1465,11 @@ async function setShiny(counter) {
 
 function bindGlobalActions() {
   elements.saveAll.addEventListener("click", saveAllChanges);
+  elements.commitStatusAction.addEventListener("click", () => {
+    const action = commitRecoveryAction;
+    if (!action || state.busy) return;
+    void action();
+  });
   elements.resetDraft.addEventListener("click", resetAllDrafts);
   elements.buildRom.addEventListener("click", startBuild);
   elements.openNds.addEventListener("click", openNds);
