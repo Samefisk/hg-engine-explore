@@ -272,6 +272,8 @@ void OverworldFollowerSelectorInput_Filter(
 {
     u16 physicalKeys;
     u16 physicalNewKeys;
+    u16 directionalNewKeys;
+    u16 directionalHeldKeys;
     u8 eligibleMask;
     u8 nextSlot;
     BOOL yHeld;
@@ -296,11 +298,14 @@ void OverworldFollowerSelectorInput_Filter(
         return;
     }
 
+    directionalNewKeys = *newKeys & PAD_PLUS_KEY_MASK;
+    directionalHeldKeys = *heldKeys & PAD_PLUS_KEY_MASK;
     yHeld = (*heldKeys & PAD_BUTTON_Y) != 0;
     /*
-     * Pending and visible selector states own field input completely.  This
-     * prevents a simultaneous X/A/d-pad press from starting a menu, script,
-     * or warp while the selector is waiting to commit.
+     * Pending/tap states own field input completely.  Once the selector is
+     * visible, only directional input is restored below so stock field input
+     * remains responsible for collision and player movement.  Y, shoulders,
+     * actions, menus, and touch remain selector-owned or suppressed.
      */
     *newKeys = 0;
     *heldKeys = 0;
@@ -376,6 +381,8 @@ void OverworldFollowerSelectorInput_Filter(
         OverworldFollowerSelectorUI_SetSelection(nextSlot);
     }
     sFollowerSelectorPreviousPhysicalKeys = physicalKeys;
+    *newKeys = directionalNewKeys;
+    *heldKeys = directionalHeldKeys;
 }
 
 void OverworldFollowerSelectorInput_Cancel(FieldSystem *fieldSystem)

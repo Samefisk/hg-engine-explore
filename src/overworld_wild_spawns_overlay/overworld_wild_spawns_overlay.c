@@ -13,6 +13,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/map_teleport.h"
 #include "../../include/overlay.h"
+#include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/pokemon.h"
@@ -17297,9 +17298,17 @@ static BOOL OverworldWildSpawns_TryStartBattleFromAButton(
     FieldSystem *fieldSystem)
 {
     LocalMapObject *facingObject = NULL;
+    u16 physicalKeys = PAD_Read();
     int slot;
 
-    if ((PAD_Read() & PAD_BUTTON_A) == 0) {
+    if ((OVERWORLD_FOLLOWER_SELECTOR_STATE
+            & (OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG
+                | OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG)) != 0) {
+        state->movementAButtonDown =
+            (physicalKeys & PAD_BUTTON_A) != 0;
+        return FALSE;
+    }
+    if ((physicalKeys & PAD_BUTTON_A) == 0) {
         state->movementAButtonDown = FALSE;
         return FALSE;
     }
