@@ -82,7 +82,9 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     label: "Movement chain",
     fields: Object.freeze([
       Object.freeze({ key: "ramAccelerationSteps", label: "Moves", unit: "moves" }),
+      Object.freeze({ key: "chainMovementVariance", label: "Move variance", unit: "moves", note: "Adds a random 0 through this value to each new movement chain" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
+      Object.freeze({ key: "chainPauseVariance", label: "Pause variance", unit: "frames", note: "Adds a random 0 through this value to passive and Look around pauses; ignored when Hop in place starts successfully" }),
       Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
     ]),
   }),
@@ -97,10 +99,22 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
         note: "Chain move count or RAM acceleration interval, depending on the inherited movement style. Zero disables both behaviors",
       }),
       Object.freeze({
+        key: "chainMovementVariance",
+        label: "Chain variance",
+        unit: "moves",
+        note: "Adds a random 0 through this value when a movement chain begins; ignored by RAM",
+      }),
+      Object.freeze({
         key: "ramMaxSpeed",
         label: "Pause / max speed",
         unit: "frames / speed tier",
         note: "Chain pause duration or RAM maximum speed, depending on the inherited movement style",
+      }),
+      Object.freeze({
+        key: "chainPauseVariance",
+        label: "Pause variance",
+        unit: "frames",
+        note: "Adds a random 0 through this value to passive and Look around pauses; ignored by RAM and successful Hop in place actions",
       }),
       Object.freeze({
         key: "chainPauseAction",
@@ -245,7 +259,7 @@ const FIELD_SECTIONS = Object.freeze([
       "chillState", "chillTarget", "chillAllowedTile", "chillAllowedTile2",
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
       "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause", "teleportTime",
-      "teleportPause", "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction",
+      "teleportPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction",
     ],
     nodes: [
       { kind: "branch", field: "chillState", branch: "chill-behavior", subtab: "behavior" },
@@ -283,7 +297,7 @@ const FIELD_SECTIONS = Object.freeze([
       "attentiveChaseBoostDistance", "attentiveChaseBoostSpeed", "movementStyle",
       "attentiveSpeed", "attentiveHopAllowNonCardinal", "attentiveHopMinDistance",
       "attentiveHopMaxDistance", "hopTime", "attentiveHopSpinSpeed", "attentiveHopPause",
-      "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction", "attentiveTeleportTime",
+      "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "attentiveTeleportTime",
       "attentiveTeleportPause", "attentiveRamAccelerationSteps", "attentiveRamMaxSpeed",
       "attentiveBattle", "alertSpecialAction",
     ],
@@ -307,8 +321,8 @@ const FIELD_SECTIONS = Object.freeze([
     fields: [
       "tiredState", "tiredAllowedTile", "tiredAllowedTile2", "specialAction", "tiredSpeed",
       "tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime",
-      "hopSpinSpeed", "tiredHopPause", "ramAccelerationSteps", "ramMaxSpeed",
-      "chainPauseAction", "tiredTeleportTime", "tiredTeleportPause",
+      "hopSpinSpeed", "tiredHopPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed",
+      "chainPauseVariance", "chainPauseAction", "tiredTeleportTime", "tiredTeleportPause",
       "tiredRamAccelerationSteps", "tiredRamMaxSpeed", "restTime",
     ],
     nodes: [
@@ -371,6 +385,12 @@ const LOCOMOTION = Object.freeze({
   teleport: "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
 });
 
+const CHAIN_LOCOMOTIONS = Object.freeze(new Set([
+  LOCOMOTION.wander,
+  LOCOMOTION.hop,
+  LOCOMOTION.teleport,
+]));
+
 const RAW_LABEL_OVERRIDES = Object.freeze({
   [LOCOMOTION.wander]: "Walk",
 });
@@ -380,7 +400,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "chillSpeed",
     hopPath: Object.freeze({ composite: "hop-path-chill", fields: Object.freeze(["hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopPause", "hopSpinSpeed"]) }),
-    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
     ramTuning: Object.freeze({ composite: "ram-tuning-chill", fields: Object.freeze(["ramAccelerationSteps", "ramMaxSpeed"]) }),
   }),
@@ -388,7 +408,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "attentiveSpeed",
     hopPath: Object.freeze({ composite: "hop-path-active", fields: Object.freeze(["attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "attentiveHopPause", "attentiveHopSpinSpeed"]) }),
-    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
     ramTuning: Object.freeze({ composite: "ram-tuning-active", fields: Object.freeze(["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"]) }),
   }),
@@ -396,13 +416,14 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "tiredSpeed",
     hopPath: Object.freeze({ composite: "hop-path-tired", fields: Object.freeze(["tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "tiredHopPause", "hopSpinSpeed"]) }),
-    chain: ["ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction"],
+    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
     ramTuning: Object.freeze({ composite: "ram-tuning-tired", fields: Object.freeze(["tiredRamAccelerationSteps", "tiredRamMaxSpeed"]) }),
   }),
 });
 
 const CIRCLE_PLAYER_TARGET = "OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER";
+const NEXT_TO_PLAYER_TARGET = "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER";
 const SPAWN_HOP_FROM_OFF_SCREEN = "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN";
 const SPAWN_NEXT_TO_PLAYER = "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER";
 const SPAWN_DESTINATION_FRONT_TYPE = "__SPAWN_DESTINATION_FRONT_OF_PLAYER";
@@ -1042,13 +1063,77 @@ export function createProfilesController({
     return data.fields.find((field) => field.key === fieldKey)?.label || humanizeRaw(fieldKey);
   }
 
+  function runtimeMatchRelation(priorMatch, currentMatch) {
+    const prior = cloneRawMatch(priorMatch);
+    const current = cloneRawMatch(currentMatch);
+    const exactDimensionRelation = (priorValue, currentValue, wildcard) => {
+      const priorAny = priorValue === wildcard;
+      const currentAny = currentValue === wildcard;
+      if (!priorAny && !currentAny && priorValue !== currentValue) return "disjoint";
+      if (priorAny || (!currentAny && priorValue === currentValue)) return "covers-current";
+      return "partial";
+    };
+    const terrainRelation = exactDimensionRelation(
+      prior.terrain,
+      current.terrain,
+      DEFAULT_MATCH.terrain,
+    );
+    const shinyRelation = exactDimensionRelation(
+      prior.shiny,
+      current.shiny,
+      DEFAULT_MATCH.shiny,
+    );
+    if (terrainRelation === "disjoint" || shinyRelation === "disjoint") return "disjoint";
+
+    const levelRange = (match) => {
+      const minimum = match.minLevel === DEFAULT_MATCH.minLevel ? 1 : Number(match.minLevel);
+      const maximum = match.maxLevel === DEFAULT_MATCH.maxLevel ? 100 : Number(match.maxLevel);
+      return [Number.isFinite(minimum) ? minimum : 1, Number.isFinite(maximum) ? maximum : 100];
+    };
+    const [priorMin, priorMax] = levelRange(prior);
+    const [currentMin, currentMax] = levelRange(current);
+    if (priorMax < currentMin || priorMin > currentMax) return "disjoint";
+    return terrainRelation === "covers-current"
+      && shinyRelation === "covers-current"
+      && priorMin <= currentMin
+      && priorMax >= currentMax
+      ? "covers-current"
+      : "partial";
+  }
+
   function effectiveFieldCandidates(profile, fieldKey) {
     const ownValue = fieldRaw(profile, fieldKey);
     if (ownValue || !isOverrideProfile(profile)) return ownValue ? [ownValue] : [];
-    const baseKeys = new Set(potentialAssignmentsFor(profile)
-      .map((assignment) => pendingBaseKeyForSpecies(assignment?.species?.symbol))
-      .filter(Boolean));
-    return unique([...baseKeys].map((key) => fieldRaw(findProfile(key), fieldKey)).filter(Boolean));
+
+    const ordered = overrideProfiles()
+      .filter((candidate) => !drafts.removedOverrides.has(profileKey(candidate)));
+    const currentIndex = ordered.findIndex((candidate) => profileKey(candidate) === profileKey(profile));
+    const earlier = currentIndex < 0 ? [] : ordered.slice(0, currentIndex);
+    const currentMatch = targetFor(profile).match;
+    const earlierCoverage = earlier.map((candidate) => ({
+      profile: candidate,
+      species: new Set(potentialAssignmentsFor(candidate)
+        .map((assignment) => assignment?.species?.symbol)
+        .filter(Boolean)),
+    }));
+    const resolved = new Set();
+
+    potentialAssignmentsFor(profile).forEach((assignment) => {
+      const species = assignment?.species?.symbol;
+      const base = findProfile(pendingBaseKeyForSpecies(species));
+      let values = new Set([fieldRaw(base, fieldKey)].filter(Boolean));
+      earlierCoverage.forEach((entry) => {
+        if (!species || !entry.species.has(species)) return;
+        const replacement = fieldRaw(entry.profile, fieldKey);
+        if (!replacement) return;
+        const relation = runtimeMatchRelation(targetFor(entry.profile).match, currentMatch);
+        if (relation === "disjoint") return;
+        if (relation === "covers-current") values = new Set([replacement]);
+        else values.add(replacement);
+      });
+      values.forEach((value) => resolved.add(value));
+    });
+    return [...resolved];
   }
 
   function canUseRamLocomotion(profile) {
@@ -1142,11 +1227,21 @@ export function createProfilesController({
   }
 
   function parseNumericOverrideRaw(raw) {
-    const value = String(raw || "");
-    if (isRelativeOverrideRaw(value)) return { kind: "adjust", operand: Number(value) };
+    const value = String(raw || "").trim();
+    const compound = value.match(/^([+-]\d+)\s*,\s*\/([<>])(\d+)$/);
+    if (compound) {
+      const adjust = { kind: "adjust", operand: Number(compound[1]) };
+      const bound = { kind: compound[2] === "<" ? "atLeast" : "atMost", operand: Number(compound[3]) };
+      return { kind: "compound", operations: [adjust, bound], adjust, bound };
+    }
+    if (isRelativeOverrideRaw(value)) {
+      const operation = { kind: "adjust", operand: Number(value) };
+      return { ...operation, operations: [operation] };
+    }
     const bound = value.match(/^\/([<>])(\d+)$/);
     if (!bound) return null;
-    return { kind: bound[1] === "<" ? "atLeast" : "atMost", operand: Number(bound[2]) };
+    const operation = { kind: bound[1] === "<" ? "atLeast" : "atMost", operand: Number(bound[2]) };
+    return { ...operation, operations: [operation] };
   }
 
   function isNumericOverrideRaw(raw) {
@@ -1156,6 +1251,10 @@ export function createProfilesController({
   function numericOperatorStateLabel(raw, changed) {
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
+    if (operator.kind === "compound") {
+      const direction = operator.bound.kind === "atLeast" ? "no less than" : "no greater than";
+      return `${changed ? "Edited compound formula" : "Adjusts the earlier stored value"} by ${operator.adjust.operand > 0 ? "+" : ""}${operator.adjust.operand}, then limits it to ${direction} ${operator.bound.operand}`;
+    }
     if (operator.kind === "adjust") {
       return `${changed ? "Edited adjustment" : "Adjusts earlier stored value"} by ${raw}; the stored result is clamped to this field's valid range`;
     }
@@ -1168,6 +1267,12 @@ export function createProfilesController({
   function numericOperatorVisibleNote(raw) {
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
+    if (operator.kind === "compound") {
+      const bound = operator.bound.kind === "atLeast"
+        ? `at least ${operator.bound.operand} (/<${operator.bound.operand})`
+        : `at most ${operator.bound.operand} (/>${operator.bound.operand})`;
+      return `adjust ${operator.adjust.operand > 0 ? "+" : ""}${operator.adjust.operand}, then ${bound}`;
+    }
     if (operator.kind === "adjust") return `adjust ${raw}`;
     return operator.kind === "atLeast"
       ? `at least ${operator.operand} (/<${operator.operand})`
@@ -1201,6 +1306,7 @@ export function createProfilesController({
     const resolvedPermissions = permissions || numericOverridePermissions(profile, fieldKey);
     if (kind === "adjust") return resolvedPermissions.adjust;
     if (kind === "atLeast" || kind === "atMost") return resolvedPermissions.bounds;
+    if (kind === "compound") return resolvedPermissions.adjust && resolvedPermissions.bounds;
     return resolvedPermissions.adjust || resolvedPermissions.bounds;
   }
 
@@ -1253,7 +1359,7 @@ export function createProfilesController({
     }
     const listId = `pv2-numeric-options-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const errorId = `pv2-numeric-error-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-    const syntax = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : ""].filter(Boolean).join(", ");
+    const syntax = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : "", permissions.adjust && permissions.bounds ? "+1, /<2" : ""].filter(Boolean).join(", ");
     const title = syntax
       ? `Clear to inherit. Type an exact value, ${syntax}.`
       : (allowInherit
@@ -1538,11 +1644,27 @@ export function createProfilesController({
     if (definition.target) {
       const targetRaw = fieldRaw(profile, definition.target);
       const targetInherited = isOverrideProfile(profile) && !targetRaw;
-      const targetChildren = definition.target === "targetSelector"
-        ? ["attentiveCircleRadius", "attentiveContinueWhenArrived"]
+      const targetChildren = [];
+      if (definition.target === "targetSelector") {
+        targetChildren.push(...["attentiveCircleRadius", "attentiveContinueWhenArrived"]
           .map((field) => explicitInactiveNode(profile, field, targetInherited || targetRaw === CIRCLE_PLAYER_TARGET))
-          .filter(Boolean)
-        : [];
+          .filter(Boolean));
+      }
+      if (["targetSelector", "chillTarget"].includes(definition.target)) {
+        const targetCandidates = targetInherited
+          ? effectiveFieldCandidates(profile, definition.target)
+          : [targetRaw];
+        const usesPlayerAdjacentTarget = targetCandidates.includes(NEXT_TO_PLAYER_TARGET);
+        const directions = explicitInactiveNode(
+          profile,
+          "playerAdjacentDirectionMasks",
+          usesPlayerAdjacentTarget,
+          {
+            virtual: "player-adjacent-directions",
+          },
+        );
+        if (directions) targetChildren.push(directions);
+      }
       const targetNode = targetChildren.length && !canTarget
         ? { field: definition.target, inactive: true, children: targetChildren }
         : explicitInactiveNode(profile, definition.target, canTarget, { children: targetChildren });
@@ -1576,18 +1698,22 @@ export function createProfilesController({
     if (!fields) return { nodes: [], context: "" };
     const raw = fieldRaw(profile, parentField);
     const inherited = isOverrideProfile(profile) && !raw;
-    const moves = Boolean(raw && raw !== LOCOMOTION.none);
-    const inheritedChillCandidates = scope === "chill" && inherited
+    const inheritedMovementCandidates = inherited
       ? effectiveFieldCandidates(profile, parentField)
       : [];
-    const inheritedChillRam = inheritedChillCandidates.length > 0
-      && inheritedChillCandidates.every((candidate) => candidate === LOCOMOTION.ram);
-    const inheritedChillChain = inheritedChillCandidates.length > 0
-      && inheritedChillCandidates.every((candidate) => candidate !== LOCOMOTION.ram);
-    const inheritedChillAmbiguous = scope === "chill" && inherited
-      && !inheritedChillRam
-      && !inheritedChillChain;
-    const usesMovementSpeed = inherited || raw === LOCOMOTION.wander || raw === LOCOMOTION.ram;
+    const inheritedHasRam = inheritedMovementCandidates.includes(LOCOMOTION.ram);
+    const inheritedHasChain = inheritedMovementCandidates.some((candidate) => CHAIN_LOCOMOTIONS.has(candidate));
+    const inheritedMovementRam = inheritedMovementCandidates.length > 0
+      && inheritedMovementCandidates.every((candidate) => candidate === LOCOMOTION.ram);
+    // An override with no current coverage has no inherited value to inspect.
+    // Keep the shared controls available: membership may be enabled later, and
+    // hiding them makes it impossible to prepare this layer beforehand.
+    const inheritedMovementUnknown = inherited && inheritedMovementCandidates.length === 0;
+    const inheritedMovementAmbiguous = inherited
+      && (inheritedMovementUnknown || (inheritedHasRam && inheritedHasChain));
+    const usesMovementSpeed = inherited
+      ? inheritedMovementCandidates.some((candidate) => candidate === LOCOMOTION.wander || candidate === LOCOMOTION.ram)
+      : raw === LOCOMOTION.wander || raw === LOCOMOTION.ram;
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -1605,7 +1731,7 @@ export function createProfilesController({
         if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
       });
     };
-    if (usesMovementSpeed) append([fields.speed], true, { label: "Movement speed" });
+    append([fields.speed], usesMovementSpeed, { label: "Movement speed" });
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
@@ -1618,21 +1744,38 @@ export function createProfilesController({
       composite: fields.hopPath.composite,
     });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
-    if (inheritedChillRam) {
+    if (inheritedMovementRam || (inherited && inheritedHasRam && !inheritedHasChain)) {
       append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
-      append([fields.chain[2]], false);
-    } else if (inheritedChillAmbiguous) {
-      append(fields.chain, true, {
-        composite: "movement-chain-or-ram",
-        chainRamDual: true,
-        ramMode: inheritedChillCandidates.includes(LOCOMOTION.ram),
-      });
+      const inactiveChainFields = scope === "chill"
+        ? ["chainMovementVariance", "chainPauseVariance", "chainPauseAction"]
+        : fields.chain;
+      append(inactiveChainFields, false, { composite: "movement-chain" });
+    } else if (inheritedMovementAmbiguous) {
+      if (scope === "chill") {
+        append(fields.chain, true, {
+          composite: "movement-chain-or-ram",
+          chainRamDual: true,
+          ramMode: inheritedMovementCandidates.includes(LOCOMOTION.ram),
+        });
+      } else {
+        // Active and Tired RAM tuning use state-specific fields, while their
+        // chain settings remain shared. Unknown/mixed inheritance needs both
+        // groups rather than mislabeled Chill RAM controls.
+        append(fields.chain, true, { composite: "movement-chain" });
+        append(fields.ramTuning.fields, true, {
+          composite: fields.ramTuning.composite,
+          ramMode: true,
+        });
+      }
+    } else if (inherited) {
+      append(fields.chain, inheritedHasChain, { composite: "movement-chain" });
+      append(fields.ramTuning.fields, false, { composite: fields.ramTuning.composite });
     } else {
-      append(fields.chain, inherited || (moves && raw !== LOCOMOTION.ram), { composite: "movement-chain" });
+      append(fields.chain, CHAIN_LOCOMOTIONS.has(raw), { composite: "movement-chain" });
     }
     append(fields.teleportTiming.fields, inherited || raw === LOCOMOTION.teleport, { composite: fields.teleportTiming.composite });
-    if (!inheritedChillRam && !inheritedChillAmbiguous) {
-      append(fields.ramTuning.fields, inherited || raw === LOCOMOTION.ram, {
+    if (!inherited && !inheritedMovementRam && !inheritedMovementAmbiguous) {
+      append(fields.ramTuning.fields, raw === LOCOMOTION.ram, {
         composite: fields.ramTuning.composite,
         ramMode: raw === LOCOMOTION.ram,
       });
@@ -2077,10 +2220,67 @@ export function createProfilesController({
     return consolidateSiblingRanges(consolidateSiblingComposites(nodes));
   }
 
+  function playerAdjacentMaskNumber(raw) {
+    const option = (data.editOptions?.playerAdjacentDirectionMasks || [])
+      .find((candidate) => valueRaw(candidate) === String(raw || ""));
+    const value = Number(option?.value ?? raw);
+    return Number.isInteger(value) && value >= 0 && value <= 15 ? value : 15;
+  }
+
+  function playerAdjacentMask(raw) {
+    const mask = playerAdjacentMaskNumber(raw) & 0xF;
+    return mask || 0xF;
+  }
+
+  function playerAdjacentEffectiveMasks(profile, raw) {
+    if (raw) return [playerAdjacentMask(raw)];
+    const candidates = isOverrideProfile(profile)
+      ? effectiveFieldCandidates(profile, "playerAdjacentDirectionMasks")
+      : [originalFieldRaw(profile, "playerAdjacentDirectionMasks")];
+    const masks = [...new Set(candidates.filter(Boolean).map(playerAdjacentMask))];
+    return masks.length ? masks : [0xF];
+  }
+
+  function renderPlayerAdjacentDirections(profile, node, presentation) {
+    const fieldKey = node.field;
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const masks = playerAdjacentEffectiveMasks(profile, raw);
+    const anyMask = masks.reduce((combined, candidate) => combined | candidate, 0);
+    const everyMask = masks.reduce((combined, candidate) => combined & candidate, 0xF);
+    const mixed = masks.length > 1;
+    const override = isOverrideProfile(profile);
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const inherited = override && !raw;
+    const state = override
+      ? (changed ? "changed" : (inherited ? "inherited" : "override"))
+      : (changed ? "changed" : "saved");
+    const directions = [
+      [1, "Behind player"],
+      [0, "Front of player"],
+      [2, "Left of player"],
+      [3, "Right of player"],
+    ];
+    return `
+      <div class="field-row profile-field pv2-field pv2-direction-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>Position relative to player</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared by Next to player targets${mixed ? " · mixed inherited values" : ""}</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-direction-options" role="group" aria-label="Allowed positions relative to player">
+          ${directions.map(([bit, label]) => {
+            const directionMixed = Boolean((anyMask & (1 << bit)) && !(everyMask & (1 << bit)));
+            return `<label class="pv2-direction-option${directionMixed ? " is-mixed" : ""}"><input type="checkbox" data-player-adjacent-direction data-field-key="${fieldKey}" data-direction-bit="${bit}" ${everyMask & (1 << bit) ? "checked" : ""} ${directionMixed ? `data-direction-mixed aria-label="${label}, mixed inherited value"` : ""}><span>${label}${directionMixed ? " ·" : ""}</span></label>`;
+          }).join("")}
+          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-player-adjacent-directions" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
+        </span>
+      </div>`;
+  }
+
   function renderVirtualFieldControl(profile, node, presentation = {}) {
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
     const original = originalFieldRaw(profile, fieldKey);
+    if (node.virtual === "player-adjacent-directions") {
+      return renderPlayerAdjacentDirections(profile, node, presentation);
+    }
     if (node.virtual === "spawn-destination-type") {
       return renderSelectField(profile, fieldKey, {
         ...presentation,
@@ -2609,14 +2809,17 @@ export function createProfilesController({
       editedFields.forEach((raw, fieldKey) => {
         const operator = parseNumericOverrideRaw(raw);
         if (!operator) return;
-        if (!numericOverrideAllowed(profile, fieldKey, operator.kind)) {
-          errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} cannot use numeric override operators`);
-          return;
-        }
         const options = fieldOptions(fieldKey, raw, profile, {});
-        const bounds = numericOverrideOperandBounds(fieldKey, options, operator.kind);
-        if (!Number.isInteger(operator.operand) || operator.operand < bounds.min || operator.operand > bounds.max) {
-          errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} ${operator.kind === "adjust" ? "adjustment" : "bound"} must be between ${bounds.min} and ${bounds.max}`);
+        for (const operation of operator.operations) {
+          if (!numericOverrideAllowed(profile, fieldKey, operation.kind)) {
+            errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} cannot use numeric override operators`);
+            break;
+          }
+          const bounds = numericOverrideOperandBounds(fieldKey, options, operation.kind);
+          if (!Number.isInteger(operation.operand) || operation.operand < bounds.min || operation.operand > bounds.max) {
+            errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} ${operation.kind === "adjust" ? "adjustment" : "bound"} must be between ${bounds.min} and ${bounds.max}`);
+            break;
+          }
         }
       });
       PROFILE_FIELD_RANGES.forEach((range) => {
@@ -2921,6 +3124,9 @@ export function createProfilesController({
         <header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="pv2-fields-title">${override ? "Overridden values" : "Profile values"}</h3></div><span>${data.fields.length} available fields</span></header>
         ${renderFieldSections(profile)}
       </section>`;
+    editorElement.querySelectorAll("[data-direction-mixed]").forEach((input) => {
+      input.indeterminate = true;
+    });
   }
 
   function ensureContextDefaults() {
@@ -3389,6 +3595,11 @@ export function createProfilesController({
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
     else if (action === "select-lifecycle-mode") selectLifecycleMode(target.dataset.lifecycleSection, target.dataset.modeTarget);
     else if (action === "select-mode-tab") selectModeTab(target.dataset.modeTabSection, target.dataset.modeTab);
+    else if (action === "inherit-player-adjacent-directions" && profile) {
+      setField(profile, "playerAdjacentDirectionMasks", "");
+      renderEditor(); renderList(); signalDirty();
+      announce("Next-to-player side settings will inherit after saving.");
+    }
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
     else if (action === "create-base") createBaseDialog();
@@ -3485,18 +3696,26 @@ export function createProfilesController({
     const operator = parseNumericOverrideRaw(raw);
     let canonical = raw;
     if (operator) {
-      if (!numericOverrideAllowed(profile, fieldKey, operator.kind, permissions)) {
-        return fail(permissions.adjust
-          ? "Use +N or -N for this field; bound formulas are unavailable."
-          : "Formulas are not available for this value.");
+      for (const operation of operator.operations) {
+        if (!numericOverrideAllowed(profile, fieldKey, operation.kind, permissions)) {
+          return fail(permissions.adjust
+            ? "Use +N or -N for this field; bound formulas are unavailable."
+            : "Formulas are not available for this value.");
+        }
+        const bounds = numericOverrideOperandBounds(fieldKey, exactOptions, operation.kind);
+        if (!Number.isInteger(operation.operand) || operation.operand < bounds.min || operation.operand > bounds.max) {
+          return fail(`${operation.kind === "adjust" ? "Adjustment" : "Bound"} must be between ${bounds.min} and ${bounds.max}.`);
+        }
       }
-      const bounds = numericOverrideOperandBounds(fieldKey, exactOptions, operator.kind);
-      if (!Number.isInteger(operator.operand) || operator.operand < bounds.min || operator.operand > bounds.max) {
-        return fail(`${operator.kind === "adjust" ? "Adjustment" : "Bound"} must be between ${bounds.min} and ${bounds.max}.`);
+      if (operator.kind === "compound") {
+        const adjust = operator.adjust.operand > 0 ? `+${operator.adjust.operand}` : String(operator.adjust.operand);
+        const bound = operator.bound.kind === "atLeast" ? `/<${operator.bound.operand}` : `/>${operator.bound.operand}`;
+        canonical = operator.adjust.operand === 0 ? bound : `${adjust}, ${bound}`;
+      } else {
+        canonical = operator.kind === "adjust"
+          ? (operator.operand === 0 ? "" : (operator.operand > 0 ? `+${operator.operand}` : String(operator.operand)))
+          : (operator.kind === "atLeast" ? `/<${operator.operand}` : `/>${operator.operand}`);
       }
-      canonical = operator.kind === "adjust"
-        ? (operator.operand === 0 ? "" : (operator.operand > 0 ? `+${operator.operand}` : String(operator.operand)))
-        : (operator.kind === "atLeast" ? `/<${operator.operand}` : `/>${operator.operand}`);
     } else {
       const exact = Number(raw);
       const exactNumbers = [...exactRawValues].map(Number).filter(Number.isFinite);
@@ -3505,7 +3724,7 @@ export function createProfilesController({
       const minimum = Number(data.numericOverrideOperandMinimums?.[fieldKey] ?? optionMinimum);
       const maximum = Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum);
       if (!Number.isInteger(exact) || exact < minimum || exact > maximum) {
-        const formulaExamples = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : ""]
+        const formulaExamples = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : "", permissions.adjust && permissions.bounds ? "+1, /<2" : ""]
           .filter(Boolean)
           .join(", ");
         return fail(`Value must be a whole number between ${minimum} and ${maximum}${formulaExamples ? `, or a formula such as ${formulaExamples}` : ""}.`);
@@ -3590,6 +3809,26 @@ export function createProfilesController({
     }
     if (updateNumericOverrideInput(event.target, profile, { render: false })) {
       if (event.target.getAttribute("aria-invalid") !== "true") refreshAfterFormulaCommit();
+      return;
+    }
+    if (event.target.matches("[data-player-adjacent-direction]") && profile) {
+      const bit = Number(event.target.dataset.directionBit);
+      const currentRaw = fieldRaw(profile, "playerAdjacentDirectionMasks");
+      const inheritedMasks = playerAdjacentEffectiveMasks(profile, currentRaw);
+      let value = inheritedMasks.reduce((combined, candidate) => combined | candidate, 0);
+      value = event.target.checked ? (value | (1 << bit)) : (value & ~(1 << bit));
+      if (!value) {
+        event.target.checked = true;
+        status("Next to player needs at least one allowed side.", "warning");
+        return;
+      }
+      setField(profile, "playerAdjacentDirectionMasks", String(value));
+      renderEditor(); renderList(); signalDirty();
+      if (inheritedMasks.length > 1) {
+        announce("Mixed inherited sides are now one shared explicit mask.");
+      }
+      const selector = `[data-player-adjacent-direction][data-direction-bit="${bit}"]`;
+      editorElement.querySelector(selector)?.focus({ preventScroll: true });
       return;
     }
     if (event.target.matches("[data-profile-value]:not([data-profile-numeric-entry])") && profile) {

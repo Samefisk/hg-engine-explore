@@ -784,8 +784,8 @@ SEQ_SE_DP_KOUKA_L                  equ 1789
 SEQ_SE_DP_KOUKA_M                  equ 1790
 SEQ_SE_DP_NIGERU2                  equ 1791
 SEQ_SE_DP_IREKAE                   equ 1792
-SEQ_SE_DP_DUMMY16                  equ 1793
-SEQ_SE_DP_DUMMY17                  equ 1794
+SEQ_SE_DP_BALL_OPEN                equ 1793
+SEQ_SE_DP_BALL_DRAW_IN             equ 1794
 SEQ_SE_DP_POKE_DEAD3               equ 1795
 SEQ_SE_DP_HINSI                    equ 1796
 SEQ_SE_DP_SUIKOMU                  equ 1797

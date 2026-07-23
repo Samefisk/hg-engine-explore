@@ -4,9 +4,15 @@
 #include "types.h"
 
 typedef struct FieldSystem FieldSystem;
+typedef struct OverworldWildSpawnState OverworldWildSpawnState;
+struct PartyPokemon;
 
 #define OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG 0x80
 #define OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG 0x40
+#define OVERWORLD_FOLLOWER_SELECTOR_STALE_BALL_FLAG 0x20
+#define OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG 0x10
+#define OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG 0x08
+#define OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG 0x04
 /* Published by overlay 131 at a fixed ABI address for overlays 151 and 152. */
 #define OVERWORLD_FOLLOWER_SELECTOR_STATE \
     (*(volatile u8 *)0x023C8148)
@@ -47,25 +53,104 @@ static inline void OverworldFollowerSelector_ClearDirectLoaded(void)
         (u8)~OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG;
 }
 
+static inline BOOL OverworldFollowerSelector_IsActiveFlagSet(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetActiveFlag(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearActiveFlag(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG;
+}
+
+static inline BOOL OverworldFollowerSelector_IsUnloadPending(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetUnloadPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearUnloadPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG;
+}
+
+static inline BOOL OverworldFollowerSelector_IsStaleBallCleanupPending(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_STALE_BALL_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetStaleBallCleanupPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_STALE_BALL_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearStaleBallCleanupPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_STALE_BALL_FLAG;
+}
+
+static inline BOOL OverworldFollowerSelector_IsPartySnapshotDirty(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetPartySnapshotDirty(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearPartySnapshotDirty(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG;
+}
+
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR 0x023C0400
-#define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR 0x023C3000
+#define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR 0x023C22A0
 #define OVERWORLD_FOLLOWER_SELECTOR_MAGIC 0x3153464F /* "OFS1" */
-#define OVERWORLD_FOLLOWER_SELECTOR_VERSION 1
+#define OVERWORLD_FOLLOWER_SELECTOR_VERSION 4
 
 typedef BOOL (*OverworldFollowerSelectorValidateFunc)(void);
 typedef BOOL (*OverworldFollowerSelectorUIOpenFunc)(
     FieldSystem *fieldSystem,
     u8 highlightedSlot);
 typedef void (*OverworldFollowerSelectorUISetSelectionFunc)(u8 highlightedSlot);
-typedef void (*OverworldFollowerSelectorUIUpdateFunc)(void);
+typedef BOOL (*OverworldFollowerSelectorUIUpdateFunc)(void);
 typedef void (*OverworldFollowerSelectorUICloseFunc)(void);
 typedef BOOL (*OverworldFollowerSelectorUIIsOpenFunc)(void);
 typedef void (*OverworldFollowerSelectorInputFilterFunc)(
-    FieldSystem *fieldSystem,
-    u16 *newKeys,
-    u16 *heldKeys);
-typedef void (*OverworldFollowerSelectorInputCancelFunc)(FieldSystem *fieldSystem);
+    FieldSystem *fieldSystem);
+typedef BOOL (*OverworldFollowerSelectorInputCancelFunc)(FieldSystem *fieldSystem);
 typedef BOOL (*OverworldFollowerSelectorInputIsActiveFunc)(void);
+typedef struct PartyPokemon *(*OverworldFollowerSelectorGetSelectedPokemonFunc)(
+    FieldSystem *fieldSystem,
+    u8 *partySlot);
+typedef s32 (*OverworldFollowerSelectorGetReleaseDistanceFunc)(
+    FieldSystem *fieldSystem);
+typedef BOOL (*OverworldFollowerSelectorIsReleaseTileAvailableFunc)(
+    FieldSystem *fieldSystem,
+    int x,
+    int y);
 
 typedef struct OverworldFollowerSelectorOverlayEntry {
     u32 magic;
@@ -80,10 +165,13 @@ typedef struct OverworldFollowerSelectorOverlayEntry {
     OverworldFollowerSelectorInputFilterFunc inputFilter;
     OverworldFollowerSelectorInputCancelFunc inputCancel;
     OverworldFollowerSelectorInputIsActiveFunc inputIsActive;
+    OverworldFollowerSelectorGetSelectedPokemonFunc getSelectedPokemon;
+    OverworldFollowerSelectorGetReleaseDistanceFunc getReleaseDistance;
+    OverworldFollowerSelectorIsReleaseTileAvailableFunc isReleaseTileAvailable;
 } OverworldFollowerSelectorOverlayEntry;
 
-typedef char OverworldFollowerSelectorOverlayEntrySizeMustRemain44Bytes[
-    sizeof(OverworldFollowerSelectorOverlayEntry) == 44 ? 1 : -1];
+typedef char OverworldFollowerSelectorOverlayEntrySizeMustRemain56Bytes[
+    sizeof(OverworldFollowerSelectorOverlayEntry) == 56 ? 1 : -1];
 
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY \
     ((const OverworldFollowerSelectorOverlayEntry *) \
@@ -92,24 +180,33 @@ typedef char OverworldFollowerSelectorOverlayEntrySizeMustRemain44Bytes[
 BOOL OverworldFollowerSelectorUI_Open(
     FieldSystem *fieldSystem,
     u8 highlightedSlot);
+void OverworldFollowerSelectorUI_BeginPartySnapshot(void);
+BOOL OverworldFollowerSelectorUI_SnapshotNextPartySlot(
+    FieldSystem *fieldSystem);
+u8 OverworldFollowerSelectorUI_GetEligibleMask(void);
 void OverworldFollowerSelectorUI_SetSelection(u8 highlightedSlot);
-void OverworldFollowerSelectorUI_Update(void);
+BOOL OverworldFollowerSelectorUI_Update(void);
 void OverworldFollowerSelectorUI_Close(void);
 BOOL OverworldFollowerSelectorUI_IsOpen(void);
 
 void OverworldFollowerSelectorInput_Filter(
-    FieldSystem *fieldSystem,
-    u16 *newKeys,
-    u16 *heldKeys);
-void OverworldFollowerSelectorInput_Cancel(FieldSystem *fieldSystem);
+    FieldSystem *fieldSystem);
+BOOL OverworldFollowerSelectorInput_Cancel(FieldSystem *fieldSystem);
 BOOL OverworldFollowerSelectorInput_IsActive(void);
+struct PartyPokemon *OverworldFollowerSelector_GetSelectedPokemon(
+    FieldSystem *fieldSystem,
+    u8 *partySlot);
+s32 OverworldFollowerSelector_GetReleaseDistance(FieldSystem *fieldSystem);
+BOOL OverworldFollowerSelector_IsReleaseTileAvailable(
+    FieldSystem *fieldSystem,
+    int x,
+    int y);
 
 /* Implemented by transient overlay 152 and used only while it is loaded. */
 u8 OverworldWildSpawns_GetSelectedFollowerPartySlot(FieldSystem *fieldSystem);
 BOOL OverworldWildSpawns_IsFollowerPartySlotEligible(
     FieldSystem *fieldSystem,
     u8 partySlot);
-u8 OverworldWildSpawns_GetEligibleFollowerPartyMask(FieldSystem *fieldSystem);
 BOOL OverworldWildSpawns_SelectFollowerPartySlot(
     FieldSystem *fieldSystem,
     u8 partySlot);
@@ -138,22 +235,19 @@ static inline BOOL OverworldFollowerSelector_CanCallInputCancel(void)
     u32 rawCancelAddress = (u32)entry->inputCancel;
     u32 cancelAddress = rawCancelAddress & ~1u;
 
-    return entry->inputCancel != NULL
-        && (rawCancelAddress & 1u) != 0
+    return (rawCancelAddress & 1u) != 0
         && cancelAddress >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
         && cancelAddress < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
 }
 
 static inline void OverworldFollowerSelector_InputFilter(
-    FieldSystem *fieldSystem,
-    u16 *newKeys,
-    u16 *heldKeys)
+    FieldSystem *fieldSystem)
 {
     const OverworldFollowerSelectorOverlayEntry *entry =
         OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
 
     if (entry->inputFilter != NULL) {
-        entry->inputFilter(fieldSystem, newKeys, heldKeys);
+        entry->inputFilter(fieldSystem);
     }
 }
 

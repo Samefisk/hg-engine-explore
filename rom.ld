@@ -200,6 +200,8 @@ SpriteList_RenderAndAnimateSprites = 0x0202457C | 1;
 Sprite_CreateAffine = 0x02024624 | 1;
 Sprite_SetMatrix = 0x020247D4 | 1;
 Sprite_SetScaleAndAffineType = 0x02024804 | 1;
+Sprite_SetAnimActiveFlag = 0x0202484C | 1;
+Sprite_SetAnimCtrlSeq = 0x020248F0 | 1;
 Sprite_SetPalIndexRespectVramOffset = 0x02024A48 | 1;
 
 EffectTCB_Delete = 0x315F8 + 0x022378C1;

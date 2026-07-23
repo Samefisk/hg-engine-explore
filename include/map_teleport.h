@@ -45,6 +45,10 @@ typedef char OverworldFieldServiceEntrySizeMustRemain16Bytes[
 #define OVERWORLD_FIELD_SERVICE_ENTRY \
     ((const OverworldFieldServiceEntry *)OVERWORLD_FIELD_SERVICE_ENTRY_ADDR)
 
+/* Runs from the independent field-ready SysTask, never FieldSystem_Control. */
+#define OVERWORLD_FOLLOWER_SELECTOR_TASK_POLL_ADDR 0x023C8010
+typedef void (*OverworldFollowerSelectorTaskPollFunc)(FieldSystem *fieldSystem);
+
 static inline const OverworldFieldServiceEntry *OverworldFieldService_GetEntry(void)
 {
     const OverworldFieldServiceEntry *entry = OVERWORLD_FIELD_SERVICE_ENTRY;

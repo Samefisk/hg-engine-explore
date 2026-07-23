@@ -12,131 +12,90 @@
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 
-typedef void (*FieldInputUpdateFunc)(
-    void *fieldInput,
-    FieldSystem *fieldSystem,
-    u16 newKeys,
-    u16 heldKeys);
-
-#define FIELD_INPUT_UPDATE ((FieldInputUpdateFunc)(0x021E6928 | 1))
-#define FIELD_SYSTEM_LAST_TOUCH_MENU_INPUT_OFFSET 0xD0
-
-static u8 sOverworldFollowerSelectorDirectLoaded;
 volatile u8 gOverworldFollowerSelectorStateStorage
     __attribute__((section(".overworld_follower_selector_state"), used));
 
-static void OverworldFollowerSelector_DiscardTouchMenuInput(
-    FieldSystem *fieldSystem)
+static BOOL OverworldFollowerSelector_IsCallable(const void *function)
 {
-    if (fieldSystem != NULL) {
-        *(u16 *)((u8 *)fieldSystem
-            + FIELD_SYSTEM_LAST_TOUCH_MENU_INPUT_OFFSET) = 0;
-    }
+    u32 rawAddress = (u32)function;
+    u32 address = rawAddress & ~1u;
+
+    return (rawAddress & 1u) != 0
+        && address >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
+        && address < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
+}
+
+static BOOL __attribute__((noinline))
+OverworldFollowerSelector_ValidateLoaded(void)
+{
+    const OverworldFollowerSelectorOverlayEntry *entry =
+        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
+
+    return entry->magic == OVERWORLD_FOLLOWER_SELECTOR_MAGIC
+        && OverworldFollowerSelector_IsCallable(entry->validate)
+        && entry->validate();
 }
 
 static BOOL OverworldFollowerSelector_ForceDirectUnload(
     FieldSystem *fieldSystem)
 {
-    if (sOverworldFollowerSelectorDirectLoaded
-        && OverworldFollowerSelector_CanCallInputCancel()) {
-        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputCancel(fieldSystem);
+    BOOL isLoaded = OverworldFollowerSelector_IsDirectLoaded();
+
+    if (isLoaded) {
+        if (!OverworldFollowerSelector_ValidateLoaded()
+            || !OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputCancel(
+                fieldSystem)) {
+            /* Keep corrupt live code and its BSS resident; unloading loses the
+             * only state capable of restoring external callbacks and objects. */
+            return FALSE;
+        }
+        if (!FS_UnloadOverlay(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) {
+            /* Keep ownership published until the managed unload succeeds. */
+            OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+                OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG
+                | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG;
+            return FALSE;
+        }
+        *(u32 *)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR = 0;
     }
-    *(u32 *)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR = 0;
-    if (sOverworldFollowerSelectorDirectLoaded
-        && !FS_UnloadOverlay(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) {
-        /* Keep ownership published so no caller can load over live code. */
-        OverworldFollowerSelector_SetReleaseGate();
-        return FALSE;
-    }
-    sOverworldFollowerSelectorDirectLoaded = FALSE;
-    OverworldFollowerSelector_ClearDirectLoaded();
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &= (u8)~(
+        OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG);
     return TRUE;
 }
 
-static BOOL OverworldFollowerSelector_TryDirectLoad(void)
+static u32 __attribute__((noinline))
+OverworldFollowerSelector_ReadPhysicalKeys(void)
 {
-    if (sOverworldFollowerSelectorDirectLoaded) {
-        if (OverworldFollowerSelector_Validate()) {
-            return TRUE;
-        }
-        (void)OverworldFollowerSelector_ForceDirectUnload(NULL);
-        return FALSE;
-    }
-    OverworldFollowerSelector_ClearDirectLoaded();
-
-    *(u32 *)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR = 0;
-    if (!LoadOverlayNormal(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) {
-        return FALSE;
-    }
-    sOverworldFollowerSelectorDirectLoaded = TRUE;
-    OverworldFollowerSelector_SetDirectLoaded();
-    if (!OverworldFollowerSelector_Validate()) {
-        (void)OverworldFollowerSelector_ForceDirectUnload(NULL);
-        return FALSE;
-    }
-    return TRUE;
+    /* Use the once-per-frame raw snapshot, before button-mode remapping. */
+    return *(vu32 *)0x021D1144 & PAD_ALL_MASK;
 }
 
 /*
- * FieldInput_Update consumes Y as the registered-item shortcut before any of
- * the resident overworld tasks run.  This wrapper is therefore the selector's
- * only input-arbitration point: overlay 152 decides whether Y is still a tap
- * or has become a hold, then the filtered keys continue through stock field
- * input unchanged.
- *
- * Overlay 131 is linked to the field overlay, so this entry is always present
- * while the patched FieldSystem_Control call site can execute.  The selector
- * overlay remains optional. A cold-load failure leaves native Y intact; a
- * loaded-but-invalid ABI fails closed, unloads immediately, and waits for all
- * owned buttons to be released before field input can resume.
+ * This callback runs from the field-ready main-queue SysTask, after the stock
+ * FieldSystem_Control update. It only observes the global key snapshot and
+ * never receives, changes, or calls player movement input.
  */
-void __attribute__((section(".overworld_follower_selector_input_hook"), used))
-OverworldFollowerSelector_FieldInputUpdateHook(
-    void *fieldInput,
-    FieldSystem *fieldSystem,
-    u16 newKeys,
-    u16 heldKeys)
+void __attribute__((section(".overworld_follower_selector_task_poll"), used))
+OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
 {
-    if (OverworldFollowerSelector_IsReleaseGated()) {
-        BOOL allReleased = heldKeys == 0
-            && (PAD_Read() & (PAD_BUTTON_L | PAD_BUTTON_R)) == 0;
-        BOOL selectorUnloaded =
-            OverworldFollowerSelector_ForceDirectUnload(fieldSystem);
+    BOOL releaseGated = OverworldFollowerSelector_IsReleaseGated();
+    const OverworldFollowerSelectorOverlayEntry *entry =
+        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
 
-        /* Consume the release frame too; no held input reaches resumed field. */
-        newKeys = 0;
-        heldKeys = 0;
-        OverworldFollowerSelector_DiscardTouchMenuInput(fieldSystem);
-        if (allReleased && selectorUnloaded) {
-            OverworldFollowerSelector_ClearReleaseGate();
-        }
-        FIELD_INPUT_UPDATE(fieldInput, fieldSystem, newKeys, heldKeys);
-        return;
+    if (!releaseGated
+        && OverworldFollowerSelector_IsDirectLoaded()
+        && OverworldFollowerSelector_ValidateLoaded()) {
+        entry->inputFilter(fieldSystem);
     }
-    if ((newKeys & PAD_BUTTON_Y) != 0
-        && !sOverworldFollowerSelectorDirectLoaded) {
-        (void)OverworldFollowerSelector_TryDirectLoad();
+    if (releaseGated
+        && !OverworldFollowerSelector_IsUnloadPending()
+        && (OverworldFollowerSelector_ReadPhysicalKeys()
+            & (PAD_BUTTON_A | PAD_BUTTON_L | PAD_BUTTON_R | PAD_BUTTON_Y))
+            == 0) {
+        OverworldFollowerSelector_ClearReleaseGate();
     }
-    if (sOverworldFollowerSelectorDirectLoaded) {
-        if (!OverworldFollowerSelector_Validate()) {
-            newKeys = 0;
-            heldKeys = 0;
-            OverworldFollowerSelector_SetReleaseGate();
-            OverworldFollowerSelector_DiscardTouchMenuInput(fieldSystem);
-            (void)OverworldFollowerSelector_ForceDirectUnload(fieldSystem);
-            FIELD_INPUT_UPDATE(fieldInput, fieldSystem, newKeys, heldKeys);
-            return;
-        }
-        OverworldFollowerSelector_InputFilter(
-            fieldSystem,
-            &newKeys,
-            &heldKeys);
-        if (!OverworldFollowerSelector_IsActive()) {
-            /* The call has returned to overlay 131, so 152 is safe to free. */
-            (void)OverworldFollowerSelector_ForceDirectUnload(fieldSystem);
-        }
-    }
-    FIELD_INPUT_UPDATE(fieldInput, fieldSystem, newKeys, heldKeys);
 }
 
 static u8 sOverworldWildPlayerFrameServiceActive;
@@ -240,7 +199,8 @@ static BOOL OverworldFieldService_PrepareMapHeaderChange(
 {
     const OverworldWildSpawnsOverlayEntry *entry;
 
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
+        || !OverworldFollowerSelector_IsDirectLoaded()) {
         return FALSE;
     }
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
@@ -322,31 +282,20 @@ static void OverworldFieldService_DiscardRetainedPrimaries(
         for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
             state->spawns[slot].object = NULL;
         }
-        state->mapId = MAP_NOTHING;
-        state->captureTargetMask = 0;
-        state->pendingSlot = -1;
-        state->movementQueuedBattleSlot = -1;
-        state->pendingSpecies = SPECIES_NONE;
-        state->pendingLevel = 0;
-        state->pendingShiny = FALSE;
-        state->pendingMapGeneration = 0;
-        state->pendingEncounterGeneration = 0;
-        state->presentationRestorePending = FALSE;
-        return;
-    }
-
-    memset(state->spawns, 0, sizeof(state->spawns));
-    state->mapGeneration++;
-    if (state->mapGeneration == 0) {
-        state->mapGeneration = 1;
+    } else {
+        memset(state->spawns, 0, sizeof(state->spawns));
+        state->mapGeneration++;
+        if (state->mapGeneration == 0) {
+            state->mapGeneration = 1;
+        }
+        state->mapObjectMan = NULL;
+        state->mapObjects = NULL;
+        state->movementFieldSystem = NULL;
+        state->pendingPersonality = 0;
     }
     state->mapId = MAP_NOTHING;
-    state->mapObjectMan = NULL;
-    state->mapObjects = NULL;
-    state->movementFieldSystem = NULL;
     state->pendingSlot = -1;
     state->movementQueuedBattleSlot = -1;
-    state->pendingPersonality = 0;
     state->pendingSpecies = SPECIES_NONE;
     state->pendingLevel = 0;
     state->pendingShiny = FALSE;
@@ -499,15 +448,18 @@ static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
         return TRUE;
     }
 
-    if (!sOverworldWildPlayerFrameServiceActive
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        if (OverworldFollowerSelector_IsDirectLoaded()) {
+            goto runFieldService;
+        }
+    } else if (!sOverworldWildPlayerFrameServiceActive
         && (reg_PAD_KEYINPUT & PAD_BUTTON_R) != 0) {
         return TRUE;
     }
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
-        (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
-        return TRUE;
-    }
+    (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
+    return TRUE;
 
+runFieldService:
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
     sOverworldWildPlayerFrameServiceActive = entry->onPlayerFrame(
         fieldSystem,

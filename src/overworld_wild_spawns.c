@@ -50,6 +50,11 @@ __asm__(
 #define gOverworldWildBattleFlags (gOverworldWildResidentData.battleFlags)
 #define gOverworldWildSavedHp (gOverworldWildResidentData.savedHp)
 extern u32 space_for_setmondata;
+extern void OverworldFollowerSelectorTaskPollEntry(FieldSystem *fieldSystem);
+__asm__(
+    ".global OverworldFollowerSelectorTaskPollEntry\n"
+    ".type OverworldFollowerSelectorTaskPollEntry, %function\n"
+    ".set OverworldFollowerSelectorTaskPollEntry, 0x023C8011\n");
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad);
 
@@ -110,18 +115,20 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         sFieldReadyTaskMapId = currentMapId;
         return;
     }
+    /* Overlay 131 is guaranteed resident after the map-service guard above. */
+    OverworldFollowerSelectorTaskPollEntry(fieldSystem);
     if (sOverworldWildSpawnState.battleGraceSteps != 0) {
         sOverworldWildSpawnState.battleGraceSteps--;
         return;
     }
+    /* Advance field presentations before a pending refill consumes the frame. */
+    OverworldFieldService_PollFrame(fieldSystem);
     if (gOverworldWildFieldIdleRearmPending != 0) {
         (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
         if (gOverworldWildFieldIdleRearmPending != 0) {
             return;
         }
     }
-
-    OverworldFieldService_PollFrame(fieldSystem);
 #if OW_WILD_FIELD_READY_INITIAL_SPAWN
     OverworldWildSpawns_OnPlayerStep(fieldSystem);
 #endif

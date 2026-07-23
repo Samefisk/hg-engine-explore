@@ -2,8 +2,8 @@
 OUTPUT_ARCH(arm)
 MEMORY {
 
-        rom     : ORIGIN = 0x023C0400, LENGTH = 0x2C00
-        ewram   : ORIGIN = 0x023C0400, LENGTH = 0x2C00
+        rom     : ORIGIN = 0x023C0400, LENGTH = 0x1EA0
+        ewram   : ORIGIN = 0x023C0400, LENGTH = 0x1EA0
 }
 
 SECTIONS {
@@ -14,7 +14,7 @@ SECTIONS {
                 __text_start = . ;
                 . = ALIGN(4);
                 KEEP(*(.overworld_follower_selector_entry))
-                ASSERT(. == ORIGIN(rom) + 0x2C,
+                ASSERT(. == ORIGIN(rom) + 0x38,
                     "overworld follower selector entry ABI changed");
                 . = ALIGN(4);
                 *(.init)

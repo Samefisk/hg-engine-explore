@@ -54,7 +54,11 @@ BUILD = "build"
 SRC_FILES = os.listdir(SOURCE)
 OVERLAYS = []
 for file in SRC_FILES:
-    if ".c" not in file and "individual" not in file and ".ld" not in file:
+    if (".c" not in file
+            and "individual" not in file
+            and ".ld" not in file
+            and file != "overworld_follower_release_overlay2"
+            and file != "overworld_follower_selector_icons_overlay2"):
         OVERLAYS.append(file)
 
 # construct output filename list
@@ -207,7 +211,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
 
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldFieldServiceEntry'
-    selector_hook_name = 'OverworldFollowerSelector_FieldInputUpdateHook'
+    selector_hook_name = 'OverworldFollowerSelector_TaskPoll'
     selector_state_name = 'gOverworldFollowerSelectorStateStorage'
     callback_names = [
         'OverworldFieldService_OnMapHeaderChangedImpl',
@@ -249,7 +253,7 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
     selector_hook_address, selector_hook_size = symbols[selector_hook_name]
     if selector_hook_address != 0x023C8010:
         raise RuntimeError(
-            'overlay 131 follower-selector input hook moved: '
+            'overlay 131 follower-selector task poll moved: '
             f'address=0x{selector_hook_address:08X}, expected address=0x023C8010'
         )
     selector_state_address, selector_state_size = symbols[selector_state_name]
@@ -259,8 +263,8 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
                 > selector_state_address):
         raise RuntimeError(
             'overlay 131 follower-selector state ABI changed or overlaps the '
-            'input hook: '
-            f'hook_end=0x{selector_hook_address + selector_hook_size:08X}, '
+            'task poll: '
+            f'poll_end=0x{selector_hook_address + selector_hook_size:08X}, '
             f'state=0x{selector_state_address:08X} size={selector_state_size}'
         )
 
@@ -304,6 +308,9 @@ def VerifyOverworldFollowerSelectorOverlay(
         'OverworldFollowerSelectorInput_Filter',
         'OverworldFollowerSelectorInput_Cancel',
         'OverworldFollowerSelectorInput_IsActive',
+        'OverworldFollowerSelector_GetSelectedPokemon',
+        'OverworldFollowerSelector_GetReleaseDistance',
+        'OverworldFollowerSelector_IsReleaseTileAvailable',
     ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
@@ -325,8 +332,8 @@ def VerifyOverworldFollowerSelectorOverlay(
 
     entry_address, entry_size = symbols[entry_name]
     expected_entry_address = 0x023C0400
-    expected_entry_size = 44
-    overlay_end = 0x023C3000
+    expected_entry_size = 56
+    overlay_end = 0x023C22A0
     if (entry_address != expected_entry_address
             or entry_size != expected_entry_size):
         raise RuntimeError(
@@ -353,7 +360,7 @@ def VerifyOverworldFollowerSelectorOverlay(
         raise RuntimeError('overlay 152 is shorter than its exported ABI entry')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3153464F, 1, expected_entry_size)
+    expected_header = (0x3153464F, 4, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 152 exported ABI magic/version/size does not match'

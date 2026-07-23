@@ -93,6 +93,13 @@
 // remain available, and the separate trainer-companion system is unaffected.
 #define DISABLE_FOLLOWER_POKEMON
 
+// Use front-facing overworld artwork in the hold-Y follower selector. Set this
+// to 0 to restore the original party-icon renderer without changing saves or
+// follower-selection behavior.
+#ifndef FOLLOWER_SELECTOR_USE_OVERWORLD_ICONS
+#define FOLLOWER_SELECTOR_USE_OVERWORLD_ICONS 1
+#endif
+
 // IMPLEMENT_CAPTURE_EXPERIENCE defines whether or not capturing wild pokemon will net experience
 // commenting this line out disables capture experience
 #define IMPLEMENT_CAPTURE_EXPERIENCE

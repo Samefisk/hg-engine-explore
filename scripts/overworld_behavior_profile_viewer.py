@@ -214,7 +214,7 @@ PROFILE_FIELDS = [
     "chillAction",
     "chillTarget",
     "alertRange",
-    "attentiveAction",
+    "playerAdjacentDirectionMasks",
     "targetSelector",
     "movementStyle",
     "alertChance",
@@ -265,6 +265,8 @@ PROFILE_FIELDS = [
     "attentiveCircleRadius",
     "attentiveContinueWhenArrived",
     "attentiveAvoidPreviousTile",
+    "chainMovementVariance",
+    "chainPauseVariance",
 ]
 
 MATCH_FIELDS = [
@@ -297,7 +299,7 @@ FIELD_LABELS = {
     "chillAction": "Movement style",
     "chillTarget": "Target",
     "alertRange": "Range type",
-    "attentiveAction": "Legacy response",
+    "playerAdjacentDirectionMasks": "Position relative to player",
     "targetSelector": "Target",
     "movementStyle": "Movement style",
     "alertChance": "Alert chance",
@@ -319,7 +321,9 @@ FIELD_LABELS = {
     "spawnDestinationMinDistance": "Min distance",
     "spawnDestinationMaxDistance": "Max distance",
     "ramAccelerationSteps": "Chain moves",
+    "chainMovementVariance": "Chain variance",
     "ramMaxSpeed": "Chain pause",
+    "chainPauseVariance": "Pause variance",
     "chainPauseAction": "Chain pause action",
     "chillAllowedTile": "Allowed tile",
     "attentiveAllowedTile": "Allowed tile",
@@ -364,7 +368,9 @@ FIELD_UNITS = {
     "teleportTime": "frames",
     "teleportPause": "frames",
     "ramAccelerationSteps": "moves",
+    "chainMovementVariance": "moves",
     "ramMaxSpeed": "frames",
+    "chainPauseVariance": "frames",
     "alertTime": "frames",
     "alertness": "tiles",
     "alertChance": "%",
@@ -428,7 +434,6 @@ FIELD_PREFIXES = {
     "spawnState": "OW_WILD_BEHAVIOR_SPAWN_STATE_",
     "chillAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "alertRange": "OW_WILD_BEHAVIOR_ALERT_RANGE_",
-    "attentiveAction": "OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_",
     "targetSelector": "OW_WILD_BEHAVIOR_TARGET_",
     "chillAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
     "attentiveAllowedTile": "OW_WILD_BEHAVIOR_ALLOWED_TILE_",
@@ -486,7 +491,7 @@ CANONICAL_TARGET_RAWS = [
     "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
     "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
     "OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
-    "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT",
+    "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER",
     "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE",
 ]
 
@@ -512,7 +517,6 @@ CANONICAL_ALLOWED_TILE_RAWS = [
     "OW_WILD_BEHAVIOR_ALLOWED_TILE_WATER",
     "OW_WILD_BEHAVIOR_ALLOWED_TILE_CANOPY",
     "OW_WILD_BEHAVIOR_ALLOWED_TILE_GRASS",
-    "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER",
     "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER_FRONT",
 ]
 
@@ -552,9 +556,24 @@ PROFILE_OPTION_EXCLUDED_SUFFIXES = (
 )
 
 PROFILE_OPTION_FIELD_EXCLUDED_RAWS = {
-    "chillAllowedTile": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE"},
-    "attentiveAllowedTile": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE"},
-    "tiredAllowedTile": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE"},
+    "chillTarget": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
+    "targetSelector": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
+    "attentiveTarget": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
+    "chillAllowedTile": {
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER",
+    },
+    "attentiveAllowedTile": {
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER",
+    },
+    "tiredAllowedTile": {
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE",
+        "OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER",
+    },
+    "chillAllowedTile2": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER"},
+    "attentiveAllowedTile2": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER"},
+    "tiredAllowedTile2": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER"},
 }
 
 OVERRIDE1_FIELDS = {
@@ -635,6 +654,9 @@ OVERRIDE3_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CONTINUE_WHEN_ARRIVED": "attentiveContinueWhenArrived",
     "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_AVOID_PREVIOUS_TILE": "attentiveAvoidPreviousTile",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION": "chainPauseAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE": "chainMovementVariance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE": "chainPauseVariance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS": "playerAdjacentDirectionMasks",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -880,7 +902,9 @@ NUMERIC_PROFILE_FIELDS = {
     "spawnDestinationMinDistance",
     "spawnDestinationMaxDistance",
     "ramAccelerationSteps",
+    "chainMovementVariance",
     "ramMaxSpeed",
+    "chainPauseVariance",
     "attentiveChaseBoostDistance",
     "attentiveChaseBoostSpeed",
     "attentiveCircleRadius",
@@ -903,6 +927,8 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "spawnHopTime",
     "attentiveHopSpinSpeed",
     "ramAccelerationSteps",
+    "chainMovementVariance",
+    "chainPauseVariance",
     "attentiveHopPause",
     "attentiveTeleportTime",
     "attentiveTeleportPause",
@@ -921,18 +947,39 @@ RELATIVE_OVERRIDE_DELTA_MAX = 127
 RELATIVE_OVERRIDE_RAW_RE = re.compile(r"^[+-]\d+$")
 AT_LEAST_OVERRIDE_RAW_RE = re.compile(r"^/<(\d+)$")
 AT_MOST_OVERRIDE_RAW_RE = re.compile(r"^/>(\d+)$")
+COMPOUND_OVERRIDE_RAW_RE = re.compile(r"^([+-]\d+)\s*,\s*(/<|/>)(\d+)$")
+
+
+def compound_override_parts(field: str, raw: str) -> tuple[int, str, int] | None:
+    if field not in RELATIVE_OVERRIDE_PROFILE_FIELDS or field not in BOUNDED_OVERRIDE_PROFILE_FIELDS:
+        return None
+    match = COMPOUND_OVERRIDE_RAW_RE.fullmatch(clean_token(raw))
+    if match is None:
+        return None
+    return int(match.group(1), 10), match.group(2), int(match.group(3), 10)
 
 
 def is_relative_override_raw(field: str, raw: str) -> bool:
-    return field in RELATIVE_OVERRIDE_PROFILE_FIELDS and RELATIVE_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+    return field in RELATIVE_OVERRIDE_PROFILE_FIELDS and (
+        RELATIVE_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+        or compound_override_parts(field, raw) is not None
+    )
 
 
 def is_at_least_override_raw(field: str, raw: str) -> bool:
-    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and AT_LEAST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+    parts = compound_override_parts(field, raw)
+    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
+        AT_LEAST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+        or (parts is not None and parts[1] == "/<")
+    )
 
 
 def is_at_most_override_raw(field: str, raw: str) -> bool:
-    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and AT_MOST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+    parts = compound_override_parts(field, raw)
+    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
+        AT_MOST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+        or (parts is not None and parts[1] == "/>")
+    )
 
 
 def is_numeric_override_operator_raw(field: str, raw: str) -> bool:
@@ -973,6 +1020,8 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "spawnDestinationMinDistance": 8,
     "spawnDestinationMaxDistance": 8,
     "ramAccelerationSteps": 32,
+    "chainMovementVariance": 32,
+    "chainPauseVariance": 255,
     # Shared storage: Movement Chain reads this as a 0..255-frame pause, while
     # RAM consumers independently clamp it to their 0..4 speed tier.
     "ramMaxSpeed": 255,
@@ -1330,6 +1379,7 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
+        "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER": "Next to player",
         "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE": "Aggressive chase",
         "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM": "Aggressive ram",
         "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2": "Canopy hopper",
@@ -1442,8 +1492,16 @@ def numeric(value: dict) -> int | None:
 
 
 def canonical_profile_value_raw(value: dict, field: str) -> str:
+    raw = value.get("raw", "")
+    if field in {"chillTarget", "targetSelector", "attentiveTarget"} \
+            and raw == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
+        return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
     evaluated = numeric(value)
     if field in NUMERIC_PROFILE_FIELDS and evaluated is not None:
+        compound = compound_override_parts(field, value.get("raw", ""))
+        if compound is not None:
+            delta, operator, threshold = compound
+            return f"{delta:+d}, {operator}{threshold}"
         if is_relative_override_raw(field, value.get("raw", "")):
             return f"{evaluated:+d}"
         if is_at_least_override_raw(field, value.get("raw", "")):
@@ -1451,14 +1509,18 @@ def canonical_profile_value_raw(value: dict, field: str) -> str:
         if is_at_most_override_raw(field, value.get("raw", "")):
             return f"/>{evaluated}"
         return str(evaluated)
-    return value.get("raw", "")
+    return raw
 
 
 def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for field, value in profile.items():
         if field in NUMERIC_PROFILE_FIELDS and numeric(value) is not None:
-            if is_relative_override_raw(field, value.get("raw", "")):
+            compound = compound_override_parts(field, value.get("raw", ""))
+            if compound is not None:
+                delta, operator, threshold = compound
+                raw = f"{delta:+d}, {operator}{threshold}"
+            elif is_relative_override_raw(field, value.get("raw", "")):
                 raw = f"{numeric(value):+d}"
             elif is_at_least_override_raw(field, value.get("raw", "")):
                 raw = f"/<{numeric(value)}"
@@ -1482,8 +1544,27 @@ def canonical_profile_change_raw(
     cleaned = clean_token(raw)
     if cleaned == "":
         return ""
+    if field in {"chillTarget", "targetSelector", "attentiveTarget"} \
+            and cleaned == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
+        return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
     if field not in NUMERIC_PROFILE_FIELDS:
         return cleaned
+    compound = compound_override_parts(field, cleaned)
+    if compound is not None:
+        if not allow_relative:
+            raise ValueError(f"numeric override operators are only valid in override profiles: {field}")
+        delta, operator, threshold = compound
+        if delta == 0:
+            return f"{operator}{threshold}"
+        if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+            raise ValueError(
+                f"relative override for {field} must be between {RELATIVE_OVERRIDE_DELTA_MIN:+d} and {RELATIVE_OVERRIDE_DELTA_MAX:+d}"
+            )
+        maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+        minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+        if threshold < minimum or threshold > maximum:
+            raise ValueError(f"override bound for {field} must be between {minimum} and {maximum}")
+        return f"{delta:+d}, {operator}{threshold}"
     if RELATIVE_OVERRIDE_RAW_RE.fullmatch(cleaned):
         if not allow_relative:
             raise ValueError(f"relative values are only valid in override profiles: {field}")
@@ -1587,7 +1668,23 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     at_most_mask_raw = "0"
     at_most_mask2_raw = "0"
     at_most_mask3_raw = "0"
-    if len(items) == 13 and isinstance(items[3], list):
+    compound_bound_profile_items = None
+    if len(items) == 14 and isinstance(items[3], list) and isinstance(items[13], list):
+        mask_raw = str(items[0])
+        mask2_raw = str(items[1])
+        mask3_raw = str(items[2])
+        profile_items = items[3]
+        relative_mask_raw = str(items[4])
+        relative_mask2_raw = str(items[5])
+        relative_mask3_raw = str(items[6])
+        at_least_mask_raw = str(items[7])
+        at_least_mask2_raw = str(items[8])
+        at_least_mask3_raw = str(items[9])
+        at_most_mask_raw = str(items[10])
+        at_most_mask2_raw = str(items[11])
+        at_most_mask3_raw = str(items[12])
+        compound_bound_profile_items = items[13]
+    elif len(items) == 13 and isinstance(items[3], list):
         mask_raw = str(items[0])
         mask2_raw = str(items[1])
         mask3_raw = str(items[2])
@@ -1639,6 +1736,11 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     at_most_mask2 = parse_mask(at_most_mask2_raw, macros, OVERRIDE2_FIELDS)
     at_most_mask3 = parse_mask(at_most_mask3_raw, macros, OVERRIDE3_FIELDS)
     profile = parse_profile(profile_items, macros)
+    compound_bound_profile = parse_profile(compound_bound_profile_items or ["0"], macros)
+    original_profile_raws = {
+        field: clean_token(profile[field].get("raw", ""))
+        for field in PROFILE_FIELDS
+    }
     mask_fields = {bit.get("field") for parsed in (mask, mask2, mask3) for bit in parsed["bits"] if bit.get("field")}
     relative_fields = {bit.get("field") for parsed in (relative_mask, relative_mask2, relative_mask3) for bit in parsed["bits"] if bit.get("field")}
     at_least_fields = {bit.get("field") for parsed in (at_least_mask, at_least_mask2, at_least_mask3) for bit in parsed["bits"] if bit.get("field")}
@@ -1654,15 +1756,23 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         unsupported = sorted(operator_fields - supported_fields)
         if unsupported:
             raise ParseError(f"{operator_name} override masks include non-numeric fields: {', '.join(unsupported)}")
-    overlap = (relative_fields & at_least_fields) | (relative_fields & at_most_fields) | (at_least_fields & at_most_fields)
-    if overlap:
-        raise ParseError(f"override operator masks overlap for: {', '.join(sorted(overlap))}")
+    contradictory_bounds = at_least_fields & at_most_fields
+    if contradictory_bounds:
+        raise ParseError(f"override bound masks overlap for: {', '.join(sorted(contradictory_bounds))}")
+    compound_fields = relative_fields & (at_least_fields | at_most_fields)
     for field in relative_fields:
-        stored_raw = clean_token(profile[field].get("raw", ""))
+        stored_raw = original_profile_raws[field]
+        compound = compound_override_parts(field, stored_raw)
         explicit_delta = re.fullmatch(r"OW_WILD_BEHAVIOR_RELATIVE\(\s*([+-]?\d+)\s*\)", stored_raw)
         stored_value = numeric(profile[field])
-        delta = int(explicit_delta.group(1), 10) if explicit_delta else (
-            None if stored_value is None else ((stored_value + 128) % 256) - 128
+        delta = (
+            compound[0]
+            if compound is not None
+            else (
+                int(explicit_delta.group(1), 10)
+                if explicit_delta
+                else (None if stored_value is None else ((stored_value + 128) % 256) - 128)
+            )
         )
         if delta is None or delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
             raise ParseError(f"relative override for {field} is outside signed byte range")
@@ -1675,22 +1785,47 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         ("/>", at_most_fields, "OW_WILD_BEHAVIOR_AT_MOST"),
     ):
         for field in fields:
-            stored_raw = clean_token(profile[field].get("raw", ""))
+            stored_raw = original_profile_raws[field]
+            compound = compound_override_parts(field, stored_raw)
             explicit_threshold = re.fullmatch(rf"{wrapper}\(\s*(\d+)\s*\)", stored_raw)
             canonical_threshold = re.fullmatch(rf"{re.escape(operator)}(\d+)", stored_raw)
             stored_value = numeric(profile[field])
-            threshold = (
-                int(explicit_threshold.group(1), 10)
-                if explicit_threshold
-                else (int(canonical_threshold.group(1), 10) if canonical_threshold else stored_value)
-            )
+            if field in compound_fields:
+                compound_stored_raw = clean_token(compound_bound_profile[field].get("raw", ""))
+                explicit_compound_threshold = re.fullmatch(rf"{wrapper}\(\s*(\d+)\s*\)", compound_stored_raw)
+                compound_stored_value = numeric(compound_bound_profile[field])
+                threshold = (
+                    compound[2]
+                    if compound is not None and compound[1] == operator
+                    else (
+                        int(explicit_compound_threshold.group(1), 10)
+                        if explicit_compound_threshold
+                        else compound_stored_value
+                    )
+                )
+            else:
+                threshold = (
+                    int(explicit_threshold.group(1), 10)
+                    if explicit_threshold
+                    else (int(canonical_threshold.group(1), 10) if canonical_threshold else stored_value)
+                )
             maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
             minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
             if threshold is None or threshold < minimum or threshold > maximum:
                 raise ParseError(f"{operator} override for {field} must be between {minimum} and {maximum}")
-            profile[field]["raw"] = f"{operator}{threshold}"
-            profile[field]["value"] = threshold
-            profile[field]["label"] = f"{operator}{threshold}"
+            compound_bound_profile[field]["raw"] = f"{operator}{threshold}"
+            compound_bound_profile[field]["value"] = threshold
+            compound_bound_profile[field]["label"] = f"{operator}{threshold}"
+            compound_bound_profile[field]["symbol"] = None
+            if field in compound_fields:
+                delta = numeric(profile[field])
+                canonical = f"{delta:+d}, {operator}{threshold}"
+                profile[field]["raw"] = canonical
+                profile[field]["label"] = canonical
+            else:
+                profile[field]["raw"] = f"{operator}{threshold}"
+                profile[field]["value"] = threshold
+                profile[field]["label"] = f"{operator}{threshold}"
             profile[field]["symbol"] = None
     labels = mask["labels"] + mask2["labels"] + mask3["labels"]
     extra_raws = [extra["displayRaw"] for extra in (mask2, mask3) if extra["displayRaw"] != "0"]
@@ -1711,6 +1846,7 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         "atMostMask2": at_most_mask2,
         "atMostMask3": at_most_mask3,
         "atMostFields": sorted(at_most_fields),
+        "compoundBoundProfile": compound_bound_profile,
         "maskLabels": labels,
         "maskRaw": mask_raw_summary,
         "profile": profile,
@@ -1741,7 +1877,7 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
     expected_member_start = 0
     profiles = []
     for order, entry in enumerate(entries, 1):
-        if len(entry) in {8, 11, 17} and isinstance(entry[0], list):
+        if len(entry) in {8, 11, 17, 18} and isinstance(entry[0], list):
             member_start = numeric(make_value(str(entry[1]), None, macros))
             member_count = numeric(make_value(str(entry[2]), None, macros))
             target_mode = make_value(str(entry[3]), None, macros)
@@ -1879,7 +2015,7 @@ def parse_behavior_overrides(source: str, macros: dict[str, int], group_labels: 
                 behavior = parse_behavior_override([entry[1], entry[2], entry[3], entry[4]], macros)
             elif len(entry) == 8:
                 behavior = parse_behavior_override(entry[1:], macros)
-            elif len(entry) == 14:
+            elif len(entry) in {14, 15}:
                 behavior = parse_behavior_override(entry[1:], macros)
             else:
                 raise ParseError("behavior override initializer shape changed")
@@ -2192,6 +2328,9 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
                 NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64) + 1,
             ):
                 add_value_option(options, seen, str(value), field, macros)
+        elif field == "playerAdjacentDirectionMasks":
+            for value in range(1, 16):
+                add_value_option(options, seen, str(value), field, macros)
         if field not in CANONICAL_PROFILE_FIELD_RAWS:
             for profile in class_profiles:
                 add_value_option(options, seen, canonical_profile_value_raw(profile[field], field), field, macros)
@@ -2299,6 +2438,12 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
             field_maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
             field_minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
             resolved = max(field_minimum, min(field_maximum, before_numeric + delta))
+            if field in at_least_fields or field in at_most_fields:
+                bound_value = override.get("compoundBoundProfile", {}).get(field, {})
+                threshold = numeric(bound_value)
+                if threshold is None:
+                    continue
+                resolved = max(resolved, threshold) if field in at_least_fields else min(resolved, threshold)
             after = make_value(str(resolved), field, {})
             after["label"] = str(resolved)
         elif field in at_least_fields or field in at_most_fields:
@@ -2324,8 +2469,10 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
                 "after": after,
                 "relative": field in relative_fields,
                 "delta": copy.deepcopy(override["profile"][field]) if field in relative_fields else None,
-                "operator": "atLeast" if field in at_least_fields else ("atMost" if field in at_most_fields else ("relative" if field in relative_fields else "absolute")),
-                "operand": copy.deepcopy(override["profile"][field]) if field in at_least_fields or field in at_most_fields else None,
+                "operator": "compound" if field in relative_fields and (field in at_least_fields or field in at_most_fields) else ("atLeast" if field in at_least_fields else ("atMost" if field in at_most_fields else ("relative" if field in relative_fields else "absolute"))),
+                "operand": copy.deepcopy(
+                    override.get("compoundBoundProfile", {}).get(field, override["profile"][field])
+                ) if field in at_least_fields or field in at_most_fields else None,
             }
         )
     return changes
@@ -4825,7 +4972,10 @@ def override_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
     """Make numeric operator storage explicit and reviewable in C initializers."""
     result = {}
     for field, raw in raws.items():
-        if is_relative_override_raw(field, raw):
+        compound = compound_override_parts(field, raw)
+        if compound is not None:
+            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({compound[0]:+d})"
+        elif is_relative_override_raw(field, raw):
             result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({int(raw, 10):+d})"
         elif is_at_least_override_raw(field, raw):
             result[field] = f"OW_WILD_BEHAVIOR_AT_LEAST({int(raw[2:], 10)})"
@@ -4834,6 +4984,22 @@ def override_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
         else:
             result[field] = raw
     return result
+
+
+def compound_bound_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
+    result = {field: "0" for field in PROFILE_FIELDS}
+    for field, raw in raws.items():
+        compound = compound_override_parts(field, raw)
+        if compound is None:
+            continue
+        _, operator, threshold = compound
+        wrapper = "OW_WILD_BEHAVIOR_AT_LEAST" if operator == "/<" else "OW_WILD_BEHAVIOR_AT_MOST"
+        result[field] = f"{wrapper}({threshold})"
+    return result
+
+
+def format_compound_bound_profile_initializer(raws: dict[str, str], indent: str) -> str:
+    return "{0}" if all(raw == "0" for raw in raws.values()) else format_profile_initializer(raws, indent)
 
 
 def format_mask_expression(mask_fields: set[str], indent: str, word: int = 1) -> str:
@@ -5653,6 +5819,7 @@ def format_behavior_override_rule(
     at_least_fields = at_least_fields or set()
     at_most_fields = at_most_fields or set()
     storage_raws = override_profile_storage_raws(profile_raws)
+    compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
@@ -5669,6 +5836,7 @@ def format_behavior_override_rule(
         f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
+        f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
         f"{indent}}}"
     )
 
@@ -5687,6 +5855,7 @@ def format_behavior_override_profile(
     at_least_fields = at_least_fields or set()
     at_most_fields = at_most_fields or set()
     storage_raws = override_profile_storage_raws(profile_raws)
+    compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
@@ -5702,6 +5871,7 @@ def format_behavior_override_profile(
         f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
+        f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
         f"{indent}}}"
     )
 
@@ -5729,6 +5899,7 @@ def format_behavior_override_member_profile(
     at_least_fields = at_least_fields or set()
     at_most_fields = at_most_fields or set()
     storage_raws = override_profile_storage_raws(profile_raws)
+    compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
@@ -5748,6 +5919,7 @@ def format_behavior_override_member_profile(
         f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
+        f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
         f"{indent}}}"
     )
 
@@ -5999,7 +6171,16 @@ def apply_profile_override_changes(body: bytes) -> dict:
             if field not in OVERRIDE_SYMBOL_BY_FIELD:
                 raise ValueError(f"field cannot be used in override profiles: {field}")
             if raw and is_numeric_override_operator_raw(field, raw):
-                if is_relative_override_raw(field, raw):
+                compound = compound_override_parts(field, raw)
+                if compound is not None:
+                    delta, _, threshold = compound
+                    if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+                        raise ValueError(f"invalid relative value for {field}: {raw}")
+                    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+                    minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+                    if threshold < minimum or threshold > maximum:
+                        raise ValueError(f"invalid override bound for {field}: {raw}")
+                elif is_relative_override_raw(field, raw):
                     delta = int(raw, 10)
                     if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
                         raise ValueError(f"invalid relative value for {field}: {raw}")
@@ -7133,14 +7314,99 @@ SOUND_EFFECT_CATALOG_ALIASES: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Battle capture",
     ),
     "SEQ_SE_DP_BOWA4": (
-        "Battle Poké Ball opens and draws in target",
-        ("pokeball", "poke ball", "battle capture", "ball opens", "draw in pokemon", "pull in pokemon"),
+        "Battle Poké Ball impact/opening + target draw-in (combined)",
+        ("pokeball", "poke ball", "battle capture", "ball opens", "draw in pokemon", "pull in pokemon", "bowa4 full"),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_BALL_OPEN": (
+        "Battle Poké Ball impact / opening burst",
+        (
+            "pokeball",
+            "poke ball",
+            "battle capture",
+            "ball impact",
+            "ball opens",
+            "opening burst",
+            "bowa4 first half",
+        ),
+        "Battle capture",
+    ),
+    "SEQ_SE_DP_BALL_DRAW_IN": (
+        "Battle capture target draw-in / Poké Ball suction",
+        (
+            "pokeball",
+            "poke ball",
+            "battle capture",
+            "draw in pokemon",
+            "draw in pokémon",
+            "target draw in",
+            "capture suction",
+            "capture attempt",
+            "pokemon goes inside pokeball",
+            "pokémon goes inside poké ball",
+            "pokemon enters pokeball",
+            "pokémon enters poké ball",
+            "bowa4 second half",
+        ),
         "Battle capture",
     ),
     "SEQ_SE_DP_BOWA2": (
-        "Battle Pokémon reappears / Poké Ball breakout",
-        ("pokeball", "poke ball", "battle capture", "capture failed", "breakout", "escape from ball", "reappear"),
-        "Battle capture",
+        "Battle Pokémon emerges / Poké Ball breakout poof",
+        (
+            "pokeball",
+            "poke ball",
+            "pokemon emerges",
+            "pokémon emerges",
+            "pokemon gets out of pokeball",
+            "pokémon gets out of poké ball",
+            "send out pokemon",
+            "send out pokémon",
+            "battle capture",
+            "capture failed",
+            "breakout",
+            "escape from ball",
+            "reappear",
+        ),
+        "Pokémon battle",
+    ),
+    # Battle recall animation members 41/42 in a/0/6/1 schedule IREKAE as
+    # the general withdraw transition. Keep the audibly outward BOWA2 poof
+    # separate from the inward SUIKOMU ("suck in") effect.
+    "SEQ_SE_DP_IREKAE": (
+        "Battle Pokémon withdraw / switch transition",
+        (
+            "switch out",
+            "switching out",
+            "withdraw pokemon",
+            "withdraw pokémon",
+            "battle switch",
+            "switch transition",
+        ),
+        "Pokémon battle",
+    ),
+    "SEQ_SE_DP_SUIKOMU": (
+        "Battle Pokémon return-to-Poké-Ball suction",
+        (
+            "pokemon recall",
+            "pokémon recall",
+            "recall pokemon",
+            "return pokemon",
+            "return to pokeball",
+            "return to poke ball",
+            "pokemon enters pokeball",
+            "pokémon enters poké ball",
+            "switch out",
+            "switching out",
+            "withdraw into ball",
+            "pokeball suction",
+            "poke ball suction",
+            "draw into ball",
+            "drawn into ball",
+            "suck into ball",
+            "baton pass",
+            "baton pass suction",
+        ),
+        "Pokémon battle",
     ),
     "SEQ_SE_DP_BOWA": (
         "Battle Poké Ball shake",
@@ -7229,7 +7495,25 @@ SOUND_EFFECT_CATALOG_ALIASES: dict[str, tuple[str, tuple[str, ...], str]] = {
 SOUND_EFFECT_CATALOG_SOURCE_FILES: dict[str, tuple[str, ...]] = {
     "SEQ_SE_DP_NAGERU": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
     "SEQ_SE_DP_BOWA4": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_BALL_OPEN": (
+        "scripts/prepare_overworld_capture_sound.py",
+        "include/constants/sndseq.h",
+    ),
+    "SEQ_SE_DP_BALL_DRAW_IN": (
+        "scripts/prepare_overworld_capture_sound.py",
+        "include/constants/sndseq.h",
+    ),
     "SEQ_SE_DP_BOWA2": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
+    "SEQ_SE_DP_IREKAE": (
+        "base/root/a/0/6/1",
+        "base/overlay/overlay_0012.bin",
+        "include/constants/sndseq.h",
+    ),
+    "SEQ_SE_DP_SUIKOMU": (
+        "base/root/a/0/1/0",
+        "armips/move/move_anim/226.s",
+        "include/constants/sndseq.h",
+    ),
     "SEQ_SE_DP_BOWA": ("base/overlay/overlay_0007.bin", "include/constants/sndseq.h"),
     "SEQ_SE_DP_GETTING": ("base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
     "SEQ_SE_DP_KON": ("base/overlay/overlay_0007.bin", "base/overlay/overlay_0012.bin", "include/constants/sndseq.h"),
@@ -15512,7 +15796,7 @@ HTML = r"""<!doctype html>
       attentiveCircleRadius: { label: "Circle radius", shortLabel: "Circle", unit: "tiles", category: "attentive", subgroup: "Targeting", iconFamily: "range" },
       attentiveContinueWhenArrived: { label: "Continue when arrived", shortLabel: "Continue", category: "attentive", subgroup: "Targeting", iconFamily: "condition", rowIcon: true },
       attentiveAvoidPreviousTile: { label: "Avoid previous tile", shortLabel: "No backtrack", category: "attentive", subgroup: "Targeting", iconFamily: "condition", rowIcon: true },
-      attentiveAction: { label: "Legacy active response", shortLabel: "Legacy", category: "attentive", subgroup: "Special", iconFamily: "special" },
+      playerAdjacentDirectionMasks: { label: "Position relative to player", shortLabel: "Position", category: "attentive", subgroup: "Targeting", iconFamily: "condition" },
       movementStyle: { label: "Active movement", shortLabel: "Movement", category: "attentive", subgroup: "Movement", iconFamily: "movement" },
       attentiveSpeed: { label: "Active speed", shortLabel: "Speed", unit: "speed", category: "attentive", subgroup: "Movement", iconFamily: "speed" },
       attentiveAllowedTile: { label: "Allowed tile", shortLabel: "Tile", category: "attentive", subgroup: "Terrain", iconFamily: "terrain" },
@@ -15550,7 +15834,7 @@ HTML = r"""<!doctype html>
       profileId: { label: "Behavior family", shortLabel: "Family", category: "special", subgroup: "Special", iconFamily: "special", rowIcon: true },
     };
     const PROFILE_DIRECT_EDIT_HIDDEN_FIELDS = new Set([
-      "attentiveAction",
+      "playerAdjacentDirectionMasks",
       "attentiveAvoidPreviousTile",
       "chainPauseAction",
     ]);
@@ -15558,7 +15842,7 @@ HTML = r"""<!doctype html>
       "chainPauseAction",
     ]);
     const PROFILE_OVERRIDE_BUILDER_HIDDEN_FIELDS = new Set([
-      "attentiveAction",
+      "playerAdjacentDirectionMasks",
       "attentiveAvoidPreviousTile",
     ]);
     const PROFILE_BEHAVIOR_FIELDS = new Set(["chillState", "attentiveState", "tiredState"]);
@@ -17169,7 +17453,7 @@ HTML = r"""<!doctype html>
         OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER: "Away from player",
         OW_WILD_BEHAVIOR_TARGET_TREE_TOP: "Tree top",
         OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT: "Toward player (legacy)",
-        OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT: "Player front",
+        OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER: "Next to player",
         OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE: "Player cardinal line",
         OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER: "Circle player",
       };

@@ -249,7 +249,10 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
         }
         objectX = MapObject_GetCurrentX(object);
         objectY = MapObject_GetCurrentY(object);
-        occupied = FALSE;
+        occupied = i != OW_WILD_FOLLOWER_SLOT
+            && state->movementFieldSystem->playerAvatar != NULL
+            && objectX == GetPlayerXCoord(state->movementFieldSystem->playerAvatar)
+            && objectY == GetPlayerYCoord(state->movementFieldSystem->playerAvatar);
         for (j = 0; !occupied && j < OW_WILD_MAX_SPAWNS; j++) {
             LocalMapObject *other = state->spawns[j].object;
 

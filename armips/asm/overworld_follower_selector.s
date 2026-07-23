@@ -1,16 +1,16 @@
 .nds
 .thumb
 
-// FieldSystem_Control normally calls FieldInput_Update here.  Route that one
-// call through overlay 131 so a short Y tap can remain the registered-item
-// shortcut while a held Y is reserved for the custom follower selector.
-.open "base/arm9.bin", 0x02000000
+// Vanilla movement already ignores Y. Disable only its registered-item action;
+// the custom selector observes physical Y from an independent main-queue
+// SysTask and does not patch FieldInput_Update's movement data path.
+.open "base/overlay/overlay_0001.bin", 0x021E5900
 
-.if readu32("base/arm9.bin", 0x0003E182) != 0xFBD1F1A8
-    .error "FieldSystem_Control FieldInput_Update call changed"
+.if readu16("base/overlay/overlay_0001.bin", 0x00001090) != 0xD104
+    .error "FieldInput_Update physical Y item branch changed"
 .endif
 
-.org 0x0203E182
-    bl 0x023C8010
+.org 0x021E6990
+    nop
 
 .close

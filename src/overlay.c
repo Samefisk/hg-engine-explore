@@ -2,6 +2,7 @@
 #include "../include/debug.h"
 #include "../include/map_teleport.h"
 #include "../include/overlay.h"
+#include "../include/overworld_follower_selector.h"
 #include "../include/overworld_wild_behavior_data.h"
 #include "../include/overworld_wild_spawns_internal.h"
 #include "../include/save.h"
@@ -12,17 +13,13 @@ struct LinkedOverlayList gLinkedOverlayList[] =
 {
     {OVERLAY_BATTLE, OVERLAY_BATTLE_EXTENSION},
     {OVERLAY_FIELD, OVERLAY_FIELD_EXTENSION},
+    {OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION,
+        OVERLAY_OVERWORLD_FOLLOWER_SELECTOR},
     {OVERLAY_HALL_OF_FAME, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_HALL_OF_FAME_PC, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEATHLON, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEWALKER, OVERLAY_FIELD_EXTENSION},
     {OVERLAY_POKEDEX, OVERLAY_POKEDEX_EXTENSION},
-};
-
-// entirely clean up overlays if the first one is being unloaded
-u8 gCleanupOverlayList[][4] =
-{
-    {OVERLAY_BATTLE_EXTENSION, OVERLAY_BATTLECONTROLLER_BEFOREMOVE, OVERLAY_SERVERBEFOREACT, OVERLAY_BATTLECONTROLLER_MOVEEND},
 };
 
 /*
@@ -49,10 +46,10 @@ OverworldFieldService_ShutdownTransientServices(void)
         "bx lr\n");
 }
 
-static BOOL IsOverworldWildOverlay(u32 ovyId)
+static BOOL IsOverworldFieldOverlay(u32 ovyId)
 {
-    return ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
-        || ovyId == OVERLAY_OVERWORLD_WILD_HELPER;
+    return ovyId == OVERLAY_GETMONEVOLUTION_SPECIFIC
+        || ovyId >= OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION;
 }
 
 static BOOL ResetOverworldFieldServiceState(void)
@@ -71,8 +68,6 @@ u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
     u32 result;
 
     if (entry->magic != OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC
-        || entry->version != OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION
-        || entry->size != sizeof(*entry)
         || !OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE()) {
         return FALSE;
     }
@@ -86,18 +81,19 @@ u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
 
 BOOL LONG_CALL UnloadOverworldWildOverlays(void)
 {
-    if (!OverworldFieldService_ShutdownTransientServices()) {
-        return FALSE;
-    }
+    /*
+     * Overlay 152 is untracked by the SDK table, so tear it down through the
+     * field-service callback before releasing its tracked overlay 149 owner.
+     * A later 149 load links 152 back in for the resumed field session.
+     */
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
-    return !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
-        && !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
-        && *(u32 *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR == 0;
+    /* A successful 149 cleanup owns and unloads 150/151 atomically. */
+    return !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
 }
 
 static BOOL UnloadColdOverworldWildOverlaysFor(u32 ovyId)
 {
-    if (IsOverworldWildOverlay(ovyId)) {
+    if (IsOverworldFieldOverlay(ovyId)) {
         return TRUE;
     }
 
@@ -125,8 +121,7 @@ inline static void PrintLoadedOverlays(u32 ovyId)
 
 
 void LONG_CALL UnloadOverlayByID(u32 ovyId) {
-    u32 i, j = 0, k = 1;
-    BOOL cleanupMode = FALSE;
+    u32 i;
     PMiLoadedOverlay *table;
 
 unloadSecond:
@@ -138,9 +133,9 @@ unloadSecond:
                     return;
                 }
             }
-            if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
-                && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData != NULL) {
-                if (!OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData()) {
+            if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION) {
+                if (!OverworldFieldService_ShutdownTransientServices()
+                    || !OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData()) {
                     /* Teardown still owns 149/150/151; retry before overlap. */
                     return;
                 }
@@ -163,26 +158,13 @@ unloadSecond:
         }
     }
 
-    // alright we want to clear overlays
-    for (; j < NELEMS(gCleanupOverlayList); j++) {
-        if (k >= NELEMS(gCleanupOverlayList[0])) {
-            cleanupMode = FALSE;
-            k = 1;
-            continue; // increases j
-        }
-        if ((gCleanupOverlayList[j][0] == ovyId) || cleanupMode) {
-            if (gCleanupOverlayList[j][k]) {
-                ovyId = gCleanupOverlayList[j][k++];
-                cleanupMode = TRUE;
+    if (ovyId == OVERLAY_BATTLE_EXTENSION) {
 #ifdef DEBUG_PRINT_OVERLAY_LOADS
-                debug_printf("Cleaning up overlay %d linked to overlay %d... ", ovyId, gCleanupOverlayList[j][0]);
+        debug_printf("Cleaning up overlays linked to overlay %d... ", ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
-                goto unloadSecond;
-            } else {
-                k = 1;
-                continue; // increases j
-            }
-        }
+        UnloadOverlayByID(OVERLAY_BATTLECONTROLLER_BEFOREMOVE);
+        UnloadOverlayByID(OVERLAY_SERVERBEFOREACT);
+        UnloadOverlayByID(OVERLAY_BATTLECONTROLLER_MOVEEND);
     }
 }
 
@@ -219,6 +201,22 @@ loadExtension:
         PrintLoadedOverlays(ovyId);
 #endif // DEBUG_PRINT_OVERLAY_LOADS
         return FALSE;
+    }
+
+    /*
+     * The field session already occupies every SDK bookkeeping slot.  Keep
+     * the selector tied to overlay 149's linked lifetime, but load it
+     * directly so it does not displace the wild-spawn helper overlay.  The
+     * overlap check above remains mandatory: later overlapping loads cannot
+     * see this untracked overlay, so every cold-overlay transition first
+     * invokes the field-service shutdown above and directly unloads it.
+     */
+    if (ovyId == OVERLAY_OVERWORLD_FOLLOWER_SELECTOR) {
+        result = LoadOverlayNoInitAsync(0, ovyId);
+        if (result) {
+            OverworldFollowerSelector_SetDirectLoaded();
+        }
+        return result;
     }
 
     overlayRegion = GetOverlayLoadDestination(ovyId);
@@ -292,8 +290,11 @@ loadLinkedExtension:
         if (gLinkedOverlayList[i].first_id == ovyId)
         {
             if (result == FALSE
-                && IsOverlayLoaded(gLinkedOverlayList[i].ext_id)) {
-                return FALSE;
+                && (gLinkedOverlayList[i].ext_id
+                        == OVERLAY_OVERWORLD_FOLLOWER_SELECTOR
+                    ? OverworldFollowerSelector_IsDirectLoaded()
+                    : (BOOL)IsOverlayLoaded(gLinkedOverlayList[i].ext_id))) {
+                    return FALSE;
             }
             ovyId = gLinkedOverlayList[i].ext_id;
             loadType = 2;
@@ -311,12 +312,14 @@ loadLinkedExtension:
 u32 LONG_CALL IsOverlayLoaded(u32 ovyId)
 {
     PMiLoadedOverlay *table = GetLoadedOverlaysInRegion(GetOverlayLoadDestination(ovyId));
+    PMiLoadedOverlay *end = table + MAX_ACTIVE_OVERLAYS;
 
-    for (int i = 0; i < MAX_ACTIVE_OVERLAYS; i++) {
-        if (table[i].active == TRUE && table[i].id == ovyId) {
+    do {
+        if (table->id == ovyId && table->active == TRUE) {
             return 1;
         }
-    }
+        table++;
+    } while (table < end);
 
     return 0;
 }
