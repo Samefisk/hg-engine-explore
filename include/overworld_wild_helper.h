@@ -10,7 +10,7 @@
 #define OVERWORLD_WILD_HELPER_FLEE_FALLBACK_ENTRY_ADDR 0x023C40F8
 #define OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE_ADDR 0x023C4101
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 29
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 31
 #define OVERWORLD_WILD_HELPER_VALIDATE_ONLY 0
 #define OVERWORLD_WILD_HELPER_ENSURE_BEHAVIOR 1
 #define OVERWORLD_WILD_HELPER_REQUIRE_BEHAVIOR 2
@@ -309,6 +309,9 @@ typedef int (*OverworldWildHelperFindBattleTalkSlotFunc)(
     OverworldWildSpawnState *state,
     LocalMapObject *talkedObject,
     u16 excludedMask);
+typedef struct PartyPokemon *(*OverworldWildHelperGetSelectedFollowerPokemonFunc)(
+    FieldSystem *fieldSystem,
+    u8 *partySlot);
 typedef BOOL (*OverworldWildHelperTickPlayerBallProjectileFunc)(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
@@ -377,7 +380,7 @@ typedef struct OverworldWildHelperOverlayEntry {
     OverworldWildHelperCreatePresentationObjectFunc createPresentationObject;
     OverworldWildHelperValidateDeferredBattleFunc validateDeferredBattle;
     OverworldWildHelperTryGetEncounterDataIdForMapFunc tryGetEncounterDataIdForMap;
-    OverworldWildHelperTryLoadEncounterDataFunc tryLoadEncounterData;
+    OverworldWildHelperGetSelectedFollowerPokemonFunc getSelectedFollowerPokemon;
     OverworldWildHelperTickPlayerBallProjectileFunc tickPlayerBallProjectile;
     OverworldWildHelperCancelPlayerBallProjectileFunc cancelPlayerBallProjectile;
     OverworldWildHelperGetPlayerBallProjectileObjectFunc getPlayerBallProjectileObject;

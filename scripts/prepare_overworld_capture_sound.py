@@ -20,6 +20,8 @@ CAPTURE_SEQUENCE_NAMES = (
     "SEQ_SE_DP_NAGERU",
     "SEQ_SE_DP_BOWA2",
     "SEQ_SE_DP_BOWA4",
+    "SEQ_SE_DP_BALL_OPEN",
+    "SEQ_SE_DP_BALL_DRAW_IN",
 )
 MOVEMENT_SEQUENCE_NAMES = (
     "SEQ_SE_DP_FPASA2",
@@ -54,6 +56,142 @@ INSTRUMENT_WAVES = {
 }
 SOURCE_WAVES = (7, 14, 19, 1, 25)
 PSG_INSTRUMENT_TYPES = {113: "PSG1", 114: "PSG1", 122: "PSG2"}
+
+# BOWA4 contains two independently useful sounds separated on every track at
+# tick 60 (0.843 seconds at tempo 89). Keep BOWA4 intact for existing callers,
+# and turn its two unused neighboring INFO slots into separately playable
+# sequences. Both halves are described once here and emitted as matching text
+# and SSEQ binaries below.
+SPLIT_CAPTURE_SEQUENCES = (
+    {
+        "slot": 1793,
+        "replaces": "SEQ_SE_DP_DUMMY16",
+        "name": "SEQ_SE_DP_BALL_OPEN",
+        "tracks": (
+            (
+                ("Poly", 0),
+                ("Tempo", 89),
+                ("Instrument", 67),
+                ("Volume", 127),
+                ("PitchSweep", 0),
+                ("PitchBendRange", 2),
+                ("PitchBend", 2),
+                ("F_5", 90, 18),
+                ("Delay", 24),
+                ("F_5", 55, 12),
+                ("Delay", 12),
+                ("F_5", 30, 12),
+                ("Delay", 24),
+                ("TrackEnd",),
+            ),
+            (
+                ("Poly", 0),
+                ("Instrument", 114),
+                ("Volume", 127),
+                ("PitchBend", 0),
+                ("F_6", 80, 12),
+                ("Delay", 24),
+                ("F_6", 30, 12),
+                ("Delay", 36),
+                ("TrackEnd",),
+            ),
+        ),
+    },
+    {
+        "slot": 1794,
+        "replaces": "SEQ_SE_DP_DUMMY17",
+        "name": "SEQ_SE_DP_BALL_DRAW_IN",
+        "tracks": (
+            (
+                ("Poly", 0),
+                ("Tempo", 89),
+                ("Instrument", 113),
+                ("Volume", 127),
+                ("PitchSweep", 64432),
+                ("PitchBendRange", 2),
+                ("PitchBend", 0),
+                ("G_4", 100, 5),
+                ("Delay", 6),
+                ("F_5", 100, 11),
+                ("Delay", 12),
+                ("F_5", 50, 12),
+                ("Delay", 12),
+                ("TrackEnd",),
+            ),
+            (
+                ("Poly", 0),
+                ("Instrument", 72),
+                ("Volume", 127),
+                ("PitchBendRange", 12),
+                ("PitchBend", 0),
+                ("G_6", 50, 6),
+                ("Delay", 6),
+                ("C_5", 112, 6),
+                ("Delay", 12),
+                ("C_4", 90, 6),
+                ("Delay", 6),
+                ("TrackEnd",),
+            ),
+            (
+                ("Poly", 0),
+                ("Instrument", 122),
+                ("Volume", 127),
+                ("G_6", 50, 6),
+                ("Delay", 6),
+                ("G#7", 50, 6),
+                ("Delay", 6),
+                ("Instrument", 98),
+                ("Volume", 16),
+                ("PitchBendRange", 12),
+                ("PitchBend", 98),
+                ("G_5", 80, 12),
+                ("Delay", 2),
+                ("PitchBend", 68),
+                ("Volume", 35),
+                ("Delay", 1),
+                ("PitchBend", 44),
+                ("Volume", 57),
+                ("Delay", 1),
+                ("Volume", 80),
+                ("PitchBend", 26),
+                ("Delay", 1),
+                ("Volume", 96),
+                ("PitchBend", 40),
+                ("Delay", 2),
+                ("PitchBend", 66),
+                ("Volume", 111),
+                ("Delay", 1),
+                ("PitchBend", 86),
+                ("Volume", 123),
+                ("Delay", 1),
+                ("PitchBend", 108),
+                ("Volume", 127),
+                ("Delay", 2),
+                ("PitchBend", 127),
+                ("Delay", 7),
+                ("G_5", 40, 6),
+                ("Delay", 6),
+                ("TrackEnd",),
+            ),
+        ),
+    },
+)
+
+SSEQ_COMMANDS = {
+    "Delay": (0x80, "var"),
+    "Instrument": (0x81, "var"),
+    "TrackEnd": (0xFF, None),
+    "Volume": (0xC1, "byte"),
+    "PitchBend": (0xC4, "byte"),
+    "PitchBendRange": (0xC5, "byte"),
+    "Poly": (0xC7, "byte"),
+    "Tempo": (0xE1, "short"),
+    "PitchSweep": (0xE3, "short"),
+}
+SSEQ_NOTE_NAMES = (
+    "C_", "C#", "D_", "D#", "E_", "F_",
+    "F#", "G_", "G#", "A_", "A#", "B_",
+)
 
 
 def find_named(entries, name):
@@ -167,10 +305,15 @@ def add_sequences_to_field_group(group_entries, sequence_items):
 
 def reserve_slot(entries, index, expected_name, replacement):
     current_name = entries[index].get("name", "")
-    if current_name not in ("", expected_name):
+    expected_names = (
+        (expected_name,)
+        if isinstance(expected_name, str)
+        else tuple(expected_name)
+    )
+    if current_name not in ("", *expected_names):
         raise RuntimeError(
             f"SDAT INFO slot {index} is occupied by {current_name}; "
-            f"cannot reserve it for {expected_name}"
+            f"cannot reserve it for {replacement['name']}"
         )
     entries[index] = replacement
 
@@ -181,6 +324,142 @@ def upsert_file(file_entries, replacement):
             file_entries[index] = replacement
             return
     file_entries.append(replacement)
+
+
+def encode_sseq_variable_length(value):
+    if not isinstance(value, int) or value < 0 or value > 0x0FFFFFFF:
+        raise RuntimeError(f"Invalid SSEQ variable-length value {value!r}")
+    encoded = [value & 0x7F]
+    value >>= 7
+    while value:
+        encoded.append(0x80 | (value & 0x7F))
+        value >>= 7
+    return bytes(reversed(encoded))
+
+
+def encode_sseq_event(event):
+    command = event[0]
+    if command in SSEQ_COMMANDS:
+        opcode, argument_type = SSEQ_COMMANDS[command]
+        if argument_type is None:
+            if len(event) != 1:
+                raise RuntimeError(f"{command} does not accept arguments")
+            return bytes((opcode,))
+        if len(event) != 2:
+            raise RuntimeError(f"{command} requires one argument")
+        value = event[1]
+        if argument_type == "var":
+            argument = encode_sseq_variable_length(value)
+        elif argument_type == "byte":
+            if not isinstance(value, int) or value < 0 or value > 0xFF:
+                raise RuntimeError(f"Invalid byte argument for {command}: {value!r}")
+            argument = bytes((value,))
+        elif argument_type == "short":
+            if not isinstance(value, int) or value < 0 or value > 0xFFFF:
+                raise RuntimeError(f"Invalid short argument for {command}: {value!r}")
+            argument = value.to_bytes(2, "little")
+        else:
+            raise RuntimeError(f"Unknown SSEQ argument type {argument_type!r}")
+        return bytes((opcode,)) + argument
+
+    note_name = command[:2]
+    if note_name not in SSEQ_NOTE_NAMES or len(event) != 3:
+        raise RuntimeError(f"Unsupported SSEQ event {event!r}")
+    try:
+        octave = int(command[2:])
+    except ValueError as error:
+        raise RuntimeError(f"Invalid SSEQ note {command!r}") from error
+    note = SSEQ_NOTE_NAMES.index(note_name) + octave * 12
+    velocity, duration = event[1:]
+    if note < 0 or note > 0x7F or velocity < 0 or velocity > 0x7F:
+        raise RuntimeError(f"Invalid SSEQ note event {event!r}")
+    return bytes((note, velocity)) + encode_sseq_variable_length(duration)
+
+
+def render_sseq_text(tracks):
+    lines = []
+    for track_index, events in enumerate(tracks, start=1):
+        if track_index > 1:
+            lines.append("")
+        lines.append(f"Track_{track_index}:")
+        for event in events:
+            if event[0][:2] in SSEQ_NOTE_NAMES:
+                lines.append(
+                    f"\t{event[0]},{event[1]},{event[2]}"
+                )
+            elif len(event) == 1:
+                lines.append(f"\t{event[0]}")
+            else:
+                lines.append(f"\t{event[0]} {event[1]}")
+    return "\n".join(lines) + "\n"
+
+
+def build_sseq(tracks):
+    if not tracks or len(tracks) > 16:
+        raise RuntimeError(f"Invalid SSEQ track count {len(tracks)}")
+    encoded_tracks = [
+        b"".join(encode_sseq_event(event) for event in track)
+        for track in tracks
+    ]
+    if any(not track or track[-1] != 0xFF for track in encoded_tracks):
+        raise RuntimeError("Every generated SSEQ track must end with TrackEnd")
+
+    sequence = bytearray()
+    if len(encoded_tracks) > 1:
+        track_mask = (1 << len(encoded_tracks)) - 1
+        sequence += b"\xFE" + track_mask.to_bytes(2, "little")
+        first_track_offset = 3 + 5 * (len(encoded_tracks) - 1)
+        next_track_offset = first_track_offset + len(encoded_tracks[0])
+        for track_index, encoded_track in enumerate(encoded_tracks[1:], start=1):
+            sequence += b"\x93" + bytes((track_index,))
+            sequence += next_track_offset.to_bytes(3, "little")
+            next_track_offset += len(encoded_track)
+    sequence += b"".join(encoded_tracks)
+
+    file_size = (0x1C + len(sequence) + 3) & ~3
+    data_size = file_size - 0x10
+    output = bytearray(b"SSEQ\xFF\xFE\x00\x01")
+    output += file_size.to_bytes(4, "little")
+    output += b"\x10\x00\x01\x00DATA"
+    output += data_size.to_bytes(4, "little")
+    output += (0x1C).to_bytes(4, "little")
+    output += sequence
+    output += bytes(file_size - len(output))
+    return bytes(output)
+
+
+def install_split_capture_sequences(info, file_block, files_dir):
+    source = find_named(info["seqInfo"], "SEQ_SE_DP_BOWA4")
+    sequence_dir = files_dir / "SEQ"
+    sequence_dir.mkdir(parents=True, exist_ok=True)
+
+    for definition in SPLIT_CAPTURE_SEQUENCES:
+        sequence_name = definition["name"]
+        file_name = f"{sequence_name}.sseq"
+        sequence_bytes = build_sseq(definition["tracks"])
+        reserve_slot(
+            info["seqInfo"],
+            definition["slot"],
+            (definition["replaces"], sequence_name),
+            {
+                **source,
+                "name": sequence_name,
+                "fileName": file_name,
+                "bnk": PRIVATE_BANK_NAME,
+            },
+        )
+        (sequence_dir / f"{sequence_name}.txt").write_text(
+            render_sseq_text(definition["tracks"])
+        )
+        (sequence_dir / file_name).write_bytes(sequence_bytes)
+        upsert_file(
+            file_block["file"],
+            {
+                "name": file_name,
+                "type": "SEQ",
+                "MD5": hashlib.md5(sequence_bytes).hexdigest(),
+            },
+        )
 
 
 def make_private_bank(source_bank_text):
@@ -243,6 +522,7 @@ def main():
     source_wave_archive = find_named(
         info["wavarcInfo"], SOURCE_WAVE_ARCHIVE_NAME
     )
+    install_split_capture_sequences(info, file_block, files_dir)
     capture_sequence_indices = []
     for sequence_name in CAPTURE_SEQUENCE_NAMES:
         sequence_index = find_named_index(info["seqInfo"], sequence_name)

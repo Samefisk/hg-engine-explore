@@ -787,8 +787,8 @@
 #define SEQ_SE_DP_KOUKA_M                    1790
 #define SEQ_SE_DP_NIGERU2                    1791
 #define SEQ_SE_DP_IREKAE                     1792
-#define SEQ_SE_DP_DUMMY16                    1793
-#define SEQ_SE_DP_DUMMY17                    1794
+#define SEQ_SE_DP_BALL_OPEN                  1793
+#define SEQ_SE_DP_BALL_DRAW_IN               1794
 #define SEQ_SE_DP_POKE_DEAD3                 1795
 #define SEQ_SE_DP_HINSI                      1796
 #define SEQ_SE_DP_SUIKOMU                    1797

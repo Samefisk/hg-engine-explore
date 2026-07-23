@@ -6,6 +6,7 @@
 #include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_spawns.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/overlay.h"
@@ -19,6 +20,13 @@
 
 extern u32 space_for_setmondata;
 u16 LONG_CALL MapHeader_GetMapSec(u32 map_no);
+__asm__(
+    ".global OverworldWildSpawns_TickFollowerReleasePresentation\n"
+    ".type OverworldWildSpawns_TickFollowerReleasePresentation, %function\n"
+    ".set OverworldWildSpawns_TickFollowerReleasePresentation, 0x02250115\n"
+    ".global OverworldWildSpawns_RenderPlayerBallProjectile\n"
+    ".type OverworldWildSpawns_RenderPlayerBallProjectile, %function\n"
+    ".set OverworldWildSpawns_RenderPlayerBallProjectile, 0x02250295\n");
 
 #define OW_WILD_HELPER_GRASS_SLOTS 12
 #define OW_WILD_HELPER_SURF_SLOTS 5
@@ -129,10 +137,12 @@ u16 LONG_CALL MapHeader_GetMapSec(u32 map_no);
 #define OW_WILD_HELPER_FIELD_ACTOR_CALLBACK_AFTER_COMMAND 3
 #define OW_WILD_HELPER_PLAYER_BALL_RESULT_FRAMES 24
 #define OW_WILD_HELPER_PLAYER_BALL_SHAKE_SE SEQ_SE_DP_BOWA
-#define OW_WILD_HELPER_PLAYER_BALL_IMPACT_SE SEQ_SE_DP_BOWA4
+#define OW_WILD_HELPER_PLAYER_BALL_IMPACT_SE SEQ_SE_DP_BALL_OPEN
+#define OW_WILD_HELPER_PLAYER_BALL_DRAW_IN_SE SEQ_SE_DP_BALL_DRAW_IN
 #define OW_WILD_HELPER_PLAYER_BALL_BREAKOUT_SE SEQ_SE_DP_BOWA2
 #define OW_WILD_HELPER_PLAYER_BALL_CAUGHT_SE SEQ_SE_DP_GETTING
 #define OW_WILD_HELPER_PLAYER_BALL_THROW_SE SEQ_SE_DP_NAGERU
+#define OW_WILD_HELPER_FOLLOWER_EMERGE_SE SEQ_SE_DP_BOWA2
 #define OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE 0
 #define OW_WILD_HELPER_PLAYER_BALL_PHASE_CHARGING 1
 #define OW_WILD_HELPER_PLAYER_BALL_PHASE_FLYING 2
@@ -233,7 +243,6 @@ void LONG_CALL MTX_RotZ33_(
 void LONG_CALL G3_MultMtx33_(
     const OverworldWildHelperRotationMatrix *matrix);
 extern const s16 FX_SinCosTable_[];
-
 typedef union OverworldWildHelperPlayerBallScratch {
     /* IMPACT owns this arm until the target palette has been restored. */
     u32 whitePaletteKey;
@@ -380,6 +389,10 @@ static BOOL sOverworldWildHelperPlayerBallStaleCheckDone;
 static u8 sOverworldWildHelperPlayerBallChargeFrames;
 static u8 sOverworldWildHelperPlayerBallChargeSoundTimer;
 static void *sOverworldWildHelperCaptureHeapReserve;
+static void OverworldWildHelper_RestoreCaptureTargetPalette(
+    FieldSystem *fieldSystem);
+static void OverworldWildHelper_ApplyPlayerBallPostBillboardRotation(
+    void *renderState);
 
 static BOOL __attribute__((noinline))
 OverworldWildHelper_IsPlayerBallFrameServiceActive(void)
@@ -2059,6 +2072,9 @@ static BOOL OverworldWildHelper_FinalizePreparedCapturedPokemon(
         stored = party != NULL
             && party->count < party->maxPossibleCount
             && PokeParty_Add(party, pokemon);
+        if (stored) {
+            OverworldFollowerSelector_SetPartySnapshotDirty();
+        }
     } else if (projectile->startY >= 0
         && projectile->startY < NUM_PC_BOXES) {
         storage = SaveArray_Get(
@@ -2078,6 +2094,10 @@ static BOOL OverworldWildHelper_FinalizePreparedCapturedPokemon(
 
 static void OverworldWildHelper_ResetPlayerBallProjectile(void)
 {
+    if (sOverworldWildHelperPlayerBallProjectile.targetWhiteActive) {
+        OverworldWildHelper_RestoreCaptureTargetPalette(
+            sOverworldWildHelperPlayerBallProjectile.fieldSystem);
+    }
     OverworldWildHelper_DiscardPreparedCapturedPokemon();
     OverworldWildHelper_ReleaseCaptureHeap();
     memset(
@@ -2209,37 +2229,28 @@ static void OverworldWildHelper_RestoreCaptureTargetPalette(
 {
     OverworldWildHelperPlayerBallProjectileState *projectile =
         &sOverworldWildHelperPlayerBallProjectile;
-    void *targetActor;
+    void *targetActor = NULL;
 
     if (!projectile->targetWhiteActive) {
         return;
     }
-    if (!OverworldWildHelper_IsPlayerBallCaptureTargetCurrent(
+    if (OverworldWildHelper_IsPlayerBallCaptureTargetCurrent(
             fieldSystem,
             projectile->state)) {
-        return;
+        targetActor = ov01_021F72DC(
+            projectile->state->spawns[projectile->impactSlot].object);
     }
-    targetActor = ov01_021F72DC(
-        projectile->state->spawns[projectile->impactSlot].object);
-    if (targetActor == NULL) {
-        return;
-    }
-    if (projectile->targetZ != 0) {
+    if (targetActor != NULL && projectile->targetZ != 0) {
         *(u32 *)((u8 *)targetActor
             + OW_WILD_HELPER_FIELD_ACTOR_PALETTE_KEY_OFFSET) =
             (u32)projectile->targetZ;
     }
     projectile->targetZ = 0;
+    projectile->scratch.whitePaletteKey = 0;
     projectile->targetWhiteActive = FALSE;
     /* Release IMPACT's union arm before preparedPokemon can own it. */
-    projectile->scratch.whitePaletteKey = 0;
-    if (fieldSystem != NULL
-        && fieldSystem->taskman == NULL
-        && OverworldWildHelper_IsPlayerBallProjectileObjectCurrent(
-            fieldSystem)) {
-        ChangeMapObjSprite(
-            projectile->object,
-            OW_WILD_HELPER_PLAYER_BALL_TAG);
+    if (fieldSystem != NULL && fieldSystem->taskman == NULL) {
+        OverworldWildHelper_RestoreCaptureWhiteBall(fieldSystem);
     }
 }
 
@@ -2333,6 +2344,29 @@ static void OverworldWildHelper_CancelPlayerBallProjectile(
     }
 
     OverworldWildHelper_RestoreCaptureTargetPalette(fieldSystem);
+    if (state != NULL
+        && state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_NONE) {
+        if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_SPAWNED
+            && state->spawns[OW_WILD_FOLLOWER_SLOT].active
+            && state->spawns[OW_WILD_FOLLOWER_SLOT].object != NULL
+            && OverworldWildHelper_IsExactObject(
+                fieldSystem,
+                state,
+                OW_WILD_FOLLOWER_SLOT)) {
+            LocalMapObject *follower =
+                state->spawns[OW_WILD_FOLLOWER_SLOT].object;
+
+            follower->faceVec[1] = 0;
+            follower->unk88[1] = 0;
+            MapObject_ClearBits(follower, BIT_VANISH);
+            state->movementCooldowns[OW_WILD_FOLLOWER_SLOT] = 1;
+        }
+        state->followerReleaseState =
+            state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_SPAWNED
+                && state->spawns[OW_WILD_FOLLOWER_SLOT].active
+            ? OW_WILD_FOLLOWER_RELEASE_NONE
+            : OW_WILD_FOLLOWER_RELEASE_REQUESTED;
+    }
     if (state != NULL && slot >= 0 && slot < OW_WILD_MAX_SPAWNS) {
         state->captureTargetMask &= (u16)~(1u << slot);
     }
@@ -2451,7 +2485,8 @@ static int OverworldWildHelper_FindPlayerBallHit(
     int bestSlot = -1;
     int i;
 
-    if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
+    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_FLYING
+        || !OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || state->presentationRestorePending
         || state->mapGeneration != projectile->mapGeneration) {
         return -1;
@@ -2544,7 +2579,8 @@ static BOOL OverworldWildHelper_TryApplyPlayerBallAimAssist(
     int bestSlot = -1;
     int i;
 
-    if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
+    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_REQUESTED
+        || !OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || state->presentationRestorePending
         || state->mapGeneration != projectile->mapGeneration) {
         return FALSE;
@@ -2747,111 +2783,50 @@ static BOOL OverworldWildHelper_ApplyPlayerBallChargeRender(
 
 static void OverworldWildHelper_ApplyPlayerBallRotation(s16 rotation);
 
-static void OverworldWildHelper_ApplyPlayerBallRender(void)
+static void OverworldWildHelper_RefreshFollowerBallReturnTarget(
+    FieldSystem *fieldSystem)
 {
-    OverworldWildHelperPlayerBallProjectileState *projectile =
-        &sOverworldWildHelperPlayerBallProjectile;
-    LocalMapObject *object = projectile->object;
-    u32 curve;
-    u32 motionProgress;
-    u32 phaseProgress;
-    u32 timeProgress;
-    u16 rotationStep;
-    s32 renderX;
-    s32 renderY;
-    s32 renderZ;
-    s32 handHeight;
-    s32 sideOffset;
+    LocalMapObject *playerObject;
 
-    if (object == NULL || projectile->totalFrames == 0) {
+    if (fieldSystem == NULL
+        || fieldSystem->playerAvatar == NULL
+        || fieldSystem->playerAvatar->mapObject == NULL) {
         return;
     }
-    phaseProgress = projectile->totalFrames
-        - OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES
-        - OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES;
-    if (projectile->elapsedFrames <= phaseProgress) {
-        timeProgress = projectile->elapsedFrames
-            * OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE
-            / phaseProgress;
-        if (timeProgress <= OW_WILD_HELPER_PLAYER_BALL_ACCEL_END) {
-            motionProgress = timeProgress * timeProgress
-                / OW_WILD_HELPER_PLAYER_BALL_ACCEL_END;
-            rotationStep = OW_WILD_HELPER_PLAYER_BALL_ROTATION_MIN_STEP;
-        } else {
-            timeProgress -= OW_WILD_HELPER_PLAYER_BALL_ACCEL_END;
-            motionProgress = OW_WILD_HELPER_PLAYER_BALL_ACCEL_END
-                + 2 * timeProgress
-                - timeProgress * timeProgress
-                    / OW_WILD_HELPER_PLAYER_BALL_DECEL_DIVISOR;
-            rotationStep = OW_WILD_HELPER_PLAYER_BALL_ROTATION_MIN_STEP
-                + (OW_WILD_HELPER_PLAYER_BALL_ROTATION_MAX_STEP
-                    - OW_WILD_HELPER_PLAYER_BALL_ROTATION_MIN_STEP)
-                    * timeProgress
-                    / OW_WILD_HELPER_PLAYER_BALL_DECEL_DIVISOR;
-        }
-        handHeight = projectile->startHeight;
-    } else if (projectile->elapsedFrames
-        <= phaseProgress + OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES) {
-        motionProgress = OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-        timeProgress = projectile->elapsedFrames - phaseProgress;
-        rotationStep = OW_WILD_HELPER_PLAYER_BALL_ROTATION_MAX_STEP
-            - (OW_WILD_HELPER_PLAYER_BALL_ROTATION_MAX_STEP
-                - OW_WILD_HELPER_PLAYER_BALL_ROTATION_HANG_END_STEP)
-                * timeProgress
-                / OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES;
-        handHeight = projectile->startHeight;
+    playerObject = fieldSystem->playerAvatar->mapObject;
+    if (playerObject->curFacing < 0 || playerObject->curFacing > 3) {
+        return;
+    }
+    sOverworldWildHelperPlayerBallProjectile.startX =
+        (s32)playerObject->posVec[0]
+        + OverworldWildHelper_DirectionDeltaX(playerObject->curFacing)
+            * OW_WILD_HELPER_PLAYER_BALL_FORWARD_OFFSET_FX32
+        - OverworldWildHelper_DirectionDeltaY(playerObject->curFacing)
+            * OW_WILD_HELPER_PLAYER_BALL_RIGHT_HAND_OFFSET_FX32;
+    sOverworldWildHelperPlayerBallProjectile.startY =
+        (s32)playerObject->posVec[1];
+    sOverworldWildHelperPlayerBallProjectile.startZ =
+        (s32)playerObject->posVec[2]
+        + OverworldWildHelper_DirectionDeltaY(playerObject->curFacing)
+            * OW_WILD_HELPER_PLAYER_BALL_FORWARD_OFFSET_FX32
+        + OverworldWildHelper_DirectionDeltaX(playerObject->curFacing)
+            * OW_WILD_HELPER_PLAYER_BALL_RIGHT_HAND_OFFSET_FX32;
+}
+
+static void OverworldWildHelper_DispatchFollowerRelease(
+    FieldSystem *fieldSystem,
+    u8 action)
+{
+    if (action == 0) {
+        OverworldWildHelper_PrepareCaptureWhiteBall(fieldSystem);
+        OverworldWildHelper_ApplyCaptureTargetWhite(fieldSystem);
+    } else if (action == 1) {
+        OverworldWildHelper_RestoreCaptureTargetPalette(fieldSystem);
+    } else if (action == 3) {
+        OverworldWildHelper_ApplyCaptureTargetWhite(fieldSystem);
     } else {
-        motionProgress = OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-        timeProgress = projectile->elapsedFrames
-            - phaseProgress
-            - OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES;
-        rotationStep = OW_WILD_HELPER_PLAYER_BALL_ROTATION_HANG_END_STEP
-            - OW_WILD_HELPER_PLAYER_BALL_ROTATION_HANG_END_STEP
-                * timeProgress
-                / OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES;
-        handHeight = projectile->startHeight
-            - projectile->startHeight
-                * (s32)timeProgress
-                * (s32)timeProgress
-                * (s32)timeProgress
-                / (OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES
-                    * OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES
-                    * OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES);
+        OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
     }
-    renderX = projectile->startX
-        + (projectile->targetX - projectile->startX)
-            * (s32)motionProgress
-            / OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-    renderY = projectile->startY
-        + (projectile->targetY - projectile->startY)
-            * (s32)motionProgress
-            / OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-    renderZ = projectile->startZ
-        + (projectile->targetZ - projectile->startZ)
-            * (s32)motionProgress
-            / OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-    curve = 4
-        * motionProgress
-        * (OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE - motionProgress)
-        / OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-    sideOffset = (OW_WILD_HELPER_PLAYER_BALL_SIDE_CURVE_FX32 * (s32)curve)
-        / OW_WILD_HELPER_PLAYER_BALL_MOTION_SCALE;
-    renderX += OverworldWildHelper_DirectionDeltaY(object->curFacing)
-        * sideOffset;
-    renderZ -= OverworldWildHelper_DirectionDeltaX(object->curFacing)
-        * sideOffset;
-    object->posVec[0] = (u32)renderX;
-    object->posVec[1] = (u32)renderY;
-    object->posVec[2] = (u32)renderZ;
-    object->hCurr = (int)(renderY >> 15);
-    OverworldWildHelper_SetPlayerBallMotionVectors(
-        object,
-        (u32)handHeight);
-    if (projectile->elapsedFrames != 0) {
-        projectile->rotation = (s16)((u16)projectile->rotation + rotationStep);
-    }
-    OverworldWildHelper_ApplyPlayerBallRotation(projectile->rotation);
-    MapObject_ClearBits(object, BIT_VANISH);
 }
 
 static LocalMapObject *OverworldWildHelper_CreatePlayerBallObject(
@@ -2989,7 +2964,9 @@ static BOOL OverworldWildHelper_TryLaunchPlayerBallProjectile(
     totalFrames += OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES
         + OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES;
     projectile->totalFrames = (u8)totalFrames;
-    OverworldWildHelper_ApplyPlayerBallRender();
+    OverworldWildSpawns_RenderPlayerBallProjectile(
+        &sOverworldWildHelperPlayerBallProjectile,
+        OverworldWildHelper_ApplyPlayerBallRotation);
     StopSE(OW_WILD_HELPER_PLAYER_BALL_CHARGE_SE);
     PlaySE(OW_WILD_HELPER_PLAYER_BALL_THROW_SE);
     return TRUE;
@@ -3201,6 +3178,7 @@ static BOOL OverworldWildHelper_TickPlayerBallCapture(
         }
         if (frame == OW_WILD_HELPER_PLAYER_BALL_IMPACT_APEX_FRAME) {
             OverworldWildHelper_PrepareCaptureWhiteBall(fieldSystem);
+            PlaySE(OW_WILD_HELPER_PLAYER_BALL_DRAW_IN_SE);
         }
         if (frame == OW_WILD_HELPER_PLAYER_BALL_IMPACT_DESCENT_FRAME) {
             OverworldWildHelper_ReservePlayerBallCaptureTarget(state);
@@ -3493,6 +3471,26 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
         return FALSE;
     }
+    if ((OVERWORLD_FOLLOWER_SELECTOR_STATE
+            & (OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG
+                | OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG)) != 0
+        && sOverworldWildHelperPlayerBallProjectile.phase
+            < OW_WILD_HELPER_PLAYER_BALL_PHASE_FLYING) {
+        /*
+         * The selector reads physical L/R so it remains usable with L=A.
+         * Once its pending hold begins, those shoulders must not also arm or
+         * charge another custom Player Ball. An already launched ball still
+         * owns its presentation and capture state, so keep ticking it while
+         * the selector is open instead of cancelling the animation.
+         */
+        if (sOverworldWildHelperPlayerBallProjectile.phase
+                != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
+            OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        } else {
+            sOverworldWildHelperPlayerBallInputArmed = FALSE;
+        }
+        return FALSE;
+    }
     if (sOverworldWildHelperPlayerBallProjectile.phase
             != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE
         && sOverworldWildHelperPlayerBallProjectile.objectId == 0) {
@@ -3525,7 +3523,7 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
             }
             sOverworldWildHelperPlayerBallChargeFrames = 0;
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return OverworldWildHelper_IsPlayerBallFrameServiceActive();
+            return FALSE;
         }
         if (rDown) {
             if (sOverworldWildHelperPlayerBallChargeFrames
@@ -3562,7 +3560,7 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
             }
         }
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-        return OverworldWildHelper_IsPlayerBallFrameServiceActive();
+        return FALSE;
     }
     if (sOverworldWildHelperPlayerBallProjectile.phase
             >= OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT
@@ -3581,6 +3579,9 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
     }
     if (sOverworldWildHelperPlayerBallProjectile.phase
         == OW_WILD_HELPER_PLAYER_BALL_PHASE_FLYING) {
+        OverworldWildHelperPlayerBallProjectileState *projectile =
+            &sOverworldWildHelperPlayerBallProjectile;
+
         if (rDown) {
             sOverworldWildHelperPlayerBallInputArmed = FALSE;
         } else {
@@ -3593,17 +3594,46 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
             || state->mapGeneration
                 != sOverworldWildHelperPlayerBallProjectile.mapGeneration) {
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return OverworldWildHelper_IsPlayerBallFrameServiceActive();
+            return FALSE;
         }
-        if (sOverworldWildHelperPlayerBallProjectile.elapsedFrames
-            >= sOverworldWildHelperPlayerBallProjectile.totalFrames) {
+        if (state->followerReleaseState
+            == OW_WILD_FOLLOWER_RELEASE_SPAWNED) {
+            /* Home toward the player's current hand, not the throw origin. */
+            OverworldWildHelper_RefreshFollowerBallReturnTarget(fieldSystem);
+            return OverworldWildSpawns_TickFollowerReleasePresentation(
+                fieldSystem,
+                state,
+                projectile,
+                OverworldWildHelper_DispatchFollowerRelease,
+                OverworldWildHelper_ApplyPlayerBallRotation);
+        }
+        if (state->followerReleaseState
+                == OW_WILD_FOLLOWER_RELEASE_FLYING
+            && projectile->elapsedFrames
+                >= projectile->totalFrames
+                    - OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES
+                    - OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES) {
+            projectile->impactSlot = OW_WILD_FOLLOWER_SLOT;
+            state->captureTargetMask |=
+                (u16)(1u << OW_WILD_FOLLOWER_SLOT);
+            state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_READY;
+            PlaySE(OW_WILD_HELPER_FOLLOWER_EMERGE_SE);
+            return TRUE;
+        }
+        if (state->followerReleaseState
+            == OW_WILD_FOLLOWER_RELEASE_READY) {
+            return TRUE;
+        }
+        if (projectile->elapsedFrames >= projectile->totalFrames) {
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return OverworldWildHelper_IsPlayerBallFrameServiceActive();
+            return FALSE;
         }
         oldX = (s32)sOverworldWildHelperPlayerBallProjectile.object->posVec[0];
         oldZ = (s32)sOverworldWildHelperPlayerBallProjectile.object->posVec[2];
         sOverworldWildHelperPlayerBallProjectile.elapsedFrames++;
-        OverworldWildHelper_ApplyPlayerBallRender();
+        OverworldWildSpawns_RenderPlayerBallProjectile(
+            &sOverworldWildHelperPlayerBallProjectile,
+            OverworldWildHelper_ApplyPlayerBallRotation);
         hitSlot = OverworldWildHelper_FindPlayerBallHit(
             fieldSystem,
             state,
@@ -3625,7 +3655,7 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
     if (sOverworldWildHelperPlayerBallProjectile.phase
         != OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-        return OverworldWildHelper_IsPlayerBallFrameServiceActive();
+        return FALSE;
     }
     if (!sOverworldWildHelperPlayerBallStaleCheckDone) {
         if (!OverworldWildHelper_PlayerBallObjectIdAvailable(fieldSystem)) {
@@ -3633,6 +3663,24 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
         }
         /* Preserve an R press held through bounded stale-object cleanup. */
         rPressed = rDown && sOverworldWildHelperPlayerBallInputArmed;
+    }
+    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_FLYING) {
+        state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_REQUESTED;
+    }
+    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_REQUESTED) {
+        distanceFx32 = OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY
+            ->getReleaseDistance(fieldSystem);
+        if (distanceFx32 > 0
+            && OverworldWildHelper_TryStartPlayerBallCharge(fieldSystem, state)
+            && OverworldWildHelper_TryLaunchPlayerBallProjectile(
+                fieldSystem,
+                state,
+                distanceFx32)) {
+            state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_FLYING;
+            return TRUE;
+        }
+        OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        return FALSE;
     }
     if (!sOverworldWildHelperPlayerBallInputArmed) {
         if (!rDown) {
@@ -3759,7 +3807,9 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
 
             projectile->object->curFacing = projectile->targetHadPassThrough;
             projectile->object->nextFacing = projectile->targetHadPassThrough;
-            OverworldWildHelper_ApplyPlayerBallRender();
+            OverworldWildSpawns_RenderPlayerBallProjectile(
+                &sOverworldWildHelperPlayerBallProjectile,
+                OverworldWildHelper_ApplyPlayerBallRotation);
             OverworldWildHelper_ApplyPlayerBallRotation(rotation);
         }
         if ((projectile->phase > OW_WILD_HELPER_PLAYER_BALL_PHASE_IMPACT

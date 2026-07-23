@@ -8,8 +8,95 @@
 #include "../../include/io_reg.h"
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
+#include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_spawns_internal.h"
+
+volatile u8 gOverworldFollowerSelectorStateStorage
+    __attribute__((section(".overworld_follower_selector_state"), used));
+
+static BOOL OverworldFollowerSelector_IsCallable(const void *function)
+{
+    u32 rawAddress = (u32)function;
+    u32 address = rawAddress & ~1u;
+
+    return (rawAddress & 1u) != 0
+        && address >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
+        && address < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
+}
+
+static BOOL __attribute__((noinline))
+OverworldFollowerSelector_ValidateLoaded(void)
+{
+    const OverworldFollowerSelectorOverlayEntry *entry =
+        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
+
+    return entry->magic == OVERWORLD_FOLLOWER_SELECTOR_MAGIC
+        && OverworldFollowerSelector_IsCallable(entry->validate)
+        && entry->validate();
+}
+
+static BOOL OverworldFollowerSelector_ForceDirectUnload(
+    FieldSystem *fieldSystem)
+{
+    BOOL isLoaded = OverworldFollowerSelector_IsDirectLoaded();
+
+    if (isLoaded) {
+        if (!OverworldFollowerSelector_ValidateLoaded()
+            || !OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputCancel(
+                fieldSystem)) {
+            /* Keep corrupt live code and its BSS resident; unloading loses the
+             * only state capable of restoring external callbacks and objects. */
+            return FALSE;
+        }
+        if (!FS_UnloadOverlay(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) {
+            /* Keep ownership published until the managed unload succeeds. */
+            OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+                OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG
+                | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG;
+            return FALSE;
+        }
+        *(u32 *)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR = 0;
+    }
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &= (u8)~(
+        OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG);
+    return TRUE;
+}
+
+static u32 __attribute__((noinline))
+OverworldFollowerSelector_ReadPhysicalKeys(void)
+{
+    /* Use the once-per-frame raw snapshot, before button-mode remapping. */
+    return *(vu32 *)0x021D1144 & PAD_ALL_MASK;
+}
+
+/*
+ * This callback runs from the field-ready main-queue SysTask, after the stock
+ * FieldSystem_Control update. It only observes the global key snapshot and
+ * never receives, changes, or calls player movement input.
+ */
+void __attribute__((section(".overworld_follower_selector_task_poll"), used))
+OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
+{
+    BOOL releaseGated = OverworldFollowerSelector_IsReleaseGated();
+    const OverworldFollowerSelectorOverlayEntry *entry =
+        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
+
+    if (!releaseGated
+        && OverworldFollowerSelector_IsDirectLoaded()
+        && OverworldFollowerSelector_ValidateLoaded()) {
+        entry->inputFilter(fieldSystem);
+    }
+    if (releaseGated
+        && !OverworldFollowerSelector_IsUnloadPending()
+        && (OverworldFollowerSelector_ReadPhysicalKeys()
+            & (PAD_BUTTON_A | PAD_BUTTON_L | PAD_BUTTON_R | PAD_BUTTON_Y))
+            == 0) {
+        OverworldFollowerSelector_ClearReleaseGate();
+    }
+}
 
 static u8 sOverworldWildPlayerFrameServiceActive;
 
@@ -112,7 +199,8 @@ static BOOL OverworldFieldService_PrepareMapHeaderChange(
 {
     const OverworldWildSpawnsOverlayEntry *entry;
 
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
+        || !OverworldFollowerSelector_IsDirectLoaded()) {
         return FALSE;
     }
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
@@ -183,7 +271,7 @@ static void OverworldFieldService_DiscardRetainedPrimaries(
         return;
     }
     state->battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
-    gOverworldWildResidentData.pendingFlags |=
+    gOverworldWildFieldIdleRearmPending |=
         OW_WILD_FIELD_IDLE_REARM_PENDING
         | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
     if (!overlayPrepared) {
@@ -194,31 +282,20 @@ static void OverworldFieldService_DiscardRetainedPrimaries(
         for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
             state->spawns[slot].object = NULL;
         }
-        state->mapId = MAP_NOTHING;
-        state->captureTargetMask = 0;
-        state->pendingSlot = -1;
-        state->movementQueuedBattleSlot = -1;
-        state->pendingSpecies = SPECIES_NONE;
-        state->pendingLevel = 0;
-        state->pendingShiny = FALSE;
-        state->pendingMapGeneration = 0;
-        state->pendingEncounterGeneration = 0;
-        state->presentationRestorePending = FALSE;
-        return;
-    }
-
-    memset(state->spawns, 0, sizeof(state->spawns));
-    state->mapGeneration++;
-    if (state->mapGeneration == 0) {
-        state->mapGeneration = 1;
+    } else {
+        memset(state->spawns, 0, sizeof(state->spawns));
+        state->mapGeneration++;
+        if (state->mapGeneration == 0) {
+            state->mapGeneration = 1;
+        }
+        state->mapObjectMan = NULL;
+        state->mapObjects = NULL;
+        state->movementFieldSystem = NULL;
+        state->pendingPersonality = 0;
     }
     state->mapId = MAP_NOTHING;
-    state->mapObjectMan = NULL;
-    state->mapObjects = NULL;
-    state->movementFieldSystem = NULL;
     state->pendingSlot = -1;
     state->movementQueuedBattleSlot = -1;
-    state->pendingPersonality = 0;
     state->pendingSpecies = SPECIES_NONE;
     state->pendingLevel = 0;
     state->pendingShiny = FALSE;
@@ -359,23 +436,35 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
  * loading overlay 149 until it is needed, while an in-progress player-ball
  * action keeps receiving frames after R is released.
  */
-static void OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
+static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
 {
     const OverworldWildSpawnsOverlayEntry *entry;
 
-    if (!sOverworldWildPlayerFrameServiceActive
-        && (reg_PAD_KEYINPUT & PAD_BUTTON_R) != 0) {
-        return;
-    }
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
-        (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
-        return;
+    if (fieldSystem == NULL) {
+        if (!OverworldFollowerSelector_ForceDirectUnload(NULL)) {
+            return FALSE;
+        }
+        sOverworldWildPlayerFrameServiceActive = FALSE;
+        return TRUE;
     }
 
+    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        if (OverworldFollowerSelector_IsDirectLoaded()) {
+            goto runFieldService;
+        }
+    } else if (!sOverworldWildPlayerFrameServiceActive
+        && (reg_PAD_KEYINPUT & PAD_BUTTON_R) != 0) {
+        return TRUE;
+    }
+    (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
+    return TRUE;
+
+runFieldService:
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
     sOverworldWildPlayerFrameServiceActive = entry->onPlayerFrame(
         fieldSystem,
         &sOverworldWildSpawnState);
+    return TRUE;
 }
 
 const OverworldFieldServiceEntry gOverworldFieldServiceEntry

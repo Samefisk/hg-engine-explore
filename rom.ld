@@ -183,6 +183,27 @@ PokeIconPalArcIndexGet = 0x02074490 | 1;
 PokeIconAnmCellArcIndexGet = 0x02074498 | 1;
 PokeIconAnmCellAnmArcIndexGet = 0x020744A4 | 1;
 
+/* Independent field sprite list support used by the custom follower selector. */
+CreateSpriteResourcesHeader = 0x02009D48 | 1;
+G2dRenderer_Init = 0x02009F40 | 1;
+Create2DGfxResObjMan = 0x0200A090 | 1;
+Destroy2DGfxResObjMan = 0x0200A0D0 | 1;
+AddCharResObjFromNarc = 0x0200A1D8 | 1;
+AddPlttResObjFromNarc = 0x0200A234 | 1;
+AddCellOrAnimResObjFromNarc = 0x0200A294 | 1;
+sub_0200ADA4 = 0x0200ADA4 | 1;
+sub_0200AEB0 = 0x0200AEB0 | 1;
+sub_0200B00C = 0x0200B00C | 1;
+sub_0200B0A8 = 0x0200B0A8 | 1;
+SpriteList_Delete = 0x02024504 | 1;
+SpriteList_RenderAndAnimateSprites = 0x0202457C | 1;
+Sprite_CreateAffine = 0x02024624 | 1;
+Sprite_SetMatrix = 0x020247D4 | 1;
+Sprite_SetScaleAndAffineType = 0x02024804 | 1;
+Sprite_SetAnimActiveFlag = 0x0202484C | 1;
+Sprite_SetAnimCtrlSeq = 0x020248F0 | 1;
+Sprite_SetPalIndexRespectVramOffset = 0x02024A48 | 1;
+
 EffectTCB_Delete = 0x315F8 + 0x022378C1;
 Sub_TouchEndDelete = 0x314C8 + 0x022378C1;
 Sub_ScrnOffsetRewrite = 0x31624 + 0x022378C1;

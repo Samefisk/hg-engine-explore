@@ -54,7 +54,11 @@ BUILD = "build"
 SRC_FILES = os.listdir(SOURCE)
 OVERLAYS = []
 for file in SRC_FILES:
-    if ".c" not in file and "individual" not in file and ".ld" not in file:
+    if (".c" not in file
+            and "individual" not in file
+            and ".ld" not in file
+            and file != "overworld_follower_release_overlay2"
+            and file != "overworld_follower_selector_icons_overlay2"):
         OVERLAYS.append(file)
 
 # construct output filename list
@@ -207,6 +211,8 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
 
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldFieldServiceEntry'
+    selector_hook_name = 'OverworldFollowerSelector_TaskPoll'
+    selector_state_name = 'gOverworldFollowerSelectorStateStorage'
     callback_names = [
         'OverworldFieldService_OnMapHeaderChangedImpl',
         'OverworldFieldService_PollFrameImpl',
@@ -216,10 +222,22 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
         parts = line.split()
-        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+        if len(parts) >= 6 and parts[-1] in [
+                entry_name,
+                selector_hook_name,
+                selector_state_name,
+                *callback_names]:
             symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
 
-    missing = [name for name in [entry_name, *callback_names] if name not in symbols]
+    missing = [
+        name
+        for name in [
+                entry_name,
+                selector_hook_name,
+                selector_state_name,
+                *callback_names]
+        if name not in symbols
+    ]
     if missing:
         raise RuntimeError(
             'overlay 131 field-service ABI gate is missing linked symbols: '
@@ -231,6 +249,23 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
         raise RuntimeError(
             f'overlay 131 field-service ABI entry changed: address=0x{entry_address:08X} '
             f'size={entry_size}, expected address=0x023C8000 size={expected_entry_size}'
+        )
+    selector_hook_address, selector_hook_size = symbols[selector_hook_name]
+    if selector_hook_address != 0x023C8010:
+        raise RuntimeError(
+            'overlay 131 follower-selector task poll moved: '
+            f'address=0x{selector_hook_address:08X}, expected address=0x023C8010'
+        )
+    selector_state_address, selector_state_size = symbols[selector_state_name]
+    if (selector_state_address != 0x023C8148
+            or selector_state_size != 1
+            or selector_hook_address + selector_hook_size
+                > selector_state_address):
+        raise RuntimeError(
+            'overlay 131 follower-selector state ABI changed or overlaps the '
+            'task poll: '
+            f'poll_end=0x{selector_hook_address + selector_hook_size:08X}, '
+            f'state=0x{selector_state_address:08X} size={selector_state_size}'
         )
 
     with open(output_path, 'rb') as file:
@@ -254,6 +289,105 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
     digest = hashlib.sha256(overlay).hexdigest()
     print(
         f'overlay 131 field-service ABI gate: entry=0x{entry_address:08X} '
+        f'size={entry_size} sha256={digest}'
+    )
+
+
+def VerifyOverworldFollowerSelectorOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    entry_name = 'gOverworldFollowerSelectorOverlayEntry'
+    callback_names = [
+        'OverworldFollowerSelector_ValidateImpl',
+        'OverworldFollowerSelectorUI_Open',
+        'OverworldFollowerSelectorUI_SetSelection',
+        'OverworldFollowerSelectorUI_Update',
+        'OverworldFollowerSelectorUI_Close',
+        'OverworldFollowerSelectorUI_IsOpen',
+        'OverworldFollowerSelectorInput_Filter',
+        'OverworldFollowerSelectorInput_Cancel',
+        'OverworldFollowerSelectorInput_IsActive',
+        'OverworldFollowerSelector_GetSelectedPokemon',
+        'OverworldFollowerSelector_GetReleaseDistance',
+        'OverworldFollowerSelector_IsReleaseTileAvailable',
+    ]
+    symbols = {}
+    output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+            symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
+
+    missing = [
+        name
+        for name in [entry_name, *callback_names]
+        if name not in symbols
+    ]
+    if missing:
+        raise RuntimeError(
+            'overlay 152 ABI gate is missing linked symbols: '
+            + ', '.join(missing)
+        )
+
+    entry_address, entry_size = symbols[entry_name]
+    expected_entry_address = 0x023C0400
+    expected_entry_size = 56
+    overlay_end = 0x023C22A0
+    if (entry_address != expected_entry_address
+            or entry_size != expected_entry_size):
+        raise RuntimeError(
+            f'overlay 152 ABI entry changed: address=0x{entry_address:08X} '
+            f'size={entry_size}, expected address=0x{expected_entry_address:08X} '
+            f'size={expected_entry_size}'
+        )
+
+    for name in callback_names:
+        callback_address, _ = symbols[name]
+        if not expected_entry_address <= callback_address < overlay_end:
+            raise RuntimeError(
+                f'overlay 152 callback {name} is outside its owned range: '
+                f'0x{callback_address:08X}'
+            )
+
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 152 differs from its linked binary')
+    if len(overlay) < expected_entry_size:
+        raise RuntimeError('overlay 152 is shorter than its exported ABI entry')
+
+    actual_header = struct.unpack_from('<IHH', overlay)
+    expected_header = (0x3153464F, 4, expected_entry_size)
+    if actual_header != expected_header:
+        raise RuntimeError(
+            'overlay 152 exported ABI magic/version/size does not match'
+        )
+    actual_callbacks = struct.unpack_from(
+        f'<{len(callback_names)}I',
+        overlay,
+        8,
+    )
+    expected_callbacks = tuple(
+        symbols[name][0] | 1
+        for name in callback_names
+    )
+    if actual_callbacks != expected_callbacks:
+        raise RuntimeError(
+            'overlay 152 exported ABI does not exactly match its linked '
+            'Thumb callbacks'
+        )
+    if any((pointer & 1) == 0 for pointer in actual_callbacks):
+        raise RuntimeError('overlay 152 exported a non-Thumb callback')
+    if any(not expected_entry_address <= (pointer & ~1) < overlay_end
+            for pointer in actual_callbacks):
+        raise RuntimeError('overlay 152 exported a callback outside its range')
+
+    digest = hashlib.sha256(overlay).hexdigest()
+    print(
+        f'overlay 152 ABI gate: entry=0x{entry_address:08X} '
         f'size={entry_size} sha256={digest}'
     )
 
@@ -611,6 +745,12 @@ def writeall():
             )
         if newOverlay == 131:
             VerifyOverworldFieldServiceOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 152:
+            VerifyOverworldFollowerSelectorOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,

@@ -41,6 +41,13 @@ def GetSymbols(args, subtract=0) -> {str: int}:
         outFile = args[1].strip()
     else:
         outFile = 'build/linked.o'
+    objectSymbols = set()
+    symbolTable = subprocess.check_output([OBJDUMP, '-t', outFile])
+    for line in symbolTable.decode().split('\n'):
+        parts = line.strip().split()
+        if len(parts) >= 6 and parts[2] == 'O':
+            objectSymbols.add((int(parts[0], 16), parts[-1]))
+
     out = subprocess.check_output([NM, outFile])
     lines = out.decode().split('\n')
 
@@ -56,7 +63,11 @@ def GetSymbols(args, subtract=0) -> {str: int}:
 
         offset = int(parts[0], 16)
         ret[parts[2]] = offset - subtract
-        if parts[1].lower() in {'t'}:
+        # The core linker places COMMON data inside its executable .text
+        # output section, so nm labels those objects as `T`. Only callable
+        # symbols receive the Thumb bit; OBJECT symbols retain their address.
+        if (parts[1].lower() in {'t'}
+                and (offset, parts[2]) not in objectSymbols):
             ret[parts[2]] = ret[parts[2]] + 1
 
     return ret

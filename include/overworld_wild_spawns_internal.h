@@ -29,6 +29,14 @@
 #define OW_WILD_FIELD_READY_DELAY_FRAMES 90
 #define OW_WILD_FIELD_IDLE_REARM_PENDING 0x01
 #define OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING 0x02
+#define OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING 0x04
+
+#define OW_WILD_FOLLOWER_RELEASE_NONE 0
+#define OW_WILD_FOLLOWER_RELEASE_REQUESTED 1
+#define OW_WILD_FOLLOWER_RELEASE_FLYING 2
+#define OW_WILD_FOLLOWER_RELEASE_READY 3
+#define OW_WILD_FOLLOWER_RELEASE_SPAWNED 4
+
 /* Reconciliation may identify one logical slot that is safe to quarantine. */
 #define OW_WILD_RECONCILE_RETRY 0
 #define OW_WILD_RECONCILE_COMPLETE 1
@@ -218,8 +226,26 @@ typedef struct OverworldWildSpawnState {
     u16 pendingMapGeneration;
     u16 pendingEncounterGeneration;
     u8 presentationRestorePending;
+    u8 activeFollowerPartySlot;
     u16 captureTargetMask;
+    s16 followerReleaseX;
+    s16 followerReleaseY;
+    u8 followerReleaseState;
 } OverworldWildSpawnState;
+
+typedef void (*OverworldWildFollowerReleaseDispatchCallback)(
+    FieldSystem *fieldSystem,
+    u8 action);
+typedef void (*OverworldWildFollowerReleaseRotationCallback)(s16 rotation);
+BOOL OverworldWildSpawns_TickFollowerReleasePresentation(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    void *projectile,
+    OverworldWildFollowerReleaseDispatchCallback dispatch,
+    OverworldWildFollowerReleaseRotationCallback rotate);
+void OverworldWildSpawns_RenderPlayerBallProjectile(
+    void *projectile,
+    OverworldWildFollowerReleaseRotationCallback rotate);
 
 typedef struct OverworldWildResidentData {
     u8 pendingFlags;
@@ -228,6 +254,8 @@ typedef struct OverworldWildResidentData {
 } OverworldWildResidentData;
 
 extern OverworldWildResidentData gOverworldWildResidentData;
+/* Exact byte alias exported by overlay 129 for cross-overlay relocations. */
+extern u8 gOverworldWildFieldIdleRearmPending;
 
 typedef enum OverworldWildMapHeaderChangeMode {
     OW_WILD_MAP_HEADER_CHANGE_PRESERVE = 0,

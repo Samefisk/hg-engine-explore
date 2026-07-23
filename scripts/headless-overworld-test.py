@@ -131,8 +131,12 @@ def extract_raw_save(dsv_path: Path) -> bytes:
     return data[:marker_index]
 
 
-def cycle(emu: DeSmuME, frames: int) -> None:
+def cycle(emu: DeSmuME, frames: int, key_mask: int | None = None) -> None:
     for _ in range(frames):
+        if key_mask is not None:
+            # This DeSmuME build refreshes SDL input after every frame, so a
+            # synthetic held key must be republished before each cycle.
+            set_key_mask(emu, key_mask)
         emu.cycle(False)
 
 
@@ -144,19 +148,30 @@ def key_constant(name: str) -> int:
     return KEYS[normalized]
 
 
+def set_key_mask(emu: DeSmuME, key_mask: int) -> None:
+    """Publish the complete pressed-key mask for the next emulated frame.
+
+    The ARM64 DeSmuME binding's keypad_get() exposes the active-low hardware
+    register rather than the pressed-key mask expected by keypad_add_key().
+    Updating the complete mask directly avoids combining those incompatible
+    representations and makes X/Y presses reach the game reliably.
+    """
+    emu.input.keypad_update(key_mask)
+
+
 def tap_key(emu: DeSmuME, key: str, hold_frames: int, release_frames: int) -> None:
     key_mask = keymask(key_constant(key))
-    emu.input.keypad_add_key(key_mask)
-    cycle(emu, hold_frames)
-    emu.input.keypad_rm_key(key_mask)
+    set_key_mask(emu, key_mask)
+    cycle(emu, hold_frames, key_mask)
+    set_key_mask(emu, 0)
     cycle(emu, release_frames)
 
 
 def hold_key(emu: DeSmuME, key: str, frames: int, release_frames: int) -> None:
     key_mask = keymask(key_constant(key))
-    emu.input.keypad_add_key(key_mask)
-    cycle(emu, frames)
-    emu.input.keypad_rm_key(key_mask)
+    set_key_mask(emu, key_mask)
+    cycle(emu, frames, key_mask)
+    set_key_mask(emu, 0)
     cycle(emu, release_frames)
 
 
@@ -169,10 +184,31 @@ def combo_key_mask(keys: str) -> int:
 
 def hold_combo(emu: DeSmuME, keys: str, frames: int, release_frames: int) -> None:
     key_mask = combo_key_mask(keys)
-    emu.input.keypad_add_key(key_mask)
-    cycle(emu, frames)
-    emu.input.keypad_rm_key(key_mask)
+    set_key_mask(emu, key_mask)
+    cycle(emu, frames, key_mask)
+    set_key_mask(emu, 0)
     cycle(emu, release_frames)
+
+
+def screenshot_while_holding_combo(
+    emu: DeSmuME,
+    keys: str,
+    reads: list[dict[str, Any]],
+    hold_frames: int,
+    path: str,
+    release_frames: int,
+) -> dict[str, Any]:
+    """Capture UI and memory while a logical key combination is still held."""
+    key_mask = combo_key_mask(keys)
+    set_key_mask(emu, key_mask)
+    cycle(emu, hold_frames, key_mask)
+    result = {
+        "path": save_screenshot(emu, path),
+        "reads": [read_memory(emu, read) for read in reads],
+    }
+    set_key_mask(emu, 0)
+    cycle(emu, release_frames, 0)
+    return result
 
 
 def boot_to_ready(args: argparse.Namespace, emu: DeSmuME) -> int:
@@ -196,9 +232,13 @@ def parse_read(spec: str) -> dict[str, Any]:
         read_type, address = parts
     elif len(parts) == 3:
         label, read_type, address = parts
+    elif len(parts) == 4:
+        label, read_type, pointer_address, offset = parts
+        address = pointer_address
     else:
         raise ValueError(
-            f"Invalid read spec {spec!r}. Use label:type:address, e.g. pos:u16:0x02100000"
+            f"Invalid read spec {spec!r}. Use label:type:address or "
+            "label:type:pointer_address:offset"
         )
 
     read_type = read_type.lower()
@@ -206,21 +246,33 @@ def parse_read(spec: str) -> dict[str, Any]:
         valid = ", ".join(sorted(READ_TYPES) + ["bytes<N>"])
         raise ValueError(f"Unknown read type {read_type!r}. Valid types: {valid}")
 
-    return {
+    read = {
         "label": label,
         "type": read_type,
         "address": parse_int(address),
     }
+    if len(parts) == 4:
+        read["pointer_address"] = parse_int(pointer_address)
+        read["offset"] = parse_int(offset)
+    return read
 
 
 def read_memory(emu: DeSmuME, read: dict[str, Any]) -> dict[str, Any]:
     address = read["address"]
+    if "pointer_address" in read:
+        pointer_address = read["pointer_address"]
+        pointer = emu.memory.unsigned[pointer_address:pointer_address:4]
+        address = pointer + read["offset"]
     read_type = read["type"]
     result = {
         "label": read["label"],
         "type": read_type,
         "address": f"0x{address:08X}",
     }
+    if "pointer_address" in read:
+        result["pointer_address"] = f"0x{pointer_address:08X}"
+        result["pointer"] = f"0x{pointer:08X}"
+        result["offset"] = f"0x{read['offset']:X}"
 
     if read_type.startswith("bytes"):
         length_text = read_type.removeprefix("bytes")
@@ -286,7 +338,7 @@ def sample_while_holding_combo(
     if hold_frames < 0 or sample_frames < 0:
         raise ValueError("combo_sample frame counts must be non-negative")
 
-    emu.input.keypad_add_key(key_mask)
+    set_key_mask(emu, key_mask)
     for frame in range(sample_frames + 1):
         if frame % interval == 0:
             samples.append(
@@ -297,10 +349,10 @@ def sample_while_holding_combo(
                 }
             )
         if frame == hold_frames:
-            emu.input.keypad_rm_key(key_mask)
+            set_key_mask(emu, 0)
         if frame < sample_frames:
-            cycle(emu, 1)
-    emu.input.keypad_rm_key(key_mask)
+            cycle(emu, 1, key_mask if frame < hold_frames else 0)
+    set_key_mask(emu, 0)
     return samples
 
 
@@ -377,6 +429,33 @@ def run_action(
                 sample_frames,
                 interval,
             ),
+        }
+
+    if command == "combo_screenshot":
+        if len(parts) not in (4, 5):
+            raise ValueError(
+                "combo_screenshot action format: "
+                "combo_screenshot:KEY+KEY:hold_frames:path[:release_frames]"
+            )
+        keys = parts[1]
+        hold_frames = parse_int(parts[2])
+        path = parts[3]
+        release_frames = parse_int(parts[4]) if len(parts) == 5 else 18
+        held = screenshot_while_holding_combo(
+            emu,
+            keys,
+            reads,
+            hold_frames,
+            path,
+            release_frames,
+        )
+        return {
+            "action": "combo_screenshot",
+            "keys": [key.strip().upper() for key in keys.split("+")],
+            "hold_frames": hold_frames,
+            "release_frames": release_frames,
+            "held_reads": held["reads"],
+            "path": held["path"],
         }
 
     if command == "wait":
@@ -488,7 +567,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Key-only action: tap:KEY[:hold[:gap]], hold:KEY:frames[:gap], "
             "combo:KEY+KEY:frames[:gap], wait:frames, sample:frames[:interval], "
-            "combo_sample:KEY+KEY:hold_frames:sample_frames[:interval], screenshot:path."
+            "combo_sample:KEY+KEY:hold_frames:sample_frames[:interval], "
+            "combo_screenshot:KEY+KEY:hold_frames:path[:release_frames], screenshot:path."
         ),
     )
     parser.add_argument("--boot-frames", type=int, default=420)

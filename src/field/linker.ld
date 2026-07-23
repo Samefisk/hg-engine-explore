@@ -15,6 +15,25 @@ SECTIONS {
                 . = ALIGN(4);
                 KEEP(*(.overworld_field_service_entry))
                 . = ALIGN(4);
+                KEEP(*(.overworld_follower_selector_task_poll))
+                ASSERT(OverworldFollowerSelector_TaskPoll
+                        == ORIGIN(rom) + 0x10,
+                    "overworld follower selector task poll moved");
+                ASSERT(. <= ORIGIN(rom) + 0x148,
+                    "overworld follower selector task poll exceeds ABI reserve");
+                . = ORIGIN(rom) + 0x148;
+                KEEP(*(.overworld_follower_selector_state))
+                ASSERT(gOverworldFollowerSelectorStateStorage
+                        == ORIGIN(rom) + 0x148,
+                    "overworld follower selector state moved");
+                . = ALIGN(4);
+                KEEP(*(.overworld_follower_selector_ow_resolver))
+                ASSERT(FollowerSelector_ResolveOverworldTag
+                        == ORIGIN(rom) + 0x14C,
+                    "overworld follower selector resolver moved");
+                ASSERT(. <= ORIGIN(rom) + 0x154,
+                    "overworld follower selector resolver exceeds ABI reserve");
+                . = ORIGIN(rom) + 0x154;
                 *(.init)
                 *(.text)
                 *(.ctors)

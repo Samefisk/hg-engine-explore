@@ -1694,6 +1694,13 @@ struct OVERWORLD_TAG *grab_overworld_ptr(u16 tag)
     return &gOWTagToFileNum[2]; // default error failure
 }
 
+struct OVERWORLD_TAG *
+    __attribute__((section(".overworld_follower_selector_ow_resolver"), used))
+FollowerSelector_ResolveOverworldTag(u16 tag)
+{
+    return grab_overworld_ptr(tag);
+}
+
 u16 get_a081_index_from_tag(u16 tag)
 {
     struct OVERWORLD_TAG *overworldData = grab_overworld_ptr(tag);

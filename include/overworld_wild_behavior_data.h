@@ -16,7 +16,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 35
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 39
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -90,6 +90,13 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER_FRONT 5
 #define OW_WILD_BEHAVIOR_ALLOWED_TILE_NONE 0xF
 
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT  (1u << 0)
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_BEHIND (1u << 1)
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_LEFT   (1u << 2)
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_RIGHT  (1u << 3)
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL   0xFu
+#define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL
+
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE 0
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE 1
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND 2
@@ -114,7 +121,7 @@ typedef struct OverworldWildBehaviorProfile {
     u8 chillAction;
     u8 chillTarget;
     u8 alertRange;
-    u8 attentiveAction;
+    u8 playerAdjacentDirectionMasks; // Shared nonzero player-relative F/B/L/R mask for Next to player.
     u8 targetSelector;
     u8 movementStyle;
     u8 alertChance;
@@ -165,6 +172,8 @@ typedef struct OverworldWildBehaviorProfile {
     u8 attentiveCircleRadius;
     u8 attentiveContinueWhenArrived;
     u8 attentiveAvoidPreviousTile;
+    u8 chainMovementVariance;
+    u8 chainPauseVariance;
 } OverworldWildBehaviorProfile;
 
 typedef struct OverworldWildBehaviorContext {
@@ -214,6 +223,8 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     u32 atMostMask;
     u16 atMostMask2;
     u32 atMostMask3;
+    /* Used only when a relative adjustment is followed by a bound. */
+    OverworldWildBehaviorProfile compoundBoundProfile;
 } OverworldWildBehaviorOverrideProfile;
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
@@ -294,6 +305,9 @@ typedef struct OverworldWildBehaviorOverrideProfile {
 #define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CONTINUE_WHEN_ARRIVED (1u << 24)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_AVOID_PREVIOUS_TILE (1u << 25)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION (1u << 26)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE (1u << 27)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE (1u << 28)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS (1u << 29)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 

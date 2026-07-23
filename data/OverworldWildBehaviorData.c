@@ -268,10 +268,6 @@
 #define OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE 3
 #define OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS 4
 #define OW_WILD_BEHAVIOR_ALERT_RANGE_TERRAIN_ONLY 5
-#define OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_NONE 0
-#define OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH 1
-#define OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE 2
-#define OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_EMOTE 3
 #define OW_WILD_BEHAVIOR_LOCOMOTION_NONE 0
 #define OW_WILD_BEHAVIOR_LOCOMOTION_WANDER 1
 #define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
@@ -286,7 +282,8 @@
 #define OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER 3
 #define OW_WILD_BEHAVIOR_TARGET_TREE_TOP 4
 #define OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT 5
-#define OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT 6
+#define OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER 6
+#define OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER
 #define OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE 8
 #define OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER 9
 #define OW_WILD_BEHAVIOR_ALERT_LOGIC_NONE 0
@@ -386,7 +383,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
         OW_WILD_BEHAVIOR_TARGET_NONE,
         OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
-        OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_FLEE,
+        OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
         OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER,
         OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
         100,
@@ -458,7 +455,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             OW_WILD_BEHAVIOR_TARGET_NONE,
             OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
-            OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH,
+            OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
             OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             100,
@@ -530,7 +527,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             OW_WILD_BEHAVIOR_TARGET_NONE,
             OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE,
-            OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_APPROACH,
+            OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
             OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
             OW_WILD_BEHAVIOR_LOCOMOTION_RAM,
             100,
@@ -602,7 +599,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
             OW_WILD_BEHAVIOR_TARGET_NONE,
             OW_WILD_BEHAVIOR_ALERT_RANGE_NONE,
-            OW_WILD_BEHAVIOR_ATTENTIVE_ACTION_NONE,
+            OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
             OW_WILD_BEHAVIOR_TARGET_NONE,
             OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
             0,
@@ -823,7 +820,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE,
             OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_PAUSE,
-            OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_TIME
+            OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS
+                | OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_PAUSE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_AVOID_PREVIOUS_TILE,
             {
@@ -846,8 +844,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
                 0,
                 0,
-                0,
-                OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT,
+                OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT,
+                OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER,
                 OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
                 0,
                 0,
@@ -878,6 +876,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 9,
                 30,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -907,6 +907,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Canopy Hopper! */
         {
@@ -1015,6 +1016,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1025,6 +1028,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Throwing! */
         {
@@ -1122,6 +1126,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1132,6 +1138,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Playful! */
         {
@@ -1229,6 +1236,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1239,6 +1248,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Floaty Bounce */
         {
@@ -1340,6 +1350,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1350,6 +1362,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Bird */
         {
@@ -1379,7 +1392,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MAX_DISTANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_PAUSE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_HOP_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_TIME,
+                | OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_TIME
+                | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
+                | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE,
             {
                 0,
                 0,
@@ -1417,8 +1432,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                2,
-                60,
+                1,
+                30,
                 0,
                 0,
                 0,
@@ -1451,6 +1466,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                2,
+                20,
             },
             0,
             0,
@@ -1461,6 +1478,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Swarm */
         {
@@ -1587,6 +1605,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 1,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1597,6 +1617,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Skittish */
         {
@@ -1713,6 +1734,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1723,6 +1746,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: test */
         {
@@ -1819,6 +1843,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED,
             0,
@@ -1829,6 +1855,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Forced asleep */
         {
@@ -1921,6 +1948,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
+                0,
+                0,
             },
             0,
             0,
@@ -1931,6 +1960,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         },
         /* profile: Follower Pokemon */
         {
@@ -1952,7 +1982,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION,
             OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_TARGET,
-            0,
+            OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS,
             {
                 OW_WILD_BEHAVIOR_KIND_CHASE,
                 0,
@@ -1971,13 +2001,15 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP,
                 0,
-                OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT,
+                OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER,
                 0,
-                0,
+                OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT,
                 0,
                 0,
                 0,
                 OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -2034,6 +2066,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
+            {0},
         }
     },
     /* sOverworldWildBehaviorOverrideMembers */
