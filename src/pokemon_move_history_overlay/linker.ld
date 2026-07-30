@@ -56,6 +56,12 @@ SECTIONS {
                 ASSERT(MoveHistoryEntry_BuildRelearnCandidates
                         == ORIGIN(rom) + 0x78,
                     "move-relearn candidate ABI moved");
+                ASSERT(MoveHistoryEntry_ReplaceMove
+                        == ORIGIN(rom) + 0x80,
+                    "move-history ReplaceMove ABI moved");
+                ASSERT(MoveHistoryEntry_DeleteMoveSlot
+                        == ORIGIN(rom) + 0x88,
+                    "move-history DeleteMoveSlot ABI moved");
                 . = ALIGN(4);
                 *(.init)
                 *(.text)

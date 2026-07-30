@@ -1,4 +1,5 @@
 #include "../include/pokemon.h"
+#include "../include/pokemon_move_history.h"
 
 #include "../include/bag.h"
 #include "../include/battle.h"
@@ -2342,6 +2343,22 @@ u32 MonTryLearnMoveOnLevelUp(struct PartyPokemon *mon, int *last_i, u16 *sp0)
 #endif
         {
             ret = TryAppendMonMove(mon, *sp0);
+            if (ret != (u16)-1u
+                && ret != (u16)-2u
+                && ret != MOVE_NONE) {
+                SaveData *saveData = SaveBlock2_get();
+
+                /*
+                 * Append is non-destructive. Record only after the retail
+                 * helper confirms that the move entered an empty slot.
+                 */
+                if (saveData != NULL) {
+                    PokemonMoveHistory_RecordMove(
+                        saveData,
+                        &mon->box,
+                        *sp0);
+                }
+            }
         }
     }
     sys_FreeMemoryEz(levelUpLearnset);

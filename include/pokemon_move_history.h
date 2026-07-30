@@ -70,6 +70,31 @@ BOOL LONG_CALL PokemonMoveHistory_RecordSnapshot(
     const PokemonMoveHistorySnapshot *snapshot);
 
 /**
+ * Permanently replaces one move slot through the canonical BoxPokemon
+ * accessors. The old four-move snapshot is recorded before mutation, and the
+ * requested move is recorded only after a successful readback. Invalid slots,
+ * duplicate assignments, MOVE_NONE, out-of-range moves, and unimplemented
+ * moves do not add history.
+ *
+ * The current save is resolved at call time through SaveBlock2_get(); no
+ * SaveData pointer is retained across save or overlay lifetimes.
+ *
+ * @return TRUE when the slot contains move after the operation.
+ */
+BOOL LONG_CALL PokemonMoveHistory_ReplaceMove(
+    struct BoxPokemon *pokemon,
+    u16 move,
+    u32 slot);
+
+/**
+ * Records a PartyPokemon's current moves at a committed forget boundary,
+ * then delegates to the retail canonical slot-deletion helper.
+ */
+void LONG_CALL PokemonMoveHistory_DeleteMoveSlot(
+    struct PartyPokemon *pokemon,
+    u32 slot);
+
+/**
  * Seeds a first-observed Pokemon, then copies its move history to movesOut.
  * Passing NULL or a zero capacity only returns the stored count.
  *

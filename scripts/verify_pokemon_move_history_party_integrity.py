@@ -257,6 +257,21 @@ def read_runtime_party(emu: DeSmuME) -> bytes:
     return bytes(emu.memory.unsigned[start:start + PARTY_SIZE:1])
 
 
+def wait_for_runtime_party(
+    emu: DeSmuME,
+    expected: bytes,
+    maximum_frames: int = 60,
+) -> tuple[bytes, int]:
+    """Wait for any in-progress canonical accessor lock to re-encrypt."""
+    actual = read_runtime_party(emu)
+    for frame in range(maximum_frames + 1):
+        if actual == expected:
+            return actual, frame
+        emu.cycle(1)
+        actual = read_runtime_party(emu)
+    return actual, maximum_frames + 1
+
+
 def read_runtime_save_counter(emu: DeSmuME) -> int:
     save_data = emu.memory.unsigned[SAVE_DATA_POINTER:SAVE_DATA_POINTER:4]
     return emu.memory.unsigned[save_data + 0x2F010:save_data + 0x2F010:4]
@@ -267,6 +282,7 @@ def reload_party_in_fresh_process(
     raw: bytes,
     screenshot: Path,
 ) -> bytes:
+    _, _, expected_party = party_image(raw)
     with tempfile.NamedTemporaryFile(suffix=".sav") as saved:
         saved.write(raw)
         saved.flush()
@@ -281,6 +297,8 @@ def reload_party_in_fresh_process(
                 "--read",
                 f"party:bytes{PARTY_SIZE}:{SAVE_DATA_POINTER:#x}:"
                 f"{PARTY_SAVE_DATA_OFFSET:#x}",
+                "--action",
+                "sample:60:1",
                 "--screenshot",
                 str(screenshot),
             ],
@@ -295,6 +313,10 @@ def reload_party_in_fresh_process(
         + (completed.stderr.strip() or completed.stdout.strip()),
     )
     result = json.loads(completed.stdout)
+    for sample in result["actions"][0]["samples"]:
+        party = bytes.fromhex(sample["reads"][0]["value"])
+        if party == expected_party:
+            return party
     return bytes.fromhex(result["reads"][0]["value"])
 
 
@@ -327,7 +349,10 @@ def run(args: argparse.Namespace) -> dict:
         with tempfile.NamedTemporaryFile(suffix=".sav") as imported:
             import_raw(emu, baseline_raw, imported)
             HEADLESS.boot_to_ready(boot_arguments(), emu)
-            runtime_party = read_runtime_party(emu)
+            runtime_party, stabilization_frames = wait_for_runtime_party(
+                emu,
+                baseline_party,
+            )
             require_exact(
                 runtime_party,
                 baseline_party,
@@ -409,6 +434,7 @@ def run(args: argparse.Namespace) -> dict:
         "occupied_party_records": occupied,
         "serialized_record_stride": PARTY_RECORD_SIZE,
         "all_six_records_exact_after_boot": runtime_party == baseline_party,
+        "party_stabilization_frames": stabilization_frames,
         "all_six_records_exact_after_save": saved_party[PARTY_HEADER_SIZE:] == baseline_records,
         "all_six_records_exact_after_reload": reloaded_party == baseline_party,
         "party_records_sha256": hashlib.sha256(baseline_records).hexdigest(),

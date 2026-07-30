@@ -862,6 +862,8 @@ def source_contracts() -> None:
         "PokemonMoveHistory_Seed",
         "PokemonMoveHistory_RecordMove",
         "PokemonMoveHistory_RecordSnapshot",
+        "PokemonMoveHistory_ReplaceMove",
+        "PokemonMoveHistory_DeleteMoveSlot",
         "PokemonMoveHistory_Query",
         "PokemonMoveHistory_CommitIfDirty",
         "PokemonMoveHistory_LoadAndSeedParty",
@@ -955,7 +957,9 @@ def source_contracts() -> None:
     require(seed_party_match is not None, "party seeding implementation is missing")
     seed_party_source = seed_party_match.group(0)
     require(
-        "Party_GetMonByIndex(party, i)" in seed_party_source
+        "Party_GetCount(party)" in seed_party_source
+        and "Party_GetMonByIndex(party, i)" in seed_party_source
+        and "party->count" not in seed_party_source
         and "party->members[" not in history_source
         and "persisted 0xEC record stride" in seed_party_source,
         "party seeding bypasses the retail 0xEC PartyPokemon accessor",
@@ -1378,6 +1382,8 @@ def main() -> None:
         ("FinishSave", 0x58),
         ("CancelSave", 0x60),
         ("WriteSaveNow", 0x68),
+        ("ReplaceMove", 0x80),
+        ("DeleteMoveSlot", 0x88),
     ):
         require(
             f"PokemonMoveHistory_{name} = "
@@ -1488,6 +1494,19 @@ def main() -> None:
     )
     require(
         re.search(
+            r"R_ARM_ABS32\s+Party_GetCount\b",
+            history_relocations,
+        )
+        is not None
+        and re.search(
+            r"R_ARM_THM_CALL\s+Party_GetCount\b",
+            history_relocations,
+        )
+        is None,
+        "party seeding binary does not use a typed long call to Party_GetCount",
+    )
+    require(
+        re.search(
             r"R_ARM_THM_CALL\s+Party_GetMonByIndex\b",
             history_relocations,
         )
@@ -1516,8 +1535,9 @@ def main() -> None:
     )
     seed_party_body = seed_party_disassembly.group(1)
     require(
-        ".word\t0x02074645" in seed_party_body,
-        "final linked party seeding does not target Party_GetMonByIndex",
+        ".word\t0x02074641" in seed_party_body
+        and ".word\t0x02074645" in seed_party_body,
+        "final linked party seeding does not target both canonical accessors",
     )
     require(
         all(
@@ -1536,7 +1556,7 @@ def main() -> None:
 
     thumb_api_targets = {
         OVERLAY_BASE + offset
-        for offset in range(0, 0x80, 8)
+        for offset in range(0, 0x90, 8)
     }
     for object_path in (
         REPO / "build/linked.o",

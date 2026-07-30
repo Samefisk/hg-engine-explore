@@ -132,3 +132,19 @@ MoveHistoryEntry_BuildRelearnCandidates:
     b PokemonMoveRelearn_BuildCandidatesImpl
     .syntax unified
     .space 6, 0
+
+.global MoveHistoryEntry_ReplaceMove
+.type MoveHistoryEntry_ReplaceMove, %function
+MoveHistoryEntry_ReplaceMove:
+    ldr r3, 17f
+    bx r3
+    .align 2
+17: .word PokemonMoveHistory_ReplaceMoveImpl + 1
+
+.global MoveHistoryEntry_DeleteMoveSlot
+.type MoveHistoryEntry_DeleteMoveSlot, %function
+MoveHistoryEntry_DeleteMoveSlot:
+    ldr r3, 18f
+    bx r3
+    .align 2
+18: .word PokemonMoveHistory_DeleteMoveSlotImpl + 1

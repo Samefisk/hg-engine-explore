@@ -977,6 +977,7 @@ void  LONG_CALL SetBoxMonData(struct BoxPokemon *boxmon, int id, const void *buf
  *  @return PartyPokemon requested
  */
 struct PartyPokemon * LONG_CALL Party_GetMonByIndex(struct Party *party, int pos);
+int LONG_CALL Party_GetCount(struct Party *party);
 
 /**
  *  @brief grab personal field accounting for form (for vanilla forms)

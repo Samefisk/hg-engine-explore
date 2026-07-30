@@ -466,6 +466,13 @@ static BOOL PokemonMoveHistory_IsCurrentMove(
     return FALSE;
 }
 
+static BOOL PokemonMoveHistory_IsRecordableMove(u16 move)
+{
+    return move != MOVE_NONE
+        && move < NUM_OF_MOVES
+        && !IsMoveUnimplemented(move);
+}
+
 static BOOL PokemonMoveHistory_AppendMove(
     SaveData *saveData,
     const PokemonMoveHistorySnapshot *snapshot,
@@ -476,7 +483,7 @@ static BOOL PokemonMoveHistory_AppendMove(
     u32 removeIndex;
     u32 i;
 
-    if (move == MOVE_NONE || move >= NUM_OF_MOVES) {
+    if (!PokemonMoveHistory_IsRecordableMove(move)) {
         return FALSE;
     }
     for (i = 0; i < record->moveCount; i++) {
@@ -618,6 +625,72 @@ BOOL PokemonMoveHistory_RecordSnapshotImpl(
     return PokemonMoveHistory_ObserveSnapshot(saveData, snapshot) != NULL;
 }
 
+extern void LONG_CALL MonDeleteMoveSlot_Original(
+    struct PartyPokemon *pokemon,
+    u32 slot);
+
+BOOL PokemonMoveHistory_ReplaceMoveImpl(
+    struct BoxPokemon *pokemon,
+    u16 move,
+    u32 slot)
+{
+    PokemonMoveHistorySnapshot before;
+    struct PokemonMoveHistoryRecord *record;
+    SaveData *saveData;
+    BOOL trackChange;
+    u8 ppUp;
+    u8 pp;
+
+    if (pokemon == NULL || move == MOVE_NONE || slot >= 4) {
+        return FALSE;
+    }
+
+    trackChange =
+        PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &before)
+        && before.moves[slot] != move;
+    saveData = SaveBlock2_get();
+    record = NULL;
+    if (trackChange) {
+        /*
+         * This API is called only at committed mutation points. Preserve the
+         * displaced move ordering before touching encrypted BoxPokemon data.
+         */
+        record = PokemonMoveHistory_ObserveSnapshot(saveData, &before);
+    }
+
+    SetBoxMonData(pokemon, MON_DATA_MOVE1 + slot, &move);
+    ppUp = 0;
+    SetBoxMonData(pokemon, MON_DATA_MOVE1PPUP + slot, &ppUp);
+    pp = (u8)GetMoveMaxPP(move, 0);
+    SetBoxMonData(pokemon, MON_DATA_MOVE1PP + slot, &pp);
+
+    if (GetBoxMonData(pokemon, MON_DATA_MOVE1 + slot, NULL) != move) {
+        return FALSE;
+    }
+    if (record != NULL) {
+        before.moves[slot] = move;
+        PokemonMoveHistory_AppendMove(
+            saveData,
+            &before,
+            record,
+            move);
+    }
+    return TRUE;
+}
+
+void PokemonMoveHistory_DeleteMoveSlotImpl(
+    struct PartyPokemon *pokemon,
+    u32 slot)
+{
+    if (pokemon == NULL || slot >= 4) {
+        return;
+    }
+    PokemonMoveHistory_SeedImpl(
+        SaveBlock2_get(),
+        &pokemon->box);
+    MonDeleteMoveSlot_Original(pokemon, slot);
+}
+
 u32 __attribute__((section(".pokemon_move_history_short_branch_targets")))
 PokemonMoveHistory_QueryImpl(
     SaveData *saveData,
@@ -740,6 +813,9 @@ BOOL PokemonMoveHistory_CommitIfDirtyImpl(SaveData *saveData)
     return TRUE;
 }
 
+static void PokemonMoveHistory_SeedParty(
+    SaveData *saveData) __attribute__((noinline, used));
+
 static void PokemonMoveHistory_SeedParty(SaveData *saveData)
 {
     struct Party *party;
@@ -750,7 +826,10 @@ static void PokemonMoveHistory_SeedParty(SaveData *saveData)
     if (party == NULL) {
         return;
     }
-    partyCount = party->count;
+    partyCount = Party_GetCount(party);
+    if (partyCount < 0) {
+        return;
+    }
     if (partyCount > 6) {
         partyCount = 6;
     }
@@ -772,7 +851,6 @@ static void PokemonMoveHistory_SeedParty(SaveData *saveData)
 void PokemonMoveHistory_LoadAndSeedPartyImpl(SaveData *saveData)
 {
     PokemonMoveHistory_LoadImpl(saveData);
-    PokemonMoveHistory_SeedParty(saveData);
 }
 
 BOOL PokemonMoveHistory_PrepareSaveImpl(SaveData *saveData)
