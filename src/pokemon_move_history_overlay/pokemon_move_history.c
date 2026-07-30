@@ -611,6 +611,9 @@ BOOL PokemonMoveHistory_RecordMoveImpl(
     PokemonMoveHistorySnapshot snapshot;
     struct PokemonMoveHistoryRecord *record;
 
+    if (!PokemonMoveHistory_IsRecordableMove(move)) {
+        return FALSE;
+    }
     if (!PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &snapshot)) {
         return FALSE;
     }

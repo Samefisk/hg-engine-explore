@@ -118,6 +118,21 @@ def source_contracts() -> None:
         replace.count("SaveBlock2_get()") == 1,
         "replacement does not resolve exactly one current save per transaction",
     )
+    record_move = function_body(history, "PokemonMoveHistory_RecordMoveImpl")
+    ordered(
+        record_move,
+        [
+            "PokemonMoveHistory_IsRecordableMove(move)",
+            "PokemonMoveHistory_CaptureSnapshotImpl",
+            "PokemonMoveHistory_ObserveSnapshot",
+            "PokemonMoveHistory_AppendMove",
+        ],
+        "record-move transaction",
+    )
+    require(
+        "if (!PokemonMoveHistory_IsRecordableMove(move))" in record_move,
+        "RecordMove does not reject invalid input before snapshot access",
+    )
     delete = function_body(history, "PokemonMoveHistory_DeleteMoveSlotImpl")
     ordered(
         delete,
@@ -306,6 +321,68 @@ def host_fixtures() -> None:
                 changed = True
         return changed
 
+    def make_public_state(existing_record: bool) -> dict[str, object]:
+        return {
+            "allocated": existing_record,
+            "allocations": 0,
+            "dirty": False,
+            "revision": 0,
+            "history": [31] if existing_record else [],
+            "moves": [1, 2, 3, 4],
+            "mutations": 0,
+        }
+
+    def clone_public_state(state: dict[str, object]) -> dict[str, object]:
+        return {
+            key: list(value) if isinstance(value, list) else value
+            for key, value in state.items()
+        }
+
+    def public_append(state: dict[str, object], move: int) -> bool:
+        history = state["history"]
+        require(isinstance(history, list), "fixture history type differs")
+        if not valid(move) or move in history:
+            return False
+        history.append(move)
+        state["dirty"] = True
+        state["revision"] = int(state["revision"]) + 1
+        return True
+
+    def public_observe(state: dict[str, object]) -> None:
+        if not state["allocated"]:
+            state["allocated"] = True
+            state["allocations"] = int(state["allocations"]) + 1
+            state["dirty"] = True
+            state["revision"] = int(state["revision"]) + 1
+        moves = state["moves"]
+        require(isinstance(moves, list), "fixture move-slot type differs")
+        for current_move in moves:
+            public_append(state, current_move)
+
+    def record_move_public(state: dict[str, object], move: int) -> bool:
+        if not valid(move):
+            return False
+        public_observe(state)
+        public_append(state, move)
+        return True
+
+    def replace_move_public(
+        state: dict[str, object],
+        slot: int,
+        move: int,
+    ) -> bool:
+        moves = state["moves"]
+        require(isinstance(moves, list), "fixture move-slot type differs")
+        if not valid(move) or not 0 <= slot < 4:
+            return False
+        if moves[slot] == move:
+            return True
+        public_observe(state)
+        moves[slot] = move
+        state["mutations"] = int(state["mutations"]) + 1
+        public_append(state, move)
+        return True
+
     def replace(
         history: list[int],
         current: list[int],
@@ -403,6 +480,49 @@ def host_fixtures() -> None:
             and (invalid_history, invalid_current) == before_invalid,
             f"invalid replacement {invalid_move} dirties or mutates state",
         )
+        for existing_record in (False, True):
+            for public_path in (record_move_public, replace_move_public):
+                public_state = make_public_state(existing_record)
+                public_before = clone_public_state(public_state)
+                if public_path is record_move_public:
+                    success = record_move_public(public_state, invalid_move)
+                else:
+                    success = replace_move_public(
+                        public_state,
+                        1,
+                        invalid_move,
+                    )
+                require(
+                    not success
+                    and public_state == public_before
+                    and public_state["allocations"] == 0
+                    and public_state["dirty"] is False
+                    and public_state["revision"] == 0
+                    and public_state["mutations"] == 0,
+                    f"invalid {public_path.__name__} input {invalid_move} "
+                    f"changes empty/existing={existing_record} state",
+                )
+    valid_record_state = make_public_state(False)
+    require(
+        record_move_public(valid_record_state, high_valid)
+        and valid_record_state["allocated"] is True
+        and valid_record_state["allocations"] == 1
+        and valid_record_state["dirty"] is True
+        and int(valid_record_state["revision"]) > 0
+        and valid_record_state["mutations"] == 0,
+        "valid high-ID RecordMove control does not succeed and record state",
+    )
+    valid_replace_state = make_public_state(False)
+    require(
+        replace_move_public(valid_replace_state, 1, high_valid)
+        and valid_replace_state["allocated"] is True
+        and valid_replace_state["allocations"] == 1
+        and valid_replace_state["dirty"] is True
+        and int(valid_replace_state["revision"]) > 0
+        and valid_replace_state["mutations"] == 1
+        and valid_replace_state["moves"] == [1, high_valid, 3, 4],
+        "valid high-ID ReplaceMove control does not mutate and record state",
+    )
     (
         capture_history,
         capture_current,
@@ -443,6 +563,19 @@ def symbol_table(path: Path) -> dict[str, int]:
     return symbols
 
 
+def symbol_sizes(path: Path) -> dict[str, int]:
+    output = subprocess.check_output(
+        ["arm-none-eabi-nm", "-S", str(path)],
+        text=True,
+    )
+    sizes: dict[str, int] = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 4:
+            sizes[parts[3]] = int(parts[1], 16)
+    return sizes
+
+
 def thumb_bl_target(image: bytes, base: int, address: int) -> int:
     offset = address - base
     first, second = struct.unpack_from("<HH", image, offset)
@@ -454,6 +587,52 @@ def thumb_bl_target(image: bytes, base: int, address: int) -> int:
     if delta & (1 << 22):
         delta -= 1 << 23
     return address + 4 + delta
+
+
+def thumb_blx_target(image: bytes, base: int, address: int) -> int:
+    offset = address - base
+    first, second = struct.unpack_from("<HH", image, offset)
+    require(
+        first & 0xF800 == 0xF000 and second & 0xF800 == 0xE800,
+        f"0x{address:08X} is not a Thumb-1 BLX immediate",
+    )
+    delta = ((first & 0x7FF) << 12) | ((second & 0x7FF) << 1)
+    if delta & (1 << 22):
+        delta -= 1 << 23
+    return ((address + 4) & ~3) + delta
+
+
+def encode_thumb_blx(address: int, target: int) -> bytes:
+    delta = target - ((address + 4) & ~3)
+    require(
+        -(1 << 22) <= delta < (1 << 22)
+        and delta % 4 == 0
+        and target % 4 == 0,
+        f"Thumb BLX 0x{address:08X}->0x{target:08X} is out of range/alignment",
+    )
+    first = 0xF000 | ((delta >> 12) & 0x7FF)
+    second = 0xE800 | ((delta >> 1) & 0x7FF)
+    return struct.pack("<HH", first, second)
+
+
+def direct_thumb_calls(disassembly: str) -> list[tuple[int, str, int]]:
+    call_line = re.compile(
+        r"^\s*([0-9a-f]+):\s+"
+        r"[0-9a-f]{4}(?:\s+[0-9a-f]{4})?\s+"
+        r"(bl|blx)\s+([0-9a-f]+)\b"
+    )
+    calls: list[tuple[int, str, int]] = []
+    for line in disassembly.splitlines():
+        match = call_line.match(line)
+        if match is not None:
+            calls.append(
+                (
+                    int(match.group(1), 16),
+                    match.group(2),
+                    int(match.group(3), 16),
+                )
+            )
+    return calls
 
 
 def packaged_components(
@@ -603,6 +782,7 @@ def binary_contracts(rom_path: Path) -> None:
         f"overlay 153 exceeds guarded 0x{OVERLAY_LIMIT:X}-byte envelope",
     )
     symbols = symbol_table(linked)
+    linked_symbol_sizes = symbol_sizes(linked)
     for name in (
         "PokemonMoveHistory_ReplaceMoveImpl",
         "PokemonMoveHistory_DeleteMoveSlotImpl",
@@ -729,14 +909,22 @@ def binary_contracts(rom_path: Path) -> None:
 
     expected = OVERLAY_BASE + 0x80
     require(
-        thumb_bl_target(packaged_arm9, arm9_base, 0x020769F0) == expected
-        and bytes_at(packaged_arm9, arm9_base, 0x020769F4, 2) == b"\x20\x1c",
-        "evolution replacement BL target differs",
+        bytes_at(packaged_arm9, arm9_base, 0x020769E2, 14)
+        == bytes.fromhex("21 1c 22 1c 6c 31 6e 32 09 88 12 78 a0 6a")
+        and thumb_bl_target(packaged_arm9, arm9_base, 0x020769F0)
+        == expected
+        and bytes_at(packaged_arm9, arm9_base, 0x020769F4, 2)
+        == b"\x20\x1c",
+        "evolution argument window, replacement BL, or continuation differs",
     )
     require(
-        thumb_bl_target(packaged_ov12, ov12_base, 0x02246344) == expected
-        and bytes_at(packaged_ov12, ov12_base, 0x02246348, 2) == b"\x61\x68",
-        "battle replacement BL target differs",
+        bytes_at(packaged_ov12, ov12_base, 0x02246336, 14)
+        == bytes.fromhex("21 6c 62 6c 09 04 12 06 30 1c 09 0c 12 0e")
+        and thumb_bl_target(packaged_ov12, ov12_base, 0x02246344)
+        == expected
+        and bytes_at(packaged_ov12, ov12_base, 0x02246348, 2)
+        == b"\x61\x68",
+        "battle argument window, replacement BL, or continuation differs",
     )
     require(
         bytes_at(packaged_ov68, ov68_base, 0x021E6158, 8)
@@ -753,11 +941,13 @@ def binary_contracts(rom_path: Path) -> None:
         "Move Deleter BL target differs",
     )
     require(
-        bytes_at(packaged_arm9, arm9_base, 0x0204DCCA, 6)
+        bytes_at(packaged_arm9, arm9_base, 0x0204DCBE, 12)
+        == bytes.fromhex("e8 68 26 f0 20 fe 31 1c 26 f0 bd fc")
+        and bytes_at(packaged_arm9, arm9_base, 0x0204DCCA, 6)
         == b"\x21\x1c\x70\xf3\xdc\xfb"
         and bytes_at(packaged_arm9, arm9_base, 0x0204DCD0, 4)
         == b"\x00\x20\x70\xbd",
-        "Move Deleter continuation differs",
+        "Move Deleter argument window, replacement BL, or continuation differs",
     )
     require(
         thumb_bl_target(packaged_arm9, arm9_base, 0x020542D6)
@@ -839,12 +1029,20 @@ def binary_contracts(rom_path: Path) -> None:
             struct.pack("<I", resolved_targets[name]) in delete_bytes,
             f"DeleteMoveSlot packaged body does not resolve {name}",
         )
-    append_start = symbols["PokemonMoveHistory_AppendMove.isra.0"] - ov153_base
-    observe_start = symbols["PokemonMoveHistory_ObserveSnapshot"] - ov153_base
-    append_bytes = packaged_ov153[append_start:observe_start]
+    recordable_start = (
+        symbols["PokemonMoveHistory_IsRecordableMove"] - ov153_base
+    )
+    recordable_size = linked_symbol_sizes.get(
+        "PokemonMoveHistory_IsRecordableMove",
+        0,
+    )
+    recordable_bytes = packaged_ov153[
+        recordable_start:recordable_start + recordable_size
+    ]
     require(
-        struct.pack("<I", implemented_check_target) in append_bytes,
-        "AppendMove packaged body does not resolve resident "
+        recordable_size != 0
+        and struct.pack("<I", implemented_check_target) in recordable_bytes,
+        "recordable-move predicate does not resolve resident "
         "IsMoveUnimplemented",
     )
 
@@ -852,23 +1050,41 @@ def binary_contracts(rom_path: Path) -> None:
         ["arm-none-eabi-objdump", "-d", str(linked)],
         text=True,
     )
+    linked_calls = [
+        call
+        for call in direct_thumb_calls(disassembly)
+        if ov153_base <= call[0] < ov153_base + len(packaged_ov153)
+    ]
+    for call_address, mnemonic, disassembly_target in linked_calls:
+        packaged_target = (
+            thumb_bl_target(packaged_ov153, ov153_base, call_address)
+            if mnemonic == "bl"
+            else thumb_blx_target(packaged_ov153, ov153_base, call_address)
+        )
+        require(
+            packaged_target == disassembly_target,
+            f"packaged {mnemonic} at 0x{call_address:08X} targets "
+            f"0x{packaged_target:08X}, linked object says "
+            f"0x{disassembly_target:08X}",
+        )
+
     helper_specs = (
         ("PokemonMoveHistory_OverlayMemcpy", 3, 0x020E5AD8),
         ("PokemonMoveHistory_OverlayMemset", 1, 0x020E5B44),
     )
+    helper_addresses: dict[str, int] = {}
     for helper, expected_count, retail_target in helper_specs:
         require(helper in symbols, f"local bridge symbol {helper} is absent")
         helper_address = symbols[helper]
+        helper_addresses[helper] = helper_address
         require(
             OVERLAY_BASE <= helper_address < OVERLAY_BASE + len(packaged_ov153),
             f"local bridge {helper} is outside overlay 153",
         )
         calls = [
-            int(match.group(1), 16)
-            for match in re.finditer(
-                rf"(?m)^\s*([0-9a-f]+):.*\bbl\s+[0-9a-f]+\s+<{helper}>",
-                disassembly,
-            )
+            call_address
+            for call_address, mnemonic, target in linked_calls
+            if mnemonic == "bl" and target == helper_address
         ]
         require(
             len(calls) == expected_count,
@@ -884,14 +1100,120 @@ def binary_contracts(rom_path: Path) -> None:
                 == helper_address,
                 f"0x{call_address:08X} does not target local {helper}",
             )
+        expected_body = (
+            b"\x00\xb5"
+            + encode_thumb_blx(helper_address + 2, retail_target)
+            + b"\x00\xbd"
+        )
         require(
-            re.search(
-                rf"<{helper}>:.*?\bblx\s+{retail_target:x}\b",
-                disassembly,
-                re.DOTALL,
+            linked_symbol_sizes.get(helper) == 8
+            and bytes_at(
+                packaged_ov153,
+                ov153_base,
+                helper_address,
+                8,
             )
-            is not None,
-            f"{helper} does not interwork to retail 0x{retail_target:08X}",
+            == expected_body
+            and thumb_blx_target(
+                packaged_ov153,
+                ov153_base,
+                helper_address + 2,
+            )
+            == retail_target,
+            f"{helper} is not the exact 8-byte local interworking bridge",
+        )
+
+    raw_retail_targets = {0x020E5AD8, 0x020E5B44}
+    expected_raw_calls = {
+        (
+            helper_addresses["PokemonMoveHistory_OverlayMemcpy"] + 2,
+            0x020E5AD8,
+        ),
+        (
+            helper_addresses["PokemonMoveHistory_OverlayMemset"] + 2,
+            0x020E5B44,
+        ),
+    }
+    observed_raw_calls = {
+        (call_address, target)
+        for call_address, _mnemonic, target in linked_calls
+        if target in raw_retail_targets
+    }
+    require(
+        observed_raw_calls == expected_raw_calls,
+        "raw retail copy/clear calls differ from the two local bridge bodies",
+    )
+    for old_bridge in (0x023DEE42, 0x023DEE5E):
+        require(
+            all(target != old_bridge for _address, _mnemonic, target in linked_calls),
+            f"overlay 153 still calls overlay-129 bridge 0x{old_bridge:08X}",
+        )
+
+    relocation_text = "\n".join(
+        subprocess.check_output(
+            ["arm-none-eabi-objdump", "-r", str(object_path)],
+            text=True,
+        )
+        for object_path in (
+            history_object,
+            relearn_object,
+            REPO / "build/pokemon_move_history_overlay/entry.o",
+            REPO / "build/pokemon_move_history_overlay/thumb_help.o",
+        )
+    )
+    relocation_names = re.findall(
+        r"R_ARM_(?:ABS32|THM_CALL)\s+([A-Za-z0-9_.$]+)",
+        relocation_text,
+    )
+    require(
+        relocation_names.count("PokemonMoveHistory_OverlayMemcpy") == 3
+        and relocation_names.count("PokemonMoveHistory_OverlayMemset") == 1
+        and relocation_names.count("MIi_CpuClearFast") == 3,
+        "overlay copy/clear relocation multiset differs",
+    )
+    require(
+        not [
+            name
+            for name in relocation_names
+            if re.search(
+                r"(?:memcpy|memset|memmove|bcopy|bzero)",
+                name,
+                re.IGNORECASE,
+            )
+            and name
+            not in {
+                "PokemonMoveHistory_OverlayMemcpy",
+                "PokemonMoveHistory_OverlayMemset",
+            }
+        ],
+        "overlay contains an unapproved raw copy/clear relocation",
+    )
+    cpu_copy_clear_relocations = [
+        name
+        for name in relocation_names
+        if re.fullmatch(r"MIi?_Cpu(?:Copy|Clear|Fill)[A-Za-z0-9_]*", name)
+    ]
+    require(
+        cpu_copy_clear_relocations == ["MIi_CpuClearFast"] * 3,
+        "overlay gained an unapproved raw CPU copy/clear/fill relocation",
+    )
+    require(
+        packaged_ov153.count(struct.pack("<I", 0x020D4858)) == 3,
+        "packaged overlay does not resolve exactly three MIi_CpuClearFast "
+        "literals",
+    )
+    for forbidden_literal in (
+        0x020E5AD8,
+        0x020E5B44,
+        0x023DEE42,
+        0x023DEE43,
+        0x023DEE5E,
+        0x023DEE5F,
+    ):
+        require(
+            struct.pack("<I", forbidden_literal) not in packaged_ov153,
+            f"packaged overlay contains forbidden raw copy/clear literal "
+            f"0x{forbidden_literal:08X}",
         )
 
     nm_all = subprocess.check_output(

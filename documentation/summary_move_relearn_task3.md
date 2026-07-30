@@ -10,7 +10,8 @@ Cross-module calls target typed fixed Thumb entries in boot-resident overlay
 153. Each commit resolves the active save through `SaveBlock2_get()` at that
 moment; no `SaveData *` is retained between calls.
 
-- `PokemonMoveHistory_RecordMove`: records a confirmed non-destructive
+- `PokemonMoveHistory_RecordMove`: rejects invalid or unimplemented input
+  before snapshot/store access, then records a confirmed non-destructive
   level-up append after success.
 - `PokemonMoveHistory_ReplaceMove`: rejects invalid or unimplemented input
   before inspecting history or Pokémon data, captures and records the old
@@ -80,9 +81,14 @@ The build runs `verify_pokemon_move_history_capture.py` only after creating the
 temporary packaged ROM. The verifier fails closed if current linked, patched,
 or packaged artifacts are absent or stale; compares the packaged ARM9 and
 overlays against the current build; checks complete hook windows and
-continuations (including `0x021E6166`); resolves fixed entries and local helper
-calls; and exercises deterministic invalid, unimplemented, canceled, no-op,
-snapshot-failure, replacement-order, and deletion fixtures.
+continuations (including the full deletion, evolution, battle, and overlay 68
+argument-producing spans); resolves fixed entries; requires exact eight-byte
+local helper bodies; audits every direct overlay call and copy/clear
+relocation; and exercises deterministic invalid, unimplemented, canceled,
+no-op, snapshot-failure, replacement-order, and deletion fixtures. Invalid
+`RecordMove` and `ReplaceMove` fixtures prove no allocation, dirty flag,
+revision, Pokémon mutation, or successful return for both empty and existing
+stores.
 
 ## Deliberate exclusions
 
