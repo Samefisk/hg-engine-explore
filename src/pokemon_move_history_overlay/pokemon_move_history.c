@@ -16,6 +16,11 @@
 #define MOVE_HISTORY_OFFSETOF(type, member) __builtin_offsetof(type, member)
 #define MOVE_HISTORY_PHYSICAL_SECTOR_COUNT 128
 
+extern void *PokemonMoveHistory_OverlayMemcpy(
+    void *destination,
+    const void *source,
+    u32 size);
+
 struct PokemonMoveHistoryHeader {
     u32 magic;
     u16 version;
@@ -505,7 +510,10 @@ static BOOL PokemonMoveHistory_AppendMove(
         for (i = removeIndex; i + 1 < record->moveCount; i++) {
             u16 nextMove = record->moves[i + 1];
 
-            memcpy(&record->moves[i], &nextMove, sizeof(nextMove));
+            PokemonMoveHistory_OverlayMemcpy(
+                &record->moves[i],
+                &nextMove,
+                sizeof(nextMove));
         }
         record->moveCount--;
     }
@@ -637,26 +645,28 @@ BOOL PokemonMoveHistory_ReplaceMoveImpl(
     PokemonMoveHistorySnapshot before;
     struct PokemonMoveHistoryRecord *record;
     SaveData *saveData;
-    BOOL trackChange;
     u8 ppUp;
     u8 pp;
 
-    if (pokemon == NULL || move == MOVE_NONE || slot >= 4) {
+    if (pokemon == NULL
+        || slot >= 4
+        || !PokemonMoveHistory_IsRecordableMove(move)) {
         return FALSE;
     }
 
-    trackChange =
-        PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &before)
-        && before.moves[slot] != move;
-    saveData = SaveBlock2_get();
-    record = NULL;
-    if (trackChange) {
-        /*
-         * This API is called only at committed mutation points. Preserve the
-         * displaced move ordering before touching encrypted BoxPokemon data.
-         */
-        record = PokemonMoveHistory_ObserveSnapshot(saveData, &before);
+    if (!PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &before)) {
+        return FALSE;
     }
+    if (before.moves[slot] == move) {
+        return TRUE;
+    }
+
+    saveData = SaveBlock2_get();
+    /*
+     * This API is called only at committed mutation points. Preserve the
+     * displaced move ordering before touching encrypted BoxPokemon data.
+     */
+    record = PokemonMoveHistory_ObserveSnapshot(saveData, &before);
 
     SetBoxMonData(pokemon, MON_DATA_MOVE1 + slot, &move);
     ppUp = 0;
@@ -715,7 +725,10 @@ PokemonMoveHistory_QueryImpl(
         copyCount = movesOutCapacity;
     }
     if (movesOut != NULL && copyCount != 0) {
-        memcpy(movesOut, record->moves, copyCount * sizeof(u16));
+        PokemonMoveHistory_OverlayMemcpy(
+            movesOut,
+            record->moves,
+            copyCount * sizeof(u16));
     }
     return record->moveCount;
 }

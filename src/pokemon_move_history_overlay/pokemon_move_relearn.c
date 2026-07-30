@@ -10,6 +10,14 @@
 #define MOVE_RELEARN_EGG_END 0xFFFF
 
 extern const u16 sMachineMoves[NUM_MACHINE_MOVES];
+extern void *PokemonMoveHistory_OverlayMemcpy(
+    void *destination,
+    const void *source,
+    u32 size);
+extern void *PokemonMoveHistory_OverlayMemset(
+    void *destination,
+    int value,
+    u32 size);
 u32 PokemonMoveHistory_QueryImpl(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
@@ -226,7 +234,10 @@ PokemonMoveRelearn_BuildCandidatesImpl(
     if (historyCount > POKEMON_MOVE_HISTORY_MAX_MOVES) {
         historyCount = POKEMON_MOVE_HISTORY_MAX_MOVES;
     }
-    memset(historyAllowed, 0, sizeof(historyAllowed));
+    PokemonMoveHistory_OverlayMemset(
+        historyAllowed,
+        0,
+        sizeof(historyAllowed));
     candidateCount = 0;
     lineageSpecies = (u16)PokeOtherFormMonsNoGet(species, form);
 
@@ -362,7 +373,10 @@ PokemonMoveRelearn_BuildCandidatesImpl(
             j = candidatesOutCapacity;
         }
         if (j != 0) {
-            memcpy(candidatesOut, candidates, j * sizeof(*candidatesOut));
+            PokemonMoveHistory_OverlayMemcpy(
+                candidatesOut,
+                candidates,
+                j * sizeof(*candidatesOut));
         }
     }
     return candidateCount;

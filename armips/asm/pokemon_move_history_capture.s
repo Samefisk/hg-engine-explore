@@ -60,6 +60,7 @@ PokemonMoveHistory_DeleteMoveSlot equ 0x023BE488
     ldr r0, [r0]
     ldr r1, [sp]
     bl PokemonMoveHistory_ReplaceMove
+    nop
 .endarea
 
 .close

@@ -12,9 +12,12 @@ moment; no `SaveData *` is retained between calls.
 
 - `PokemonMoveHistory_RecordMove`: records a confirmed non-destructive
   level-up append after success.
-- `PokemonMoveHistory_ReplaceMove`: captures and records the old four slots,
-  mutates through `SetBoxMonData`, verifies the learned slot by readback, then
-  records the new valid implemented move.
+- `PokemonMoveHistory_ReplaceMove`: rejects invalid or unimplemented input
+  before inspecting history or Pokémon data, captures and records the old
+  four slots, mutates through
+  `SetBoxMonData`, verifies the learned slot by readback, then records the new
+  valid implemented move. Snapshot failures and same-slot no-ops return before
+  mutation.
 - `PokemonMoveHistory_DeleteMoveSlot`: records the current four slots at the
   committed Move Deleter command, then delegates to retail
   `MonDeleteMoveSlot`.
@@ -37,9 +40,10 @@ history.
   `Task_GetExp`’s `STATE_GET_EXP_LEARNED_MOVE`. Cancel/give-up states do not
   reach this call.
 - Move Reminder and its special tutor UI: overlay 68
-  `ov68_021E614C`, with `0x021E6158..0x021E6165` rewritten only after the UI
-  has resolved a confirmed move and slot. The retained PP writes are
-  idempotent.
+  `ov68_021E614C`, with the complete `0x021E6158..0x021E6165` span rewritten
+  only after the UI has resolved a confirmed move and slot. A final Thumb NOP
+  overwrites the retail BL suffix at `0x021E6164`, so return continues at
+  `0x021E6166`. The retained PP writes are idempotent.
 - Standard script tutor helper: only retail `PartyMonSetMoveInSlot`'s final
   setter call at `0x020542E0` is redirected. Its preceding
   `Party_GetMonByIndex` call at `0x020542D6` remains the canonical Party to
@@ -67,8 +71,18 @@ the new move only after successful readback, so high-level and low-level paths
 never double-record or invert acquisition order.
 
 Overlay 153 links an overlay-local interworking helper containing only the
-retail `memcpy` and `memset` bridges it actually references. This keeps the
-fixed `0x1000` code guard intact without consuming overlay 129 headroom.
+uniquely named retail `memcpy` and `memset` bridges it actually references.
+All three copy calls and the one clear call resolve inside overlay 153 before
+interworking to the retail ARM routines. This keeps the fixed `0x1000` code
+guard intact without consuming overlay 129 headroom.
+
+The build runs `verify_pokemon_move_history_capture.py` only after creating the
+temporary packaged ROM. The verifier fails closed if current linked, patched,
+or packaged artifacts are absent or stale; compares the packaged ARM9 and
+overlays against the current build; checks complete hook windows and
+continuations (including `0x021E6166`); resolves fixed entries and local helper
+calls; and exercises deterministic invalid, unimplemented, canceled, no-op,
+snapshot-failure, replacement-order, and deletion fixtures.
 
 ## Deliberate exclusions
 
