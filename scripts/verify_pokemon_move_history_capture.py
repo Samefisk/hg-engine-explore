@@ -48,6 +48,241 @@ def without_comments(source: str) -> str:
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
 
 
+def executable_function(source: str, name: str) -> str:
+    return function_body(without_comments(source), name)
+
+
+RECORDABLE_RETURN_RE = re.compile(
+    r"\breturn\s+move\s*!=\s*MOVE_NONE"
+    r"\s*&&\s*move\s*<\s*NUM_OF_MOVES"
+    r"\s*&&\s*!\s*IsMoveUnimplemented\s*\(\s*move\s*\)\s*;"
+)
+APPEND_RECORDABLE_GUARD_RE = re.compile(
+    r"\bif\s*\(\s*!PokemonMoveHistory_IsRecordableMove\s*\("
+    r"\s*move\s*\)\s*\)\s*\{\s*return\s+FALSE\s*;\s*\}",
+    re.S,
+)
+LEVEL_UP_SUCCESS_RE = re.compile(
+    r"\bif\s*\(\s*ret\s*!=\s*\(u16\)\s*-\s*1u"
+    r"\s*&&\s*ret\s*!=\s*\(u16\)\s*-\s*2u"
+    r"\s*&&\s*ret\s*!=\s*MOVE_NONE\s*\)\s*\{",
+    re.S,
+)
+
+
+def block_from_match(source: str, match: re.Match[str]) -> str:
+    open_brace = source.find("{", match.start(), match.end())
+    require(open_brace >= 0, "matched control block has no opening brace")
+    cursor = open_brace + 1
+    depth = 1
+    while cursor < len(source) and depth:
+        if source[cursor] == "{":
+            depth += 1
+        elif source[cursor] == "}":
+            depth -= 1
+        cursor += 1
+    require(depth == 0, "matched control block is unterminated")
+    return source[match.start():cursor]
+
+
+def predicate_contract_matches(history_source: str) -> bool:
+    predicate_code = executable_function(
+        history_source,
+        "PokemonMoveHistory_IsRecordableMove",
+    )
+    return (
+        len(RECORDABLE_RETURN_RE.findall(predicate_code)) == 1
+        and predicate_code.count("IsMoveUnimplemented") == 1
+    )
+
+
+def append_guard_contract_matches(history_source: str) -> bool:
+    append_code = executable_function(
+        history_source,
+        "PokemonMoveHistory_AppendMove",
+    )
+    return (
+        len(APPEND_RECORDABLE_GUARD_RE.findall(append_code)) == 1
+        and append_code.count("PokemonMoveHistory_IsRecordableMove") == 1
+    )
+
+
+def level_up_success_contract_matches(pokemon_source: str) -> bool:
+    level_up_code = executable_function(
+        pokemon_source,
+        "MonTryLearnMoveOnLevelUp",
+    )
+    success_match = LEVEL_UP_SUCCESS_RE.search(level_up_code)
+    if success_match is None:
+        return False
+    success_block = block_from_match(level_up_code, success_match)
+    assignment_text = "ret = TryAppendMonMove(mon, *sp0);"
+    assignment = level_up_code.find(assignment_text)
+    save_assignment_text = "SaveData *saveData = SaveBlock2_get();"
+    save_assignment = success_block.find(save_assignment_text)
+    save_guard = re.search(
+        r"\bif\s*\(\s*saveData\s*!=\s*NULL\s*\)\s*\{"
+        r"[^{}]*PokemonMoveHistory_RecordMove\s*\(",
+        success_block,
+        re.S,
+    )
+    return (
+        assignment >= 0
+        and level_up_code.count(assignment_text) == 1
+        and assignment + len(assignment_text) <= success_match.start()
+        and not level_up_code[
+            assignment + len(assignment_text):success_match.start()
+        ].strip()
+        and level_up_code.count("PokemonMoveHistory_RecordMove(") == 1
+        and save_assignment >= 0
+        and success_block.count(save_assignment_text) == 1
+        and save_guard is not None
+        and save_assignment + len(save_assignment_text) <= save_guard.start()
+        and not success_block[
+            save_assignment + len(save_assignment_text):save_guard.start()
+        ].strip()
+        and success_block.count("PokemonMoveHistory_RecordMove(") == 1
+    )
+
+
+def source_matcher_mutation_fixtures(
+    history_source: str,
+    pokemon_source: str,
+) -> None:
+    append_raw = function_body(
+        history_source,
+        "PokemonMoveHistory_AppendMove",
+    )
+    append_guard = APPEND_RECORDABLE_GUARD_RE.search(
+        without_comments(append_raw)
+    )
+    require(append_guard is not None, "append mutation fixture lacks guard")
+    executable_append = without_comments(append_raw)
+    guard_text = append_guard.group(0)
+    commented_append = executable_append.replace(
+        guard_text,
+        f"/* {guard_text} */",
+        1,
+    )
+    ignored_append = executable_append.replace(
+        guard_text,
+        "PokemonMoveHistory_IsRecordableMove(move);",
+        1,
+    )
+    require(
+        not append_guard_contract_matches(
+            history_source.replace(append_raw, commented_append, 1)
+        ),
+        "commented-out AppendMove guard passes source contracts",
+    )
+    require(
+        not append_guard_contract_matches(
+            history_source.replace(append_raw, ignored_append, 1)
+        ),
+        "ignored AppendMove predicate result passes source contracts",
+    )
+
+    predicate_raw = function_body(
+        history_source,
+        "PokemonMoveHistory_IsRecordableMove",
+    )
+    predicate_return = RECORDABLE_RETURN_RE.search(
+        without_comments(predicate_raw)
+    )
+    require(
+        predicate_return is not None,
+        "predicate mutation fixture lacks executable return",
+    )
+    executable_predicate = without_comments(predicate_raw)
+    return_text = predicate_return.group(0)
+    comment_only_predicate = executable_predicate.replace(
+        return_text,
+        f"/* {return_text} */\n    return TRUE;",
+        1,
+    )
+    ignored_implementation_result = executable_predicate.replace(
+        return_text,
+        "IsMoveUnimplemented(move);\n"
+        "    return move != MOVE_NONE && move < NUM_OF_MOVES;",
+        1,
+    )
+    require(
+        not predicate_contract_matches(
+            history_source.replace(
+                predicate_raw,
+                comment_only_predicate,
+                1,
+            )
+        ),
+        "comment-only recordable predicate passes source contracts",
+    )
+    require(
+        not predicate_contract_matches(
+            history_source.replace(
+                predicate_raw,
+                ignored_implementation_result,
+                1,
+            )
+        ),
+        "ignored IsMoveUnimplemented result passes source contracts",
+    )
+
+    level_up_raw = function_body(
+        pokemon_source,
+        "MonTryLearnMoveOnLevelUp",
+    )
+    executable_level_up = without_comments(level_up_raw)
+    level_up_guard = LEVEL_UP_SUCCESS_RE.search(executable_level_up)
+    require(
+        level_up_guard is not None,
+        "level-up mutation fixture lacks success guard",
+    )
+    level_up_header = executable_level_up[
+        level_up_guard.start():executable_level_up.find(
+            "{",
+            level_up_guard.start(),
+            level_up_guard.end(),
+        )
+    ]
+    ignored_level_up = executable_level_up.replace(
+        level_up_header,
+        "ret != (u16)-1u;\n"
+        "            ret != (u16)-2u;\n"
+        "            ret != MOVE_NONE;\n"
+        "            if (TRUE) ",
+        1,
+    )
+    clobbered_level_up = (
+        executable_level_up[:level_up_guard.start()]
+        + "ret = 0;\n            "
+        + executable_level_up[level_up_guard.start():]
+    )
+    save_assignment_text = "SaveData *saveData = SaveBlock2_get();"
+    clobbered_save = executable_level_up.replace(
+        save_assignment_text,
+        save_assignment_text + "\n                saveData = NULL;",
+        1,
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, ignored_level_up, 1)
+        ),
+        "ignored level-up success results pass source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, clobbered_level_up, 1)
+        ),
+        "clobbered level-up helper result passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, clobbered_save, 1)
+        ),
+        "clobbered SaveBlock2_get result passes source contracts",
+    )
+
+
 def source_contracts() -> None:
     header = (REPO / "include/pokemon_move_history.h").read_text()
     history = (
@@ -66,36 +301,78 @@ def source_contracts() -> None:
     hooks = (REPO / "hooks").read_text()
     makefile = (REPO / "Makefile").read_text()
     config = (REPO / "include/config.h").read_text()
+    header_code = without_comments(header)
+    history_code = without_comments(history)
+    pokemon_code = without_comments(pokemon)
+    party_menu_code = without_comments(party_menu)
+    config_code = without_comments(config)
 
     for api in (
         "PokemonMoveHistory_ReplaceMove",
         "PokemonMoveHistory_DeleteMoveSlot",
     ):
         require(
-            re.search(rf"\bLONG_CALL\s+{api}\s*\(", header) is not None,
+            re.search(rf"\bLONG_CALL\s+{api}\s*\(", header_code) is not None,
             f"{api} is not a typed long-call API",
         )
 
-    append = function_body(history, "PokemonMoveHistory_AppendMove")
     require(
-        "PokemonMoveHistory_IsRecordableMove(move)" in append,
-        "history append bypasses the central valid/implemented predicate",
+        predicate_contract_matches(history),
+        "recordable-move predicate is not the exact executable valid/range/"
+        "implemented expression",
     )
-    predicate = function_body(history, "PokemonMoveHistory_IsRecordableMove")
-    for token in ("MOVE_NONE", "NUM_OF_MOVES", "IsMoveUnimplemented(move)"):
-        require(token in predicate, f"recordable-move predicate misses {token}")
+    require(
+        append_guard_contract_matches(history),
+        "AppendMove does not execute and consume exactly one recordable-move "
+        "predicate before mutation",
+    )
+    append = function_body(history_code, "PokemonMoveHistory_AppendMove")
+    append_guard = APPEND_RECORDABLE_GUARD_RE.search(append)
+    require(append_guard is not None, "AppendMove executable guard is missing")
+    ordered(
+        append,
+        [
+            append_guard.group(0),
+            "for (i = 0; i < record->moveCount; i++)",
+            "if (record->moveCount == POKEMON_MOVE_HISTORY_MAX_MOVES)",
+            "record->moveCount--;",
+            "store = saveData->pokemonMoveHistory;",
+            "record->moves[record->moveCount++] = move;",
+            "record->lastTouched = ++store->header.nextAccessSequence;",
+            "saveData->pokemonMoveHistoryDirty = TRUE;",
+            "saveData->pokemonMoveHistoryRevision++;",
+        ],
+        "AppendMove predicate and mutation transaction",
+    )
+    for mutation in (
+        "PokemonMoveHistory_OverlayMemcpy(",
+        "record->moveCount--;",
+        "record->moves[record->moveCount++] = move;",
+        "record->speciesSnapshot = snapshot->species;",
+        "record->lastTouched = ++store->header.nextAccessSequence;",
+        "saveData->pokemonMoveHistoryDirty = TRUE;",
+        "saveData->pokemonMoveHistoryRevision++;",
+    ):
+        require(
+            append.find(mutation) > append_guard.end(),
+            f"AppendMove mutation {mutation!r} can precede its executable "
+            "predicate",
+        )
     require(
         re.search(
             r"^\s*#\s*define\s+BLOCK_LEARNING_UNIMPLEMENTED_MOVES(?:\s|$)",
-            config,
+            config_code,
             re.MULTILINE,
         )
         is not None,
         "host unimplemented-move fixture requires the runtime policy enabled",
     )
+    source_matcher_mutation_fixtures(history, pokemon)
 
-    replace = function_body(history, "PokemonMoveHistory_ReplaceMoveImpl")
-    replace_code = without_comments(replace)
+    replace_code = function_body(
+        history_code,
+        "PokemonMoveHistory_ReplaceMoveImpl",
+    )
     ordered(
         replace_code,
         [
@@ -143,8 +420,10 @@ def source_contracts() -> None:
         replace_code.count("SaveBlock2_get()") == 1,
         "replacement does not resolve exactly one current save per transaction",
     )
-    record_move = function_body(history, "PokemonMoveHistory_RecordMoveImpl")
-    record_move_code = without_comments(record_move)
+    record_move_code = function_body(
+        history_code,
+        "PokemonMoveHistory_RecordMoveImpl",
+    )
     ordered(
         record_move_code,
         [
@@ -165,7 +444,10 @@ def source_contracts() -> None:
         is not None,
         "RecordMove invalid guard does not return FALSE before snapshot access",
     )
-    delete = function_body(history, "PokemonMoveHistory_DeleteMoveSlotImpl")
+    delete = function_body(
+        history_code,
+        "PokemonMoveHistory_DeleteMoveSlotImpl",
+    )
     ordered(
         delete,
         [
@@ -176,7 +458,12 @@ def source_contracts() -> None:
         "move deletion transaction",
     )
 
-    level_up = function_body(pokemon, "MonTryLearnMoveOnLevelUp")
+    level_up = function_body(pokemon_code, "MonTryLearnMoveOnLevelUp")
+    require(
+        level_up_success_contract_matches(pokemon),
+        "level-up history recording is not controlled by the exact successful "
+        "append result",
+    )
     ordered(
         level_up,
         [
@@ -190,7 +477,10 @@ def source_contracts() -> None:
         "level-up append",
     )
 
-    learn_slot = function_body(party_menu, "PartyMenu_LearnMoveToSlot")
+    learn_slot = function_body(
+        party_menu_code,
+        "PartyMenu_LearnMoveToSlot",
+    )
     require(
         learn_slot.count("PokemonMoveHistory_ReplaceMove(") == 1,
         "TM/HM and rare-candy replacement do not share one transaction owner",
@@ -200,8 +490,10 @@ def source_contracts() -> None:
         "party-menu replacement still mutates outside the central transaction",
     )
 
-    seed_party = function_body(history, "PokemonMoveHistory_SeedParty")
-    seed_party_code = without_comments(seed_party)
+    seed_party_code = function_body(
+        history_code,
+        "PokemonMoveHistory_SeedParty",
+    )
     require(
         "Party_GetCount(party)" in seed_party_code
         and "Party_GetMonByIndex(party, i)" in seed_party_code,
@@ -219,7 +511,7 @@ def source_contracts() -> None:
             f"party reconciliation contains forbidden stride/count access {forbidden}",
         )
     load_boundary = function_body(
-        history,
+        history_code,
         "PokemonMoveHistory_LoadAndSeedPartyImpl",
     )
     require(
@@ -227,7 +519,7 @@ def source_contracts() -> None:
         "party reconciliation runs before the active save is boot-stable",
     )
     save_boundary = function_body(
-        history,
+        history_code,
         "PokemonMoveHistory_PrepareSaveImpl",
     )
     ordered(
@@ -1235,9 +1527,8 @@ def binary_contracts(rom_path: Path) -> None:
             struct.pack("<I", resolved_targets[name]) in delete_bytes,
             f"DeleteMoveSlot packaged body does not resolve {name}",
         )
-    recordable_start = (
-        symbols["PokemonMoveHistory_IsRecordableMove"] - ov153_base
-    )
+    recordable_address = symbols["PokemonMoveHistory_IsRecordableMove"]
+    recordable_start = recordable_address - ov153_base
     recordable_size = linked_symbol_sizes.get(
         "PokemonMoveHistory_IsRecordableMove",
         0,
@@ -1246,10 +1537,221 @@ def binary_contracts(rom_path: Path) -> None:
         recordable_start:recordable_start + recordable_size
     ]
     require(
-        recordable_size != 0
+        recordable_size == 0x28
         and struct.pack("<I", implemented_check_target) in recordable_bytes,
         "recordable-move predicate does not resolve resident "
         "IsMoveUnimplemented",
+    )
+    range_literal_address, range_literal_value = thumb_literal_load(
+        packaged_ov153,
+        ov153_base,
+        recordable_address + 0x02,
+        1,
+    )
+    implemented_literal_address, implemented_literal_value = (
+        thumb_literal_load(
+            packaged_ov153,
+            ov153_base,
+            recordable_address + 0x12,
+            3,
+        )
+    )
+    recordable_false = recordable_address + 0x1E
+    recordable_call = recordable_address + 0x16
+    recordable_trampoline = thumb_bl_target(
+        packaged_ov153,
+        ov153_base,
+        recordable_call,
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            recordable_address,
+            16,
+        )
+        == bytes.fromhex(
+            "43 1e 07 49 1b 04 02 00 10 b5 00 20 1b 0c 8b 42"
+        )
+        and range_literal_address == recordable_address + 0x20
+        and range_literal_value == 0x399
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            recordable_address + 0x10,
+            8,
+        )
+        == recordable_false,
+        "recordable-move MOVE_NONE/range CFG does not return FALSE before "
+        "the implementation check",
+    )
+    require(
+        implemented_literal_address == recordable_address + 0x24
+        and implemented_literal_value == implemented_check_target
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            recordable_address + 0x14,
+            2,
+        )
+        == bytes.fromhex("10 00")
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            recordable_trampoline,
+            2,
+        )
+        == bytes.fromhex("18 47")
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            recordable_address + 0x1A,
+            6,
+        )
+        == bytes.fromhex("43 42 58 41 10 bd"),
+        "IsMoveUnimplemented result does not control the final predicate "
+        "return through the authenticated interworking call",
+    )
+
+    append_address = next(
+        (
+            address
+            for name, address in symbols.items()
+            if name == "PokemonMoveHistory_AppendMove"
+            or name.startswith("PokemonMoveHistory_AppendMove.")
+        ),
+        None,
+    )
+    require(
+        append_address is not None,
+        "linked move-history append implementation is missing",
+    )
+    append_size = next(
+        (
+            size
+            for name, size in linked_symbol_sizes.items()
+            if name == "PokemonMoveHistory_AppendMove"
+            or name.startswith("PokemonMoveHistory_AppendMove.")
+        ),
+        0,
+    )
+    require(
+        append_size == 0xC0
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address,
+            14,
+        )
+        == bytes.fromhex(
+            "f0 b5 06 00 85 b0 18 00 14 00 1f 00 00 91"
+        )
+        and thumb_bl_target(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x0E,
+        )
+        == recordable_address
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x12,
+            2,
+        )
+        == bytes.fromhex("00 28")
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x14,
+            0,
+        )
+        == append_address + 0x80,
+        "AppendMove does not consume its sole predicate result before "
+        "record access or mutation",
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x16,
+            6,
+        )
+        == bytes.fromhex("00 23 a1 7b 8b 42")
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x1C,
+            3,
+        )
+        == append_address + 0x84
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x20,
+            1,
+        )
+        == append_address + 0x54
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x8E,
+            0,
+        )
+        == append_address + 0x80
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x80,
+            4,
+        )
+        == bytes.fromhex("05 b0 f0 bd"),
+        "AppendMove invalid/duplicate CFG can reach mutation",
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x1E,
+            0x32,
+        )
+        == bytes.fromhex(
+            "18 29 18 d1 00 25 23 00 6a 00 10 33 99 5a 00 9b "
+            "00 9a 0a 33 12 32 18 88 88 42 37 d0 02 33 93 42 "
+            "f9 d1 68 00 20 18 a3 7b 82 1c 01 35 01 92 9d 42 "
+            "21 d3"
+        )
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x84,
+            0x30,
+        )
+        == bytes.fromhex(
+            "22 00 58 00 10 32 12 5a ba 42 f7 d0 01 33 c2 e7 "
+            "01 9b 02 aa 1b 8a 91 1d 10 30 02 22 0b 80 00 f0 "
+            "af fb 01 98 cc e7 01 35 18 2d b9 d1 00 25 c5 e7"
+        ),
+        "AppendMove duplicate/capacity/eviction CFG window differs",
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            append_address + 0x50,
+            0x30,
+        )
+        == bytes.fromhex(
+            "01 3b a3 73 17 4b f2 58 a3 7b 59 1c 08 33 5b 00 "
+            "a1 73 1f 53 00 9b 1b 89 a3 81 53 69 01 33 53 61 "
+            "01 22 a3 60 10 4b f2 54 10 4a b3 58 01 33 b3 50"
+        )
+        and struct.unpack_from(
+            "<III",
+            packaged_ov153,
+            append_address + 0xB4 - ov153_base,
+        )
+        == (0x0002F30C, 0x0002F310, 0x0002F314),
+        "AppendMove history/store/dirty/revision mutation window differs",
     )
 
     disassembly = subprocess.check_output(
@@ -1266,18 +1768,32 @@ def binary_contracts(rom_path: Path) -> None:
         for call in linked_calls
         if replace_address <= call[0] < replace_address + replace_size
     ]
-    append_address = next(
-        (
-            address
-            for name, address in symbols.items()
-            if name == "PokemonMoveHistory_AppendMove"
-            or name.startswith("PokemonMoveHistory_AppendMove.")
-        ),
-        None,
-    )
+    recordable_calls = [
+        call
+        for call in linked_calls
+        if recordable_address <= call[0] < recordable_address + recordable_size
+    ]
     require(
-        append_address is not None,
-        "linked move-history append implementation is missing",
+        recordable_calls
+        == [(recordable_call, "bl", recordable_trampoline)],
+        "recordable-move predicate has extra/missing external calls",
+    )
+    append_calls = [
+        call
+        for call in linked_calls
+        if append_address <= call[0] < append_address + append_size
+    ]
+    require(
+        append_calls
+        == [
+            (append_address + 0x0E, "bl", recordable_address),
+            (
+                append_address + 0xA2,
+                "bl",
+                symbols["PokemonMoveHistory_OverlayMemcpy"],
+            ),
+        ],
+        "AppendMove call graph differs or predicate is not uniquely first",
     )
     require(
         [
