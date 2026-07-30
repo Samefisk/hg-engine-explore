@@ -37,6 +37,9 @@ def verify_source_contract() -> None:
     rom = (REPO / "rom.ld").read_text()
     learnset_builder = (REPO / "scripts/build_learnsets.py").read_text()
     codetables = (REPO / "data/codetables.mk").read_text()
+    final_verifier = (
+        REPO / "scripts/verify_pokemon_move_history.py"
+    ).read_text()
 
     for fragment in (
         "#define POKEMON_MOVE_RELEARN_MAX_CANDIDATES",
@@ -108,6 +111,68 @@ def verify_source_contract() -> None:
             dependency in codetables,
             f"learnset generator dependency lost: {dependency}",
         )
+    for fragment in (
+        "LEARNSETS_PRIMARY_OUTPUTS := \\",
+        "$(LEARNSETS_HEADER) \\",
+        "$(MACHINELEARNSET_DEPENDENCIES) \\",
+        "$(LEVELUPLEARNSET_DEPENDENCIES) \\",
+        "$(EGGLEARNSET_DEPENDENCIES) \\",
+        "$(TUTORLEARNSET_DEPENDENCIES)",
+        "LEARNSETS_ARMIPS_CONSTANTS := armips/include/generated/levelup.s",
+        "LEARNSETS_COMPLETION_STAMP :=",
+        ".PHONY: learnsets-ensure",
+        "--completion-stamp $(LEARNSETS_COMPLETION_STAMP)",
+        ".DELETE_ON_ERROR: $(LEARNSETS_COMPLETION_STAMP)",
+        "$(LEARNSETS_ATOMIC_OUTPUTS) $(LEARNSETS_COMPLETION_STAMP): | "
+        "learnsets-ensure",
+    ):
+        require(fragment in codetables, f"atomic Make contract lost: {fragment}")
+    for target, generated_source in (
+        ("$(MACHINELEARNSET_BIN):", "$(MACHINELEARNSET_DEPENDENCIES)"),
+        ("$(TUTORLEARNSET_BIN):", "$(TUTORLEARNSET_DEPENDENCIES)"),
+        ("$(LEVELUPLEARNSET_NARC):", "$(LEVELUPLEARNSET_DEPENDENCIES)"),
+        ("$(EGGLEARNSET_NARC):", "$(EGGLEARNSET_DEPENDENCIES)"),
+    ):
+        target_line = next(
+            line for line in codetables.splitlines() if line.startswith(target)
+        )
+        require(
+            generated_source in target_line,
+            f"{target} does not directly depend on {generated_source}",
+        )
+    for fragment in (
+        "fcntl.flock(lock.fileno(), fcntl.LOCK_EX)",
+        "stamp.unlink(missing_ok=True)",
+        "tempfile.TemporaryDirectory(",
+        "os.replace(staged[name], destination)",
+        "os.replace(stamp_temporary, stamp)",
+    ):
+        require(
+            fragment in learnset_builder,
+            f"atomic generator contract lost: {fragment}",
+        )
+    require(
+        learnset_builder.index("stamp.unlink(missing_ok=True)")
+        < learnset_builder.index("generate({name: str(path)")
+        < learnset_builder.index("os.replace(staged[name], destination)")
+        < learnset_builder.index("os.replace(stamp_temporary, stamp)"),
+        "learnset transaction is not invalidate -> stage -> publish -> stamp",
+    )
+    for fragment in (
+        "def build_expected_learnset_payloads(",
+        "data/learnsets/learnsets.json",
+        "data/FormToSpeciesMapping.c",
+        "const u16 sMachineMoves[]",
+        "TutorMove sTutorMoves[]",
+        'a033_members[0] == expected_learnsets["level"]',
+        'a028_members[14] == expected_learnsets["machine"]',
+        'a028_members[15] == expected_learnsets["tutor"]',
+        'a229_members[0] == expected_learnsets["egg"]',
+    ):
+        require(
+            fragment in final_verifier,
+            f"independent final-ROM oracle contract lost: {fragment}",
+        )
     history_loop = source.index(
         "for (i = 0; i < historyCount; i++) {",
         source.index("lineageDepth < MOVE_RELEARN_LINEAGE_LIMIT"),
@@ -129,6 +194,77 @@ def verify_source_contract() -> None:
         ),
         "special policy is called before persisted move validation",
     )
+
+
+def verify_atomic_learnset_publication() -> None:
+    path = REPO / "scripts/build_learnsets.py"
+    spec = importlib.util.spec_from_file_location("build_learnsets_atomic", path)
+    require(spec is not None and spec.loader is not None, "learnset generator cannot load")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    with tempfile.TemporaryDirectory(prefix="learnsets-atomic-fixture-") as root:
+        root_path = Path(root)
+        outputs = {
+            name: root_path / f"{name}.out"
+            for name in (
+                "constants_header",
+                "levelup_constants",
+                "machine",
+                "levelup",
+                "egg",
+                "tutor",
+            )
+        }
+        for output in outputs.values():
+            output.write_bytes(b"old")
+        stamp = root_path / ".complete"
+        stamp.write_bytes(b"old stamp")
+
+        def fail_after_staging_one(paths):
+            Path(paths["constants_header"]).write_bytes(b"new header")
+            raise RuntimeError("injected generation failure")
+
+        try:
+            module.atomic_generate_and_publish(
+                outputs,
+                stamp,
+                fail_after_staging_one,
+            )
+        except RuntimeError as error:
+            require(
+                str(error) == "injected generation failure",
+                "atomic failure fixture raised the wrong error",
+            )
+        else:
+            require(False, "atomic failure fixture unexpectedly succeeded")
+        require(not stamp.exists(), "failed generation left a completion stamp")
+        require(
+            all(output.read_bytes() == b"old" for output in outputs.values()),
+            "failed staging changed a published output",
+        )
+
+        def generate_all(paths):
+            for name, output in paths.items():
+                Path(output).write_bytes(f"generated:{name}".encode())
+
+        module.atomic_generate_and_publish(outputs, stamp, generate_all)
+        require(
+            stamp.read_text().startswith("learnsets-v1\n"),
+            "successful generation did not publish its manifest last",
+        )
+        before = {
+            name: output.stat().st_mtime_ns
+            for name, output in outputs.items()
+        }
+        module.atomic_generate_and_publish(outputs, stamp, generate_all)
+        require(
+            all(
+                output.stat().st_mtime_ns == before[name]
+                for name, output in outputs.items()
+            ),
+            "unchanged atomic generation rewrote a published output",
+        )
 
 
 def verify_shared_move_tables() -> None:
@@ -397,6 +533,7 @@ def verify_hgss_special_policy_model() -> None:
 
 def main() -> None:
     verify_source_contract()
+    verify_atomic_learnset_publication()
     verify_shared_move_tables()
     verify_parent_generator()
     verify_ordering_model()

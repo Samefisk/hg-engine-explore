@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import re
 import struct
 import subprocess
@@ -219,6 +220,290 @@ def narc_members(narc: bytes, label: str) -> list[bytes]:
     return members
 
 
+def declaration_order_ids(path: Path, kind: str) -> dict[str, int]:
+    identifiers: list[str] = []
+    for line in path.read_text().splitlines():
+        parts = line.split()
+        if len(parts) <= 1:
+            continue
+        name = parts[1].strip()
+        if kind == "species":
+            include = (
+                "SPECIES" in name
+                and "_START" not in name
+                and "_SPECIES_H" not in name
+                and "_NUM (" not in line
+                and "MAX_" not in name
+            )
+        else:
+            include = (
+                "MOVE" in name
+                and "_START" not in name
+                and "_MOVES_H" not in name
+                and "NUM_OF" not in name
+            )
+        if include:
+            require(name not in identifiers, f"duplicate {kind} constant {name}")
+            identifiers.append(name)
+    require(identifiers, f"no {kind} constants were found in {path}")
+    return {name: index for index, name in enumerate(identifiers)}
+
+
+def ordered_move_array(path: Path, declaration: str) -> list[str]:
+    source = path.read_text()
+    start = source.index(declaration)
+    end = source.index("};", start)
+    moves = re.findall(r"\bMOVE_[A-Z0-9_]+\b", source[start:end])
+    require(moves, f"{declaration} has no moves")
+    return moves
+
+
+def ordered_tutor_moves(path: Path) -> list[str]:
+    source = path.read_text()
+    start = source.index("TutorMove sTutorMoves[]")
+    end = source.index("};", start)
+    moves = re.findall(
+        r"\{\s*(MOVE_[A-Z0-9_]+)\s*,",
+        source[start:end],
+    )
+    require(moves, "field tutor table has no moves")
+    return moves
+
+
+def authoritative_move_layout() -> tuple[int, int, int]:
+    header = (REPO / "include/battle.h").read_text()
+    struct_match = re.search(
+        r"struct\s+__attribute__\(\(packed\)\)\s+BattleMove\s*\{(.*?)"
+        r"\};\s*//\s*size\s*=\s*(0x[0-9A-Fa-f]+)",
+        header,
+        re.DOTALL,
+    )
+    require(struct_match is not None, "authoritative packed BattleMove is missing")
+    flag_match = re.search(
+        r"/\*\s*(0x[0-9A-Fa-f]+)\s*\*/\s*u8\s+flag\s*;",
+        struct_match.group(1),
+    )
+    mask_match = re.search(
+        r"^#define FLAG_UNUSED_MOVE \((0x[0-9A-Fa-f]+)\)",
+        header,
+        re.MULTILINE,
+    )
+    require(
+        flag_match is not None and mask_match is not None,
+        "BattleMove flag ABI is missing",
+    )
+    c_offset = int(flag_match.group(1), 16)
+    c_size = int(struct_match.group(2), 16)
+    mask = int(mask_match.group(1), 16)
+
+    macros = (REPO / "armips/include/movemacros.s").read_text()
+    fields = (
+        "battleeffect",
+        "pss",
+        "basepower",
+        "type",
+        "accuracy",
+        "pp",
+        "effectchance",
+        "target",
+        "priority",
+        "flags",
+        "appeal",
+        "contesttype",
+        "terminatedata",
+    )
+    widths = []
+    for name in fields:
+        match = re.search(
+            rf"^\.macro\s+{name}(?:,|\s|$)(.*?)^\.endmacro\s*$",
+            macros,
+            re.MULTILINE | re.DOTALL,
+        )
+        require(match is not None, f"move macro {name} is missing")
+        emissions = re.findall(
+            r"^\s*\.(byte|halfword)\b",
+            match.group(1),
+            re.MULTILINE,
+        )
+        require(len(emissions) == 1, f"move macro {name} is not one field")
+        widths.append(1 if emissions[0] == "byte" else 2)
+    require(
+        (sum(widths[:fields.index("flags")]), sum(widths))
+        == (c_offset, c_size),
+        "C and Armips BattleMove layouts differ",
+    )
+    return mask, c_offset, c_size
+
+
+def compact_levelup_payload(
+    payload: bytes,
+    row_width: int,
+    move_flags: list[int],
+    unused_mask: int,
+) -> bytes:
+    row_size = row_width * 4
+    require(len(payload) % row_size == 0, "expected level-up payload is misaligned")
+    result = bytearray(payload)
+    for row_offset in range(0, len(payload), row_size):
+        values = list(struct.unpack_from(f"<{row_width}I", payload, row_offset))
+        filtered = list(values)
+        write = 0
+        terminated = False
+        for entry in values:
+            move = entry & 0xFFFF
+            if move == 0xFFFF:
+                filtered[write] = entry
+                terminated = True
+                break
+            require(move < len(move_flags), f"learnset references missing move {move}")
+            if move_flags[move] & unused_mask == 0:
+                filtered[write] = entry
+                write += 1
+        require(terminated, "expected learnset row has no terminator")
+        struct.pack_into(f"<{row_width}I", result, row_offset, *filtered)
+    return bytes(result)
+
+
+def build_expected_learnset_payloads(
+    move_data_members: list[bytes],
+) -> tuple[dict[str, bytes], dict[str, int]]:
+    species_ids = declaration_order_ids(
+        REPO / "include/constants/species.h",
+        "species",
+    )
+    move_ids = declaration_order_ids(
+        REPO / "include/constants/moves.h",
+        "moves",
+    )
+    require(len(species_ids) == max(species_ids.values()) + 1, "species IDs have gaps")
+    learnsets = json.loads(
+        (REPO / "data/learnsets/learnsets.json").read_text(encoding="utf-8")
+    )
+    form_source = (REPO / "data/FormToSpeciesMapping.c").read_text()
+    form_to_base = dict(
+        re.findall(
+            r"\[(SPECIES_\w+)\s*-\s*SPECIES_MEGA_START\]\s*=\s*"
+            r"(SPECIES_\w+),",
+            form_source,
+        )
+    )
+    for form_species, base_species in form_to_base.items():
+        if form_species not in learnsets and base_species in learnsets:
+            learnsets[form_species] = dict(learnsets[base_species])
+
+    machine_moves = ordered_move_array(
+        REPO / "src/item.c",
+        "const u16 sMachineMoves[]",
+    )
+    tutor_moves = ordered_tutor_moves(REPO / "src/field/move_tutor.c")
+    require(
+        all(move in move_ids for move in machine_moves + tutor_moves),
+        "machine/tutor table references an unknown move",
+    )
+    level_width = max(
+        len(data.get("LevelMoves", [])) + 1
+        for data in learnsets.values()
+    )
+    egg_width = max(
+        len(data.get("EggMoves", [])) + 1
+        for data in learnsets.values()
+    )
+    machine_words = (len(machine_moves) + 31) // 32
+    tutor_words = (len(tutor_moves) + 31) // 32
+
+    species_by_id = {value: name for name, value in species_ids.items()}
+    level_values: list[int] = []
+    egg_values: list[int] = []
+    machine_values: list[int] = []
+    tutor_values: list[int] = []
+    tutor_indices = {move: index for index, move in enumerate(tutor_moves)}
+
+    for species_id in range(len(species_ids)):
+        species = species_by_id[species_id]
+        data = learnsets.get(species, {})
+        level_moves = data.get("LevelMoves", [])
+        encoded_level = []
+        for entry in level_moves:
+            move = entry.get("Move", "").strip()
+            require(move in move_ids, f"{species} has unknown level move {move}")
+            encoded_level.append((int(entry["Level"]) << 16) | move_ids[move])
+        encoded_level.append(0x0000FFFF)
+        encoded_level.extend(
+            [0x0000FFFF] * (level_width - len(encoded_level))
+        )
+        level_values.extend(encoded_level)
+
+        encoded_egg = []
+        for move in data.get("EggMoves", []):
+            require(move in move_ids, f"{species} has unknown egg move {move}")
+            encoded_egg.append(move_ids[move])
+        encoded_egg.append(0xFFFF)
+        encoded_egg.extend([0xFFFF] * (egg_width - len(encoded_egg)))
+        egg_values.extend(encoded_egg)
+
+        machine_compatible = {
+            move.strip()
+            for move in data.get("MachineMoves", [])
+        }
+        machine_compatible.update(
+            entry["Move"]
+            for entry in level_moves
+            if "Move" in entry
+        )
+        machine_row = [0] * machine_words
+        for index, move in enumerate(machine_moves):
+            if move in machine_compatible:
+                machine_row[index // 32] |= 1 << (index % 32)
+        machine_values.extend(machine_row)
+
+        tutor_row = [0] * tutor_words
+        for move in data.get("TutorMoves", []):
+            index = tutor_indices.get(move)
+            if index is not None:
+                tutor_row[index // 32] |= 1 << (index % 32)
+        tutor_values.extend(tutor_row)
+
+    raw_level = struct.pack(f"<{len(level_values)}I", *level_values)
+    unused_mask, flag_offset, move_record_size = authoritative_move_layout()
+    require(
+        move_data_members
+        and all(len(member) == move_record_size for member in move_data_members),
+        "final ROM move-data members do not match BattleMove size",
+    )
+    move_flags = [member[flag_offset] for member in move_data_members]
+    config = (REPO / "include/config.h").read_text()
+    filter_enabled = re.search(
+        r"^\s*#\s*define\s+BLOCK_LEARNING_UNIMPLEMENTED_MOVES(?:\s|$)",
+        config,
+        re.MULTILINE,
+    ) is not None
+    level = (
+        compact_levelup_payload(
+            raw_level,
+            level_width,
+            move_flags,
+            unused_mask,
+        )
+        if filter_enabled
+        else raw_level
+    )
+    payloads = {
+        "level": level,
+        "egg": struct.pack(f"<{len(egg_values)}H", *egg_values),
+        "machine": struct.pack(f"<{len(machine_values)}I", *machine_values),
+        "tutor": struct.pack(f"<{len(tutor_values)}I", *tutor_values),
+    }
+    dimensions = {
+        "species": len(species_ids),
+        "level_width": level_width,
+        "egg_width": egg_width,
+        "machine_words": machine_words,
+        "tutor_words": tutor_words,
+        "move_records": len(move_data_members),
+    }
+    return payloads, dimensions
+
+
 def serial_compare(first: int, second: int) -> int:
     difference = (first - second) & 0xFFFFFFFF
     require(
@@ -391,6 +676,7 @@ def main() -> None:
 
     file_constants = (REPO / "include/constants/file.h").read_text()
     for name, expected in (
+        ("ARC_MOVE_DATA", 11),
         ("ARC_CODE_ADDONS", 28),
         ("ARC_LEVELUP_LEARNSETS", 33),
         ("ARC_EGG_MOVES", 231),
@@ -471,6 +757,28 @@ def main() -> None:
     require(
         a229_members[0] == (REPO / "build/a229/EggLearnsets.bin").read_bytes(),
         "final ROM egg member differs from generated EggLearnsets.bin",
+    )
+
+    a011_id, packaged_a011 = nitrofs_file(rom, fnt, fat, "a/0/1/1")
+    a011_members = narc_members(packaged_a011, "final ROM a/0/1/1")
+    expected_learnsets, learnset_dimensions = build_expected_learnset_payloads(
+        a011_members,
+    )
+    require(
+        a033_members[0] == expected_learnsets["level"],
+        "final ROM level-up member differs from the current-input oracle",
+    )
+    require(
+        a028_members[14] == expected_learnsets["machine"],
+        "final ROM machine member differs from the current-input oracle",
+    )
+    require(
+        a028_members[15] == expected_learnsets["tutor"],
+        "final ROM tutor member differs from the current-input oracle",
+    )
+    require(
+        a229_members[0] == expected_learnsets["egg"],
+        "final ROM egg member differs from the current-input oracle",
     )
 
     rows = [
@@ -950,6 +1258,8 @@ def main() -> None:
         "move-history post-package gate: "
         f"rom={rom_path} "
         f"fnt=0x{fnt_size:X} fat=0x{fat_size:X} "
+        f"a011=file#{a011_id}/0x{len(packaged_a011):X}/"
+        f"{learnset_dimensions['move_records']} "
         f"a033=file#{a033_id}/0x{len(packaged_a033):X}/1 "
         f"a028=file#{a028_id}/0x{len(packaged_a028):X}/21 "
         f"a229=file#{a229_id}/0x{len(packaged_a229):X}/1 "
@@ -958,6 +1268,11 @@ def main() -> None:
         f"0x{cached_fnt_end:08X} "
         f"fat-cache=0x{cached_fat_start:08X}.."
         f"0x{cached_fat_end:08X} "
+        f"learnsets={learnset_dimensions['species']}x"
+        f"{learnset_dimensions['level_width']}/"
+        f"{learnset_dimensions['egg_width']}/"
+        f"{learnset_dimensions['machine_words']}/"
+        f"{learnset_dimensions['tutor_words']} "
         f"overlay153=0x{OVERLAY_BASE:08X}.."
         f"0x{OVERLAY_BASE + len(overlay):08X} "
         f"overlay129=0x{len(overlay129):X}/0x8000"
