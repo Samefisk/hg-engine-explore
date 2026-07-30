@@ -21,12 +21,21 @@
 extern u32 space_for_setmondata;
 u16 LONG_CALL MapHeader_GetMapSec(u32 map_no);
 __asm__(
+    ".global OverworldWildSpawns_StartFollowerReleaseBounce\n"
+    ".type OverworldWildSpawns_StartFollowerReleaseBounce, %function\n"
+    ".set OverworldWildSpawns_StartFollowerReleaseBounce, 0x0224F299\n"
     ".global OverworldWildSpawns_TickFollowerReleasePresentation\n"
     ".type OverworldWildSpawns_TickFollowerReleasePresentation, %function\n"
     ".set OverworldWildSpawns_TickFollowerReleasePresentation, 0x02250115\n"
     ".global OverworldWildSpawns_RenderPlayerBallProjectile\n"
     ".type OverworldWildSpawns_RenderPlayerBallProjectile, %function\n"
     ".set OverworldWildSpawns_RenderPlayerBallProjectile, 0x02250295\n");
+
+BOOL OverworldWildSpawns_StartFollowerReleaseBounce(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    void *projectile,
+    int slot);
 
 #define OW_WILD_HELPER_GRASS_SLOTS 12
 #define OW_WILD_HELPER_SURF_SLOTS 5
@@ -2358,14 +2367,21 @@ static void OverworldWildHelper_CancelPlayerBallProjectile(
 
             follower->faceVec[1] = 0;
             follower->unk88[1] = 0;
-            MapObject_ClearBits(follower, BIT_VANISH);
+            MapObject_ClearBits(
+                follower,
+                BIT_VANISH
+                    | BIT_JUMP_START
+                    | BIT_MOVE_START
+                    | MAPOBJECTFLAG_UNK13);
             state->movementCooldowns[OW_WILD_FOLLOWER_SLOT] = 1;
         }
         state->followerReleaseState =
             state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_SPAWNED
                 && state->spawns[OW_WILD_FOLLOWER_SLOT].active
             ? OW_WILD_FOLLOWER_RELEASE_NONE
-            : OW_WILD_FOLLOWER_RELEASE_REQUESTED;
+            : OW_WILD_FOLLOWER_RELEASE_REQUESTED
+                | (state->followerReleaseState
+                    & OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG);
     }
     if (state != NULL && slot >= 0 && slot < OW_WILD_MAX_SPAWNS) {
         state->captureTargetMask &= (u16)~(1u << slot);
@@ -2485,7 +2501,8 @@ static int OverworldWildHelper_FindPlayerBallHit(
     int bestSlot = -1;
     int i;
 
-    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_FLYING
+    if ((state->followerReleaseState & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+            == OW_WILD_FOLLOWER_RELEASE_BOUNCING
         || !OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || state->presentationRestorePending
         || state->mapGeneration != projectile->mapGeneration) {
@@ -2579,8 +2596,7 @@ static BOOL OverworldWildHelper_TryApplyPlayerBallAimAssist(
     int bestSlot = -1;
     int i;
 
-    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_REQUESTED
-        || !OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
+    if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || state->presentationRestorePending
         || state->mapGeneration != projectile->mapGeneration) {
         return FALSE;
@@ -3598,29 +3614,36 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
         }
         if (state->followerReleaseState
             == OW_WILD_FOLLOWER_RELEASE_SPAWNED) {
+            BOOL releaseActive;
+
+            if (!OverworldWildHelper_IsExactObject(
+                    fieldSystem,
+                    state,
+                    OW_WILD_FOLLOWER_SLOT)) {
+                OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+                state->followerReleaseState =
+                    OW_WILD_FOLLOWER_RELEASE_FAILED;
+                return FALSE;
+            }
             /* Home toward the player's current hand, not the throw origin. */
             OverworldWildHelper_RefreshFollowerBallReturnTarget(fieldSystem);
-            return OverworldWildSpawns_TickFollowerReleasePresentation(
+            releaseActive = OverworldWildSpawns_TickFollowerReleasePresentation(
                 fieldSystem,
                 state,
                 projectile,
                 OverworldWildHelper_DispatchFollowerRelease,
                 OverworldWildHelper_ApplyPlayerBallRotation);
+            if (projectile->shakeIndex == 1) {
+                OverworldWildHelper_DispatchFollowerRelease(fieldSystem, 0);
+            } else if (projectile->shakeIndex == 2) {
+                OverworldWildHelper_DispatchFollowerRelease(fieldSystem, 3);
+            } else if (projectile->shakeIndex == 5) {
+                OverworldWildHelper_DispatchFollowerRelease(fieldSystem, 1);
+            }
+            return releaseActive;
         }
-        if (state->followerReleaseState
-                == OW_WILD_FOLLOWER_RELEASE_FLYING
-            && projectile->elapsedFrames
-                >= projectile->totalFrames
-                    - OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES
-                    - OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES) {
-            projectile->impactSlot = OW_WILD_FOLLOWER_SLOT;
-            state->captureTargetMask |=
-                (u16)(1u << OW_WILD_FOLLOWER_SLOT);
-            state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_READY;
-            PlaySE(OW_WILD_HELPER_FOLLOWER_EMERGE_SE);
-            return TRUE;
-        }
-        if (state->followerReleaseState
+        if ((state->followerReleaseState
+                & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
             == OW_WILD_FOLLOWER_RELEASE_READY) {
             return TRUE;
         }
@@ -3641,14 +3664,47 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
             oldZ,
             (s32)sOverworldWildHelperPlayerBallProjectile.object->posVec[0],
             (s32)sOverworldWildHelperPlayerBallProjectile.object->posVec[2]);
-        if (hitSlot >= 0
-            && OverworldWildHelper_StartPlayerBallImpact(
-                fieldSystem,
-                state,
-                hitSlot,
-                prepareCaptureTarget,
-                calculateShakes)) {
-            return TRUE;
+        if (hitSlot >= 0) {
+            if ((state->followerReleaseState
+                    & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+                    == OW_WILD_FOLLOWER_RELEASE_FLYING) {
+                (void)OverworldWildSpawns_StartFollowerReleaseBounce(
+                    fieldSystem,
+                    state,
+                    projectile,
+                    hitSlot);
+                return TRUE;
+            }
+            if (OverworldWildHelper_StartPlayerBallImpact(
+                    fieldSystem,
+                    state,
+                    hitSlot,
+                    prepareCaptureTarget,
+                    calculateShakes)) {
+                return TRUE;
+            }
+        }
+        if (((state->followerReleaseState
+                    & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+                    == OW_WILD_FOLLOWER_RELEASE_FLYING
+                || (state->followerReleaseState
+                        & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+                    == OW_WILD_FOLLOWER_RELEASE_BOUNCING)
+            && projectile->elapsedFrames
+                >= projectile->totalFrames
+                    - OW_WILD_HELPER_PLAYER_BALL_HANG_FRAMES
+                    - OW_WILD_HELPER_PLAYER_BALL_FALL_FRAMES) {
+            projectile->impactSlot = OW_WILD_FOLLOWER_SLOT;
+            state->captureTargetMask |=
+                (u16)(1u << OW_WILD_FOLLOWER_SLOT);
+            state->followerReleaseState =
+                OW_WILD_FOLLOWER_RELEASE_READY
+                | (state->followerReleaseState
+                    & OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG);
+            gOverworldWildFieldIdleRearmPending |=
+                OW_WILD_FIELD_IDLE_REARM_PENDING
+                | OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING;
+            PlaySE(OW_WILD_HELPER_FOLLOWER_EMERGE_SE);
         }
         return TRUE;
     }
@@ -3667,7 +3723,9 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
     if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_FLYING) {
         state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_REQUESTED;
     }
-    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_REQUESTED) {
+    if ((state->followerReleaseState
+            & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+            == OW_WILD_FOLLOWER_RELEASE_REQUESTED) {
         distanceFx32 = OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY
             ->getReleaseDistance(fieldSystem);
         if (distanceFx32 > 0
@@ -3680,6 +3738,7 @@ static BOOL OverworldWildHelper_TickPlayerBallProjectile(
             return TRUE;
         }
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
+        state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_FAILED;
         return FALSE;
     }
     if (!sOverworldWildHelperPlayerBallInputArmed) {

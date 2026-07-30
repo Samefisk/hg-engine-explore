@@ -13,9 +13,34 @@ struct PartyPokemon;
 #define OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG 0x10
 #define OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG 0x08
 #define OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG 0x04
+#define OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG 0x02
+#define OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG 0x01
 /* Published by overlay 131 at a fixed ABI address for overlays 151 and 152. */
 #define OVERWORLD_FOLLOWER_SELECTOR_STATE \
     (*(volatile u8 *)0x023C8148)
+
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_CAPACITY 10
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_COMMAND_BITS 3
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_DESPAWN_COMMAND 7
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_ADDR 0x023C8130
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_APPEND_ADDR 0x023C80D1
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_POP_ADDR 0x023C8109
+
+typedef struct OverworldFollowerTransitionQueueStorage {
+    u32 commands;
+    u8 count;
+    u8 headIssued;
+    u8 headRetries;
+    u8 reserved;
+} OverworldFollowerTransitionQueueStorage;
+
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE \
+    ((volatile OverworldFollowerTransitionQueueStorage *) \
+        OVERWORLD_FOLLOWER_TRANSITION_QUEUE_ADDR)
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_APPEND \
+    ((BOOL (*)(u8))OVERWORLD_FOLLOWER_TRANSITION_QUEUE_APPEND_ADDR)
+#define OVERWORLD_FOLLOWER_TRANSITION_QUEUE_POP \
+    ((void (*)(void))OVERWORLD_FOLLOWER_TRANSITION_QUEUE_POP_ADDR)
 
 static inline BOOL OverworldFollowerSelector_IsReleaseGated(void)
 {
@@ -25,7 +50,11 @@ static inline BOOL OverworldFollowerSelector_IsReleaseGated(void)
 
 static inline void OverworldFollowerSelector_SetReleaseGate(void)
 {
-    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+    OVERWORLD_FOLLOWER_SELECTOR_STATE =
+        (OVERWORLD_FOLLOWER_SELECTOR_STATE
+            & (u8)~(OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG
+                | OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG))
+        |
         OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG;
 }
 
@@ -123,6 +152,42 @@ static inline void OverworldFollowerSelector_ClearPartySnapshotDirty(void)
 {
     OVERWORLD_FOLLOWER_SELECTOR_STATE &=
         (u8)~OVERWORLD_FOLLOWER_SELECTOR_PARTY_DIRTY_FLAG;
+}
+
+static inline BOOL OverworldFollowerSelector_IsYPressPending(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetYPressPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearYPressPending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG;
+}
+
+static inline BOOL OverworldFollowerSelector_IsYReleasePending(void)
+{
+    return (OVERWORLD_FOLLOWER_SELECTOR_STATE
+        & OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG) != 0;
+}
+
+static inline void OverworldFollowerSelector_SetYReleasePending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE |=
+        OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG;
+}
+
+static inline void OverworldFollowerSelector_ClearYReleasePending(void)
+{
+    OVERWORLD_FOLLOWER_SELECTOR_STATE &=
+        (u8)~OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG;
 }
 
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR 0x023C0400

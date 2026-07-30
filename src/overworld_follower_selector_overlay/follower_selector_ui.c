@@ -265,16 +265,6 @@ const OverworldFollowerSelectorOverlayEntry gOverworldFollowerSelectorOverlayEnt
         OverworldFollowerSelector_IsReleaseTileAvailable,
 };
 
-static BOOL FollowerSelectorUI_IsOverlayCode(const void *function)
-{
-    u32 rawAddress = (u32)function;
-    u32 address = rawAddress & ~1u;
-
-    return (rawAddress & 1u) != 0
-        && address >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
-        && address < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
-}
-
 static BOOL OverworldFollowerSelector_ValidateImpl(void)
 {
     const OverworldFollowerSelectorOverlayEntry *entry =
@@ -283,23 +273,13 @@ static BOOL OverworldFollowerSelector_ValidateImpl(void)
     return entry->magic == OVERWORLD_FOLLOWER_SELECTOR_MAGIC
         && entry->version == OVERWORLD_FOLLOWER_SELECTOR_VERSION
         && entry->size == sizeof(*entry)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->validate)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->uiOpen)
-        && FollowerSelectorUI_IsOverlayCode(
-            (const void *)entry->uiSetSelection)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->uiUpdate)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->uiClose)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->uiIsOpen)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->inputFilter)
-        && FollowerSelectorUI_IsOverlayCode((const void *)entry->inputCancel)
-        && FollowerSelectorUI_IsOverlayCode(
-            (const void *)entry->inputIsActive)
-        && FollowerSelectorUI_IsOverlayCode(
-            (const void *)entry->getSelectedPokemon)
-        && FollowerSelectorUI_IsOverlayCode(
-            (const void *)entry->getReleaseDistance)
-        && FollowerSelectorUI_IsOverlayCode(
-            (const void *)entry->isReleaseTileAvailable);
+        && entry->validate != NULL
+        && entry->inputFilter != NULL
+        && entry->inputCancel != NULL
+        && entry->inputIsActive != NULL
+        && entry->getSelectedPokemon != NULL
+        && entry->getReleaseDistance != NULL
+        && entry->isReleaseTileAvailable != NULL;
 }
 
 static void FollowerSelectorUI_EnableObjPlane(void)

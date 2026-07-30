@@ -22,5 +22,11 @@ SECTIONS {
                 *(COMMON)
                 *(.bss)
                 . = ALIGN(4);
+                ASSERT(. <= ORIGIN(rom) + 0x358,
+                    "follower release render exceeds fixed ABI slot");
+                . = ORIGIN(rom) + 0x358;
+                KEEP(*(.follower_release_aggro))
+                ASSERT(. <= ORIGIN(rom) + LENGTH(rom),
+                    "follower release aggro helper exceeds retired graph");
         } >rom = 0xff
 }

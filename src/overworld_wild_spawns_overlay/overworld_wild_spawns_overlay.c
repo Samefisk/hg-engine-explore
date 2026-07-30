@@ -5,6 +5,16 @@
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
+__asm__(
+    ".global OverworldWildSpawns_EnterAggroState\n"
+    ".type OverworldWildSpawns_EnterAggroState, %function\n"
+    ".set OverworldWildSpawns_EnterAggroState, 0x0225046D\n");
+
+void OverworldWildSpawns_EnterAggroState(
+    OverworldWildSpawnState *state,
+    int slot,
+    LocalMapObject *spawnedFollower);
+
 #include "../../include/constants/buttons.h"
 #include "../../include/constants/file.h"
 #include "../../include/constants/save.h"
@@ -9843,6 +9853,15 @@ static void OverworldWildSpawns_TickMovementParams(
                 continue;
             }
 
+            if ((state->spawns[i].active
+                    & OW_WILD_SPAWN_AGGRO_PENDING_FLAG) != 0
+                && state->movementSpotStates[i]
+                    != OW_WILD_SPAWNER_SPOT_STATE_TIRED) {
+                OverworldWildSpawns_EnterAggroState(state, i, NULL);
+                state->movementSpotCooldowns[i] = 0;
+                OverworldWildSpawns_ApplyHelpChildSpawnState(state, i, object);
+            }
+
             if ((throwTarget & OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG) != 0) {
                 u8 targetSlot = OW_WILD_SPAWNER_THROW_TARGET_DECODE(throwTarget);
                 OverworldWildSpawns_SyncCarriedThrowTarget(state, i, targetSlot);
@@ -11534,7 +11553,10 @@ static void OverworldWildSpawns_Clear(OverworldWildSpawnState *state, BOOL delet
     OverworldWildSpawns_ClearQueuedHelpChildren(state);
     OverworldWildSpawns_ResetPendingBattle(state);
     if (state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_NONE) {
-        state->followerReleaseState = OW_WILD_FOLLOWER_RELEASE_REQUESTED;
+        state->followerReleaseState =
+            OW_WILD_FOLLOWER_RELEASE_REQUESTED
+            | (state->followerReleaseState
+                & OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG);
     }
 }
 #endif
@@ -16758,7 +16780,9 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
     }
 
     if (state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_NONE
-        && state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_READY) {
+        && (state->followerReleaseState
+                & OW_WILD_FOLLOWER_RELEASE_STATE_MASK)
+            != OW_WILD_FOLLOWER_RELEASE_READY) {
         return FALSE;
     }
 
@@ -16776,7 +16800,7 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
             &prepared)) {
         return FALSE;
     }
-    if (state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_READY) {
+    if (state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_NONE) {
         prepared.position.startX = state->followerReleaseX;
         prepared.position.startY = state->followerReleaseY;
         prepared.startup.locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
@@ -16790,8 +16814,15 @@ static BOOL OverworldWildSpawns_TrySpawnFollower(
         &prepared);
     if (spawned) {
         state->activeFollowerPartySlot = partySlot;
+        if ((state->followerReleaseState
+                & OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG) != 0) {
+            OverworldWildSpawns_EnterAggroState(
+                state,
+                OW_WILD_FOLLOWER_SLOT,
+                state->spawns[OW_WILD_FOLLOWER_SLOT].object);
+        }
         state->followerReleaseState =
-            state->followerReleaseState == OW_WILD_FOLLOWER_RELEASE_READY
+            state->followerReleaseState != OW_WILD_FOLLOWER_RELEASE_NONE
                 ? OW_WILD_FOLLOWER_RELEASE_SPAWNED
                 : OW_WILD_FOLLOWER_RELEASE_NONE;
     }
@@ -16803,17 +16834,6 @@ static void OverworldWildSpawns_ApplyHelpChildSpawnState(
     int slot,
     LocalMapObject *object)
 {
-    if (state == NULL
-        || slot < 0
-        || slot >= OW_WILD_MAX_SPAWNS
-        || !state->spawns[slot].active) {
-        return;
-    }
-
-    if (object == NULL) {
-        object = state->spawns[slot].object;
-    }
-
     if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_EMOTING) {
         state->movementEmoteEndStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
