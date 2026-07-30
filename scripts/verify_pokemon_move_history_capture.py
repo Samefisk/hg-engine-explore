@@ -6,21 +6,29 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import json
 import os
 import re
+import shlex
+import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from pokemon_move_history_build_manifest import (
+    DEPENDENCY_FILES,
+    FIXED_INPUTS,
+    OUTPUTS,
     PACKAGED_ROM_LOGICAL_PATH,
     SCHEMA as BUILD_MANIFEST_SCHEMA,
     ManifestError,
     armips_dependency_paths,
     file_record,
     load_manifest,
+    publish_pair,
     verify_manifest,
     verify_manifest_document,
 )
@@ -29,6 +37,9 @@ from pokemon_move_history_build_manifest import (
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x1000
+OVERLAY153_CALL_INVENTORY_SHA256 = (
+    "14d53cf039cb048a94a3c164f985d466c5318adfb1f2d09961f1ee038dfcdd6b"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -58,6 +69,62 @@ def ordered(body: str, tokens: list[str], label: str) -> None:
         found = body.find(token, cursor)
         require(found >= 0, f"{label} is missing ordered token {token!r}")
         cursor = found + len(token)
+
+
+def make_recipe_commands(makefile: str) -> list[str]:
+    commands: list[str] = []
+    current: list[str] = []
+    for line in makefile.splitlines():
+        if not line.startswith("\t"):
+            require(
+                not current,
+                "Makefile recipe continuation is unterminated",
+            )
+            continue
+        part = line[1:].rstrip()
+        continued = part.endswith("\\")
+        if continued:
+            part = part[:-1].rstrip()
+        current.append(part)
+        if not continued:
+            commands.append(" ".join(" ".join(current).split()))
+            current = []
+    require(not current, "Makefile ends inside a recipe continuation")
+    return commands
+
+
+def make_target_recipe_commands(makefile: str, target: str) -> list[str]:
+    lines = makefile.splitlines()
+    target_lines = [
+        index
+        for index, line in enumerate(lines)
+        if re.match(rf"^{re.escape(target)}\s*:", line) is not None
+    ]
+    require(
+        len(target_lines) == 1,
+        f"Makefile target {target!r} is missing or duplicated",
+    )
+    recipe_lines: list[str] = []
+    for line in lines[target_lines[0] + 1:]:
+        if line.startswith("\t"):
+            recipe_lines.append(line)
+        elif recipe_lines:
+            break
+        elif line.strip():
+            break
+    require(recipe_lines, f"Makefile target {target!r} has no recipe")
+    return make_recipe_commands("\n".join(recipe_lines))
+
+
+def makeflags_suppress_failures_or_output(makefile: str) -> bool:
+    return (
+        re.search(
+            r"(?m)^\s*(?:override\s+)?MAKEFLAGS\s*"
+            r"(?::|\+|\?|!)?=",
+            makefile,
+        )
+        is not None
+    )
 
 
 def without_comments(source: str) -> str:
@@ -159,6 +226,36 @@ LEVEL_UP_COMMIT_REGION = (
 LEVEL_UP_EXECUTABLE_SHA256 = (
     "6a58f4e384533000ea32263208648e2eb77cec497c8aa9c383abbcfefad2847a"
 )
+LIFECYCLE_SOURCE_SHA256 = {
+    "SaveData_New":
+        "8f08d1f8ded5be41e68ad1c0ca94ae7bea720e85755de09addd184d44734b75b",
+    "Save_InitDynamicRegion":
+        "894db9f97260cfde161484f9803f6d89496f4b1fdf8e9d915e3e092da05642ec",
+    "Save_LoadDynamicRegion":
+        "fb00e981d22f36006f39e7b52e69733d742de6ab8340117e1fd2330ec3fe785b",
+    "Save_WriteManInit":
+        "77e222a4cee3f6cc2556b255af9808480050364df277ef866e35d1eaf6fdf23d",
+    "Save_PrepareForAsyncWrite":
+        "cfff78b3382c88d76122f52b2ab280777e29c00e93e3c52d5df01c211cada1a7",
+    "Save_WriteFileAsync":
+        "3d1b0292daeb18f571ae4bed84985c40898ad2d72e48a5ea62471b6f4a7ac804",
+    "Save_WriteManFinish":
+        "7c5b2f25d9c3d9feb9eb6c433abd8968523e01b3167d3c95a048bdbc2271053b",
+    "CancelAsyncSaveWithMoveHistory":
+        "e80d6eeb8b029bd63ff8bcff5ac484205affe05a13307c21317a22724f59a566",
+    "Save_Cancel":
+        "48f0544af0aa738aee01640e14c7d3a32fe42296d5fcd3b79fdc45a0f71abdb3",
+    "PokemonMoveHistory_SeedParty":
+        "1f871802df018cf9adf78fc51f51d02960f3c1370da0a1589911bb5b2bbf6646",
+    "PokemonMoveHistory_LoadAndSeedPartyImpl":
+        "fdddca1535b4d654fce02afb11c2239e7745c5700590432cc5d304f7f85611bc",
+    "PokemonMoveHistory_PrepareSaveImpl":
+        "d3e7c1ca4984ee8173abe01bc2c0cfe44c6bcac997706116a79a5019f2e7a905",
+    "PokemonMoveHistory_FinishSaveImpl":
+        "37dc8758ca4dc19d3c12bf19009d84d5a3799833de0d05a6535bc1cb2d7f8e89",
+    "PokemonMoveHistory_CancelSaveImpl":
+        "71b04820cb3aa373a016534f78896360b9f6808009e61a6517a29d49b1448180",
+}
 
 
 def block_from_match(source: str, match: re.Match[str]) -> str:
@@ -313,6 +410,186 @@ def delete_move_contract_matches(history_source: str) -> bool:
         )
         is not None
     )
+
+
+def normalized_function_sha256(source: str, name: str) -> str:
+    normalized = " ".join(executable_function(source, name).split())
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def lifecycle_contract_matches(
+    source: str,
+    name: str,
+) -> bool:
+    return (
+        normalized_function_sha256(source, name)
+        == LIFECYCLE_SOURCE_SHA256[name]
+    )
+
+
+def lifecycle_source_mutation_fixtures(
+    save_source: str,
+    history_source: str,
+) -> None:
+    fixtures = (
+        (
+            save_source,
+            "SaveData_New",
+            "PokemonMoveHistory_Init(ret);",
+            "PokemonMoveHistory_Init(NULL);",
+            "NULL history initialization",
+        ),
+        (
+            save_source,
+            "Save_InitDynamicRegion",
+            "PokemonMoveHistory_Reset(saveData);",
+            "PokemonMoveHistory_Reset(NULL);",
+            "NULL new-game history reset",
+        ),
+        (
+            save_source,
+            "Save_LoadDynamicRegion",
+            "PokemonMoveHistory_LoadAndSeedParty(saveData);",
+            "PokemonMoveHistory_LoadAndSeedParty(NULL);",
+            "NULL load-boundary seeding",
+        ),
+        (
+            save_source,
+            "Save_LoadDynamicRegion",
+            "sub_0202C6FC(saveData);\n"
+            "    PokemonMoveHistory_LoadAndSeedParty(saveData);",
+            "PokemonMoveHistory_LoadAndSeedParty(saveData);\n"
+            "    sub_0202C6FC(saveData);",
+            "reordered load-boundary seeding",
+        ),
+        (
+            save_source,
+            "Save_WriteManInit",
+            "Sys_SetSleepDisableFlag(1);\n\n"
+            "    \n    (void)PokemonMoveHistory_PrepareSave(saveData);",
+            "PokemonMoveHistory_PrepareSave(saveData);\n"
+            "    Sys_SetSleepDisableFlag(1);",
+            "reordered prepare/sleep-disable lifecycle",
+        ),
+        (
+            save_source,
+            "Save_WriteManInit",
+            "(void)PokemonMoveHistory_PrepareSave(saveData);",
+            "(void)PokemonMoveHistory_PrepareSave(NULL);",
+            "NULL save preparation",
+        ),
+        (
+            save_source,
+            "Save_PrepareForAsyncWrite",
+            "Save_WriteManInit("
+            "saveData, &saveData->asyncWriteMan, a1);",
+            "Save_WriteManInit(NULL, &saveData->asyncWriteMan, a1);",
+            "NULL prepare wrapper",
+        ),
+        (
+            save_source,
+            "Save_WriteFileAsync",
+            "Save_WriteManFinish("
+            "saveData, &saveData->asyncWriteMan, ret);",
+            "Save_WriteManFinish("
+            "saveData, &saveData->asyncWriteMan, WRITE_STATUS_TOTAL_FAIL);",
+            "wrong asynchronous finish status",
+        ),
+        (
+            save_source,
+            "Save_WriteManFinish",
+            "PokemonMoveHistory_FinishSave(\n"
+            "        saveData,\n"
+            "        a2 != WRITE_STATUS_TOTAL_FAIL);",
+            "PokemonMoveHistory_FinishSave(NULL, TRUE);",
+            "wrong save-finish arguments",
+        ),
+        (
+            save_source,
+            "CancelAsyncSaveWithMoveHistory",
+            "PokemonMoveHistory_CancelSave(saveData);\n"
+            "    Sys_ClearSleepDisableFlag(1);",
+            "Sys_ClearSleepDisableFlag(1);\n"
+            "    PokemonMoveHistory_CancelSave(NULL);",
+            "NULL/reordered cancellation",
+        ),
+        (
+            save_source,
+            "Save_Cancel",
+            "CancelAsyncSaveWithMoveHistory("
+            "saveData, &saveData->asyncWriteMan);",
+            "CancelAsyncSave(saveData, &saveData->asyncWriteMan);",
+            "bypassed history-aware cancellation",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_SeedParty",
+            "pokemon = Party_GetMonByIndex(party, i);",
+            "pokemon = &party->members[i];",
+            "serialized party array indexing",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_SeedParty",
+            "saveData,\n            &pokemon->box",
+            "NULL,\n            &pokemon->box",
+            "NULL party-history seeding",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_LoadAndSeedPartyImpl",
+            "PokemonMoveHistory_LoadImpl(saveData);",
+            "PokemonMoveHistory_LoadImpl(NULL);\n"
+            "    PokemonMoveHistory_SeedParty(saveData);",
+            "wrong load-only boundary",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_PrepareSaveImpl",
+            "PokemonMoveHistory_SeedParty(saveData);\n"
+            "    historyReady = "
+            "PokemonMoveHistory_CommitIfDirtyImpl(saveData);",
+            "historyReady = "
+            "PokemonMoveHistory_CommitIfDirtyImpl(saveData);\n"
+            "    PokemonMoveHistory_SeedParty(NULL);",
+            "reordered prepare seeding/commit",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_FinishSaveImpl",
+            "if (success\n"
+            "            && saveData->pokemonMoveHistoryStagedSaveCounter",
+            "if (!success\n"
+            "            && saveData->pokemonMoveHistoryStagedSaveCounter",
+            "inverted finish success",
+        ),
+        (
+            history_source,
+            "PokemonMoveHistory_CancelSaveImpl",
+            "saveData->pokemonMoveHistoryStagedMirror = "
+            "MOVE_HISTORY_NO_MIRROR;",
+            "saveData->pokemonMoveHistoryStagedMirror = "
+            "MOVE_HISTORY_NO_MIRROR;\n"
+            "    saveData->pokemonMoveHistoryDirty = FALSE;",
+            "cancellation clears retry state",
+        ),
+    )
+    for source, name, needle, replacement, label in fixtures:
+        raw = function_body(source, name)
+        executable = without_comments(raw)
+        require(
+            needle in executable,
+            f"{label} fixture does not match {name}",
+        )
+        mutated = executable.replace(needle, replacement, 1)
+        require(mutated != executable, f"{label} fixture is inert")
+        require(
+            not lifecycle_contract_matches(
+                source.replace(raw, mutated, 1),
+                name,
+            ),
+            f"{label} passes exact lifecycle source authentication",
+        )
 
 
 def source_matcher_mutation_fixtures(
@@ -741,6 +1018,7 @@ def source_contracts() -> None:
     ).read_text()
     pokemon = (REPO / "src/pokemon.c").read_text()
     party_menu = (REPO / "src/party_menu.c").read_text()
+    save = (REPO / "src/save.c").read_text()
     entry = (REPO / "asm/pokemon_move_history_overlay/entry.s").read_text()
     linker = (
         REPO / "src/pokemon_move_history_overlay/linker.ld"
@@ -757,6 +1035,13 @@ def source_contracts() -> None:
     pokemon_code = without_comments(pokemon)
     party_menu_code = without_comments(party_menu)
     config_code = without_comments(config)
+
+    require(
+        "build/save.d" in DEPENDENCY_FILES
+        and "scripts/generate_armips_symbols.py" in FIXED_INPUTS
+        and OUTPUTS.get("save_object") == "build/save.o",
+        "save lifecycle/generator provenance inputs are not sealed",
+    )
 
     for api in (
         "PokemonMoveHistory_ReplaceMove",
@@ -819,6 +1104,33 @@ def source_contracts() -> None:
         "host unimplemented-move fixture requires the runtime policy enabled",
     )
     source_matcher_mutation_fixtures(history, pokemon, party_menu)
+    for name in (
+        "SaveData_New",
+        "Save_InitDynamicRegion",
+        "Save_LoadDynamicRegion",
+        "Save_WriteManInit",
+        "Save_PrepareForAsyncWrite",
+        "Save_WriteFileAsync",
+        "Save_WriteManFinish",
+        "CancelAsyncSaveWithMoveHistory",
+        "Save_Cancel",
+    ):
+        require(
+            lifecycle_contract_matches(save, name),
+            f"{name} complete executable lifecycle source differs",
+        )
+    for name in (
+        "PokemonMoveHistory_SeedParty",
+        "PokemonMoveHistory_LoadAndSeedPartyImpl",
+        "PokemonMoveHistory_PrepareSaveImpl",
+        "PokemonMoveHistory_FinishSaveImpl",
+        "PokemonMoveHistory_CancelSaveImpl",
+    ):
+        require(
+            lifecycle_contract_matches(history, name),
+            f"{name} complete executable lifecycle source differs",
+        )
+    lifecycle_source_mutation_fixtures(save, history)
 
     replace_code = function_body(
         history_code,
@@ -1063,13 +1375,127 @@ def source_contracts() -> None:
     seal_command = "scripts/pokemon_move_history_build_manifest.py"
     verifier_command = (
         "scripts/verify_pokemon_move_history_capture.py \\\n"
-        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp"
     )
     final_verifier_command = (
         "scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp"
     )
-    publish_command = "mv $(BUILDROM).tmp $(BUILDROM)"
+    publish_command = (
+        "scripts/pokemon_move_history_build_manifest.py \\\n"
+        "\t\t--publish-pair"
+    )
+    recipe_commands = make_target_recipe_commands(makefile, "all")
+    require(
+        re.search(
+            r"(?m)^\s*\.(?:ONESHELL|IGNORE|SILENT)\s*:",
+            makefile,
+        )
+        is None
+        and re.search(
+            r"(?m)^\s*\.SHELLFLAGS\s*(?::|\+|\?|!)?=",
+            makefile,
+        )
+        is None
+        and not makeflags_suppress_failures_or_output(makefile),
+        "Makefile global shell/error semantics can suppress all failures",
+    )
+    exact_package_commands = [
+        "$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin "
+        "-7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin "
+        "-y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay "
+        "-t $(BASE)/banner.bin -h $(BASE)/header.bin",
+        "$(PYTHON_NO_VENV) "
+        "scripts/pokemon_move_history_build_manifest.py "
+        "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--rom $(BUILDROM).tmp "
+        '--context "CC=$(CC)" --context "CFLAGS=$(CFLAGS)" '
+        '--context "AS=$(AS)" --context "ASFLAGS=$(ASFLAGS)" '
+        '--context "LD=$(LD)" --context "LDFLAGS=$(LDFLAGS)" '
+        '--context "OBJCOPY=$(OBJCOPY)" --context "ARMIPS=$(ARMIPS)" '
+        '--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" '
+        '--context "NDSTOOL=$(NDSTOOL)"',
+        "$(PYTHON_NO_VENV) "
+        "scripts/verify_pokemon_move_history_capture.py "
+        "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--rom $(BUILDROM).tmp",
+        "$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py "
+        "--rom $(BUILDROM).tmp",
+        "$(PYTHON_NO_VENV) "
+        "scripts/pokemon_move_history_build_manifest.py --publish-pair "
+        "--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--candidate-rom $(BUILDROM).tmp "
+        "--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "--final-rom $(BUILDROM)",
+    ]
+    exact_command_positions = [
+        recipe_commands.index(command)
+        if recipe_commands.count(command) == 1
+        else -1
+        for command in exact_package_commands
+    ]
+    require(
+        -1 not in exact_command_positions
+        and exact_command_positions == sorted(exact_command_positions),
+        "complete package/seal/verify/publish recipes differ or can ignore "
+        "command failures",
+    )
+    ignored_prefix_makefile = makefile.replace(
+        "\t$(PYTHON_NO_VENV) "
+        "scripts/verify_pokemon_move_history_capture.py",
+        "\t-$(PYTHON_NO_VENV) "
+        "scripts/verify_pokemon_move_history_capture.py",
+        1,
+    )
+    ignored_suffix_makefile = makefile.replace(
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--rom $(BUILDROM).tmp",
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--rom $(BUILDROM).tmp || true",
+        1,
+    )
+    require(
+        exact_package_commands[2]
+        not in make_recipe_commands(ignored_prefix_makefile)
+        and exact_package_commands[2]
+        not in make_recipe_commands(ignored_suffix_makefile),
+        "Make error-ignoring mutation fixture does not fail closed",
+    )
+    detached_target_makefile = makefile.replace(
+        "\t$(PYTHON_NO_VENV) "
+        "scripts/verify_pokemon_move_history_capture.py",
+        "detached_capture_gate:\n"
+        "\t$(PYTHON_NO_VENV) "
+        "scripts/verify_pokemon_move_history_capture.py",
+        1,
+    )
+    require(
+        exact_package_commands[2]
+        not in make_target_recipe_commands(
+            detached_target_makefile,
+            "all",
+        )
+        and re.search(
+            r"(?m)^\s*\.(?:ONESHELL|IGNORE|SILENT)\s*:",
+            ".ONESHELL:\n" + makefile,
+        )
+        is not None,
+        "Make target/global-context mutation fixtures do not fail closed",
+    )
+    for makeflags_mutation in (
+        "MAKEFLAGS=-i\n",
+        "override MAKEFLAGS=-s\n",
+        "MAKEFLAGS += --ignore-errors\n",
+        "MAKEFLAGS+=--silent\n",
+        "MAKEFLAGS=i\n",
+        "FAIL_FLAGS=-i\nMAKEFLAGS=$(FAIL_FLAGS)\n",
+    ):
+        require(
+            makeflags_suppress_failures_or_output(
+                makeflags_mutation + makefile
+            ),
+            f"Make global flag mutation passes: {makeflags_mutation.strip()}",
+        )
     seal_start = makefile.find(seal_command)
     verifier_start = makefile.find(verifier_command)
     seal_block = (
@@ -1081,15 +1507,21 @@ def source_contracts() -> None:
         makefile.count("scripts/verify_pokemon_move_history_capture.py") == 1
         and makefile.count(
             "scripts/pokemon_move_history_build_manifest.py"
-        ) == 1
+        ) == 2
         and makefile.count(final_verifier_command) == 1
         and package_command in makefile
         and seal_command in makefile
-        and "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        and "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp" in seal_block
         and verifier_command in makefile
         and final_verifier_command in makefile
         and publish_command in makefile
+        and "--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)"
+        in makefile
+        and "--candidate-rom $(BUILDROM).tmp" in makefile
+        and "--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST)" in makefile
+        and "--final-rom $(BUILDROM)" in makefile
+        and "mv $(BUILDROM).tmp $(BUILDROM)" not in makefile
         and makefile.index(package_command) < makefile.index(seal_command)
         < makefile.index(verifier_command)
         < makefile.index(final_verifier_command)
@@ -1125,6 +1557,7 @@ def source_contracts() -> None:
         and {
             "$(BUILD)/pokemon.o",
             "$(BUILD)/party_menu.o",
+            "$(BUILD)/save.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
             "$(BUILD)/pokemon_move_history_overlay/entry.o",
@@ -1133,7 +1566,7 @@ def source_contracts() -> None:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "task-3 provenance does not force exactly the six capture objects",
+        "task-3 provenance does not force exactly the seven capture objects",
     )
 
 
@@ -1169,7 +1602,10 @@ def move_limits() -> tuple[int, int, int]:
     return canonical, custom, canonical + custom
 
 
-def manifest_mutation_fixtures() -> None:
+def manifest_mutation_fixtures(
+    packaged_manifest: Path | None,
+    packaged_rom: Path | None,
+) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         input_path = root / "input.c"
@@ -1300,6 +1736,344 @@ def manifest_mutation_fixtures() -> None:
         malformed_tool_hash["tools"]["fixture-tool"]["binary"]["sha256"] = "bad"
         must_reject("malformed tool identity hash", malformed_tool_hash)
 
+        accepted_manifest = root / "accepted.json"
+        candidate_manifest = root / "candidate.json"
+        candidate_rom = root / "candidate.nds"
+        accepted_manifest_bytes = b"previous accepted manifest\n"
+        accepted_rom_bytes = b"previous accepted ROM\n"
+        candidate_rom_bytes = b"new verified ROM generation\n"
+
+        def write_candidate_pair() -> None:
+            candidate_rom.write_bytes(candidate_rom_bytes)
+            candidate_document = copy.deepcopy(document)
+            candidate_document["outputs"]["packaged_rom"] = {
+                "path": PACKAGED_ROM_LOGICAL_PATH,
+                **file_record(candidate_rom),
+            }
+            candidate_manifest.write_text(
+                json.dumps(candidate_document, sort_keys=True) + "\n"
+            )
+
+        def verify_publish_pair(manifest: Path, rom: Path) -> None:
+            verify_fixture(load_manifest(manifest), rom)
+
+        for failure_phase in (
+            "after_manifest_replace",
+            "after_rom_replace",
+        ):
+            accepted_manifest.write_bytes(accepted_manifest_bytes)
+            final_rom.write_bytes(accepted_rom_bytes)
+            write_candidate_pair()
+
+            def fail_at_phase(phase: str, expected: str = failure_phase) -> None:
+                if phase == expected:
+                    raise RuntimeError(f"injected publish failure: {phase}")
+
+            try:
+                publish_pair(
+                    candidate_manifest,
+                    candidate_rom,
+                    accepted_manifest,
+                    final_rom,
+                    verify=verify_publish_pair,
+                    failure_hook=fail_at_phase,
+                )
+            except RuntimeError:
+                pass
+            else:
+                require(False, f"{failure_phase} publish failure was ignored")
+            require(
+                accepted_manifest.read_bytes() == accepted_manifest_bytes
+                and final_rom.read_bytes() == accepted_rom_bytes,
+                f"{failure_phase} changed the prior accepted pair",
+            )
+            require(
+                candidate_manifest.is_file() and candidate_rom.is_file(),
+                f"{failure_phase} destroyed the candidate pair",
+            )
+            require(
+                not list(root.glob(".*.publish.*")),
+                f"{failure_phase} left transactional publish files",
+            )
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        replace_count = 0
+
+        def fail_once_during_second_restore(
+            source: str | Path,
+            destination: str | Path,
+        ) -> None:
+            nonlocal replace_count
+            replace_count += 1
+            if replace_count == 4:
+                raise OSError("injected second-restore failure")
+            os.replace(source, destination)
+
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=verify_publish_pair,
+                failure_hook=lambda phase: (
+                    (_ for _ in ()).throw(RuntimeError(phase))
+                    if phase == "after_rom_replace"
+                    else None
+                ),
+                replace=fail_once_during_second_restore,
+            )
+        except RuntimeError:
+            pass
+        else:
+            require(False, "rollback retry fixture ignored publish failure")
+        require(
+            replace_count == 5
+            and accepted_manifest.read_bytes() == accepted_manifest_bytes
+            and final_rom.read_bytes() == accepted_rom_bytes
+            and not list(root.glob("*.publish-journal"))
+            and not list(root.glob(".*.publish.*")),
+            "rollback retry did not restore the accepted pair exactly",
+        )
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        persistent_replace_count = 0
+
+        def fail_persistently_during_second_restore(
+            source: str | Path,
+            destination: str | Path,
+        ) -> None:
+            nonlocal persistent_replace_count
+            persistent_replace_count += 1
+            if persistent_replace_count >= 4:
+                raise OSError("persistent injected restore failure")
+            os.replace(source, destination)
+
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=verify_publish_pair,
+                failure_hook=lambda phase: (
+                    (_ for _ in ()).throw(RuntimeError(phase))
+                    if phase == "after_rom_replace"
+                    else None
+                ),
+                replace=fail_persistently_during_second_restore,
+            )
+        except ManifestError:
+            pass
+        else:
+            require(False, "incomplete rollback discarded its recovery state")
+        journals = list(root.glob("*.publish-journal"))
+        require(
+            len(journals) == 1
+            and list(root.glob(".*.publish.*")),
+            "incomplete rollback did not retain its journal/backup",
+        )
+
+        def stop_after_recovery(_manifest: Path, _rom: Path) -> None:
+            raise RuntimeError("recovery-only fixture stop")
+
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=stop_after_recovery,
+            )
+        except RuntimeError:
+            pass
+        else:
+            require(False, "startup recovery fixture did not stop")
+        require(
+            accepted_manifest.read_bytes() == accepted_manifest_bytes
+            and final_rom.read_bytes() == accepted_rom_bytes
+            and not list(root.glob("*.publish-journal"))
+            and not list(root.glob(".*.publish.*")),
+            "startup journal recovery did not restore the accepted pair",
+        )
+
+        malformed_journal = accepted_manifest.with_name(
+            accepted_manifest.name + ".publish-journal"
+        )
+        malformed_temporaries = (
+            root / ".accepted.json.publish.backup",
+            root / ".accepted.nds.publish.backup",
+            root / ".accepted.nds.publish.stage",
+        )
+        for temporary in malformed_temporaries:
+            temporary.write_bytes(b"malformed journal fixture\n")
+        malformed_journal.write_text(
+            json.dumps(
+                {
+                    "schema": "pokemon-move-history-pair-publish-v1",
+                    "entries": [
+                        {
+                            "final": str(accepted_manifest.resolve()),
+                            "prior": file_record(accepted_manifest),
+                            "backup": str(
+                                malformed_temporaries[0].resolve()
+                            ),
+                            "stage": str(accepted_manifest.resolve()),
+                        },
+                        {
+                            "final": str(final_rom.resolve()),
+                            "prior": file_record(final_rom),
+                            "backup": str(
+                                malformed_temporaries[1].resolve()
+                            ),
+                            "stage": str(
+                                malformed_temporaries[2].resolve()
+                            ),
+                        },
+                    ],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=verify_publish_pair,
+            )
+        except ManifestError:
+            pass
+        else:
+            require(False, "malformed journal path was accepted")
+        require(
+            accepted_manifest.read_bytes() == accepted_manifest_bytes
+            and final_rom.read_bytes() == accepted_rom_bytes
+            and malformed_journal.is_file()
+            and all(path.is_file() for path in malformed_temporaries),
+            "malformed journal path altered or deleted accepted files",
+        )
+        malformed_journal.unlink()
+        for temporary in malformed_temporaries:
+            temporary.unlink()
+
+        accepted_manifest.unlink()
+        final_rom.unlink()
+        write_candidate_pair()
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=verify_publish_pair,
+                failure_hook=lambda phase: (
+                    (_ for _ in ()).throw(RuntimeError(phase))
+                    if phase == "after_manifest_replace"
+                    else None
+                ),
+            )
+        except RuntimeError:
+            pass
+        else:
+            require(False, "first-publish failure was ignored")
+        require(
+            not accepted_manifest.exists() and not final_rom.exists(),
+            "failed first publish left a partial final pair",
+        )
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        publish_pair(
+            candidate_manifest,
+            candidate_rom,
+            accepted_manifest,
+            final_rom,
+            verify=verify_publish_pair,
+        )
+        verify_publish_pair(accepted_manifest, final_rom)
+        require(
+            final_rom.read_bytes() == candidate_rom_bytes
+            and not candidate_manifest.exists()
+            and not candidate_rom.exists(),
+            "successful transactional pair publication differs",
+        )
+
+        require(
+            (packaged_manifest is None) == (packaged_rom is None),
+            "real Make/publish fixture inputs are incomplete",
+        )
+        if packaged_manifest is not None and packaged_rom is not None:
+            cli_candidate_rom = root / "cli-candidate.nds"
+            cli_candidate_manifest = root / "cli-candidate.json"
+            cli_final_rom = root / "cli-final.nds"
+            cli_final_manifest = root / "cli-final.json"
+            cli_sentinel = root / "make-continued"
+            try:
+                os.link(packaged_rom, cli_candidate_rom)
+            except OSError:
+                shutil.copyfile(packaged_rom, cli_candidate_rom)
+            cli_candidate_manifest.write_bytes(
+                packaged_manifest.read_bytes()
+            )
+            cli_final_rom.write_bytes(accepted_rom_bytes)
+            cli_final_manifest.write_bytes(accepted_manifest_bytes)
+            cli_makefile = root / "Makefile.publish-fixture"
+            publish_arguments = [
+                sys.executable,
+                str(
+                    REPO
+                    / "scripts/pokemon_move_history_build_manifest.py"
+                ),
+                "--publish-pair",
+                "--candidate-manifest",
+                str(cli_candidate_manifest),
+                "--candidate-rom",
+                str(cli_candidate_rom),
+                "--final-manifest",
+                str(cli_final_manifest),
+                "--final-rom",
+                str(cli_final_rom),
+            ]
+            cli_makefile.write_text(
+                "all:\n"
+                "\tPOKEMON_MOVE_HISTORY_TEST_PUBLISH_FAILURE="
+                "after_manifest_replace "
+                + " ".join(
+                    shlex.quote(word) for word in publish_arguments
+                )
+                + "\n"
+                + "\ttouch "
+                + shlex.quote(str(cli_sentinel))
+                + "\n"
+            )
+            make_result = subprocess.run(
+                ["make", "-f", str(cli_makefile)],
+                cwd=REPO,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            require(
+                make_result.returncode != 0
+                and not cli_sentinel.exists()
+                and cli_final_manifest.read_bytes()
+                == accepted_manifest_bytes
+                and cli_final_rom.read_bytes() == accepted_rom_bytes
+                and cli_candidate_manifest.is_file()
+                and cli_candidate_rom.is_file()
+                and not list(root.glob("*.publish-journal")),
+                "real Make/CLI failure did not stop before preserving the "
+                "accepted pair:\n" + make_result.stdout,
+            )
+
         malformed = root / "malformed.json"
         malformed.write_text('{"schema":')
         try:
@@ -1310,7 +2084,10 @@ def manifest_mutation_fixtures() -> None:
             require(False, "truncated manifest JSON is accepted")
 
 
-def host_fixtures() -> None:
+def host_fixtures(
+    packaged_manifest: Path | None = None,
+    packaged_rom: Path | None = None,
+) -> None:
     max_moves = 24
     _canonical, _custom, num_moves = move_limits()
     unimplemented = {777}
@@ -1598,7 +2375,7 @@ def host_fixtures() -> None:
         ],
         "packaged call scanner does not decode BL and BLX-register forms",
     )
-    manifest_mutation_fixtures()
+    manifest_mutation_fixtures(packaged_manifest, packaged_rom)
 
 
 def symbol_table(path: Path) -> dict[str, int]:
@@ -1759,6 +2536,16 @@ def packaged_thumb_calls(
     return calls
 
 
+def call_inventory_sha256(
+    calls: list[tuple[int, str, int]],
+) -> str:
+    canonical = "\n".join(
+        f"{address:08x}:{kind}:{target:08x}"
+        for address, kind, target in calls
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def elf_bytes_at(path: Path, address: int, size: int) -> bytes:
     image = path.read_bytes()
     require(image[:4] == b"\x7fELF", f"{path} is not ELF")
@@ -1862,6 +2649,9 @@ OVERLAY129_THUNKS = {
     0x023DA874: bytes.fromhex("30 47"),
     0x023DCB1C: bytes.fromhex("18 47"),
     0x023DCB20: bytes.fromhex("28 47"),
+    0x023DE0D2: bytes.fromhex("18 47"),
+    0x023DE0D4: bytes.fromhex("30 47"),
+    0x023DE0D6: bytes.fromhex("38 47"),
 }
 
 
@@ -2053,6 +2843,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
     pokemon_object = REPO / "build/pokemon.o"
     party_menu_object = REPO / "build/party_menu.o"
+    save_object = REPO / "build/save.o"
     history_object = (
         REPO / "build/pokemon_move_history_overlay/pokemon_move_history.o"
     )
@@ -2070,6 +2861,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov153_path,
         pokemon_object,
         party_menu_object,
+        save_object,
         history_object,
         relearn_object,
         core_linked,
@@ -2132,6 +2924,29 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         re.search(r"R_ARM_THM_CALL\s+SaveBlock2_get\b", pokemon_reloc)
         is None,
         "pokemon.o gained an unsafe direct SaveBlock2_get relocation",
+    )
+    save_reloc = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", str(save_object)],
+        text=True,
+    )
+    for target in (
+        "PokemonMoveHistory_Init",
+        "PokemonMoveHistory_Reset",
+        "PokemonMoveHistory_LoadAndSeedParty",
+        "PokemonMoveHistory_PrepareSave",
+        "PokemonMoveHistory_FinishSave",
+        "PokemonMoveHistory_CancelSave",
+    ):
+        require(
+            re.search(rf"R_ARM_ABS32\s+{target}\b", save_reloc) is not None
+            and re.search(rf"R_ARM_THM_CALL\s+{target}\b", save_reloc)
+            is None,
+            f"save.o lacks an interworking-safe lifecycle call to {target}",
+        )
+    require(
+        re.search(r"R_ARM_THM_CALL\s+CancelAsyncSave\b", save_reloc)
+        is None,
+        "Save_Cancel still relocates to vanilla CancelAsyncSave",
     )
 
     history_reloc = subprocess.check_output(
@@ -2231,6 +3046,71 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(
         packaged_ov153 == ov153_path.read_bytes() == overlay,
         "packaged overlay 153 differs from the current linked output",
+    )
+    linked_overlay = elf_bytes_at(
+        linked,
+        ov153_base,
+        len(packaged_ov153),
+    )
+    packaged_call_inventory = packaged_thumb_calls(
+        packaged_ov153,
+        ov153_base,
+        ov153_base,
+        len(packaged_ov153),
+    )
+    linked_call_inventory = packaged_thumb_calls(
+        linked_overlay,
+        ov153_base,
+        ov153_base,
+        len(linked_overlay),
+    )
+    require(
+        linked_overlay == packaged_ov153
+        and packaged_call_inventory == linked_call_inventory
+        and len(packaged_call_inventory) == 109
+        and sum(
+            kind == "bl" for _address, kind, _target
+            in packaged_call_inventory
+        ) == 107
+        and sum(
+            kind == "blx" for _address, kind, _target
+            in packaged_call_inventory
+        ) == 2
+        and not [
+            call for call in packaged_call_inventory
+            if call[1] == "blx_reg"
+        ]
+        and call_inventory_sha256(packaged_call_inventory)
+        == OVERLAY153_CALL_INVENTORY_SHA256,
+        "complete overlay-153 packaged/linked call-site inventory differs",
+    )
+    added_indirect_call = bytearray(packaged_ov153)
+    struct.pack_into("<H", added_indirect_call, 0x7A, 0x4798)
+    require(
+        packaged_thumb_calls(
+            bytes(added_indirect_call),
+            ov153_base,
+            ov153_base,
+            len(added_indirect_call),
+        )
+        != packaged_call_inventory,
+        "inserted overlay-wide BLX-register call passes call authentication",
+    )
+    removed_direct_call = bytearray(packaged_ov153)
+    first_call_address = packaged_call_inventory[0][0]
+    removed_direct_call[
+        first_call_address - ov153_base:
+        first_call_address - ov153_base + 4
+    ] = b"\xc0\x46\xc0\x46"
+    require(
+        packaged_thumb_calls(
+            bytes(removed_direct_call),
+            ov153_base,
+            ov153_base,
+            len(removed_direct_call),
+        )
+        != packaged_call_inventory,
+        "removed overlay-wide direct call passes call authentication",
     )
 
     expected = OVERLAY_BASE + 0x80
@@ -2351,6 +3231,142 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     core_function_sizes = symbol_sizes(core_linked)
     packaged_function_specs = (
         (
+            "Save_InitDynamicRegion",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DD6C4,
+            0x38,
+            "1f1d2eece6cdadcf00a99da5e46c656d488207975dffa6390c3ae4c9d193f3d0",
+            [
+                (0x023DD6DC, "bl", 0x023DE0D2),
+                (0x023DD6E4, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "Save_LoadDynamicRegion",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DD8B0,
+            0xCC,
+            "6cd2ca42c366bdacf938c67058e17559d60ffaedbb3b3c8c6f00b18d12eaffe6",
+            [
+                (0x023DD8C4, "bl", 0x023DE0D4),
+                (0x023DD8D2, "bl", 0x023DD7EC),
+                (0x023DD8E2, "bl", 0x023DE0D4),
+                (0x023DD8F4, "bl", 0x023DD7EC),
+                (0x023DD910, "bl", 0x023DE0D6),
+                (0x023DD928, "bl", 0x023DE0D6),
+                (0x023DD934, "bl", 0x023DE0D2),
+                (0x023DD93C, "bl", 0x023DE0D2),
+                (0x023DD944, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "Save_WriteManInit",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDA1C,
+            0x58,
+            "e48cab0c691f760112a4cb6de3aa855293345566f4e6ef4dd0308a4e77eba7bc",
+            [
+                (0x023DDA24, "bl", 0x023DE0D2),
+                (0x023DDA2C, "bl", 0x023DE0D2),
+                (0x023DDA50, "bl", 0x023DE0D2),
+                (0x023DDA58, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "Save_WriteManFinish",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDA88,
+            0x94,
+            "d0ab077f4a074d4bdb9dd0d4a7cae88d312f3632cf4aa28881a6312e8de63ef0",
+            [
+                (0x023DDAAE, "bl", 0x023DE0D2),
+                (0x023DDAB6, "bl", 0x023DE0D2),
+                (0x023DDABE, "bl", 0x023DE0D2),
+                (0x023DDAD2, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "Save_PrepareForAsyncWrite",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDA74,
+            0x14,
+            "1a870f9245779d7c51a37ec7e2c59ed6f83f3d3fbc70bd84eab5c1d028866f88",
+            [(0x023DDA7C, "bl", 0x023DDA1C)],
+        ),
+        (
+            "Save_WriteFileAsync",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DE040,
+            0x40,
+            "84d8babc3bbbec9575f468493c19f98c08af8e0bc39a68594bc30cb93fdbfce0",
+            [
+                (0x023DE052, "bl", 0x023DDF14),
+                (0x023DE062, "bl", 0x023DDA88),
+                (0x023DE06C, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "CancelAsyncSaveWithMoveHistory",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDB1C,
+            0x6C,
+            "760a810448748647fed89c9ba587fdda6e4d439482dc478df2cc57e8336aa48e",
+            [
+                (0x023DDB30, "bl", 0x023DE0D2),
+                (0x023DDB3A, "bl", 0x023DE0D2),
+                (0x023DDB48, "bl", 0x023DE0D2),
+                (0x023DDB50, "bl", 0x023DE0D2),
+                (0x023DDB5C, "bl", 0x023DE0D2),
+                (0x023DDB64, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
+            "Save_Cancel",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDB88,
+            0x10,
+            "b58e7ced034221bcc71a863e62fe4c97a82f88b9d35e8d6b89e162462fa017b5",
+            [(0x023DDB8E, "bl", 0x023DDB1C)],
+        ),
+        (
+            "SaveData_New",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DDC14,
+            0x118,
+            "b077470b6728b6e5a54f89ae10afe4e00a26df1f3884071ab64c8552588d9296",
+            [
+                (0x023DDC1C, "bl", 0x023DE0D2),
+                (0x023DDC2A, "bl", 0x023DE0D2),
+                (0x023DDC36, "bl", 0x023DE0D2),
+                (0x023DDC3C, "bl", 0x023DE0D2),
+                (0x023DDC5A, "bl", 0x023DE0D2),
+                (0x023DDC64, "bl", 0x023DDB98),
+                (0x023DDC6C, "bl", 0x023DE0D2),
+                (0x023DDC8C, "bl", 0x023DD6C4),
+                (0x023DDC94, "bl", 0x023DD8B0),
+                (0x023DDCAE, "bl", 0x023DE0D2),
+                (0x023DDCD4, "bl", 0x023DE0D2),
+            ],
+        ),
+        (
             "PartyMenu_LearnMoveToSlot",
             core_linked,
             packaged_ov129,
@@ -2439,6 +3455,173 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
                 (0x023BEF5C, "bl", 0x023BF2B4),
             ],
         ),
+        (
+            "PokemonMoveHistory_InitImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BED00,
+            0x44,
+            "b2c79876bcafbce1176bd49f7c64e029458a2d953b03c7dfcd5c230615e558ea",
+            [
+                (0x023BED1C, "bl", 0x023BE9AC),
+                (0x023BED26, "bl", 0x023BE8FC),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_ResetImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BED44,
+            0x24,
+            "3440b778eeaabc81c2f85b3fde6923fcd37c4fe01c68bb88f86bcf4753eec32d",
+            [
+                (0x023BED52, "bl", 0x023BE8FC),
+                (0x023BED58, "bl", 0x023BE9AC),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_LoadForCounter",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BE9E4,
+            0x15C,
+            "7a1f814b4ca9a074ecda423eb0b0a8b720880ec62b918c3b0685db83e1ed9ec4",
+            [
+                (0x023BEA02, "bl", 0x023BF2BA),
+                (0x023BEA0C, "bl", 0x023BE80C),
+                (0x023BEA3A, "bl", 0x023BF2BA),
+                (0x023BEA44, "bl", 0x023BE80C),
+                (0x023BEA68, "bl", 0x023BE8FC),
+                (0x023BEA6E, "bl", 0x023BE9AC),
+                (0x023BEAAA, "bl", 0x023BF2B4),
+                (0x023BEAB4, "bl", 0x023BE80C),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_LoadImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BED68,
+            0x10,
+            "1ab5fa79b585edc2df7b5c64a5798e19d5835d9cfdad321a8ec745dc3574b469",
+            [(0x023BED6E, "bl", 0x023BE9E4)],
+        ),
+        (
+            "PokemonMoveHistory_CommitIfDirtyImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BEF6C,
+            0x170,
+            "9f904b9ee2b566d2cec45bf8d3e13b60cd80b8fdb68469052fa506fced943e03",
+            [
+                (0x023BEF8E, "bl", 0x023BF2B4),
+                (0x023BEFA8, "bl", 0x023BE8FC),
+                (0x023BEFEC, "bl", 0x023BF2BA),
+                (0x023BF00A, "bl", 0x023BE7D8),
+                (0x023BF014, "bl", 0x023BE7D8),
+                (0x023BF022, "bl", 0x023BF2BA),
+                (0x023BF036, "bl", 0x023BF2B4),
+                (0x023BF04E, "bl", 0x023BF2B4),
+                (0x023BF05E, "bl", 0x023BF2B4),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_SeedParty",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF0DC,
+            0x48,
+            "13ef47f7f585bee326a229131d447b374db4fc06e091f4b22a9d658a76d9a3ac",
+            [
+                (0x023BF0E2, "bl", 0x023BF2B4),
+                (0x023BF0EC, "bl", 0x023BF2B4),
+                (0x023BF108, "bl", 0x023BF2B4),
+                (0x023BF110, "bl", 0x023BEDEC),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_LoadAndSeedPartyImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF124,
+            0x08,
+            "17ec10b2f043947411fd01b036c9ab28698ab1f733c113b253ad6aa1495b09ef",
+            [(0x023BF126, "bl", 0x023BED68)],
+        ),
+        (
+            "PokemonMoveHistory_PrepareSaveImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF12C,
+            0x2C,
+            "2e956897097795aacacd521f68dc87d010442dda74a482986887c6874b56ad24",
+            [
+                (0x023BF13E, "bl", 0x023BE9E4),
+                (0x023BF144, "bl", 0x023BF0DC),
+                (0x023BF14A, "bl", 0x023BEF6C),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_FinishSaveImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF158,
+            0x60,
+            "7f037a772072138bfc251db15417674fdd2e239df1292eb17f012a982738b967",
+            [],
+        ),
+        (
+            "PokemonMoveHistory_CancelSaveImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF1B8,
+            0x30,
+            "485ddd855b50dbf52cd5b8a9de6d92ca1a28c20ced429c48e8575a5806f5b557",
+            [],
+        ),
+        (
+            "PokemonMoveHistory_WriteSaveNowImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF1E8,
+            0x50,
+            "4088c6bcb5640b79981956d48e8d8200215db20a3cf187f1ff8714ac383d9021",
+            [
+                (0x023BF1F4, "bl", 0x023BF2B4),
+                (0x023BF206, "bl", 0x023BF2B4),
+                (0x023BF218, "bl", 0x023BF2B4),
+                (0x023BF222, "bl", 0x023BF2B8),
+            ],
+        ),
+        (
+            "SaveGameNormalImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BF238,
+            0x7C,
+            "9e428237d862e99d378f1d4427e22c15cddc60f40b509033398a5515634a6e4a",
+            [
+                (0x023BF250, "bl", 0x023BF2B4),
+                (0x023BF260, "bl", 0x023BF2B6),
+                (0x023BF26E, "bl", 0x023BF2B6),
+                (0x023BF278, "bl", 0x023BF2B6),
+                (0x023BF282, "bl", 0x023BF2B6),
+                (0x023BF28A, "bl", 0x023BF2B4),
+                (0x023BF290, "bl", 0x023BF1E8),
+            ],
+        ),
     )
     for (
         name,
@@ -2469,6 +3652,77 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             packaged_thumb_calls(image, image_base, address, size)
             == expected_calls,
             f"{name} packaged BL/BLX call allowlist differs",
+        )
+
+    for entry_offset, implementation in (
+        (0x00, "PokemonMoveHistory_InitImpl"),
+        (0x08, "PokemonMoveHistory_LoadImpl"),
+        (0x10, "PokemonMoveHistory_ResetImpl"),
+        (0x40, "PokemonMoveHistory_CommitIfDirtyImpl"),
+        (0x48, "PokemonMoveHistory_LoadAndSeedPartyImpl"),
+        (0x50, "PokemonMoveHistory_PrepareSaveImpl"),
+        (0x58, "PokemonMoveHistory_FinishSaveImpl"),
+        (0x60, "PokemonMoveHistory_CancelSaveImpl"),
+        (0x68, "PokemonMoveHistory_WriteSaveNowImpl"),
+        (0x70, "SaveGameNormalImpl"),
+    ):
+        require(
+            bytes_at(
+                packaged_ov153,
+                ov153_base,
+                ov153_base + entry_offset,
+                4,
+            ) == b"\x00\x4b\x18\x47"
+            and struct.unpack_from(
+                "<I",
+                packaged_ov153,
+                entry_offset + 4,
+            )[0] == symbols[implementation] + 1,
+            f"lifecycle entry 0x{entry_offset:X} target/body differs",
+        )
+    for literal_address, expected_target in (
+        (0x023DD6F8, OVERLAY_BASE + 0x11),
+        (0x023DD978, OVERLAY_BASE + 0x49),
+        (0x023DDA70, OVERLAY_BASE + 0x51),
+        (0x023DDAF8, OVERLAY_BASE + 0x59),
+        (0x023DDB80, OVERLAY_BASE + 0x61),
+        (0x023DDD04, OVERLAY_BASE + 0x01),
+    ):
+        require(
+            struct.unpack_from(
+                "<I",
+                packaged_ov129,
+                literal_address - ov129_base,
+            )[0] == expected_target,
+            f"save lifecycle literal 0x{literal_address:08X} differs",
+        )
+    for hook_address, expected_bytes in (
+        (0x020271B0, "00 48 00 47 15 dc 3d 02"),
+        (0x020274A8, "00 49 08 47 c5 d6 3d 02"),
+        (0x02027550, "00 4a 10 47 75 da 3d 02"),
+        (0x02027564, "00 49 08 47 41 e0 3d 02"),
+        (0x020275A4, "00 49 08 47 89 db 3d 02"),
+        (0x02027AD4, "00 49 08 47 b1 d8 3d 02"),
+        (0x02027BDC, "00 4b 18 47 1d da 3d 02"),
+        (0x02027CEC, "00 4b 18 47 89 da 3d 02"),
+    ):
+        require(
+            bytes_at(packaged_arm9, arm9_base, hook_address, 8)
+            == bytes.fromhex(expected_bytes),
+            f"save lifecycle hook 0x{hook_address:08X} differs",
+        )
+    for literal_address, expected_target in (
+        (0x023BF118, 0x02074905),
+        (0x023BF11C, 0x02074641),
+        (0x023BF120, 0x02074645),
+    ):
+        require(
+            struct.unpack_from(
+                "<I",
+                packaged_ov153,
+                literal_address - ov153_base,
+            )[0] == expected_target,
+            f"SeedParty accessor literal 0x{literal_address:08X} differs",
         )
 
     party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA154, 0x6C)
@@ -3164,7 +4418,7 @@ def main() -> None:
         "--manifest is required exactly when --rom is used",
     )
     source_contracts()
-    host_fixtures()
+    host_fixtures(args.manifest, args.rom)
     if args.source_only:
         print("move-history capture: source and host fixtures verified")
     else:

@@ -65,6 +65,17 @@ lifecycle is still settling. The save boundary seeds newly acquired normal
 party Pokémon, including inherited egg moves, without repeated revision churn:
 existing moves are deduplicated and retain first-observed order.
 
+The save lifecycle is authenticated end to end. Dynamic-load success reaches
+the sidecar load entry only after the retail dynamic-region fixups. Save
+initialization advances the primary counter and disables sleep before sidecar
+prepare/seed/commit; finish promotes or retries the staged sidecar before sleep
+is re-enabled. `Save_Cancel` reaches the resident history-aware cancellation
+worker, which performs the retail rollback/backup cleanup, marks staged history
+for retry, clears its staging fields, and only then clears the sleep-disable
+flag. The worker has a direct local Thumb call from resident overlay 129 and
+uses the typed overlay-153 long-call entry, avoiding the former link-time
+resolution to vanilla `CancelAsyncSave`.
+
 High-level replacement paths and low-level helpers have one transaction owner:
 Party Menu delegates directly to `ReplaceMove`; battle/evolution/overlay 68
 replace only their final setter call; and the standard tutor redirects only
@@ -78,24 +89,33 @@ All three copy calls and the one clear call resolve inside overlay 153 before
 interworking to the retail ARM routines. This keeps the fixed `0x1000` code
 guard intact without consuming overlay 129 headroom.
 
-The build forces the six task-3 C/assembly objects to be rebuilt, packages the
-temporary ROM, then seals a content-addressed manifest over their generated
+The build forces the seven task-3 C/assembly objects, including `save.o`, to be
+rebuilt, packages a candidate ROM, then seals a candidate content-addressed
+manifest over their generated
 dependency/ARMIPS include-and-incbin closure, generated linker script,
+the ARMIPS symbol generator,
 effective build flags, identities of the actual compiler/assembler/linker/
 objcopy/ARMIPS/ndstool commands, `build/linked.o`, both linked binaries, the
 patched ARM9/consumed overlays, y9, and the packaged ROM. The packaged ROM is a
-logical content role, so the retained manifest remains valid after `.tmp` is
-published as `test.nds` and can be rechecked on the macOS host without requiring Docker's
-absolute tool paths. The capture verifier accepts `--rom` only with that exact
-manifest. Hashes—not mtimes—make absent, modified, or coherently touched stale
-generations fail closed.
+logical content role, so it can be rechecked on the macOS host without
+requiring Docker's absolute tool paths. Both verifiers run against the
+candidate pair. Only after they succeed does a rollback-capable publisher
+replace the accepted manifest/ROM pair and reverify it; an injected failure
+after either replacement restores the previous pair byte-for-byte. A fsynced
+recovery journal retains the prior pair through process interruption or a
+persistent restore error and is resolved before any later publication. Hashes—not
+mtimes—make absent, modified, or coherently touched stale generations fail
+closed.
 
 Post-package checks authenticate unique dense overlay/file IDs and exact
 y9/FAT metadata for overlays 12, 68, 129, and 153. Overlay 129's complete
 `IsMoveUnimplemented` body and controlling call are exact-checked. Complete
 packaged bodies and BL/BLX (including register-form) call allowlists cover
 `MonTryLearnMoveOnLevelUp`, `PartyMenu_LearnMoveToSlot`, `RecordMoveImpl`,
-`ReplaceMoveImpl`, and `DeleteMoveSlotImpl`; all earlier fixed-entry, hook
+`ReplaceMoveImpl`, `DeleteMoveSlotImpl`, and the complete load/prepare/finish/
+cancel lifecycle. The complete overlay-153 call-site inventory is also bound
+between linked ELF and packaged bytes, including immediate and register-form
+BLX instructions; all earlier fixed-entry, hook
 window/continuation, local-helper, relocation, interworking, `0xEC` layout,
 candidate, and sidecar checks remain. Deterministic source mutation fixtures
 reject wrong arguments, ignored/duplicate predicates, pre-guard mutations,

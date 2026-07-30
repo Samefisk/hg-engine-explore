@@ -147,6 +147,10 @@ void LONG_CALL HexDumpMemory(u8 *start, u32 size)
 #ifdef ALLOW_SAVE_CHANGES
 #ifdef EXPAND_PC_BOXES
 
+static void CancelAsyncSaveWithMoveHistory(
+    SaveData *saveData,
+    struct AsyncWriteManager *writeMan) __attribute__((noipa, used));
+
 SaveData *SaveData_New(void) {
     SaveData *ret;
     int status;
@@ -270,7 +274,7 @@ int Save_WriteFileAsync(SaveData *saveData) {
 }
 
 void Save_Cancel(SaveData *saveData) {
-    CancelAsyncSave(saveData, &saveData->asyncWriteMan);
+    CancelAsyncSaveWithMoveHistory(saveData, &saveData->asyncWriteMan);
 }
 
 struct SaveChunkFooter *GetSaveSectorFooterPtr(SaveData *saveData, void *data, int idx) {
@@ -431,7 +435,9 @@ void Save_WriteManFinish(SaveData *saveData, struct AsyncWriteManager *writeMan,
     Sys_ClearSleepDisableFlag(1);
 }
 
-void CancelAsyncSave(SaveData *saveData, struct AsyncWriteManager *writeMan) {
+static void CancelAsyncSaveWithMoveHistory(
+    SaveData *saveData,
+    struct AsyncWriteManager *writeMan) {
     if (writeMan->rollbackCounter) {
         saveData->saveCounter = writeMan->count;
     }

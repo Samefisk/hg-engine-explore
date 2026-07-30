@@ -131,9 +131,11 @@ LINK = $(BUILD)/linked.o
 OUTPUT = $(BUILD)/output.bin
 
 MOVE_HISTORY_CAPTURE_MANIFEST = $(BUILD)/pokemon_move_history_capture_build.json
+MOVE_HISTORY_CAPTURE_MANIFEST_TMP = $(MOVE_HISTORY_CAPTURE_MANIFEST).tmp
 MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/pokemon.o \
 	$(BUILD)/party_menu.o \
+	$(BUILD)/save.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
 	$(BUILD)/pokemon_move_history_overlay/entry.o \
@@ -306,10 +308,10 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
 	$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py
 	@echo "Making ROM..."
-	rm -f $(BUILDROM).tmp
+	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
 	$(PYTHON_NO_VENV) scripts/pokemon_move_history_build_manifest.py \
-		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST) --rom $(BUILDROM).tmp \
+		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp \
 		--context "CC=$(CC)" --context "CFLAGS=$(CFLAGS)" \
 		--context "AS=$(AS)" --context "ASFLAGS=$(ASFLAGS)" \
 		--context "LD=$(LD)" --context "LDFLAGS=$(LDFLAGS)" \
@@ -318,9 +320,14 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" \
 		--context "NDSTOOL=$(NDSTOOL)"
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
-		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) --rom $(BUILDROM).tmp
+		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
-	mv $(BUILDROM).tmp $(BUILDROM)
+	$(PYTHON_NO_VENV) scripts/pokemon_move_history_build_manifest.py \
+		--publish-pair \
+		--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) \
+		--candidate-rom $(BUILDROM).tmp \
+		--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) \
+		--final-rom $(BUILDROM)
 	@echo "Done.  See output $(BUILDROM)."
 
 

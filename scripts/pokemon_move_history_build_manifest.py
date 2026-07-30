@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -13,7 +14,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -36,6 +37,7 @@ TOOL_CONTEXT_KEYS = {"ARMIPS", "AS", "CC", "LD", "NDSTOOL", "OBJCOPY"}
 DEPENDENCY_FILES = (
     "build/pokemon.d",
     "build/party_menu.d",
+    "build/save.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
 )
@@ -52,6 +54,7 @@ FIXED_INPUTS = (
     "asm/pokemon_move_history_overlay/thumb_help.s",
     "src/pokemon_move_history_overlay/linker.ld",
     "scripts/pokemon_move_history_build_manifest.py",
+    "scripts/generate_armips_symbols.py",
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/verify_pokemon_move_history_capture.py",
@@ -62,6 +65,7 @@ OUTPUTS = {
     "core_binary": "build/output.bin",
     "pokemon_object": "build/pokemon.o",
     "party_menu_object": "build/party_menu.o",
+    "save_object": "build/save.o",
     "history_object":
         "build/pokemon_move_history_overlay/pokemon_move_history.o",
     "relearn_object":
@@ -385,11 +389,308 @@ def seal(
         raise
 
 
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        try:
+            os.fsync(descriptor)
+        except OSError as exc:
+            if exc.errno not in {errno.EINVAL, errno.ENOTSUP}:
+                raise
+    finally:
+        os.close(descriptor)
+
+
+def _clone_for_replace(source: Path, destination_directory: Path) -> Path:
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{source.name}.publish.",
+        dir=destination_directory,
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    temporary.unlink()
+    try:
+        try:
+            os.link(source, temporary)
+        except OSError:
+            shutil.copyfile(source, temporary)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        _fsync_directory(destination_directory)
+        return temporary
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _write_publish_journal(
+    journal_path: Path,
+    finals: tuple[Path, Path],
+    prior_records: dict[Path, dict[str, Any] | None],
+    backups: dict[Path, Path],
+    stages: dict[Path, Path],
+) -> None:
+    document = {
+        "schema": "pokemon-move-history-pair-publish-v1",
+        "entries": [
+            {
+                "final": str(final.resolve()),
+                "prior": prior_records[final],
+                "backup": (
+                    str(backups[final].resolve())
+                    if final in backups
+                    else None
+                ),
+                "stage": str(stages[final].resolve()),
+            }
+            for final in finals
+        ],
+    }
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{journal_path.name}.",
+        dir=journal_path.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            json.dump(document, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, journal_path)
+        _fsync_directory(journal_path.parent)
+    except BaseException:
+        Path(temporary_name).unlink(missing_ok=True)
+        raise
+
+
+def _restore_publish_journal(
+    journal_path: Path,
+    finals: tuple[Path, Path],
+    replace: Callable[[str | Path, str | Path], Any],
+) -> None:
+    try:
+        document = json.loads(journal_path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ManifestError("pair-publish recovery journal is invalid") from exc
+    entries = document.get("entries") if isinstance(document, dict) else None
+    if (
+        not isinstance(document, dict)
+        or document.get("schema")
+        != "pokemon-move-history-pair-publish-v1"
+        or not isinstance(entries, list)
+        or len(entries) != 2
+        or not all(isinstance(entry, dict) for entry in entries)
+    ):
+        raise ManifestError("pair-publish recovery journal schema differs")
+    if any(
+        set(entry) != {"final", "prior", "backup", "stage"}
+        for entry in entries
+    ):
+        raise ManifestError("pair-publish recovery entry fields differ")
+    expected_finals = [str(path.resolve()) for path in finals]
+    if [entry.get("final") for entry in entries] != expected_finals:
+        raise ManifestError("pair-publish recovery paths differ")
+
+    final_resolved = {path.resolve() for path in finals}
+    journal_resolved = journal_path.resolve()
+    owned_temporaries: set[Path] = set()
+    for entry, final in zip(entries, finals):
+        prior = entry["prior"]
+        backup_text = entry["backup"]
+        stage_text = entry["stage"]
+        temporary_texts = [stage_text]
+        if prior is None:
+            if backup_text is not None:
+                raise ManifestError(
+                    "pair-publish absent prior unexpectedly has a backup"
+                )
+        elif not isinstance(backup_text, str):
+            raise ManifestError("pair-publish recovery backup path is invalid")
+        else:
+            temporary_texts.append(backup_text)
+        for temporary_text in temporary_texts:
+            if not isinstance(temporary_text, str):
+                raise ManifestError(
+                    "pair-publish recovery temporary path is invalid"
+                )
+            temporary = Path(temporary_text)
+            resolved = temporary.resolve()
+            if (
+                not temporary.is_absolute()
+                or resolved.parent != final.parent.resolve()
+                or re.fullmatch(
+                    r"\..+\.publish\.[A-Za-z0-9_-]+",
+                    resolved.name,
+                )
+                is None
+                or resolved in final_resolved
+                or resolved == journal_resolved
+                or resolved in owned_temporaries
+            ):
+                raise ManifestError(
+                    "pair-publish recovery temporary ownership differs"
+                )
+            owned_temporaries.add(resolved)
+
+    restore_errors: list[str] = []
+    for entry, final in zip(entries, finals):
+        prior = entry.get("prior")
+        backup_text = entry.get("backup")
+        stage_text = entry.get("stage")
+        if not isinstance(stage_text, str):
+            restore_errors.append(f"{final}: malformed stage path")
+            continue
+        if prior is None:
+            try:
+                final.unlink(missing_ok=True)
+                _fsync_directory(final.parent)
+            except OSError as exc:
+                restore_errors.append(f"{final}: {exc}")
+            continue
+        if (
+            not isinstance(prior, dict)
+            or set(prior) != {"size", "sha256"}
+            or not isinstance(backup_text, str)
+        ):
+            restore_errors.append(f"{final}: malformed prior record")
+            continue
+        backup = Path(backup_text)
+        restored = final.is_file() and file_record(final) == prior
+        last_error: BaseException | None = None
+        for _attempt in range(3 if not restored else 0):
+            try:
+                if not backup.is_file() or file_record(backup) != prior:
+                    raise ManifestError(
+                        f"recovery backup differs for {final}"
+                    )
+                replace(backup, final)
+                _fsync_directory(final.parent)
+                restored = file_record(final) == prior
+                if restored:
+                    break
+            except BaseException as exc:
+                last_error = exc
+        if not restored:
+            restore_errors.append(f"{final}: {last_error}")
+
+    for entry, final in zip(entries, finals):
+        prior = entry["prior"]
+        if prior is None:
+            if final.exists():
+                restore_errors.append(f"{final}: expected absence")
+        elif not final.is_file() or file_record(final) != prior:
+            restore_errors.append(f"{final}: restored content differs")
+    if restore_errors:
+        raise ManifestError(
+            "pair-publish rollback incomplete; recovery journal/backups "
+            "retained: " + "; ".join(restore_errors)
+        )
+    cleanup_directories: set[Path] = set()
+    for entry in entries:
+        for field in ("backup", "stage"):
+            path_text = entry.get(field)
+            if isinstance(path_text, str):
+                path = Path(path_text)
+                path.unlink(missing_ok=True)
+                cleanup_directories.add(path.parent)
+    for directory in cleanup_directories:
+        _fsync_directory(directory)
+    journal_path.unlink()
+    _fsync_directory(journal_path.parent)
+
+
+def publish_pair(
+    candidate_manifest: Path,
+    candidate_rom: Path,
+    final_manifest: Path,
+    final_rom: Path,
+    *,
+    verify: Callable[[Path, Path], Any] = verify_manifest,
+    failure_hook: Callable[[str], None] | None = None,
+    replace: Callable[[str | Path, str | Path], Any] = os.replace,
+) -> None:
+    candidates = (candidate_manifest.resolve(), candidate_rom.resolve())
+    finals = (final_manifest.resolve(), final_rom.resolve())
+    if len(set(candidates + finals)) != 4:
+        raise ManifestError("candidate and final publish paths must be distinct")
+    final_manifest.parent.mkdir(parents=True, exist_ok=True)
+    final_rom.parent.mkdir(parents=True, exist_ok=True)
+    journal_path = final_manifest.with_name(
+        final_manifest.name + ".publish-journal"
+    )
+    final_paths = (final_manifest, final_rom)
+    if journal_path.exists():
+        _restore_publish_journal(journal_path, final_paths, replace)
+    verify(candidate_manifest, candidate_rom)
+
+    prior_records = {
+        final: file_record(final) if final.is_file() else None
+        for final in final_paths
+    }
+    backups: dict[Path, Path] = {}
+    stages: dict[Path, Path] = {}
+    mutated = False
+    try:
+        for final, candidate in (
+            (final_manifest, candidate_manifest),
+            (final_rom, candidate_rom),
+        ):
+            if prior_records[final] is not None:
+                backups[final] = _clone_for_replace(final, final.parent)
+            stages[final] = _clone_for_replace(candidate, final.parent)
+
+        _write_publish_journal(
+            journal_path,
+            final_paths,
+            prior_records,
+            backups,
+            stages,
+        )
+        mutated = True
+        replace(stages[final_manifest], final_manifest)
+        _fsync_directory(final_manifest.parent)
+        if failure_hook is not None:
+            failure_hook("after_manifest_replace")
+
+        replace(stages[final_rom], final_rom)
+        _fsync_directory(final_rom.parent)
+        if failure_hook is not None:
+            failure_hook("after_rom_replace")
+
+        verify(final_manifest, final_rom)
+        candidate_manifest.unlink()
+        candidate_rom.unlink()
+        _fsync_directory(candidate_manifest.parent)
+        if candidate_rom.parent != candidate_manifest.parent:
+            _fsync_directory(candidate_rom.parent)
+        journal_path.unlink()
+        _fsync_directory(journal_path.parent)
+    except BaseException:
+        if mutated:
+            _restore_publish_journal(journal_path, final_paths, replace)
+        elif journal_path.exists():
+            journal_path.unlink()
+            _fsync_directory(journal_path.parent)
+        raise
+    finally:
+        cleanup_backups = not journal_path.exists()
+        temporaries = tuple(stages.values())
+        if cleanup_backups:
+            temporaries += tuple(backups.values())
+        for temporary in temporaries:
+            temporary.unlink(missing_ok=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seal", type=Path)
     parser.add_argument("--verify", type=Path)
-    parser.add_argument("--rom", required=True, type=Path)
+    parser.add_argument("--publish-pair", action="store_true")
+    parser.add_argument("--rom", type=Path)
+    parser.add_argument("--candidate-manifest", type=Path)
+    parser.add_argument("--candidate-rom", type=Path)
+    parser.add_argument("--final-manifest", type=Path)
+    parser.add_argument("--final-rom", type=Path)
     parser.add_argument(
         "--context",
         action="append",
@@ -397,10 +698,29 @@ def main() -> None:
         metavar="KEY=VALUE",
     )
     args = parser.parse_args()
-    if (args.seal is None) == (args.verify is None):
-        raise SystemExit("choose exactly one of --seal or --verify")
+    modes = (
+        args.seal is not None,
+        args.verify is not None,
+        args.publish_pair,
+    )
+    if sum(modes) != 1:
+        raise SystemExit(
+            "choose exactly one of --seal, --verify, or --publish-pair"
+        )
+    publish_values = (
+        args.candidate_manifest,
+        args.candidate_rom,
+        args.final_manifest,
+        args.final_rom,
+    )
     try:
         if args.seal is not None:
+            if args.rom is None or any(
+                value is not None for value in publish_values
+            ):
+                raise ManifestError(
+                    "--seal requires --rom and no publish paths"
+                )
             context: dict[str, str] = {}
             for item in args.context:
                 if "=" not in item:
@@ -410,10 +730,49 @@ def main() -> None:
                     raise ManifestError(f"duplicate build context: {key}")
                 context[key] = value
             seal(args.seal, args.rom, context)
-        else:
-            if args.context:
-                raise ManifestError("--context is valid only with --seal")
+        elif args.verify is not None:
+            if (
+                args.rom is None
+                or args.context
+                or any(value is not None for value in publish_values)
+            ):
+                raise ManifestError(
+                    "--verify requires --rom and no seal/publish options"
+                )
             verify_manifest(args.verify, args.rom)
+        else:
+            if args.rom is not None or args.context or any(
+                value is None for value in publish_values
+            ):
+                raise ManifestError(
+                    "--publish-pair requires exactly candidate/final "
+                    "manifest and ROM paths"
+                )
+            injected_phase = os.environ.get(
+                "POKEMON_MOVE_HISTORY_TEST_PUBLISH_FAILURE"
+            )
+            if injected_phase not in {
+                None,
+                "after_manifest_replace",
+                "after_rom_replace",
+            }:
+                raise ManifestError("invalid injected publish-failure phase")
+
+            def fail_for_fixture(phase: str) -> None:
+                if phase == injected_phase:
+                    raise ManifestError(
+                        f"injected pair-publish failure: {phase}"
+                    )
+
+            publish_pair(
+                args.candidate_manifest,
+                args.candidate_rom,
+                args.final_manifest,
+                args.final_rom,
+                failure_hook=(
+                    fail_for_fixture if injected_phase is not None else None
+                ),
+            )
     except ManifestError as exc:
         raise SystemExit(f"move-history build manifest failed: {exc}") from exc
 
