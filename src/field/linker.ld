@@ -19,8 +19,29 @@ SECTIONS {
                 ASSERT(OverworldFollowerSelector_TaskPoll
                         == ORIGIN(rom) + 0x10,
                     "overworld follower selector task poll moved");
-                ASSERT(. <= ORIGIN(rom) + 0x148,
+                ASSERT(. <= ORIGIN(rom) + 0xD0,
                     "overworld follower selector task poll exceeds ABI reserve");
+                . = ORIGIN(rom) + 0xD0;
+                KEEP(*(.overworld_follower_transition_queue_append))
+                ASSERT(OverworldFollowerTransitionQueue_AppendResident
+                        == ORIGIN(rom) + 0xD0,
+                    "follower transition queue append moved");
+                ASSERT(. <= ORIGIN(rom) + 0x108,
+                    "follower transition queue append exceeds ABI reserve");
+                . = ORIGIN(rom) + 0x108;
+                KEEP(*(.overworld_follower_transition_queue_pop))
+                ASSERT(OverworldFollowerTransitionQueue_PopResident
+                        == ORIGIN(rom) + 0x108,
+                    "follower transition queue pop moved");
+                ASSERT(. <= ORIGIN(rom) + 0x130,
+                    "follower transition queue pop exceeds ABI reserve");
+                . = ORIGIN(rom) + 0x130;
+                KEEP(*(.overworld_follower_transition_queue))
+                ASSERT(gOverworldFollowerTransitionQueueStorage
+                        == ORIGIN(rom) + 0x130,
+                    "follower transition queue storage moved");
+                ASSERT(. <= ORIGIN(rom) + 0x138,
+                    "follower transition queue storage exceeds ABI reserve");
                 . = ORIGIN(rom) + 0x148;
                 KEEP(*(.overworld_follower_selector_state))
                 ASSERT(gOverworldFollowerSelectorStateStorage

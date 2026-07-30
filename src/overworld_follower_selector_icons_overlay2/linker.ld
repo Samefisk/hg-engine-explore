@@ -11,6 +11,25 @@ SECTIONS {
                 KEEP(*(.follower_selector_ow_entry))
                 ASSERT(FollowerSelectorOverworld_Extract == ORIGIN(rom),
                     "follower selector overworld extractor ABI moved");
+                ASSERT(. <= ORIGIN(rom) + 0x300,
+                    "follower selector overworld extractor exceeds ABI slot");
+                . = ORIGIN(rom) + 0x300;
+                KEEP(*(.follower_release_bounce_entry))
+                ASSERT(OverworldWildSpawns_StartFollowerReleaseBounce
+                        == ORIGIN(rom) + 0x300,
+                    "follower release bounce entry ABI moved");
+                ASSERT(. <= ORIGIN(rom) + 0x600,
+                    "follower release bounce entry exceeds ABI slot");
+                . = ORIGIN(rom) + 0x600;
+                KEEP(*(.follower_release_bounce_render))
+                ASSERT(OverworldWildSpawns_RenderFollowerReleaseBounce
+                        == ORIGIN(rom) + 0x600,
+                    "follower release bounce render ABI moved");
+                . = ORIGIN(rom) + 0x714;
+                KEEP(*(.follower_release_return))
+                ASSERT(OverworldWildSpawns_ReturnFollowerReleaseBall
+                        == ORIGIN(rom) + 0x714,
+                    "follower release return ABI moved");
                 *(.init)
                 *(.text)
                 *(.ctors)

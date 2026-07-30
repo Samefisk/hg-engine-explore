@@ -14,6 +14,41 @@
 
 volatile u8 gOverworldFollowerSelectorStateStorage
     __attribute__((section(".overworld_follower_selector_state"), used));
+volatile OverworldFollowerTransitionQueueStorage
+    gOverworldFollowerTransitionQueueStorage
+    __attribute__((section(".overworld_follower_transition_queue"), used));
+static u8 sOverworldFollowerSelectorYWasDown;
+
+BOOL __attribute__((section(".overworld_follower_transition_queue_append"), used))
+OverworldFollowerTransitionQueue_AppendResident(u8 command)
+{
+    volatile OverworldFollowerTransitionQueueStorage *queue =
+        &gOverworldFollowerTransitionQueueStorage;
+
+    if (command == 0
+        || queue->count >= OVERWORLD_FOLLOWER_TRANSITION_QUEUE_CAPACITY) {
+        return FALSE;
+    }
+    queue->commands |= (u32)command
+        << (queue->count
+            * OVERWORLD_FOLLOWER_TRANSITION_QUEUE_COMMAND_BITS);
+    queue->count++;
+    return TRUE;
+}
+
+void __attribute__((section(".overworld_follower_transition_queue_pop"), used))
+OverworldFollowerTransitionQueue_PopResident(void)
+{
+    volatile OverworldFollowerTransitionQueueStorage *queue =
+        &gOverworldFollowerTransitionQueueStorage;
+
+    if (queue->count != 0) {
+        queue->commands >>=
+            OVERWORLD_FOLLOWER_TRANSITION_QUEUE_COMMAND_BITS;
+        queue->count--;
+    }
+    queue->headIssued = FALSE;
+}
 
 static BOOL OverworldFollowerSelector_IsCallable(const void *function)
 {
@@ -61,7 +96,9 @@ static BOOL OverworldFollowerSelector_ForceDirectUnload(
     OVERWORLD_FOLLOWER_SELECTOR_STATE &= (u8)~(
         OVERWORLD_FOLLOWER_SELECTOR_ACTIVE_FLAG
         | OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG
-        | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG);
+        | OVERWORLD_FOLLOWER_SELECTOR_UNLOAD_PENDING_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG
+        | OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG);
     return TRUE;
 }
 
@@ -80,9 +117,27 @@ OverworldFollowerSelector_ReadPhysicalKeys(void)
 void __attribute__((section(".overworld_follower_selector_task_poll"), used))
 OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
 {
+    u32 physicalKeys = OverworldFollowerSelector_ReadPhysicalKeys();
+    BOOL yDown = (physicalKeys & PAD_BUTTON_Y) != 0;
     BOOL releaseGated = OverworldFollowerSelector_IsReleaseGated();
     const OverworldFollowerSelectorOverlayEntry *entry =
         OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY;
+
+    if (!releaseGated) {
+        if (yDown
+            && !sOverworldFollowerSelectorYWasDown
+            && !OverworldFollowerSelector_IsActiveFlagSet()
+            && !OverworldFollowerSelector_IsYPressPending()) {
+            OverworldFollowerSelector_ClearYReleasePending();
+            OverworldFollowerSelector_SetYPressPending();
+        } else if (!yDown
+            && sOverworldFollowerSelectorYWasDown
+            && (OverworldFollowerSelector_IsActiveFlagSet()
+                || OverworldFollowerSelector_IsYPressPending())) {
+            OverworldFollowerSelector_SetYReleasePending();
+        }
+    }
+    sOverworldFollowerSelectorYWasDown = (u8)yDown;
 
     if (!releaseGated
         && OverworldFollowerSelector_IsDirectLoaded()
@@ -91,7 +146,7 @@ OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
     }
     if (releaseGated
         && !OverworldFollowerSelector_IsUnloadPending()
-        && (OverworldFollowerSelector_ReadPhysicalKeys()
+        && (physicalKeys
             & (PAD_BUTTON_A | PAD_BUTTON_L | PAD_BUTTON_R | PAD_BUTTON_Y))
             == 0) {
         OverworldFollowerSelector_ClearReleaseGate();
@@ -432,9 +487,9 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
 }
 
 /*
- * Preserve the old field-overlay frame pump: the R-button fast path avoids
- * loading overlay 149 until it is needed, while an in-progress player-ball
- * action keeps receiving frames after R is released.
+ * Preserve the old field-overlay frame pump: R or Y wakes the linked
+ * overworld services, while an in-progress player-ball or selector action
+ * keeps receiving frames after the button is released.
  */
 static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
 {
@@ -453,10 +508,18 @@ static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
             goto runFieldService;
         }
     } else if (!sOverworldWildPlayerFrameServiceActive
-        && (reg_PAD_KEYINPUT & PAD_BUTTON_R) != 0) {
+        && (reg_PAD_KEYINPUT & (PAD_BUTTON_R | PAD_BUTTON_Y))
+            == (PAD_BUTTON_R | PAD_BUTTON_Y)
+        && !OverworldFollowerSelector_IsYPressPending()) {
         return TRUE;
     }
     (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
+    if (OverworldFollowerSelector_IsYPressPending()
+        && !OverworldFollowerSelector_IsReleaseGated()
+        && OverworldFollowerSelector_IsDirectLoaded()
+        && OverworldFollowerSelector_ValidateLoaded()) {
+        OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputFilter(fieldSystem);
+    }
     return TRUE;
 
 runFieldService:
