@@ -45,7 +45,9 @@ BOOL PokemonMoveHistory_Seed(
 
 /**
  * Adds one move, ignoring MOVE_NONE and duplicate entries. When a Pokemon's
- * bounded history is full, its oldest move is discarded.
+ * bounded history is full, the oldest stored move not among its current four
+ * moves is discarded (falling back to the oldest move only if all are
+ * current).
  *
  * @return TRUE when the record is available.
  */
@@ -78,14 +80,22 @@ u32 PokemonMoveHistory_Query(
 
 /**
  * Persists a dirty sidecar to the inactive mirror. Save code calls this
- * before writing the primary save so a failed history write cannot make a
- * just-forgotten move unrecoverable.
+ * before writing the primary save. A failure leaves history dirty for retry
+ * and never blocks the primary save; an interrupted or failed sidecar can
+ * lose recent history, but cannot damage the main save. Persisted generation
+ * comparisons require relevant primary/sidecar counters to remain less than
+ * 2^31 saves apart.
+ *
+ * @return TRUE when no sidecar write was needed or the write was staged.
  */
 BOOL PokemonMoveHistory_CommitIfDirty(SaveData *saveData);
 
 /*
  * Save lifecycle integration. Feature callers should use the APIs above;
  * these entry points keep the resident save hooks small and transactional.
+ * PrepareSave's result reports only the ancillary history attempt and must
+ * not be used to gate primary saving. FinishSave promotes a staged mirror
+ * only after primary success; CancelSave leaves history dirty for retry.
  */
 void PokemonMoveHistory_LoadAndSeedParty(SaveData *saveData);
 BOOL PokemonMoveHistory_PrepareSave(SaveData *saveData);

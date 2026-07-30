@@ -258,9 +258,7 @@ void Save_PrepareForAsyncWrite(SaveData *saveData, int a1) {
 int Save_WriteFileAsync(SaveData *saveData) {
     int ret;
 
-    if (!saveData->pokemonMoveHistorySaveReady) {
-        ret = WRITE_STATUS_TOTAL_FAIL;
-    } else if (saveData->asyncWriteMan.curSector == 1) {
+    if (saveData->asyncWriteMan.curSector == 1) {
         ret = HandleWriteSaveAsync_PCBoxes(saveData, &saveData->asyncWriteMan);
     } else {
         ret = HandleWriteSaveAsync_NormalData(saveData, &saveData->asyncWriteMan);
@@ -402,8 +400,11 @@ void Save_WriteManInit(SaveData *saveData, struct AsyncWriteManager *writeMan, i
     writeMan->numSectors = 2;
     Sys_SetSleepDisableFlag(1);
 
-    saveData->pokemonMoveHistorySaveReady =
-        PokemonMoveHistory_PrepareSave(saveData);
+    /*
+     * Move history is an ancillary, retryable sidecar. Its allocation or
+     * flash failure must never prevent the primary save from proceeding.
+     */
+    (void)PokemonMoveHistory_PrepareSave(saveData);
 }
 
 // HandleWriteSaveAsync_NormalData just needs offset of lastGoodSector written to 02027CE8 (0x2330A)

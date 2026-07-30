@@ -278,7 +278,6 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(MAKE) move_narc
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
 	$(NARCHIVE) create $(FILESYS)/a/0/2/8 $(BUILD)/a028/ -nf
-	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py
 	$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py \
 		--source src/pokemon_storage_system.c \
 		--config include/config.h \
@@ -294,7 +293,10 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
 	@echo "Making ROM..."
-	$(NDSTOOL) -c $(BUILDROM) -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	rm -f $(BUILDROM).tmp
+	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
+	mv $(BUILDROM).tmp $(BUILDROM)
 	@echo "Done.  See output $(BUILDROM)."
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import re
 import struct
 import subprocess
@@ -10,6 +11,11 @@ REPO = Path(__file__).resolve().parents[1]
 OVERLAY_ID = 153
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x023C0400
+OVERLAY_GUARD = 0x1000
+MAIN_RAM_START = 0x02000000
+MAIN_ARENA_HIGH = 0x023E0000
+DTCM_START = 0x027E0000
+DTCM_END = DTCM_START + 0x4000
 ROW_SIZE = 0x20
 
 
@@ -22,6 +28,15 @@ def align4(value: int) -> int:
     return (value + 3) & ~3
 
 
+def ranges_overlap(
+    first_start: int,
+    first_end: int,
+    second_start: int,
+    second_end: int,
+) -> bool:
+    return first_start < second_end and second_start < first_end
+
+
 def parse_define(source: str, name: str) -> int:
     match = re.search(
         rf"^#define {re.escape(name)} (0x[0-9a-fA-F]+|[0-9]+)$",
@@ -32,32 +47,198 @@ def parse_define(source: str, name: str) -> int:
     return int(match.group(1), 0)
 
 
+def checked_slice(
+    data: bytes,
+    offset: int,
+    size: int,
+    description: str,
+) -> bytes:
+    require(
+        offset >= 0 and size >= 0 and offset + size <= len(data),
+        f"{description} lies outside the completed ROM",
+    )
+    return data[offset:offset + size]
+
+
+def read_u32(data: bytes, offset: int, description: str) -> int:
+    require(offset >= 0 and offset + 4 <= len(data),
+            f"{description} is outside its binary")
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def final_overlay(
+    rom: bytes,
+    fat: bytes,
+    row: tuple[int, ...],
+) -> bytes:
+    file_id = row[6]
+    entry_offset = file_id * 8
+    require(entry_offset + 8 <= len(fat),
+            f"overlay {row[0]} FAT entry {file_id} is missing")
+    file_start, file_end = struct.unpack_from("<II", fat, entry_offset)
+    require(file_start < file_end,
+            f"overlay {row[0]} FAT entry is empty or reversed")
+    return checked_slice(
+        rom,
+        file_start,
+        file_end - file_start,
+        f"overlay {row[0]} file",
+    )
+
+
+def serial_compare(first: int, second: int) -> int:
+    difference = (first - second) & 0xFFFFFFFF
+    require(
+        difference != 0x80000000,
+        "serial comparison fixture used the excluded half-range",
+    )
+    if difference == 0:
+        return 0
+    return 1 if difference < 0x80000000 else -1
+
+
+def source_contracts() -> None:
+    history_source = (
+        REPO
+        / "src/pokemon_move_history_overlay/pokemon_move_history.c"
+    ).read_text()
+    save_source = (REPO / "src/save.c").read_text()
+
+    for first, second, expected in (
+        (0, 0, 0),
+        (5, 4, 1),
+        (4, 5, -1),
+        (0, 0xFFFFFFFF, 1),
+        (1, 0xFFFFFFFE, 1),
+        (0xFFFFFFFF, 1, -1),
+        (0xFFFFFF00, 0x100, -1),
+    ):
+        require(
+            serial_compare(first, second) == expected,
+            f"serial comparison fixture failed for {first:#x}/{second:#x}",
+        )
+    compare_match = re.search(
+        r"static int PokemonMoveHistory_CompareCounters.*?^}",
+        history_source,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(compare_match is not None, "counter comparison implementation is missing")
+    compare_source = compare_match.group(0)
+    require(
+        "difference = first - second;" in compare_source
+        and "difference < 0x80000000" in compare_source
+        and "2^31" in compare_source,
+        "counter comparison is not documented modular serial arithmetic",
+    )
+    require(
+        "first == 0xFFFFFFFF" not in compare_source
+        and "second == 0xFFFFFFFF" not in compare_source,
+        "obsolete single-wrap counter special case remains",
+    )
+
+    async_match = re.search(
+        r"int Save_WriteFileAsync\(.*?^}",
+        save_source,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(async_match is not None, "Save_WriteFileAsync is missing")
+    require(
+        "pokemonMoveHistorySaveReady" not in async_match.group(0)
+        and "WRITE_STATUS_TOTAL_FAIL" not in async_match.group(0),
+        "asynchronous primary saving is still gated by move history",
+    )
+    now_match = re.search(
+        r"int PokemonMoveHistory_WriteSaveNowImpl\(.*?^}",
+        history_source,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(now_match is not None, "WriteSaveNow implementation is missing")
+    require(
+        "pokemonMoveHistorySaveReady" not in now_match.group(0)
+        and "WRITE_STATUS_TOTAL_FAIL" not in now_match.group(0),
+        "synchronous primary saving is still gated by move history",
+    )
+    require(
+        "(void)PokemonMoveHistory_PrepareSave(saveData);" in save_source,
+        "primary save initialization does not explicitly ignore sidecar failure",
+    )
+    require(
+        "saveData->pokemonMoveHistoryDirty = TRUE;"
+        in history_source
+        and "PokemonMoveHistory_LoadForCounter(\n"
+            "            saveData,\n"
+            "            saveData->saveCounter - 1);"
+        in history_source,
+        "sidecar failure retry/dirty recovery contract is missing",
+    )
+
+
 def main() -> None:
-    table = (REPO / "base/overarm9.bin").read_bytes()
-    overlay = (REPO / "base/overlay/overlay_0153.bin").read_bytes()
+    parser = argparse.ArgumentParser(
+        description="Verify the packaged move-history sidecar integration")
+    parser.add_argument(
+        "--rom",
+        required=True,
+        type=Path,
+        help="completed, repacked Nintendo DS ROM",
+    )
+    args = parser.parse_args()
+    rom_path = args.rom.resolve()
+    rom = rom_path.read_bytes()
+
+    arm9_offset = read_u32(rom, 0x20, "ARM9 ROM offset")
+    arm9_ram = read_u32(rom, 0x28, "ARM9 RAM address")
+    arm9_size = read_u32(rom, 0x2C, "ARM9 size")
+    fnt_offset = read_u32(rom, 0x40, "FNT offset")
+    fnt_size = read_u32(rom, 0x44, "FNT size")
+    fat_offset = read_u32(rom, 0x48, "FAT offset")
+    fat_size = read_u32(rom, 0x4C, "FAT size")
+    y9_offset = read_u32(rom, 0x50, "y9 offset")
+    y9_size = read_u32(rom, 0x54, "y9 size")
+
+    arm9 = checked_slice(rom, arm9_offset, arm9_size, "ARM9")
+    checked_slice(rom, fnt_offset, fnt_size, "FNT")
+    fat = checked_slice(rom, fat_offset, fat_size, "FAT")
+    table = checked_slice(rom, y9_offset, y9_size, "y9 table")
+    require(len(fat) % 8 == 0, "final FAT is not entry-aligned")
+    require(len(table) % ROW_SIZE == 0, "final y9 table is not row-aligned")
+    require(arm9_ram == MAIN_RAM_START, "final ARM9 has an unexpected RAM base")
+
+    rows = [
+        struct.unpack_from("<8I", table, offset)
+        for offset in range(0, len(table), ROW_SIZE)
+    ]
+    require(
+        all(row[0] == index for index, row in enumerate(rows)),
+        "final y9 overlay IDs are not dense and ordered",
+    )
+    require(OVERLAY_ID < len(rows), "final y9 has no overlay 153 row")
+
+    row = rows[OVERLAY_ID]
+    overlay = final_overlay(rom, fat, row)
     built = (
         REPO / "build/output_pokemon_move_history_overlay.bin"
     ).read_bytes()
-    main_overlay = (REPO / "build/output.bin").read_bytes()
-
-    require(len(table) % ROW_SIZE == 0, "y9 table is not row-aligned")
-    require(len(main_overlay) <= 0x7A00, "resident overlay 129 exceeds 0x023E0000")
-    require(overlay == built, "packaged overlay 153 differs from linked output")
-    require(0 < len(overlay) <= OVERLAY_LIMIT - OVERLAY_BASE,
-            "overlay 153 exceeds its 0x2000-byte reservation")
-
-    offset = OVERLAY_ID * ROW_SIZE
-    require(offset + ROW_SIZE <= len(table), "y9 has no overlay 153 row")
-    row = struct.unpack_from("<8I", table, offset)
-    require(row[0] == OVERLAY_ID, "overlay 153 row has the wrong ID")
-    require(row[1] == OVERLAY_BASE, "overlay 153 has the wrong load address")
-    require(row[2] == len(overlay), "overlay 153 y9 size differs from its file")
+    require(overlay == built,
+            "final ROM overlay 153 differs from linked output")
     require(
-        row[3:] == (0, 0, 0, OVERLAY_ID, 0),
-        "overlay 153 has unexpected BSS/init/file/compression metadata",
+        row == (
+            OVERLAY_ID,
+            OVERLAY_BASE,
+            len(overlay),
+            0,
+            0,
+            0,
+            OVERLAY_ID,
+            0,
+        ),
+        "final overlay 153 row has unexpected metadata",
     )
-    require(row[1] + row[2] <= OVERLAY_LIMIT,
-            "overlay 153 crosses into the custom overlay band")
+    require(
+        0 < len(overlay)
+        and OVERLAY_BASE + len(overlay) + OVERLAY_GUARD <= OVERLAY_LIMIT,
+        "overlay 153 exceeds its reservation or upper growth guard",
+    )
 
     linked_symbols = subprocess.check_output(
         [
@@ -86,40 +267,68 @@ def main() -> None:
         "Query entry does not branch to QueryImpl",
     )
 
-    for other_offset in range(0, len(table), ROW_SIZE):
-        other = struct.unpack_from("<8I", table, other_offset)
-        if other[0] == OVERLAY_ID or other[2] + other[3] == 0:
+    for other in rows:
+        other_size = other[2] + other[3]
+        if other[0] == OVERLAY_ID or other_size == 0:
             continue
         other_start = other[1]
-        other_end = other_start + other[2] + other[3]
+        other_end = other_start + other_size
         require(
-            other_end <= OVERLAY_BASE or other_start >= OVERLAY_LIMIT,
-            f"overlay {other[0]} overlaps overlay 153's resident reservation",
+            MAIN_RAM_START <= other_start < other_end <= MAIN_ARENA_HIGH,
+            f"overlay {other[0]} lies outside audited ARM9 main RAM",
+        )
+        require(
+            not ranges_overlap(
+                other_start,
+                other_end,
+                OVERLAY_BASE,
+                OVERLAY_LIMIT,
+            ),
+            f"overlay {other[0]} overlaps overlay 153's reservation",
         )
 
-    # Derive the worst boot-time OS_ARENA_MAIN low endpoint. Heap_InitSystem
-    # allocates entropy padding, metadata, and four fixed heaps; system init
-    # then allocates four task queues and the ROM FNT table.
-    stock_overlay_end = max(
-        row_data[1] + row_data[2] + row_data[3]
-        for row_offset in range(0, min(len(table), 129 * ROW_SIZE), ROW_SIZE)
-        for row_data in [struct.unpack_from("<8I", table, row_offset)]
-    )
     save_constants = (REPO / "include/constants/save.h").read_text()
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
-    arm9 = (REPO / "base/arm9.bin").read_bytes()
     require(
-        struct.unpack_from("<I", arm9, 0x020F62AC - 0x02000000)[0]
-            == full_save_size,
+        heap3_size == 0x10E000
+        and 0x110000 - heap3_size == 0x2000,
+        "heap 3 does not explicitly reserve 0x2000 for overlay 153",
+    )
+
+    def arm9_word(address: int, description: str) -> int:
+        return read_u32(arm9, address - arm9_ram, description)
+
+    require(
+        arm9_word(0x020F62AC, "patched save heap size")
+        == full_save_size,
         "patched save heap size differs from FULL_SAVE_SIZE",
     )
     require(
-        struct.unpack_from("<I", arm9, 0x020F62BC - 0x02000000)[0]
-            == heap3_size,
+        arm9_word(0x020F62BC, "patched heap 3 size") == heap3_size,
         "patched heap 3 size differs from NEW_HEAP3_SIZE",
     )
-    arena_end = align4(stock_overlay_end + 0x100)
+    require(
+        arm9_word(0x020D2C5C, "main arena low literal") == 0x0226EC40,
+        "final ARM9 main arena low changed",
+    )
+    require(
+        arm9_word(0x020D2BB0, "main arena high literal")
+        == MAIN_ARENA_HIGH,
+        "final ARM9 main arena high changed",
+    )
+    require(
+        arm9_word(0x02000930, "DTCM stack base literal") == DTCM_START,
+        "final ARM9 DTCM stack base changed",
+    )
+
+    stock_overlay_end = max(
+        stock[1] + stock[2] + stock[3]
+        for stock in rows[:129]
+    )
+    require(stock_overlay_end == 0x0226EC40,
+            "stock overlay arena endpoint changed")
+    archive_start = align4(stock_overlay_end + 0x100)
     usable_heaps = 4 + 24
     total_heap_ids = 166
     heap_metadata_size = (
@@ -129,21 +338,87 @@ def main() -> None:
         + total_heap_ids * 2
         + total_heap_ids
     )
-    arena_end = align4(arena_end + heap_metadata_size)
+    archive_start = align4(archive_start + heap_metadata_size)
     for heap_size in (0xD200, full_save_size, 0x10, heap3_size):
-        arena_end = align4(arena_end + heap_size)
+        archive_start = align4(archive_start + heap_size)
     for task_count in (160, 32, 32, 4):
-        arena_end = align4(arena_end + task_count * (28 + 4) + 52)
-    header = (REPO / "base/header.bin").read_bytes()
-    fnt_size = struct.unpack_from("<I", header, 0x44)[0]
-    arena_end = align4(arena_end + fnt_size)
+        archive_start = align4(
+            archive_start + task_count * (28 + 4) + 52)
+
+    archive_size = (fnt_size + fat_size + 0x3F) & ~0x1F
+    archive_end = archive_start + archive_size
+    cached_fnt_start = (archive_start + 0x1F) & ~0x1F
+    cached_fnt_end = cached_fnt_start + fnt_size
+    cached_fat_start = cached_fnt_end
+    cached_fat_end = cached_fat_start + fat_size
     require(
-        arena_end <= OVERLAY_BASE,
-        f"boot arena allocations reach 0x{arena_end:08X}",
+        cached_fat_end <= archive_end,
+        "FNT/FAT caches exceed the SDK archive allocation",
+    )
+    require(
+        archive_end + OVERLAY_GUARD <= OVERLAY_BASE,
+        f"boot FNT+FAT allocation reaches 0x{archive_end:08X}",
+    )
+
+    arm9_end = arm9_ram + arm9_size
+    require(
+        not ranges_overlap(
+            arm9_ram,
+            arm9_end,
+            OVERLAY_BASE,
+            OVERLAY_LIMIT,
+        ),
+        "final ARM9 load image overlaps overlay 153",
+    )
+    require(
+        OVERLAY_LIMIT <= MAIN_ARENA_HIGH
+        and not ranges_overlap(
+            DTCM_START,
+            DTCM_END,
+            OVERLAY_BASE,
+            OVERLAY_LIMIT,
+        ),
+        "overlay 153 crosses the main arena or DTCM stack boundary",
+    )
+
+    require(129 < len(rows), "final y9 has no overlay 129 row")
+    row129 = rows[129]
+    overlay129 = final_overlay(rom, fat, row129)
+    generated_overlay129 = (
+        REPO / "base/overlay/overlay_0129.bin"
+    ).read_bytes()
+    main_overlay = (REPO / "build/output.bin").read_bytes()
+    require(
+        overlay129 == generated_overlay129,
+        "final ROM overlay 129 differs from the generated package",
+    )
+    require(
+        row129 == (
+            129,
+            0x023D8000,
+            len(overlay129),
+            0,
+            0,
+            0,
+            129,
+            0,
+        ),
+        "final overlay 129 row has unexpected metadata",
+    )
+    require(
+        len(overlay129) == 0x600 + len(main_overlay)
+        and overlay129[0x600:] == main_overlay,
+        "final overlay 129 does not contain the linked resident core",
+    )
+    require(
+        len(main_overlay) <= 0x7A00
+        and row129[1] + len(overlay129) <= MAIN_ARENA_HIGH,
+        "resident overlay 129 exceeds the ARM9 main arena",
     )
 
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
-    require("mov r1, #153" in startup, "startup does not request overlay 153")
+    require("mov r1, #153" in startup,
+            "startup does not request overlay 153")
     require("0x02007188|1" in startup,
             "startup does not use the untracked no-init loader")
 
@@ -177,6 +452,7 @@ def main() -> None:
         ".word 0x023BE471" in save_trampoline,
         "SaveGameNormal resident trampoline is missing or moved",
     )
+
     core_symbols = subprocess.check_output(
         ["arm-none-eabi-nm", str(REPO / "build/linked.o")],
         text=True,
@@ -188,23 +464,30 @@ def main() -> None:
     )
     require(match is not None, "SaveGameNormal hook symbol was not generated")
     save_game_normal = int(match.group(1), 16) | 1
-    hook_offset = 0x020273F0 - 0x02000000
+    hook_offset = 0x020273F0 - arm9_ram
     require(
         arm9[hook_offset:hook_offset + 4] == bytes.fromhex("00 49 08 47"),
         "SaveGameNormal hook is not the expected Thumb literal trampoline",
     )
     require(
         struct.unpack_from("<I", arm9, hook_offset + 4)[0]
-            == save_game_normal,
+        == save_game_normal,
         "SaveGameNormal hook does not target the resident trampoline",
     )
 
+    source_contracts()
     print(
-        "move-history static gate: "
+        "move-history post-package gate: "
+        f"rom={rom_path} "
+        f"fnt=0x{fnt_size:X} fat=0x{fat_size:X} "
+        f"archive=0x{archive_start:08X}..0x{archive_end:08X} "
+        f"fnt-cache=0x{cached_fnt_start:08X}.."
+        f"0x{cached_fnt_end:08X} "
+        f"fat-cache=0x{cached_fat_start:08X}.."
+        f"0x{cached_fat_end:08X} "
         f"overlay153=0x{OVERLAY_BASE:08X}.."
         f"0x{OVERLAY_BASE + len(overlay):08X} "
-        f"arena=0x{arena_end:08X} "
-        f"overlay129=0x{len(main_overlay):X}/0x7A00"
+        f"overlay129=0x{len(overlay129):X}/0x8000"
     )
 
 

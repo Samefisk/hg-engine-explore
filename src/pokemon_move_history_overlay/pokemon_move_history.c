@@ -108,19 +108,21 @@ static u32 PokemonMoveHistory_GetMirrorOffset(u32 mirror)
 
 static int PokemonMoveHistory_CompareCounters(u32 first, u32 second)
 {
-    if (first == 0xFFFFFFFF && second == 0) {
-        return -1;
+    u32 difference;
+
+    /*
+     * RFC 1982-style serial arithmetic. Every pair of persisted generations
+     * compared here must be less than 2^31 saves apart; the exact half-range
+     * case is deliberately outside that invariant.
+     */
+    difference = first - second;
+    if (difference == 0) {
+        return 0;
     }
-    if (first == 0 && second == 0xFFFFFFFF) {
+    if (difference < 0x80000000) {
         return 1;
     }
-    if (first > second) {
-        return 1;
-    }
-    if (first < second) {
-        return -1;
-    }
-    return 0;
+    return -1;
 }
 
 static u32 PokemonMoveHistory_CalcCrc32(const void *data, u32 size)
@@ -173,7 +175,30 @@ static void PokemonMoveHistory_InitializeStore(SaveData *saveData)
     saveData->pokemonMoveHistoryActiveMirror = MOVE_HISTORY_NO_MIRROR;
     saveData->pokemonMoveHistorySaveReady = TRUE;
     saveData->pokemonMoveHistoryStagedMirror = MOVE_HISTORY_NO_MIRROR;
+    saveData->pokemonMoveHistoryStagedRevision = 0;
+    saveData->pokemonMoveHistoryStagedSaveCounter = 0;
     saveData->pokemonMoveHistoryRevision++;
+}
+
+static BOOL PokemonMoveHistory_AllocateStore(SaveData *saveData)
+{
+    if (saveData->pokemonMoveHistory != NULL) {
+        return TRUE;
+    }
+
+    saveData->pokemonMoveHistory = sys_AllocMemory(
+        3,
+        sizeof(struct PokemonMoveHistoryStore));
+    if (saveData->pokemonMoveHistory == NULL) {
+        /*
+         * History is ancillary. Keep it pending for a later save attempt,
+         * but never make this allocation failure fatal to the primary save.
+         */
+        saveData->pokemonMoveHistoryDirty = TRUE;
+        saveData->pokemonMoveHistorySaveReady = FALSE;
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static BOOL PokemonMoveHistory_ValidateStore(
@@ -247,9 +272,7 @@ static BOOL PokemonMoveHistory_ValidateStore(
 
 void PokemonMoveHistory_InitImpl(SaveData *saveData)
 {
-    saveData->pokemonMoveHistory = sys_AllocMemory(
-        3,
-        sizeof(struct PokemonMoveHistoryStore));
+    saveData->pokemonMoveHistory = NULL;
     saveData->pokemonMoveHistoryRevision = 0;
     saveData->pokemonMoveHistoryStagedRevision = 0;
     saveData->pokemonMoveHistoryStagedSaveCounter = 0;
@@ -258,19 +281,21 @@ void PokemonMoveHistory_InitImpl(SaveData *saveData)
     saveData->pokemonMoveHistorySaveReady = TRUE;
     saveData->pokemonMoveHistoryDirty = FALSE;
 
-    if (saveData->pokemonMoveHistory != NULL) {
+    if (PokemonMoveHistory_AllocateStore(saveData)) {
         PokemonMoveHistory_InitializeStore(saveData);
-    } else {
-        saveData->pokemonMoveHistorySaveReady = FALSE;
     }
 }
 
 void PokemonMoveHistory_ResetImpl(SaveData *saveData)
 {
-    PokemonMoveHistory_InitializeStore(saveData);
+    if (PokemonMoveHistory_AllocateStore(saveData)) {
+        PokemonMoveHistory_InitializeStore(saveData);
+    }
 }
 
-void PokemonMoveHistory_LoadImpl(SaveData *saveData)
+static void PokemonMoveHistory_LoadForCounter(
+    SaveData *saveData,
+    u32 eligibleSaveCounter)
 {
     struct PokemonMoveHistoryStore *store;
     u32 counter[2];
@@ -279,10 +304,10 @@ void PokemonMoveHistory_LoadImpl(SaveData *saveData)
     u32 selectedMirror;
     u32 i;
 
-    store = saveData->pokemonMoveHistory;
-    if (store == NULL) {
+    if (!PokemonMoveHistory_AllocateStore(saveData)) {
         return;
     }
+    store = saveData->pokemonMoveHistory;
 
     for (i = 0; i < 2; i++) {
         FlashLoadChunk(
@@ -295,7 +320,7 @@ void PokemonMoveHistory_LoadImpl(SaveData *saveData)
         if (valid[i]
             && PokemonMoveHistory_CompareCounters(
                     counter[i],
-                    saveData->saveCounter) > 0) {
+                    eligibleSaveCounter) > 0) {
             valid[i] = FALSE;
         }
     }
@@ -329,6 +354,8 @@ void PokemonMoveHistory_LoadImpl(SaveData *saveData)
 
     saveData->pokemonMoveHistoryActiveMirror = selectedMirror;
     saveData->pokemonMoveHistoryStagedMirror = MOVE_HISTORY_NO_MIRROR;
+    saveData->pokemonMoveHistoryStagedRevision = 0;
+    saveData->pokemonMoveHistoryStagedSaveCounter = 0;
     saveData->pokemonMoveHistorySaveReady = TRUE;
     saveData->pokemonMoveHistoryDirty =
         !valid[selectedMirror ^ 1]
@@ -337,6 +364,13 @@ void PokemonMoveHistory_LoadImpl(SaveData *saveData)
     if (saveData->pokemonMoveHistoryDirty) {
         saveData->pokemonMoveHistoryRevision++;
     }
+}
+
+void PokemonMoveHistory_LoadImpl(SaveData *saveData)
+{
+    PokemonMoveHistory_LoadForCounter(
+        saveData,
+        saveData->saveCounter);
 }
 
 static struct PokemonMoveHistoryRecord *PokemonMoveHistory_FindRecord(
@@ -608,6 +642,8 @@ BOOL PokemonMoveHistory_CommitIfDirtyImpl(SaveData *saveData)
 
     saveData->pokemonMoveHistorySaveReady = TRUE;
     saveData->pokemonMoveHistoryStagedMirror = MOVE_HISTORY_NO_MIRROR;
+    saveData->pokemonMoveHistoryStagedRevision = 0;
+    saveData->pokemonMoveHistoryStagedSaveCounter = 0;
     store = saveData->pokemonMoveHistory;
     if (store != NULL) {
         ownerTrainerId = PokemonMoveHistory_GetOwnerTrainerId(saveData);
@@ -622,6 +658,7 @@ BOOL PokemonMoveHistory_CommitIfDirtyImpl(SaveData *saveData)
         }
     }
     if (store == NULL) {
+        saveData->pokemonMoveHistoryDirty = TRUE;
         saveData->pokemonMoveHistorySaveReady = FALSE;
         return FALSE;
     }
@@ -675,6 +712,7 @@ BOOL PokemonMoveHistory_CommitIfDirtyImpl(SaveData *saveData)
                 footer),
             footer,
             sizeof(*footer)) != TRUE) {
+        saveData->pokemonMoveHistoryDirty = TRUE;
         saveData->pokemonMoveHistorySaveReady = FALSE;
         return FALSE;
     }
@@ -715,36 +753,60 @@ void PokemonMoveHistory_LoadAndSeedPartyImpl(SaveData *saveData)
 
 BOOL PokemonMoveHistory_PrepareSaveImpl(SaveData *saveData)
 {
+    BOOL historyReady;
+
+    if (saveData->pokemonMoveHistory == NULL) {
+        /*
+         * Save_WriteManInit has already advanced saveCounter. A sidecar
+         * recovered after an earlier allocation failure is therefore
+         * eligible only through the last committed primary generation.
+         */
+        PokemonMoveHistory_LoadForCounter(
+            saveData,
+            saveData->saveCounter - 1);
+    }
     PokemonMoveHistory_SeedParty(saveData);
-    return PokemonMoveHistory_CommitIfDirtyImpl(saveData);
+    historyReady = PokemonMoveHistory_CommitIfDirtyImpl(saveData);
+    return historyReady;
 }
 
 void PokemonMoveHistory_FinishSaveImpl(
     SaveData *saveData,
     BOOL success)
 {
-    if (success
-        && saveData->pokemonMoveHistoryStagedMirror
-            != MOVE_HISTORY_NO_MIRROR
-        && saveData->pokemonMoveHistoryStagedSaveCounter
-            == saveData->saveCounter) {
-        saveData->pokemonMoveHistoryActiveMirror =
-            saveData->pokemonMoveHistoryStagedMirror;
-        if (saveData->pokemonMoveHistoryRevision
-            == saveData->pokemonMoveHistoryStagedRevision) {
-            saveData->pokemonMoveHistoryDirty = FALSE;
+    if (saveData->pokemonMoveHistoryStagedMirror
+            != MOVE_HISTORY_NO_MIRROR) {
+        if (success
+            && saveData->pokemonMoveHistoryStagedSaveCounter
+                == saveData->saveCounter) {
+            saveData->pokemonMoveHistoryActiveMirror =
+                saveData->pokemonMoveHistoryStagedMirror;
+            if (saveData->pokemonMoveHistoryRevision
+                == saveData->pokemonMoveHistoryStagedRevision) {
+                saveData->pokemonMoveHistoryDirty = FALSE;
+            }
+        } else {
+            /*
+             * The mirror may be valid but is not paired with a committed
+             * primary generation, so keep the sidecar pending for retry.
+             */
+            saveData->pokemonMoveHistoryDirty = TRUE;
         }
     }
     saveData->pokemonMoveHistoryStagedMirror = MOVE_HISTORY_NO_MIRROR;
-    saveData->pokemonMoveHistorySaveReady =
-        saveData->pokemonMoveHistory != NULL;
+    saveData->pokemonMoveHistoryStagedRevision = 0;
+    saveData->pokemonMoveHistoryStagedSaveCounter = 0;
 }
 
 void PokemonMoveHistory_CancelSaveImpl(SaveData *saveData)
 {
+    if (saveData->pokemonMoveHistoryStagedMirror
+            != MOVE_HISTORY_NO_MIRROR) {
+        saveData->pokemonMoveHistoryDirty = TRUE;
+    }
     saveData->pokemonMoveHistoryStagedMirror = MOVE_HISTORY_NO_MIRROR;
-    saveData->pokemonMoveHistorySaveReady =
-        saveData->pokemonMoveHistory != NULL;
+    saveData->pokemonMoveHistoryStagedRevision = 0;
+    saveData->pokemonMoveHistoryStagedSaveCounter = 0;
 }
 
 int PokemonMoveHistory_WriteSaveNowImpl(SaveData *saveData)
@@ -753,22 +815,18 @@ int PokemonMoveHistory_WriteSaveNowImpl(SaveData *saveData)
     int result;
 
     Save_WriteManInit(saveData, &writeManager, 2);
-    if (!saveData->pokemonMoveHistorySaveReady) {
-        result = WRITE_STATUS_TOTAL_FAIL;
-    } else {
-        do {
-            if (writeManager.curSector == 1) {
-                result = HandleWriteSaveAsync_PCBoxes(
-                    saveData,
-                    &writeManager);
-            } else {
-                result = HandleWriteSaveAsync_NormalData(
-                    saveData,
-                    &writeManager);
-            }
-        } while (result == WRITE_STATUS_CONTINUE
-            || result == WRITE_STATUS_NEXT);
-    }
+    do {
+        if (writeManager.curSector == 1) {
+            result = HandleWriteSaveAsync_PCBoxes(
+                saveData,
+                &writeManager);
+        } else {
+            result = HandleWriteSaveAsync_NormalData(
+                saveData,
+                &writeManager);
+        }
+    } while (result == WRITE_STATUS_CONTINUE
+        || result == WRITE_STATUS_NEXT);
     Save_WriteManFinish(saveData, &writeManager, result);
     return result;
 }
