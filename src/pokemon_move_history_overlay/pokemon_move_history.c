@@ -657,11 +657,14 @@ BOOL PokemonMoveHistory_ReplaceMoveImpl(
         return FALSE;
     }
 
-    if (!PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &before)) {
+    if ((u16)GetBoxMonData(
+            pokemon,
+            MON_DATA_MOVE1 + slot,
+            NULL) == move) {
         return FALSE;
     }
-    if (before.moves[slot] == move) {
-        return TRUE;
+    if (!PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &before)) {
+        return FALSE;
     }
 
     saveData = SaveBlock2_get();

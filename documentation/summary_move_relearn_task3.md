@@ -17,8 +17,9 @@ moment; no `SaveData *` is retained between calls.
   before inspecting history or Pokémon data, captures and records the old
   four slots, mutates through
   `SetBoxMonData`, verifies the learned slot by readback, then records the new
-  valid implemented move. Snapshot failures and same-slot no-ops return before
-  mutation.
+  valid implemented move. A canonical read of only the requested slot returns
+  `FALSE` for same-slot no-ops before the full snapshot or any save/history
+  access. Snapshot failures also return before mutation.
 - `PokemonMoveHistory_DeleteMoveSlot`: records the current four slots at the
   committed Move Deleter command, then delegates to retail
   `MonDeleteMoveSlot`.
@@ -88,7 +89,8 @@ relocation; and exercises deterministic invalid, unimplemented, canceled,
 no-op, snapshot-failure, replacement-order, and deletion fixtures. Invalid
 `RecordMove` and `ReplaceMove` fixtures prove no allocation, dirty flag,
 revision, Pokémon mutation, or successful return for both empty and existing
-stores.
+stores. Same-slot `ReplaceMove` fixtures additionally prove no full snapshot
+or store access and a `FALSE` result.
 
 ## Deliberate exclusions
 

@@ -44,6 +44,10 @@ def ordered(body: str, tokens: list[str], label: str) -> None:
         cursor = found + len(token)
 
 
+def without_comments(source: str) -> str:
+    return re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+
+
 def source_contracts() -> None:
     header = (REPO / "include/pokemon_move_history.h").read_text()
     history = (
@@ -91,12 +95,15 @@ def source_contracts() -> None:
     )
 
     replace = function_body(history, "PokemonMoveHistory_ReplaceMoveImpl")
+    replace_code = without_comments(replace)
     ordered(
-        replace,
+        replace_code,
         [
             "PokemonMoveHistory_IsRecordableMove(move)",
+            "GetBoxMonData(",
+            "MON_DATA_MOVE1 + slot",
+            "NULL) == move",
             "PokemonMoveHistory_CaptureSnapshotImpl",
-            "before.moves[slot] == move",
             "SaveBlock2_get()",
             "PokemonMoveHistory_ObserveSnapshot",
             "SetBoxMonData(pokemon, MON_DATA_MOVE1 + slot",
@@ -107,20 +114,39 @@ def source_contracts() -> None:
         "replacement transaction",
     )
     require(
-        "if (!PokemonMoveHistory_CaptureSnapshotImpl" in replace,
-        "snapshot failure does not stop replacement before mutation",
+        re.search(
+            r"if\s*\(\s*\(u16\)\s*GetBoxMonData\s*\("
+            r"\s*pokemon\s*,\s*MON_DATA_MOVE1\s*\+\s*slot\s*,"
+            r"\s*NULL\s*\)\s*==\s*move\s*\)\s*\{"
+            r"\s*return\s+FALSE\s*;\s*\}",
+            replace_code,
+            re.DOTALL,
+        )
+        is not None,
+        "same-slot replacement does not return FALSE before full snapshot",
     )
     require(
-        "if (before.moves[slot] == move)" in replace,
-        "duplicate/no-op replacement is not stopped before mutation",
+        "before.moves[slot] == move" not in replace_code,
+        "same-slot replacement still depends on the full snapshot",
     )
     require(
-        replace.count("SaveBlock2_get()") == 1,
+        re.search(
+            r"if\s*\(\s*!PokemonMoveHistory_CaptureSnapshotImpl\s*\("
+            r"[^)]*\)\s*\)\s*\{\s*return\s+FALSE\s*;\s*\}",
+            replace_code,
+            re.DOTALL,
+        )
+        is not None,
+        "snapshot failure does not return FALSE before mutation",
+    )
+    require(
+        replace_code.count("SaveBlock2_get()") == 1,
         "replacement does not resolve exactly one current save per transaction",
     )
     record_move = function_body(history, "PokemonMoveHistory_RecordMoveImpl")
+    record_move_code = without_comments(record_move)
     ordered(
-        record_move,
+        record_move_code,
         [
             "PokemonMoveHistory_IsRecordableMove(move)",
             "PokemonMoveHistory_CaptureSnapshotImpl",
@@ -130,8 +156,14 @@ def source_contracts() -> None:
         "record-move transaction",
     )
     require(
-        "if (!PokemonMoveHistory_IsRecordableMove(move))" in record_move,
-        "RecordMove does not reject invalid input before snapshot access",
+        re.search(
+            r"if\s*\(\s*!PokemonMoveHistory_IsRecordableMove\s*\("
+            r"\s*move\s*\)\s*\)\s*\{\s*return\s+FALSE\s*;\s*\}",
+            record_move_code,
+            re.DOTALL,
+        )
+        is not None,
+        "RecordMove invalid guard does not return FALSE before snapshot access",
     )
     delete = function_body(history, "PokemonMoveHistory_DeleteMoveSlotImpl")
     ordered(
@@ -169,7 +201,7 @@ def source_contracts() -> None:
     )
 
     seed_party = function_body(history, "PokemonMoveHistory_SeedParty")
-    seed_party_code = re.sub(r"/\*.*?\*/|//[^\n]*", "", seed_party, flags=re.S)
+    seed_party_code = without_comments(seed_party)
     require(
         "Party_GetCount(party)" in seed_party_code
         and "Party_GetMonByIndex(party, i)" in seed_party_code,
@@ -330,6 +362,8 @@ def host_fixtures() -> None:
             "history": [31] if existing_record else [],
             "moves": [1, 2, 3, 4],
             "mutations": 0,
+            "snapshot_reads": 0,
+            "store_accesses": 0,
         }
 
     def clone_public_state(state: dict[str, object]) -> dict[str, object]:
@@ -349,6 +383,7 @@ def host_fixtures() -> None:
         return True
 
     def public_observe(state: dict[str, object]) -> None:
+        state["store_accesses"] = int(state["store_accesses"]) + 1
         if not state["allocated"]:
             state["allocated"] = True
             state["allocations"] = int(state["allocations"]) + 1
@@ -362,6 +397,7 @@ def host_fixtures() -> None:
     def record_move_public(state: dict[str, object], move: int) -> bool:
         if not valid(move):
             return False
+        state["snapshot_reads"] = int(state["snapshot_reads"]) + 1
         public_observe(state)
         public_append(state, move)
         return True
@@ -376,7 +412,8 @@ def host_fixtures() -> None:
         if not valid(move) or not 0 <= slot < 4:
             return False
         if moves[slot] == move:
-            return True
+            return False
+        state["snapshot_reads"] = int(state["snapshot_reads"]) + 1
         public_observe(state)
         moves[slot] = move
         state["mutations"] = int(state["mutations"]) + 1
@@ -498,10 +535,28 @@ def host_fixtures() -> None:
                     and public_state["allocations"] == 0
                     and public_state["dirty"] is False
                     and public_state["revision"] == 0
+                    and public_state["snapshot_reads"] == 0
+                    and public_state["store_accesses"] == 0
                     and public_state["mutations"] == 0,
                     f"invalid {public_path.__name__} input {invalid_move} "
                     f"changes empty/existing={existing_record} state",
                 )
+    for existing_record in (False, True):
+        same_slot_state = make_public_state(existing_record)
+        same_slot_before = clone_public_state(same_slot_state)
+        same_slot_success = replace_move_public(same_slot_state, 1, 2)
+        require(
+            not same_slot_success
+            and same_slot_state == same_slot_before
+            and same_slot_state["allocations"] == 0
+            and same_slot_state["dirty"] is False
+            and same_slot_state["revision"] == 0
+            and same_slot_state["mutations"] == 0
+            and same_slot_state["snapshot_reads"] == 0
+            and same_slot_state["store_accesses"] == 0,
+            f"same-slot ReplaceMove changes or accesses "
+            f"empty/existing={existing_record} state",
+        )
     valid_record_state = make_public_state(False)
     require(
         record_move_public(valid_record_state, high_valid)
@@ -509,6 +564,8 @@ def host_fixtures() -> None:
         and valid_record_state["allocations"] == 1
         and valid_record_state["dirty"] is True
         and int(valid_record_state["revision"]) > 0
+        and valid_record_state["snapshot_reads"] == 1
+        and valid_record_state["store_accesses"] == 1
         and valid_record_state["mutations"] == 0,
         "valid high-ID RecordMove control does not succeed and record state",
     )
@@ -520,6 +577,8 @@ def host_fixtures() -> None:
         and valid_replace_state["dirty"] is True
         and int(valid_replace_state["revision"]) > 0
         and valid_replace_state["mutations"] == 1
+        and valid_replace_state["snapshot_reads"] == 1
+        and valid_replace_state["store_accesses"] == 1
         and valid_replace_state["moves"] == [1, high_valid, 3, 4],
         "valid high-ID ReplaceMove control does not mutate and record state",
     )
@@ -600,6 +659,41 @@ def thumb_blx_target(image: bytes, base: int, address: int) -> int:
     if delta & (1 << 22):
         delta -= 1 << 23
     return ((address + 4) & ~3) + delta
+
+
+def thumb_conditional_branch(
+    image: bytes,
+    base: int,
+    address: int,
+    condition: int,
+) -> int:
+    halfword = struct.unpack_from("<H", image, address - base)[0]
+    require(
+        halfword & 0xF000 == 0xD000
+        and (halfword >> 8) & 0xF == condition,
+        f"0x{address:08X} is not the expected Thumb conditional branch",
+    )
+    delta = (halfword & 0xFF) << 1
+    if delta & 0x100:
+        delta -= 0x200
+    return address + 4 + delta
+
+
+def thumb_literal_load(
+    image: bytes,
+    base: int,
+    address: int,
+    register: int,
+) -> tuple[int, int]:
+    halfword = struct.unpack_from("<H", image, address - base)[0]
+    require(
+        halfword & 0xF800 == 0x4800
+        and (halfword >> 8) & 0x7 == register,
+        f"0x{address:08X} is not the expected Thumb literal load",
+    )
+    literal_address = ((address + 4) & ~3) + ((halfword & 0xFF) << 2)
+    value = struct.unpack_from("<I", image, literal_address - base)[0]
+    return literal_address, value
 
 
 def encode_thumb_blx(address: int, target: int) -> bytes:
@@ -1014,6 +1108,118 @@ def binary_contracts(rom_path: Path) -> None:
     delete_end = symbols["PokemonMoveHistory_CommitIfDirtyImpl"] - ov153_base
     replace_bytes = packaged_ov153[replace_start:delete_start]
     delete_bytes = packaged_ov153[delete_start:delete_end]
+    replace_address = symbols["PokemonMoveHistory_ReplaceMoveImpl"]
+    replace_size = linked_symbol_sizes.get(
+        "PokemonMoveHistory_ReplaceMoveImpl",
+        0,
+    )
+    require(
+        replace_size == 0xE2 and len(replace_bytes) == replace_size,
+        "ReplaceMove packaged body size/layout differs from authenticated build",
+    )
+    false_address = replace_address + 0x12
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            false_address,
+            8,
+        )
+        == bytes.fromhex("00 24 20 00 0d b0 f0 bd"),
+        "ReplaceMove FALSE return block differs",
+    )
+    same_slot_start = replace_address + 0x28
+    literal_address, literal_value = thumb_literal_load(
+        packaged_ov153,
+        ov153_base,
+        replace_address + 0x2A,
+        3,
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            same_slot_start,
+            2,
+        )
+        == bytes.fromhex("3e 00")
+        and replace_address <= literal_address < replace_address + replace_size
+        and literal_value == resolved_targets["GetBoxMonData"]
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            replace_address + 0x2C,
+            10,
+        )
+        == bytes.fromhex("36 36 00 22 31 00 20 00 04 93"),
+        "ReplaceMove early same-slot read setup differs",
+    )
+    same_slot_call = replace_address + 0x36
+    same_slot_trampoline = thumb_bl_target(
+        packaged_ov153,
+        ov153_base,
+        same_slot_call,
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            same_slot_trampoline,
+            2,
+        )
+        == bytes.fromhex("18 47")
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            replace_address + 0x3A,
+            8,
+        )
+        == bytes.fromhex("2b 88 00 04 00 0c 83 42"),
+        "ReplaceMove early same-slot call/compare differs",
+    )
+    equal_branch = replace_address + 0x42
+    capture_call = replace_address + 0x48
+    require(
+        thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            equal_branch,
+            0,
+        )
+        == false_address
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            replace_address + 0x44,
+            4,
+        )
+        == bytes.fromhex("20 00 07 a9")
+        and thumb_bl_target(
+            packaged_ov153,
+            ov153_base,
+            capture_call,
+        )
+        == symbols["PokemonMoveHistory_CaptureSnapshotImpl"],
+        "ReplaceMove equality edge does not return FALSE before snapshot access",
+    )
+    save_literal_address, save_literal_value = thumb_literal_load(
+        packaged_ov153,
+        ov153_base,
+        replace_address + 0x50,
+        3,
+    )
+    require(
+        replace_address <= save_literal_address < replace_address + replace_size
+        and save_literal_value == resolved_targets["SaveBlock2_get"]
+        and thumb_bl_target(
+            packaged_ov153,
+            ov153_base,
+            replace_address + 0x52,
+        )
+        == same_slot_trampoline
+        and replace_address + 0x52 > capture_call,
+        "ReplaceMove SaveBlock2_get call is not authenticated after snapshot",
+    )
     for name in (
         "SaveBlock2_get",
         "GetBoxMonData",
@@ -1055,6 +1261,78 @@ def binary_contracts(rom_path: Path) -> None:
         for call in direct_thumb_calls(disassembly)
         if ov153_base <= call[0] < ov153_base + len(packaged_ov153)
     ]
+    replace_calls = [
+        call
+        for call in linked_calls
+        if replace_address <= call[0] < replace_address + replace_size
+    ]
+    append_address = next(
+        (
+            address
+            for name, address in symbols.items()
+            if name == "PokemonMoveHistory_AppendMove"
+            or name.startswith("PokemonMoveHistory_AppendMove.")
+        ),
+        None,
+    )
+    require(
+        append_address is not None,
+        "linked move-history append implementation is missing",
+    )
+    require(
+        [
+            address
+            for address, mnemonic, target in replace_calls
+            if mnemonic == "bl"
+            and target == symbols["PokemonMoveHistory_CaptureSnapshotImpl"]
+        ]
+        == [capture_call],
+        "ReplaceMove does not have exactly one authenticated snapshot call",
+    )
+    require(
+        [
+            (address, mnemonic, target)
+            for address, mnemonic, target in replace_calls
+            if address < equal_branch
+        ]
+        == [
+            (
+                replace_address + 0x20,
+                "bl",
+                symbols["PokemonMoveHistory_IsRecordableMove"],
+            ),
+            (same_slot_call, "bl", same_slot_trampoline),
+        ],
+        "ReplaceMove equality path gained an unauthenticated call",
+    )
+    for later_label, later_address in (
+        (
+            "PokemonMoveHistory_ObserveSnapshot",
+            symbols["PokemonMoveHistory_ObserveSnapshot"],
+        ),
+        ("PokemonMoveHistory_AppendMove", append_address),
+    ):
+        require(
+            [
+                address
+                for address, mnemonic, target in replace_calls
+                if mnemonic == "bl" and target == later_address
+            ]
+            and all(
+                address > capture_call
+                for address, mnemonic, target in replace_calls
+                if mnemonic == "bl" and target == later_address
+            )
+            and len(
+                [
+                    address
+                    for address, mnemonic, target in replace_calls
+                    if mnemonic == "bl" and target == later_address
+                ]
+            )
+            == 1,
+            f"ReplaceMove {later_label} call is not uniquely after snapshot",
+        )
     for call_address, mnemonic, disassembly_target in linked_calls:
         packaged_target = (
             thumb_bl_target(packaged_ov153, ov153_base, call_address)

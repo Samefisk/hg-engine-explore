@@ -79,7 +79,8 @@ BOOL LONG_CALL PokemonMoveHistory_RecordSnapshot(
  * The current save is resolved at call time through SaveBlock2_get(); no
  * SaveData pointer is retained across save or overlay lifetimes.
  *
- * @return TRUE when the slot contains move after the operation.
+ * @return TRUE only when a distinct replacement is committed and read back.
+ * Invalid, same-slot, or failed operations return FALSE.
  */
 BOOL LONG_CALL PokemonMoveHistory_ReplaceMove(
     struct BoxPokemon *pokemon,
