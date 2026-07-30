@@ -29,9 +29,9 @@ typedef struct PokemonMoveHistorySnapshot {
  * mirrored sidecar. Missing, incompatible, or corrupt sidecars are replaced
  * in memory and made dirty for the next save.
  */
-void PokemonMoveHistory_Init(SaveData *saveData);
-void PokemonMoveHistory_Load(SaveData *saveData);
-void PokemonMoveHistory_Reset(SaveData *saveData);
+void LONG_CALL PokemonMoveHistory_Init(SaveData *saveData);
+void LONG_CALL PokemonMoveHistory_Load(SaveData *saveData);
+void LONG_CALL PokemonMoveHistory_Reset(SaveData *saveData);
 
 /**
  * Ensures that a Pokemon has a history record and unions in its four current
@@ -39,10 +39,10 @@ void PokemonMoveHistory_Reset(SaveData *saveData);
  *
  * @return TRUE when the record is available.
  */
-BOOL PokemonMoveHistory_CaptureSnapshot(
+BOOL LONG_CALL PokemonMoveHistory_CaptureSnapshot(
     struct BoxPokemon *pokemon,
     PokemonMoveHistorySnapshot *snapshot);
-BOOL PokemonMoveHistory_Seed(
+BOOL LONG_CALL PokemonMoveHistory_Seed(
     SaveData *saveData,
     struct BoxPokemon *pokemon);
 
@@ -54,7 +54,7 @@ BOOL PokemonMoveHistory_Seed(
  *
  * @return TRUE when the record is available.
  */
-BOOL PokemonMoveHistory_RecordMove(
+BOOL LONG_CALL PokemonMoveHistory_RecordMove(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
     u16 move);
@@ -65,7 +65,7 @@ BOOL PokemonMoveHistory_RecordMove(
  *
  * @return TRUE when the record is available.
  */
-BOOL PokemonMoveHistory_RecordSnapshot(
+BOOL LONG_CALL PokemonMoveHistory_RecordSnapshot(
     SaveData *saveData,
     const PokemonMoveHistorySnapshot *snapshot);
 
@@ -75,7 +75,7 @@ BOOL PokemonMoveHistory_RecordSnapshot(
  *
  * @return The full stored count, which can be larger than movesOutCapacity.
  */
-u32 PokemonMoveHistory_Query(
+u32 LONG_CALL PokemonMoveHistory_Query(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
     u16 *movesOut,
@@ -111,9 +111,10 @@ typedef struct PokemonMoveRelearnOptions {
  *
  * Persisted moves are accepted only when an hg-engine level/machine/egg/tutor
  * table authorizes them for the current form-aware evolutionary lineage, when
- * a built-in event rule authorizes them, or when options->allowSpecialMove
- * explicitly authorizes them. The callback is an extension point for task 6;
- * it cannot override invalid/unimplemented-move rejection.
+ * a built-in HGSS rule authorizes them (Light Ball Volt Tackle or the
+ * Spiky-ear Pichu gift), or when options->allowSpecialMove explicitly
+ * authorizes them. The callback is an extension point for task 6; it cannot
+ * override invalid/unimplemented-move rejection.
  *
  * Passing NULL candidatesOut or zero capacity performs a count-only query.
  * The function writes at most candidatesOutCapacity entries and returns the
@@ -122,7 +123,7 @@ typedef struct PokemonMoveRelearnOptions {
  * performs bounded archive reads, UI callers should cache the result for the
  * selected Pokemon instead of rebuilding it every frame.
  */
-u32 PokemonMoveRelearn_BuildCandidates(
+u32 LONG_CALL PokemonMoveRelearn_BuildCandidates(
     SaveData *saveData,
     struct BoxPokemon *boxPokemon,
     u16 *candidatesOut,
@@ -139,7 +140,7 @@ u32 PokemonMoveRelearn_BuildCandidates(
  *
  * @return TRUE when no sidecar write was needed or the write was staged.
  */
-BOOL PokemonMoveHistory_CommitIfDirty(SaveData *saveData);
+BOOL LONG_CALL PokemonMoveHistory_CommitIfDirty(SaveData *saveData);
 
 /*
  * Save lifecycle integration. Feature callers should use the APIs above;
@@ -148,10 +149,10 @@ BOOL PokemonMoveHistory_CommitIfDirty(SaveData *saveData);
  * not be used to gate primary saving. FinishSave promotes a staged mirror
  * only after primary success; CancelSave leaves history dirty for retry.
  */
-void PokemonMoveHistory_LoadAndSeedParty(SaveData *saveData);
-BOOL PokemonMoveHistory_PrepareSave(SaveData *saveData);
-void PokemonMoveHistory_FinishSave(SaveData *saveData, BOOL success);
-void PokemonMoveHistory_CancelSave(SaveData *saveData);
-int PokemonMoveHistory_WriteSaveNow(SaveData *saveData);
+void LONG_CALL PokemonMoveHistory_LoadAndSeedParty(SaveData *saveData);
+BOOL LONG_CALL PokemonMoveHistory_PrepareSave(SaveData *saveData);
+void LONG_CALL PokemonMoveHistory_FinishSave(SaveData *saveData, BOOL success);
+void LONG_CALL PokemonMoveHistory_CancelSave(SaveData *saveData);
+int LONG_CALL PokemonMoveHistory_WriteSaveNow(SaveData *saveData);
 
 #endif // POKEMON_MOVE_HISTORY_H

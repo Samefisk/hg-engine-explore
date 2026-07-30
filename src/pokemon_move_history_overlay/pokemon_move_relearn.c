@@ -10,6 +10,11 @@
 #define MOVE_RELEARN_EGG_END 0xFFFF
 
 extern const u16 sMachineMoves[NUM_MACHINE_MOVES];
+u32 PokemonMoveHistory_QueryImpl(
+    SaveData *saveData,
+    struct BoxPokemon *pokemon,
+    u16 *movesOut,
+    u32 movesOutCapacity);
 
 static const u16 sMoveRelearnTutorMoves[NUM_TUTOR_MOVES] = {
     MOVE_DIVE,
@@ -146,11 +151,17 @@ static BOOL PokemonMoveRelearn_IsBuiltInSpecial(
     u16 move)
 {
     /*
-     * Vanilla's Spiky-ear Pichu gift is scripted with Pain Split, which is in
-     * none of hg-engine's generated Pichu source tables. Keep special/event
-     * exceptions explicit and species/form scoped.
+     * Vanilla's Spiky-ear Pichu gift has these exact four scripted moves.
+     * Keep event exceptions explicit and species/form scoped even when a move
+     * also happens to be present in a generated compatibility table.
      */
-    return species == SPECIES_PICHU && form == 1 && move == MOVE_PAIN_SPLIT;
+    if (species != SPECIES_PICHU || form != 1) {
+        return FALSE;
+    }
+    return move == MOVE_HELPING_HAND
+        || move == MOVE_VOLT_TACKLE
+        || move == MOVE_SWAGGER
+        || move == MOVE_PAIN_SPLIT;
 }
 
 static u16 PokemonMoveRelearn_GetParent(u16 species)
@@ -207,7 +218,7 @@ PokemonMoveRelearn_BuildCandidatesImpl(
             (u16)GetBoxMonData(boxPokemon, MON_DATA_MOVE1 + i, NULL);
     }
 
-    historyCount = PokemonMoveHistory_Query(
+    historyCount = PokemonMoveHistory_QueryImpl(
         saveData,
         boxPokemon,
         history,
@@ -224,6 +235,19 @@ PokemonMoveRelearn_BuildCandidatesImpl(
             && lineageSpecies <= MAX_SPECIES_INCLUDING_FORMS
             && lineageDepth < MOVE_RELEARN_LINEAGE_LIMIT;
          lineageDepth++) {
+        /*
+         * HGSS can breed Volt Tackle onto ordinary Pichu through Light Ball,
+         * outside the generated egg list. Treat it as an explicit Pichu
+         * lineage source so legitimate evolved history remains legal.
+         */
+        if (lineageSpecies == SPECIES_PICHU) {
+            PokemonMoveRelearn_MarkHistoryMove(
+                history,
+                historyCount,
+                historyAllowed,
+                MOVE_VOLT_TACKLE);
+        }
+
         LoadLevelUpLearnset_HandleAlternateForm(
             lineageSpecies,
             0,

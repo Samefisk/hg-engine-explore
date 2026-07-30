@@ -83,7 +83,22 @@ typedef char MoveHistoryMirrorRangeAssert[
 typedef char MoveHistorySectorImageSizeAssert[
     MOVE_HISTORY_IMAGE_SIZE == 5 * 0x1000 ? 1 : -1];
 typedef char MoveHistorySaveDataSizeAssert[
-    sizeof(SaveData) <= FULL_SAVE_SIZE ? 1 : -1];
+    sizeof(SaveData) == 0x2F320 ? 1 : -1];
+typedef char MoveHistoryPointerOffsetAssert[
+    MOVE_HISTORY_OFFSETOF(SaveData, pokemonMoveHistory) == 0x2F30C
+        ? 1 : -1];
+typedef char MoveHistoryDirtyOffsetAssert[
+    MOVE_HISTORY_OFFSETOF(SaveData, pokemonMoveHistoryDirty) == 0x2F310
+        ? 1 : -1];
+typedef char MoveHistoryRevisionOffsetAssert[
+    MOVE_HISTORY_OFFSETOF(SaveData, pokemonMoveHistoryRevision) == 0x2F314
+        ? 1 : -1];
+typedef char MoveHistoryStagedRevisionOffsetAssert[
+    MOVE_HISTORY_OFFSETOF(SaveData, pokemonMoveHistoryStagedRevision) == 0x2F318
+        ? 1 : -1];
+typedef char MoveHistoryStagedCounterOffsetAssert[
+    MOVE_HISTORY_OFFSETOF(SaveData, pokemonMoveHistoryStagedSaveCounter)
+        == 0x2F31C ? 1 : -1];
 typedef char MoveHistorySaveSlotSpecsOffsetAssert[
     MOVE_HISTORY_OFFSETOF(SaveData, saveSlotSpecs) == OFFSET_saveSlotSpecs
         ? 1 : -1];
@@ -740,9 +755,17 @@ static void PokemonMoveHistory_SeedParty(SaveData *saveData)
         partyCount = 6;
     }
     for (i = 0; i < partyCount; i++) {
+        struct PartyPokemon *pokemon;
+
+        /*
+         * The retail Party accessor owns the persisted 0xEC record stride.
+         * GCC may pad our source-level PartyPokemon to 0xF0, so indexing the
+         * members array here would walk into encrypted payload bytes.
+         */
+        pokemon = Party_GetMonByIndex(party, i);
         PokemonMoveHistory_SeedImpl(
             saveData,
-            &party->members[i].box);
+            &pokemon->box);
     }
 }
 

@@ -73,12 +73,20 @@ NARC_FILES += $(FORMREVERSION_BIN)
 LEARNSETS_INPUT = data/learnsets/learnsets.json
 LEARNSET_OUTPUT_DIR := build/learnset
 LEARNSETS_HEADER := $(INCLUDE_SUBDIR)/constants/generated/learnsets.h
+LEARNSETS_GENERATOR_INPUTS := \
+	$(LEARNSETS_INPUT) \
+	scripts/build_learnsets.py \
+	src/item.c \
+	src/field/move_tutor.c \
+	include/constants/species.h \
+	include/constants/moves.h \
+	data/FormToSpeciesMapping.c
 MACHINELEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/MachineMoveLearnsets.c
 TUTORLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/TutorMoveLearnsets.c
 LEVELUPLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/LevelupLearnsets.c
 EGGLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/EggLearnsets.c
 
-$(LEARNSETS_HEADER): $(LEARNSETS_INPUT) $(VENV_ACTIVATE) src/item.c scripts/build_learnsets.py
+$(LEARNSETS_HEADER): $(LEARNSETS_GENERATOR_INPUTS) $(VENV_ACTIVATE)
 	@echo "generating learnset data..."
 	$(PYTHON) scripts/build_learnsets.py \
 		--learnsets $(LEARNSETS_INPUT) \
@@ -118,11 +126,13 @@ MOVE_RELEARN_PARENTS_SOURCE := $(BUILD)/move_relearn/MoveRelearnParents.c
 MOVE_RELEARN_PARENTS_OBJ := $(BUILD)/move_relearn/MoveRelearnParents.o
 MOVE_RELEARN_PARENTS_BIN := $(BUILD)/move_relearn/MoveRelearnParents.bin
 
-$(MOVE_RELEARN_PARENTS_SOURCE): scripts/build_move_relearn_parents.py armips/data/evodata.s include/constants/species.h asm/include/species.inc
+$(MOVE_RELEARN_PARENTS_SOURCE): scripts/build_move_relearn_parents.py armips/data/evodata.s include/constants/species.h asm/include/species.inc data/PokeFormDataTbl.c data/FormToSpeciesMapping.c
 	$(PYTHON_NO_VENV) scripts/build_move_relearn_parents.py \
 		--evodata armips/data/evodata.s \
 		--species-header include/constants/species.h \
 		--armips-species-header asm/include/species.inc \
+		--form-data data/PokeFormDataTbl.c \
+		--form-to-species data/FormToSpeciesMapping.c \
 		--output $@
 
 $(MOVE_RELEARN_PARENTS_BIN): $(MOVE_RELEARN_PARENTS_SOURCE)

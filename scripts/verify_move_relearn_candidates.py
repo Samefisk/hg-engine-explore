@@ -36,22 +36,26 @@ def verify_source_contract() -> None:
     ).read_text()
     rom = (REPO / "rom.ld").read_text()
     learnset_builder = (REPO / "scripts/build_learnsets.py").read_text()
+    codetables = (REPO / "data/codetables.mk").read_text()
 
     for fragment in (
         "#define POKEMON_MOVE_RELEARN_MAX_CANDIDATES",
         "typedef BOOL (*PokemonMoveRelearnSpecialPolicy)",
-        "u32 PokemonMoveRelearn_BuildCandidates(",
+        "u32 LONG_CALL PokemonMoveRelearn_BuildCandidates(",
         "return > capacity reports truncation",
         "allocation or ownership is transferred",
     ):
         require(fragment in header, f"public contract lost: {fragment}")
     for fragment in (
-        "PokemonMoveHistory_Query(",
+        "PokemonMoveHistory_QueryImpl(",
         "LoadLevelUpLearnset_HandleAlternateForm(",
         "CODE_ADDON_MOVE_RELEARN_PARENTS",
         "CODE_ADDON_MACHINE_LEARNSETS",
         "ARC_EGG_MOVES",
         "CODE_ADDON_TUTOR_LEARNSETS",
+        "MOVE_HELPING_HAND",
+        "MOVE_VOLT_TACKLE",
+        "MOVE_SWAGGER",
         "MOVE_PAIN_SPLIT",
         "options->allowSpecialMove(",
         "move == MOVE_NONE || move >= NUM_OF_MOVES",
@@ -94,6 +98,16 @@ def verify_source_contract() -> None:
         ),
         "XP-derived level is loaded before species/form bounds validation",
     )
+    for dependency in (
+        "src/field/move_tutor.c",
+        "include/constants/species.h",
+        "include/constants/moves.h",
+        "data/FormToSpeciesMapping.c",
+    ):
+        require(
+            dependency in codetables,
+            f"learnset generator dependency lost: {dependency}",
+        )
     history_loop = source.index(
         "for (i = 0; i < historyCount; i++) {",
         source.index("lineageDepth < MOVE_RELEARN_LINEAGE_LIMIT"),
@@ -169,6 +183,8 @@ def verify_parent_generator() -> None:
         REPO / "armips/data/evodata.s",
         REPO / "include/constants/species.h",
         REPO / "asm/include/species.inc",
+        REPO / "data/PokeFormDataTbl.c",
+        REPO / "data/FormToSpeciesMapping.c",
     )
     pairs = re.findall(
         r"\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*(SPECIES_[A-Z0-9_]+)",
@@ -186,6 +202,34 @@ def verify_parent_generator() -> None:
         == "SPECIES_SHELLOS_EAST_SEA",
         "form-aware parent mapping differs",
     )
+    require(
+        parents["SPECIES_LYCANROC"] == "SPECIES_ROCKRUFF"
+        and parents["SPECIES_LYCANROC_MIDNIGHT"] == "SPECIES_ROCKRUFF"
+        and parents["SPECIES_LYCANROC_DUSK"]
+        == "SPECIES_ROCKRUFF_OWN_TEMPO",
+        "evolutionwithform parent mapping differs",
+    )
+    require(
+        parents["SPECIES_RAICHU_ALOLAN"] == "SPECIES_PIKACHU",
+        "alternate evolved form did not inherit its base lineage",
+    )
+    require(
+        parents["SPECIES_RATICATE_ALOLAN"] == "SPECIES_RATTATA_ALOLAN",
+        "explicit regional lineage was overwritten by base fallback",
+    )
+    for target, parent in (
+        ("SPECIES_RATICATE_ALOLAN_LARGE", "SPECIES_RATTATA_ALOLAN"),
+        (
+            "SPECIES_DARMANITAN_ZEN_MODE_GALARIAN",
+            "SPECIES_DARUMAKA_GALARIAN",
+        ),
+        ("SPECIES_ARCANINE_LORD", "SPECIES_GROWLITHE_HISUIAN"),
+        ("SPECIES_ELECTRODE_LORD", "SPECIES_VOLTORB_HISUIAN"),
+    ):
+        require(
+            parents[target] == parent,
+            f"derived regional lineage differs for {target}",
+        )
     require(
         parents["SPECIES_MR_MIME"] == "SPECIES_MIME_JR",
         "armips/C species spelling is not resolved by numeric identity",
@@ -300,11 +344,63 @@ def verify_ordering_model() -> None:
     )
 
 
+def verify_hgss_special_policy_model() -> None:
+    spiky_gift = {
+        "MOVE_HELPING_HAND",
+        "MOVE_VOLT_TACKLE",
+        "MOVE_SWAGGER",
+        "MOVE_PAIN_SPLIT",
+    }
+
+    def allowed(
+        species: str,
+        form: int,
+        lineage: list[str],
+        move: str,
+    ) -> bool:
+        if move == "MOVE_VOLT_TACKLE" and "SPECIES_PICHU" in lineage:
+            return True
+        return (
+            species == "SPECIES_PICHU"
+            and form == 1
+            and move in spiky_gift
+        )
+
+    require(
+        all(
+            allowed("SPECIES_PICHU", 1, ["SPECIES_PICHU"], move)
+            for move in spiky_gift
+        ),
+        "Spiky-ear Pichu's canonical scripted moves are not all legal",
+    )
+    for species in ("SPECIES_PICHU", "SPECIES_PIKACHU", "SPECIES_RAICHU"):
+        require(
+            allowed(species, 0, [species, "SPECIES_PICHU"], "MOVE_VOLT_TACKLE"),
+            f"Light Ball Volt Tackle lineage allowance lost for {species}",
+        )
+    require(
+        not allowed(
+            "SPECIES_PICHU",
+            0,
+            ["SPECIES_PICHU"],
+            "MOVE_PAIN_SPLIT",
+        )
+        and not allowed(
+            "SPECIES_BUTTERFREE",
+            0,
+            ["SPECIES_BUTTERFREE"],
+            "MOVE_VOLT_TACKLE",
+        ),
+        "HGSS special move policy leaked outside its species/form lineage",
+    )
+
+
 def main() -> None:
     verify_source_contract()
     verify_shared_move_tables()
     verify_parent_generator()
     verify_ordering_model()
+    verify_hgss_special_policy_model()
     print(
         "move-relearn candidates: source policy, lineage data, shared tables, "
         "ordering, dedupe, filtering, and truncation verified"

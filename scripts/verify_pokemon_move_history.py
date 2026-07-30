@@ -86,6 +86,139 @@ def final_overlay(
     )
 
 
+def nitrofs_file_id(fnt: bytes, path: str) -> int:
+    require(len(fnt) >= 8, "final FNT has no root directory entry")
+    directory_count = struct.unpack_from("<H", fnt, 6)[0]
+    require(
+        directory_count != 0 and directory_count * 8 <= len(fnt),
+        "final FNT directory table is truncated",
+    )
+    directory_id = 0xF000
+    components = [component for component in path.split("/") if component]
+    require(components, "NitroFS path is empty")
+
+    for component_index, component in enumerate(components):
+        table_index = directory_id - 0xF000
+        require(
+            0 <= table_index < directory_count,
+            f"NitroFS directory ID {directory_id:#x} is outside the FNT",
+        )
+        subtable, first_file_id, _parent = struct.unpack_from(
+            "<IHH",
+            fnt,
+            table_index * 8,
+        )
+        require(subtable < len(fnt), f"FNT directory {directory_id:#x} has a bad subtable")
+        cursor = subtable
+        file_id = first_file_id
+        matches: list[tuple[bool, int]] = []
+        while True:
+            require(cursor < len(fnt), f"FNT directory {directory_id:#x} is unterminated")
+            length_and_type = fnt[cursor]
+            cursor += 1
+            if length_and_type == 0:
+                break
+            is_directory = (length_and_type & 0x80) != 0
+            name_length = length_and_type & 0x7F
+            require(
+                name_length != 0 and cursor + name_length <= len(fnt),
+                f"FNT directory {directory_id:#x} contains a truncated name",
+            )
+            name_bytes = fnt[cursor:cursor + name_length]
+            cursor += name_length
+            try:
+                name = name_bytes.decode("ascii")
+            except UnicodeDecodeError:
+                require(False, f"FNT directory {directory_id:#x} has a non-ASCII name")
+            if is_directory:
+                require(
+                    cursor + 2 <= len(fnt),
+                    f"FNT child directory {name} has no directory ID",
+                )
+                child_id = struct.unpack_from("<H", fnt, cursor)[0]
+                cursor += 2
+                require(
+                    0xF000 <= child_id < 0xF000 + directory_count,
+                    f"FNT child directory {name} has invalid ID {child_id:#x}",
+                )
+                if name == component:
+                    matches.append((True, child_id))
+            else:
+                if name == component:
+                    matches.append((False, file_id))
+                file_id += 1
+
+        require(
+            len(matches) == 1,
+            f"NitroFS component {component!r} is missing or ambiguous in {path!r}",
+        )
+        is_directory, resolved = matches[0]
+        if component_index + 1 == len(components):
+            require(not is_directory, f"NitroFS path {path!r} resolves to a directory")
+            return resolved
+        require(is_directory, f"NitroFS component {component!r} is not a directory")
+        directory_id = resolved
+
+    raise AssertionError("unreachable")
+
+
+def nitrofs_file(rom: bytes, fnt: bytes, fat: bytes, path: str) -> tuple[int, bytes]:
+    file_id = nitrofs_file_id(fnt, path)
+    entry_offset = file_id * 8
+    require(entry_offset + 8 <= len(fat), f"NitroFS file {path!r} has no FAT entry")
+    start, end = struct.unpack_from("<II", fat, entry_offset)
+    require(start <= end, f"NitroFS file {path!r} has a reversed FAT range")
+    return file_id, checked_slice(rom, start, end - start, f"NitroFS file {path}")
+
+
+def narc_members(narc: bytes, label: str) -> list[bytes]:
+    require(len(narc) >= 16, f"{label} archive is shorter than its NARC header")
+    require(narc[:4] == b"NARC", f"{label} archive has no NARC header")
+    require(
+        narc[4:8] == bytes.fromhex("fe ff 00 01"),
+        f"{label} NARC byte order/version differs",
+    )
+    declared_size, header_size, chunk_count = struct.unpack_from("<IHH", narc, 8)
+    require(declared_size == len(narc), f"{label} NARC declared size differs")
+    require((header_size, chunk_count) == (16, 3), f"{label} NARC header shape differs")
+    require(narc[16:20] == b"BTAF", f"{label} archive has no BTAF")
+    btaf_size = struct.unpack_from("<I", narc, 20)[0]
+    file_count = struct.unpack_from("<H", narc, 24)[0]
+    require(btaf_size == 12 + file_count * 8, f"{label} BTAF size/count differs")
+    require(16 + btaf_size <= len(narc), f"{label} BTAF exceeds archive")
+    ranges = [
+        struct.unpack_from("<II", narc, 28 + index * 8)
+        for index in range(file_count)
+    ]
+    btnf = 16 + btaf_size
+    require(narc[btnf:btnf + 4] == b"BTNF", f"{label} archive has no BTNF")
+    btnf_size = struct.unpack_from("<I", narc, btnf + 4)[0]
+    require(
+        btnf_size >= 8 and btnf + btnf_size <= len(narc),
+        f"{label} BTNF exceeds archive",
+    )
+    gmif = btnf + btnf_size
+    require(narc[gmif:gmif + 4] == b"GMIF", f"{label} archive has no GMIF")
+    gmif_size = struct.unpack_from("<I", narc, gmif + 4)[0]
+    require(
+        gmif_size >= 8 and gmif + gmif_size == len(narc),
+        f"{label} GMIF size differs",
+    )
+    payload = gmif + 8
+    payload_size = gmif_size - 8
+    previous_end = 0
+    members: list[bytes] = []
+    for index, (start, end) in enumerate(ranges):
+        require(start <= end <= payload_size, f"{label} member {index} exceeds GMIF")
+        require(
+            start >= previous_end,
+            f"{label} member {index} overlaps its predecessor",
+        )
+        members.append(narc[payload + start:payload + end])
+        previous_end = end
+    return members
+
+
 def serial_compare(first: int, second: int) -> int:
     difference = (first - second) & 0xFFFFFFFF
     require(
@@ -102,7 +235,34 @@ def source_contracts() -> None:
         REPO
         / "src/pokemon_move_history_overlay/pokemon_move_history.c"
     ).read_text()
+    history_header = (REPO / "include/pokemon_move_history.h").read_text()
     save_source = (REPO / "src/save.c").read_text()
+
+    for public_api in (
+        "PokemonMoveHistory_Init",
+        "PokemonMoveHistory_Load",
+        "PokemonMoveHistory_Reset",
+        "PokemonMoveHistory_CaptureSnapshot",
+        "PokemonMoveHistory_Seed",
+        "PokemonMoveHistory_RecordMove",
+        "PokemonMoveHistory_RecordSnapshot",
+        "PokemonMoveHistory_Query",
+        "PokemonMoveHistory_CommitIfDirty",
+        "PokemonMoveHistory_LoadAndSeedParty",
+        "PokemonMoveHistory_PrepareSave",
+        "PokemonMoveHistory_FinishSave",
+        "PokemonMoveHistory_CancelSave",
+        "PokemonMoveHistory_WriteSaveNow",
+        "PokemonMoveRelearn_BuildCandidates",
+    ):
+        require(
+            re.search(
+                rf"\bLONG_CALL\s+{re.escape(public_api)}\s*\(",
+                history_header,
+            )
+            is not None,
+            f"{public_api} is not declared as an interworking-safe long call",
+        )
 
     for first, second, expected in (
         (0, 0, 0),
@@ -171,6 +331,31 @@ def source_contracts() -> None:
         in history_source,
         "sidecar failure retry/dirty recovery contract is missing",
     )
+    seed_party_match = re.search(
+        r"static void PokemonMoveHistory_SeedParty\(.*?^}",
+        history_source,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(seed_party_match is not None, "party seeding implementation is missing")
+    seed_party_source = seed_party_match.group(0)
+    require(
+        "Party_GetMonByIndex(party, i)" in seed_party_source
+        and "party->members[" not in history_source
+        and "persisted 0xEC record stride" in seed_party_source,
+        "party seeding bypasses the retail 0xEC PartyPokemon accessor",
+    )
+    for layout_contract in (
+        "sizeof(SaveData) == 0x2F320",
+        "pokemonMoveHistory) == 0x2F30C",
+        "pokemonMoveHistoryDirty) == 0x2F310",
+        "pokemonMoveHistoryRevision) == 0x2F314",
+        "pokemonMoveHistoryStagedRevision) == 0x2F318",
+        "pokemonMoveHistoryStagedSaveCounter)\n        == 0x2F31C",
+    ):
+        require(
+            layout_contract in history_source,
+            f"SaveData layout contract lost: {layout_contract}",
+        )
 
 
 def main() -> None:
@@ -197,12 +382,96 @@ def main() -> None:
     y9_size = read_u32(rom, 0x54, "y9 size")
 
     arm9 = checked_slice(rom, arm9_offset, arm9_size, "ARM9")
-    checked_slice(rom, fnt_offset, fnt_size, "FNT")
+    fnt = checked_slice(rom, fnt_offset, fnt_size, "FNT")
     fat = checked_slice(rom, fat_offset, fat_size, "FAT")
     table = checked_slice(rom, y9_offset, y9_size, "y9 table")
     require(len(fat) % 8 == 0, "final FAT is not entry-aligned")
     require(len(table) % ROW_SIZE == 0, "final y9 table is not row-aligned")
     require(arm9_ram == MAIN_RAM_START, "final ARM9 has an unexpected RAM base")
+
+    file_constants = (REPO / "include/constants/file.h").read_text()
+    for name, expected in (
+        ("ARC_CODE_ADDONS", 28),
+        ("ARC_LEVELUP_LEARNSETS", 33),
+        ("ARC_EGG_MOVES", 231),
+        ("CODE_ADDON_MACHINE_LEARNSETS", 14),
+        ("CODE_ADDON_TUTOR_LEARNSETS", 15),
+        ("CODE_ADDON_MOVE_RELEARN_PARENTS", 20),
+    ):
+        require(
+            parse_define(file_constants, name) == expected,
+            f"{name} no longer matches its authenticated archive/member index",
+        )
+
+    a033_id, packaged_a033 = nitrofs_file(rom, fnt, fat, "a/0/3/3")
+    staged_a033 = (REPO / "base/root/a/0/3/3").read_bytes()
+    generated_a033 = (REPO / "build/narc/a033.narc").read_bytes()
+    require(
+        packaged_a033 == staged_a033 == generated_a033,
+        "final ROM level-up archive differs from staged/generated a033",
+    )
+    a033_entries = sorted(path.name for path in (REPO / "build/a033").iterdir())
+    require(
+        a033_entries == ["LevelupLearnsets.bin"],
+        "build/a033 is not the exact one-file level-up packaging source",
+    )
+    a033_members = narc_members(packaged_a033, "final ROM a/0/3/3")
+    require(len(a033_members) == 1, "final ROM level-up archive has multiple members")
+    require(
+        a033_members[0]
+        == (REPO / "build/a033/LevelupLearnsets.bin").read_bytes(),
+        "final ROM level-up member differs from generated LevelupLearnsets.bin",
+    )
+
+    a028_id, packaged_a028 = nitrofs_file(rom, fnt, fat, "a/0/2/8")
+    staged_a028 = (REPO / "base/root/a/0/2/8").read_bytes()
+    require(
+        packaged_a028 == staged_a028,
+        "final ROM a/0/2/8 differs from the staged code-addons archive",
+    )
+    a028_entries = sorted(path.name for path in (REPO / "build/a028").iterdir())
+    require(
+        len(a028_entries) == 21
+        and all((REPO / "build/a028" / name).is_file() for name in a028_entries),
+        "build/a028 is not the exact 21-file sorted packaging source",
+    )
+    for index, name in ((14, "9_14"), (15, "9_15"), (20, "9_20")):
+        require(
+            a028_entries[index] == name,
+            f"a028 sorted member {index} is {a028_entries[index]!r}, not {name!r}",
+        )
+    a028_members = narc_members(packaged_a028, "final ROM a/0/2/8")
+    require(len(a028_members) == 21, "final ROM a/0/2/8 does not have 21 members")
+    for index, staged_name, generated_path in (
+        (14, "9_14", REPO / "build/MachineMoveLearnsets.bin"),
+        (15, "9_15", REPO / "build/TutorMoveLearnsets.bin"),
+        (20, "9_20", REPO / "build/move_relearn/MoveRelearnParents.bin"),
+    ):
+        staged_member = (REPO / "build/a028" / staged_name).read_bytes()
+        generated_member = generated_path.read_bytes()
+        require(
+            a028_members[index] == staged_member == generated_member,
+            f"final a028 member {index} differs from staged/generated {staged_name}",
+        )
+
+    a229_id, packaged_a229 = nitrofs_file(rom, fnt, fat, "a/2/2/9")
+    staged_a229 = (REPO / "base/root/a/2/2/9").read_bytes()
+    generated_a229 = (REPO / "build/narc/a229.narc").read_bytes()
+    require(
+        packaged_a229 == staged_a229 == generated_a229,
+        "final ROM egg archive differs from staged/generated a229",
+    )
+    a229_entries = sorted(path.name for path in (REPO / "build/a229").iterdir())
+    require(
+        a229_entries == ["EggLearnsets.bin"],
+        "build/a229 is not the exact one-file egg packaging source",
+    )
+    a229_members = narc_members(packaged_a229, "final ROM a/2/2/9")
+    require(len(a229_members) == 1, "final ROM egg archive has multiple members")
+    require(
+        a229_members[0] == (REPO / "build/a229/EggLearnsets.bin").read_bytes(),
+        "final ROM egg member differs from generated EggLearnsets.bin",
+    )
 
     rows = [
         struct.unpack_from("<8I", table, offset)
@@ -484,6 +753,180 @@ def main() -> None:
         ["arm-none-eabi-nm", str(REPO / "build/linked.o")],
         text=True,
     )
+    for object_name, symbols in (
+        ("resident core", core_symbols),
+        ("overlay 153", linked_symbols),
+    ):
+        require(
+            "__PokemonMoveHistory_" not in symbols
+            and "__PokemonMoveRelearn_" not in symbols,
+            f"{object_name} contains an unsafe generated interworking veneer",
+        )
+
+    save_relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", str(REPO / "build/save.o")],
+        text=True,
+    )
+    require(
+        re.search(r"R_ARM_THM_CALL\s+PokemonMoveHistory_", save_relocations)
+        is None,
+        "save.o still emits a short Thumb call to overlay 153",
+    )
+    for called_api in (
+        "Init",
+        "Reset",
+        "LoadAndSeedParty",
+        "PrepareSave",
+        "FinishSave",
+        "CancelSave",
+    ):
+        require(
+            re.search(
+                rf"R_ARM_ABS32\s+PokemonMoveHistory_{called_api}\b",
+                save_relocations,
+            )
+            is not None,
+            f"save.o does not use a typed long call for {called_api}",
+        )
+
+    candidate_relocations = subprocess.check_output(
+        [
+            "arm-none-eabi-objdump",
+            "-r",
+            str(
+                REPO
+                / "build/pokemon_move_history_overlay/pokemon_move_relearn.o"
+            ),
+        ],
+        text=True,
+    )
+    require(
+        re.search(
+            r"R_ARM_THM_CALL\s+PokemonMoveHistory_QueryImpl\b",
+            candidate_relocations,
+        )
+        is not None,
+        "candidate builder does not call QueryImpl directly within overlay 153",
+    )
+    require(
+        re.search(
+            r"\bPokemonMoveHistory_Query\b",
+            candidate_relocations,
+        )
+        is None
+        and "__PokemonMoveHistory_Query_from_thumb" not in candidate_relocations,
+        "candidate builder still relocates through the public Query alias",
+    )
+
+    history_relocations = subprocess.check_output(
+        [
+            "arm-none-eabi-objdump",
+            "-r",
+            str(
+                REPO
+                / "build/pokemon_move_history_overlay/pokemon_move_history.o"
+            ),
+        ],
+        text=True,
+    )
+    require(
+        re.search(
+            r"R_ARM_ABS32\s+Party_GetMonByIndex\b",
+            history_relocations,
+        )
+        is not None,
+        "party seeding binary does not use a typed long call to "
+        "Party_GetMonByIndex",
+    )
+    require(
+        re.search(
+            r"R_ARM_THM_CALL\s+Party_GetMonByIndex\b",
+            history_relocations,
+        )
+        is None,
+        "party seeding binary emits an unsafe short Thumb call to "
+        "Party_GetMonByIndex",
+    )
+
+    overlay_disassembly = subprocess.check_output(
+        [
+            "arm-none-eabi-objdump",
+            "-d",
+            str(REPO / "build/pokemon_move_history_overlay_linked.o"),
+        ],
+        text=True,
+    )
+    seed_party_disassembly = re.search(
+        r"^[0-9a-fA-F]+ <PokemonMoveHistory_SeedParty>:\n"
+        r"(.*?)(?=^\n[0-9a-fA-F]+ <|\Z)",
+        overlay_disassembly,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(
+        seed_party_disassembly is not None,
+        "final linked party-seeding function is missing",
+    )
+    seed_party_body = seed_party_disassembly.group(1)
+    require(
+        ".word\t0x02074645" in seed_party_body,
+        "final linked party seeding does not target Party_GetMonByIndex",
+    )
+    require(
+        all(
+            stride not in seed_party_body
+            for stride in (
+                "#236",
+                "#240",
+                "#0xec",
+                "#0xf0",
+                "0x000000ec",
+                "0x000000f0",
+            )
+        ),
+        "final linked party seeding contains direct PartyPokemon stride arithmetic",
+    )
+
+    thumb_api_targets = {
+        OVERLAY_BASE + offset
+        for offset in range(0, 0x80, 8)
+    }
+    for object_path in (
+        REPO / "build/linked.o",
+        REPO / "build/pokemon_move_history_overlay_linked.o",
+    ):
+        disassembly = subprocess.check_output(
+            ["arm-none-eabi-objdump", "-d", str(object_path)],
+            text=True,
+        )
+        for line in disassembly.splitlines():
+            arm_instruction = re.match(
+                r"^\s*([0-9a-fA-F]+):\s+([0-9a-fA-F]{8})\s+"
+                r"([a-zA-Z.][a-zA-Z0-9.]*)\b",
+                line,
+            )
+            if arm_instruction is None:
+                continue
+            address = int(arm_instruction.group(1), 16)
+            instruction = int(arm_instruction.group(2), 16)
+            mnemonic = arm_instruction.group(3)
+            # ARM B/BL (including all condition forms) have bits 27:25 = 101.
+            # cond=0xF is BLX-immediate and intentionally targets the state
+            # encoded by H, so it is not the unsafe ARM-to-even-Thumb case.
+            if (
+                mnemonic == ".word"
+                or (instruction >> 25) & 0x7 != 0x5
+                or instruction >> 28 == 0xF
+            ):
+                continue
+            displacement = instruction & 0xFFFFFF
+            if displacement & 0x800000:
+                displacement -= 0x1000000
+            target = (address + 8 + (displacement << 2)) & 0xFFFFFFFF
+            require(
+                target not in thumb_api_targets,
+                f"{object_path.name} has an ARM branch to even Thumb API "
+                f"0x{target:08X}",
+            )
     match = re.search(
         r"^([0-9a-fA-F]+) T SaveGameNormal$",
         core_symbols,
@@ -507,6 +950,9 @@ def main() -> None:
         "move-history post-package gate: "
         f"rom={rom_path} "
         f"fnt=0x{fnt_size:X} fat=0x{fat_size:X} "
+        f"a033=file#{a033_id}/0x{len(packaged_a033):X}/1 "
+        f"a028=file#{a028_id}/0x{len(packaged_a028):X}/21 "
+        f"a229=file#{a229_id}/0x{len(packaged_a229):X}/1 "
         f"archive=0x{archive_start:08X}..0x{archive_end:08X} "
         f"fnt-cache=0x{cached_fnt_start:08X}.."
         f"0x{cached_fnt_end:08X} "
