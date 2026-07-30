@@ -11,7 +11,7 @@
 #define GFX_ITEM_RETURN_ID ((MAX_TOTAL_ITEM_NUM+1) * 2 + 4)
 #define NEW_ITEM_GFX (797)
 
-static const u16 sMachineMoves[] = {
+const u16 sMachineMoves[] = {
     // vanilla TMs
     MOVE_FOCUS_PUNCH,      // TM001
     MOVE_DRAGON_CLAW,      // TM002

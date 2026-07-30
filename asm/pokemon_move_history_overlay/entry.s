@@ -123,3 +123,12 @@ MoveHistoryEntry_SaveGameNormal:
     bx r3
     .align 2
 15: .word SaveGameNormalImpl + 1
+
+.global MoveHistoryEntry_BuildRelearnCandidates
+.type MoveHistoryEntry_BuildRelearnCandidates, %function
+MoveHistoryEntry_BuildRelearnCandidates:
+    /* Capacity occupies r3 and options is stacked; preserve the full ABI. */
+    .syntax divided
+    b PokemonMoveRelearn_BuildCandidatesImpl
+    .syntax unified
+    .space 6, 0

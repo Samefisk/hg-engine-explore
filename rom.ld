@@ -670,6 +670,7 @@ PokemonMoveHistory_PrepareSave = 0x023BE450 | 1;
 PokemonMoveHistory_FinishSave = 0x023BE458 | 1;
 PokemonMoveHistory_CancelSave = 0x023BE460 | 1;
 PokemonMoveHistory_WriteSaveNow = 0x023BE468 | 1;
+PokemonMoveRelearn_BuildCandidates = 0x023BE478 | 1;
 Sys_ClearSleepDisableFlag = 0x0201A4CC | 1;
 _NowWriteFlash = 0x02027DB4 | 1;
 //Save_PrepareForAsyncWrite = 0x02027550 | 1;

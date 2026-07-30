@@ -1,10 +1,13 @@
 #ifndef POKEMON_MOVE_HISTORY_H
 #define POKEMON_MOVE_HISTORY_H
 
+#include "constants/generated/learnsets.h"
 #include "pokemon.h"
 #include "save.h"
 
 #define POKEMON_MOVE_HISTORY_MAX_MOVES 24
+#define POKEMON_MOVE_RELEARN_MAX_CANDIDATES \
+    (MAX_LEVELUP_MOVES + POKEMON_MOVE_HISTORY_MAX_MOVES)
 
 typedef struct PokemonMoveHistorySnapshot {
     u32 personality;
@@ -77,6 +80,54 @@ u32 PokemonMoveHistory_Query(
     struct BoxPokemon *pokemon,
     u16 *movesOut,
     u32 movesOutCapacity);
+
+/**
+ * Optional additive policy for persisted moves whose exact acquisition source
+ * is not represented by hg-engine's level, machine, egg, or tutor tables
+ * (notably event/script gifts). It is called only for otherwise-ineligible,
+ * valid implemented moves. Returning TRUE admits the move.
+ *
+ * Task-specific policy must be species/form-aware through boxPokemon. It must
+ * not treat persisted presence alone as universal legality.
+ */
+typedef BOOL (*PokemonMoveRelearnSpecialPolicy)(
+    struct BoxPokemon *boxPokemon,
+    u16 move,
+    void *context);
+
+typedef struct PokemonMoveRelearnOptions {
+    PokemonMoveRelearnSpecialPolicy allowSpecialMove;
+    void *context;
+} PokemonMoveRelearnOptions;
+
+/**
+ * Builds relearn candidates for either a boxed Pokemon or the BoxPokemon
+ * prefix of a PartyPokemon.
+ *
+ * Ordering is the current form's level-up table order (all entries at or
+ * below the XP-derived current level), followed by accepted persisted moves
+ * in acquisition order. The result excludes current moves, invalid or
+ * unimplemented moves, and duplicates.
+ *
+ * Persisted moves are accepted only when an hg-engine level/machine/egg/tutor
+ * table authorizes them for the current form-aware evolutionary lineage, when
+ * a built-in event rule authorizes them, or when options->allowSpecialMove
+ * explicitly authorizes them. The callback is an extension point for task 6;
+ * it cannot override invalid/unimplemented-move rejection.
+ *
+ * Passing NULL candidatesOut or zero capacity performs a count-only query.
+ * The function writes at most candidatesOutCapacity entries and returns the
+ * full deduplicated count, so return > capacity reports truncation. No heap
+ * allocation or ownership is transferred to the caller. Because construction
+ * performs bounded archive reads, UI callers should cache the result for the
+ * selected Pokemon instead of rebuilding it every frame.
+ */
+u32 PokemonMoveRelearn_BuildCandidates(
+    SaveData *saveData,
+    struct BoxPokemon *boxPokemon,
+    u16 *candidatesOut,
+    u32 candidatesOutCapacity,
+    const PokemonMoveRelearnOptions *options);
 
 /**
  * Persists a dirty sidecar to the inactive mirror. Save code calls this

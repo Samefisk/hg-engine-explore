@@ -49,7 +49,10 @@ def load_machine_move_list(file_path):
     with open(file_path, encoding='utf-8') as f:
         for line in f:
             line = line.strip()
-            if 'static const u16 sMachineMoves[]' in line:
+            if re.search(
+                r'\b(?:static\s+)?const\s+u16\s+sMachineMoves\s*\[\s*\]',
+                line,
+            ):
                 in_array = True
                 continue
             if in_array:

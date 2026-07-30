@@ -292,6 +292,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--overlay-table $(BASE)/overarm9.bin
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
+	$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
@@ -509,6 +510,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "tutor moves:"
 	cp $(TUTORLEARNSET_BIN) $(TUTORLEARNSET_TARGET)
+
+	@echo "move relearn parents:"
+	cp $(MOVE_RELEARN_PARENTS_BIN) $(MOVE_RELEARN_PARENTS_TARGET)
 
 	@echo "battle tests:"
 	cp $(BATTLETESTS_BIN) $(BATTLETESTS_TARGET)

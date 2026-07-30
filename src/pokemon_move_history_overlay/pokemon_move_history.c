@@ -603,7 +603,8 @@ BOOL PokemonMoveHistory_RecordSnapshotImpl(
     return PokemonMoveHistory_ObserveSnapshot(saveData, snapshot) != NULL;
 }
 
-u32 PokemonMoveHistory_QueryImpl(
+u32 __attribute__((section(".pokemon_move_history_short_branch_targets")))
+PokemonMoveHistory_QueryImpl(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
     u16 *movesOut,

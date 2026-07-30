@@ -78,7 +78,7 @@ TUTORLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/TutorMoveLearnsets.c
 LEVELUPLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/LevelupLearnsets.c
 EGGLEARNSET_DEPENDENCIES := $(LEARNSET_OUTPUT_DIR)/EggLearnsets.c
 
-$(LEARNSETS_HEADER): $(LEARNSETS_INPUT) $(VENV_ACTIVATE) src/item.c
+$(LEARNSETS_HEADER): $(LEARNSETS_INPUT) $(VENV_ACTIVATE) src/item.c scripts/build_learnsets.py
 	@echo "generating learnset data..."
 	$(PYTHON) scripts/build_learnsets.py \
 		--learnsets $(LEARNSETS_INPUT) \
@@ -112,6 +112,25 @@ $(TUTORLEARNSET_BIN): $(LEARNSETS_HEADER)
 	$(OBJCOPY) -O binary $(TUTORLEARNSET_OBJS) $@
 
 NARC_FILES += $(TUTORLEARNSET_BIN)
+
+MOVE_RELEARN_PARENTS_TARGET := $(BUILD)/a028/9_20
+MOVE_RELEARN_PARENTS_SOURCE := $(BUILD)/move_relearn/MoveRelearnParents.c
+MOVE_RELEARN_PARENTS_OBJ := $(BUILD)/move_relearn/MoveRelearnParents.o
+MOVE_RELEARN_PARENTS_BIN := $(BUILD)/move_relearn/MoveRelearnParents.bin
+
+$(MOVE_RELEARN_PARENTS_SOURCE): scripts/build_move_relearn_parents.py armips/data/evodata.s include/constants/species.h asm/include/species.inc
+	$(PYTHON_NO_VENV) scripts/build_move_relearn_parents.py \
+		--evodata armips/data/evodata.s \
+		--species-header include/constants/species.h \
+		--armips-species-header asm/include/species.inc \
+		--output $@
+
+$(MOVE_RELEARN_PARENTS_BIN): $(MOVE_RELEARN_PARENTS_SOURCE)
+	$(CC) $(CFLAGS) -c $< -o $(MOVE_RELEARN_PARENTS_OBJ)
+	$(OBJCOPY) -O binary $(MOVE_RELEARN_PARENTS_OBJ) $@
+
+NARC_FILES += $(MOVE_RELEARN_PARENTS_BIN)
+REQUIRED_DIRECTORIES += $(BUILD)/move_relearn
 
 
 LEVELUPLEARNSET_TARGET := $(FILESYS)/a/0/3/3

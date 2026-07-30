@@ -266,6 +266,29 @@ def main() -> None:
         query_target == (int(query_impl_match.group(1), 16) & ~1),
         "Query entry does not branch to QueryImpl",
     )
+    candidate_impl_match = re.search(
+        r"^([0-9a-fA-F]+) T PokemonMoveRelearn_BuildCandidatesImpl$",
+        linked_symbols,
+        re.MULTILINE,
+    )
+    require(
+        candidate_impl_match is not None,
+        "move-relearn candidate implementation symbol is missing",
+    )
+    candidate_instruction = struct.unpack_from("<H", overlay, 0x78)[0]
+    require(
+        candidate_instruction & 0xF800 == 0xE000,
+        "candidate entry is not a register-preserving Thumb branch",
+    )
+    candidate_delta = candidate_instruction & 0x7FF
+    if candidate_delta & 0x400:
+        candidate_delta -= 0x800
+    candidate_target = OVERLAY_BASE + 0x78 + 4 + candidate_delta * 2
+    require(
+        candidate_target
+        == (int(candidate_impl_match.group(1), 16) & ~1),
+        "candidate entry does not branch to BuildCandidatesImpl",
+    )
 
     for other in rows:
         other_size = other[2] + other[3]
@@ -445,6 +468,10 @@ def main() -> None:
             in rom_ld,
             f"{name} ABI alias is missing or moved",
         )
+    require(
+        "PokemonMoveRelearn_BuildCandidates = 0x023BE478 | 1;" in rom_ld,
+        "move-relearn candidate ABI alias is missing or moved",
+    )
     save_trampoline = (
         REPO / "asm/pokemon_move_history_trampoline.s"
     ).read_text()

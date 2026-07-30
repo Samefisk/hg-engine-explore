@@ -17,6 +17,12 @@ SECTIONS {
 
                 __text_start = . ;
                 KEEP(*(.pokemon_move_history_api))
+                /*
+                 * These entries must preserve r3 (and, for candidates, the
+                 * stacked fifth argument), so keep their implementations
+                 * within range of the fixed-width Thumb-1 branches.
+                 */
+                KEEP(*(.pokemon_move_history_short_branch_targets))
                 ASSERT(MoveHistoryEntry_Init == ORIGIN(rom) + 0x00,
                     "move-history Init ABI moved");
                 ASSERT(MoveHistoryEntry_Load == ORIGIN(rom) + 0x08,
@@ -47,6 +53,9 @@ SECTIONS {
                     "move-history WriteSaveNow ABI moved");
                 ASSERT(MoveHistoryEntry_SaveGameNormal == ORIGIN(rom) + 0x70,
                     "move-history SaveGameNormal ABI moved");
+                ASSERT(MoveHistoryEntry_BuildRelearnCandidates
+                        == ORIGIN(rom) + 0x78,
+                    "move-relearn candidate ABI moved");
                 . = ALIGN(4);
                 *(.init)
                 *(.text)
@@ -60,8 +69,8 @@ SECTIONS {
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
-                    "move-history overlay exceeds reserved gap");
+                ASSERT(__bss_end__ + 0x1000 <= ORIGIN(rom) + LENGTH(rom),
+                    "move-history overlay exceeds guarded code envelope");
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
         } >rom = 0xff
