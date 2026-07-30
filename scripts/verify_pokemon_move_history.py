@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
+import ast
+from collections import defaultdict
 import json
 import re
 import struct
@@ -247,6 +249,335 @@ def declaration_order_ids(path: Path, kind: str) -> dict[str, int]:
             identifiers.append(name)
     require(identifiers, f"no {kind} constants were found in {path}")
     return {name: index for index, name in enumerate(identifiers)}
+
+
+def evaluate_parent_constant(
+    expression: str,
+    values: dict[str, int],
+) -> int:
+    def evaluate(node: ast.AST) -> int:
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return node.value
+        if isinstance(node, ast.Name) and node.id in values:
+            return values[node.id]
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -evaluate(node.operand)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return evaluate(node.left) + evaluate(node.right)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Sub):
+            return evaluate(node.left) - evaluate(node.right)
+        raise ValueError(f"unsupported parent-oracle constant: {expression}")
+
+    return evaluate(ast.parse(expression, mode="eval").body)
+
+
+def load_parent_constants(
+    path: Path,
+    pattern: re.Pattern[str],
+) -> dict[str, int]:
+    values: dict[str, int] = {}
+    for line in path.read_text().splitlines():
+        match = pattern.match(line)
+        if match is None:
+            continue
+        name, expression = match.groups()
+        expression = expression.split("//", 1)[0].strip()
+        try:
+            values[name] = evaluate_parent_constant(expression, values)
+        except (SyntaxError, ValueError):
+            continue
+    return values
+
+
+def without_source_comments(source: str) -> str:
+    source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    return re.sub(r"//.*", "", source)
+
+
+def build_expected_parent_payload(
+) -> tuple[bytes, dict[int, str], int, int]:
+    species_header = REPO / "include/constants/species.h"
+    species_values = load_parent_constants(
+        species_header,
+        re.compile(r"^\s*#define\s+([A-Z0-9_]+)\s+(.+?)\s*$"),
+    )
+    armips_values = load_parent_constants(
+        REPO / "asm/include/species.inc",
+        re.compile(r"^\s*\.equ\s+([A-Z0-9_]+)\s*,\s*(.+?)\s*$"),
+    )
+    require(
+        "MAX_SPECIES_INCLUDING_FORMS" in species_values,
+        "current species header has no reverse-parent table bound",
+    )
+    maximum = species_values["MAX_SPECIES_INCLUDING_FORMS"]
+    require(
+        0 <= maximum <= 0xFFFF,
+        "current reverse-parent table bound does not fit u16 indexing",
+    )
+    names_by_id = {
+        value: name
+        for name, value in species_values.items()
+        if name.startswith("SPECIES_")
+    }
+    require(
+        set(range(maximum + 1)).issubset(names_by_id),
+        "current C species IDs are not dense through the parent-table bound",
+    )
+    require(
+        all(
+            value in names_by_id
+            for name, value in armips_values.items()
+            if name.startswith("SPECIES_")
+        ),
+        "an Armips species ID has no C equivalent",
+    )
+
+    def canonical_id(symbol: str) -> int:
+        require(
+            symbol in armips_values,
+            f"current evodata references unknown Armips species {symbol}",
+        )
+        value = armips_values[symbol]
+        require(
+            value in names_by_id,
+            f"Armips species {symbol} ({value}) has no C equivalent",
+        )
+        return value
+
+    form_source = without_source_comments(
+        (REPO / "data/PokeFormDataTbl.c").read_text()
+    )
+    form_rows: dict[int, list[int]] = {}
+    for base, body in re.findall(
+        r"\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\}",
+        form_source,
+        re.DOTALL,
+    ):
+        require(
+            base in species_values,
+            f"form table references unknown base species {base}",
+        )
+        forms = re.findall(r"\bSPECIES_[A-Z0-9_]+\b", body)
+        require(forms, f"form table row {base} has no species entries")
+        require(
+            all(form in species_values for form in forms),
+            f"form table row {base} references an unknown species",
+        )
+        base_id = species_values[base]
+        require(base_id not in form_rows, f"form table duplicates base {base}")
+        form_rows[base_id] = [species_values[form] for form in forms]
+
+    form_to_base_source = without_source_comments(
+        (REPO / "data/FormToSpeciesMapping.c").read_text()
+    )
+    form_to_base: dict[int, int] = {}
+    for form, base in re.findall(
+        r"\[(SPECIES_[A-Z0-9_]+)\s*-\s*SPECIES_MEGA_START\]\s*=\s*"
+        r"(SPECIES_[A-Z0-9_]+)",
+        form_to_base_source,
+    ):
+        require(
+            form in species_values and base in species_values,
+            f"form-to-species row references an unknown species: {form} -> {base}",
+        )
+        form_id = species_values[form]
+        base_id = species_values[base]
+        require(
+            form_id not in form_to_base,
+            f"form-to-species mapping duplicates {form}",
+        )
+        form_to_base[form_id] = base_id
+
+    parent_candidates: dict[int, list[int]] = defaultdict(list)
+    current: int | None = None
+    evodata = without_source_comments(
+        (REPO / "armips/data/evodata.s").read_text()
+    )
+    evodata_re = re.compile(r"^\s*evodata\s+(SPECIES_[A-Z0-9_]+)\b")
+    evolution_re = re.compile(
+        r"^\s*evolution\s+([^,]+),\s*[^,]+,\s*(SPECIES_[A-Z0-9_]+)\b"
+    )
+    evolution_with_form_re = re.compile(
+        r"^\s*evolutionwithform\s+([^,]+),\s*[^,]+,\s*"
+        r"(SPECIES_[A-Z0-9_]+)\s*,\s*([0-9]+)\b"
+    )
+    for line in evodata.splitlines():
+        match = evodata_re.match(line)
+        if match is not None:
+            current = canonical_id(match.group(1))
+            continue
+        match = evolution_re.match(line)
+        form_match = evolution_with_form_re.match(line)
+        if match is None and form_match is None:
+            continue
+        require(current is not None, "evolution appeared before evodata")
+        if match is not None:
+            if match.group(1).strip() == "EVO_NONE":
+                continue
+            target = canonical_id(match.group(2))
+        else:
+            assert form_match is not None
+            if form_match.group(1).strip() == "EVO_NONE":
+                continue
+            target_base = canonical_id(form_match.group(2))
+            form = int(form_match.group(3))
+            forms = form_rows.get(target_base, [])
+            target = (
+                forms[form - 1]
+                if form != 0 and form <= len(forms)
+                else target_base
+            )
+        if current not in parent_candidates[target]:
+            parent_candidates[target].append(current)
+
+    parents: dict[int, int] = {}
+    for target, candidates in parent_candidates.items():
+        if len(candidates) == 1:
+            parents[target] = candidates[0]
+            continue
+
+        candidate_bases = {
+            form_to_base.get(candidate, candidate)
+            for candidate in candidates
+        }
+        require(
+            len(candidate_bases) == 1,
+            f"{names_by_id[target]} has unrelated parent form families",
+        )
+        base_parent = next(iter(candidate_bases))
+        require(
+            base_parent in candidates,
+            f"{names_by_id[target]} has form parents but no base parent",
+        )
+        parents[target] = base_parent
+        parent_forms = form_rows.get(base_parent, [])
+        target_forms = form_rows.get(target, [])
+        for candidate in candidates:
+            if candidate == base_parent:
+                continue
+            require(
+                candidate in parent_forms,
+                f"{names_by_id[candidate]} is absent from its numeric form family",
+            )
+            form_index = parent_forms.index(candidate)
+            require(
+                form_index < len(target_forms),
+                f"{names_by_id[target]} has no matching numeric form slot "
+                f"for {names_by_id[candidate]}",
+            )
+            form_target = target_forms[form_index]
+            require(
+                form_target not in parents or parents[form_target] == candidate,
+                f"{names_by_id[form_target]} has conflicting numeric parents",
+            )
+            parents[form_target] = candidate
+
+    # These four policy-only derivatives have no evolution edge. Keep them
+    # explicit here as a two-party policy gate: changing generator policy must
+    # be reviewed independently in the final-ROM oracle.
+    derived_overrides = {
+        "SPECIES_RATICATE_ALOLAN_LARGE": "SPECIES_RATTATA_ALOLAN",
+        "SPECIES_DARMANITAN_ZEN_MODE_GALARIAN": "SPECIES_DARUMAKA_GALARIAN",
+        "SPECIES_ARCANINE_LORD": "SPECIES_GROWLITHE_HISUIAN",
+        "SPECIES_ELECTRODE_LORD": "SPECIES_VOLTORB_HISUIAN",
+    }
+    for target, parent in derived_overrides.items():
+        require(
+            target in species_values and parent in species_values,
+            f"parent-oracle policy references unknown species: {target} -> {parent}",
+        )
+        parents.setdefault(species_values[target], species_values[parent])
+
+    require(
+        not (set(form_to_base) & set(form_to_base.values())),
+        "chained form-to-species mappings make parent fallback order-dependent",
+    )
+    for form, base in sorted(form_to_base.items()):
+        if form not in parents and base in parents:
+            parents[form] = parents[base]
+
+    runtime_source = (
+        REPO
+        / "src/pokemon_move_history_overlay/pokemon_move_relearn.c"
+    ).read_text()
+    limit_match = re.search(
+        r"^#define MOVE_RELEARN_LINEAGE_LIMIT ([0-9]+)$",
+        runtime_source,
+        re.MULTILINE,
+    )
+    require(limit_match is not None, "runtime lineage limit is missing")
+    lineage_limit = int(limit_match.group(1))
+
+    maximum_depth = 0
+    for target, parent in parents.items():
+        require(
+            0 < target <= maximum and 0 < parent <= maximum,
+            f"current parent mapping is out of range: {target} -> {parent}",
+        )
+        require(target != parent, f"current parent mapping is self-referential: {target}")
+        seen: set[int] = set()
+        current_species = target
+        depth = 0
+        while current_species in parents:
+            require(
+                current_species not in seen,
+                f"current parent mapping has a cycle at {names_by_id[current_species]}",
+            )
+            seen.add(current_species)
+            current_species = parents[current_species]
+            depth += 1
+        maximum_depth = max(maximum_depth, depth)
+    require(
+        maximum_depth < lineage_limit,
+        "current parent mapping exceeds the runtime lineage limit",
+    )
+
+    values = [0] * (maximum + 1)
+    for target, parent in parents.items():
+        values[target] = parent
+
+    return (
+        struct.pack(f"<{len(values)}H", *values),
+        names_by_id,
+        len(parents),
+        maximum_depth,
+    )
+
+
+def first_parent_mismatch(
+    member: bytes,
+    expected: bytes,
+    names_by_id: dict[int, str],
+) -> str | None:
+    if len(member) != len(expected):
+        return f"size expected {len(expected)} bytes, actual {len(member)} bytes"
+    row_count = len(expected) // 2
+    for target in range(row_count):
+        actual_parent = struct.unpack_from("<H", member, target * 2)[0]
+        expected_parent = struct.unpack_from("<H", expected, target * 2)[0]
+        if actual_parent == expected_parent:
+            continue
+        return (
+            f"target {target} ({names_by_id.get(target, 'UNKNOWN')}) "
+            f"expected {expected_parent} "
+            f"({names_by_id.get(expected_parent, 'UNKNOWN')}), "
+            f"actual {actual_parent} "
+            f"({names_by_id.get(actual_parent, 'UNKNOWN')})"
+        )
+    return None
+
+
+def verify_parent_member_against_current_inputs(
+    member: bytes,
+    expected: bytes,
+    names_by_id: dict[int, str],
+) -> None:
+    mismatch = first_parent_mismatch(member, expected, names_by_id)
+    require(
+        mismatch is None,
+        "final a028 member 20 differs from the current evolution/form input "
+        f"oracle: {mismatch}",
+    )
 
 
 def ordered_move_array(path: Path, declaration: str) -> list[str]:
@@ -780,6 +1111,15 @@ def main() -> None:
         a229_members[0] == expected_learnsets["egg"],
         "final ROM egg member differs from the current-input oracle",
     )
+    expected_parents, parent_names, parent_mappings, parent_depth = (
+        build_expected_parent_payload()
+    )
+    verify_parent_member_against_current_inputs(
+        a028_members[20],
+        expected_parents,
+        parent_names,
+    )
+    parent_rows = len(expected_parents) // 2
 
     rows = [
         struct.unpack_from("<8I", table, offset)
@@ -1273,6 +1613,7 @@ def main() -> None:
         f"{learnset_dimensions['egg_width']}/"
         f"{learnset_dimensions['machine_words']}/"
         f"{learnset_dimensions['tutor_words']} "
+        f"parents={parent_mappings}/{parent_rows}/depth{parent_depth} "
         f"overlay153=0x{OVERLAY_BASE:08X}.."
         f"0x{OVERLAY_BASE + len(overlay):08X} "
         f"overlay129=0x{len(overlay129):X}/0x8000"

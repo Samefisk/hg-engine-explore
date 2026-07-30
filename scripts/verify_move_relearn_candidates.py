@@ -168,10 +168,31 @@ def verify_source_contract() -> None:
         'a028_members[14] == expected_learnsets["machine"]',
         'a028_members[15] == expected_learnsets["tutor"]',
         'a229_members[0] == expected_learnsets["egg"]',
+        "def build_expected_parent_payload(",
+        "armips/data/evodata.s",
+        "asm/include/species.inc",
+        "data/PokeFormDataTbl.c",
+        "data/FormToSpeciesMapping.c",
+        "def first_parent_mismatch(",
+        "verify_parent_member_against_current_inputs(",
+        "a028_members[20],",
     ):
         require(
             fragment in final_verifier,
             f"independent final-ROM oracle contract lost: {fragment}",
+        )
+    parent_oracle = final_verifier[
+        final_verifier.index("def build_expected_parent_payload("):
+        final_verifier.index("def ordered_move_array(")
+    ]
+    for forbidden in (
+        "scripts/build_move_relearn_parents.py",
+        "build/move_relearn/MoveRelearnParents.c",
+        "build/move_relearn/MoveRelearnParents.bin",
+    ):
+        require(
+            forbidden not in parent_oracle,
+            f"final parent oracle trusts generated logic/artifact: {forbidden}",
         )
     history_loop = source.index(
         "for (i = 0; i < historyCount; i++) {",
@@ -265,6 +286,74 @@ def verify_atomic_learnset_publication() -> None:
             ),
             "unchanged atomic generation rewrote a published output",
         )
+
+
+def verify_final_parent_oracle_rejects_tampering() -> None:
+    path = REPO / "scripts/verify_pokemon_move_history.py"
+    spec = importlib.util.spec_from_file_location(
+        "move_history_parent_oracle_fixture",
+        path,
+    )
+    require(spec is not None and spec.loader is not None, "final verifier cannot load")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    expected, names_by_id, mapping_count, maximum_depth = (
+        module.build_expected_parent_payload()
+    )
+    species_values = module.load_parent_constants(
+        REPO / "include/constants/species.h",
+        re.compile(r"^\s*#define\s+([A-Z0-9_]+)\s+(.+?)\s*$"),
+    )
+    maximum = species_values["MAX_SPECIES_INCLUDING_FORMS"]
+    require(
+        len(expected) == (maximum + 1) * 2
+        and mapping_count > 0
+        and maximum_depth > 0,
+        "current-input parent oracle has the wrong complete u16 shape",
+    )
+    module.verify_parent_member_against_current_inputs(
+        expected,
+        expected,
+        names_by_id,
+    )
+
+    butterfree = species_values["SPECIES_BUTTERFREE"]
+    metapod = species_values["SPECIES_METAPOD"]
+    caterpie = species_values["SPECIES_CATERPIE"]
+    offset = butterfree * 2
+    require(
+        int.from_bytes(expected[offset:offset + 2], "little") == metapod,
+        "current-input parent fixture lost Butterfree <- Metapod",
+    )
+    tampered = bytearray(expected)
+    tampered[offset:offset + 2] = caterpie.to_bytes(2, "little")
+    expected_mismatch = (
+        f"target {butterfree} (SPECIES_BUTTERFREE) "
+        f"expected {metapod} (SPECIES_METAPOD), "
+        f"actual {caterpie} (SPECIES_CATERPIE)"
+    )
+    require(
+        module.first_parent_mismatch(
+            bytes(tampered),
+            expected,
+            names_by_id,
+        ) == expected_mismatch,
+        "tampered parent member did not identify the precise stale row",
+    )
+    try:
+        module.verify_parent_member_against_current_inputs(
+            bytes(tampered),
+            expected,
+            names_by_id,
+        )
+    except SystemExit as error:
+        require(
+            expected_mismatch in str(error),
+            f"tampered parent member failed imprecisely: {error}",
+        )
+    else:
+        require(False, "tampered final-ROM parent member was accepted")
 
 
 def verify_shared_move_tables() -> None:
@@ -534,6 +623,7 @@ def verify_hgss_special_policy_model() -> None:
 def main() -> None:
     verify_source_contract()
     verify_atomic_learnset_publication()
+    verify_final_parent_oracle_rejects_tampering()
     verify_shared_move_tables()
     verify_parent_generator()
     verify_ordering_model()
