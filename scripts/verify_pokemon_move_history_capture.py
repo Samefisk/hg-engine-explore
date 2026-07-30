@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -40,6 +41,26 @@ OVERLAY_LIMIT = 0x1000
 OVERLAY153_CALL_INVENTORY_SHA256 = (
     "14d53cf039cb048a94a3c164f985d466c5318adfb1f2d09961f1ee038dfcdd6b"
 )
+EXPECTED_MAKEFILE_SHA256 = (
+    "32eb029257514bb2f7c52ba70bdc1584fa5e3a8717a2772c0f7348c8eb83062b"
+)
+EXPECTED_BUILD_WRAPPER_SHA256 = (
+    "df3659cd2f630bac5df444076ec762e97049f0e31ac008c752a7de08cfbe2eb0"
+)
+EXPECTED_INCLUDED_MAKE_SOURCES = {
+    "data/codetables.mk":
+        "d0fe26e89f80a5101339650e69ba205fe8a352b7dd8a09a13f1394583b84f5bd",
+    "data/graphics/itemgra.mk":
+        "3e90342beaa98774e2e1bb62fd0c0b32673edee65d69b1ce85603c81a8aad444",
+    "data/graphics/pokegra.mk":
+        "a48e47de1f0c7139755a1e437f29c4a32daddb0176854f369905b2ab75f2c994",
+    "data/itemdata/itemdata.mk":
+        "5f6fb210d6106c88edca22ce74b9e4c8e93a9dc29d54ad9dd86bc281e010bf51",
+    "narcs.mk":
+        "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
+    "overlays.mk":
+        "f9a09d1628b31c1decdd5f3ff798f9c220bb4e0afa95ff0973fd3e48479a9369",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -114,6 +135,524 @@ def make_target_recipe_commands(makefile: str, target: str) -> list[str]:
             break
     require(recipe_lines, f"Makefile target {target!r} has no recipe")
     return make_recipe_commands("\n".join(recipe_lines))
+
+
+def make_publication_contract_matches(
+    makefile: str,
+    target_declaration: str,
+    complete_recipe: list[str],
+    publication_tail: list[str],
+) -> bool:
+    target_pattern = re.compile(
+        rf"(?m)^{re.escape(target_declaration)}$"
+    )
+    if len(target_pattern.findall(makefile)) != 1:
+        return False
+    if len(re.findall(r"(?m)^all\s*:", makefile)) != 1:
+        return False
+    try:
+        recipe = make_target_recipe_commands(makefile, "all")
+    except SystemExit:
+        return False
+    return (
+        recipe == complete_recipe
+        and recipe[-len(publication_tail):] == publication_tail
+    )
+
+
+def outer_make_invocation_is_safe(
+    environment: dict[str, str] | None = None,
+) -> bool:
+    active_environment = os.environ if environment is None else environment
+    makeflags = active_environment.get("MAKEFLAGS", "").strip()
+    makeoverrides = active_environment.get("MAKEOVERRIDES", "").strip()
+    if not makeflags:
+        return not makeoverrides
+    if "\\" in makeflags or "\n" in makeflags:
+        return False
+    tokens = makeflags.split()
+    command_variables: list[str] = []
+    if "--" in tokens:
+        separator = tokens.index("--")
+        command_variables = tokens[separator + 1:]
+        tokens = tokens[:separator]
+    elif any("=" in token for token in tokens):
+        command_variables = [
+            token for token in tokens if "=" in token
+        ]
+        tokens = [
+            token for token in tokens if "=" not in token
+        ]
+    for token in tokens:
+        if (
+            token in {"-j", "w", "--print-directory", "--no-print-directory"}
+            or re.fullmatch(r"-j[1-9][0-9]*", token)
+            or re.fullmatch(
+                r"--jobserver-(?:fds|auth)=[0-9]+,[0-9]+",
+                token,
+            )
+        ):
+            continue
+        return False
+    if command_variables not in (
+        [],
+        ["VENV=/tmp/hg-engine-venv"],
+    ):
+        return False
+    if command_variables:
+        return makeoverrides == "${-*-command-variables-*-}"
+    return not makeoverrides
+
+
+def make_compilation_source_topology_is_safe(root: Path = REPO) -> bool:
+    safe_component = re.compile(r"[A-Za-z0-9_.+\-]+")
+    for relative_root, suffix in (("src", ".c"), ("asm", ".s")):
+        source_root = root / relative_root
+        try:
+            source_mode = source_root.lstat().st_mode
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(source_mode) or not stat.S_ISDIR(source_mode):
+            return False
+        for directory, directory_names, file_names in os.walk(
+            source_root,
+            followlinks=False,
+        ):
+            directory_path = Path(directory)
+            for directory_name in directory_names:
+                child = directory_path / directory_name
+                if (
+                    safe_component.fullmatch(directory_name) is None
+                    or child.is_symlink()
+                    or not child.is_dir()
+                ):
+                    return False
+            for file_name in file_names:
+                if (
+                    relative_root == "src"
+                    and directory_path == source_root
+                    and "." not in file_name
+                ):
+                    return False
+                if Path(file_name).suffix != suffix:
+                    continue
+                source = directory_path / file_name
+                if (
+                    safe_component.fullmatch(file_name) is None
+                    or source.is_symlink()
+                    or not source.is_file()
+                ):
+                    return False
+    return True
+
+
+def generated_dependency_inputs_are_safe(root: Path = REPO) -> bool:
+    if not make_compilation_source_topology_is_safe(root):
+        return False
+    build_root = root / "build"
+    source_root = root / "src"
+    try:
+        build_mode = build_root.lstat().st_mode
+    except FileNotFoundError:
+        return True
+    if stat.S_ISLNK(build_mode) or not stat.S_ISDIR(build_mode):
+        return False
+    safe_token = re.compile(r"[A-Za-z0-9_./+\-]+")
+    expected_dependencies = {
+        build_root
+        / source.relative_to(source_root).with_suffix(".d")
+        for source in source_root.rglob("*.c")
+    }
+    for dependency in sorted(expected_dependencies):
+        cursor = dependency.parent
+        while cursor != build_root:
+            try:
+                cursor_mode = cursor.lstat().st_mode
+            except FileNotFoundError:
+                pass
+            else:
+                if (
+                    stat.S_ISLNK(cursor_mode)
+                    or not stat.S_ISDIR(cursor_mode)
+                ):
+                    return False
+            cursor = cursor.parent
+        if not dependency.exists() and not dependency.is_symlink():
+            continue
+        if dependency.is_symlink() or not dependency.is_file():
+            return False
+        try:
+            source = dependency.read_text()
+        except (OSError, UnicodeError):
+            return False
+        if (
+            "\0" in source
+            or "$" in source
+            or "=" in source
+            or "\t" in source
+            or any(character in source for character in "`;&|")
+        ):
+            return False
+        logical = source.replace("\\\n", " ")
+        if "\\" in logical:
+            return False
+        lines = [
+            line.strip()
+            for line in logical.splitlines()
+            if line.strip()
+        ]
+        if len(lines) != 1 or ":" not in lines[0]:
+            return False
+        target, prerequisites = lines[0].split(":", 1)
+        target = target.strip()
+        prerequisite_tokens = prerequisites.split()
+        expected_target = dependency.with_suffix(".o").relative_to(root)
+        if (
+            target != expected_target.as_posix()
+            or safe_token.fullmatch(target) is None
+            or not prerequisite_tokens
+            or any(
+                safe_token.fullmatch(token) is None
+                or Path(token).suffix not in {".c", ".h"}
+                for token in prerequisite_tokens
+            )
+        ):
+            return False
+    return True
+
+
+def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
+    if (
+        hashlib.sha256(makefile.encode()).hexdigest()
+        != EXPECTED_MAKEFILE_SHA256
+    ):
+        return False
+    wrapper = REPO / "docker-makerom.cmd"
+    if (
+        not wrapper.is_file()
+        or wrapper.is_symlink()
+        or hashlib.sha256(wrapper.read_bytes()).hexdigest()
+        != EXPECTED_BUILD_WRAPPER_SHA256
+    ):
+        return False
+    for relative_path, expected_sha256 in (
+        EXPECTED_INCLUDED_MAKE_SOURCES.items()
+    ):
+        path = REPO / relative_path
+        if (
+            not path.is_file()
+            or path.is_symlink()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != expected_sha256
+        ):
+            return False
+    return generated_dependency_inputs_are_safe()
+
+
+def effective_make_all_contract_matches(
+    makefile: str,
+    expected_makefile_sha256: str,
+    expected_included_sources: dict[str, str],
+    expected_prerequisites_sha256: str,
+    expected_recipe: list[str],
+    expected_recipe_variables_sha256: str,
+    *,
+    make_arguments: tuple[str, ...] = (),
+) -> bool:
+    if (
+        hashlib.sha256(makefile.encode()).hexdigest()
+        != expected_makefile_sha256
+    ):
+        return False
+    for relative_path, expected_sha256 in expected_included_sources.items():
+        path = REPO / relative_path
+        if (
+            not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest()
+            != expected_sha256
+        ):
+            return False
+
+    try:
+        environment = {
+            "LC_ALL": "C",
+            "PATH": os.environ.get("PATH", os.defpath),
+        }
+        with tempfile.TemporaryDirectory(
+            prefix="move-history-effective-make-"
+        ) as isolated_directory:
+            isolated_root = Path(isolated_directory)
+            (isolated_root / "Makefile").write_text(makefile)
+            for directory in (
+                "armips",
+                "asm",
+                "data",
+                "include",
+                "scripts",
+                "src",
+                "tools",
+            ):
+                (isolated_root / directory).symlink_to(
+                    REPO / directory,
+                    target_is_directory=True,
+                )
+            for make_source in ("narcs.mk", "overlays.mk"):
+                shutil.copyfile(
+                    REPO / make_source,
+                    isolated_root / make_source,
+                )
+            for root_input in ("hooks", "requirements.txt", "rom.ld"):
+                (isolated_root / root_input).symlink_to(
+                    REPO / root_input,
+                )
+            rom_header = bytearray(16)
+            rom_header[12:16] = b"IPKE"
+            (isolated_root / "rom.nds").write_bytes(rom_header)
+            initialized = subprocess.run(
+                ["git", "init", "-q"],
+                cwd=isolated_root,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10,
+            )
+            if initialized.returncode != 0:
+                return False
+            completed = subprocess.run(
+                [
+                    "make",
+                    "--no-print-directory",
+                    "-qpRr",
+                    "-f",
+                    "Makefile",
+                    "VENV=/tmp/hg-engine-venv",
+                    *make_arguments,
+                    "all",
+                ],
+                cwd=isolated_root,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+            )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if completed.returncode not in (0, 1) or completed.stderr.strip():
+        return False
+    makefile_lists = re.findall(
+        r"(?m)^MAKEFILE_LIST\s*:?=\s*(.*)$",
+        completed.stdout,
+    )
+    if (
+        len(makefile_lists) != 1
+        or any(
+            path.endswith(".d")
+            for path in makefile_lists[0].split()
+        )
+    ):
+        return False
+
+    lines = completed.stdout.splitlines()
+    all_rule_indices = [
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("all:")
+    ]
+    if len(all_rule_indices) != 1:
+        return False
+    rule_index = all_rule_indices[0]
+    prerequisites = " ".join(
+        lines[rule_index].removeprefix("all:").split()
+    )
+    if (
+        hashlib.sha256(prerequisites.encode()).hexdigest()
+        != expected_prerequisites_sha256
+    ):
+        return False
+
+    next_rule = next(
+        (
+            index
+            for index in range(rule_index + 1, len(lines))
+            if lines[index]
+            and not lines[index].startswith(("#", "\t", " "))
+            and ":" in lines[index]
+        ),
+        len(lines),
+    )
+    command_header = next(
+        (
+            index
+            for index in range(rule_index + 1, next_rule)
+            if lines[index].startswith(
+                ("#  commands to execute", "#  recipe to execute")
+            )
+        ),
+        None,
+    )
+    if command_header is None:
+        return False
+    all_rule_metadata = lines[rule_index + 1:command_header]
+    if any(
+        re.match(r"^# (?:makefile|command line|override|environment)", line)
+        is not None
+        and index + 1 < len(all_rule_metadata)
+        and re.match(
+            r"^#\s+[A-Za-z_][A-Za-z0-9_]*\s*(?::|\+|\?|!)?=",
+            all_rule_metadata[index + 1],
+        )
+        is not None
+        for index, line in enumerate(all_rule_metadata)
+    ):
+        return False
+    recipe_lines: list[str] = []
+    for line in lines[command_header + 1:]:
+        if line.startswith("\t"):
+            recipe_lines.append(line)
+        elif recipe_lines:
+            break
+    while recipe_lines and not recipe_lines[-1].strip():
+        recipe_lines.pop()
+    try:
+        effective_recipe = make_recipe_commands(
+            "\n".join(recipe_lines)
+        )
+    except SystemExit:
+        return False
+    if effective_recipe != expected_recipe:
+        return False
+
+    variable_definitions: dict[str, list[tuple[str, str, str]]] = {}
+    definition_pattern = re.compile(
+        r"^([A-Za-z_][A-Za-z0-9_]*)\s*"
+        r"((?::|\+|\?|!)?=)\s*(.*)$"
+    )
+    for index, line in enumerate(lines):
+        assignment = definition_pattern.match(line)
+        if assignment is None:
+            continue
+        name = assignment.group(1)
+        origin_line = lines[index - 1] if index else ""
+        origin_match = re.match(r"^# ([a-z ]+)", origin_line)
+        origin = (
+            origin_match.group(1).strip()
+            if origin_match is not None
+            else ""
+        )
+        variable_definitions.setdefault(name, []).append(
+            (
+                origin,
+                assignment.group(2),
+                " ".join(assignment.group(3).split()),
+            )
+        )
+
+    simple_reference = re.compile(
+        r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)"
+        r"|\$\{([A-Za-z_][A-Za-z0-9_]*)\}"
+    )
+    direct_variables = {
+        first or second
+        for first, second in simple_reference.findall(
+            "\n".join(expected_recipe)
+        )
+    }
+    variable_closure: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit_variable(name: str) -> bool:
+        if name in variable_closure:
+            return True
+        if (
+            name in visiting
+            or name not in variable_definitions
+            or len(variable_definitions[name]) != 1
+        ):
+            return False
+        visiting.add(name)
+        _origin, _operator, value = variable_definitions[name][0]
+        references = {
+            first or second
+            for first, second in simple_reference.findall(value)
+        }
+        residual = simple_reference.sub("", value).replace("$$", "")
+        if "$" in residual:
+            return False
+        for reference in references:
+            if not visit_variable(reference):
+                return False
+        visiting.remove(name)
+        variable_closure.add(name)
+        return True
+
+    if not all(
+        visit_variable(name)
+        for name in sorted(direct_variables)
+    ):
+        return False
+    variable_records = [
+        {
+            "name": name,
+            "operator": variable_definitions[name][0][1],
+            "origin": variable_definitions[name][0][0],
+            "value": (
+                Path(variable_definitions[name][0][2]).name
+                if name == "MAKE_COMMAND"
+                else variable_definitions[name][0][2]
+            ),
+        }
+        for name in sorted(variable_closure)
+    ]
+    if (
+        "MAKE_COMMAND" in variable_closure
+        and (
+            variable_definitions["MAKE_COMMAND"][0][0] != "default"
+            or Path(
+                variable_definitions["MAKE_COMMAND"][0][2]
+            ).name != "make"
+        )
+    ):
+        return False
+    variables_sha256 = hashlib.sha256(
+        json.dumps(
+            variable_records,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    if variables_sha256 != expected_recipe_variables_sha256:
+        return False
+
+    makeflags = re.findall(
+        r"(?m)^MAKEFLAGS\s*((?::|\+|\?|!)?=)\s*(.*)$",
+        completed.stdout,
+    )
+    if makeflags not in (
+        [
+            (
+                "=",
+                "--no-print-directory -Rrqp -- $(MAKEOVERRIDES)",
+            )
+        ],
+        [
+            (
+                "=",
+                "pqrR --no-print-directory -- $(MAKEOVERRIDES)",
+            )
+        ],
+    ):
+        return False
+    makeoverrides = re.findall(
+        r"(?m)^MAKEOVERRIDES\s*((?::|\+|\?|!)?=)\s*(.*)$",
+        completed.stdout,
+    )
+    if makeoverrides != [
+        ("=", "${-*-command-variables-*-}"),
+    ]:
+        return False
+    return True
 
 
 def makeflags_suppress_failures_or_output(makefile: str) -> bool:
@@ -1030,6 +1569,45 @@ def source_contracts() -> None:
     hooks = (REPO / "hooks").read_text()
     makefile = (REPO / "Makefile").read_text()
     config = (REPO / "include/config.h").read_text()
+    require(
+        outer_make_invocation_is_safe(),
+        "outer Make invocation contains unsafe flags or command variables",
+    )
+    require(
+        trusted_pre_make_sources_are_exact(makefile),
+        "pre-Make source/dependency trust gate differs",
+    )
+    require(
+        outer_make_invocation_is_safe({})
+        and outer_make_invocation_is_safe(
+            {
+                "MAKEFLAGS":
+                    "w -j --jobserver-fds=3,4 -- "
+                    "VENV=/tmp/hg-engine-venv",
+                "MAKEOVERRIDES": "${-*-command-variables-*-}",
+            }
+        ),
+        "known direct/managed outer Make invocations fail authentication",
+    )
+    for label, environment in {
+        "ignore errors": {"MAKEFLAGS": "-i"},
+        "keep going": {"MAKEFLAGS": "-k"},
+        "redirected ROM": {
+            "MAKEFLAGS": "-- BUILDROM=attacker.nds",
+            "MAKEOVERRIDES": "${-*-command-variables-*-}",
+        },
+        "injected recipe variable": {
+            "MAKEFLAGS": "-- ARMIPS_FLAGS=;cp rom.nds test.nds",
+            "MAKEOVERRIDES": "${-*-command-variables-*-}",
+        },
+        "unexpected override metadata": {
+            "MAKEOVERRIDES": "${-*-command-variables-*-}",
+        },
+    }.items():
+        require(
+            not outer_make_invocation_is_safe(environment),
+            f"{label} outer Make invocation passes authentication",
+        )
     header_code = without_comments(header)
     history_code = without_comments(history)
     pokemon_code = without_comments(pokemon)
@@ -1428,6 +2006,76 @@ def source_contracts() -> None:
         "--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
         "--final-rom $(BUILDROM)",
     ]
+    expected_publication_tail = [
+        "rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)",
+        *exact_package_commands,
+        '@echo "Done. See output $(BUILDROM)."',
+    ]
+    expected_all_recipe = [
+        "rm -rf $(BASE)",
+        "@mkdir -p $(REQUIRED_DIRECTORIES)",
+        "@# find and delete macOS and windows files",
+        'find . \\( -name "*.DS_Store" -o '
+        '-name "*:Zone.Identifier" \\) -delete',
+        "$(NDSTOOL) -x $(ROMNAME) -9 $(BASE)/arm9.bin "
+        "-7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin "
+        "-y7 $(BASE)/overarm7.bin -d $(FILESYS) "
+        "-y $(BASE)/overlay -t $(BASE)/banner.bin "
+        "-h $(BASE)/header.bin",
+        '@echo "$(ROMNAME) Decompression successful!!"',
+        "$(NARCHIVE) extract $(FILESYS)/a/0/2/8 "
+        "-o $(BUILD)/a028/ -nf",
+        "$(PYTHON) scripts/make.py $(CFLAGS)",
+        "$(MAKE) move_narc",
+        "$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)",
+        "$(NARCHIVE) create $(FILESYS)/a/0/2/8 "
+        "$(BUILD)/a028/ -nf",
+        "$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py "
+        "--source src/pokemon_storage_system.c "
+        "--config include/config.h "
+        "--save-constants include/constants/save.h "
+        "--party-header include/party_menu.h "
+        "--arm9 $(BASE)/arm9.bin "
+        "--linker-script rom.ld --hooks hooks "
+        "--linked-object $(LINK) --core-binary $(OUTPUT) "
+        "--packaged-overlay129 $(BASE)/overlay/overlay_0129.bin "
+        "--overlay-table $(BASE)/overarm9.bin",
+        "$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py "
+        "--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9",
+        "$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py",
+        '@echo "Making ROM..."',
+        *expected_publication_tail,
+    ]
+    expected_recipe_variables_sha256 = (
+        "255760941a1718662c7adb55c05cbb480b4cb4a62e04f02d55975b4730e755fc"
+    )
+    expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
+    expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
+    expected_prerequisites_sha256 = (
+        "0a0bc3c7fde914a13336a939b7b9de3b4cd67f7bc2ca76d8615a753c26cc7af7"
+    )
+    require(
+        make_publication_contract_matches(
+            makefile,
+            "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)",
+            expected_all_recipe,
+            expected_publication_tail,
+        ),
+        "complete all target declaration/recipe or exact publication tail "
+        "differs",
+    )
+    require(
+        effective_make_all_contract_matches(
+            makefile,
+            expected_makefile_sha256,
+            expected_included_make_sources,
+            expected_prerequisites_sha256,
+            expected_all_recipe,
+            expected_recipe_variables_sha256,
+        ),
+        "effective GNU Make all rule, prerequisites, recipe, or critical "
+        "variables differ",
+    )
     exact_command_positions = [
         recipe_commands.index(command)
         if recipe_commands.count(command) == 1
@@ -1496,6 +2144,480 @@ def source_contracts() -> None:
             ),
             f"Make global flag mutation passes: {makeflags_mutation.strip()}",
         )
+    exact_target = "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)"
+    prerequisite_mutation = makefile.replace(
+        exact_target,
+        exact_target + " clobber-accepted-rom",
+        1,
+    )
+    require(
+        prerequisite_mutation != makefile
+        and not make_publication_contract_matches(
+            prerequisite_mutation,
+            exact_target,
+            expected_all_recipe,
+            expected_publication_tail,
+        ),
+        "extra all-target prerequisite passes publication authentication",
+    )
+    effective_make_mutations = (
+        (
+            "expanded target recipe override",
+            "\nALL_TARGET = all\n"
+            "$(ALL_TARGET):\n"
+            "\tcp test.nds.tmp test.nds\n",
+        ),
+        (
+            "expanded target prerequisite",
+            "\nALL_TARGET = all\n"
+            "$(ALL_TARGET): clobber-accepted-rom\n",
+        ),
+        (
+            "multi-target prerequisite",
+            "\nall shadow-target: clobber-accepted-rom\n",
+        ),
+        (
+            "late ROM override",
+            "\noverride BUILDROM = attacker.nds\n",
+        ),
+        (
+            "late manifest override",
+            "\noverride MOVE_HISTORY_CAPTURE_MANIFEST = attacker.json\n",
+        ),
+        (
+            "expanded target-specific ROM override",
+            "\nALL_TARGET = all\n"
+            "$(ALL_TARGET): BUILDROM = attacker.nds\n",
+        ),
+        (
+            "expanded target-specific manifest override",
+            "\nALL_TARGET = all\n"
+            "$(ALL_TARGET): MOVE_HISTORY_CAPTURE_MANIFEST = attacker.json\n",
+        ),
+        (
+            "expanded target-specific temporary manifest override",
+            "\nALL_TARGET = all\n"
+            "$(ALL_TARGET): MOVE_HISTORY_CAPTURE_MANIFEST_TMP = "
+            "attacker.tmp\n",
+        ),
+        (
+            "delayed ARMIPS flags write",
+            "\noverride ARMIPS_FLAGS = -equ DEBUG_BATTLE_SCENARIOS 0 ; "
+            "(sleep 1; cp rom.nds test.nds) & #\n",
+        ),
+        (
+            "delayed VENV activation write",
+            "\noverride VENV_ACTIVATE = /dev/null ; "
+            "(sleep 1; cp rom.nds test.nds) & #\n",
+        ),
+        (
+            "nested delayed VENV activation write",
+            "\noverride VENV_ACTIVATE = $(MOVE_HISTORY_NESTED)\n"
+            "MOVE_HISTORY_NESTED = /dev/null ; "
+            "(sleep 1; cp rom.nds test.nds) & #\n",
+        ),
+        (
+            "cyclic VENV activation reference",
+            "\noverride VENV_ACTIVATE = $(MOVE_HISTORY_CYCLE)\n"
+            "MOVE_HISTORY_CYCLE = $(VENV_ACTIVATE)\n",
+        ),
+        (
+            "unknown VENV activation reference",
+            "\noverride VENV_ACTIVATE = $(MOVE_HISTORY_UNKNOWN)\n",
+        ),
+        (
+            "dynamic VENV activation reference",
+            "\noverride VENV_ACTIVATE = $@\n",
+        ),
+    )
+    for label, suffix in effective_make_mutations:
+        mutated_makefile = makefile + suffix
+        require(
+            not effective_make_all_contract_matches(
+                mutated_makefile,
+                hashlib.sha256(mutated_makefile.encode()).hexdigest(),
+                expected_included_make_sources,
+                expected_prerequisites_sha256,
+                expected_all_recipe,
+                expected_recipe_variables_sha256,
+            ),
+            f"{label} passes effective Make authentication",
+        )
+    mismatched_included_sources = dict(expected_included_make_sources)
+    mismatched_included_sources["overlays.mk"] = "0" * 64
+    require(
+        not effective_make_all_contract_matches(
+            makefile,
+            expected_makefile_sha256,
+            mismatched_included_sources,
+            expected_prerequisites_sha256,
+            expected_all_recipe,
+            expected_recipe_variables_sha256,
+        ),
+        "changed included Make source passes pre-evaluation authentication",
+    )
+
+    def source_path_snapshot(path: Path) -> tuple[object, ...]:
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            return ("missing",)
+        if path.is_symlink():
+            return ("symlink", metadata.st_ino, os.readlink(path))
+        if path.is_file():
+            return (
+                "file",
+                metadata.st_ino,
+                metadata.st_mode,
+                file_record(path),
+            )
+        return ("other", metadata.st_ino, metadata.st_mode)
+
+    accepted_publication_paths = (
+        REPO / "test.nds",
+        REPO / "build/pokemon_move_history_capture_build.json",
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="move-history-make-side-effects-"
+    ) as side_effect_directory:
+        side_effect_root = Path(side_effect_directory)
+        topology_root = side_effect_root / "source-topology"
+        topology_source = topology_root / "src"
+        topology_assembly = topology_root / "asm"
+        topology_source.mkdir(parents=True)
+        topology_assembly.mkdir()
+        (topology_source / "probe.c").write_text("int probe;\n")
+        (topology_assembly / "probe.s").write_text(".thumb\n")
+        require(
+            make_compilation_source_topology_is_safe(topology_root),
+            "valid compilation-source topology fixture is rejected",
+        )
+        accepted_before = {
+            path: source_path_snapshot(path)
+            for path in accepted_publication_paths
+        }
+        malicious_source = topology_source / "bad$(file poison).c"
+        malicious_source.write_text("int bad;\n")
+        require(
+            not make_compilation_source_topology_is_safe(topology_root),
+            "Make-syntax C filename passes source-topology validation",
+        )
+        malicious_source.unlink()
+        malicious_dotless_source = topology_source / "$(file poison)"
+        malicious_dotless_source.write_text("not an overlay\n")
+        require(
+            not make_compilation_source_topology_is_safe(topology_root),
+            "dotless Make-syntax source entry passes topology validation",
+        )
+        malicious_dotless_source.unlink()
+        malicious_overlay = topology_source / "bad,$(shell poison)"
+        malicious_overlay.mkdir()
+        (malicious_overlay / "probe.c").write_text("int bad;\n")
+        require(
+            not make_compilation_source_topology_is_safe(topology_root),
+            "Make-syntax overlay directory passes source-topology validation",
+        )
+        shutil.rmtree(malicious_overlay)
+        malicious_assembly = topology_assembly / "bad$(eval poison).s"
+        malicious_assembly.write_text(".thumb\n")
+        require(
+            not make_compilation_source_topology_is_safe(topology_root),
+            "Make-syntax assembly filename passes source-topology validation",
+        )
+        malicious_assembly.unlink()
+        symlink_source = topology_source / "linked.c"
+        symlink_source.symlink_to(topology_source / "missing.c")
+        require(
+            not make_compilation_source_topology_is_safe(topology_root)
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "symlink compilation source passes or changes accepted artifacts",
+        )
+
+        dependency_root = side_effect_root / "dependency-tree"
+        dependency_build = dependency_root / "build"
+        dependency_source = dependency_root / "src"
+        dependency_assembly = dependency_root / "asm"
+        dependency_build.mkdir(parents=True)
+        dependency_source.mkdir()
+        dependency_assembly.mkdir()
+        (dependency_source / "probe.c").write_text("int probe;\n")
+        dependency = dependency_build / "probe.d"
+        dependency.write_text("build/probe.o: src/probe.c include/types.h\n")
+        require(
+            generated_dependency_inputs_are_safe(dependency_root),
+            "valid generated dependency fixture is rejected",
+        )
+        accepted_before = {
+            path: source_path_snapshot(path)
+            for path in accepted_publication_paths
+        }
+        for label, malicious_dependency in (
+            (
+                "file function",
+                "SIDE := $(file >accepted.nds,corrupted)\n",
+            ),
+            (
+                "shell assignment",
+                "SIDE != cp rom.nds accepted.nds\n",
+            ),
+            (
+                "all-rule alteration",
+                "all: clobber-accepted-rom\n",
+            ),
+            (
+                "wrong object target",
+                "build/probe.o: clean\n",
+            ),
+        ):
+            dependency.write_text(malicious_dependency)
+            require(
+                not generated_dependency_inputs_are_safe(dependency_root)
+                and {
+                    path: source_path_snapshot(path)
+                    for path in accepted_publication_paths
+                }
+                == accepted_before,
+                f"malicious generated dependency {label} passes or "
+                "changes accepted artifacts",
+            )
+        dependency.unlink()
+        dependency.symlink_to(dependency_root / "missing.d")
+        require(
+            not generated_dependency_inputs_are_safe(dependency_root)
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "generated dependency symlink passes or changes accepted "
+            "artifacts",
+        )
+        dependency.unlink()
+        nested_source = dependency_source / "nested"
+        nested_source.mkdir()
+        (nested_source / "probe.c").write_text("int nested_probe;\n")
+        attacker_directory = side_effect_root / "dependency-attacker"
+        attacker_directory.mkdir()
+        (attacker_directory / "probe.d").write_text(
+            "SIDE := $(file >accepted.nds,corrupted)\n"
+        )
+        (dependency_build / "nested").symlink_to(
+            attacker_directory,
+            target_is_directory=True,
+        )
+        require(
+            not generated_dependency_inputs_are_safe(dependency_root)
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "generated dependency parent-directory symlink passes or "
+            "changes accepted artifacts",
+        )
+        dangling_root = side_effect_root / "dangling-dependency-tree"
+        (dangling_root / "src").mkdir(parents=True)
+        (dangling_root / "asm").mkdir()
+        (dangling_root / "src/probe.c").write_text("int probe;\n")
+        (dangling_root / "build").symlink_to(
+            dangling_root / "missing-build",
+            target_is_directory=True,
+        )
+        require(
+            not generated_dependency_inputs_are_safe(dangling_root)
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "dangling generated dependency root passes or changes "
+            "accepted artifacts",
+        )
+
+        parse_time_mutations = (
+            (
+                "file function",
+                "SIDE_EFFECT := $(file >{path},corrupted)\n",
+            ),
+            (
+                "shell function",
+                "SIDE_EFFECT := $(shell printf corrupted > {path})\n",
+            ),
+            (
+                "shell assignment",
+                "SIDE_EFFECT != cp rom.nds {path}\n",
+            ),
+        )
+        for index, (label, mutation) in enumerate(
+            parse_time_mutations
+        ):
+            sentinel = side_effect_root / f"sentinel-{index}"
+            accepted_before = {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            mutated_makefile = (
+                makefile + "\n" + mutation.format(path=sentinel)
+            )
+            require(
+                not effective_make_all_contract_matches(
+                    mutated_makefile,
+                    expected_makefile_sha256,
+                    expected_included_make_sources,
+                    expected_prerequisites_sha256,
+                    expected_all_recipe,
+                    expected_recipe_variables_sha256,
+                )
+                and not sentinel.exists()
+                and {
+                    path: source_path_snapshot(path)
+                    for path in accepted_publication_paths
+                }
+                == accepted_before,
+                f"parse-time Make {label} executed before authentication",
+            )
+
+        environment_sentinel = side_effect_root / "environment-sentinel"
+        accepted_before = {
+            path: source_path_snapshot(path)
+            for path in accepted_publication_paths
+        }
+        prior_armips_flags = os.environ.get("ARMIPS_FLAGS")
+        prior_makeflags = os.environ.get("MAKEFLAGS")
+        try:
+            os.environ["ARMIPS_FLAGS"] = (
+                "-equ DEBUG_BATTLE_SCENARIOS 0 ; "
+                f"cp rom.nds {environment_sentinel}"
+            )
+            os.environ["MAKEFLAGS"] = "-e"
+            environment_scrubbed = effective_make_all_contract_matches(
+                makefile,
+                expected_makefile_sha256,
+                expected_included_make_sources,
+                expected_prerequisites_sha256,
+                expected_all_recipe,
+                expected_recipe_variables_sha256,
+            )
+        finally:
+            if prior_armips_flags is None:
+                os.environ.pop("ARMIPS_FLAGS", None)
+            else:
+                os.environ["ARMIPS_FLAGS"] = prior_armips_flags
+            if prior_makeflags is None:
+                os.environ.pop("MAKEFLAGS", None)
+            else:
+                os.environ["MAKEFLAGS"] = prior_makeflags
+        require(
+            environment_scrubbed
+            and not environment_sentinel.exists()
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "host environment overrides reached effective Make evaluation",
+        )
+
+        command_line_sentinel = (
+            side_effect_root / "command-line-sentinel"
+        )
+        command_line_value = (
+            "ARMIPS_FLAGS=-equ DEBUG_BATTLE_SCENARIOS 0 ; "
+            f"cp rom.nds {command_line_sentinel}"
+        )
+        require(
+            not effective_make_all_contract_matches(
+                makefile,
+                expected_makefile_sha256,
+                expected_included_make_sources,
+                expected_prerequisites_sha256,
+                expected_all_recipe,
+                expected_recipe_variables_sha256,
+                make_arguments=(command_line_value,),
+            )
+            and not command_line_sentinel.exists()
+            and {
+                path: source_path_snapshot(path)
+                for path in accepted_publication_paths
+            }
+            == accepted_before,
+            "command-line Make override passed or executed",
+        )
+    publisher_end = "\t\t--final-rom $(BUILDROM)\n"
+    done_line = '\t@echo "Done.  See output $(BUILDROM)."\n'
+    require(
+        publisher_end in makefile and done_line in makefile,
+        "publication mutation fixture anchors are absent",
+    )
+    publication_write_commands = (
+        "cp $(BUILDROM).tmp $(BUILDROM)",
+        "install $(BUILDROM).tmp $(BUILDROM)",
+        "printf bad > $(BUILDROM)",
+        "printf bad >> $(BUILDROM)",
+        "cat $(BUILDROM).tmp | tee $(BUILDROM)",
+        "dd if=$(BUILDROM).tmp of=$(BUILDROM)",
+        "cp test.nds.tmp test.nds",
+        "cp $(BUILDROM).tmp $(FINAL_ROM_ALIAS)",
+        "cp stale.json $(MOVE_HISTORY_CAPTURE_MANIFEST)",
+    )
+    for command in publication_write_commands:
+        for placement, mutated_makefile in (
+            (
+                "before publish",
+                makefile.replace(
+                    "\t$(PYTHON_NO_VENV) "
+                    "scripts/pokemon_move_history_build_manifest.py \\\n"
+                    "\t\t--publish-pair",
+                    f"\t{command}\n"
+                    "\t$(PYTHON_NO_VENV) "
+                    "scripts/pokemon_move_history_build_manifest.py \\\n"
+                    "\t\t--publish-pair",
+                    1,
+                ),
+            ),
+            (
+                "after publish",
+                makefile.replace(
+                    publisher_end,
+                    publisher_end + f"\t{command}\n",
+                    1,
+                ),
+            ),
+        ):
+            if "FINAL_ROM_ALIAS" in command:
+                mutated_makefile = (
+                    "FINAL_ROM_ALIAS = $(BUILDROM)\n" + mutated_makefile
+                )
+            require(
+                mutated_makefile != makefile
+                and not make_publication_contract_matches(
+                    mutated_makefile,
+                    exact_target,
+                    expected_all_recipe,
+                    expected_publication_tail,
+                ),
+                f"{placement} command passes publication authentication: "
+                f"{command}",
+            )
+    post_done_mutation = makefile.replace(
+        done_line,
+        done_line + "\tcp test.nds.tmp test.nds\n",
+        1,
+    )
+    require(
+        post_done_mutation != makefile
+        and not make_publication_contract_matches(
+            post_done_mutation,
+            exact_target,
+            expected_all_recipe,
+            expected_publication_tail,
+        ),
+        "post-publication target mutation passes authentication",
+    )
     seal_start = makefile.find(seal_command)
     verifier_start = makefile.find(verifier_command)
     seal_block = (
@@ -1756,6 +2878,387 @@ def manifest_mutation_fixtures(
 
         def verify_publish_pair(manifest: Path, rom: Path) -> None:
             verify_fixture(load_manifest(manifest), rom)
+
+        def path_snapshot(path: Path) -> tuple[object, ...]:
+            try:
+                metadata = path.lstat()
+            except FileNotFoundError:
+                return ("missing",)
+            if path.is_symlink():
+                return (
+                    "symlink",
+                    metadata.st_ino,
+                    os.readlink(path),
+                )
+            if path.is_file():
+                return ("file", metadata.st_ino, path.read_bytes())
+            return ("other", metadata.st_ino, metadata.st_mode)
+
+        accepted_paths = (accepted_manifest, final_rom)
+        candidate_paths = (candidate_manifest, candidate_rom)
+        journal_path = accepted_manifest.with_name(
+            accepted_manifest.name + ".publish-journal"
+        )
+
+        for label, leaf in (
+            ("candidate manifest", candidate_manifest),
+            ("candidate ROM", candidate_rom),
+            ("final manifest", accepted_manifest),
+            ("final ROM", final_rom),
+        ):
+            for dangling in (False, True):
+                accepted_manifest.write_bytes(accepted_manifest_bytes)
+                final_rom.write_bytes(accepted_rom_bytes)
+                write_candidate_pair()
+                leaf_bytes = leaf.read_bytes()
+                target = root / (
+                    f"{leaf.name}.{label.replace(' ', '-')}"
+                    f".{'dangling' if dangling else 'target'}"
+                )
+                target.unlink(missing_ok=True)
+                leaf.unlink()
+                if not dangling:
+                    target.write_bytes(leaf_bytes)
+                leaf.symlink_to(target.name)
+                watched = (
+                    *accepted_paths,
+                    *candidate_paths,
+                    target,
+                    journal_path,
+                )
+                before = {
+                    path: path_snapshot(path)
+                    for path in watched
+                }
+                try:
+                    publish_pair(
+                        candidate_manifest,
+                        candidate_rom,
+                        accepted_manifest,
+                        final_rom,
+                        verify=verify_publish_pair,
+                    )
+                except ManifestError:
+                    pass
+                else:
+                    require(
+                        False,
+                        f"{label} "
+                        f"{'dangling ' if dangling else ''}symlink passed",
+                    )
+                require(
+                    {
+                        path: path_snapshot(path)
+                        for path in watched
+                    }
+                    == before
+                    and not list(root.glob(".*.publish.*")),
+                    f"{label} symlink rejection changed publication state",
+                )
+                leaf.unlink()
+                target.unlink(missing_ok=True)
+                leaf.write_bytes(leaf_bytes)
+
+        for label, leaf in (
+            ("final manifest", accepted_manifest),
+            ("final ROM", final_rom),
+        ):
+            accepted_manifest.write_bytes(accepted_manifest_bytes)
+            final_rom.write_bytes(accepted_rom_bytes)
+            write_candidate_pair()
+            leaf_bytes = leaf.read_bytes()
+            target = root / f"{leaf.name}.dotdot-target"
+            target.write_bytes(leaf_bytes)
+            leaf.unlink()
+            leaf.symlink_to(target.name)
+            missing_parent = root / f"{leaf.name}.missing-parent"
+            require(
+                not missing_parent.exists(),
+                "dot-dot symlink fixture parent unexpectedly exists",
+            )
+            dotdot_alias = missing_parent / ".." / leaf.name
+            watched = (
+                *accepted_paths,
+                *candidate_paths,
+                target,
+                journal_path,
+            )
+            before = {
+                path: path_snapshot(path)
+                for path in watched
+            }
+            try:
+                publish_pair(
+                    candidate_manifest,
+                    candidate_rom,
+                    (
+                        dotdot_alias
+                        if label == "final manifest"
+                        else accepted_manifest
+                    ),
+                    (
+                        dotdot_alias
+                        if label == "final ROM"
+                        else final_rom
+                    ),
+                    verify=verify_publish_pair,
+                )
+            except ManifestError:
+                pass
+            else:
+                require(False, f"missing/../{label} symlink passed")
+            require(
+                {
+                    path: path_snapshot(path)
+                    for path in watched
+                }
+                == before
+                and not list(root.glob(".*.publish.*")),
+                f"missing/../{label} rejection changed publication state",
+            )
+            leaf.unlink()
+            target.unlink()
+            leaf.write_bytes(leaf_bytes)
+
+        for label, candidate, final in (
+            ("manifest", candidate_manifest, accepted_manifest),
+            ("ROM", candidate_rom, final_rom),
+        ):
+            accepted_manifest.write_bytes(accepted_manifest_bytes)
+            final_rom.write_bytes(accepted_rom_bytes)
+            write_candidate_pair()
+            alias_parent = root / f"{label}-alias-parent"
+            alias_parent.mkdir(exist_ok=True)
+            final_alias = alias_parent / ".." / candidate.name
+            watched = (*accepted_paths, *candidate_paths, journal_path)
+            before = {
+                path: path_snapshot(path)
+                for path in watched
+            }
+            try:
+                publish_pair(
+                    candidate_manifest,
+                    candidate_rom,
+                    final_alias if label == "manifest" else accepted_manifest,
+                    final_alias if label == "ROM" else final_rom,
+                    verify=verify_publish_pair,
+                )
+            except ManifestError:
+                pass
+            else:
+                require(False, f"resolved {label} path alias passed")
+            require(
+                {
+                    path: path_snapshot(path)
+                    for path in watched
+                }
+                == before
+                and not list(root.glob(".*.publish.*")),
+                f"resolved {label} alias changed publication state",
+            )
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        swap_target = root / "candidate-rom-after-verify.nds"
+
+        def swap_candidate_after_verify(
+            manifest: Path,
+            rom: Path,
+        ) -> None:
+            verify_publish_pair(manifest, rom)
+            swap_target.write_bytes(rom.read_bytes())
+            rom.unlink()
+            rom.symlink_to(swap_target.name)
+
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=swap_candidate_after_verify,
+            )
+        except ManifestError:
+            pass
+        else:
+            require(False, "post-verify candidate symlink swap passed")
+        require(
+            accepted_manifest.read_bytes() == accepted_manifest_bytes
+            and final_rom.read_bytes() == accepted_rom_bytes
+            and candidate_rom.is_symlink()
+            and swap_target.read_bytes() == candidate_rom_bytes
+            and candidate_manifest.is_file()
+            and not journal_path.exists()
+            and not list(root.glob(".*.publish.*")),
+            "post-verify candidate symlink rejection changed accepted state",
+        )
+        candidate_rom.unlink()
+        swap_target.unlink()
+        write_candidate_pair()
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        journal_swap_target = root / "journal-after-verify-target.json"
+        journal_swap_snapshot: dict[Path, tuple[object, ...]] = {}
+
+        def swap_journal_after_verify(
+            manifest: Path,
+            rom: Path,
+        ) -> None:
+            verify_publish_pair(manifest, rom)
+            journal_swap_target.write_text("{}\n")
+            journal_path.symlink_to(journal_swap_target.name)
+            for path in (
+                *accepted_paths,
+                *candidate_paths,
+                journal_path,
+                journal_swap_target,
+            ):
+                journal_swap_snapshot[path] = path_snapshot(path)
+
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=swap_journal_after_verify,
+            )
+        except ManifestError:
+            pass
+        else:
+            require(False, "post-verify journal symlink swap passed")
+        require(
+            journal_swap_snapshot
+            and {
+                path: path_snapshot(path)
+                for path in journal_swap_snapshot
+            }
+            == journal_swap_snapshot
+            and not list(root.glob(".*.publish.*")),
+            "post-verify journal symlink rejection changed topology",
+        )
+        journal_path.unlink()
+        journal_swap_target.unlink()
+
+        for field in ("backup", "stage"):
+            for entry_index, final in enumerate(accepted_paths):
+                accepted_manifest.write_bytes(accepted_manifest_bytes)
+                final_rom.write_bytes(accepted_rom_bytes)
+                write_candidate_pair()
+                prior_records = {
+                    path: file_record(path)
+                    for path in accepted_paths
+                }
+                backups = {
+                    path: root / f".{path.name}.publish.backup{entry_index}"
+                    for path in accepted_paths
+                }
+                stages = {
+                    path: root / f".{path.name}.publish.stage{entry_index}"
+                    for path in accepted_paths
+                }
+                for path in backups.values():
+                    path.write_bytes(b"journal backup fixture\n")
+                for path in stages.values():
+                    path.write_bytes(b"journal stage fixture\n")
+                symlink_leaf = (
+                    backups[final] if field == "backup" else stages[final]
+                )
+                symlink_target = root / (
+                    f".{final.name}.publish.{field}-target{entry_index}"
+                )
+                symlink_target.write_bytes(symlink_leaf.read_bytes())
+                symlink_leaf.unlink()
+                symlink_leaf.symlink_to(symlink_target.name)
+                journal_document = {
+                    "schema": "pokemon-move-history-pair-publish-v1",
+                    "entries": [
+                        {
+                            "final": str(path.resolve()),
+                            "prior": prior_records[path],
+                            "backup": str(backups[path].absolute()),
+                            "stage": str(stages[path].absolute()),
+                        }
+                        for path in accepted_paths
+                    ],
+                }
+                journal_path.write_text(
+                    json.dumps(journal_document, sort_keys=True) + "\n"
+                )
+                watched = (
+                    *accepted_paths,
+                    *candidate_paths,
+                    *backups.values(),
+                    *stages.values(),
+                    symlink_target,
+                    journal_path,
+                )
+                before = {
+                    path: path_snapshot(path)
+                    for path in watched
+                }
+                try:
+                    publish_pair(
+                        candidate_manifest,
+                        candidate_rom,
+                        accepted_manifest,
+                        final_rom,
+                        verify=verify_publish_pair,
+                    )
+                except ManifestError:
+                    pass
+                else:
+                    require(
+                        False,
+                        f"journal {field} symlink passed recovery",
+                    )
+                require(
+                    {
+                        path: path_snapshot(path)
+                        for path in watched
+                    }
+                    == before,
+                    f"journal {field} symlink changed recovery state",
+                )
+                journal_path.unlink()
+                for path in (*backups.values(), *stages.values()):
+                    path.unlink(missing_ok=True)
+                symlink_target.unlink()
+
+        accepted_manifest.write_bytes(accepted_manifest_bytes)
+        final_rom.write_bytes(accepted_rom_bytes)
+        write_candidate_pair()
+        journal_target = root / "journal-target.json"
+        journal_target.write_text("{}\n")
+        journal_path.symlink_to(journal_target.name)
+        watched = (
+            *accepted_paths,
+            *candidate_paths,
+            journal_path,
+            journal_target,
+        )
+        before = {path: path_snapshot(path) for path in watched}
+        try:
+            publish_pair(
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+                verify=verify_publish_pair,
+            )
+        except ManifestError:
+            pass
+        else:
+            require(False, "symlink recovery journal passed")
+        require(
+            {path: path_snapshot(path) for path in watched} == before,
+            "symlink recovery journal changed publication state",
+        )
+        journal_path.unlink()
+        journal_target.unlink()
 
         for failure_phase in (
             "after_manifest_replace",
@@ -4408,15 +5911,39 @@ def main() -> None:
         action="store_true",
         help="run deterministic source and host checks before packaging",
     )
+    parser.add_argument(
+        "--pre-make",
+        action="store_true",
+        help="authenticate Make inputs before GNU Make parses the workspace",
+    )
     args = parser.parse_args()
     require(
-        args.source_only != (args.rom is not None),
-        "choose exactly one of --source-only or --rom",
+        sum(
+            (
+                args.pre_make,
+                args.source_only,
+                args.rom is not None,
+            )
+        )
+        == 1,
+        "choose exactly one of --pre-make, --source-only, or --rom",
     )
     require(
-        args.source_only == (args.manifest is None),
+        (args.rom is not None) == (args.manifest is not None),
         "--manifest is required exactly when --rom is used",
     )
+    if args.pre_make:
+        makefile = (REPO / "Makefile").read_text()
+        require(
+            outer_make_invocation_is_safe(),
+            "pre-Make environment contains unsafe flags or overrides",
+        )
+        require(
+            trusted_pre_make_sources_are_exact(makefile),
+            "pre-Make source/dependency trust gate differs",
+        )
+        print("move-history capture: pre-Make trust gate verified")
+        return
     source_contracts()
     host_fixtures(args.manifest, args.rom)
     if args.source_only:

@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -43,6 +44,7 @@ DEPENDENCY_FILES = (
 )
 FIXED_INPUTS = (
     "Makefile",
+    "docker-makerom.cmd",
     "hooks",
     "overlays.mk",
     "rom.nds",
@@ -401,6 +403,28 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _require_regular_publish_leaf(
+    path: Path,
+    label: str,
+    *,
+    allow_missing: bool,
+) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        if allow_missing:
+            return
+        raise ManifestError(f"{label} is absent: {path}") from None
+    if stat.S_ISLNK(mode):
+        raise ManifestError(f"{label} must not be a symlink: {path}")
+    if not stat.S_ISREG(mode):
+        raise ManifestError(f"{label} is not a regular file: {path}")
+
+
+def _lexically_normal_publish_path(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
 def _clone_for_replace(source: Path, destination_directory: Path) -> Path:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{source.name}.publish.",
@@ -468,6 +492,17 @@ def _restore_publish_journal(
     finals: tuple[Path, Path],
     replace: Callable[[str | Path, str | Path], Any],
 ) -> None:
+    _require_regular_publish_leaf(
+        journal_path,
+        "pair-publish recovery journal",
+        allow_missing=False,
+    )
+    for final in finals:
+        _require_regular_publish_leaf(
+            final,
+            "pair-publish final",
+            allow_missing=True,
+        )
     try:
         document = json.loads(journal_path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -514,9 +549,15 @@ def _restore_publish_journal(
                     "pair-publish recovery temporary path is invalid"
                 )
             temporary = Path(temporary_text)
+            _require_regular_publish_leaf(
+                temporary,
+                "pair-publish recovery temporary",
+                allow_missing=True,
+            )
             resolved = temporary.resolve()
             if (
                 not temporary.is_absolute()
+                or temporary.parent != final.parent
                 or resolved.parent != final.parent.resolve()
                 or re.fullmatch(
                     r"\..+\.publish\.[A-Za-z0-9_-]+",
@@ -609,10 +650,41 @@ def publish_pair(
     failure_hook: Callable[[str], None] | None = None,
     replace: Callable[[str | Path, str | Path], Any] = os.replace,
 ) -> None:
-    candidates = (candidate_manifest.resolve(), candidate_rom.resolve())
-    finals = (final_manifest.resolve(), final_rom.resolve())
+    candidate_inputs = tuple(
+        _lexically_normal_publish_path(Path(path))
+        for path in (candidate_manifest, candidate_rom)
+    )
+    final_inputs = tuple(
+        _lexically_normal_publish_path(Path(path))
+        for path in (final_manifest, final_rom)
+    )
+    journal_input = final_inputs[0].with_name(
+        final_inputs[0].name + ".publish-journal"
+    )
+    for candidate in candidate_inputs:
+        _require_regular_publish_leaf(
+            candidate,
+            "pair-publish candidate",
+            allow_missing=False,
+        )
+    for final in final_inputs:
+        _require_regular_publish_leaf(
+            final,
+            "pair-publish final",
+            allow_missing=True,
+        )
+    _require_regular_publish_leaf(
+        journal_input,
+        "pair-publish recovery journal",
+        allow_missing=True,
+    )
+
+    candidates = tuple(path.resolve() for path in candidate_inputs)
+    finals = tuple(path.resolve() for path in final_inputs)
     if len(set(candidates + finals)) != 4:
         raise ManifestError("candidate and final publish paths must be distinct")
+    candidate_manifest, candidate_rom = candidates
+    final_manifest, final_rom = finals
     final_manifest.parent.mkdir(parents=True, exist_ok=True)
     final_rom.parent.mkdir(parents=True, exist_ok=True)
     journal_path = final_manifest.with_name(
@@ -622,6 +694,23 @@ def publish_pair(
     if journal_path.exists():
         _restore_publish_journal(journal_path, final_paths, replace)
     verify(candidate_manifest, candidate_rom)
+    for candidate in candidates:
+        _require_regular_publish_leaf(
+            candidate,
+            "pair-publish candidate",
+            allow_missing=False,
+        )
+    for final in finals:
+        _require_regular_publish_leaf(
+            final,
+            "pair-publish final",
+            allow_missing=True,
+        )
+    _require_regular_publish_leaf(
+        journal_path,
+        "pair-publish recovery journal",
+        allow_missing=True,
+    )
 
     prior_records = {
         final: file_record(final) if final.is_file() else None

@@ -90,7 +90,13 @@ interworking to the retail ARM routines. This keeps the fixed `0x1000` code
 guard intact without consuming overlay 129 headroom.
 
 The build forces the seven task-3 C/assembly objects, including `save.o`, to be
-rebuilt, packages a candidate ROM, then seals a candidate content-addressed
+rebuilt. The Docker build wrapper first authenticates the complete Make source
+set and rejects unsafe outer `MAKEFLAGS`/overrides or generated dependency
+syntax before GNU Make can parse the workspace. Effective-rule inspection then
+runs in an isolated tree without generated `.d` files and binds the complete
+`all` recipe/prerequisites plus the recursively closed value, operator, and
+origin graph of every referenced recipe variable. The build packages a
+candidate ROM, then seals a candidate content-addressed
 manifest over their generated
 dependency/ARMIPS include-and-incbin closure, generated linker script,
 the ARMIPS symbol generator,
@@ -103,9 +109,17 @@ candidate pair. Only after they succeed does a rollback-capable publisher
 replace the accepted manifest/ROM pair and reverify it; an injected failure
 after either replacement restores the previous pair byte-for-byte. A fsynced
 recovery journal retains the prior pair through process interruption or a
-persistent restore error and is resolved before any later publication. Hashes—not
-mtimes—make absent, modified, or coherently touched stale generations fail
-closed.
+persistent restore error and is resolved before any later publication.
+Candidate, final, journal, stage, and backup leaves reject symlinks before and
+after candidate verification, with lexical and resolved directory ownership
+checked before recovery or mutation. Hashes—not mtimes—make absent, modified,
+or coherently touched stale generations fail closed.
+
+Authenticated task-3 packaging therefore uses `docker-makerom.cmd`/the
+Workshop path; invoking `make` directly bypasses the pre-parse gate and is not
+a supported authenticated build entry point. The local Workshop is a
+single-writer workflow: repository mutation concurrent with the short
+preflight-to-Make handoff is outside this verifier's trust model.
 
 Post-package checks authenticate unique dense overlay/file IDs and exact
 y9/FAT metadata for overlays 12, 68, 129, and 153. Overlay 129's complete
