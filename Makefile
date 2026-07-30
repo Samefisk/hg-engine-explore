@@ -130,6 +130,18 @@ FILESYS := $(BASE)/root
 LINK = $(BUILD)/linked.o
 OUTPUT = $(BUILD)/output.bin
 
+MOVE_HISTORY_CAPTURE_MANIFEST = $(BUILD)/pokemon_move_history_capture_build.json
+MOVE_HISTORY_CAPTURE_OBJECTS = \
+	$(BUILD)/pokemon.o \
+	$(BUILD)/party_menu.o \
+	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
+	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
+	$(BUILD)/pokemon_move_history_overlay/entry.o \
+	$(BUILD)/pokemon_move_history_overlay/thumb_help.o
+.PHONY: FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
+$(MOVE_HISTORY_CAPTURE_OBJECTS): FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
+FORCE_MOVE_HISTORY_CAPTURE_OBJECTS:
+
 INCLUDE_SRCS := $(wildcard $(INCLUDE_SUBDIR)/*.h)
 
 C_SRCS := $(wildcard $(C_SUBDIR)/*.c)
@@ -296,8 +308,17 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	$(PYTHON_NO_VENV) scripts/pokemon_move_history_build_manifest.py \
+		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST) --rom $(BUILDROM).tmp \
+		--context "CC=$(CC)" --context "CFLAGS=$(CFLAGS)" \
+		--context "AS=$(AS)" --context "ASFLAGS=$(ASFLAGS)" \
+		--context "LD=$(LD)" --context "LDFLAGS=$(LDFLAGS)" \
+		--context "OBJCOPY=$(OBJCOPY)" \
+		--context "ARMIPS=$(ARMIPS)" \
+		--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" \
+		--context "NDSTOOL=$(NDSTOOL)"
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
-		--rom $(BUILDROM).tmp
+		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
 	mv $(BUILDROM).tmp $(BUILDROM)
 	@echo "Done.  See output $(BUILDROM)."

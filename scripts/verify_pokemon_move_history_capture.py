@@ -4,10 +4,26 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
+import os
 import re
 import struct
 import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+
+from pokemon_move_history_build_manifest import (
+    PACKAGED_ROM_LOGICAL_PATH,
+    SCHEMA as BUILD_MANIFEST_SCHEMA,
+    ManifestError,
+    armips_dependency_paths,
+    file_record,
+    load_manifest,
+    verify_manifest,
+    verify_manifest_document,
+)
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -68,6 +84,81 @@ LEVEL_UP_SUCCESS_RE = re.compile(
     r"\s*&&\s*ret\s*!=\s*MOVE_NONE\s*\)\s*\{",
     re.S,
 )
+LEVEL_UP_TRANSACTION_RE = re.compile(
+    r"\bret\s*=\s*TryAppendMonMove\s*\(\s*mon\s*,\s*\*sp0\s*\)\s*;"
+    r"\s*if\s*\(\s*ret\s*!=\s*\(u16\)\s*-\s*1u"
+    r"\s*&&\s*ret\s*!=\s*\(u16\)\s*-\s*2u"
+    r"\s*&&\s*ret\s*!=\s*MOVE_NONE\s*\)\s*\{"
+    r"\s*SaveData\s*\*\s*saveData\s*=\s*SaveBlock2_get\s*\(\s*\)\s*;"
+    r"\s*if\s*\(\s*saveData\s*!=\s*NULL\s*\)\s*\{"
+    r"\s*PokemonMoveHistory_RecordMove\s*\("
+    r"\s*saveData\s*,\s*&mon->box\s*,\s*\*sp0\s*\)\s*;"
+    r"\s*\}\s*\}",
+    re.S,
+)
+RECORD_MOVE_IMPL_RE = re.compile(
+    r"^PokemonMoveHistory_RecordMoveImpl\s*\("
+    r"\s*SaveData\s*\*\s*saveData\s*,"
+    r"\s*struct\s+BoxPokemon\s*\*\s*pokemon\s*,"
+    r"\s*u16\s+move\s*\)\s*\{"
+    r"\s*PokemonMoveHistorySnapshot\s+snapshot\s*;"
+    r"\s*struct\s+PokemonMoveHistoryRecord\s*\*\s*record\s*;"
+    r"\s*if\s*\(\s*!PokemonMoveHistory_IsRecordableMove\s*\(\s*move\s*\)"
+    r"\s*\)\s*\{\s*return\s+FALSE\s*;\s*\}"
+    r"\s*if\s*\(\s*!PokemonMoveHistory_CaptureSnapshotImpl\s*\("
+    r"\s*pokemon\s*,\s*&snapshot\s*\)\s*\)\s*\{"
+    r"\s*return\s+FALSE\s*;\s*\}"
+    r"\s*record\s*=\s*PokemonMoveHistory_ObserveSnapshot\s*\("
+    r"\s*saveData\s*,\s*&snapshot\s*\)\s*;"
+    r"\s*if\s*\(\s*record\s*==\s*NULL\s*\)\s*\{"
+    r"\s*return\s+FALSE\s*;\s*\}"
+    r"\s*PokemonMoveHistory_AppendMove\s*\("
+    r"\s*saveData\s*,\s*&snapshot\s*,\s*record\s*,\s*move\s*\)\s*;"
+    r"\s*return\s+TRUE\s*;\s*\}$",
+    re.S,
+)
+PARTY_MENU_REPLACE_RE = re.compile(
+    r"\bPokemonMoveHistory_ReplaceMove\s*\("
+    r"\s*&mon->box\s*,\s*partyMenu->args->moveId\s*,\s*moveIdx\s*\)\s*;",
+    re.S,
+)
+DELETE_MOVE_IMPL_RE = re.compile(
+    r"^PokemonMoveHistory_DeleteMoveSlotImpl\s*\("
+    r"\s*struct\s+PartyPokemon\s*\*\s*pokemon\s*,"
+    r"\s*u32\s+slot\s*\)\s*\{"
+    r"\s*if\s*\(\s*pokemon\s*==\s*NULL\s*\|\|\s*slot\s*>=\s*4\s*\)"
+    r"\s*\{\s*return\s*;\s*\}"
+    r"\s*PokemonMoveHistory_SeedImpl\s*\("
+    r"\s*SaveBlock2_get\s*\(\s*\)\s*,\s*&pokemon->box\s*\)\s*;"
+    r"\s*MonDeleteMoveSlot_Original\s*\(\s*pokemon\s*,\s*slot\s*\)\s*;"
+    r"\s*\}$",
+    re.S,
+)
+LEVEL_UP_COMMIT_REGION = (
+    "if ((levelUpLearnset[*last_i] & LEVEL_UP_LEARNSET_LEVEL_MASK) == "
+    "(level << LEVEL_UP_LEARNSET_LEVEL_SHIFT)) { "
+    "*sp0 = LEVEL_UP_LEARNSET_MOVE(levelUpLearnset[*last_i]); "
+    "(*last_i)++; "
+    "#ifdef BLOCK_LEARNING_UNIMPLEMENTED_MOVES "
+    "if (!IsMoveUnimplemented(*sp0)) "
+    "#endif "
+    "{ "
+    "ret = TryAppendMonMove(mon, *sp0); "
+    "if (ret != (u16)-1u && ret != (u16)-2u && ret != MOVE_NONE) { "
+    "SaveData *saveData = SaveBlock2_get(); "
+    "if (saveData != NULL) { "
+    "PokemonMoveHistory_RecordMove( saveData, &mon->box, *sp0); "
+    "} "
+    "} "
+    "} "
+    "} "
+    "sys_FreeMemoryEz(levelUpLearnset); "
+    "return ret; "
+    "}"
+)
+LEVEL_UP_EXECUTABLE_SHA256 = (
+    "6a58f4e384533000ea32263208648e2eb77cec497c8aa9c383abbcfefad2847a"
+)
 
 
 def block_from_match(source: str, match: re.Match[str]) -> str:
@@ -112,42 +203,122 @@ def level_up_success_contract_matches(pokemon_source: str) -> bool:
         pokemon_source,
         "MonTryLearnMoveOnLevelUp",
     )
-    success_match = LEVEL_UP_SUCCESS_RE.search(level_up_code)
-    if success_match is None:
-        return False
-    success_block = block_from_match(level_up_code, success_match)
-    assignment_text = "ret = TryAppendMonMove(mon, *sp0);"
-    assignment = level_up_code.find(assignment_text)
-    save_assignment_text = "SaveData *saveData = SaveBlock2_get();"
-    save_assignment = success_block.find(save_assignment_text)
-    save_guard = re.search(
-        r"\bif\s*\(\s*saveData\s*!=\s*NULL\s*\)\s*\{"
-        r"[^{}]*PokemonMoveHistory_RecordMove\s*\(",
-        success_block,
+    if re.match(
+        r"^MonTryLearnMoveOnLevelUp\s*\("
+        r"\s*struct\s+PartyPokemon\s*\*\s*mon\s*,"
+        r"\s*int\s*\*\s*last_i\s*,\s*u16\s*\*\s*sp0\s*\)\s*\{",
+        level_up_code,
         re.S,
+    ) is None:
+        return False
+    transactions = list(LEVEL_UP_TRANSACTION_RE.finditer(level_up_code))
+    if len(transactions) != 1:
+        return False
+    transaction = transactions[0]
+    tail = level_up_code[transaction.end():]
+    brace_depth = (
+        level_up_code[:transaction.start()].count("{")
+        - level_up_code[:transaction.start()].count("}")
     )
+    containing_brace = level_up_code.rfind("{", 0, transaction.start())
+    guard_prefix = level_up_code[:containing_brace]
+    commit_region_start = level_up_code.rfind(
+        "if ((levelUpLearnset[*last_i]"
+    )
+    normalized_commit_region = (
+        " ".join(level_up_code[commit_region_start:].split())
+        if commit_region_start >= 0
+        else ""
+    )
+    normalized_function = " ".join(level_up_code.split()).encode()
     return (
-        assignment >= 0
-        and level_up_code.count(assignment_text) == 1
-        and assignment + len(assignment_text) <= success_match.start()
-        and not level_up_code[
-            assignment + len(assignment_text):success_match.start()
-        ].strip()
+        hashlib.sha256(normalized_function).hexdigest()
+        == LEVEL_UP_EXECUTABLE_SHA256
+        and level_up_code.count("TryAppendMonMove(") == 1
         and level_up_code.count("PokemonMoveHistory_RecordMove(") == 1
-        and save_assignment >= 0
-        and success_block.count(save_assignment_text) == 1
-        and save_guard is not None
-        and save_assignment + len(save_assignment_text) <= save_guard.start()
-        and not success_block[
-            save_assignment + len(save_assignment_text):save_guard.start()
+        and level_up_code.count("SaveBlock2_get(") == 1
+        and brace_depth == 3
+        and containing_brace >= 0
+        and re.search(
+            r"#ifdef\s+BLOCK_LEARNING_UNIMPLEMENTED_MOVES"
+            r"\s*if\s*\(\s*!IsMoveUnimplemented\s*\(\s*\*sp0\s*\)\s*\)"
+            r"\s*#endif\s*$",
+            guard_prefix,
+            re.S,
+        )
+        is not None
+        and not level_up_code[
+            containing_brace + 1:transaction.start()
         ].strip()
-        and success_block.count("PokemonMoveHistory_RecordMove(") == 1
+        and re.search(r"\b(?:ret|saveData)\s*=", tail) is None
+        and normalized_commit_region == LEVEL_UP_COMMIT_REGION
+        and re.search(
+            r"\b(?:SetMonData|SetBoxMonData|MonSetMoveInSlot|"
+            r"PartyMonSetMoveInSlot)\s*\(",
+            level_up_code,
+        )
+        is None
+    )
+
+
+def record_move_contract_matches(history_source: str) -> bool:
+    return (
+        RECORD_MOVE_IMPL_RE.fullmatch(
+            executable_function(
+                history_source,
+                "PokemonMoveHistory_RecordMoveImpl",
+            )
+        )
+        is not None
+    )
+
+
+def party_menu_contract_matches(party_source: str) -> bool:
+    code = executable_function(party_source, "PartyMenu_LearnMoveToSlot")
+    replacement = PARTY_MENU_REPLACE_RE.search(code)
+    function_brace = code.find("{")
+    return (
+        re.match(
+            r"^PartyMenu_LearnMoveToSlot\s*\("
+            r"\s*struct\s+PartyMenu\s*\*\s*partyMenu\s*,"
+            r"\s*struct\s+PartyPokemon\s*\*\s*mon\s*,"
+            r"\s*int\s+moveIdx\s*\)\s*\{",
+            code,
+            re.S,
+        )
+        is not None
+        and replacement is not None
+        and len(PARTY_MENU_REPLACE_RE.findall(code)) == 1
+        and code.count("PokemonMoveHistory_ReplaceMove(") == 1
+        and function_brace >= 0
+        and not code[function_brace + 1:replacement.start()].strip()
+        and replacement.start()
+        < code.find("if (partyMenu->args->itemId != ITEM_NONE)")
+        and re.search(
+            r"\b(?:SetMonData|SetBoxMonData|MonSetMoveInSlot|"
+            r"PartyMonSetMoveInSlot)\s*\(",
+            code,
+        )
+        is None
+    )
+
+
+def delete_move_contract_matches(history_source: str) -> bool:
+    return (
+        DELETE_MOVE_IMPL_RE.fullmatch(
+            executable_function(
+                history_source,
+                "PokemonMoveHistory_DeleteMoveSlotImpl",
+            )
+        )
+        is not None
     )
 
 
 def source_matcher_mutation_fixtures(
     history_source: str,
     pokemon_source: str,
+    party_source: str,
 ) -> None:
     append_raw = function_body(
         history_source,
@@ -263,6 +434,82 @@ def source_matcher_mutation_fixtures(
         save_assignment_text + "\n                saveData = NULL;",
         1,
     )
+    wrong_record_arguments = executable_level_up.replace(
+        "saveData,\n                        &mon->box,\n                        *sp0",
+        "NULL,\n                        &mon->box,\n                        MOVE_NONE",
+        1,
+    )
+    post_record_ret_clobber = executable_level_up.replace(
+        "PokemonMoveHistory_RecordMove(\n"
+        "                        saveData,\n"
+        "                        &mon->box,\n"
+        "                        *sp0);",
+        "PokemonMoveHistory_RecordMove(\n"
+        "                        saveData,\n"
+        "                        &mon->box,\n"
+        "                        *sp0);\n"
+        "                    ret = 0;",
+        1,
+    )
+    level_transaction = LEVEL_UP_TRANSACTION_RE.search(executable_level_up)
+    require(
+        level_transaction is not None,
+        "level-up mutation fixture lacks exact transaction",
+    )
+    post_guard_save_clobber = (
+        executable_level_up[:level_transaction.end()]
+        + "\n            saveData = NULL;"
+        + executable_level_up[level_transaction.end():]
+    )
+    wrapped_level_up = (
+        executable_level_up[:level_transaction.start()]
+        + "if (FALSE) {\n"
+        + executable_level_up[
+            level_transaction.start():level_transaction.end()
+        ]
+        + "\n            }"
+        + executable_level_up[level_transaction.end():]
+    )
+    disabled_implementation_guard = executable_level_up.replace(
+        "if (!IsMoveUnimplemented(*sp0))",
+        "if (FALSE)",
+        1,
+    )
+    unreachable_guard_prefix = executable_level_up.replace(
+        "#ifdef BLOCK_LEARNING_UNIMPLEMENTED_MOVES",
+        "goto skip_history;\n"
+        "        #ifdef BLOCK_LEARNING_UNIMPLEMENTED_MOVES",
+        1,
+    ).replace(
+        "    sys_FreeMemoryEz(levelUpLearnset);",
+        "skip_history:;\n"
+        "    sys_FreeMemoryEz(levelUpLearnset);",
+        1,
+    )
+    post_transaction_raw_setter = executable_level_up.replace(
+        "PokemonMoveHistory_RecordMove(\n"
+        "                        saveData,\n"
+        "                        &mon->box,\n"
+        "                        *sp0);",
+        "PokemonMoveHistory_RecordMove(\n"
+        "                        saveData,\n"
+        "                        &mon->box,\n"
+        "                        *sp0);\n"
+        "                    SetBoxMonData \n"
+        "                        (&mon->box, MON_DATA_MOVE1, NULL);",
+        1,
+    )
+    outer_region_skip = executable_level_up.replace(
+        "if ((levelUpLearnset[*last_i]",
+        "goto skip_all_history;\n"
+        "    if ((levelUpLearnset[*last_i]",
+        1,
+    ).replace(
+        "    sys_FreeMemoryEz(levelUpLearnset);",
+        "skip_all_history:;\n"
+        "    sys_FreeMemoryEz(levelUpLearnset);",
+        1,
+    )
     require(
         not level_up_success_contract_matches(
             pokemon_source.replace(level_up_raw, ignored_level_up, 1)
@@ -281,6 +528,210 @@ def source_matcher_mutation_fixtures(
         ),
         "clobbered SaveBlock2_get result passes source contracts",
     )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, wrong_record_arguments, 1)
+        ),
+        "wrong level-up RecordMove arguments pass source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, post_record_ret_clobber, 1)
+        ),
+        "post-record level-up ret clobber passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, post_guard_save_clobber, 1)
+        ),
+        "after-guard level-up saveData clobber passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(level_up_raw, wrapped_level_up, 1)
+        ),
+        "unreachable wrapped level-up transaction passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(
+                level_up_raw,
+                disabled_implementation_guard,
+                1,
+            )
+        ),
+        "replaced level-up implementation guard passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(
+                level_up_raw,
+                unreachable_guard_prefix,
+                1,
+            )
+        ),
+        "unreachable prefix before level-up guard passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(
+                level_up_raw,
+                post_transaction_raw_setter,
+                1,
+            )
+        ),
+        "post-transaction level-up raw setter passes source contracts",
+    )
+    require(
+        not level_up_success_contract_matches(
+            pokemon_source.replace(
+                level_up_raw,
+                outer_region_skip,
+                1,
+            )
+        ),
+        "outer-prefix skip around level-up region passes source contracts",
+    )
+
+    record_raw = function_body(
+        history_source,
+        "PokemonMoveHistory_RecordMoveImpl",
+    )
+    executable_record = without_comments(record_raw)
+    record_mutations = {
+        "ignored predicate": executable_record.replace(
+            "if (!PokemonMoveHistory_IsRecordableMove(move)) {\n"
+            "        return FALSE;\n"
+            "    }",
+            "PokemonMoveHistory_IsRecordableMove(move);",
+            1,
+        ),
+        "duplicate predicate": executable_record.replace(
+            "if (!PokemonMoveHistory_IsRecordableMove(move)) {",
+            "PokemonMoveHistory_IsRecordableMove(move);\n"
+            "    if (!PokemonMoveHistory_IsRecordableMove(move)) {",
+            1,
+        ),
+        "pre-predicate dirty mutation": executable_record.replace(
+            "if (!PokemonMoveHistory_IsRecordableMove(move)) {",
+            "saveData->pokemonMoveHistoryDirty = TRUE;\n"
+            "    if (!PokemonMoveHistory_IsRecordableMove(move)) {",
+            1,
+        ),
+        "post-guard saveData clobber": executable_record.replace(
+            "if (!PokemonMoveHistory_CaptureSnapshotImpl",
+            "saveData = NULL;\n"
+            "    if (!PokemonMoveHistory_CaptureSnapshotImpl",
+            1,
+        ),
+        "wrong append arguments": executable_record.replace(
+            "saveData,\n        &snapshot,\n        record,\n        move",
+            "NULL,\n        &snapshot,\n        record,\n        MOVE_NONE",
+            1,
+        ),
+    }
+    for label, mutation in record_mutations.items():
+        require(
+            not record_move_contract_matches(
+                history_source.replace(record_raw, mutation, 1)
+            ),
+            f"{label} passes RecordMoveImpl source contracts",
+        )
+
+    delete_raw = function_body(
+        history_source,
+        "PokemonMoveHistory_DeleteMoveSlotImpl",
+    )
+    executable_delete = without_comments(delete_raw)
+    delete_mutations = {
+        "wrong seed save": executable_delete.replace(
+            "SaveBlock2_get(),",
+            "NULL,",
+            1,
+        ),
+        "wrong seed Pokémon": executable_delete.replace(
+            "&pokemon->box",
+            "NULL",
+            1,
+        ),
+        "wrong delete slot": executable_delete.replace(
+            "MonDeleteMoveSlot_Original(pokemon, slot);",
+            "MonDeleteMoveSlot_Original(pokemon, 0);",
+            1,
+        ),
+        "reversed delete order": executable_delete.replace(
+            "PokemonMoveHistory_SeedImpl(\n"
+            "        SaveBlock2_get(),\n"
+            "        &pokemon->box);\n"
+            "    MonDeleteMoveSlot_Original(pokemon, slot);",
+            "MonDeleteMoveSlot_Original(pokemon, slot);\n"
+            "    PokemonMoveHistory_SeedImpl(\n"
+            "        SaveBlock2_get(),\n"
+            "        &pokemon->box);",
+            1,
+        ),
+    }
+    for label, mutation in delete_mutations.items():
+        require(
+            not delete_move_contract_matches(
+                history_source.replace(delete_raw, mutation, 1)
+            ),
+            f"{label} passes DeleteMoveSlotImpl source contracts",
+        )
+
+    party_raw = function_body(party_source, "PartyMenu_LearnMoveToSlot")
+    executable_party = without_comments(party_raw)
+    for label, mutation in {
+        "wrong Pokémon": executable_party.replace("&mon->box", "NULL", 1),
+        "wrong learned move": executable_party.replace(
+            "partyMenu->args->moveId",
+            "moveIdx",
+            1,
+        ),
+        "swapped move and slot": executable_party.replace(
+            "partyMenu->args->moveId,\n        moveIdx",
+            "moveIdx,\n        partyMenu->args->moveId",
+            1,
+        ),
+        "duplicate replacement": executable_party.replace(
+            "PokemonMoveHistory_ReplaceMove(",
+            "PokemonMoveHistory_ReplaceMove(&mon->box, "
+            "partyMenu->args->moveId, moveIdx);\n"
+            "    PokemonMoveHistory_ReplaceMove(",
+            1,
+        ),
+        "unreachable replacement": executable_party.replace(
+            "PokemonMoveHistory_ReplaceMove(",
+            "if (FALSE) {\n"
+            "        PokemonMoveHistory_ReplaceMove(",
+            1,
+        ).replace(
+            "moveIdx);\n    if (partyMenu->args->itemId",
+            "moveIdx);\n    }\n"
+            "    if (partyMenu->args->itemId",
+            1,
+        ),
+        "raw pre-replacement setter": executable_party.replace(
+            "PokemonMoveHistory_ReplaceMove(",
+            "SetBoxMonData(&mon->box, MON_DATA_MOVE1 + moveIdx, NULL);\n"
+            "    PokemonMoveHistory_ReplaceMove(",
+            1,
+        ),
+        "spaced post-replacement setter": executable_party.replace(
+            "moveIdx);\n    if (partyMenu->args->itemId",
+            "moveIdx);\n"
+            "    SetBoxMonData \n"
+            "        (&mon->box, MON_DATA_MOVE1 + moveIdx, NULL);\n"
+            "    if (partyMenu->args->itemId",
+            1,
+        ),
+    }.items():
+        require(
+            not party_menu_contract_matches(
+                party_source.replace(party_raw, mutation, 1)
+            ),
+            f"{label} passes PartyMenu replacement source contracts",
+        )
 
 
 def source_contracts() -> None:
@@ -367,7 +818,7 @@ def source_contracts() -> None:
         is not None,
         "host unimplemented-move fixture requires the runtime policy enabled",
     )
-    source_matcher_mutation_fixtures(history, pokemon)
+    source_matcher_mutation_fixtures(history, pokemon, party_menu)
 
     replace_code = function_body(
         history_code,
@@ -420,6 +871,11 @@ def source_contracts() -> None:
         replace_code.count("SaveBlock2_get()") == 1,
         "replacement does not resolve exactly one current save per transaction",
     )
+    require(
+        record_move_contract_matches(history),
+        "RecordMoveImpl is not the exact guarded capture/observe/append "
+        "transaction",
+    )
     record_move_code = function_body(
         history_code,
         "PokemonMoveHistory_RecordMoveImpl",
@@ -443,6 +899,10 @@ def source_contracts() -> None:
         )
         is not None,
         "RecordMove invalid guard does not return FALSE before snapshot access",
+    )
+    require(
+        delete_move_contract_matches(history),
+        "DeleteMoveSlotImpl does not use the exact seed-before-delete call flow",
     )
     delete = function_body(
         history_code,
@@ -482,8 +942,9 @@ def source_contracts() -> None:
         "PartyMenu_LearnMoveToSlot",
     )
     require(
-        learn_slot.count("PokemonMoveHistory_ReplaceMove(") == 1,
-        "TM/HM and rare-candy replacement do not share one transaction owner",
+        party_menu_contract_matches(party_menu),
+        "party-menu learning does not call exact "
+        "ReplaceMove(&mon->box, moveId, moveIdx)",
     )
     require(
         "SetMonData(" not in learn_slot,
@@ -599,37 +1060,259 @@ def source_contracts() -> None:
         "overlay bridge still collides with global memcpy/memset symbols",
     )
     package_command = "$(NDSTOOL) -c $(BUILDROM).tmp"
+    seal_command = "scripts/pokemon_move_history_build_manifest.py"
     verifier_command = (
         "scripts/verify_pokemon_move_history_capture.py \\\n"
-        "\t\t--rom $(BUILDROM).tmp"
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "--rom $(BUILDROM).tmp"
+    )
+    final_verifier_command = (
+        "scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp"
+    )
+    publish_command = "mv $(BUILDROM).tmp $(BUILDROM)"
+    seal_start = makefile.find(seal_command)
+    verifier_start = makefile.find(verifier_command)
+    seal_block = (
+        makefile[seal_start:verifier_start]
+        if seal_start >= 0 and verifier_start > seal_start
+        else ""
     )
     require(
         makefile.count("scripts/verify_pokemon_move_history_capture.py") == 1
+        and makefile.count(
+            "scripts/pokemon_move_history_build_manifest.py"
+        ) == 1
+        and makefile.count(final_verifier_command) == 1
         and package_command in makefile
+        and seal_command in makefile
+        and "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "--rom $(BUILDROM).tmp" in seal_block
         and verifier_command in makefile
-        and makefile.index(package_command) < makefile.index(verifier_command),
-        "capture verifier is not wired once after current ROM packaging",
+        and final_verifier_command in makefile
+        and publish_command in makefile
+        and makefile.index(package_command) < makefile.index(seal_command)
+        < makefile.index(verifier_command)
+        < makefile.index(final_verifier_command)
+        < makefile.index(publish_command),
+        "capture manifest/verifiers are not wired once in fail-closed "
+        "post-package/publish order",
     )
+    require(
+        set(re.findall(r'--context\s+"([A-Z_]+)=', seal_block))
+        == {
+            "ARMIPS",
+            "ARMIPS_FLAGS",
+            "AS",
+            "ASFLAGS",
+            "CC",
+            "CFLAGS",
+            "LD",
+            "LDFLAGS",
+            "NDSTOOL",
+            "OBJCOPY",
+        },
+        "manifest seal does not record the exact effective build context",
+    )
+    forced_objects_match = re.search(
+        r"MOVE_HISTORY_CAPTURE_OBJECTS\s*=\s*\\\n"
+        r"(.*?)"
+        r"\n\.PHONY:\s*FORCE_MOVE_HISTORY_CAPTURE_OBJECTS",
+        makefile,
+        re.S,
+    )
+    require(
+        forced_objects_match is not None
+        and {
+            "$(BUILD)/pokemon.o",
+            "$(BUILD)/party_menu.o",
+            "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
+            "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
+            "$(BUILD)/pokemon_move_history_overlay/entry.o",
+            "$(BUILD)/pokemon_move_history_overlay/thumb_help.o",
+        }
+        == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
+        and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
+        "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
+        "task-3 provenance does not force exactly the six capture objects",
+    )
+
+
+def move_limits() -> tuple[int, int, int]:
+    moves_header = (REPO / "include/constants/moves.h").read_text()
+    executable = without_comments(moves_header)
+    none_match = re.search(
+        r"^#define\s+MOVE_NONE\s+(\d+)$",
+        executable,
+        re.MULTILINE,
+    )
+    canonical_match = re.search(
+        r"^#define\s+NUM_OF_CANONICAL_MOVES\s+(\d+)$",
+        executable,
+        re.MULTILINE,
+    )
+    custom_match = re.search(
+        r"^#define\s+NUM_OF_CUSTOM_MOVES\s+(\d+)$",
+        executable,
+        re.MULTILINE,
+    )
+    require(
+        none_match is not None
+        and canonical_match is not None
+        and custom_match is not None,
+        "move-count constants are not simple deterministic integers",
+    )
+    move_none = int(none_match.group(1))
+    canonical = int(canonical_match.group(1))
+    custom = int(custom_match.group(1))
+    require(move_none == 0, "MOVE_NONE is no longer zero")
+    require(canonical >= 2 and custom >= 0, "move-count constants are invalid")
+    return canonical, custom, canonical + custom
+
+
+def manifest_mutation_fixtures() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        input_path = root / "input.c"
+        output_path = root / "linked.o"
+        temporary_rom = root / "test.nds.tmp"
+        final_rom = root / "test.nds"
+        (root / "armips").mkdir()
+        (root / "build").mkdir()
+        armips_entry = root / "armips/global.s"
+        armips_nested = root / "armips/nested.s"
+        incbin_path = root / "build/payload.bin"
+        importobj_path = root / "build/imported.o"
+        armips_entry.write_text('.include "armips/nested.s"\n')
+        armips_nested.write_text(
+            '.incbin "build/payload.bin"\n'
+            '.importobj "build/imported.o"\n'
+        )
+        incbin_path.write_bytes(b"generation-a incbin")
+        importobj_path.write_bytes(b"generation-a imported object")
+        fixture_input_paths = {
+            "input.c",
+            "armips/global.s",
+            "armips/nested.s",
+            "build/payload.bin",
+            "build/imported.o",
+        }
+        require(
+            armips_dependency_paths(root, armips_entry)
+            == fixture_input_paths - {"input.c"},
+            "ARMIPS fixture does not close over nested incbin inputs",
+        )
+        input_path.write_bytes(b"generation-a source")
+        output_path.write_bytes(b"generation-a output")
+        temporary_rom.write_bytes(b"generation-a packaged rom")
+        document = {
+            "schema": BUILD_MANIFEST_SCHEMA,
+            "build_context": {"fixture-tool": "fixture-tool"},
+            "inputs": {
+                path: file_record(root / path)
+                for path in sorted(fixture_input_paths)
+            },
+            "outputs": {
+                "linked": {
+                    "path": "linked.o",
+                    **file_record(output_path),
+                },
+                "packaged_rom": {
+                    "path": PACKAGED_ROM_LOGICAL_PATH,
+                    **file_record(temporary_rom),
+                },
+            },
+            "tools": {
+                "fixture-tool": {
+                    "command": "fixture-tool",
+                    "version": "fixture 1",
+                    "binary": {"size": 1, "sha256": "0" * 64},
+                },
+            },
+        }
+
+        def verify_fixture(candidate: dict[str, object], rom: Path) -> None:
+            verify_manifest_document(
+                candidate,
+                root,
+                fixture_input_paths,
+                {"linked": "linked.o"},
+                rom,
+                {"fixture-tool"},
+                {"fixture-tool"},
+            )
+
+        def must_reject(
+            label: str,
+            candidate: dict[str, object],
+            rom: Path = final_rom,
+        ) -> None:
+            try:
+                verify_fixture(candidate, rom)
+            except ManifestError:
+                return
+            require(False, f"{label} passes full manifest schema verification")
+
+        temporary_rom.rename(final_rom)
+        verify_fixture(document, final_rom)
+
+        os.utime(input_path, (1, 1))
+        input_path.write_bytes(b"generation-b current source")
+        os.utime(input_path, (1, 1))
+        must_reject("coherent backdated stale generation", document)
+        input_path.write_bytes(b"generation-a source")
+
+        output_path.write_bytes(b"mutated output")
+        os.utime(output_path, (2_000_000_000, 2_000_000_000))
+        must_reject("future-dated changed output", document)
+        output_path.write_bytes(b"generation-a output")
+
+        incbin_path.write_bytes(b"mutated incbin")
+        must_reject("changed recursively reached incbin", document)
+        incbin_path.write_bytes(b"generation-a incbin")
+
+        importobj_path.write_bytes(b"mutated imported object")
+        must_reject("changed recursively reached importobj", document)
+        importobj_path.write_bytes(b"generation-a imported object")
+
+        missing_role = copy.deepcopy(document)
+        del missing_role["outputs"]["linked"]
+        must_reject("missing output role", missing_role)
+        extra_role = copy.deepcopy(document)
+        extra_role["outputs"]["extra"] = copy.deepcopy(
+            document["outputs"]["linked"]
+        )
+        must_reject("unknown output role", extra_role)
+        wrong_binding = copy.deepcopy(document)
+        wrong_binding["inputs"]["input.c"]["sha256"] = "f" * 64
+        must_reject("wrong input hash binding", wrong_binding)
+        wrong_rom_path = copy.deepcopy(document)
+        wrong_rom_path["outputs"]["packaged_rom"]["path"] = "test.nds.tmp"
+        must_reject("temporary packaged-ROM path binding", wrong_rom_path)
+        wrong_tool = copy.deepcopy(document)
+        wrong_tool["tools"]["unknown"] = wrong_tool["tools"].pop(
+            "fixture-tool"
+        )
+        must_reject("unknown tool role", wrong_tool)
+        tampered_tool = copy.deepcopy(document)
+        tampered_tool["tools"]["fixture-tool"]["command"] = "other-tool"
+        must_reject("tool/build-context binding tamper", tampered_tool)
+        malformed_tool_hash = copy.deepcopy(document)
+        malformed_tool_hash["tools"]["fixture-tool"]["binary"]["sha256"] = "bad"
+        must_reject("malformed tool identity hash", malformed_tool_hash)
+
+        malformed = root / "malformed.json"
+        malformed.write_text('{"schema":')
+        try:
+            load_manifest(malformed)
+        except ManifestError:
+            pass
+        else:
+            require(False, "truncated manifest JSON is accepted")
 
 
 def host_fixtures() -> None:
     max_moves = 24
-    moves_header = (REPO / "include/constants/moves.h").read_text()
-    canonical_match = re.search(
-        r"^#define NUM_OF_CANONICAL_MOVES\s+(\d+)$",
-        moves_header,
-        re.MULTILINE,
-    )
-    custom_match = re.search(
-        r"^#define NUM_OF_CUSTOM_MOVES\s+(\d+)$",
-        moves_header,
-        re.MULTILINE,
-    )
-    require(
-        canonical_match is not None and custom_match is not None,
-        "move-count constants are not simple deterministic integers",
-    )
-    num_moves = int(canonical_match.group(1)) + int(custom_match.group(1))
+    _canonical, _custom, num_moves = move_limits()
     unimplemented = {777}
 
     def valid(move: int) -> bool:
@@ -900,6 +1583,22 @@ def host_fixtures() -> None:
         and delete_current == [21, 23, 24, 0],
         "committed deletion lost the forgotten move or appended MOVE_NONE",
     )
+    scanner_base = 0x02000000
+    scanner_image = b"\x00\xf0\x00\xf8\x80\x47"
+    require(
+        packaged_thumb_calls(
+            scanner_image,
+            scanner_base,
+            scanner_base,
+            len(scanner_image),
+        )
+        == [
+            (scanner_base, "bl", scanner_base + 4),
+            (scanner_base + 4, "blx_reg", 0),
+        ],
+        "packaged call scanner does not decode BL and BLX-register forms",
+    )
+    manifest_mutation_fixtures()
 
 
 def symbol_table(path: Path) -> dict[str, int]:
@@ -1021,11 +1720,154 @@ def direct_thumb_calls(disassembly: str) -> list[tuple[int, str, int]]:
     return calls
 
 
-def packaged_components(
-    rom_path: Path,
-) -> tuple[int, bytes, dict[int, tuple[int, bytes]]]:
-    require(rom_path.is_file(), f"packaged ROM is absent: {rom_path}")
-    rom = rom_path.read_bytes()
+def packaged_thumb_calls(
+    image: bytes,
+    base: int,
+    address: int,
+    size: int,
+) -> list[tuple[int, str, int]]:
+    calls: list[tuple[int, str, int]] = []
+    cursor = address
+    end = address + size
+    while cursor + 2 <= end:
+        halfword = struct.unpack_from("<H", image, cursor - base)[0]
+        if cursor + 4 <= end and halfword & 0xF800 == 0xF000:
+            second = struct.unpack_from("<H", image, cursor + 2 - base)[0]
+            if second & 0xF800 == 0xF800:
+                calls.append(
+                    (
+                        cursor,
+                        "bl",
+                        thumb_bl_target(image, base, cursor),
+                    )
+                )
+                cursor += 4
+                continue
+            if second & 0xF800 == 0xE800:
+                calls.append(
+                    (
+                        cursor,
+                        "blx",
+                        thumb_blx_target(image, base, cursor),
+                    )
+                )
+                cursor += 4
+                continue
+        if halfword & 0xFF87 == 0x4780:
+            calls.append((cursor, "blx_reg", (halfword >> 3) & 0xF))
+        cursor += 2
+    return calls
+
+
+def elf_bytes_at(path: Path, address: int, size: int) -> bytes:
+    image = path.read_bytes()
+    require(image[:4] == b"\x7fELF", f"{path} is not ELF")
+    require(image[4:6] == b"\x01\x01", f"{path} is not little-endian ELF32")
+    section_offset = struct.unpack_from("<I", image, 0x20)[0]
+    section_entry_size = struct.unpack_from("<H", image, 0x2E)[0]
+    section_count = struct.unpack_from("<H", image, 0x30)[0]
+    require(
+        section_entry_size >= 40
+        and section_offset + section_entry_size * section_count <= len(image),
+        f"{path} section table is invalid",
+    )
+    for index in range(section_count):
+        offset = section_offset + index * section_entry_size
+        (
+            _name,
+            _type,
+            _flags,
+            section_address,
+            file_offset,
+            section_size,
+        ) = struct.unpack_from("<6I", image, offset)
+        if (
+            section_address <= address
+            and address + size <= section_address + section_size
+        ):
+            start = file_offset + address - section_address
+            require(
+                start + size <= len(image),
+                f"{path} section payload is truncated",
+            )
+            return image[start:start + size]
+    require(False, f"0x{address:08X}+0x{size:X} is absent from {path}")
+    return b""
+
+
+@dataclass(frozen=True)
+class OverlayComponent:
+    overlay_id: int
+    ordinal: int
+    ram_address: int
+    ram_size: int
+    bss_size: int
+    static_init_start: int
+    static_init_end: int
+    file_id: int
+    flags: int
+    fat_start: int
+    fat_end: int
+    data: bytes
+
+
+EXPECTED_OVERLAY_METADATA = {
+    12: (
+        0x022378C0,
+        0x37380,
+        0,
+        0x0226EC08,
+        0x0226EC10,
+        12,
+        0,
+        0x1D3200,
+        0x20A580,
+    ),
+    68: (
+        0x021E5900,
+        0x2800,
+        0,
+        0x021E80E4,
+        0x021E80E8,
+        68,
+        0,
+        0x2E4200,
+        0x2E6A00,
+    ),
+    129: (
+        0x023D8000,
+        0x7FC0,
+        0,
+        0,
+        0,
+        129,
+        0,
+        0x3D5200,
+        0x3DD1C0,
+    ),
+    153: (
+        OVERLAY_BASE,
+        0xFB4,
+        0,
+        0,
+        0,
+        153,
+        0,
+        0x41BE00,
+        0x41CDB4,
+    ),
+}
+OVERLAY129_THUNKS = {
+    0x023DA86E: bytes.fromhex("18 47"),
+    0x023DA874: bytes.fromhex("30 47"),
+    0x023DCB1C: bytes.fromhex("18 47"),
+    0x023DCB20: bytes.fromhex("28 47"),
+}
+
+
+def packaged_components_from_bytes(
+    rom: bytes,
+) -> tuple[int, bytes, dict[int, OverlayComponent]]:
     require(len(rom) >= 0x160, "packaged ROM header is truncated")
     arm9_offset, _entry, arm9_base, arm9_size = struct.unpack_from(
         "<4I",
@@ -1047,10 +1889,40 @@ def packaged_components(
         and overlay_size % 32 == 0,
         "packaged ARM9 overlay table is invalid",
     )
-    overlays: dict[int, tuple[int, bytes]] = {}
-    for offset in range(overlay_offset, overlay_offset + overlay_size, 32):
-        fields = struct.unpack_from("<8I", rom, offset)
-        overlay_id, ram_address, file_id = fields[0], fields[1], fields[6]
+    rows = [
+        struct.unpack_from("<8I", rom, offset)
+        for offset in range(
+            overlay_offset,
+            overlay_offset + overlay_size,
+            32,
+        )
+    ]
+    overlay_ids = [row[0] for row in rows]
+    file_ids_list = [row[6] for row in rows]
+    require(
+        len(set(overlay_ids)) == len(overlay_ids),
+        "packaged overlay table contains duplicate overlay IDs",
+    )
+    require(
+        len(set(file_ids_list)) == len(file_ids_list),
+        "packaged overlay table contains duplicate file IDs",
+    )
+    overlays: dict[int, OverlayComponent] = {}
+    for ordinal, fields in enumerate(rows):
+        (
+            overlay_id,
+            ram_address,
+            ram_size,
+            bss_size,
+            static_init_start,
+            static_init_end,
+            file_id,
+            flags,
+        ) = fields
+        require(
+            overlay_id == ordinal,
+            f"overlay ID {overlay_id} differs from ordinal {ordinal}",
+        )
         require(
             file_id * 8 + 8 <= fat_size,
             f"overlay {overlay_id} file ID is outside the FAT",
@@ -1064,8 +1936,55 @@ def packaged_components(
             start <= end <= len(rom),
             f"overlay {overlay_id} file extent is invalid",
         )
-        overlays[overlay_id] = (ram_address, rom[start:end])
+        component = OverlayComponent(
+            overlay_id,
+            ordinal,
+            ram_address,
+            ram_size,
+            bss_size,
+            static_init_start,
+            static_init_end,
+            file_id,
+            flags,
+            start,
+            end,
+            rom[start:end],
+        )
+        overlays[overlay_id] = component
+
+    for overlay_id, expected in EXPECTED_OVERLAY_METADATA.items():
+        require(
+            overlay_id in overlays,
+            f"packaged overlay {overlay_id} is absent",
+        )
+        component = overlays[overlay_id]
+        actual = (
+            component.ram_address,
+            component.ram_size,
+            component.bss_size,
+            component.static_init_start,
+            component.static_init_end,
+            component.file_id,
+            component.flags,
+            component.fat_start,
+            component.fat_end,
+        )
+        require(
+            actual == expected,
+            f"overlay {overlay_id} y9/FAT metadata differs",
+        )
+        require(
+            component.ram_size == len(component.data),
+            f"overlay {overlay_id} RAM size differs from uncompressed payload",
+        )
     return arm9_base, rom[arm9_offset:arm9_offset + arm9_size], overlays
+
+
+def packaged_components(
+    rom_path: Path,
+) -> tuple[int, bytes, dict[int, OverlayComponent]]:
+    require(rom_path.is_file(), f"packaged ROM is absent: {rom_path}")
+    return packaged_components_from_bytes(rom_path.read_bytes())
 
 
 def bytes_at(image: bytes, base: int, address: int, size: int) -> bytes:
@@ -1077,12 +1996,60 @@ def bytes_at(image: bytes, base: int, address: int, size: int) -> bytes:
     return image[offset:offset + size]
 
 
-def binary_contracts(rom_path: Path) -> None:
+def overlay129_predicate_matches(image: bytes, base: int) -> bool:
+    address = 0x023D94C4
+    if not (base <= address and address + 0x0E <= base + len(image)):
+        return False
+    try:
+        target = thumb_bl_target(image, base, address + 4)
+    except SystemExit:
+        return False
+    return (
+        bytes_at(image, base, address, 0x0E)
+        == bytes.fromhex("10 b5 09 21 ff f7 c0 ff 80 06 c0 0f 10 bd")
+        and target == 0x023D944C
+        and packaged_thumb_calls(image, base, address, 0x0E)
+        == [(address + 4, "bl", 0x023D944C)]
+    )
+
+
+def overlay129_thunks_match(image: bytes, base: int) -> bool:
+    return all(
+        base <= address
+        and address + len(expected) <= base + len(image)
+        and image[address - base:address - base + len(expected)] == expected
+        for address, expected in OVERLAY129_THUNKS.items()
+    )
+
+
+def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
+    y9_offset = struct.unpack_from("<I", rom, 0x50)[0]
+    mutations: list[tuple[str, bytearray]] = []
+    duplicate = bytearray(rom)
+    struct.pack_into("<I", duplicate, y9_offset + 153 * 32, 152)
+    mutations.append(("duplicate overlay ID", duplicate))
+    wrong_size = bytearray(rom)
+    struct.pack_into("<I", wrong_size, y9_offset + 153 * 32 + 8, 0xFB0)
+    mutations.append(("overlay 153 RAM size", wrong_size))
+    wrong_flags = bytearray(rom)
+    struct.pack_into("<I", wrong_flags, y9_offset + 129 * 32 + 28, 1)
+    mutations.append(("overlay 129 flags", wrong_flags))
+    for label, mutation in mutations:
+        try:
+            packaged_components_from_bytes(bytes(mutation))
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated {label} passes packaged metadata checks")
+
+
+def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     linked = REPO / "build/pokemon_move_history_overlay_linked.o"
     overlay_path = REPO / "build/output_pokemon_move_history_overlay.bin"
     arm9_path = REPO / "base/arm9.bin"
     ov12_path = REPO / "base/overlay/overlay_0012.bin"
     ov68_path = REPO / "base/overlay/overlay_0068.bin"
+    ov129_path = REPO / "base/overlay/overlay_0129.bin"
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
     pokemon_object = REPO / "build/pokemon.o"
     party_menu_object = REPO / "build/party_menu.o"
@@ -1099,6 +2066,7 @@ def binary_contracts(rom_path: Path) -> None:
         arm9_path,
         ov12_path,
         ov68_path,
+        ov129_path,
         ov153_path,
         pokemon_object,
         party_menu_object,
@@ -1109,58 +2077,10 @@ def binary_contracts(rom_path: Path) -> None:
     )
     missing = [str(path) for path in required_artifacts if not path.is_file()]
     require(not missing, "required build artifacts are absent: " + ", ".join(missing))
-
-    overlay_inputs = (
-        REPO / "src/pokemon_move_history_overlay/pokemon_move_history.c",
-        REPO / "src/pokemon_move_history_overlay/pokemon_move_relearn.c",
-        REPO / "asm/pokemon_move_history_overlay/entry.s",
-        REPO / "asm/pokemon_move_history_overlay/thumb_help.s",
-        REPO / "src/pokemon_move_history_overlay/linker.ld",
-        REPO / "include/pokemon_move_history.h",
-        REPO / "include/pokemon.h",
-        REPO / "rom.ld",
-        REPO / "overlays.mk",
-    )
-    newest_overlay_input = max(
-        path.stat().st_mtime
-        for path in overlay_inputs
-    )
-    for artifact in (linked, overlay_path, ov153_path):
-        require(
-            artifact.stat().st_mtime >= newest_overlay_input,
-            f"build artifact is stale: {artifact}",
-        )
-    object_inputs = (
-        (pokemon_object, REPO / "src/pokemon.c"),
-        (party_menu_object, REPO / "src/party_menu.c"),
-        (
-            history_object,
-            REPO / "src/pokemon_move_history_overlay/pokemon_move_history.c",
-        ),
-        (
-            relearn_object,
-            REPO / "src/pokemon_move_history_overlay/pokemon_move_relearn.c",
-        ),
-    )
-    for artifact, source in object_inputs:
-        require(
-            artifact.stat().st_mtime >= source.stat().st_mtime,
-            f"object is stale relative to {source}: {artifact}",
-        )
-    patch_input = REPO / "armips/asm/pokemon_move_history_capture.s"
-    for artifact in (arm9_path, ov12_path, ov68_path):
-        require(
-            artifact.stat().st_mtime >= patch_input.stat().st_mtime,
-            f"patched binary is stale: {artifact}",
-        )
-    newest_packaged_input = max(
-        path.stat().st_mtime
-        for path in (arm9_path, ov12_path, ov68_path, ov153_path)
-    )
-    require(
-        rom_path.stat().st_mtime >= newest_packaged_input,
-        f"packaged ROM is stale relative to patched binaries: {rom_path}",
-    )
+    try:
+        verify_manifest(manifest_path, rom_path)
+    except ManifestError as exc:
+        require(False, f"content-addressed build manifest rejected: {exc}")
 
     overlay = overlay_path.read_bytes()
     require(
@@ -1261,16 +2181,32 @@ def binary_contracts(rom_path: Path) -> None:
                 f"{object_path.name} does not call local bridge {target}",
             )
 
-    arm9_base, packaged_arm9, packaged_overlays = packaged_components(rom_path)
+    rom_bytes = rom_path.read_bytes()
+    arm9_base, packaged_arm9, packaged_overlays = (
+        packaged_components_from_bytes(rom_bytes)
+    )
+    packaged_metadata_mutation_fixtures(rom_bytes)
     require(arm9_base == 0x02000000, "packaged ARM9 RAM base differs")
-    for overlay_id in (12, 68, 153):
-        require(
-            overlay_id in packaged_overlays,
-            f"packaged overlay {overlay_id} is absent",
-        )
-    ov12_base, packaged_ov12 = packaged_overlays[12]
-    ov68_base, packaged_ov68 = packaged_overlays[68]
-    ov153_base, packaged_ov153 = packaged_overlays[153]
+    ov12_component = packaged_overlays[12]
+    ov68_component = packaged_overlays[68]
+    ov129_component = packaged_overlays[129]
+    ov153_component = packaged_overlays[153]
+    ov12_base, packaged_ov12 = (
+        ov12_component.ram_address,
+        ov12_component.data,
+    )
+    ov68_base, packaged_ov68 = (
+        ov68_component.ram_address,
+        ov68_component.data,
+    )
+    ov129_base, packaged_ov129 = (
+        ov129_component.ram_address,
+        ov129_component.data,
+    )
+    ov153_base, packaged_ov153 = (
+        ov153_component.ram_address,
+        ov153_component.data,
+    )
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
     require(ov68_base == 0x021E5900, "packaged overlay 68 base differs")
     require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
@@ -1287,6 +2223,10 @@ def binary_contracts(rom_path: Path) -> None:
     require(
         packaged_ov68 == ov68_path.read_bytes(),
         "packaged overlay 68 differs from the current patched artifact",
+    )
+    require(
+        packaged_ov129 == ov129_path.read_bytes(),
+        "packaged overlay 129 differs from the current patched artifact",
     )
     require(
         packaged_ov153 == ov153_path.read_bytes() == overlay,
@@ -1378,8 +2318,20 @@ def binary_contracts(rom_path: Path) -> None:
     )
     implemented_check_target = core_symbols["IsMoveUnimplemented"] + 1
     require(
-        0x023D8000 <= implemented_check_target < 0x023E0000,
+        ov129_base <= implemented_check_target < ov129_base + len(packaged_ov129),
         "IsMoveUnimplemented is not resident in overlay 129",
+    )
+    implemented_address = implemented_check_target - 1
+    require(
+        implemented_address == 0x023D94C4
+        and overlay129_predicate_matches(packaged_ov129, ov129_base),
+        "overlay-129 IsMoveUnimplemented body/controlling data flow differs",
+    )
+    mutated_predicate = bytearray(packaged_ov129)
+    mutated_predicate[implemented_address - ov129_base + 2] = 0
+    require(
+        not overlay129_predicate_matches(bytes(mutated_predicate), ov129_base),
+        "always-false IsMoveUnimplemented mutation passes packaged checks",
     )
     resolved_targets = {
         "SaveBlock2_get": 0x020272B1,
@@ -1394,6 +2346,167 @@ def binary_contracts(rom_path: Path) -> None:
             symbols.get(name) == address,
             f"final symbol {name} resolves to {symbols.get(name)!r}, "
             f"expected 0x{address:08X}",
+        )
+
+    core_function_sizes = symbol_sizes(core_linked)
+    packaged_function_specs = (
+        (
+            "PartyMenu_LearnMoveToSlot",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DA154,
+            0x6C,
+            "fff8695ccb309e47286f0f4aeb8f67d1b1327c732a4b3896b3f91647e41f3357",
+            [
+                (0x023DA164, "bl", 0x023DA86E),
+                (0x023DA180, "bl", 0x023DA874),
+                (0x023DA188, "bl", 0x023DA86E),
+                (0x023DA194, "bl", 0x023DA86E),
+                (0x023DA19E, "bl", 0x023DA86E),
+            ],
+        ),
+        (
+            "MonTryLearnMoveOnLevelUp",
+            core_linked,
+            packaged_ov129,
+            ov129_base,
+            0x023DC704,
+            0x158,
+            "457614c6a8b8e13d158ca0dab84536a662443e233db5fd29570bf2df861d481c",
+            [
+                (0x023DC718, "bl", 0x023DCB1C),
+                (0x023DC726, "bl", 0x023DCB20),
+                (0x023DC732, "bl", 0x023DCB20),
+                (0x023DC73E, "bl", 0x023DCB20),
+                (0x023DC750, "bl", 0x023DCB1C),
+                (0x023DC79E, "bl", 0x023DCB1C),
+                (0x023DC7AC, "bl", 0x023DCB1C),
+                (0x023DC7C4, "bl", 0x023DCB1C),
+                (0x023DC806, "bl", 0x023DCB1C),
+                (0x023DC81A, "bl", 0x023DCB1C),
+                (0x023DC82A, "bl", 0x023DCB1C),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_RecordMoveImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BEE0E,
+            0x40,
+            "ced2d2e052a86f717ab05b09c45715d1af3813af1f8393fdd10c913791f18571",
+            [
+                (0x023BEE1A, "bl", 0x023BE984),
+                (0x023BEE2C, "bl", 0x023BED78),
+                (0x023BEE38, "bl", 0x023BEC00),
+                (0x023BEE46, "bl", 0x023BEB40),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_ReplaceMoveImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BEE5A,
+            0xE2,
+            "e6e7567a8f66f2d7976ef3bfedab0a2f878c26bba5fd4d224fee58a2b461a7b9",
+            [
+                (0x023BEE7A, "bl", 0x023BE984),
+                (0x023BEE90, "bl", 0x023BF2B4),
+                (0x023BEEA2, "bl", 0x023BED78),
+                (0x023BEEAC, "bl", 0x023BF2B4),
+                (0x023BEEB4, "bl", 0x023BEC00),
+                (0x023BEEC4, "bl", 0x023BF2B4),
+                (0x023BEEDA, "bl", 0x023BF2B4),
+                (0x023BEEE4, "bl", 0x023BF2B4),
+                (0x023BEEF8, "bl", 0x023BF2B4),
+                (0x023BEF04, "bl", 0x023BF2B4),
+                (0x023BEF26, "bl", 0x023BEB40),
+            ],
+        ),
+        (
+            "PokemonMoveHistory_DeleteMoveSlotImpl",
+            linked,
+            packaged_ov153,
+            ov153_base,
+            0x023BEF3C,
+            0x30,
+            "c94dd14bb322c730304ef5b86976842f0e27a27a1e530d8339d67eaf5cf9daa0",
+            [
+                (0x023BEF4C, "bl", 0x023BF2B4),
+                (0x023BEF52, "bl", 0x023BEDEC),
+                (0x023BEF5C, "bl", 0x023BF2B4),
+            ],
+        ),
+    )
+    for (
+        name,
+        elf_path,
+        image,
+        image_base,
+        address,
+        size,
+        expected_sha256,
+        expected_calls,
+    ) in packaged_function_specs:
+        size_table = (
+            core_function_sizes if elf_path == core_linked
+            else linked_symbol_sizes
+        )
+        require(
+            symbol_table(elf_path).get(name) == address
+            and size_table.get(name) == size,
+            f"{name} linked address/size differs",
+        )
+        packaged_body = bytes_at(image, image_base, address, size)
+        require(
+            packaged_body == elf_bytes_at(elf_path, address, size)
+            and hashlib.sha256(packaged_body).hexdigest() == expected_sha256,
+            f"{name} complete packaged body differs from authenticated ELF",
+        )
+        require(
+            packaged_thumb_calls(image, image_base, address, size)
+            == expected_calls,
+            f"{name} packaged BL/BLX call allowlist differs",
+        )
+
+    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA154, 0x6C)
+    require(
+        overlay129_thunks_match(packaged_ov129, ov129_base),
+        "overlay-129 interworking thunk bodies/registers differ",
+    )
+    mutated_thunk = bytearray(packaged_ov129)
+    mutated_thunk[0x023DA86E - ov129_base] = 0x20
+    require(
+        not overlay129_thunks_match(bytes(mutated_thunk), ov129_base),
+        "mutated overlay-129 thunk register passes exact authentication",
+    )
+    for target in (
+        OVERLAY_BASE + 0x81,
+        0x023D8987,
+        0x020828ED,
+        0x0206FE91,
+        0x02097F0D,
+    ):
+        require(
+            party_body.count(struct.pack("<I", target)) == 1,
+            f"PartyMenu_LearnMoveToSlot target 0x{target:08X} differs",
+        )
+    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC704, 0x158)
+    for target in (
+        0x0201AA8D,
+        0x0206E541,
+        0x02071FC9,
+        implemented_check_target,
+        0x0201AB0D,
+        0x0207137D,
+        0x020272B1,
+        OVERLAY_BASE + 0x29,
+    ):
+        require(
+            level_body.count(struct.pack("<I", target)) == 1,
+            f"MonTryLearnMoveOnLevelUp target 0x{target:08X} differs",
         )
     replace_start = symbols["PokemonMoveHistory_ReplaceMoveImpl"] - ov153_base
     delete_start = symbols["PokemonMoveHistory_DeleteMoveSlotImpl"] - ov153_base
@@ -1563,6 +2676,7 @@ def binary_contracts(rom_path: Path) -> None:
         ov153_base,
         recordable_call,
     )
+    _canonical_moves, _custom_moves, num_moves = move_limits()
     require(
         bytes_at(
             packaged_ov153,
@@ -1574,7 +2688,7 @@ def binary_contracts(rom_path: Path) -> None:
             "43 1e 07 49 1b 04 02 00 10 b5 00 20 1b 0c 8b 42"
         )
         and range_literal_address == recordable_address + 0x20
-        and range_literal_value == 0x399
+        and range_literal_value == num_moves - 2
         and thumb_conditional_branch(
             packaged_ov153,
             ov153_base,
@@ -2031,6 +3145,11 @@ def main() -> None:
         help="current packaged ROM; required unless --source-only is used",
     )
     parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="content-addressed build manifest; required with --rom",
+    )
+    parser.add_argument(
         "--source-only",
         action="store_true",
         help="run deterministic source and host checks before packaging",
@@ -2040,12 +3159,16 @@ def main() -> None:
         args.source_only != (args.rom is not None),
         "choose exactly one of --source-only or --rom",
     )
+    require(
+        args.source_only == (args.manifest is None),
+        "--manifest is required exactly when --rom is used",
+    )
     source_contracts()
     host_fixtures()
     if args.source_only:
         print("move-history capture: source and host fixtures verified")
     else:
-        binary_contracts(args.rom)
+        binary_contracts(args.rom, args.manifest)
 
 
 if __name__ == "__main__":

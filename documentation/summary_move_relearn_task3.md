@@ -78,19 +78,33 @@ All three copy calls and the one clear call resolve inside overlay 153 before
 interworking to the retail ARM routines. This keeps the fixed `0x1000` code
 guard intact without consuming overlay 129 headroom.
 
-The build runs `verify_pokemon_move_history_capture.py` only after creating the
-temporary packaged ROM. The verifier fails closed if current linked, patched,
-or packaged artifacts are absent or stale; compares the packaged ARM9 and
-overlays against the current build; checks complete hook windows and
-continuations (including the full deletion, evolution, battle, and overlay 68
-argument-producing spans); resolves fixed entries; requires exact eight-byte
-local helper bodies; audits every direct overlay call and copy/clear
-relocation; and exercises deterministic invalid, unimplemented, canceled,
-no-op, snapshot-failure, replacement-order, and deletion fixtures. Invalid
-`RecordMove` and `ReplaceMove` fixtures prove no allocation, dirty flag,
-revision, Pokémon mutation, or successful return for both empty and existing
-stores. Same-slot `ReplaceMove` fixtures additionally prove no full snapshot
-or store access and a `FALSE` result.
+The build forces the six task-3 C/assembly objects to be rebuilt, packages the
+temporary ROM, then seals a content-addressed manifest over their generated
+dependency/ARMIPS include-and-incbin closure, generated linker script,
+effective build flags, identities of the actual compiler/assembler/linker/
+objcopy/ARMIPS/ndstool commands, `build/linked.o`, both linked binaries, the
+patched ARM9/consumed overlays, y9, and the packaged ROM. The packaged ROM is a
+logical content role, so the retained manifest remains valid after `.tmp` is
+published as `test.nds` and can be rechecked on the macOS host without requiring Docker's
+absolute tool paths. The capture verifier accepts `--rom` only with that exact
+manifest. Hashes—not mtimes—make absent, modified, or coherently touched stale
+generations fail closed.
+
+Post-package checks authenticate unique dense overlay/file IDs and exact
+y9/FAT metadata for overlays 12, 68, 129, and 153. Overlay 129's complete
+`IsMoveUnimplemented` body and controlling call are exact-checked. Complete
+packaged bodies and BL/BLX (including register-form) call allowlists cover
+`MonTryLearnMoveOnLevelUp`, `PartyMenu_LearnMoveToSlot`, `RecordMoveImpl`,
+`ReplaceMoveImpl`, and `DeleteMoveSlotImpl`; all earlier fixed-entry, hook
+window/continuation, local-helper, relocation, interworking, `0xEC` layout,
+candidate, and sidecar checks remain. Deterministic source mutation fixtures
+reject wrong arguments, ignored/duplicate predicates, pre-guard mutations,
+guard/result clobbers, and reordered deletion. Host fixtures retain invalid,
+unimplemented, canceled, no-op, snapshot-failure, replacement-order, and
+deletion coverage. Invalid `RecordMove` and `ReplaceMove` prove no allocation,
+dirty flag, revision, Pokémon mutation, or successful return for empty and
+existing stores; same-slot replacement additionally proves no snapshot/store
+access and a `FALSE` result.
 
 ## Deliberate exclusions
 

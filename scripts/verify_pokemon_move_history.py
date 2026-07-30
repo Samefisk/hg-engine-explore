@@ -1129,6 +1129,11 @@ def main() -> None:
         struct.unpack_from("<8I", table, offset)
         for offset in range(0, len(table), ROW_SIZE)
     ]
+    overlay_ids = [row[0] for row in rows]
+    require(
+        len(set(overlay_ids)) == len(overlay_ids),
+        "final y9 contains duplicate overlay IDs",
+    )
     require(
         all(row[0] == index for index, row in enumerate(rows)),
         "final y9 overlay IDs are not dense and ordered",
