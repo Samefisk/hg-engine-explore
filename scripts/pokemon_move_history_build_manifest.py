@@ -14,6 +14,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -425,6 +426,35 @@ def _lexically_normal_publish_path(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path)))
 
 
+def _require_distinct_publish_paths(paths: tuple[Path, ...]) -> None:
+    filesystem_keys = {
+        unicodedata.normalize("NFC", os.fspath(path)).casefold()
+        for path in paths
+    }
+    if (
+        len(set(paths)) != len(paths)
+        or len(filesystem_keys) != len(paths)
+    ):
+        raise ManifestError(
+            "candidate, final, and journal publish paths must be distinct"
+        )
+    journal = paths[-1]
+    for role in paths[:-1]:
+        try:
+            aliases = os.path.samefile(role, journal)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise ManifestError(
+                "candidate, final, and journal identity check failed"
+            ) from exc
+        if aliases:
+            raise ManifestError(
+                "candidate, final, and journal publish paths must be "
+                "distinct"
+            )
+
+
 def _clone_for_replace(source: Path, destination_directory: Path) -> Path:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{source.name}.publish.",
@@ -661,6 +691,8 @@ def publish_pair(
     journal_input = final_inputs[0].with_name(
         final_inputs[0].name + ".publish-journal"
     )
+    lexical_paths = candidate_inputs + final_inputs + (journal_input,)
+    _require_distinct_publish_paths(lexical_paths)
     for candidate in candidate_inputs:
         _require_regular_publish_leaf(
             candidate,
@@ -681,15 +713,13 @@ def publish_pair(
 
     candidates = tuple(path.resolve() for path in candidate_inputs)
     finals = tuple(path.resolve() for path in final_inputs)
-    if len(set(candidates + finals)) != 4:
-        raise ManifestError("candidate and final publish paths must be distinct")
+    journal_path = journal_input.resolve()
+    resolved_paths = candidates + finals + (journal_path,)
+    _require_distinct_publish_paths(resolved_paths)
     candidate_manifest, candidate_rom = candidates
     final_manifest, final_rom = finals
     final_manifest.parent.mkdir(parents=True, exist_ok=True)
     final_rom.parent.mkdir(parents=True, exist_ok=True)
-    journal_path = final_manifest.with_name(
-        final_manifest.name + ".publish-journal"
-    )
     final_paths = (final_manifest, final_rom)
     if journal_path.exists():
         _restore_publish_journal(journal_path, final_paths, replace)
@@ -711,6 +741,13 @@ def publish_pair(
         "pair-publish recovery journal",
         allow_missing=True,
     )
+    post_verify_paths = tuple(
+        path.resolve()
+        for path in (*candidate_inputs, *final_inputs, journal_input)
+    )
+    _require_distinct_publish_paths(post_verify_paths)
+    if post_verify_paths != resolved_paths:
+        raise ManifestError("pair-publish path topology changed during verify")
 
     prior_records = {
         final: file_record(final) if final.is_file() else None

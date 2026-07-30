@@ -90,10 +90,15 @@ interworking to the retail ARM routines. This keeps the fixed `0x1000` code
 guard intact without consuming overlay 129 headroom.
 
 The build forces the seven task-3 C/assembly objects, including `save.o`, to be
-rebuilt. The Docker build wrapper first authenticates the complete Make source
-set and rejects unsafe outer `MAKEFLAGS`/overrides or generated dependency
-syntax before GNU Make can parse the workspace. Effective-rule inspection then
-runs in an isolated tree without generated `.d` files and binds the complete
+rebuilt. Before Python or GNU Make can parse build inputs, the Docker wrapper
+starts the managed gate with an empty environment containing only pinned
+`PATH`, `PIP_CACHE_DIR`, `LC_ALL`, and `PWD`; the gate then execs the real Make
+with that same environment and fixed `VENV`/parallelism arguments. Thus
+inherited `MAKEFILES`, `MAKEFLAGS`, `GNUMAKEFLAGS`, `MFLAGS`, `AUTO_TEST`, and
+recipe/tool overrides cannot reach the build. The gate authenticates the
+complete Make source set and generated dependency syntax before GNU Make parses
+the workspace. Effective-rule inspection then runs in an isolated tree without
+generated `.d` files and binds the complete
 `all` recipe/prerequisites plus the recursively closed value, operator, and
 origin graph of every referenced recipe variable. The build packages a
 candidate ROM, then seals a candidate content-addressed
@@ -112,8 +117,10 @@ recovery journal retains the prior pair through process interruption or a
 persistent restore error and is resolved before any later publication.
 Candidate, final, journal, stage, and backup leaves reject symlinks before and
 after candidate verification, with lexical and resolved directory ownership
-checked before recovery or mutation. Hashes—not mtimes—make absent, modified,
-or coherently touched stale generations fail closed.
+checked before recovery or mutation. The derived recovery journal must also be
+lexically, canonically, and—when present—by inode distinct from every candidate
+and final role before recovery or verification begins. Hashes—not mtimes—make
+absent, modified, or coherently touched stale generations fail closed.
 
 Authenticated task-3 packaging therefore uses `docker-makerom.cmd`/the
 Workshop path; invoking `make` directly bypasses the pre-parse gate and is not

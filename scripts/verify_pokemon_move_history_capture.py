@@ -45,7 +45,7 @@ EXPECTED_MAKEFILE_SHA256 = (
     "32eb029257514bb2f7c52ba70bdc1584fa5e3a8717a2772c0f7348c8eb83062b"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "df3659cd2f630bac5df444076ec762e97049f0e31ac008c752a7de08cfbe2eb0"
+    "9b39fd50bc4d208ab520f2d9a933cad33602c99c810149f2e7ff51e1a180e427"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -60,6 +60,44 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
         "f9a09d1628b31c1decdd5f3ff798f9c220bb4e0afa95ff0973fd3e48479a9369",
+}
+MANAGED_BUILD_PATH = (
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+)
+MANAGED_BUILD_VENV = "/tmp/hg-engine-venv"
+MANAGED_BUILD_PIP_CACHE = "/tmp/pip-cache"
+FORBIDDEN_INHERITED_MAKE_CONTROLS = {
+    "AUTO_TEST",
+    "GNUMAKEFLAGS",
+    "MAKEFILES",
+}
+FORBIDDEN_IMPORTED_BUILD_VARIABLES = {
+    "ARMIPS",
+    "ARMIPS_FLAGS",
+    "AS",
+    "ASFLAGS",
+    "BUILD",
+    "BUILDROM",
+    "CC",
+    "CFLAGS",
+    "DEVKITARM",
+    "FILESYS",
+    "LD",
+    "LDFLAGS",
+    "LINK",
+    "MAKE",
+    "MOVE_HISTORY_CAPTURE_MANIFEST",
+    "MOVE_HISTORY_CAPTURE_MANIFEST_TMP",
+    "NARCHIVE",
+    "NDSTOOL",
+    "OBJCOPY",
+    "OUTPUT",
+    "PREFIX",
+    "PYTHON",
+    "PYTHON_NO_VENV",
+    "ROMNAME",
+    "SHELL",
+    "VENV_ACTIVATE",
 }
 
 
@@ -160,14 +198,88 @@ def make_publication_contract_matches(
     )
 
 
+def managed_build_environment() -> dict[str, str]:
+    return {
+        "LC_ALL": "C",
+        "PATH": MANAGED_BUILD_PATH,
+        "PIP_CACHE_DIR": MANAGED_BUILD_PIP_CACHE,
+        "PWD": str(REPO),
+    }
+
+
+def managed_build_environment_is_exact(
+    environment: dict[str, str] | None = None,
+) -> bool:
+    active_environment = os.environ if environment is None else environment
+    observed = dict(active_environment)
+    if sys.platform == "darwin":
+        encoding = observed.pop("__CF_USER_TEXT_ENCODING", None)
+        if (
+            encoding is not None
+            and re.fullmatch(r"0x[0-9A-Fa-f]+:0x[0-9A-Fa-f]+:0x[0-9A-Fa-f]+", encoding)
+            is None
+        ):
+            return False
+    return observed == managed_build_environment()
+
+
+def safe_make_flag_tokens(tokens: list[str]) -> bool:
+    return all(
+        (
+            token
+            in {
+                "-j",
+                "-w",
+                "w",
+                "--print-directory",
+                "--no-print-directory",
+            }
+            or re.fullmatch(r"-j[1-9][0-9]*", token) is not None
+            or re.fullmatch(
+                r"--jobserver-(?:fds|auth)=[0-9]+,[0-9]+",
+                token,
+            )
+            is not None
+        )
+        for token in tokens
+    )
+
+
 def outer_make_invocation_is_safe(
     environment: dict[str, str] | None = None,
 ) -> bool:
     active_environment = os.environ if environment is None else environment
+    if any(
+        name in active_environment
+        for name in FORBIDDEN_INHERITED_MAKE_CONTROLS
+    ):
+        return False
+    makelevel = active_environment.get("MAKELEVEL")
+    inside_make = makelevel is not None
+    if inside_make and any(
+        name in active_environment
+        for name in FORBIDDEN_IMPORTED_BUILD_VARIABLES
+    ):
+        return False
+    if inside_make and makelevel != "1":
+        return False
+    if (
+        "VENV" in active_environment
+        and (
+            not inside_make
+            or active_environment["VENV"] != MANAGED_BUILD_VENV
+        )
+    ):
+        return False
     makeflags = active_environment.get("MAKEFLAGS", "").strip()
     makeoverrides = active_environment.get("MAKEOVERRIDES", "").strip()
+    mflags = active_environment.get("MFLAGS")
     if not makeflags:
-        return not makeoverrides
+        return (
+            not inside_make
+            and not makeoverrides
+            and mflags is None
+        )
     if "\\" in makeflags or "\n" in makeflags:
         return False
     tokens = makeflags.split()
@@ -183,25 +295,24 @@ def outer_make_invocation_is_safe(
         tokens = [
             token for token in tokens if "=" not in token
         ]
-    for token in tokens:
-        if (
-            token in {"-j", "w", "--print-directory", "--no-print-directory"}
-            or re.fullmatch(r"-j[1-9][0-9]*", token)
-            or re.fullmatch(
-                r"--jobserver-(?:fds|auth)=[0-9]+,[0-9]+",
-                token,
-            )
-        ):
-            continue
+    if not safe_make_flag_tokens(tokens):
         return False
-    if command_variables not in (
-        [],
-        ["VENV=/tmp/hg-engine-venv"],
-    ):
+    if command_variables not in ([], [f"VENV={MANAGED_BUILD_VENV}"]):
         return False
     if command_variables:
-        return makeoverrides == "${-*-command-variables-*-}"
-    return not makeoverrides
+        if makeoverrides != "${-*-command-variables-*-}":
+            return False
+    elif makeoverrides:
+        return False
+    if inside_make:
+        if (
+            mflags is None
+            or not safe_make_flag_tokens(mflags.split())
+        ):
+            return False
+    elif mflags is not None:
+        return False
+    return True
 
 
 def make_compilation_source_topology_is_safe(root: Path = REPO) -> bool:
@@ -347,6 +458,63 @@ def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
         ):
             return False
     return generated_dependency_inputs_are_safe()
+
+
+def enter_managed_build_environment(clean_mode: str) -> None:
+    os.execve(
+        sys.executable,
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            clean_mode,
+        ],
+        managed_build_environment(),
+    )
+
+
+def exec_managed_build() -> None:
+    require(
+        REPO == Path("/hg-engine"),
+        "managed build entry must run inside the hg-engine Docker mount",
+    )
+    require(
+        managed_build_environment_is_exact(),
+        "managed build environment contains inherited variables",
+    )
+    makefile = (REPO / "Makefile").read_text()
+    require(
+        outer_make_invocation_is_safe(),
+        "managed pre-Make environment contains controls or overrides",
+    )
+    require(
+        trusted_pre_make_sources_are_exact(makefile),
+        "managed pre-Make source/dependency trust gate differs",
+    )
+    try:
+        parallelism = subprocess.check_output(
+            ["nproc"],
+            env=managed_build_environment(),
+            text=True,
+            timeout=10,
+        ).strip()
+    except (OSError, subprocess.SubprocessError):
+        raise SystemExit(
+            "move-history capture verification failed: nproc failed"
+        ) from None
+    require(
+        re.fullmatch(r"[1-9][0-9]*", parallelism) is not None,
+        "managed build parallelism is invalid",
+    )
+    print("move-history capture: managed pre-Make trust gate verified", flush=True)
+    os.execvpe(
+        "make",
+        [
+            "make",
+            f"-j{parallelism}",
+            f"VENV={MANAGED_BUILD_VENV}",
+        ],
+        managed_build_environment(),
+    )
 
 
 def effective_make_all_contract_matches(
@@ -1568,6 +1736,7 @@ def source_contracts() -> None:
     ).read_text()
     hooks = (REPO / "hooks").read_text()
     makefile = (REPO / "Makefile").read_text()
+    build_wrapper = (REPO / "docker-makerom.cmd").read_text()
     config = (REPO / "include/config.h").read_text()
     require(
         outer_make_invocation_is_safe(),
@@ -1584,7 +1753,10 @@ def source_contracts() -> None:
                 "MAKEFLAGS":
                     "w -j --jobserver-fds=3,4 -- "
                     "VENV=/tmp/hg-engine-venv",
+                "MAKELEVEL": "1",
                 "MAKEOVERRIDES": "${-*-command-variables-*-}",
+                "MFLAGS": "-w -j --jobserver-fds=3,4",
+                "VENV": MANAGED_BUILD_VENV,
             }
         ),
         "known direct/managed outer Make invocations fail authentication",
@@ -1603,10 +1775,203 @@ def source_contracts() -> None:
         "unexpected override metadata": {
             "MAKEOVERRIDES": "${-*-command-variables-*-}",
         },
+        "injected makefile": {"MAKEFILES": "/tmp/attacker.mk"},
+        "GNU ignore errors": {"GNUMAKEFLAGS": "-i"},
+        "legacy ignore errors": {"MFLAGS": "-i"},
+        "battle test mode": {"AUTO_TEST": "Y"},
     }.items():
         require(
             not outer_make_invocation_is_safe(environment),
             f"{label} outer Make invocation passes authentication",
+        )
+    expected_managed_environment = managed_build_environment()
+    require(
+        managed_build_environment_is_exact(expected_managed_environment)
+        and build_wrapper.count(
+            "/usr/bin/python3 "
+            "scripts/verify_pokemon_move_history_capture.py "
+            "--managed-build-clean"
+        )
+        == 2
+        and build_wrapper.count("/usr/bin/env -i") == 2
+        and build_wrapper.count("--workdir /hg-engine") == 2
+        and "/bin/bash" not in build_wrapper
+        and "--pre-make && make" not in build_wrapper
+        and " && make " not in build_wrapper,
+        "Docker wrapper does not exclusively use the scrubbed managed-build "
+        "entry",
+    )
+    for name, value in {
+        "MAKEFILES": "/tmp/attacker.mk",
+        "GNUMAKEFLAGS": "-i",
+        "MFLAGS": "-i",
+        "AUTO_TEST": "Y",
+        "ARMIPS": "/tmp/attacker-armips",
+        "CC": "/tmp/attacker-cc",
+    }.items():
+        polluted_environment = {
+            **expected_managed_environment,
+            name: value,
+        }
+        require(
+            not managed_build_environment_is_exact(polluted_environment)
+            and name not in managed_build_environment(),
+            f"{name} survives the managed-build environment scrub",
+        )
+    with tempfile.TemporaryDirectory(
+        prefix="move-history-managed-environment-"
+    ) as managed_fixture_directory:
+        managed_fixture_root = Path(managed_fixture_directory)
+        injected_makefile = managed_fixture_root / "injected.mk"
+        injected_sentinel = managed_fixture_root / "make-injection-ran"
+        injected_makefile.write_text(
+            "override BUILDROM = attacker.nds\n"
+            f"SIDE_EFFECT := $(file >{injected_sentinel},corrupted)\n"
+        )
+
+        def managed_path_snapshot(path: Path) -> tuple[object, ...]:
+            try:
+                metadata = path.lstat()
+            except FileNotFoundError:
+                return ("missing",)
+            if path.is_symlink():
+                return ("symlink", metadata.st_ino, os.readlink(path))
+            if path.is_file():
+                return ("file", metadata.st_ino, path.read_bytes())
+            return ("other", metadata.st_ino, metadata.st_mode)
+
+        protected_paths = (
+            REPO / "test.nds",
+            REPO / "test.nds.tmp",
+            REPO / "build/pokemon_move_history_capture_build.json",
+            REPO / "build/pokemon_move_history_capture_build.json.tmp",
+            REPO
+            / "build/pokemon_move_history_capture_build.json.publish-journal",
+            injected_makefile,
+            injected_sentinel,
+        )
+        protected_before = {
+            path: managed_path_snapshot(path)
+            for path in protected_paths
+        }
+        for label, injection in {
+            "MAKEFILES parse injection": {
+                "MAKEFILES": str(injected_makefile),
+            },
+            "GNU ignore errors": {"GNUMAKEFLAGS": "-i"},
+            "legacy Make flags": {"MFLAGS": "-i"},
+            "AUTO_TEST build mode": {"AUTO_TEST": "Y"},
+            "tool override": {"ARMIPS": "/tmp/attacker-armips"},
+        }.items():
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "--managed-build-probe",
+                ],
+                cwd=REPO,
+                env={**os.environ, **injection},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+            )
+            try:
+                observed_environment = json.loads(completed.stdout)
+            except json.JSONDecodeError:
+                observed_environment = None
+            require(
+                completed.returncode == 0
+                and observed_environment == expected_managed_environment
+                and {
+                    path: managed_path_snapshot(path)
+                    for path in protected_paths
+                }
+                == protected_before,
+                f"{label} survives or mutates the managed wrapper handoff",
+            )
+        make_probe = managed_fixture_root / "Makefile"
+        make_probe_output = managed_fixture_root / "origins.txt"
+        make_flags_output = managed_fixture_root / "gnu-make-flags.txt"
+        origin_names = (
+            "ALL_C_SRCS",
+            "ARMIPS",
+            "AUTO_TEST",
+            "BUILDROM",
+            "CC",
+            "DEVKITARM",
+            "GNUMAKEFLAGS",
+            "MAKE",
+            "MAKEFILES",
+            "MOVE_HISTORY_CAPTURE_MANIFEST",
+            "MOVE_HISTORY_CAPTURE_MANIFEST_TMP",
+            "PYTHON",
+            "REQUIRED_DIRECTORIES",
+            "SHELL",
+            "TEST_FILTER",
+        )
+        expected_origins = {
+            name: (
+                "default"
+                if name in {"MAKE", "MAKEFILES", "SHELL"}
+                else "undefined"
+            )
+            for name in origin_names
+        }
+        make_probe.write_text(
+            "fail:\n"
+            "\t@false\n"
+            "origins:\n"
+            "\t@printf '%s\\n' "
+            + " ".join(
+                f"'$(origin {name})'"
+                for name in origin_names
+            )
+            + f" > {make_probe_output}\n"
+            f"\t@printf '%s' '$(GNUMAKEFLAGS)' > {make_flags_output}\n"
+        )
+        failure_probe = subprocess.run(
+            ["make", "-Rr", "-f", str(make_probe), "fail"],
+            cwd=managed_fixture_root,
+            env=expected_managed_environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+        origin_probe = subprocess.run(
+            ["make", "-Rr", "-f", str(make_probe), "origins"],
+            cwd=managed_fixture_root,
+            env=expected_managed_environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+        observed_origins = make_probe_output.read_text().splitlines()
+        expected_origin_lines = [
+            expected_origins[name]
+            for name in origin_names
+        ]
+        gnu_flags_index = origin_names.index("GNUMAKEFLAGS")
+        origin_matches = observed_origins == expected_origin_lines
+        if not origin_matches and len(observed_origins) == len(origin_names):
+            gnu_make_43_origins = list(expected_origin_lines)
+            gnu_make_43_origins[gnu_flags_index] = "override"
+            origin_matches = observed_origins == gnu_make_43_origins
+        require(
+            failure_probe.returncode != 0
+            and origin_probe.returncode == 0
+            and origin_matches
+            and make_flags_output.read_bytes() == b""
+            and not injected_sentinel.exists()
+            and {
+                path: managed_path_snapshot(path)
+                for path in protected_paths
+            }
+            == protected_before,
+            "real GNU Make probe inherited controls, ignored failure, or "
+            "changed protected artifacts",
         )
     header_code = without_comments(header)
     history_code = without_comments(history)
@@ -2899,6 +3264,377 @@ def manifest_mutation_fixtures(
         journal_path = accepted_manifest.with_name(
             accepted_manifest.name + ".publish-journal"
         )
+
+        def reset_journal_alias_fixture() -> None:
+            for path in (
+                accepted_manifest,
+                final_rom,
+                candidate_manifest,
+                candidate_rom,
+                journal_path,
+            ):
+                path.unlink(missing_ok=True)
+            for path in root.glob(".*.publish.*"):
+                path.unlink(missing_ok=True)
+            accepted_manifest.write_bytes(accepted_manifest_bytes)
+            final_rom.write_bytes(accepted_rom_bytes)
+            write_candidate_pair()
+
+        def require_journal_alias_rejected(
+            label: str,
+            arguments: tuple[Path, Path, Path, Path],
+            watched: tuple[Path, ...],
+        ) -> None:
+            verify_calls = 0
+            replace_calls = 0
+
+            def count_verify(_manifest: Path, _rom: Path) -> None:
+                nonlocal verify_calls
+                verify_calls += 1
+
+            def count_replace(
+                _source: str | Path,
+                _destination: str | Path,
+            ) -> None:
+                nonlocal replace_calls
+                replace_calls += 1
+
+            before = {
+                path: path_snapshot(path)
+                for path in watched
+            }
+            publish_temporaries_before = {
+                path: path_snapshot(path)
+                for path in root.glob(".*.publish.*")
+            }
+            try:
+                publish_pair(
+                    *arguments,
+                    verify=count_verify,
+                    replace=count_replace,
+                )
+            except ManifestError as exc:
+                require(
+                    str(exc)
+                    == "candidate, final, and journal publish paths must "
+                    "be distinct",
+                    f"{label} failed for the wrong reason: {exc}",
+                )
+            else:
+                require(False, f"{label} journal identity alias passed")
+            require(
+                verify_calls == 0
+                and replace_calls == 0
+                and {
+                    path: path_snapshot(path)
+                    for path in watched
+                }
+                == before
+                and {
+                    path: path_snapshot(path)
+                    for path in root.glob(".*.publish.*")
+                }
+                == publish_temporaries_before,
+                f"{label} journal identity rejection mutated topology",
+            )
+
+        for label, role in (
+            ("journal equals candidate manifest", "candidate_manifest"),
+            ("journal equals candidate ROM", "candidate_rom"),
+            ("journal equals existing final ROM", "final_rom"),
+        ):
+            reset_journal_alias_fixture()
+            if role == "candidate_manifest":
+                journal_path.write_bytes(candidate_manifest.read_bytes())
+                candidate_manifest.unlink()
+                arguments = (
+                    journal_path,
+                    candidate_rom,
+                    accepted_manifest,
+                    final_rom,
+                )
+            elif role == "candidate_rom":
+                journal_path.write_bytes(candidate_rom.read_bytes())
+                candidate_rom.unlink()
+                arguments = (
+                    candidate_manifest,
+                    journal_path,
+                    accepted_manifest,
+                    final_rom,
+                )
+            else:
+                journal_path.write_bytes(final_rom.read_bytes())
+                arguments = (
+                    candidate_manifest,
+                    candidate_rom,
+                    accepted_manifest,
+                    journal_path,
+                )
+            require_journal_alias_rejected(
+                label,
+                arguments,
+                (
+                    *accepted_paths,
+                    *candidate_paths,
+                    journal_path,
+                ),
+            )
+
+        reset_journal_alias_fixture()
+        journal_path.unlink(missing_ok=True)
+        require_journal_alias_rejected(
+            "journal equals missing final ROM",
+            (
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                journal_path,
+            ),
+            (*accepted_paths, *candidate_paths, journal_path),
+        )
+
+        reset_journal_alias_fixture()
+        journal_path.unlink(missing_ok=True)
+        casefold_final_rom = journal_path.with_name(
+            journal_path.name.upper()
+        )
+        require_journal_alias_rejected(
+            "casefold journal equals missing final ROM",
+            (
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                casefold_final_rom,
+            ),
+            (
+                *accepted_paths,
+                *candidate_paths,
+                journal_path,
+                casefold_final_rom,
+            ),
+        )
+
+        reset_journal_alias_fixture()
+        decomposed_manifest = root / "acce\u0301pted.json"
+        composed_final_rom = root / "acc\u00e9pted.json.publish-journal"
+        decomposed_journal = decomposed_manifest.with_name(
+            decomposed_manifest.name + ".publish-journal"
+        )
+        decomposed_manifest.write_bytes(accepted_manifest_bytes)
+        composed_final_rom.unlink(missing_ok=True)
+        require_journal_alias_rejected(
+            "Unicode-normalized journal equals missing final ROM",
+            (
+                candidate_manifest,
+                candidate_rom,
+                decomposed_manifest,
+                composed_final_rom,
+            ),
+            (
+                *accepted_paths,
+                *candidate_paths,
+                decomposed_manifest,
+                decomposed_journal,
+                composed_final_rom,
+            ),
+        )
+        decomposed_manifest.unlink(missing_ok=True)
+
+        for label, role in (
+            ("dot-dot candidate manifest", "candidate_manifest"),
+            ("dot-dot candidate ROM", "candidate_rom"),
+            ("dot-dot final ROM", "final_rom"),
+        ):
+            reset_journal_alias_fixture()
+            missing_parent = root / f"{role}-missing-parent"
+            missing_parent.rmdir() if missing_parent.is_dir() else None
+            dotdot_journal = missing_parent / ".." / journal_path.name
+            if role == "candidate_manifest":
+                journal_path.write_bytes(candidate_manifest.read_bytes())
+                candidate_manifest.unlink()
+                arguments = (
+                    dotdot_journal,
+                    candidate_rom,
+                    accepted_manifest,
+                    final_rom,
+                )
+            elif role == "candidate_rom":
+                journal_path.write_bytes(candidate_rom.read_bytes())
+                candidate_rom.unlink()
+                arguments = (
+                    candidate_manifest,
+                    dotdot_journal,
+                    accepted_manifest,
+                    final_rom,
+                )
+            else:
+                journal_path.write_bytes(final_rom.read_bytes())
+                arguments = (
+                    candidate_manifest,
+                    candidate_rom,
+                    accepted_manifest,
+                    dotdot_journal,
+                )
+            require_journal_alias_rejected(
+                label,
+                arguments,
+                (
+                    *accepted_paths,
+                    *candidate_paths,
+                    journal_path,
+                    missing_parent,
+                ),
+            )
+
+        for label, role in (
+            ("resolved candidate manifest", "candidate_manifest"),
+            ("resolved candidate ROM", "candidate_rom"),
+            ("resolved final ROM", "final_rom"),
+        ):
+            reset_journal_alias_fixture()
+            alias_parent = root / f"{role}-resolved-parent"
+            alias_parent.unlink(missing_ok=True)
+            alias_parent.symlink_to(".", target_is_directory=True)
+            resolved_journal_alias = alias_parent / journal_path.name
+            if role == "candidate_manifest":
+                journal_path.write_bytes(candidate_manifest.read_bytes())
+                candidate_manifest.unlink()
+                arguments = (
+                    resolved_journal_alias,
+                    candidate_rom,
+                    accepted_manifest,
+                    final_rom,
+                )
+            elif role == "candidate_rom":
+                journal_path.write_bytes(candidate_rom.read_bytes())
+                candidate_rom.unlink()
+                arguments = (
+                    candidate_manifest,
+                    resolved_journal_alias,
+                    accepted_manifest,
+                    final_rom,
+                )
+            else:
+                journal_path.write_bytes(final_rom.read_bytes())
+                arguments = (
+                    candidate_manifest,
+                    candidate_rom,
+                    accepted_manifest,
+                    resolved_journal_alias,
+                )
+            require_journal_alias_rejected(
+                label,
+                arguments,
+                (
+                    *accepted_paths,
+                    *candidate_paths,
+                    journal_path,
+                    alias_parent,
+                ),
+            )
+            alias_parent.unlink()
+
+        for label, target in (
+            ("journal symlink to candidate manifest", candidate_manifest),
+            ("journal symlink to candidate ROM", candidate_rom),
+            ("journal symlink to final manifest", accepted_manifest),
+            ("journal symlink to final ROM", final_rom),
+        ):
+            reset_journal_alias_fixture()
+            journal_path.symlink_to(target.name)
+            require_journal_alias_rejected(
+                label,
+                (
+                    candidate_manifest,
+                    candidate_rom,
+                    accepted_manifest,
+                    final_rom,
+                ),
+                (
+                    *accepted_paths,
+                    *candidate_paths,
+                    journal_path,
+                ),
+            )
+
+        reset_journal_alias_fixture()
+        journal_path.unlink(missing_ok=True)
+        os.link(candidate_manifest, journal_path)
+        require_journal_alias_rejected(
+            "journal hardlink to candidate manifest",
+            (
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+            ),
+            (*accepted_paths, *candidate_paths, journal_path),
+        )
+
+        reset_journal_alias_fixture()
+        malformed_journal_alias_bytes = b"{malformed journal alias\n"
+        journal_path.write_bytes(malformed_journal_alias_bytes)
+        require_journal_alias_rejected(
+            "malformed journal equals final ROM",
+            (
+                candidate_manifest,
+                candidate_rom,
+                accepted_manifest,
+                journal_path,
+            ),
+            (*accepted_paths, *candidate_paths, journal_path),
+        )
+
+        reset_journal_alias_fixture()
+        recovery_backups = {
+            path: root / f".{path.name}.publish.alias-backup"
+            for path in accepted_paths
+        }
+        recovery_stages = {
+            path: root / f".{path.name}.publish.alias-stage"
+            for path in accepted_paths
+        }
+        for final in accepted_paths:
+            recovery_backups[final].write_bytes(final.read_bytes())
+            recovery_stages[final].write_bytes(b"alias recovery stage\n")
+        valid_recovery_alias = {
+            "schema": "pokemon-move-history-pair-publish-v1",
+            "entries": [
+                {
+                    "final": str(final.resolve()),
+                    "prior": file_record(final),
+                    "backup": str(recovery_backups[final].resolve()),
+                    "stage": str(recovery_stages[final].resolve()),
+                }
+                for final in accepted_paths
+            ],
+        }
+        journal_path.write_text(
+            json.dumps(valid_recovery_alias, sort_keys=True) + "\n"
+        )
+        candidate_manifest.unlink()
+        require_journal_alias_rejected(
+            "valid recovery journal equals candidate manifest",
+            (
+                journal_path,
+                candidate_rom,
+                accepted_manifest,
+                final_rom,
+            ),
+            (
+                *accepted_paths,
+                *candidate_paths,
+                journal_path,
+                *recovery_backups.values(),
+                *recovery_stages.values(),
+            ),
+        )
+        for temporary in (
+            *recovery_backups.values(),
+            *recovery_stages.values(),
+        ):
+            temporary.unlink()
+        reset_journal_alias_fixture()
 
         for label, leaf in (
             ("candidate manifest", candidate_manifest),
@@ -5916,22 +6652,65 @@ def main() -> None:
         action="store_true",
         help="authenticate Make inputs before GNU Make parses the workspace",
     )
+    parser.add_argument(
+        "--managed-build",
+        action="store_true",
+        help="re-exec the authenticated Docker build under a scrubbed environment",
+    )
+    parser.add_argument(
+        "--managed-build-clean",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--managed-build-probe",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--managed-build-probe-clean",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
     require(
         sum(
             (
                 args.pre_make,
+                args.managed_build,
+                args.managed_build_clean,
+                args.managed_build_probe,
+                args.managed_build_probe_clean,
                 args.source_only,
                 args.rom is not None,
             )
         )
         == 1,
-        "choose exactly one of --pre-make, --source-only, or --rom",
+        "choose exactly one build/source/package verification mode",
     )
     require(
         (args.rom is not None) == (args.manifest is not None),
         "--manifest is required exactly when --rom is used",
     )
+    if args.managed_build:
+        enter_managed_build_environment("--managed-build-clean")
+    if args.managed_build_clean:
+        exec_managed_build()
+    if args.managed_build_probe:
+        enter_managed_build_environment("--managed-build-probe-clean")
+    if args.managed_build_probe_clean:
+        require(
+            managed_build_environment_is_exact(),
+            "managed build probe environment contains inherited variables",
+        )
+        print(
+            json.dumps(
+                managed_build_environment(),
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        return
     if args.pre_make:
         makefile = (REPO / "Makefile").read_text()
         require(
