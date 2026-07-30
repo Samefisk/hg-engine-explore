@@ -653,6 +653,23 @@ sSaveDataPtr = 0x021D2228;
 Sys_SetSleepDisableFlag = 0x0201A4BC | 1;
 FlashClobberChunkFooter = 0x02027DF8 | 1;
 FlashWriteChunk = 0x02028758 | 1;
+FlashLoadChunk = 0x0202877C | 1;
+
+/* Boot-resident overlay 153 move-history ABI. */
+PokemonMoveHistory_Init = 0x023BE400 | 1;
+PokemonMoveHistory_Load = 0x023BE408 | 1;
+PokemonMoveHistory_Reset = 0x023BE410 | 1;
+PokemonMoveHistory_CaptureSnapshot = 0x023BE418 | 1;
+PokemonMoveHistory_Seed = 0x023BE420 | 1;
+PokemonMoveHistory_RecordMove = 0x023BE428 | 1;
+PokemonMoveHistory_RecordSnapshot = 0x023BE430 | 1;
+PokemonMoveHistory_Query = 0x023BE438 | 1;
+PokemonMoveHistory_CommitIfDirty = 0x023BE440 | 1;
+PokemonMoveHistory_LoadAndSeedParty = 0x023BE448 | 1;
+PokemonMoveHistory_PrepareSave = 0x023BE450 | 1;
+PokemonMoveHistory_FinishSave = 0x023BE458 | 1;
+PokemonMoveHistory_CancelSave = 0x023BE460 | 1;
+PokemonMoveHistory_WriteSaveNow = 0x023BE468 | 1;
 Sys_ClearSleepDisableFlag = 0x0201A4CC | 1;
 _NowWriteFlash = 0x02027DB4 | 1;
 //Save_PrepareForAsyncWrite = 0x02027550 | 1;

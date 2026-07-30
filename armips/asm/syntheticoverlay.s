@@ -20,6 +20,11 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #2
     bl HandleLoadOverlay129 // HandleLoadOverlay(129, 2) // noinit load
 
+// load overlay 153 as a second, untracked resident code segment
+    mov r0, #0
+    mov r1, #153
+    bl LoadMoveHistoryOverlay
+
     mov r0, #0
     mov r0, #0
     mov r1, #3
@@ -37,6 +42,12 @@ HandleLoadOverlay129:
 	mvn r1, r1
 	ldr r2, =0x02007000|1 // HandleLoadOverlay+8, need normal loading for the first one
 	bx r2
+
+.pool
+
+LoadMoveHistoryOverlay:
+    ldr r2, =0x02007188|1 // LoadOverlayNoInit(0, 153)
+    bx r2
 
 .pool
 

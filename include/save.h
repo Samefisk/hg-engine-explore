@@ -290,6 +290,14 @@ typedef struct SaveData {
     u16 nextBoxToWrite;
     u8 sectorCleanFlag[2];
     u16 lastGoodSector;
+    struct PokemonMoveHistoryStore *pokemonMoveHistory;
+    u8 pokemonMoveHistoryDirty;
+    u8 pokemonMoveHistoryActiveMirror;
+    u8 pokemonMoveHistorySaveReady;
+    u8 pokemonMoveHistoryStagedMirror;
+    u32 pokemonMoveHistoryRevision;
+    u32 pokemonMoveHistoryStagedRevision;
+    u32 pokemonMoveHistoryStagedSaveCounter;
 } SaveData;
 
 struct SaveSlotCheck {
@@ -310,6 +318,7 @@ void LONG_CALL Save_InitDynamicRegion(SaveData *saveData);
 void LONG_CALL Sys_SetSleepDisableFlag(BOOL sleepDisable);
 int LONG_CALL FlashClobberChunkFooter(SaveData *saveData, int spec, int sector);
 s32 LONG_CALL FlashWriteChunk(u32 offset, void *data, u32 size);
+BOOL LONG_CALL FlashLoadChunk(u32 offset, void *data, u32 size);
 void LONG_CALL Sys_ClearSleepDisableFlag(int a0);
 int LONG_CALL _NowWriteFlash(SaveData *saveData);
 void LONG_CALL Save_PrepareForAsyncWrite(SaveData *saveData, int a1);

@@ -3,6 +3,7 @@
 #include "../include/debug.h"
 #include "../include/message.h"
 #include "../include/pokemon.h"
+#include "../include/pokemon_move_history.h"
 #include "../include/pokemon_storage_system.h"
 #include "../include/save.h"
 #include "../include/script.h"
@@ -155,6 +156,7 @@ SaveData *SaveData_New(void) {
     ret = sys_AllocMemory(1, sizeof(SaveData));
     MI_CpuClearFast(ret, sizeof(SaveData));
     sSaveDataPtr = ret;
+    PokemonMoveHistory_Init(ret);
 
     ret->flashChipDetected = SaveDetectFlash();
     ret->saveFileExists = FALSE;
@@ -228,28 +230,6 @@ BOOL Save_DeleteAllData(SaveData *saveData) {
     return TRUE;
 }
 
-int SaveGameNormal(SaveData *saveData) {
-    int ret;
-
-    if (!saveData->flashChipDetected) {
-        return WRITE_STATUS_TOTAL_FAIL;
-    }
-    if (saveData->isNewGame) {
-        Sys_SetSleepDisableFlag(1);
-        FlashClobberChunkFooter(saveData, 0, saveData->lastGoodSector == 0 ? 1 : 0);
-        FlashClobberChunkFooter(saveData, 1, saveData->lastGoodSector == 0 ? 1 : 0);
-        FlashClobberChunkFooter(saveData, 0, saveData->lastGoodSector);
-        FlashClobberChunkFooter(saveData, 1, saveData->lastGoodSector);
-        Sys_ClearSleepDisableFlag(1);
-    }
-    ret = _NowWriteFlash(saveData);
-    if (ret == WRITE_STATUS_SUCCESS) {
-        saveData->saveFileExists = TRUE;
-        saveData->isNewGame = FALSE;
-    }
-    return ret;
-}
-
 int Save_NowWriteFile_AfterMGInit(SaveData *saveData, int a1) {
     int ret;
 
@@ -268,6 +248,7 @@ void Save_InitDynamicRegion(SaveData *saveData) {
     saveData->sectorCleanFlag[0] = 1;
     saveData->sectorCleanFlag[1] = 1;
     Save_InitDynamicRegion_Internal(saveData->dynamic_region, saveData->arrayHeaders);
+    PokemonMoveHistory_Reset(saveData);
 }
 
 void Save_PrepareForAsyncWrite(SaveData *saveData, int a1) {
@@ -277,7 +258,9 @@ void Save_PrepareForAsyncWrite(SaveData *saveData, int a1) {
 int Save_WriteFileAsync(SaveData *saveData) {
     int ret;
 
-    if (saveData->asyncWriteMan.curSector == 1) {
+    if (!saveData->pokemonMoveHistorySaveReady) {
+        ret = WRITE_STATUS_TOTAL_FAIL;
+    } else if (saveData->asyncWriteMan.curSector == 1) {
         ret = HandleWriteSaveAsync_PCBoxes(saveData, &saveData->asyncWriteMan);
     } else {
         ret = HandleWriteSaveAsync_NormalData(saveData, &saveData->asyncWriteMan);
@@ -382,6 +365,7 @@ BOOL Save_LoadDynamicRegion(SaveData *saveData) {
     saveData->pcStorageLastCRC = GF_CalcCRC16(data + pc_offs, pc_size);
     sub_020310A0(saveData);
     sub_0202C6FC(saveData);
+    PokemonMoveHistory_LoadAndSeedParty(saveData);
     return TRUE;
 }
 
@@ -417,6 +401,9 @@ void Save_WriteManInit(SaveData *saveData, struct AsyncWriteManager *writeMan, i
     writeMan->curSector = 0;
     writeMan->numSectors = 2;
     Sys_SetSleepDisableFlag(1);
+
+    saveData->pokemonMoveHistorySaveReady =
+        PokemonMoveHistory_PrepareSave(saveData);
 }
 
 // HandleWriteSaveAsync_NormalData just needs offset of lastGoodSector written to 02027CE8 (0x2330A)
@@ -437,6 +424,9 @@ void Save_WriteManFinish(SaveData *saveData, struct AsyncWriteManager *writeMan,
         saveData->saveFileExists = TRUE;
         saveData->isNewGame = FALSE;
     }
+    PokemonMoveHistory_FinishSave(
+        saveData,
+        a2 != WRITE_STATUS_TOTAL_FAIL);
     Sys_ClearSleepDisableFlag(1);
 }
 
@@ -452,6 +442,7 @@ void CancelAsyncSave(SaveData *saveData, struct AsyncWriteManager *writeMan) {
         OS_ReleaseLockID(writeMan->lockId);
         writeMan->waitingAsync = FALSE;
     }
+    PokemonMoveHistory_CancelSave(saveData);
     Sys_ClearSleepDisableFlag(1);
 }
 

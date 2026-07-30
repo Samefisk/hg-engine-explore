@@ -278,6 +278,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(MAKE) move_narc
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
 	$(NARCHIVE) create $(FILESYS)/a/0/2/8 $(BUILD)/a028/ -nf
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py
 	$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py \
 		--source src/pokemon_storage_system.c \
 		--config include/config.h \
