@@ -160,13 +160,35 @@ candidate construction, history observation, setters, dirtying, or byte
 changes beyond the controlled injected record.
 
 Runtime results are provenance-bound evidence. The publication manifest seals
-the runtime verifier plus its headless and party-integrity helpers. Every run
-verifies that manifest and the exact ROM before importing those helpers,
-repeats authentication after emulation, records the ROM, publication manifest,
-verifier, and helper SHA-256 records in its JSON, and atomically publishes
-only after the start/end records agree. An old result is removed before
-authentication, so a changed verifier or manifest cannot leave stale passing
-evidence.
+the external runtime launcher, runtime verifier worker, manifest helper,
+headless helper, and party-integrity helper. The launcher is the only supported
+entry point. Its top-level prelude uses only `os` and `sys`; it resolves and
+unlinks every requested result target before argument parsing, helper imports,
+DeSmuME loading, or verifier compilation. Syntax, import, missing-dependency,
+authentication, and argument failures therefore cannot leave an old passing
+result in place. Only the authenticated verifier worker may atomically publish
+a replacement.
+
+Before any authenticated helper executes, the launcher independently hashes
+and strictly parses the publication manifest, pins the expected launcher and
+verifier revisions, reads all five source files once, and checks their exact
+retained bytes against the manifest. It compiles those retained buffers with
+no import loader, injects the retained headless module into the retained party
+helper, and executes module namespaces with `__cached__ = None`. Timestamp-
+valid `.pyc` files and later filesystem source replacements are never eligible
+for execution. The manifest helper does not authenticate itself: its retained
+source must first match the independently parsed manifest record.
+
+Authentication is repeated against the live manifest, ROM, and every source
+at the start and end of emulation. Serialized child scenarios launch through
+the same authenticated launcher and must return an artifact-authentication
+block exactly equal to the parent before their evidence is consumed. The JSON
+records the ROM, publication manifest, launcher, verifier, manifest helper,
+and runtime-helper SHA-256 records, plus retained-buffer and pycache-bypass
+claims. Focused host fixtures prove rejection of a corrupted manifest-helper
+source, prove a normal source loader executes three valid-header poisoned
+`.pyc` fixtures while the retained-buffer path does not, and prove stale-result
+removal before syntax, import, dependency, and argument failures.
 
 Task 5 does not audit daycare, trade, gift, scripted, form-change, Pokéwalker,
 or other unusual acquisition paths (task 6). It does not enable the optional
@@ -180,11 +202,13 @@ The task-5 Workshop artifact used by the final headless acceptance has:
 - ROM SHA-256
   `24afe7078d3986c0f282d4908d22fd8eda4e5d7df0721092da9b986f8c6a0177`;
 - publication manifest SHA-256
-  `ad4a5eb43c542eeb45dcda9052ad29faf774bcc05d4a7e59c656cdfeb5629940`;
+  `1d45c9ffb19c0242acbad0e497c31a5ce34ec698552a25ef7d8c09cef7e9de3f`;
+- runtime launcher SHA-256
+  `e9dccb131889afa847ccf18aaa425b302a5862b2e05bcbb61325394b5bcaac0f`;
 - runtime verifier SHA-256
-  `664f18e4912e9ab0aa489524ffffa23e4ab0e34faf2b656fe9d8cd51154f600a`;
+  `829e68f5f3e4a102cbc1097627da24e5565ec8cd3911ead128d73b098803f391`;
 - runtime result SHA-256
-  `0c23a8ea6c78a05279ac6d00a122cfeddb51bd978ca25e0bf888a13d35abfc5a`;
+  `9c257169d68ea8a63c89765a04a39b5d58b9bf6bf35ccaa1e94b77e03556f175`;
 - overlay 154 SHA-256
   `bec4bed715e1d8282c71e077075b0dd2c71627f579a91a62b6cc6aa38b96435b`,
   size `0xE68` (3688 bytes), base `0x023C0400`, reserved size `0x1EA0`,

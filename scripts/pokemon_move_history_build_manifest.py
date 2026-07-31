@@ -71,6 +71,7 @@ FIXED_INPUTS = (
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
     "scripts/verify_summary_move_relearn.py",
+    "scripts/launch_summary_move_relearn_runtime.py",
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",

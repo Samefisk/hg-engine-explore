@@ -4,9 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import marshal
+import os
 import re
 import struct
 import subprocess
+import sys
+import tempfile
+import types
 from pathlib import Path
 
 
@@ -84,6 +93,13 @@ def source_contracts(root: Path) -> None:
     storage = (root / "src/pokemon_storage_system.c").read_text()
     runtime = (
         root / "scripts/verify_summary_move_relearn_runtime.py"
+    ).read_text()
+    launcher = (
+        root / "scripts/launch_summary_move_relearn_runtime.py"
+    ).read_text()
+    party_verifier = (
+        root
+        / "scripts/verify_pokemon_move_history_party_integrity.py"
     ).read_text()
     manifest_builder = (
         root / "scripts/pokemon_move_history_build_manifest.py"
@@ -375,7 +391,9 @@ def source_contracts(root: Path) -> None:
             f"{runtime_contract}",
         )
     for sealed_runtime_input in (
+        '"scripts/launch_summary_move_relearn_runtime.py"',
         '"scripts/verify_summary_move_relearn_runtime.py"',
+        '"scripts/pokemon_move_history_build_manifest.py"',
         '"scripts/headless-overworld-test.py"',
         '"scripts/verify_pokemon_move_history_party_integrity.py"',
     ):
@@ -385,15 +403,56 @@ def source_contracts(root: Path) -> None:
             f"{sealed_runtime_input}",
         )
     require(
-        "MANIFEST.verify_manifest(publication_manifest, rom)" in runtime
-        and '"publication_manifest": MANIFEST.file_record(' in runtime
-        and '"runtime_verifier": verifier_record' in runtime
+        "importlib" not in runtime
+        and "spec_from_file_location" not in runtime
+        and "SourceFileLoader" not in runtime
+        and "load_module" not in runtime
+        and "BOOTSTRAP_REAUTHENTICATE()" in runtime
+        and "BOOTSTRAP_LAUNCHER_PATH" in runtime
+        and '"runtime_launcher"' in runtime
         and '"artifact_authentication"' in runtime
         and "final_authentication == authentication" in runtime
-        and "arguments.result_json.unlink(missing_ok=True)" in runtime
+        and "arguments.result_json.unlink" not in runtime
+        and "probe.get(\"artifact_authentication\")"
+        in runtime
+        and "evidence.get(\"artifact_authentication\")"
+        in runtime
         and "os.replace(temporary_path, path)" in runtime,
         "runtime evidence is not fail-closed against verifier/publication "
         "revision or atomic publication",
+    )
+    require(
+        launcher.index("_invalidate_results(sys.argv[1:])")
+        < launcher.index("import hashlib")
+        < launcher.index("_load_authenticated_buffers(")
+        < launcher.index("_compile_buffers(")
+        and "spec_from_file_location" not in launcher
+        and "SourceFileLoader" not in launcher
+        and "__pycache__" not in launcher
+        and "compile(" in launcher
+        and "dont_inherit=True" in launcher
+        and "optimize=0" in launcher
+        and "exec(code, module.__dict__)" in launcher
+        and "module.__cached__ = None" in launcher
+        and "stream.read() == source" in launcher
+        and "expected-runtime-launcher-sha256" in launcher
+        and "expected-runtime-verifier-sha256" in launcher,
+        "runtime launcher does not invalidate stale evidence before retained-"
+        "buffer authentication and pycache-free execution",
+    )
+    require(
+        "AUTHENTICATED_HEADLESS" in party_verifier
+        and "spec_from_file_location" not in party_verifier
+        and "SourceFileLoader" not in party_verifier
+        and "compile(" in party_verifier
+        and "module.__cached__ = None" in party_verifier,
+        "party-integrity helper can reload unauthenticated cached bytecode",
+    )
+    require(
+        "subprocess.Popen" not in runtime
+        and "multiprocessing" not in runtime
+        and runtime.count("subprocess.run(") >= 2,
+        "runtime child evidence is no longer blocking and serialized",
     )
     require(
         "PCStorage_SetBoxModified" not in ui
@@ -566,6 +625,459 @@ def source_contracts(root: Path) -> None:
         and "SummaryMoveRelearn_SetMovePane(summary, FALSE)" in main,
         "retail detail pane is not shown and restored around modal ownership",
     )
+
+
+def bootstrap_host_contracts(root: Path) -> None:
+    launcher_path = (
+        root / "scripts/launch_summary_move_relearn_runtime.py"
+    )
+    launcher = types.ModuleType("summary_relearn_launcher_fixture")
+    launcher.__file__ = str(launcher_path)
+    launcher.__cached__ = None
+    launcher.__loader__ = None
+    launcher.__package__ = ""
+    launcher.__spec__ = None
+    exec(
+        compile(
+            launcher_path.read_bytes(),
+            str(launcher_path),
+            "exec",
+            dont_inherit=True,
+            optimize=0,
+        ),
+        launcher.__dict__,
+    )
+
+    def expect_failure(
+        exception_type: type[BaseException],
+        callback: object,
+        label: str,
+    ) -> None:
+        try:
+            callback()
+        except exception_type:
+            return
+        except BaseException as error:
+            require(
+                False,
+                f"{label} raised {type(error).__name__}, not "
+                f"{exception_type.__name__}",
+            )
+        require(False, f"{label} did not fail closed")
+
+    def invalidate_stale(
+        stale: Path,
+        callback: object,
+        exception_type: type[BaseException],
+        label: str,
+    ) -> None:
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_text('{"status": "passing-stale-evidence"}\n')
+        invalidated = launcher._invalidate_results(
+            [
+                f"--result-json={stale}",
+                "--result-json",
+                str(stale),
+            ]
+        )
+        require(
+            invalidated == (os.path.abspath(stale),) and not stale.exists(),
+            f"{label} did not invalidate stale evidence first",
+        )
+        expect_failure(exception_type, callback, label)
+        require(
+            not stale.exists(),
+            f"{label} recreated stale evidence after failure",
+        )
+
+    def make_fixture(
+        fixture_root: Path,
+        *,
+        source_overrides: dict[str, bytes] | None = None,
+        production_launcher: bool = False,
+    ) -> tuple[
+        Path,
+        Path,
+        dict[str, bytes],
+        dict[str, Path],
+        str,
+        str,
+        str,
+    ]:
+        fixture_root.mkdir(parents=True, exist_ok=True)
+        sources: dict[str, bytes] = {}
+        paths: dict[str, Path] = {}
+        for index, relative in enumerate(
+            launcher.AUTHENTICATED_SOURCES
+        ):
+            if production_launcher and relative == launcher.LAUNCHER_RELATIVE:
+                source = launcher_path.read_bytes()
+            else:
+                source = f"FIXTURE_VALUE = {index}\n".encode()
+            if source_overrides and relative in source_overrides:
+                source = source_overrides[relative]
+            path = fixture_root.joinpath(*relative.split("/"))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(source)
+            sources[relative] = source
+            paths[relative] = path
+        rom = fixture_root / "fixture.nds"
+        rom.write_bytes(b"authenticated fixture ROM")
+        inputs = {
+            relative: launcher._bytes_record(source)
+            for relative, source in sources.items()
+        }
+        document = {
+            "build_context": {},
+            "inputs": inputs,
+            "outputs": {
+                "packaged_rom": {
+                    "path": launcher.PACKAGED_ROM_LOGICAL_PATH,
+                    **launcher._path_record(str(rom)),
+                }
+            },
+            "schema": launcher.SCHEMA,
+            "tools": {},
+        }
+        manifest = fixture_root / "publication-manifest.json"
+        manifest_bytes = (
+            json.dumps(document, sort_keys=True, separators=(",", ":"))
+            + "\n"
+        ).encode()
+        manifest.write_bytes(manifest_bytes)
+        return (
+            manifest,
+            rom,
+            sources,
+            paths,
+            hashlib.sha256(manifest_bytes).hexdigest(),
+            hashlib.sha256(
+                sources[launcher.LAUNCHER_RELATIVE]
+            ).hexdigest(),
+            hashlib.sha256(
+                sources[launcher.VERIFIER_RELATIVE]
+            ).hexdigest(),
+        )
+
+    def subprocess_failure_fixture(
+        fixture_root: Path,
+        *,
+        source_overrides: dict[str, bytes] | None = None,
+        mutate: object | None = None,
+        arguments_only: bool = False,
+    ) -> None:
+        sentinel = fixture_root / "runtime-executed"
+        worker = (
+            "from pathlib import Path\n"
+            f"Path({str(sentinel)!r}).write_text('executed')\n"
+        ).encode()
+        overrides = {
+            launcher.VERIFIER_RELATIVE: worker,
+            **(source_overrides or {}),
+        }
+        (
+            manifest,
+            rom,
+            _,
+            paths,
+            manifest_sha,
+            launcher_sha,
+            verifier_sha,
+        ) = make_fixture(
+            fixture_root,
+            source_overrides=overrides,
+            production_launcher=True,
+        )
+        if mutate is not None:
+            mutate(paths)
+        stale = fixture_root / "runtime-result.json"
+        stale.write_text('{"status": "passing-stale-evidence"}\n')
+        command = [
+            sys.executable,
+            str(paths[launcher.LAUNCHER_RELATIVE]),
+            "--result-json",
+            str(stale),
+        ]
+        if not arguments_only:
+            command.extend(
+                (
+                    "--rom",
+                    str(rom),
+                    "--publication-manifest",
+                    str(manifest),
+                    "--expected-publication-manifest-sha256",
+                    manifest_sha,
+                    "--expected-runtime-launcher-sha256",
+                    launcher_sha,
+                    "--expected-runtime-verifier-sha256",
+                    verifier_sha,
+                )
+            )
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        require(
+            completed.returncode != 0,
+            f"{fixture_root.name} launcher fixture did not fail",
+        )
+        require(
+            not stale.exists(),
+            f"{fixture_root.name} launcher fixture retained stale result",
+        )
+        require(
+            not sentinel.exists(),
+            f"{fixture_root.name} launcher fixture executed runtime",
+        )
+
+    with tempfile.TemporaryDirectory(
+        prefix="summary-relearn-bootstrap-"
+    ) as temporary:
+        temp = Path(temporary)
+
+        corrupted_root = temp / "corrupted-helper"
+        (
+            corrupt_manifest,
+            corrupt_rom,
+            _,
+            corrupt_paths,
+            corrupt_manifest_sha,
+            corrupt_launcher_sha,
+            corrupt_verifier_sha,
+        ) = make_fixture(corrupted_root)
+        corrupt_sentinel = corrupted_root / "helper-executed"
+        corrupt_paths[launcher.MANIFEST_HELPER_RELATIVE].write_text(
+            "from pathlib import Path\n"
+            f"Path({str(corrupt_sentinel)!r}).write_text('executed')\n"
+        )
+        invalidate_stale(
+            corrupted_root / "runtime-result.json",
+            lambda: launcher._load_authenticated_buffers(
+                str(corrupted_root),
+                str(corrupt_manifest),
+                str(corrupt_rom),
+                corrupt_manifest_sha,
+                corrupt_launcher_sha,
+                corrupt_verifier_sha,
+            ),
+            RuntimeError,
+            "corrupted manifest-helper source",
+        )
+        require(
+            not corrupt_sentinel.exists(),
+            "corrupted manifest helper executed before authentication",
+        )
+        subprocess_failure_fixture(
+            temp / "subprocess-corrupted-helper",
+            mutate=lambda paths: paths[
+                launcher.MANIFEST_HELPER_RELATIVE
+            ].write_text("CORRUPTED = True\n"),
+        )
+
+        syntax_root = temp / "syntax-failure"
+        (
+            _,
+            _,
+            syntax_sources,
+            syntax_paths,
+            _,
+            _,
+            _,
+        ) = make_fixture(syntax_root)
+        syntax_sources[launcher.HEADLESS_RELATIVE] = b"def broken(:\n"
+        invalidate_stale(
+            syntax_root / "runtime-result.json",
+            lambda: launcher._compile_buffers(
+                syntax_sources,
+                {
+                    relative: str(path)
+                    for relative, path in syntax_paths.items()
+                },
+            ),
+            SyntaxError,
+            "authenticated source syntax failure",
+        )
+        subprocess_failure_fixture(
+            temp / "subprocess-syntax-failure",
+            source_overrides={
+                launcher.HEADLESS_RELATIVE: b"def broken(:\n",
+            },
+        )
+
+        import_root = temp / "import-failure"
+        import_sentinel = import_root / "runtime-executed"
+        invalidate_stale(
+            import_root / "runtime-result.json",
+            lambda: launcher._execute_module(
+                "summary_relearn_missing_import_fixture",
+                str(import_root / "missing.py"),
+                compile(
+                    "import summary_relearn_dependency_that_does_not_exist\n"
+                    f"open({str(import_sentinel)!r}, 'w').close()\n",
+                    str(import_root / "missing.py"),
+                    "exec",
+                    dont_inherit=True,
+                    optimize=0,
+                ),
+            ),
+            ModuleNotFoundError,
+            "authenticated helper import failure",
+        )
+        require(
+            not import_sentinel.exists(),
+            "import failure reached runtime execution",
+        )
+        subprocess_failure_fixture(
+            temp / "subprocess-import-failure",
+            source_overrides={
+                launcher.MANIFEST_HELPER_RELATIVE: (
+                    b"import summary_relearn_dependency_that_does_not_exist\n"
+                ),
+            },
+        )
+
+        dependency_root = temp / "dependency-failure"
+        (
+            dependency_manifest,
+            dependency_rom,
+            _,
+            dependency_paths,
+            dependency_manifest_sha,
+            dependency_launcher_sha,
+            dependency_verifier_sha,
+        ) = make_fixture(dependency_root)
+        dependency_paths[launcher.PARTY_RELATIVE].unlink()
+        invalidate_stale(
+            dependency_root / "runtime-result.json",
+            lambda: launcher._load_authenticated_buffers(
+                str(dependency_root),
+                str(dependency_manifest),
+                str(dependency_rom),
+                dependency_manifest_sha,
+                dependency_launcher_sha,
+                dependency_verifier_sha,
+            ),
+            FileNotFoundError,
+            "authenticated helper dependency failure",
+        )
+        subprocess_failure_fixture(
+            temp / "subprocess-dependency-failure",
+            mutate=lambda paths: paths[
+                launcher.PARTY_RELATIVE
+            ].unlink(),
+        )
+
+        argument_root = temp / "argument-failure"
+        invalidate_stale(
+            argument_root / "runtime-result.json",
+            lambda: launcher._extract_single_option(
+                ["--rom"],
+                "--rom",
+            ),
+            RuntimeError,
+            "runtime argument failure",
+        )
+        subprocess_failure_fixture(
+            temp / "subprocess-argument-failure",
+            arguments_only=True,
+        )
+
+        for helper_name in (
+            "manifest",
+            "headless",
+            "party",
+        ):
+            pycache_root = temp / f"poisoned-pyc-{helper_name}"
+            pycache_root.mkdir()
+            source_path = pycache_root / f"{helper_name}_helper.py"
+            retained_source = b'FIXTURE_VALUE = "retained-source"\n'
+            source_path.write_bytes(retained_source)
+            fixed_time = 1_700_000_000
+            os.utime(source_path, (fixed_time, fixed_time))
+            sentinel = pycache_root / "poison-executed"
+            poison_source = (
+                'FIXTURE_VALUE = "poisoned-pyc"\n'
+                "from pathlib import Path\n"
+                f"Path({str(sentinel)!r}).write_text('executed')\n"
+            )
+            poison_code = compile(
+                poison_source,
+                str(source_path),
+                "exec",
+                dont_inherit=True,
+                optimize=0,
+            )
+            source_stat = source_path.stat()
+            cached_path = Path(
+                importlib.util.cache_from_source(str(source_path))
+            )
+            cached_path.parent.mkdir(parents=True)
+            cached_path.write_bytes(
+                importlib.util.MAGIC_NUMBER
+                + struct.pack(
+                    "<III",
+                    0,
+                    int(source_stat.st_mtime),
+                    source_stat.st_size,
+                )
+                + marshal.dumps(poison_code)
+            )
+            loader_name = f"summary_relearn_loader_{helper_name}"
+            loader = importlib.machinery.SourceFileLoader(
+                loader_name,
+                str(source_path),
+            )
+            spec = importlib.util.spec_from_loader(loader_name, loader)
+            require(spec is not None, "could not create poison loader spec")
+            loaded = importlib.util.module_from_spec(spec)
+            loader.exec_module(loaded)
+            require(
+                loaded.FIXTURE_VALUE == "poisoned-pyc"
+                and sentinel.exists(),
+                f"{helper_name} poison fixture did not prove loader risk",
+            )
+            sentinel.unlink()
+            retained = launcher._execute_module(
+                f"summary_relearn_retained_{helper_name}",
+                str(source_path),
+                compile(
+                    retained_source,
+                    str(source_path),
+                    "exec",
+                    dont_inherit=True,
+                    optimize=0,
+                ),
+            )
+            require(
+                retained.FIXTURE_VALUE == "retained-source"
+                and retained.__cached__ is None
+                and not sentinel.exists(),
+                f"{helper_name} retained-buffer execution consulted pycache",
+            )
+            source_path.write_text(
+                "FIXTURE_VALUE = 'live-toctou-replacement'\n"
+                f"open({str(sentinel)!r}, 'w').close()\n"
+            )
+            retained_again = launcher._execute_module(
+                f"summary_relearn_retained_again_{helper_name}",
+                str(source_path),
+                compile(
+                    retained_source,
+                    str(source_path),
+                    "exec",
+                    dont_inherit=True,
+                    optimize=0,
+                ),
+            )
+            require(
+                retained_again.FIXTURE_VALUE == "retained-source"
+                and source_path.read_bytes() != retained_source
+                and not sentinel.exists(),
+                f"{helper_name} retained buffer was replaced by live source",
+            )
 
 
 def host_state_contracts() -> None:
@@ -857,7 +1369,9 @@ def main() -> None:
     parser.add_argument("--core-linked", type=Path)
     args = parser.parse_args()
 
-    source_contracts(args.root.resolve())
+    root = args.root.resolve()
+    source_contracts(root)
+    bootstrap_host_contracts(root)
     host_state_contracts()
     binary_paths = (
         args.arm9,

@@ -1986,7 +1986,9 @@ def source_contracts() -> None:
         "save lifecycle/generator provenance inputs are not sealed",
     )
     for runtime_evidence_input in (
+        "scripts/launch_summary_move_relearn_runtime.py",
         "scripts/verify_summary_move_relearn_runtime.py",
+        "scripts/pokemon_move_history_build_manifest.py",
         "scripts/headless-overworld-test.py",
         "scripts/verify_pokemon_move_history_party_integrity.py",
     ):

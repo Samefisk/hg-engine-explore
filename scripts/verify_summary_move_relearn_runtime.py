@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import struct
@@ -91,99 +90,64 @@ OVERLAY_SLOT_COUNT = 8
 SUMMARY_RELEARN_OVERLAY_ID = 154
 
 
-def ensure_repo_venv() -> None:
-    venv = REPO / ".venv"
-    python = venv / "bin/python3"
-    if Path(sys.prefix).resolve() == venv.resolve() or not python.is_file():
-        return
-    os.execv(str(python), [str(python), *sys.argv])
-
-
-ensure_repo_venv()
+if not all(
+    name in globals()
+    for name in (
+        "MANIFEST",
+        "HEADLESS",
+        "PARTY",
+        "BOOTSTRAP_AUTHENTICATION",
+        "BOOTSTRAP_REAUTHENTICATE",
+        "BOOTSTRAP_MANIFEST_PATH",
+        "BOOTSTRAP_ROM_PATH",
+        "BOOTSTRAP_LAUNCHER_PATH",
+    )
+):
+    raise RuntimeError(
+        "run Summary relearn acceptance through "
+        "launch_summary_move_relearn_runtime.py"
+    )
 
 from desmume.emulator import DeSmuME  # noqa: E402
 
 
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot import verifier helpers from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-MANIFEST = load_module(
-    "summary_relearn_manifest",
-    REPO / "scripts/pokemon_move_history_build_manifest.py",
-)
-HEADLESS = None
-PARTY = None
 SUBPROCESS_AUTHENTICATION_ARGS: list[str] = []
-
-
-def load_runtime_helpers() -> None:
-    global HEADLESS, PARTY
-
-    HEADLESS = load_module(
-        "summary_relearn_headless",
-        REPO / "scripts/headless-overworld-test.py",
-    )
-    PARTY = load_module(
-        "summary_relearn_party",
-        REPO / "scripts/verify_pokemon_move_history_party_integrity.py",
-    )
 
 
 def artifact_authentication(
     rom: Path,
     publication_manifest: Path,
 ) -> dict[str, object]:
-    document = MANIFEST.verify_manifest(publication_manifest, rom)
-    verifier_path = Path(__file__).resolve()
-    helper_paths = (
-        REPO / "scripts/headless-overworld-test.py",
-        REPO / "scripts/verify_pokemon_move_history_party_integrity.py",
-    )
-    input_records = document["inputs"]
-    verifier_relative = verifier_path.relative_to(REPO).as_posix()
-    verifier_record = MANIFEST.file_record(verifier_path)
     require(
-        input_records.get(verifier_relative) == verifier_record,
-        "publication manifest does not seal this runtime verifier",
+        rom.resolve() == Path(BOOTSTRAP_ROM_PATH).resolve(),
+        "runtime ROM path differs from authenticated bootstrap",
     )
-    helper_records: dict[str, object] = {}
-    for helper_path in helper_paths:
-        relative = helper_path.relative_to(REPO).as_posix()
-        record = MANIFEST.file_record(helper_path)
-        require(
-            input_records.get(relative) == record,
-            f"publication manifest does not seal runtime helper {relative}",
-        )
-        helper_records[relative] = record
-    return {
-        "schema": "summary-move-relearn-runtime-artifact-v1",
-        "rom": MANIFEST.file_record(rom),
-        "publication_manifest": MANIFEST.file_record(
-            publication_manifest
-        ),
-        "runtime_verifier": verifier_record,
-        "runtime_helpers": helper_records,
-        "authenticated_at_start_and_end": True,
-    }
+    require(
+        publication_manifest.resolve()
+        == Path(BOOTSTRAP_MANIFEST_PATH).resolve(),
+        "publication manifest path differs from authenticated bootstrap",
+    )
+    authentication = BOOTSTRAP_REAUTHENTICATE()
+    require(
+        authentication == BOOTSTRAP_AUTHENTICATION,
+        "bootstrap authentication record changed before runtime",
+    )
+    return authentication
 
 
 def validate_expected_authentication(
     authentication: dict[str, object],
     *,
     expected_manifest_sha256: str | None,
+    expected_launcher_sha256: str | None,
     expected_verifier_sha256: str | None,
 ) -> None:
     manifest_record = authentication["publication_manifest"]
+    launcher_record = authentication["runtime_launcher"]
     verifier_record = authentication["runtime_verifier"]
     require(
         isinstance(manifest_record, dict)
+        and isinstance(launcher_record, dict)
         and isinstance(verifier_record, dict),
         "runtime artifact authentication records are malformed",
     )
@@ -191,6 +155,11 @@ def validate_expected_authentication(
         require(
             manifest_record.get("sha256") == expected_manifest_sha256,
             "publication manifest SHA-256 differs from the required artifact",
+        )
+    if expected_launcher_sha256 is not None:
+        require(
+            launcher_record.get("sha256") == expected_launcher_sha256,
+            "runtime launcher SHA-256 differs from the required revision",
         )
     if expected_verifier_sha256 is not None:
         require(
@@ -1749,7 +1718,7 @@ def fresh_reload_evidence(
     completed = subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).resolve()),
+            str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
             "--probe-raw",
@@ -1768,6 +1737,11 @@ def fresh_reload_evidence(
         "fresh reload probe failed: " + completed.stderr[-1000:],
     )
     probe = json.loads(completed.stdout)
+    require(
+        probe.get("artifact_authentication")
+        == BOOTSTRAP_AUTHENTICATION,
+        "fresh reload probe artifact authentication differs",
+    )
     return (
         bytes.fromhex(probe["party"]),
         bytes.fromhex(probe["metadata"]),
@@ -4151,7 +4125,7 @@ def isolated_scenario_evidence(
     completed = subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).resolve()),
+            str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
             "--probe-raw",
@@ -4183,7 +4157,17 @@ def isolated_scenario_evidence(
         completed.returncode == 0,
         f"{name} subprocess failed: " + completed.stderr[-1000:],
     )
-    return json.loads(completed.stdout)
+    evidence = json.loads(completed.stdout)
+    require(
+        evidence.get("label") == name,
+        f"{name} subprocess returned the wrong scenario label",
+    )
+    require(
+        evidence.get("artifact_authentication")
+        == BOOTSTRAP_AUTHENTICATION,
+        f"{name} subprocess artifact authentication differs",
+    )
+    return evidence
 
 
 def target_semantic_diff(before: bytes, after: bytes) -> list[int]:
@@ -5173,6 +5157,7 @@ def parse_args() -> argparse.Namespace:
         default=REPO / "build/pokemon_move_history_capture_build.json",
     )
     parser.add_argument("--expected-publication-manifest-sha256")
+    parser.add_argument("--expected-runtime-launcher-sha256")
     parser.add_argument("--expected-runtime-verifier-sha256")
     parser.add_argument("--dsv", type=Path)
     parser.add_argument("--expected-dsv-sha256")
@@ -5227,7 +5212,11 @@ if __name__ == "__main__":
     try:
         arguments = parse_args()
         if arguments.result_json is not None:
-            arguments.result_json.unlink(missing_ok=True)
+            require(
+                str(arguments.result_json.resolve())
+                in BOOTSTRAP_INVALIDATED_RESULTS,
+                "result target was not invalidated by runtime launcher",
+            )
         resolved_rom = arguments.rom.resolve()
         resolved_manifest = arguments.publication_manifest.resolve()
         authentication = artifact_authentication(
@@ -5239,6 +5228,9 @@ if __name__ == "__main__":
             expected_manifest_sha256=(
                 arguments.expected_publication_manifest_sha256
             ),
+            expected_launcher_sha256=(
+                arguments.expected_runtime_launcher_sha256
+            ),
             expected_verifier_sha256=(
                 arguments.expected_runtime_verifier_sha256
             ),
@@ -5249,11 +5241,12 @@ if __name__ == "__main__":
                 str(resolved_manifest),
                 "--expected-publication-manifest-sha256",
                 str(authentication["publication_manifest"]["sha256"]),
+                "--expected-runtime-launcher-sha256",
+                str(authentication["runtime_launcher"]["sha256"]),
                 "--expected-runtime-verifier-sha256",
                 str(authentication["runtime_verifier"]["sha256"]),
             )
         )
-        load_runtime_helpers()
         if arguments.scenario is not None:
             require(arguments.probe_raw is not None, "--probe-raw is required")
             result = run_isolated_scenario(

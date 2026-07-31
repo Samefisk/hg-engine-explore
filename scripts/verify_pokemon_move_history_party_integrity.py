@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import struct
@@ -13,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -84,12 +83,28 @@ from desmume.emulator import DeSmuME  # noqa: E402
 
 
 def load_headless_helpers():
+    authenticated = globals().get("AUTHENTICATED_HEADLESS")
+    if authenticated is not None:
+        return authenticated
     path = REPO / "scripts/headless-overworld-test.py"
-    spec = importlib.util.spec_from_file_location("headless_overworld", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot import headless helpers from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    source = path.read_bytes()
+    module = ModuleType("headless_overworld")
+    module.__file__ = str(path)
+    module.__cached__ = None
+    module.__loader__ = None
+    module.__package__ = ""
+    module.__spec__ = None
+    sys.modules[module.__name__] = module
+    exec(
+        compile(
+            source,
+            str(path),
+            "exec",
+            dont_inherit=True,
+            optimize=0,
+        ),
+        module.__dict__,
+    )
     return module
 
 
