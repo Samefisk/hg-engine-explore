@@ -30,6 +30,7 @@ from pokemon_move_history_build_manifest import (
     file_record,
     load_manifest,
     publish_pair,
+    unbound_runtime_environment,
     verify_manifest,
     verify_manifest_document,
 )
@@ -44,13 +45,13 @@ OVERLAY153_CALL_INVENTORY_SHA256 = (
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "19a9ab007805cdc77c21673cb13f0be708cb97a8be59f6894874a5ca150676bb"
+    "e28e81b6acbb71dd64ac65c25851de7bf057bb31241cd93b25dc7b5d0333505c"
 )
 EXPECTED_MAKEFILE_SHA256 = (
     "439bf4b541e094f793b6d495a7cb90b33f6d4ae917b7869fec04242d32ffce15"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "9b39fd50bc4d208ab520f2d9a933cad33602c99c810149f2e7ff51e1a180e427"
+    "264e227b3840778947108cba56583fe89e3a5191d5e3e3878cd7d1efe5a1da7f"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -2538,14 +2539,52 @@ def source_contracts() -> None:
         ],
         "GTS party outgoing removal",
     )
-    export_seed = function_body(
+    export_stage = function_body(
         without_comments(task6),
-        "PokemonMoveHistoryTask6_PCStorageGetAndSeedImpl",
+        "PokemonMoveHistoryTask6_PCStorageGetAndStageImpl",
     )
     ordered(
-        export_seed,
-        ["PCStorage_GetMonByIndexPair(", "PokemonMoveHistory_Seed("],
-        "Pokewalker export",
+        export_stage,
+        [
+            "PCStorage_GetMonByIndexPair(",
+            "sPokewalkerPendingValid = FALSE;",
+            "PokemonMoveHistory_CaptureSnapshot(",
+            "sPokewalkerPendingValid = TRUE;",
+            "return pokemon;",
+        ],
+        "Pokewalker export pending stage",
+    )
+    require(
+        "PokemonMoveHistory_Seed(" not in export_stage
+        and "PokemonMoveHistory_RecordSnapshot(" not in export_stage
+        and "SaveBlock2_get(" not in export_stage,
+        "Pokewalker export stage can mutate persisted history",
+    )
+    walker_success = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl",
+    )
+    ordered(
+        walker_success,
+        [
+            "retailSuccess(pokewalker);",
+            "if (!sPokewalkerPendingValid)",
+            "sPokewalkerPendingValid = FALSE;",
+            "PokemonMoveHistory_RecordSnapshot(",
+        ],
+        "Pokewalker irreversible radio success",
+    )
+    walker_recovery = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl",
+    )
+    ordered(
+        walker_recovery,
+        [
+            "retailRecovery(pokewalkerApp);",
+            "sPokewalkerPendingValid = FALSE;",
+        ],
+        "Pokewalker recovery discard",
     )
     sanitizer = function_body(
         without_comments(script_commands),
@@ -2629,6 +2668,9 @@ def source_contracts() -> None:
         "0x02240A0E",
         "0x02240A44",
         "0x021EE65A",
+        "0x021ED41A",
+        "0x021EDBEE",
+        "0x021EC0AA",
         "0x021EE86A",
         "0x021EEB8C",
         "0x021EEC7E",
@@ -2652,6 +2694,8 @@ def source_contracts() -> None:
         and "MoveHistoryTask6Entry_GTSPlaceAndSeed:" in task6_entry
         and "MoveHistoryTask6Entry_GTSDeleteBoxAndRecord:" in task6_entry
         and "MoveHistoryTask6Entry_GTSRemovePartyAndRecord:" in task6_entry
+        and "MoveHistoryTask6Entry_PokewalkerRadioSuccess:" in task6_entry
+        and "MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard:" in task6_entry
         and "ORIGIN(rom) + 0x38" in task6_linker
         and "ORIGIN(rom) + 0x40" in task6_linker
         and "ORIGIN(rom) + 0x48" in task6_linker
@@ -2662,6 +2706,8 @@ def source_contracts() -> None:
         and "ORIGIN(rom) + 0x68" in task6_linker
         and "ORIGIN(rom) + 0x70" in task6_linker
         and "ORIGIN(rom) + 0x78" in task6_linker
+        and "ORIGIN(rom) + 0x80" in task6_linker
+        and "ORIGIN(rom) + 0x88" in task6_linker
         and "PokemonMoveHistoryTask6_ScriptTeachMove = "
         "0x023BD464 | 1;" in rom_ld
         and "PokemonMoveHistoryTask6_GTSPlaceAndSeed = "
@@ -2669,7 +2715,13 @@ def source_contracts() -> None:
         and "PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord = "
         "0x023BD470 | 1;" in rom_ld
         and "PokemonMoveHistoryTask6_GTSRemovePartyAndRecord = "
-        "0x023BD478 | 1;" in rom_ld,
+        "0x023BD478 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_PCStorageGetAndStage = "
+        "0x023BD420 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_PokewalkerRadioSuccess = "
+        "0x023BD480 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard = "
+        "0x023BD488 | 1;" in rom_ld,
         "task-6 resident stub ABI differs",
     )
     for entry_name, implementation in (
@@ -2707,6 +2759,31 @@ def source_contracts() -> None:
             f"b {implementation}" in entry_body
             and "ldr r3" not in entry_body,
             f"{entry_name} clobbers its fourth ARM EABI argument",
+        )
+    for entry_name, implementation in (
+        (
+            "MoveHistoryTask6Entry_PCStorageGetAndSeed",
+            "PokemonMoveHistoryTask6_PCStorageGetAndStageImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_PokewalkerRadioSuccess",
+            "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard",
+            "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl",
+        ),
+    ):
+        entry_start = task6_entry.index(f"{entry_name}:")
+        entry_end = task6_entry.find("\n.global ", entry_start)
+        if entry_end < 0:
+            entry_end = len(task6_entry)
+        entry_body = task6_entry[entry_start:entry_end]
+        require(
+            "ldr r3" in entry_body
+            and "bx r3" in entry_body
+            and f".word {implementation} + 1" in entry_body,
+            f"{entry_name} long entry target differs",
         )
     for wrapper_name in (
         "PokemonMoveRelearn_MarkHistoryMove",
@@ -3663,6 +3740,7 @@ def manifest_mutation_fixtures(
                     **file_record(temporary_rom),
                 },
             },
+            "runtime_environment": unbound_runtime_environment(),
             "tools": {
                 "fixture-tool": {
                     "command": "fixture-tool",
@@ -5401,6 +5479,17 @@ EXPECTED_OVERLAY_METADATA = {
         0x2E9400,
         0x2F8340,
     ),
+    112: (
+        0x021E5900,
+        0x1A0E0,
+        0x2C0,
+        0x021FF4E8,
+        0x021FF4EC,
+        112,
+        0,
+        0x3B5200,
+        0x3CF2E0,
+    ),
     129: (
         0x023D8000,
         0x7FC0,
@@ -5447,14 +5536,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     155: (
         OVERLAY155_BASE,
-        0x6A8,
+        0x724,
         0,
         0,
         0,
         155,
         0,
         0x423600,
-        0x423CA8,
+        0x423D24,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -5721,6 +5810,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     arm9_path = REPO / "base/arm9.bin"
     ov12_path = REPO / "base/overlay/overlay_0012.bin"
     ov68_path = REPO / "base/overlay/overlay_0068.bin"
+    ov112_path = REPO / "base/overlay/overlay_0112.bin"
     ov129_path = REPO / "base/overlay/overlay_0129.bin"
     ov131_path = REPO / "base/overlay/overlay_0131.bin"
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
@@ -5771,6 +5861,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         arm9_path,
         ov12_path,
         ov68_path,
+        ov112_path,
         ov129_path,
         ov131_path,
         ov153_path,
@@ -5958,6 +6049,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov65_component = packaged_overlays[65]
     ov68_component = packaged_overlays[68]
     ov70_component = packaged_overlays[70]
+    ov112_component = packaged_overlays[112]
     ov129_component = packaged_overlays[129]
     ov131_component = packaged_overlays[131]
     ov153_component = packaged_overlays[153]
@@ -5978,6 +6070,10 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov70_base, packaged_ov70 = (
         ov70_component.ram_address,
         ov70_component.data,
+    )
+    ov112_base, packaged_ov112 = (
+        ov112_component.ram_address,
+        ov112_component.data,
     )
     ov129_base, packaged_ov129 = (
         ov129_component.ram_address,
@@ -6024,6 +6120,17 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "packaged GTS overlay 70 metadata differs",
     )
     require(
+        ov112_base == 0x021E5900
+        and len(packaged_ov112) == 0x1A0E0
+        and ov112_component.ram_size == len(packaged_ov112)
+        and ov112_component.bss_size == 0x2C0
+        and ov112_component.static_init_start == 0x021FF4E8
+        and ov112_component.static_init_end == 0x021FF4EC
+        and ov112_component.file_id == 112
+        and ov112_component.flags == 0,
+        "packaged Pokewalker overlay 112 metadata differs",
+    )
+    require(
         ov131_base == 0x023C8000
         and len(packaged_ov131) == 0x4FD2
         and ov131_component.ram_size == len(packaged_ov131)
@@ -6067,6 +6174,10 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "packaged GTS overlay differs from patched artifact",
     )
     require(
+        packaged_ov112 == ov112_path.read_bytes(),
+        "packaged Pokewalker overlay differs from patched artifact",
+    )
+    require(
         packaged_ov65[
             0x0221F6C4 - ov65_base:0x0221F6D4 - ov65_base
         ]
@@ -6084,6 +6195,23 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         and thumb_bl_target(packaged_ov70, ov70_base, 0x02240A44)
         == OVERLAY155_BASE + 0x78,
         "wireless/GTS packaged commit hooks differ",
+    )
+    require(
+        thumb_bl_target(packaged_ov112, ov112_base, 0x021EE65A)
+        == OVERLAY155_BASE + 0x20
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021ED41A)
+        == OVERLAY155_BASE + 0x80
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EDBEE)
+        == OVERLAY155_BASE + 0x80
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EC0AA)
+        == OVERLAY155_BASE + 0x88
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EE86A)
+        == OVERLAY155_BASE + 0x28
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EEB8C)
+        == OVERLAY155_BASE + 0x28
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EEC7E)
+        == OVERLAY155_BASE + 0x28,
+        "Pokewalker packaged transaction-boundary hooks differ",
     )
     require(
         bytes_at(packaged_ov70, ov70_base, 0x022418A4, 0x68)
@@ -6169,10 +6297,24 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ("MoveHistoryTask6Entry_GTSPlaceAndSeed", 0x68),
         ("MoveHistoryTask6Entry_GTSDeleteBoxAndRecord", 0x70),
         ("MoveHistoryTask6Entry_GTSRemovePartyAndRecord", 0x78),
+        ("MoveHistoryTask6Entry_PokewalkerRadioSuccess", 0x80),
+        ("MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard", 0x88),
     ):
         require(
             task6_symbols.get(name) == ov155_base + offset,
             f"packaged overlay 155 fixed entry differs: {name}",
+        )
+    for offset, implementation in (
+        (0x20, "PokemonMoveHistoryTask6_PCStorageGetAndStageImpl"),
+        (0x80, "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl"),
+        (0x88, "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl"),
+    ):
+        require(
+            packaged_ov155[offset:offset + 4]
+            == bytes.fromhex("00 4b 18 47")
+            and struct.unpack_from("<I", packaged_ov155, offset + 4)[0]
+            == task6_symbols.get(implementation, 0) + 1,
+            f"packaged overlay 155 long entry target differs: {implementation}",
         )
     task6_calls = packaged_thumb_calls(
         packaged_ov155,
@@ -6181,9 +6323,9 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         len(packaged_ov155),
     )
     require(
-        len(task6_calls) == 66
+        len(task6_calls) == 69
         and sum(kind == "bl" for _address, kind, _target in task6_calls)
-        == 59
+        == 62
         and sum(
             kind == "blx_reg"
             for _address, kind, _target in task6_calls

@@ -31,6 +31,12 @@ SECTIONS {
                 ASSERT(MoveHistoryTask6Entry_GTSRemovePartyAndRecord
                         == ORIGIN(rom) + 0x78,
                     "task-6 GTS party removal ABI moved");
+                ASSERT(MoveHistoryTask6Entry_PokewalkerRadioSuccess
+                        == ORIGIN(rom) + 0x80,
+                    "task-6 Pokewalker success ABI moved");
+                ASSERT(MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
+                        == ORIGIN(rom) + 0x88,
+                    "task-6 Pokewalker recovery ABI moved");
                 KEEP(*(.pokemon_move_history_task6_short_branch_targets))
                 ASSERT(MoveHistoryTask6Entry_IsCanonical
                         == ORIGIN(rom) + 0x00,

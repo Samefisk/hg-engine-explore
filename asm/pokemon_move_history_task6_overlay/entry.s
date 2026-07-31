@@ -42,7 +42,7 @@ MoveHistoryTask6Entry_PCStorageGetAndSeed:
     ldr r3, 5f
     bx r3
     .align 2
-5:  .word PokemonMoveHistoryTask6_PCStorageGetAndSeedImpl + 1
+5:  .word PokemonMoveHistoryTask6_PCStorageGetAndStageImpl + 1
 
 .global MoveHistoryTask6Entry_PCStoragePlaceAndSeed
 .type MoveHistoryTask6Entry_PCStoragePlaceAndSeed, %function
@@ -140,6 +140,22 @@ MoveHistoryTask6Entry_GTSRemovePartyAndRecord:
     bx r3
     .align 2
 20: .word PokemonMoveHistoryTask6_GTSRemovePartyAndRecordImpl + 1
+
+.global MoveHistoryTask6Entry_PokewalkerRadioSuccess
+.type MoveHistoryTask6Entry_PokewalkerRadioSuccess, %function
+MoveHistoryTask6Entry_PokewalkerRadioSuccess:
+    ldr r3, 21f
+    bx r3
+    .align 2
+21: .word PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl + 1
+
+.global MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
+.type MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard, %function
+MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard:
+    ldr r3, 22f
+    bx r3
+    .align 2
+22: .word PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl + 1
 
 .section .text, "ax", %progbits
 

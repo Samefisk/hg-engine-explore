@@ -23,9 +23,19 @@ typedef BOOL (*GTSPlaceBoxRetailFunc)(
     PCStorage *,
     u32,
     struct BoxPokemon *);
+typedef void (*PokewalkerRadioSuccessRetailFunc)(void *pokewalker);
+typedef void (*PokewalkerRecoveryRetailFunc)(void *pokewalkerApp);
 
 u32 __attribute__((section(".pokemon_move_history_task6_data")))
 gPokemonMoveHistoryTask6PartyMenuSignalStorage;
+
+/*
+ * Export preparation is reversible until the Pokewalker IR state machine
+ * reports status 15. Keep the selected owner's snapshot in resident transient
+ * memory so cancel/recovery cannot allocate, touch, or evict persisted history.
+ */
+static PokemonMoveHistorySnapshot sPokewalkerPendingSnapshot;
+static BOOL sPokewalkerPendingValid;
 
 BOOL PokemonMoveHistoryTask6_IsCanonicalImpl(struct BoxPokemon *pokemon)
 {
@@ -124,7 +134,7 @@ void PokemonMoveHistoryTask6_HatchClearEggImpl(
     PokemonMoveHistory_Seed(SaveBlock2_get(), &pokemon->box);
 }
 
-struct BoxPokemon *PokemonMoveHistoryTask6_PCStorageGetAndSeedImpl(
+struct BoxPokemon *PokemonMoveHistoryTask6_PCStorageGetAndStageImpl(
     PCStorage *storage,
     u32 boxno,
     u32 slotno)
@@ -132,8 +142,42 @@ struct BoxPokemon *PokemonMoveHistoryTask6_PCStorageGetAndSeedImpl(
     struct BoxPokemon *pokemon =
         PCStorage_GetMonByIndexPair(storage, boxno, slotno);
 
-    PokemonMoveHistory_Seed(SaveBlock2_get(), pokemon);
+    sPokewalkerPendingValid = FALSE;
+    if (PokemonMoveHistory_CaptureSnapshot(
+            pokemon,
+            &sPokewalkerPendingSnapshot)) {
+        sPokewalkerPendingValid = TRUE;
+    }
     return pokemon;
+}
+
+void PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl(void *pokewalker)
+{
+    PokewalkerRadioSuccessRetailFunc retailSuccess =
+        (PokewalkerRadioSuccessRetailFunc)0x02032645;
+
+    /* Retail advances the Walker transaction only after IR status 15. */
+    retailSuccess(pokewalker);
+    if (!sPokewalkerPendingValid) {
+        return;
+    }
+
+    /* Clear first so a second success callback can never record twice. */
+    sPokewalkerPendingValid = FALSE;
+    PokemonMoveHistory_RecordSnapshot(
+        SaveBlock2_get(),
+        &sPokewalkerPendingSnapshot);
+}
+
+void PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl(
+    void *pokewalkerApp)
+{
+    PokewalkerRecoveryRetailFunc retailRecovery =
+        (PokewalkerRecoveryRetailFunc)0x021EC135;
+
+    /* Restore the canonical PC owner first, then abandon transient history. */
+    retailRecovery(pokewalkerApp);
+    sPokewalkerPendingValid = FALSE;
 }
 
 BOOL __attribute__((section(".pokemon_move_history_task6_short_branch_targets")))

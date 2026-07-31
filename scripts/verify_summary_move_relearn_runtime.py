@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 import struct
 import subprocess
 import sys
@@ -117,6 +118,7 @@ if not all(
         "BOOTSTRAP_MANIFEST_PATH",
         "BOOTSTRAP_ROM_PATH",
         "BOOTSTRAP_LAUNCHER_PATH",
+        "BOOTSTRAP_LIBDESMUME_PATH",
     )
 ):
     raise RuntimeError(
@@ -128,6 +130,218 @@ from desmume.emulator import DeSmuME  # noqa: E402
 
 
 SUBPROCESS_AUTHENTICATION_ARGS: list[str] = []
+
+
+class EvidenceArtifactRegistry:
+    """Freeze and content-address files referenced by runtime evidence."""
+
+    _SINGLE_CLAIM_KEYS = {
+        "capture",
+        "party_exit_screenshot",
+        "exported_raw_save",
+    }
+    _MULTI_CLAIM_KEYS = {"captures", "screenshots"}
+
+    def __init__(self) -> None:
+        self._protected: set[str] = set()
+        self._entries: dict[str, dict[str, object]] = {}
+        self._lexical_paths: dict[str, str] = {}
+        self._file_identities: dict[tuple[int, int], str] = {}
+
+    @staticmethod
+    def _canonical(path: Path) -> tuple[str, str]:
+        lexical = os.path.abspath(os.fspath(path))
+        canonical = os.path.realpath(lexical)
+        require(
+            lexical == canonical,
+            f"evidence artifact path uses an alias: {lexical}",
+        )
+        return lexical, canonical
+
+    def protect(self, *paths: Path | None) -> None:
+        for path in paths:
+            if path is None:
+                continue
+            _, canonical = self._canonical(path)
+            self._protected.add(canonical)
+
+    def prepare_target(self, path: Path) -> Path:
+        lexical, canonical = self._canonical(path)
+        require(
+            canonical not in self._protected,
+            f"evidence artifact aliases a protected input/output: {canonical}",
+        )
+        require(
+            canonical not in self._entries,
+            f"frozen evidence artifact cannot be overwritten: {canonical}",
+        )
+        prior = self._lexical_paths.get(canonical)
+        require(
+            prior is None or prior == lexical,
+            f"distinct evidence paths alias one file: {prior}, {lexical}",
+        )
+        self._lexical_paths[canonical] = lexical
+        Path(canonical).parent.mkdir(parents=True, exist_ok=True)
+        return Path(canonical)
+
+    @staticmethod
+    def _hash_descriptor(descriptor: int) -> dict[str, object]:
+        digest = hashlib.sha256()
+        size = 0
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        return {"size": size, "sha256": digest.hexdigest()}
+
+    @staticmethod
+    def _identity(info: os.stat_result) -> tuple[int, int, int, int]:
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+
+    def register(
+        self,
+        path: Path,
+        *,
+        expected: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        lexical, canonical = self._canonical(path)
+        require(
+            canonical not in self._protected,
+            f"evidence artifact aliases a protected input/output: {canonical}",
+        )
+        existing = self._entries.get(canonical)
+        if existing is not None:
+            record = dict(existing["record"])
+            if expected is not None:
+                require(
+                    record == expected,
+                    f"evidence artifact record differs: {canonical}",
+                )
+            return record
+        prior = self._lexical_paths.get(canonical)
+        require(
+            prior is None or prior == lexical,
+            f"distinct evidence paths alias one file: {prior}, {lexical}",
+        )
+        info = os.lstat(canonical)
+        require(
+            stat.S_ISREG(info.st_mode),
+            f"evidence artifact is not regular: {canonical}",
+        )
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(canonical, flags)
+        try:
+            opened = os.fstat(descriptor)
+            require(
+                self._identity(opened) == self._identity(info),
+                f"evidence artifact changed while opening: {canonical}",
+            )
+            content = self._hash_descriptor(descriptor)
+            require(
+                content["size"] == opened.st_size,
+                f"evidence artifact size changed while hashing: {canonical}",
+            )
+            record = {"path": canonical, **content}
+            file_identity = (opened.st_dev, opened.st_ino)
+            identity_owner = self._file_identities.get(file_identity)
+            require(
+                identity_owner is None or identity_owner == canonical,
+                "distinct evidence paths alias one inode: "
+                f"{identity_owner}, {canonical}",
+            )
+            if expected is not None:
+                require(
+                    record == expected,
+                    f"evidence artifact record differs: {canonical}",
+                )
+            self._entries[canonical] = {
+                "descriptor": descriptor,
+                "identity": self._identity(opened),
+                "record": record,
+            }
+            self._lexical_paths[canonical] = lexical
+            self._file_identities[file_identity] = canonical
+            descriptor = -1
+            return dict(record)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+
+    def reauthenticate(self) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        for canonical in sorted(self._entries):
+            entry = self._entries[canonical]
+            require(
+                os.path.realpath(os.path.abspath(canonical)) == canonical,
+                f"evidence artifact path changed identity: {canonical}",
+            )
+            info = os.lstat(canonical)
+            require(
+                stat.S_ISREG(info.st_mode),
+                f"evidence artifact became non-regular: {canonical}",
+            )
+            descriptor = int(entry["descriptor"])
+            opened = os.fstat(descriptor)
+            require(
+                self._identity(info) == entry["identity"]
+                and self._identity(opened) == entry["identity"],
+                f"evidence artifact identity changed: {canonical}",
+            )
+            content = self._hash_descriptor(descriptor)
+            record = dict(entry["record"])
+            require(
+                content == {"size": record["size"], "sha256": record["sha256"]},
+                f"evidence artifact content changed: {canonical}",
+            )
+            records.append(record)
+        return records
+
+    @staticmethod
+    def _is_record(value: object) -> bool:
+        return (
+            isinstance(value, dict)
+            and set(value) == {"path", "size", "sha256"}
+            and isinstance(value.get("path"), str)
+            and isinstance(value.get("size"), int)
+            and isinstance(value.get("sha256"), str)
+        )
+
+    def _claim_record(self, value: object) -> dict[str, object]:
+        if self._is_record(value):
+            expected = dict(value)
+            return self.register(Path(str(expected["path"])), expected=expected)
+        require(
+            isinstance(value, str),
+            "evidence artifact claim is not a path or record",
+        )
+        return self.register(Path(value))
+
+    def transform_claims(self, value: object, parent_key: str = "") -> object:
+        if parent_key in self._SINGLE_CLAIM_KEYS:
+            return self._claim_record(value)
+        if parent_key in self._MULTI_CLAIM_KEYS:
+            require(
+                isinstance(value, list),
+                f"{parent_key} artifact claims are malformed",
+            )
+            return [self._claim_record(item) for item in value]
+        if parent_key == "records" and self._is_record(value):
+            return self._claim_record(value)
+        if isinstance(value, dict):
+            return {
+                key: self.transform_claims(item, key)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self.transform_claims(item, parent_key) for item in value]
+        return value
+
+
+EVIDENCE_ARTIFACTS = EvidenceArtifactRegistry()
 
 
 def artifact_authentication(
@@ -184,7 +398,129 @@ def validate_expected_authentication(
         )
 
 
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _atomic_artifact_path(path: Path, writer: object) -> dict[str, object]:
+    final = EVIDENCE_ARTIFACTS.prepare_target(path)
+    temporary_directory = Path(tempfile.mkdtemp(
+        prefix=f".{final.name}.artifact.", dir=final.parent
+    ))
+    temporary = temporary_directory / (
+        "payload" + (final.suffix or ".tmp")
+    )
+    try:
+        require(callable(writer), "evidence artifact writer is not callable")
+        require(
+            writer(temporary) is not False,
+            f"could not create evidence artifact: {final}",
+        )
+        info = os.lstat(temporary)
+        require(
+            stat.S_ISREG(info.st_mode),
+            f"temporary evidence artifact is not regular: {temporary}",
+        )
+        descriptor = os.open(
+            temporary, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, final)
+        _fsync_directory(final.parent)
+        return EVIDENCE_ARTIFACTS.register(final)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+        temporary_directory.rmdir()
+
+
+def export_backup_artifact(emu: DeSmuME, path: Path) -> dict[str, object]:
+    return _atomic_artifact_path(
+        path,
+        lambda temporary: emu.backup.export_file(str(temporary)),
+    )
+
+
+def artifact_path(value: object) -> Path:
+    if EVIDENCE_ARTIFACTS._is_record(value):
+        return Path(str(EVIDENCE_ARTIFACTS._claim_record(value)["path"]))
+    require(isinstance(value, str), "artifact path claim is malformed")
+    return Path(value)
+
+
+def _canonical_result_payload(result: dict[str, object]) -> bytes:
+    payload = dict(result)
+    payload.pop("result_authentication", None)
+    return (
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+
+
+def authenticate_result(result: dict[str, object]) -> dict[str, object]:
+    transformed = EVIDENCE_ARTIFACTS.transform_claims(result)
+    require(isinstance(transformed, dict), "runtime result is not an object")
+    records = EVIDENCE_ARTIFACTS.reauthenticate()
+    rendered_records = (
+        json.dumps(records, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    transformed["evidence_artifacts"] = {
+        "schema": "summary-move-relearn-evidence-artifacts-v1",
+        "records": records,
+        "sha256": hashlib.sha256(rendered_records).hexdigest(),
+    }
+    payload = _canonical_result_payload(transformed)
+    transformed["result_authentication"] = {
+        "schema": "summary-move-relearn-result-v1",
+        "size": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    return transformed
+
+
+def verify_authenticated_result(result: dict[str, object]) -> None:
+    authentication = result.get("result_authentication")
+    require(
+        isinstance(authentication, dict)
+        and set(authentication) == {"schema", "size", "sha256"}
+        and authentication.get("schema") == "summary-move-relearn-result-v1",
+        "child result authentication is malformed",
+    )
+    payload = _canonical_result_payload(result)
+    require(
+        authentication.get("size") == len(payload)
+        and authentication.get("sha256") == hashlib.sha256(payload).hexdigest(),
+        "child result authentication differs",
+    )
+    artifacts = result.get("evidence_artifacts")
+    require(
+        isinstance(artifacts, dict)
+        and set(artifacts) == {"schema", "records", "sha256"}
+        and artifacts.get("schema")
+        == "summary-move-relearn-evidence-artifacts-v1"
+        and isinstance(artifacts.get("records"), list),
+        "child evidence artifact authentication is malformed",
+    )
+    records = artifacts["records"]
+    rendered_records = (
+        json.dumps(records, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    require(
+        artifacts.get("sha256") == hashlib.sha256(rendered_records).hexdigest(),
+        "child evidence artifact set authentication differs",
+    )
+    for record in records:
+        EVIDENCE_ARTIFACTS._claim_record(record)
+
+
 def write_result_atomic(path: Path, rendered: str) -> None:
+    EVIDENCE_ARTIFACTS.reauthenticate()
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
@@ -198,11 +534,21 @@ def write_result_atomic(path: Path, rendered: str) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary_path, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        _fsync_directory(path.parent)
+        require(
+            path.read_text(encoding="utf-8") == rendered,
+            "published result bytes differ",
+        )
+        EVIDENCE_ARTIFACTS.reauthenticate()
+        require(
+            BOOTSTRAP_REAUTHENTICATE() == BOOTSTRAP_AUTHENTICATION,
+            "runtime closure changed after result publication",
+        )
+    except Exception:
+        if path.exists():
+            path.unlink()
+            _fsync_directory(path.parent)
+        raise
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
@@ -236,8 +582,11 @@ def touch(emu: DeSmuME, x: int, y: int, gap: int = 60) -> None:
 
 def screenshot(emu: DeSmuME, root: Path, name: str) -> str:
     path = root / name
-    emu.screenshot().save(path)
-    return str(path)
+    record = _atomic_artifact_path(
+        path,
+        lambda temporary: emu.screenshot().save(temporary, format="PNG"),
+    )
+    return str(record["path"])
 
 
 def save_data_pointer(emu: DeSmuME) -> int:
@@ -1796,7 +2145,7 @@ def new_emulator(
     rom: Path,
     raw: bytes,
 ) -> tuple[DeSmuME, tempfile.NamedTemporaryFile]:
-    emu = DeSmuME()
+    emu = DeSmuME(BOOTSTRAP_LIBDESMUME_PATH)
     emu.volume_set(0)
     emu.open(str(rom))
     imported = tempfile.NamedTemporaryFile(suffix=".sav")
@@ -1936,6 +2285,8 @@ def fresh_reload_evidence(
     completed = subprocess.run(
         [
             sys.executable,
+            "-S",
+            "-B",
             str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
@@ -1949,12 +2300,23 @@ def fresh_reload_evidence(
         capture_output=True,
         text=True,
         timeout=90,
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPYCACHEPREFIX": "/dev/null",
+        },
     )
     require(
         completed.returncode == 0,
         "fresh reload probe failed: " + completed.stderr[-1000:],
     )
     probe = json.loads(completed.stdout)
+    require(
+        completed.stdout
+        == json.dumps(probe, indent=2, sort_keys=True) + "\n",
+        "fresh reload probe output is not canonical",
+    )
+    verify_authenticated_result(probe)
     require(
         probe.get("artifact_authentication")
         == BOOTSTRAP_AUTHENTICATION,
@@ -2226,10 +2588,8 @@ def task6_daycare_sanitize_evidence(
     tap(emu, "A", 180)
     retail_save_from_field(emu, baseline_counter)
     exported = screenshot_path.with_suffix(".sav")
-    require(
-        emu.backup.export_file(str(exported)),
-        "could not export retail daycare sanitizer save",
-    )
+    exported_record = export_backup_artifact(emu, exported)
+    exported = artifact_path(exported_record)
     persisted_raw = PARTY.extract_raw_save(exported)
     persisted_raw_sha256 = hashlib.sha256(persisted_raw).hexdigest()
     _, persisted_base = PARTY.active_copy(persisted_raw)
@@ -3581,10 +3941,8 @@ def run_isolated_scenario(
                 screenshot(emu, screenshot_path.parent, screenshot_path.name)
                 retail_save_from_field(emu, baseline_counter)
                 exported = screenshot_path.with_suffix(".sav")
-                require(
-                    emu.backup.export_file(str(exported)),
-                    "could not export retail Center bootstrap",
-                )
+                exported_record = export_backup_artifact(emu, exported)
+                exported = artifact_path(exported_record)
                 saved_raw = PARTY.extract_raw_save(exported)
                 saved_counter, saved_base = PARTY.active_copy(saved_raw)
                 location = struct.unpack_from(
@@ -3621,10 +3979,8 @@ def run_isolated_scenario(
                 screenshot(emu, screenshot_path.parent, screenshot_path.name)
                 retail_save_from_field(emu, baseline_counter)
                 exported = screenshot_path.with_suffix(".sav")
-                require(
-                    emu.backup.export_file(str(exported)),
-                    "could not export retail terminal bootstrap",
-                )
+                exported_record = export_backup_artifact(emu, exported)
+                exported = artifact_path(exported_record)
                 saved_raw = PARTY.extract_raw_save(exported)
                 saved_counter, saved_base = PARTY.active_copy(saved_raw)
                 location = struct.unpack_from(
@@ -3822,10 +4178,8 @@ def run_isolated_scenario(
                 )
                 retail_save_from_field(emu, baseline_counter)
                 exported = screenshot_path.with_suffix(".sav")
-                require(
-                    emu.backup.export_file(str(exported)),
-                    "could not export retail transfer save",
-                )
+                exported_record = export_backup_artifact(emu, exported)
+                exported = artifact_path(exported_record)
                 saved_raw = PARTY.extract_raw_save(exported)
                 saved_counter, saved_count, saved_party = PARTY.party_image(
                     saved_raw
@@ -4147,10 +4501,8 @@ def run_isolated_scenario(
                     )
                 )
                 exported = screenshot_path.with_suffix(".sav")
-                require(
-                    emu.backup.export_file(str(exported)),
-                    "DeSmuME could not export boxed post-save battery",
-                )
+                exported_record = export_backup_artifact(emu, exported)
+                exported = artifact_path(exported_record)
                 saved_raw = PARTY.extract_raw_save(exported)
                 saved_counter, saved_count, saved_party = PARTY.party_image(
                     saved_raw
@@ -4767,6 +5119,8 @@ def isolated_scenario_evidence(
     completed = subprocess.run(
         [
             sys.executable,
+            "-S",
+            "-B",
             str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
@@ -4783,6 +5137,11 @@ def isolated_scenario_evidence(
         check=False,
         capture_output=True,
         text=True,
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPYCACHEPREFIX": "/dev/null",
+        },
         timeout=240
         if name in (
             "center_bootstrap",
@@ -4805,6 +5164,12 @@ def isolated_scenario_evidence(
         f"{name} subprocess failed: " + completed.stderr[-1000:],
     )
     evidence = json.loads(completed.stdout)
+    require(
+        completed.stdout
+        == json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+        f"{name} subprocess output is not canonical",
+    )
+    verify_authenticated_result(evidence)
     require(
         evidence.get("label") == name,
         f"{name} subprocess returned the wrong scenario label",
@@ -5235,6 +5600,274 @@ def task6_serialization_surrogate_evidence(
 
     # No headless radio peer exists. Exercise Pokéwalker's exact canonical
     # 0x88 export/import boundary and both PC/history authentication layers.
+    # The export hook stages only a task-3 snapshot; persisted history is not
+    # observed until the retail IR state machine acknowledges status 15.
+    def walker_snapshot(box: bytes) -> tuple[int, int, int, tuple[int, ...]]:
+        pid, ot_id, species = box_identity(box)
+        moves = tuple(box_record_payload(box)[1])
+        require(
+            species != 0 and all(move != 0 for move in moves),
+            "Pokéwalker pending fixture is not canonical",
+        )
+        return pid, ot_id, species, moves
+
+    def walker_state(
+        payload: bytes,
+        *,
+        revision: int,
+    ) -> dict[str, object]:
+        require(
+            len(payload) == HISTORY_FOOTER_OFFSET,
+            "Pokéwalker fixture payload has the wrong size",
+        )
+        return {
+            "payload": bytearray(payload),
+            "revision": revision,
+            "dirty": False,
+            "pending": None,
+        }
+
+    def walker_state_fingerprint(
+        state: dict[str, object],
+    ) -> tuple[bytes, int, int, int, bool]:
+        payload = state["payload"]
+        require(
+            isinstance(payload, bytearray),
+            "Pokéwalker fixture history is not mutable payload bytes",
+        )
+        return (
+            bytes(payload),
+            struct.unpack_from("<H", payload, 14)[0],
+            struct.unpack_from("<I", payload, 20)[0],
+            int(state["revision"]),
+            bool(state["dirty"]),
+        )
+
+    def walker_stage(
+        state: dict[str, object],
+        box: bytes,
+    ) -> None:
+        # Source-exact model of CaptureSnapshot: it reads only the canonical
+        # owner. It does not open, allocate, touch, or dirty the history store.
+        state["pending"] = walker_snapshot(box)
+
+    def walker_discard(state: dict[str, object]) -> None:
+        # The recovery wrapper calls retail restoration first, then clears the
+        # resident pending-valid bit regardless of whether placement ran.
+        state["pending"] = None
+
+    def walker_ack(state: dict[str, object]) -> None:
+        # Source-exact model of RecordSnapshot after successful retail status
+        # 15. Clear pending first, then use task-3 allocation/LRU/append rules.
+        snapshot = state["pending"]
+        if snapshot is None:
+            return
+        state["pending"] = None
+        require(
+            isinstance(snapshot, tuple) and len(snapshot) == 4,
+            "Pokéwalker pending snapshot is malformed",
+        )
+        pid, ot_id, species, moves = snapshot
+        payload = state["payload"]
+        require(
+            isinstance(payload, bytearray)
+            and isinstance(moves, tuple),
+            "Pokéwalker ACK fixture state is malformed",
+        )
+        records = history_records(
+            bytes(payload) + bytes(HISTORY_IMAGE_SIZE - len(payload))
+        )
+        index = next(
+            (
+                candidate
+                for candidate, record in enumerate(records)
+                if record[15] & 1
+                and struct.unpack_from("<II", record) == (pid, ot_id)
+            ),
+            -1,
+        )
+        if index < 0:
+            index = next(
+                (
+                    candidate
+                    for candidate, record in enumerate(records)
+                    if not (record[15] & 1)
+                ),
+                -1,
+            )
+            if index < 0:
+                next_access = struct.unpack_from("<I", payload, 20)[0]
+                index = max(
+                    range(HISTORY_RECORD_COUNT),
+                    key=lambda candidate: (
+                        next_access
+                        - struct.unpack_from("<I", records[candidate], 8)[0]
+                    )
+                    & 0xFFFFFFFF,
+                )
+            else:
+                record_count = struct.unpack_from("<H", payload, 14)[0]
+                struct.pack_into("<H", payload, 14, record_count + 1)
+            record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+            payload[record_offset:record_offset + HISTORY_RECORD_SIZE] = bytes(
+                HISTORY_RECORD_SIZE
+            )
+            next_access = (
+                struct.unpack_from("<I", payload, 20)[0] + 1
+            ) & 0xFFFFFFFF
+            struct.pack_into("<I", payload, 20, next_access)
+            struct.pack_into(
+                "<IIIHBB",
+                payload,
+                record_offset,
+                pid,
+                ot_id,
+                next_access,
+                species,
+                0,
+                1,
+            )
+            state["dirty"] = True
+            state["revision"] = int(state["revision"]) + 1
+
+        record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+        for move in moves:
+            move_count = payload[record_offset + 14]
+            known = struct.unpack_from(
+                f"<{move_count}H", payload, record_offset + 16
+            ) if move_count else ()
+            if move in known:
+                continue
+            require(
+                move_count < 24,
+                "Pokéwalker ACK fixture unexpectedly needs move eviction",
+            )
+            struct.pack_into(
+                "<H", payload, record_offset + 16 + move_count * 2, move
+            )
+            payload[record_offset + 14] = move_count + 1
+            struct.pack_into("<H", payload, record_offset + 12, species)
+            next_access = (
+                struct.unpack_from("<I", payload, 20)[0] + 1
+            ) & 0xFFFFFFFF
+            struct.pack_into("<I", payload, 20, next_access)
+            struct.pack_into("<I", payload, record_offset + 8, next_access)
+            state["dirty"] = True
+            state["revision"] = int(state["revision"]) + 1
+
+    pending_box = controlled_box_record(
+        source,
+        ot_id_xor=0x6E6F6E65,
+        moves=(33, 45, 98, 129),
+        pp=(10, 10, 10, 10),
+        pp_ups=(0, 0, 0, 0),
+    )
+    pending_identity = box_identity(pending_box)[:2]
+    require(
+        history_identity_count(
+            controlled_history_payload
+            + bytes(HISTORY_IMAGE_SIZE - len(controlled_history_payload)),
+            *pending_identity,
+        )
+        == 0,
+        "Pokéwalker missing-record fixture identity already exists",
+    )
+
+    missing_cancel = walker_state(
+        controlled_history_payload,
+        revision=0x10203040,
+    )
+    missing_before = walker_state_fingerprint(missing_cancel)
+    missing_unrelated_before = tuple(
+        history_records(missing_before[0])
+    )
+    walker_stage(missing_cancel, pending_box)
+    require(
+        walker_state_fingerprint(missing_cancel) == missing_before,
+        "Pokéwalker missing-record stage mutated history",
+    )
+    walker_discard(missing_cancel)
+    missing_after = walker_state_fingerprint(missing_cancel)
+    require(
+        missing_after == missing_before
+        and tuple(history_records(missing_after[0]))
+        == missing_unrelated_before,
+        "Pokéwalker missing-record cancellation changed history",
+    )
+
+    full_payload = bytearray(HISTORY_FOOTER_OFFSET)
+    full_payload[:HISTORY_HEADER_SIZE] = controlled_history_payload[
+        :HISTORY_HEADER_SIZE
+    ]
+    struct.pack_into("<H", full_payload, 14, HISTORY_RECORD_COUNT)
+    struct.pack_into("<I", full_payload, 20, 0x01000000)
+    for index in range(HISTORY_RECORD_COUNT):
+        record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+        struct.pack_into(
+            "<IIIHBBH",
+            full_payload,
+            record_offset,
+            0x70000000 + index,
+            0x71000000 + index,
+            index + 1,
+            1 + index % 493,
+            1,
+            1,
+            1 + index % 467,
+        )
+    require(
+        history_identity_count(
+            bytes(full_payload) + bytes(HISTORY_IMAGE_SIZE - len(full_payload)),
+            *pending_identity,
+        )
+        == 0,
+        "Pokéwalker full-capacity fixture identity collides",
+    )
+    full_cancel = walker_state(bytes(full_payload), revision=0x50607080)
+    full_before = walker_state_fingerprint(full_cancel)
+    oldest_before = history_records(full_before[0])[0]
+    unrelated_before = history_records(full_before[0])[173]
+    walker_stage(full_cancel, pending_box)
+    require(
+        walker_state_fingerprint(full_cancel) == full_before,
+        "Pokéwalker full-capacity stage mutated or evicted history",
+    )
+    walker_discard(full_cancel)
+    full_after = walker_state_fingerprint(full_cancel)
+    require(
+        full_after == full_before
+        and history_records(full_after[0])[0] == oldest_before
+        and history_records(full_after[0])[173] == unrelated_before,
+        "Pokéwalker full-capacity cancellation changed history",
+    )
+
+    acknowledged = walker_state(
+        controlled_history_payload,
+        revision=0x90,
+    )
+    ack_before = walker_state_fingerprint(acknowledged)
+    ack_unrelated_before = history_records(ack_before[0])[0]
+    walker_stage(acknowledged, pending_box)
+    walker_ack(acknowledged)
+    ack_once = walker_state_fingerprint(acknowledged)
+    ack_image = ack_once[0] + bytes(HISTORY_IMAGE_SIZE - len(ack_once[0]))
+    require(
+        ack_once[1] == ack_before[1] + 1
+        and ack_once[2] == ack_before[2] + 5
+        and ack_once[3] == ack_before[3] + 5
+        and ack_once[4]
+        and history_identity_count(ack_image, *pending_identity) == 1
+        and find_history_record(ack_image, *pending_identity)[2]
+        == (33, 45, 98, 129)
+        and history_records(ack_once[0])[0] == ack_unrelated_before,
+        "Pokéwalker successful ACK did not record one pending baseline",
+    )
+    walker_ack(acknowledged)
+    require(
+        walker_state_fingerprint(acknowledged) == ack_once,
+        "Pokéwalker duplicate status-15 ACK recorded twice",
+    )
+
     transit = bytes(source)
     walker_export = replace_pc_slots(
         controlled_raw, {(0, BOX_TARGET_SLOT): canonical_empty}
@@ -5355,6 +5988,18 @@ def task6_serialization_surrogate_evidence(
         },
         "pokewalker": {
             "protocol": "source-exact 0x88 serialization surrogate",
+            "export_transaction": {
+                "stage_is_history_read_only": True,
+                "missing_record_cancel_image_exact": True,
+                "full_319_cancel_image_exact": True,
+                "full_319_oldest_and_unrelated_exact": True,
+                "header_count_sequence_revision_dirty_exact": True,
+                "ack_commits_pending_once": True,
+                "duplicate_ack_inert": True,
+                "pending_identity": list(pending_identity),
+                "ack_revision_delta": ack_once[3] - ack_before[3],
+                "ack_access_sequence_delta": ack_once[2] - ack_before[2],
+            },
             "failure_recovery_exact": True,
             "round_trip_identity": list(source_identity),
             "round_trip_history": list(source_history),
@@ -5942,10 +6587,7 @@ def run(args: argparse.Namespace) -> dict:
             captures.append(
                 screenshot(emu, args.screenshot_dir, "08_after_save.png")
             )
-            require(
-                emu.backup.export_file(str(args.export_raw)),
-                "DeSmuME could not export the post-save battery",
-            )
+            export_backup_artifact(emu, args.export_raw)
         finally:
             close_emulator(emu, imported)
 
@@ -5996,7 +6638,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     terminal_bootstrap_evidence = isolated_scenario_evidence(
         rom,
-        Path(center_bootstrap_evidence["exported_raw_save"]),
+        artifact_path(center_bootstrap_evidence["exported_raw_save"]),
         "terminal_bootstrap",
         terminal_bootstrap_capture,
     )
@@ -6007,7 +6649,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     pc_fail_closed_evidence = isolated_scenario_evidence(
         rom,
-        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        artifact_path(terminal_bootstrap_evidence["exported_raw_save"]),
         "pc_fail_closed",
         pc_fail_closed_capture,
     )
@@ -6017,7 +6659,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     pc_teardown_evidence = isolated_scenario_evidence(
         rom,
-        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        artifact_path(terminal_bootstrap_evidence["exported_raw_save"]),
         "pc_teardown",
         pc_teardown_capture,
     )
@@ -6026,7 +6668,7 @@ def run(args: argparse.Namespace) -> dict:
     boxed_capture = args.screenshot_dir / "12_actual_boxed_summary.png"
     boxed_evidence = isolated_scenario_evidence(
         rom,
-        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        artifact_path(terminal_bootstrap_evidence["exported_raw_save"]),
         "boxed",
         boxed_capture,
     )
@@ -6036,7 +6678,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     boxed_reload_evidence = isolated_scenario_evidence(
         rom,
-        Path(boxed_evidence["exported_raw_save"]),
+        artifact_path(boxed_evidence["exported_raw_save"]),
         "boxed_reload",
         boxed_reload_capture,
     )
@@ -6046,7 +6688,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     transfer_evidence = isolated_scenario_evidence(
         rom,
-        Path(boxed_evidence["exported_raw_save"]),
+        artifact_path(boxed_evidence["exported_raw_save"]),
         "transfer",
         transfer_capture,
     )
@@ -6056,7 +6698,7 @@ def run(args: argparse.Namespace) -> dict:
     )
     transfer_reload_evidence = isolated_scenario_evidence(
         rom,
-        Path(transfer_evidence["exported_raw_save"]),
+        artifact_path(transfer_evidence["exported_raw_save"]),
         "transfer_reload",
         transfer_reload_capture,
     )
@@ -6081,7 +6723,7 @@ def run(args: argparse.Namespace) -> dict:
         daycare_sanitize_capture,
     )
     captures.append(daycare_sanitize_evidence["capture"])
-    daycare_exported_path = Path(
+    daycare_exported_path = artifact_path(
         daycare_sanitize_evidence["exported_raw_save"]
     )
     require(
@@ -6487,16 +7129,35 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    resolved_result: Path | None = None
     try:
         arguments = parse_args()
+        resolved_result = (
+            arguments.result_json.resolve()
+            if arguments.result_json is not None
+            else None
+        )
         if arguments.result_json is not None:
             require(
-                str(arguments.result_json.resolve())
+                str(resolved_result)
                 in BOOTSTRAP_INVALIDATED_RESULTS,
                 "result target was not invalidated by runtime launcher",
             )
         resolved_rom = arguments.rom.resolve()
         resolved_manifest = arguments.publication_manifest.resolve()
+        EVIDENCE_ARTIFACTS.protect(
+            resolved_rom,
+            resolved_manifest,
+            resolved_result,
+            arguments.dsv.resolve() if arguments.dsv is not None else None,
+            (
+                arguments.probe_raw.resolve()
+                if arguments.probe_raw is not None
+                else None
+            ),
+            arguments.controlled_raw.resolve(),
+            arguments.daycare_raw.resolve(),
+        )
         authentication = artifact_authentication(
             resolved_rom,
             resolved_manifest,
@@ -6564,10 +7225,20 @@ if __name__ == "__main__":
             "runtime artifact authentication changed during execution",
         )
         result["artifact_authentication"] = final_authentication
+        result = authenticate_result(result)
         rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
-        if arguments.result_json is not None:
-            write_result_atomic(arguments.result_json, rendered)
-        print(rendered, end="")
+        if resolved_result is not None:
+            write_result_atomic(resolved_result, rendered)
+        sys.stdout.write(rendered)
+        sys.stdout.flush()
+        EVIDENCE_ARTIFACTS.reauthenticate()
+        require(
+            BOOTSTRAP_REAUTHENTICATE() == BOOTSTRAP_AUTHENTICATION,
+            "runtime closure changed after stdout publication",
+        )
     except Exception as error:
+        if resolved_result is not None and resolved_result.exists():
+            resolved_result.unlink()
+            _fsync_directory(resolved_result.parent)
         print(f"Summary relearn runtime verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

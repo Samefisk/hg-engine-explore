@@ -1454,9 +1454,12 @@ def main() -> None:
         ("PokemonMoveHistoryTask6_DaycareDepositCommit", 0x08),
         ("PokemonMoveHistoryTask6_TradeReplacePartySlot", 0x10),
         ("PokemonMoveHistoryTask6_HatchClearEgg", 0x18),
+        ("PokemonMoveHistoryTask6_PCStorageGetAndStage", 0x20),
         ("PokemonMoveHistoryTask6_PCStorageGetAndSeed", 0x20),
         ("PokemonMoveHistoryTask6_PCStoragePlaceAndSeed", 0x28),
         ("SwapPartyPokemonMove", 0x30),
+        ("PokemonMoveHistoryTask6_PokewalkerRadioSuccess", 0x80),
+        ("PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard", 0x88),
     ):
         require(
             f"{name} = "

@@ -72,7 +72,11 @@ SUBSTRUCT_OFFSETS = (
 def ensure_repo_venv() -> None:
     venv = REPO / ".venv"
     venv_python = venv / "bin/python3"
-    if Path(sys.prefix).resolve() == venv.resolve() or not venv_python.is_file():
+    if (
+        Path(os.path.abspath(sys.executable))
+        == Path(os.path.abspath(venv_python))
+        or not venv_python.is_file()
+    ):
         return
     os.execv(str(venv_python), [str(venv_python), *sys.argv])
 
@@ -80,6 +84,11 @@ def ensure_repo_venv() -> None:
 ensure_repo_venv()
 
 from desmume.emulator import DeSmuME  # noqa: E402
+
+
+def create_desmume() -> DeSmuME:
+    authenticated = globals().get("AUTHENTICATED_LIBDESMUME_PATH")
+    return DeSmuME(authenticated) if authenticated is not None else DeSmuME()
 
 
 def load_headless_helpers():
@@ -358,7 +367,7 @@ def run(args: argparse.Namespace) -> dict:
 
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     with HEADLESS.silence_native_output(True):
-        emu = DeSmuME()
+        emu = create_desmume()
         emu.volume_set(0)
         emu.open(str(rom))
         with tempfile.NamedTemporaryFile(suffix=".sav") as imported:

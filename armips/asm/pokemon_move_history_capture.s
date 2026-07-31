@@ -8,11 +8,13 @@ PokemonMoveHistory_DaycareShiftAndAppend equ 0x023BD440
 PokemonMoveHistoryTask6_DaycareDepositCommit equ 0x023BD408
 PokemonMoveHistoryTask6_TradeReplacePartySlot equ 0x023BD410
 PokemonMoveHistoryTask6_HatchClearEgg equ 0x023BD418
-PokemonMoveHistoryTask6_PCStorageGetAndSeed equ 0x023BD420
+PokemonMoveHistoryTask6_PCStorageGetAndStage equ 0x023BD420
 PokemonMoveHistoryTask6_PCStoragePlaceAndSeed equ 0x023BD428
 PokemonMoveHistoryTask6_GTSPlaceAndSeed equ 0x023BD468
 PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord equ 0x023BD470
 PokemonMoveHistoryTask6_GTSRemovePartyAndRecord equ 0x023BD478
+PokemonMoveHistoryTask6_PokewalkerRadioSuccess equ 0x023BD480
+PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard equ 0x023BD488
 
 /*
  * Task 3 permanent move-history hooks.
@@ -122,12 +124,29 @@ PokemonMoveHistoryTask6_GTSRemovePartyAndRecord equ 0x023BD478
 .open "base/overlay/overlay_0112.bin", 0x021E5900
 
 /*
- * Pokéwalker export is an existing-identity transfer. Seed the canonical PC
- * owner before retail serializes and deletes it; the transit copy is never
- * observed.
+ * Pokéwalker export is reversible until retail's IR status-15 acknowledgement.
+ * Capture the canonical PC owner into non-dirty resident pending state before
+ * serialization/deletion; do not allocate or update persisted history here.
  */
 .org 0x021EE65A
-    bl PokemonMoveHistoryTask6_PCStorageGetAndSeed
+    bl PokemonMoveHistoryTask6_PCStorageGetAndStage
+
+/*
+ * Both IR state families reach status 15 only after the remote transaction is
+ * accepted. Advance retail's Walker counter, then commit a staged export once.
+ */
+.org 0x021ED41A
+    bl PokemonMoveHistoryTask6_PokewalkerRadioSuccess
+.org 0x021EDBEE
+    bl PokemonMoveHistoryTask6_PokewalkerRadioSuccess
+
+/*
+ * Status-15 recovery restores the canonical PC owner (when present) and then
+ * clears Walker state. Wrap the whole recovery helper so pending history is
+ * discarded even if its internal TryGetBoxMon/placement is skipped.
+ */
+.org 0x021EC0AA
+    bl PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard
 
 /*
  * These are the three successful arrival placements. The separate recovery

@@ -31,9 +31,9 @@ hooks call task-3 history APIs; there is no second history store.
 | Scripted daycare sanitizer / Mirror Herb inheritance | Existing mutation of either owner | Successful canonical move+PP write to the selected party `PartyPokemon` or deposited `DaycareMon` | Direct setters were missed | Each owner filters its own legal egg-move buffer/current set, then records through the resident task-3 transaction. Both callers compute max PP from the incoming move with zero PP Ups before mutation. The resident helper atomically writes the move, resets PP Ups, writes PP, then records. Party and deposited histories never share donor or scratch-buffer state. |
 | Daycare withdrawal | Pure transfer | Successful `PokeParty_Add` | No explicit withdrawal hook | The canonical party-add success hook seeds the same PID/OTID record after withdrawal; it does not allocate a second identity. |
 | Egg generation/inheritance | New identity construction | Temporary egg construction, then party add as egg | Intentionally none | Construction buffers and parent moves never observe. The accepted inherited/current set becomes baseline only at hatch completion. |
-| Pokéwalker export | Pure transfer | Canonical PC lookup immediately before serialization/delete | No | Export-only get-and-seed wrapper observes the PC owner; the transit buffer is not recorded. |
+| Pokéwalker export | Pure transfer | Canonical PC lookup immediately before serialization/delete, followed by IR status-15 acknowledgement | No | The lookup captures a non-dirty resident pending snapshot. Only status 15 commits that snapshot once, after retail advances the Walker transaction; preparation, serialization, deletion, and forced-save steps do not allocate, touch, or evict history. |
 | Pokéwalker successful return/catch placements | Existing transfer or new import | Three successful `PCStorage_PlaceMonInBoxByIndexPair` calls | No | Place first, resolve the canonical destination, then seed. Existing PID/OTID resumes one record; a new arrival receives one baseline. |
-| Pokéwalker recovery/cancel | Failed transfer recovery | Separate placement at `0x021EC182` | None | Deliberately unpatched. No history revision/dirty change is permitted. |
+| Pokéwalker recovery/cancel | Failed transfer recovery | Complete retail recovery helper `ov112_021EC134` | None | A wrapper runs retail restoration first and then discards pending history unconditionally, including a missing/corrupt Walker copy that skips the internal placement at `0x021EC182`. No history image, access sequence, revision, dirty flag, or unrelated record may change. |
 | Castform/Cherrim battle forms, battle Kyurem/Zacian/Zamazenta, `NEEDS_REVERSION` extended forms | Temporary/battle-only | Battle copies, not save owners | Not applicable | Rejected by the canonical permanent-owner gate or explicitly routed through transient setters. They never enter permanent history or Summary relearn. |
 
 ## Integrity and ownership rules
@@ -51,6 +51,12 @@ hooks call task-3 history APIs; there is no second history store.
 - History dirty/revision changes follow task-3 APIs. Preview, animation,
   communication failure, full-party failure, egg construction, and temporary
   transit buffers do not allocate or dirty records.
+- Pokéwalker export pending state is transient overlay-155 memory, not a
+  second history store. Missing-record and full-319-record cancellation
+  fixtures prove the complete history image, oldest record, access sequence,
+  revision, dirty flag, and unrelated records remain byte-exact. A positive
+  acknowledgement fixture proves the first status-15 callback records once
+  and a duplicate callback is inert.
 - Save ownership is unchanged: the primary save/box/daycare/Pokéwalker code
   marks its ordinary owner dirty and task-3 prepare/finish/cancel publishes the
   sidecar transaction. Task 6 adds no independent save or commit path.
@@ -77,5 +83,65 @@ hooks call task-3 history APIs; there is no second history store.
 - Candidate ordering and known-move exclusion remain proven by the task-2
   builder/source-static gate; the serialization surrogate does not model or
   claim execution of that builder.
+- Screenshots and exported saves are evidence artifacts, not path-only
+  claims. Every emulator process writes them by sibling-file atomic replace,
+  freezes the regular file by canonical path and inode, and publishes each
+  reference as `{path,size,sha256}`. ROM, manifest, result, preserved DSV, and
+  controlled fixture paths are protected against output aliasing. Child
+  results authenticate canonical JSON and their complete artifact set; the
+  parent verifies the records against the live files before embedding them.
+  Paths, descriptors, sizes, hashes, result bytes, and the sealed runtime
+  closure are reauthenticated after atomic publication or a stdout-only child
+  flush. Mutation, substitution, hard-link/symlink aliasing, and stale-result
+  reuse therefore fail closed.
+
+## Sealed emulator runtime closure
+
+- The container build publishes the ROM/build pair with an explicit unbound
+  runtime slot. After that managed build succeeds, and before Delta receives a
+  copy, the host `.venv/bin/python3` atomically binds the publication manifest
+  to the actual emulator runtime and verifies the resulting manifest again.
+  An unbound or partially replaced manifest cannot launch acceptance.
+- The host binding and every acceptance child require `-S -B` with
+  `PYTHONPYCACHEPREFIX=/dev/null` from interpreter startup. The launcher checks
+  that policy before importing even `os`; Python therefore skips `site` and
+  `.pth` execution, compiles standard-library sources, and cannot read or write
+  an existing filesystem `.pyc`. A builtin-only stage-zero path removes a
+  requested stale result before rejecting a process with the wrong policy.
+  Any configured Python zip-import path is recorded and must remain absent, so
+  bytecode cannot re-enter through the interpreter's default zip search path.
+  The bound manifest records and revalidates the exact policy. The host binding
+  content-addresses the canonical Python entry and resolved
+  executable, the linked Python shared runtime, `pyvenv.cfg`, and a
+  pycache-excluding tree of standard-library source/native modules. It also
+  seals the complete DeSmuME and Pillow package trees, the exact
+  `desmume.__init__`, `i18n_util`, `controls`, and `emulator` sources, the
+  canonical `libdesmume`, and every allowed mutable native image.
+- Before any retained helper or manifest-helper code executes, the launcher
+  independently recomputes that primitive closure. DeSmuME Python modules are
+  compiled directly from the retained authenticated buffers. Pillow Python
+  modules are served only from retained source buffers through the already
+  loaded frozen import bootstrap; timestamp-valid `.pyc` files and ordinary
+  source loaders are not consulted. The exact canonical `libdesmume` path is
+  hashed before load, loaded explicitly, and rehashed with stable file
+  identity immediately afterward.
+- Native image enumeration uses dyld's in-process image list on macOS and
+  `/proc/self/maps` on Linux. Every loaded image outside the documented
+  OS-owned roots must be present in the manifest's mutable closure. The trust
+  boundary is limited to `/System/Library`, `/usr/lib`, and the OS Cryptex
+  equivalents on macOS, or `/lib*` and `/usr/lib*` on Linux. In particular,
+  the Python framework/runtime, Pillow extensions, `libdesmume`, SDL2, GLib,
+  Intl, and PCRE2 remain content-addressed rather than delegated to that OS
+  boundary.
+- The explicit bootstrap boundary is the selected Python executable/runtime
+  and the OS loader before the in-process source tree hashes can be computed.
+  The no-site/no-pyc policy removes mutable bytecode and `.pth` execution from
+  that boundary; any later source/native substitution fails before evidence
+  publication and again at end-of-run reauthentication.
+- The complete runtime trees, retained buffers, mutable native image set,
+  ROM, publication manifest, helpers, and evidence artifacts are rehashed at
+  the end. The same version-3 authentication object is compared by every
+  isolated parent/child process, so environment substitution cannot be hidden
+  behind a successful child result.
 
 Task 7's all-compatible testing mode is deliberately excluded.

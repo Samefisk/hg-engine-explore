@@ -198,6 +198,11 @@ void LONG_CALL PokemonMoveHistoryTask6_HatchClearEgg(
     int attr,
     void *value);
 struct PokemonStorageSystem;
+struct BoxPokemon *LONG_CALL PokemonMoveHistoryTask6_PCStorageGetAndStage(
+    struct PokemonStorageSystem *storage,
+    u32 boxno,
+    u32 slotno);
+/* Legacy symbol retained at the same ABI address as GetAndStage. */
 struct BoxPokemon *LONG_CALL PokemonMoveHistoryTask6_PCStorageGetAndSeed(
     struct PokemonStorageSystem *storage,
     u32 boxno,
@@ -218,6 +223,10 @@ void LONG_CALL PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord(
 BOOL LONG_CALL PokemonMoveHistoryTask6_GTSRemovePartyAndRecord(
     struct Party *party,
     u32 partySlot);
+void LONG_CALL PokemonMoveHistoryTask6_PokewalkerRadioSuccess(
+    void *pokewalker);
+void LONG_CALL PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard(
+    void *pokewalkerApp);
 void LONG_CALL PokemonMoveHistoryTask6_ScriptTeachMove(
     SaveData *saveData,
     struct BoxPokemon *pokemon,

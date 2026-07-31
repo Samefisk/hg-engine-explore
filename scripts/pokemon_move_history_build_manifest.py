@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import errno
 import hashlib
 import json
@@ -13,6 +14,8 @@ import shlex
 import shutil
 import stat
 import subprocess
+import sys
+import sysconfig
 import tempfile
 import unicodedata
 from pathlib import Path
@@ -21,6 +24,7 @@ from typing import Any, Callable
 
 REPO = Path(__file__).resolve().parents[1]
 SCHEMA = "pokemon-move-history-capture-build-v1"
+RUNTIME_ENVIRONMENT_SCHEMA = "summary-move-relearn-runtime-environment-v1"
 PACKAGED_ROM_LOGICAL_PATH = "@packaged-rom"
 BUILD_CONTEXT_KEYS = {
     "ARMIPS",
@@ -139,6 +143,297 @@ OUTPUTS = {
 
 class ManifestError(ValueError):
     """The manifest does not describe the current build generation."""
+
+
+RUNTIME_OS_TRUST_ROOTS = {
+    "darwin": (
+        "/System/Library",
+        "/usr/lib",
+        "/System/Volumes/Preboot/Cryptexes/OS/System/Library",
+        "/System/Volumes/Preboot/Cryptexes/OS/usr/lib",
+    ),
+    "linux": ("/lib", "/lib64", "/usr/lib", "/usr/lib64"),
+}
+RUNTIME_MODULE_RELATIVES = (
+    "desmume/__init__.py",
+    "desmume/i18n_util.py",
+    "desmume/controls.py",
+    "desmume/emulator.py",
+)
+RUNTIME_NATIVE_SUFFIXES = (".dylib", ".dll", ".so")
+
+
+def unbound_runtime_environment() -> dict[str, Any]:
+    return {
+        "schema": RUNTIME_ENVIRONMENT_SCHEMA,
+        "status": "unbound",
+    }
+
+
+def _canonical_runtime_path(path: Path, label: str) -> Path:
+    absolute = Path(os.path.abspath(path))
+    resolved = Path(os.path.realpath(absolute))
+    if not resolved.is_file():
+        raise ManifestError(f"runtime {label} is absent: {resolved}")
+    return resolved
+
+
+def runtime_file_record(path: Path, label: str) -> dict[str, Any]:
+    resolved = _canonical_runtime_path(path, label)
+    return {"path": str(resolved), **file_record(resolved)}
+
+
+def _runtime_tree_record(
+    root: Path,
+    label: str,
+    *,
+    suffixes: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    resolved_root = Path(os.path.realpath(os.path.abspath(root)))
+    if not resolved_root.is_dir():
+        raise ManifestError(f"runtime {label} root is absent: {resolved_root}")
+    digest = hashlib.sha256()
+    count = 0
+    size = 0
+    for candidate in sorted(resolved_root.rglob("*")):
+        relative = candidate.relative_to(resolved_root).as_posix()
+        parts = candidate.relative_to(resolved_root).parts
+        if (
+            "__pycache__" in parts
+            or "site-packages" in parts
+            or candidate.suffix == ".pyc"
+        ):
+            continue
+        if suffixes is not None and not any(
+            candidate.name.endswith(suffix) for suffix in suffixes
+        ):
+            continue
+        metadata = candidate.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            target = os.readlink(candidate).encode("utf-8")
+            digest.update(b"L\0" + relative.encode("utf-8") + b"\0")
+            digest.update(len(target).to_bytes(8, "little") + target)
+            count += 1
+            size += len(target)
+        elif stat.S_ISREG(metadata.st_mode):
+            data = candidate.read_bytes()
+            digest.update(b"F\0" + relative.encode("utf-8") + b"\0")
+            digest.update(len(data).to_bytes(8, "little"))
+            digest.update(hashlib.sha256(data).digest())
+            count += 1
+            size += len(data)
+    if count == 0:
+        raise ManifestError(f"runtime {label} closure is empty")
+    return {
+        "root": str(resolved_root),
+        "files": count,
+        "size": size,
+        "sha256": digest.hexdigest(),
+    }
+
+
+def _runtime_package_root(package: str) -> Path:
+    candidates: set[Path] = set()
+    for entry in sys.path:
+        root = Path(entry if entry else os.getcwd())
+        candidate = root / package
+        if candidate.is_dir():
+            candidates.add(Path(os.path.realpath(candidate)))
+    venv_root = Path(os.path.abspath(sys.executable)).parent.parent
+    version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    for library in ("lib", "lib64"):
+        candidate = venv_root / library / version / "site-packages" / package
+        if candidate.is_dir():
+            candidates.add(Path(os.path.realpath(candidate)))
+    if len(candidates) != 1:
+        raise ManifestError(
+            f"runtime package {package} does not resolve uniquely: "
+            f"{sorted(str(path) for path in candidates)}"
+        )
+    return next(iter(candidates))
+
+
+def _python_runtime_binary() -> Path:
+    if sys.platform == "darwin":
+        candidate = Path(sys.base_prefix) / "Python"
+    else:
+        library = sysconfig.get_config_var("LDLIBRARY")
+        directory = sysconfig.get_config_var("LIBDIR")
+        if not isinstance(library, str) or not isinstance(directory, str):
+            raise ManifestError("Python shared runtime path is unavailable")
+        candidate = Path(directory) / library
+    return _canonical_runtime_path(candidate, "Python shared runtime")
+
+
+def _native_records(roots: tuple[Path, ...]) -> list[dict[str, Any]]:
+    paths: set[Path] = set()
+    for root in roots:
+        for candidate in root.rglob("*"):
+            if candidate.is_file() and any(
+                candidate.name.endswith(suffix)
+                for suffix in RUNTIME_NATIVE_SUFFIXES
+            ):
+                paths.add(Path(os.path.realpath(candidate)))
+    return [
+        runtime_file_record(path, "mutable native closure")
+        for path in sorted(paths)
+    ]
+
+
+def _loaded_native_paths() -> set[Path]:
+    paths: set[Path] = set()
+    if sys.platform == "darwin":
+        process = ctypes.CDLL(None)
+        count = process._dyld_image_count
+        count.argtypes = []
+        count.restype = ctypes.c_uint32
+        name = process._dyld_get_image_name
+        name.argtypes = [ctypes.c_uint32]
+        name.restype = ctypes.c_char_p
+        for index in range(count()):
+            raw = name(index)
+            if raw:
+                candidate = Path(os.path.realpath(os.fsdecode(raw)))
+                if candidate.is_file():
+                    paths.add(candidate)
+    elif sys.platform.startswith("linux"):
+        maps = Path("/proc/self/maps")
+        if not maps.is_file():
+            raise ManifestError("Linux loaded-image map is unavailable")
+        for line in maps.read_text().splitlines():
+            fields = line.split(None, 5)
+            if len(fields) == 6 and fields[5].startswith("/"):
+                candidate = Path(os.path.realpath(fields[5]))
+                if candidate.is_file():
+                    paths.add(candidate)
+    else:
+        raise ManifestError(
+            f"unsupported runtime loaded-image platform: {sys.platform}"
+        )
+    return paths
+
+
+def _under_runtime_root(path: Path, roots: tuple[str, ...]) -> bool:
+    text = os.fspath(path)
+    return any(text == root or text.startswith(root + os.sep) for root in roots)
+
+
+def capture_runtime_environment() -> dict[str, Any]:
+    if (
+        not sys.dont_write_bytecode
+        or sys.pycache_prefix != os.devnull
+        or sys.flags.no_site != 1
+        or "site" in sys.modules
+    ):
+        raise ManifestError(
+            "runtime binding requires -S -B and "
+            "PYTHONPYCACHEPREFIX=/dev/null"
+        )
+    if os.stat(os.devnull).st_mode & 0o170000 != 0o020000:
+        raise ManifestError("runtime pycache sink is not a character device")
+    platform_name = sys.platform.lower()
+    trust_roots = RUNTIME_OS_TRUST_ROOTS.get(platform_name)
+    if trust_roots is None:
+        raise ManifestError(
+            f"unsupported runtime platform for native closure: {sys.platform}"
+        )
+    desmume_root = _runtime_package_root("desmume")
+    pil_root = _runtime_package_root("PIL")
+    module_records = {
+        relative: runtime_file_record(
+            desmume_root.parent / relative,
+            f"module {relative}",
+        )
+        for relative in RUNTIME_MODULE_RELATIVES
+    }
+    libdesmume_name = {
+        "darwin": "libdesmume.dylib",
+        "linux": "libdesmume.so",
+    }[platform_name]
+    libdesmume = desmume_root / libdesmume_name
+    stdlib_root = Path(sysconfig.get_path("stdlib"))
+    stdlib_suffixes = (".py", ".so", ".dylib", ".dll")
+    executable_entry = Path(os.path.abspath(sys.executable))
+    venv_root = executable_entry.parent.parent
+    venv_config = venv_root / "pyvenv.cfg"
+    runtime_binary = _python_runtime_binary()
+    native_roots = (desmume_root, pil_root, stdlib_root / "lib-dynload")
+    absent_zip_paths = sorted(
+        os.path.abspath(entry)
+        for entry in sys.path
+        if isinstance(entry, str) and entry.endswith(".zip")
+    )
+    if any(Path(path).exists() for path in absent_zip_paths):
+        raise ManifestError(
+            "runtime zip import path must be absent under source-only policy"
+        )
+    native_records = _native_records(native_roots)
+    explicitly_required = {
+        str(Path(record["path"])) for record in native_records
+    }
+    explicitly_required.add(str(runtime_binary))
+    for loaded in _loaded_native_paths():
+        if not _under_runtime_root(loaded, trust_roots):
+            explicitly_required.add(str(loaded))
+    native_records = [
+        runtime_file_record(Path(path), "mutable native closure")
+        for path in sorted(explicitly_required)
+    ]
+    return {
+        "schema": RUNTIME_ENVIRONMENT_SCHEMA,
+        "status": "bound",
+        "platform": {
+            "system": platform_name,
+            "machine": os.uname().machine,
+            "implementation": sys.implementation.name,
+            "cache_tag": sys.implementation.cache_tag,
+        },
+        "python": {
+            "bytecode_policy": {
+                "absent_zip_paths": absent_zip_paths,
+                "bytecode_reads_disabled": True,
+                "dont_write_bytecode": True,
+                "no_site": True,
+                "pycache_prefix": os.devnull,
+                "scope": (
+                    "Interpreter startup and every acceptance child skip "
+                    "site/.pth processing and compile Python sources without "
+                    "reading or writing filesystem pyc."
+                ),
+            },
+            "entry_path": str(executable_entry),
+            "executable": runtime_file_record(
+                executable_entry, "Python executable"
+            ),
+            "shared_runtime": runtime_file_record(
+                runtime_binary, "Python shared runtime"
+            ),
+            "pyvenv_cfg": runtime_file_record(
+                venv_config, "virtual-environment configuration"
+            ),
+            "stdlib": _runtime_tree_record(
+                stdlib_root,
+                "Python standard library",
+                suffixes=stdlib_suffixes,
+            ),
+        },
+        "packages": {
+            "desmume": _runtime_tree_record(desmume_root, "DeSmuME package"),
+            "PIL": _runtime_tree_record(pil_root, "Pillow package"),
+        },
+        "modules": module_records,
+        "native": {
+            "libdesmume": runtime_file_record(
+                libdesmume, "libdesmume"
+            ),
+            "mutable_closure": native_records,
+            "os_trust_roots": list(trust_roots),
+            "scope": (
+                "All loaded native images outside the listed OS-owned trust "
+                "roots must be content-addressed by mutable_closure."
+            ),
+        },
+    }
 
 
 def _relative(path: Path, root: Path = REPO) -> str:
@@ -283,6 +578,7 @@ def create_manifest(
         "build_context": dict(sorted(build_context.items())),
         "inputs": first_inputs,
         "outputs": _hash_outputs(rom_path),
+        "runtime_environment": unbound_runtime_environment(),
         "tools": tool_identities(build_context),
     }
     if _hash_inputs(input_paths) != first_inputs:
@@ -346,6 +642,37 @@ def _validate_tool_records(
             raise ManifestError(f"build tool identity is malformed: {name}")
 
 
+def _validate_runtime_environment(
+    runtime: Any,
+    *,
+    require_bound: bool,
+) -> None:
+    if runtime == unbound_runtime_environment():
+        if require_bound:
+            raise ManifestError("runtime environment is not host-bound")
+        return
+    if not isinstance(runtime, dict) or set(runtime) != {
+        "schema",
+        "status",
+        "platform",
+        "python",
+        "packages",
+        "modules",
+        "native",
+    }:
+        raise ManifestError("runtime environment record is malformed")
+    if (
+        runtime.get("schema") != RUNTIME_ENVIRONMENT_SCHEMA
+        or runtime.get("status") != "bound"
+    ):
+        raise ManifestError("runtime environment schema/status differs")
+    current = capture_runtime_environment()
+    if runtime != current:
+        raise ManifestError(
+            "runtime environment content/path closure differs"
+        )
+
+
 def verify_manifest_document(
     document: dict[str, Any],
     root: Path,
@@ -354,12 +681,15 @@ def verify_manifest_document(
     rom_path: Path,
     tool_names: set[str],
     context_keys: set[str],
+    *,
+    require_bound_runtime: bool = False,
 ) -> None:
     if not isinstance(document, dict) or set(document) != {
         "schema",
         "build_context",
         "inputs",
         "outputs",
+        "runtime_environment",
         "tools",
     }:
         raise ManifestError("build manifest top-level fields differ")
@@ -406,9 +736,18 @@ def verify_manifest_document(
     ):
         raise ManifestError("build context differs or is malformed")
     _validate_tool_records(document["tools"], tool_names, context)
+    _validate_runtime_environment(
+        document["runtime_environment"],
+        require_bound=require_bound_runtime,
+    )
 
 
-def verify_manifest(manifest_path: Path, rom_path: Path) -> dict[str, Any]:
+def verify_manifest(
+    manifest_path: Path,
+    rom_path: Path,
+    *,
+    require_bound_runtime: bool = False,
+) -> dict[str, Any]:
     document = load_manifest(manifest_path)
     verify_manifest_document(
         document,
@@ -418,8 +757,49 @@ def verify_manifest(manifest_path: Path, rom_path: Path) -> dict[str, Any]:
         rom_path,
         TOOL_CONTEXT_KEYS,
         BUILD_CONTEXT_KEYS,
+        require_bound_runtime=require_bound_runtime,
     )
     return document
+
+
+def bind_runtime_environment(manifest_path: Path, rom_path: Path) -> None:
+    manifest_path = Path(os.path.abspath(manifest_path))
+    _require_regular_publish_leaf(
+        manifest_path,
+        "runtime-bind manifest",
+        allow_missing=False,
+    )
+    original = load_manifest(manifest_path)
+    verify_manifest(manifest_path, rom_path, require_bound_runtime=False)
+    runtime = capture_runtime_environment()
+    document = json.loads(json.dumps(original))
+    document["runtime_environment"] = runtime
+    rendered = json.dumps(document, indent=2, sort_keys=True) + "\n"
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{manifest_path.name}.runtime-bind.",
+        suffix=".tmp",
+        dir=manifest_path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(rendered)
+            stream.flush()
+            os.fsync(stream.fileno())
+        verify_manifest(temporary, rom_path, require_bound_runtime=True)
+        if capture_runtime_environment() != runtime:
+            raise ManifestError(
+                "runtime environment changed while it was being bound"
+            )
+        os.replace(temporary, manifest_path)
+        _fsync_directory(manifest_path.parent)
+        verify_manifest(
+            manifest_path,
+            rom_path,
+            require_bound_runtime=True,
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def seal(
@@ -862,6 +1242,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seal", type=Path)
     parser.add_argument("--verify", type=Path)
+    parser.add_argument("--bind-runtime", type=Path)
+    parser.add_argument("--require-bound-runtime", action="store_true")
     parser.add_argument("--publish-pair", action="store_true")
     parser.add_argument("--rom", type=Path)
     parser.add_argument("--candidate-manifest", type=Path)
@@ -878,11 +1260,13 @@ def main() -> None:
     modes = (
         args.seal is not None,
         args.verify is not None,
+        args.bind_runtime is not None,
         args.publish_pair,
     )
     if sum(modes) != 1:
         raise SystemExit(
-            "choose exactly one of --seal, --verify, or --publish-pair"
+            "choose exactly one of --seal, --verify, --bind-runtime, or "
+            "--publish-pair"
         )
     publish_values = (
         args.candidate_manifest,
@@ -892,7 +1276,7 @@ def main() -> None:
     )
     try:
         if args.seal is not None:
-            if args.rom is None or any(
+            if args.require_bound_runtime or args.rom is None or any(
                 value is not None for value in publish_values
             ):
                 raise ManifestError(
@@ -916,10 +1300,28 @@ def main() -> None:
                 raise ManifestError(
                     "--verify requires --rom and no seal/publish options"
                 )
-            verify_manifest(args.verify, args.rom)
+            verify_manifest(
+                args.verify,
+                args.rom,
+                require_bound_runtime=args.require_bound_runtime,
+            )
+        elif args.bind_runtime is not None:
+            if (
+                args.rom is None
+                or args.context
+                or args.require_bound_runtime
+                or any(value is not None for value in publish_values)
+            ):
+                raise ManifestError(
+                    "--bind-runtime requires --rom and no other mode options"
+                )
+            bind_runtime_environment(args.bind_runtime, args.rom)
         else:
-            if args.rom is not None or args.context or any(
-                value is None for value in publish_values
+            if (
+                args.rom is not None
+                or args.context
+                or args.require_bound_runtime
+                or any(value is None for value in publish_values)
             ):
                 raise ManifestError(
                     "--publish-pair requires exactly candidate/final "

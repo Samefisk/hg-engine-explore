@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -109,6 +110,8 @@ def source_contracts(root: Path) -> None:
     manifest_builder = (
         root / "scripts/pokemon_move_history_build_manifest.py"
     ).read_text()
+    build_wrapper = (root / "docker-makerom.cmd").read_text()
+    headless = (root / "scripts/headless-overworld-test.py").read_text()
     pokemon_core = (root / "src/pokemon.c").read_text()
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
@@ -448,9 +451,28 @@ def source_contracts(root: Path) -> None:
         in runtime
         and "evidence.get(\"artifact_authentication\")"
         in runtime
+        and "verify_authenticated_result(probe)" in runtime
+        and "verify_authenticated_result(evidence)" in runtime
+        and "result = authenticate_result(result)" in runtime
+        and '"summary-move-relearn-evidence-artifacts-v1"' in runtime
+        and '"summary-move-relearn-result-v1"' in runtime
+        and "EVIDENCE_ARTIFACTS.reauthenticate()" in runtime
+        and '"BOOTSTRAP_LIBDESMUME_PATH"' in runtime
+        and "DeSmuME(BOOTSTRAP_LIBDESMUME_PATH)" in runtime
+        and "runtime closure changed after result publication" in runtime
+        and "runtime closure changed after stdout publication" in runtime
         and "os.replace(temporary_path, path)" in runtime,
         "runtime evidence is not fail-closed against verifier/publication "
         "revision or atomic publication",
+    )
+    require(
+        runtime.count("emu.backup.export_file(") == 1
+        and "def export_backup_artifact(" in runtime
+        and "def artifact_path(" in runtime
+        and "return _atomic_artifact_path(" in runtime
+        and '"screenshots": captures' in runtime
+        and '"exported_raw_save": str(args.export_raw)' in runtime,
+        "runtime screenshot/save evidence bypasses atomic content addressing",
     )
     require(
         launcher.index("_invalidate_results(sys.argv[1:])")
@@ -459,7 +481,7 @@ def source_contracts(root: Path) -> None:
         < launcher.index("_compile_buffers(")
         and "spec_from_file_location" not in launcher
         and "SourceFileLoader" not in launcher
-        and "__pycache__" not in launcher
+        and '"__pycache__" in parts' in launcher
         and "compile(" in launcher
         and "dont_inherit=True" in launcher
         and "optimize=0" in launcher
@@ -472,6 +494,67 @@ def source_contracts(root: Path) -> None:
         "buffer authentication and pycache-free execution",
     )
     require(
+        'sys.pycache_prefix != "/dev/null"' in launcher
+        and "not sys.dont_write_bytecode" in launcher
+        and "sys.flags.no_site != 1" in launcher
+        and '"site" in sys.modules' in launcher
+        and "_stage_zero_invalidate_results(sys.argv[1:])" in launcher
+        and "posix.unlink(target)" in launcher
+        and launcher.index("import sys")
+        < launcher.index('sys.pycache_prefix != "/dev/null"')
+        < launcher.index("import os")
+        and '"bytecode_policy"' in launcher
+        and '"bytecode_reads_disabled": True' in launcher
+        and '"absent_zip_paths"' in launcher
+        and '"no_site": True' in launcher
+        and '"pycache_prefix": "/dev/null"' in launcher
+        and "runtime Python bytecode-bypass policy differs" in launcher
+        and "capture_runtime_environment()" in launcher
+        and "runtime binding requires -S -B" in manifest_builder
+        and '"bytecode_policy"' in manifest_builder
+        and '"bytecode_reads_disabled": True' in manifest_builder
+        and '"absent_zip_paths": absent_zip_paths' in manifest_builder
+        and "runtime zip import path must be absent" in manifest_builder
+        and '"no_site": True' in manifest_builder
+        and '"pycache_prefix": os.devnull' in manifest_builder
+        and "import importlib" not in launcher
+        and 'sys.modules.get("_frozen_importlib")' in launcher
+        and launcher.index(
+            "runtime_environment = _primitive_runtime_authentication(document)"
+        )
+        < launcher.index("compiled = _compile_buffers(buffers, paths)")
+        < launcher.index("manifest_module = _execute_module(")
+        and "_install_retained_package_loader(" in launcher
+        and '"PIL"' in launcher
+        and "runtime module differs from publication manifest" in launcher
+        and "loaded mutable native image is outside sealed closure" in launcher
+        and "runtime libdesmume changed across native load" in launcher
+        and '"BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path' in launcher
+        and "require_bound_runtime=True" in launcher
+        and "create_desmume()" in headless
+        and "create_desmume()" in party_verifier
+        and "os.path.abspath(sys.executable)" in headless
+        and "os.path.abspath(venv_python)" in headless
+        and "os.path.abspath(sys.executable)" in party_verifier
+        and "os.path.abspath(venv_python)" in party_verifier,
+        "runtime launcher does not independently seal Python/DeSmuME/Pillow/"
+        "native execution before retained-buffer helpers",
+    )
+    bind_index = build_wrapper.index("--bind-runtime")
+    verify_bound_index = build_wrapper.index("--require-bound-runtime")
+    delta_index = build_wrapper.index("./scripts/copy-test-nds-to-delta.sh")
+    require(
+        build_wrapper.count("--bind-runtime") == 1
+        and build_wrapper.count("--require-bound-runtime") == 1
+        and "PYTHONDONTWRITEBYTECODE=1" in build_wrapper
+        and build_wrapper.count("PYTHONPYCACHEPREFIX=/dev/null") == 2
+        and build_wrapper.count('"$runtime_python" -S -B') == 2
+        and 'runtime_python=".venv/bin/python3"' in build_wrapper
+        and bind_index < verify_bound_index < delta_index,
+        "managed build does not bind and verify the host runtime before Delta "
+        "publication",
+    )
+    require(
         "AUTHENTICATED_HEADLESS" in party_verifier
         and "spec_from_file_location" not in party_verifier
         and "SourceFileLoader" not in party_verifier
@@ -482,7 +565,10 @@ def source_contracts(root: Path) -> None:
     require(
         "subprocess.Popen" not in runtime
         and "multiprocessing" not in runtime
-        and runtime.count("subprocess.run(") >= 2,
+        and runtime.count("subprocess.run(") >= 2
+        and runtime.count('            "-S",') == 2
+        and runtime.count('            "-B",') == 2
+        and runtime.count('"PYTHONPYCACHEPREFIX": "/dev/null"') == 2,
         "runtime child evidence is no longer blocking and serialized",
     )
     route_start = runtime.index("def open_retail_daycare_lady(")
@@ -590,6 +676,16 @@ def source_contracts(root: Path) -> None:
         "hatch_reparse_sha256",
         "not destination_accepts_trade",
         "walker_recovered == controlled_raw",
+        "walker_state_fingerprint(",
+        "walker_stage(missing_cancel, pending_box)",
+        "walker_discard(missing_cancel)",
+        "walker_stage(full_cancel, pending_box)",
+        "HISTORY_RECORD_COUNT",
+        "walker_ack(acknowledged)",
+        '"missing_record_cancel_image_exact": True',
+        '"full_319_cancel_image_exact": True',
+        '"ack_commits_pending_once": True',
+        '"duplicate_ack_inert": True',
         "history_identity_count(",
         "validate_all_boxed_checksums(",
         '"source-exact authenticated serialization surrogate"',
@@ -800,6 +896,43 @@ def bootstrap_host_contracts(root: Path) -> None:
         launcher.__dict__,
     )
 
+    def colocated_cache_path(source: Path) -> Path:
+        return (
+            source.parent
+            / "__pycache__"
+            / f"{source.stem}.{sys.implementation.cache_tag}.pyc"
+        )
+
+    source_only_environment = dict(os.environ)
+    source_only_environment.update(
+        {
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPYCACHEPREFIX": "/dev/null",
+        }
+    )
+    source_only_probe = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-B",
+            "-v",
+            "-c",
+            "import hashlib, json, os, subprocess, tempfile, types",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=source_only_environment,
+    )
+    require(
+        source_only_probe.returncode == 0
+        and ".pyc" not in source_only_probe.stderr
+        and "hashlib.py" in source_only_probe.stderr
+        and "json/__init__.py" in source_only_probe.stderr,
+        "runtime interpreter did not bypass filesystem pycache from startup",
+    )
+
     def expect_failure(
         exception_type: type[BaseException],
         callback: object,
@@ -890,6 +1023,12 @@ def bootstrap_host_contracts(root: Path) -> None:
                     **launcher._path_record(str(rom)),
                 }
             },
+            "runtime_environment": {
+                "schema": (
+                    "summary-move-relearn-runtime-environment-v1"
+                ),
+                "status": "unbound",
+            },
             "schema": launcher.SCHEMA,
             "tools": {},
         }
@@ -948,6 +1087,8 @@ def bootstrap_host_contracts(root: Path) -> None:
         stale.write_text('{"status": "passing-stale-evidence"}\n')
         command = [
             sys.executable,
+            "-S",
+            "-B",
             str(paths[launcher.LAUNCHER_RELATIVE]),
             "--result-json",
             str(stale),
@@ -973,6 +1114,7 @@ def bootstrap_host_contracts(root: Path) -> None:
             capture_output=True,
             text=True,
             timeout=30,
+            env=source_only_environment,
         )
         require(
             completed.returncode != 0,
@@ -991,6 +1133,102 @@ def bootstrap_host_contracts(root: Path) -> None:
         prefix="summary-relearn-bootstrap-"
     ) as temporary:
         temp = Path(temporary)
+
+        unsealed_stale = temp / "unsealed-startup-result.json"
+        unsealed_stale.write_text('{"status": "stale"}\n')
+        unsealed_environment = dict(os.environ)
+        unsealed_environment.pop("PYTHONPYCACHEPREFIX", None)
+        unsealed_environment.pop("PYTHONDONTWRITEBYTECODE", None)
+        unsealed_start = subprocess.run(
+            [
+                sys.executable,
+                str(launcher_path),
+                "--result-json",
+                str(unsealed_stale),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=unsealed_environment,
+        )
+        require(
+            unsealed_start.returncode != 0
+            and "-S -B and PYTHONPYCACHEPREFIX=/dev/null"
+            in unsealed_start.stderr
+            and not unsealed_stale.exists(),
+            "runtime launcher accepted an unsealed startup or retained stale "
+            "evidence",
+        )
+
+        startup_root = temp / "startup-pycache"
+        startup_root.mkdir()
+        startup_source = startup_root / "startup_fixture.py"
+        startup_source.write_text('VALUE = "authenticated-source"\n')
+        startup_sentinel = startup_root / "poison-executed"
+        startup_poison = compile(
+            "from pathlib import Path\n"
+            f"Path({str(startup_sentinel)!r}).write_text('executed')\n"
+            'VALUE = "poisoned-pyc"\n',
+            str(startup_source),
+            "exec",
+            dont_inherit=True,
+            optimize=0,
+        )
+        startup_stat = startup_source.stat()
+        startup_cache = colocated_cache_path(startup_source)
+        startup_cache.parent.mkdir(parents=True)
+        startup_cache.write_bytes(
+            importlib.util.MAGIC_NUMBER
+            + struct.pack(
+                "<III",
+                0,
+                int(startup_stat.st_mtime),
+                startup_stat.st_size,
+            )
+            + marshal.dumps(startup_poison)
+        )
+        startup_command = (
+            "import sys; "
+            f"sys.path.insert(0, {str(startup_root)!r}); "
+            "import startup_fixture; print(startup_fixture.VALUE)"
+        )
+        poisoned_environment = dict(os.environ)
+        poisoned_environment.pop("PYTHONPYCACHEPREFIX", None)
+        poisoned_environment.pop("PYTHONDONTWRITEBYTECODE", None)
+        poison_calibration = subprocess.run(
+            [sys.executable, "-S", "-B", "-c", startup_command],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=poisoned_environment,
+        )
+        require(
+            poison_calibration.returncode == 0
+            and poison_calibration.stdout.strip() == "poisoned-pyc"
+            and startup_sentinel.is_file(),
+            "startup pycache fixture did not calibrate the poisoned-bytecode "
+            "risk",
+        )
+        startup_sentinel.unlink()
+        source_only_execution = subprocess.run(
+            [sys.executable, "-S", "-B", "-v", "-c", startup_command],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            source_only_execution.returncode == 0
+            and source_only_execution.stdout.strip()
+            == "authenticated-source"
+            and not startup_sentinel.exists()
+            and str(startup_cache) not in source_only_execution.stderr
+            and str(startup_source) in source_only_execution.stderr,
+            "source-only startup consulted timestamp-valid poisoned bytecode",
+        )
 
         corrupted_root = temp / "corrupted-helper"
         (
@@ -1139,6 +1377,94 @@ def bootstrap_host_contracts(root: Path) -> None:
             arguments_only=True,
         )
 
+        runtime_leaf = temp / "runtime-leaf"
+        runtime_leaf.write_bytes(b"sealed runtime leaf")
+        runtime_leaf_record = {
+            "path": str(runtime_leaf.resolve()),
+            **launcher._path_record(str(runtime_leaf)),
+        }
+        runtime_leaf.write_bytes(b"substituted runtime leaf")
+        invalidate_stale(
+            temp / "runtime-leaf-result.json",
+            lambda: launcher._validate_file_path_record(
+                runtime_leaf_record,
+                "substituted fixture",
+            ),
+            RuntimeError,
+            "substituted runtime leaf",
+        )
+        runtime_leaf.write_bytes(b"sealed runtime leaf")
+        runtime_alias = temp / "runtime-leaf-alias"
+        runtime_alias.symlink_to(runtime_leaf)
+        alias_record = {
+            "path": str(runtime_alias),
+            **launcher._path_record(str(runtime_alias)),
+        }
+        invalidate_stale(
+            temp / "runtime-alias-result.json",
+            lambda: launcher._validate_file_path_record(
+                alias_record,
+                "aliased fixture",
+            ),
+            RuntimeError,
+            "runtime path alias",
+        )
+
+        pil_root = temp / "retained-pil" / "PIL"
+        pil_root.mkdir(parents=True)
+        (pil_root / "__init__.py").write_text("")
+        pil_source = pil_root / "fixture.py"
+        pil_source.write_text('VALUE = "retained-pillow-source"\n')
+        pil_sentinel = temp / "retained-pil-poison-executed"
+        poison = compile(
+            "from pathlib import Path\n"
+            f"Path({str(pil_sentinel)!r}).write_text('executed')\n"
+            'VALUE = "poisoned-pyc"\n',
+            str(pil_source),
+            "exec",
+            dont_inherit=True,
+            optimize=0,
+        )
+        source_stat = pil_source.stat()
+        pil_cache = colocated_cache_path(pil_source)
+        pil_cache.parent.mkdir(parents=True)
+        pil_cache.write_bytes(
+            importlib.util.MAGIC_NUMBER
+            + struct.pack(
+                "<III",
+                0,
+                int(source_stat.st_mtime),
+                source_stat.st_size,
+            )
+            + marshal.dumps(poison)
+        )
+        prior_pil = {
+            name: module
+            for name, module in tuple(sys.modules.items())
+            if name == "PIL" or name.startswith("PIL.")
+        }
+        for name in prior_pil:
+            del sys.modules[name]
+        retained_loader = launcher._install_retained_package_loader(
+            {"packages": {"PIL": {"root": str(pil_root.resolve())}}},
+            "PIL",
+        )
+        try:
+            imported_pil = __import__("PIL.fixture", fromlist=["fixture"])
+            require(
+                imported_pil.VALUE == "retained-pillow-source"
+                and imported_pil.__cached__ is None
+                and not pil_sentinel.exists(),
+                "retained Pillow loader consulted poisoned bytecode",
+            )
+            retained_loader.authenticate()
+        finally:
+            sys.meta_path.remove(retained_loader)
+            for name in tuple(sys.modules):
+                if name == "PIL" or name.startswith("PIL."):
+                    del sys.modules[name]
+            sys.modules.update(prior_pil)
+
         for helper_name in (
             "manifest",
             "headless",
@@ -1165,9 +1491,7 @@ def bootstrap_host_contracts(root: Path) -> None:
                 optimize=0,
             )
             source_stat = source_path.stat()
-            cached_path = Path(
-                importlib.util.cache_from_source(str(source_path))
-            )
+            cached_path = colocated_cache_path(source_path)
             cached_path.parent.mkdir(parents=True)
             cached_path.write_bytes(
                 importlib.util.MAGIC_NUMBER
@@ -1187,7 +1511,12 @@ def bootstrap_host_contracts(root: Path) -> None:
             spec = importlib.util.spec_from_loader(loader_name, loader)
             require(spec is not None, "could not create poison loader spec")
             loaded = importlib.util.module_from_spec(spec)
-            loader.exec_module(loaded)
+            prior_pycache_prefix = sys.pycache_prefix
+            sys.pycache_prefix = None
+            try:
+                loader.exec_module(loaded)
+            finally:
+                sys.pycache_prefix = prior_pycache_prefix
             require(
                 loaded.FIXTURE_VALUE == "poisoned-pyc"
                 and sentinel.exists(),
@@ -1232,6 +1561,211 @@ def bootstrap_host_contracts(root: Path) -> None:
                 and not sentinel.exists(),
                 f"{helper_name} retained buffer was replaced by live source",
             )
+
+
+def artifact_publication_host_contracts(root: Path) -> None:
+    runtime_path = root / "scripts/verify_summary_move_relearn_runtime.py"
+    parsed = ast.parse(runtime_path.read_bytes(), filename=str(runtime_path))
+    selected_names = {
+        "EvidenceArtifactRegistry",
+        "_fsync_directory",
+        "_atomic_artifact_path",
+        "_canonical_result_payload",
+        "authenticate_result",
+        "verify_authenticated_result",
+        "write_result_atomic",
+    }
+    selected = [
+        node
+        for node in parsed.body
+        if (
+            isinstance(node, (ast.ClassDef, ast.FunctionDef))
+            and node.name in selected_names
+        )
+    ]
+    require(
+        {node.name for node in selected} == selected_names,
+        "runtime evidence artifact fixture could not select production code",
+    )
+
+    def runtime_require(condition: bool, message: str) -> None:
+        if not condition:
+            raise RuntimeError(message)
+
+    fixture = types.ModuleType("summary_relearn_evidence_artifact_fixture")
+    fixture.__dict__.update(
+        {
+            "hashlib": hashlib,
+            "json": json,
+            "os": os,
+            "Path": Path,
+            "BOOTSTRAP_AUTHENTICATION": {"fixture": "exact"},
+            "BOOTSTRAP_REAUTHENTICATE": lambda: {"fixture": "exact"},
+            "require": runtime_require,
+            "stat": __import__("stat"),
+            "tempfile": tempfile,
+        }
+    )
+    compiled = compile(
+        ast.fix_missing_locations(ast.Module(body=selected, type_ignores=[])),
+        str(runtime_path),
+        "exec",
+        dont_inherit=True,
+        optimize=0,
+    )
+    exec(compiled, fixture.__dict__)
+
+    def expect_runtime_failure(callback: object, label: str) -> None:
+        try:
+            callback()
+        except (RuntimeError, FileNotFoundError, IsADirectoryError, OSError):
+            return
+        require(False, f"{label} did not fail closed")
+
+    with tempfile.TemporaryDirectory(
+        prefix="summary-relearn-evidence-artifacts-"
+    ) as temporary:
+        temp = Path(temporary).resolve()
+        registry = fixture.EvidenceArtifactRegistry()
+        fixture.EVIDENCE_ARTIFACTS = registry
+        capture = temp / "capture.png"
+        capture.write_bytes(b"stale screenshot")
+        capture_record = fixture._atomic_artifact_path(
+            capture,
+            lambda temporary: temporary.write_bytes(
+                b"authenticated screenshot"
+            ),
+        )
+        require(
+            capture_record
+            == {
+                "path": str(capture),
+                "size": len(b"authenticated screenshot"),
+                "sha256": hashlib.sha256(
+                    b"authenticated screenshot"
+                ).hexdigest(),
+            },
+            "runtime screenshot record is not exact",
+        )
+        expect_runtime_failure(
+            lambda: fixture._atomic_artifact_path(
+                capture,
+                lambda temporary: temporary.write_bytes(b"replacement"),
+            ),
+            "frozen artifact overwrite",
+        )
+        authenticated = fixture.authenticate_result(
+            {
+                "screenshots": [str(capture)],
+                "nested": {"capture": str(capture)},
+            }
+        )
+        parent_registry = fixture.EvidenceArtifactRegistry()
+        fixture.EVIDENCE_ARTIFACTS = parent_registry
+        fixture.verify_authenticated_result(authenticated)
+        require(
+            authenticated["screenshots"] == [capture_record]
+            and authenticated["nested"]["capture"] == capture_record,
+            "runtime result did not replace every artifact path claim",
+        )
+        require(
+            parent_registry.reauthenticate() == [capture_record],
+            "parent did not adopt and reauthenticate the child artifact",
+        )
+        tampered_result = json.loads(json.dumps(authenticated))
+        tampered_result["nested"]["label"] = "substituted"
+        expect_runtime_failure(
+            lambda: fixture.verify_authenticated_result(tampered_result),
+            "tampered child result",
+        )
+        tampered_record = json.loads(json.dumps(authenticated))
+        tampered_record["screenshots"][0]["sha256"] = "0" * 64
+        expect_runtime_failure(
+            lambda: fixture.verify_authenticated_result(tampered_record),
+            "tampered child artifact record",
+        )
+
+        missing_registry = fixture.EvidenceArtifactRegistry()
+        expect_runtime_failure(
+            lambda: missing_registry.register(temp / "missing.png"),
+            "missing evidence artifact",
+        )
+        directory = temp / "directory"
+        directory.mkdir()
+        expect_runtime_failure(
+            lambda: missing_registry.register(directory),
+            "directory evidence artifact",
+        )
+        alias = temp / "capture-alias.png"
+        alias.symlink_to(capture)
+        expect_runtime_failure(
+            lambda: missing_registry.register(alias),
+            "symlink evidence artifact",
+        )
+        hardlink_registry = fixture.EvidenceArtifactRegistry()
+        hardlink_registry.register(capture)
+        hardlink = temp / "capture-hardlink.png"
+        os.link(capture, hardlink)
+        expect_runtime_failure(
+            lambda: hardlink_registry.register(hardlink),
+            "hard-linked evidence artifact alias",
+        )
+        protected_registry = fixture.EvidenceArtifactRegistry()
+        protected_registry.protect(capture)
+        expect_runtime_failure(
+            lambda: protected_registry.register(capture),
+            "protected evidence artifact alias",
+        )
+
+        mutation = temp / "mutation.png"
+        mutation.write_bytes(b"before")
+        mutation_registry = fixture.EvidenceArtifactRegistry()
+        mutation_registry.register(mutation)
+        mutation.write_bytes(b"after")
+        expect_runtime_failure(
+            mutation_registry.reauthenticate,
+            "post-capture artifact mutation",
+        )
+        substitution = temp / "substitution.png"
+        substitution.write_bytes(b"original inode")
+        substitution_registry = fixture.EvidenceArtifactRegistry()
+        substitution_registry.register(substitution)
+        replacement = temp / "replacement.png"
+        replacement.write_bytes(b"replacement inode")
+        os.replace(replacement, substitution)
+        expect_runtime_failure(
+            substitution_registry.reauthenticate,
+            "post-capture path substitution",
+        )
+
+        publication = temp / "result.json"
+        publication.write_text('{"stale":true}\n')
+        publication_registry = fixture.EvidenceArtifactRegistry()
+        fixture.EVIDENCE_ARTIFACTS = publication_registry
+        published_artifact = temp / "published.png"
+        published_artifact.write_bytes(b"before publication")
+        publication_registry.register(published_artifact)
+        original_reauthenticate = publication_registry.reauthenticate
+        calls = 0
+
+        def mutate_after_publication() -> list[dict[str, object]]:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                published_artifact.write_bytes(b"after publication")
+            return original_reauthenticate()
+
+        publication_registry.reauthenticate = mutate_after_publication
+        expect_runtime_failure(
+            lambda: fixture.write_result_atomic(
+                publication, '{"passing":true}\n'
+            ),
+            "post-publication artifact mutation",
+        )
+        require(
+            not publication.exists(),
+            "failed artifact reauthentication retained a published result",
+        )
 
 
 def host_state_contracts() -> None:
@@ -1525,6 +2059,7 @@ def main() -> None:
     root = args.root.resolve()
     source_contracts(root)
     bootstrap_host_contracts(root)
+    artifact_publication_host_contracts(root)
     host_state_contracts()
     binary_paths = (
         args.arm9,

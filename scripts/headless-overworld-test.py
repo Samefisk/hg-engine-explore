@@ -20,7 +20,9 @@ DSV_FOOTER_MARKER = (
 def ensure_repo_venv() -> None:
     venv = REPO_ROOT / ".venv"
     venv_python = venv / "bin/python3"
-    if Path(sys.prefix).resolve() == venv.resolve():
+    if Path(os.path.abspath(sys.executable)) == Path(
+        os.path.abspath(venv_python)
+    ):
         return
     if not venv_python.is_file():
         return
@@ -31,6 +33,11 @@ ensure_repo_venv()
 
 from desmume.controls import Keys, keymask
 from desmume.emulator import DeSmuME
+
+
+def create_desmume() -> DeSmuME:
+    authenticated = globals().get("AUTHENTICATED_LIBDESMUME_PATH")
+    return DeSmuME(authenticated) if authenticated is not None else DeSmuME()
 
 KEYS = {
     "A": Keys.KEY_A,
@@ -608,7 +615,7 @@ def main() -> int:
     started_at = time.monotonic()
 
     with silence_native_output(not args.show_emulator_log):
-        emu = DeSmuME()
+        emu = create_desmume()
         emu.volume_set(0)
         emu.open(str(rom))
         with tempfile.NamedTemporaryFile(suffix=".sav") as raw_file:
