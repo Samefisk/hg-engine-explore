@@ -25,8 +25,25 @@
 #include "../include/types.h"
 
 extern u32 word_to_store_form_at;
+extern u32 partyMenuSignal;
 // [preevo] = {species, form}, [postevo] = {species, form},
 u16 ALIGN4 gEvolutionSceneOverride[2][2];
+u32 PokemonMoveHistoryTask6_CoreSizePad;
+
+/*
+ * Preserve every task1-5 core symbol address after moving the retail/form
+ * swap implementation to resident overlay 155. The paired private u32 moved
+ * to overlay 155 keeps overlay129's total size and 0x40 headroom unchanged.
+ */
+void __attribute__((naked, used))
+PokemonMoveHistoryTask6_CoreLayoutPad(void)
+{
+    __asm__(
+        "nop\n"
+        "nop\n"
+        "nop\n"
+        "bx lr\n");
+}
 
 /**
  *  @brief set up the indices for the new form system pictures.  if necessary, loop through the form table, searching for the new form index to load sprites from
@@ -61,14 +78,14 @@ BOOL LONG_CALL GetOtherFormPic(MON_PIC *picdata, u16 mons_no, u8 dir, u8 col, u8
 
 void SetPartyPokemonParamsForEvoCutscene(struct PartyPokemon *mon, u16 *targetSpecies, BOOL clearEvoStructure)
 {
-    u32 form = 0;
+    u32 form = 32;
     if (gEvolutionSceneOverride[0][0] == *targetSpecies) {
         form = gEvolutionSceneOverride[0][1];
     } else if (gEvolutionSceneOverride[1][0] == *targetSpecies) {
         form = gEvolutionSceneOverride[1][1];
     }
     SetMonData(mon, MON_DATA_SPECIES, targetSpecies);
-    if (form) {
+    if (form != 32) {
         SetMonData(mon, MON_DATA_FORM, &form);
     }
     if (clearEvoStructure) {
@@ -871,8 +888,6 @@ BOOL CanUseRotomCatalog(struct PartyPokemon *pp)
     return GetMonData(pp, MON_DATA_SPECIES, NULL) == SPECIES_ROTOM;
 }
 
-u32 ALIGN4 partyMenuSignal = 0;
-
 u16 NatureToMintItem[] = {
     [NATURE_LONELY] = ITEM_LONELY_MINT,
     [NATURE_ADAMANT] = ITEM_ADAMANT_MINT,
@@ -976,8 +991,16 @@ u32 LONG_CALL UseItemMonAttrChangeCheck(struct PartyMenu *wk, void *dat)
             wk->args->species = 0;
 
             ChangePartyPokemonToForm(pp, 0);
-            SwapPartyPokemonMove(pp, currForm == 1 ? MOVE_ICE_BURN : MOVE_FREEZE_SHOCK, MOVE_GLACIATE);
-            SwapPartyPokemonMove(pp, currForm == 1 ? MOVE_FUSION_FLARE : MOVE_FUSION_BOLT, MOVE_SCARY_FACE);
+            SwapPartyPokemonMove(
+                pp,
+                currForm == 1 ? MOVE_ICE_BURN : MOVE_FREEZE_SHOCK,
+                MOVE_GLACIATE,
+                TRUE);
+            SwapPartyPokemonMove(
+                pp,
+                currForm == 1 ? MOVE_FUSION_FLARE : MOVE_FUSION_BOLT,
+                MOVE_SCARY_FACE,
+                TRUE);
         } else if (saveMiscData->isMonStored[STORED_MONS_DNA_SPLICERS] == 0) // return nothing otherwise
         {
             // grab reshiram from party
@@ -1000,8 +1023,16 @@ u32 LONG_CALL UseItemMonAttrChangeCheck(struct PartyMenu *wk, void *dat)
             }
 
             ChangePartyPokemonToForm(pp, wk->args->species);
-            SwapPartyPokemonMove(pp, MOVE_GLACIATE, wk->args->species == 1 ? MOVE_ICE_BURN : MOVE_FREEZE_SHOCK);
-            SwapPartyPokemonMove(pp, MOVE_SCARY_FACE, wk->args->species == 1 ? MOVE_FUSION_FLARE : MOVE_FUSION_BOLT);
+            SwapPartyPokemonMove(
+                pp,
+                MOVE_GLACIATE,
+                wk->args->species == 1 ? MOVE_ICE_BURN : MOVE_FREEZE_SHOCK,
+                TRUE);
+            SwapPartyPokemonMove(
+                pp,
+                MOVE_SCARY_FACE,
+                wk->args->species == 1 ? MOVE_FUSION_FLARE : MOVE_FUSION_BOLT,
+                TRUE);
         } else {
             return FALSE;
         } // get out because no changes should be made
@@ -1141,18 +1172,17 @@ void LONG_CALL ChangePartyPokemonToForm(struct PartyPokemon *pp, u32 form)
  *  @param oldMove move to be replaced
  *  @param newMove move that will be written
  */
-void LONG_CALL SwapPartyPokemonMove(struct PartyPokemon *pp, u32 oldMove, u32 newMove)
+/*
+ * SwapPartyPokemonMove now lives in resident overlay 155. Retain its original
+ * 0x30-byte core footprint so all task1-5 symbols through the level-up learner
+ * keep their sealed addresses.
+ */
+void __attribute__((naked, used))
+PokemonMoveHistoryTask6_SwapMoveCoreLayoutPad(void)
 {
-    for (u32 i = 0; i < 4; i++) {
-        if (GetMonData(pp, MON_DATA_MOVE1 + i, NULL) == oldMove) {
-            SetMonData(pp, MON_DATA_MOVE1 + i, &newMove);
-            u32 maxPP = GetMonData(pp, MON_DATA_MOVE1MAXPP + i, NULL);
-            if (GetMonData(pp, MON_DATA_MOVE1PP + i, NULL) > maxPP) {
-                SetMonData(pp, MON_DATA_MOVE1PP + i, &maxPP);
-            }
-            break;
-        }
-    }
+    __asm__(
+        ".space 0x2e\n"
+        "bx lr\n");
 }
 
 /**
@@ -1165,7 +1195,11 @@ void LONG_CALL ChangePartyPokemonToFormSwapMove(struct PartyPokemon *pp, u32 for
 {
     if (form != GetMonData(pp, MON_DATA_FORM, NULL)) {
         ChangePartyPokemonToForm(pp, form);
-        SwapPartyPokemonMove(pp, oldMove, newMove);
+        SwapPartyPokemonMove(
+            pp,
+            oldMove,
+            newMove,
+            TRUE);
     }
 }
 
@@ -2502,58 +2536,24 @@ TrainerGender LONG_CALL TT_TrainerTypeSexGet(int tr_type)
     return (TrainerGender)sTrainerGenders[tr_type];
 }
 
-// https://www.smogon.com/forums/threads/scarlet-violet-battle-mechanics-research.3709545/post-9714380
-void LONG_CALL correct_zacian_zamazenta_kyurem_moves_for_form(struct PartyPokemon *param, unsigned int expected_form, int UNUSED *a3)
+/*
+ * The battle-only Zacian/Zamazenta/Kyurem rewrite now lives in resident
+ * overlay 155. Its original core function was 0x100 bytes; retaining 0xD0 here
+ * removes exactly 0x30 after MonTryLearnMoveOnLevelUp, balancing the 0x30
+ * compatibility pad at SwapPartyPokemonMove's old position.
+ */
+void LONG_CALL __attribute__((naked, used))
+correct_zacian_zamazenta_kyurem_moves_for_form(
+    struct PartyPokemon *pokemon,
+    unsigned int expected_form,
+    int UNUSED *unused)
 {
-    switch (GetMonData(param, MON_DATA_SPECIES, NULL)) {
-    case SPECIES_KYUREM:
-        switch (expected_form) {
-        case 0:
-            SwapPartyPokemonMove(param, MOVE_ICE_BURN, MOVE_GLACIATE);
-            SwapPartyPokemonMove(param, MOVE_FREEZE_SHOCK, MOVE_GLACIATE);
-            SwapPartyPokemonMove(param, MOVE_FUSION_FLARE, MOVE_SCARY_FACE);
-            SwapPartyPokemonMove(param, MOVE_FUSION_BOLT, MOVE_SCARY_FACE);
-            break;
-        case 1:
-            SwapPartyPokemonMove(param, MOVE_GLACIATE, MOVE_ICE_BURN);
-            SwapPartyPokemonMove(param, MOVE_SCARY_FACE, MOVE_FUSION_FLARE);
-            break;
-        case 2:
-            SwapPartyPokemonMove(param, MOVE_GLACIATE, MOVE_FREEZE_SHOCK);
-            SwapPartyPokemonMove(param, MOVE_SCARY_FACE, MOVE_FUSION_BOLT);
-            break;
-
-        default:
-            break;
-        }
-        break;
-    case SPECIES_ZACIAN:
-        switch (expected_form) {
-        case 0:
-            SwapPartyPokemonMove(param, MOVE_BEHEMOTH_BLADE, MOVE_IRON_HEAD);
-            break;
-        case 1:
-            SwapPartyPokemonMove(param, MOVE_IRON_HEAD, MOVE_BEHEMOTH_BLADE);
-            break;
-        default:
-            break;
-        }
-        break;
-    case SPECIES_ZAMAZENTA:
-        switch (expected_form) {
-        case 0:
-            SwapPartyPokemonMove(param, MOVE_BEHEMOTH_BASH, MOVE_IRON_HEAD);
-            break;
-        case 1:
-            SwapPartyPokemonMove(param, MOVE_IRON_HEAD, MOVE_BEHEMOTH_BASH);
-            break;
-        default:
-            break;
-        }
-        break;
-    default:
-        break;
-    }
+    __asm__(
+        "ldr r3, 1f\n"
+        "bx r3\n"
+        ".align 2\n"
+        "1: .word PokemonMoveHistoryTask6_CorrectBattleFormMoves + 1\n"
+        ".space 0xc8\n");
 }
 
 void LONG_CALL ChangeToBattleForm(struct PartyPokemon *pp)

@@ -39,10 +39,15 @@ REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x1000
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "a18047923b29b4154dcc1abdb29510a598371c23892198d4611d2866250dc8f6"
+    "21d0a504635c977e812d2f395445b3e7a2b8d416a0c5607c72b55865657250e2"
+)
+OVERLAY155_BASE = 0x023BD400
+OVERLAY155_LIMIT = 0x1000
+OVERLAY155_CALL_INVENTORY_SHA256 = (
+    "19a9ab007805cdc77c21673cb13f0be708cb97a8be59f6894874a5ca150676bb"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "30b2d3ada02dc7956418353fbc95534d27a2411bcf89d0682b83101a65eff946"
+    "439bf4b541e094f793b6d495a7cb90b33f6d4ae917b7869fec04242d32ffce15"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "9b39fd50bc4d208ab520f2d9a933cad33602c99c810149f2e7ff51e1a180e427"
@@ -59,7 +64,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "13ac28beb07bed07418d954b15432e7520258e341b99bfd9fdc2f68f678d678f",
+        "d850825fa9a0e9c183f41d55c16c268d43ffe32faa9e54fe7259aa4dc7458c97",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -1723,7 +1728,21 @@ def source_contracts() -> None:
     history = (
         REPO / "src/pokemon_move_history_overlay/pokemon_move_history.c"
     ).read_text()
+    relearn = (
+        REPO / "src/pokemon_move_history_overlay/pokemon_move_relearn.c"
+    ).read_text()
     pokemon = (REPO / "src/pokemon.c").read_text()
+    task6 = (
+        REPO
+        / "src/pokemon_move_history_task6_overlay/"
+        "pokemon_move_history_task6.c"
+    ).read_text()
+    task6_entry = (
+        REPO / "asm/pokemon_move_history_task6_overlay/entry.s"
+    ).read_text()
+    task6_linker = (
+        REPO / "src/pokemon_move_history_task6_overlay/linker.ld"
+    ).read_text()
     party_menu = (REPO / "src/party_menu.c").read_text()
     save = (REPO / "src/save.c").read_text()
     entry = (REPO / "asm/pokemon_move_history_overlay/entry.s").read_text()
@@ -1738,6 +1757,19 @@ def source_contracts() -> None:
     makefile = (REPO / "Makefile").read_text()
     build_wrapper = (REPO / "docker-makerom.cmd").read_text()
     config = (REPO / "include/config.h").read_text()
+    evolution = (
+        REPO / "src/individual/GetMonEvolutionInternal.c"
+    ).read_text()
+    evolution_macros = (REPO / "armips/include/macros.s").read_text()
+    parent_builder = (
+        REPO / "scripts/build_move_relearn_parents.py"
+    ).read_text()
+    script_commands = (
+        REPO / "src/field/script_commands.c"
+    ).read_text()
+    symbol_builder = (
+        REPO / "scripts/generate_armips_symbols.py"
+    ).read_text()
     require(
         outer_make_invocation_is_safe(),
         "outer Make invocation contains unsafe flags or command variables",
@@ -1981,9 +2013,20 @@ def source_contracts() -> None:
 
     require(
         "build/save.d" in DEPENDENCY_FILES
+        and "build/field/script_commands.d" in DEPENDENCY_FILES
         and "scripts/generate_armips_symbols.py" in FIXED_INPUTS
+        and "src/field/linker.ld" in FIXED_INPUTS
         and OUTPUTS.get("save_object") == "build/save.o",
-        "save lifecycle/generator provenance inputs are not sealed",
+        "save/field lifecycle and generator provenance inputs are not sealed",
+    )
+    require(
+        OUTPUTS.get("field_script_commands_object")
+        == "build/field/script_commands.o"
+        and OUTPUTS.get("field_linked") == "build/field_linked.o"
+        and OUTPUTS.get("field_binary") == "build/output_field.bin"
+        and OUTPUTS.get("patched_overlay131")
+        == "base/overlay/overlay_0131.bin",
+        "scripted daycare field binary/package provenance is not sealed",
     )
     for runtime_evidence_input in (
         "scripts/launch_summary_move_relearn_runtime.py",
@@ -2346,6 +2389,386 @@ def source_contracts() -> None:
         and re.search(r"\n\s+nop\s*(?:\n|$)", reminder_patch) is not None,
         "Move Reminder replacement does not fill the complete 14-byte span",
     )
+
+    # Task 6: unusual scripted/transfer/form/daycare transaction ownership.
+    capture_snapshot = function_body(
+        without_comments(history),
+        "PokemonMoveHistory_CaptureSnapshotImpl",
+    )
+    require(
+        "!PokemonMoveHistoryTask6_IsCanonical(pokemon)"
+        in capture_snapshot,
+        "history capture does not fail closed through the canonical owner gate",
+    )
+    canonical = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_IsCanonicalImpl",
+    )
+    for fragment in (
+        "MON_DATA_CHECKSUM_FAILED",
+        "MON_DATA_SPECIES_EXISTS",
+        "MON_DATA_IS_EGG",
+        "SPECIES_BAD_EGG",
+        "form >= 32",
+        "SPECIES_CASTFORM",
+        "SPECIES_CHERRIM",
+        "SanitizeFormNumber",
+        "NEEDS_REVERSION",
+    ):
+        require(fragment in canonical, f"canonical owner gate lost {fragment}")
+
+    daycare_commit = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_DaycareDepositCommitImpl",
+    )
+    ordered(
+        daycare_commit,
+        ["retailCommit(", "PokemonMoveHistory_Seed("],
+        "daycare deposit commit",
+    )
+    trade_commit = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_TradeReplacePartySlotImpl",
+    )
+    ordered(
+        trade_commit,
+        [
+            "PokemonMoveHistory_CaptureSnapshot(",
+            "retailCommit(",
+            "PokemonMoveHistory_RecordSnapshot(",
+            "PokemonMoveHistory_Seed(",
+        ],
+        "NPC trade slot replacement",
+    )
+    hatch_commit = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_HatchClearEggImpl",
+    )
+    ordered(
+        hatch_commit,
+        ["SetMonData(", "PokemonMoveHistory_Seed("],
+        "hatch baseline",
+    )
+    swap_move = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_SwapPartyPokemonMoveImpl",
+    )
+    require(
+        "if (recordPermanentHistory)" in swap_move
+        and "PokemonMoveHistory_ReplaceMove(" in swap_move
+        and "SetMonData(" in swap_move,
+        "permanent/transient special-form move split differs",
+    )
+    special_form_sources = pokemon + "\n" + task6
+    special_form_swap_calls = (
+        special_form_sources.count("SwapPartyPokemonMove(")
+        + special_form_sources.count(
+            "PokemonMoveHistoryTask6_SwapPartyPokemonMoveImpl("
+        )
+    )
+    require(
+        special_form_swap_calls >= 15
+        and len(re.findall(
+            r"SwapPartyPokemonMove\s*\([^;]*?,\s*TRUE\s*\);",
+            special_form_sources,
+            re.S,
+        )) >= 5
+        and special_form_sources.count(", FALSE);") >= 10,
+        "special-form call sites do not classify permanent and battle copies",
+    )
+
+    place_seed = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_PCStoragePlaceAndSeedImpl",
+    )
+    ordered(
+        place_seed,
+        [
+            "PCStorage_PlaceMonInBoxByIndexPair(",
+            "PCStorage_GetMonByIndexPair(",
+            "PokemonMoveHistory_Seed(",
+        ],
+        "Pokewalker successful placement",
+    )
+    gts_place_seed = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_GTSPlaceAndSeedImpl",
+    )
+    ordered(
+        gts_place_seed,
+        [
+            "PCStorage_FindFirstEmptySlot(",
+            "retailCommit(",
+            "PCStorage_GetMonByIndexPair(",
+            "PokemonMoveHistory_Seed(",
+        ],
+        "GTS boxed receive placement",
+    )
+    require(
+        "resolvedBox != (int)boxno" in gts_place_seed
+        and "resolvedSlot >= MONS_PER_BOX" in gts_place_seed
+        and "(GTSPlaceBoxRetailFunc)0x02073BFD" in gts_place_seed,
+        "GTS boxed receive does not fail closed on destination drift",
+    )
+    gts_delete_box = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_GTSDeleteBoxAndRecordImpl",
+    )
+    ordered(
+        gts_delete_box,
+        [
+            "PokemonMoveHistory_CaptureSnapshot(",
+            "retailCommit(",
+            "PokemonMoveHistory_RecordSnapshot(",
+        ],
+        "GTS boxed outgoing removal",
+    )
+    gts_remove_party = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_GTSRemovePartyAndRecordImpl",
+    )
+    ordered(
+        gts_remove_party,
+        [
+            "PokemonMoveHistory_CaptureSnapshot(",
+            "result = retailCommit(",
+            "if (result && captured)",
+            "PokemonMoveHistory_RecordSnapshot(",
+            "return result;",
+        ],
+        "GTS party outgoing removal",
+    )
+    export_seed = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_PCStorageGetAndSeedImpl",
+    )
+    ordered(
+        export_seed,
+        ["PCStorage_GetMonByIndexPair(", "PokemonMoveHistory_Seed("],
+        "Pokewalker export",
+    )
+    sanitizer = function_body(
+        without_comments(script_commands),
+        "ScrCmd_DaycareSanitizeMon",
+    )
+    script_teach = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_ScriptTeachMoveImpl",
+    )
+    require(
+        '#include "../../include/pokemon_move_history.h"'
+        in script_commands
+        and sanitizer.count(
+            "PokemonMoveHistoryTask6_ScriptTeachMove("
+        )
+        == 2
+        and sanitizer.count("if (temp_egg_moves[i]") == 1
+        and sanitizer.count(
+            "inheriterMoves[i] = GetBoxMonData("
+            "daycareMon, MON_DATA_MOVE1 + i, NULL);"
+        )
+        == 1
+        and "if (baby_egg_moves[i] != inheriterMoves[0]"
+        in sanitizer,
+        "daycare sanitizer owner/buffer history coverage differs",
+    )
+    ordered(
+        sanitizer,
+        [
+            "pp = GetMoveMaxPP((u16)newMove, 0);",
+            "PokemonMoveHistoryTask6_ScriptTeachMove(\n"
+            "                                fieldSystem->savedata,\n"
+            "                                &partyMon->box,\n"
+            "                                (newMove << 8)\n"
+            "                                    | potentialOverrideMoveSlot,\n"
+            "                                pp);",
+        ],
+        "party daycare sanitizer move commit",
+    )
+    ordered(
+        sanitizer,
+        [
+            "pp = GetMoveMaxPP((u16)newMove, 0);",
+            "PokemonMoveHistoryTask6_ScriptTeachMove(\n"
+            "                                fieldSystem->savedata,\n"
+            "                                daycareMon,\n"
+            "                                (newMove << 8)\n"
+            "                                    | potentialOverrideMoveSlot,\n"
+            "                                pp);",
+        ],
+        "deposited daycare sanitizer move commit",
+    )
+    ordered(
+        script_teach,
+        [
+            "u32 moveSlot = encodedMoveSlot & 0xFF;",
+            "u32 move = encodedMoveSlot >> 8;",
+            "u32 ppUps = 0;",
+            "SetBoxMonData(pokemon, MON_DATA_MOVE1 + moveSlot, &move);",
+            "SetBoxMonData(pokemon, MON_DATA_MOVE1PPUP + moveSlot, &ppUps);",
+            "SetBoxMonData(pokemon, MON_DATA_MOVE1PP + moveSlot, &pp);",
+            "PokemonMoveHistory_RecordMove(saveData, pokemon, (u16)move);",
+        ],
+        "resident scripted daycare transaction",
+    )
+    for address in (
+        "0x02074562",
+        "0x0206BF04",
+        "0x0206BF98",
+        "0x02071EE0",
+        "0x02071F20",
+        "0x02071F2C",
+        "0x02071F64",
+        "0x02071F80",
+        "0x02071F98",
+        "0x02091156",
+        "0x02259B7A",
+        "0x0221F6C4",
+        "0x02240B72",
+        "0x02240C76",
+        "0x02240A0E",
+        "0x02240A44",
+        "0x021EE65A",
+        "0x021EE86A",
+        "0x021EEB8C",
+        "0x021EEC7E",
+    ):
+        require(address in patches, f"task-6 commit patch {address} is missing")
+    require(
+        ".org 0x021EC182" not in patches,
+        "Pokewalker failure-recovery placement dirties history",
+    )
+    require(
+        "PokemonMoveHistory_PlayerPartyAddCommit equ 0x023BD438"
+        in patches
+        and "PokemonMoveHistory_DaycareShiftAndAppend equ 0x023BD440"
+        in patches
+        and "MoveHistoryTask6Entry_PlayerPartyAddCommit:" in task6_entry
+        and "MoveHistoryTask6Entry_DaycareShiftAndAppend:" in task6_entry
+        and "MoveHistoryTask6Entry_CorrectBattleFormMoves:" in task6_entry
+        and "MoveHistoryTask6Entry_MarkHistoryMove:" in task6_entry
+        and "MoveHistoryTask6Entry_AppendCandidate:" in task6_entry
+        and "MoveHistoryTask6Entry_ScriptTeachMove:" in task6_entry
+        and "MoveHistoryTask6Entry_GTSPlaceAndSeed:" in task6_entry
+        and "MoveHistoryTask6Entry_GTSDeleteBoxAndRecord:" in task6_entry
+        and "MoveHistoryTask6Entry_GTSRemovePartyAndRecord:" in task6_entry
+        and "ORIGIN(rom) + 0x38" in task6_linker
+        and "ORIGIN(rom) + 0x40" in task6_linker
+        and "ORIGIN(rom) + 0x48" in task6_linker
+        and "ORIGIN(rom) + 0x50" in task6_linker
+        and "ORIGIN(rom) + 0x58" in task6_linker
+        and "ORIGIN(rom) + 0x60" in task6_linker
+        and "ORIGIN(rom) + 0x64" in task6_linker
+        and "ORIGIN(rom) + 0x68" in task6_linker
+        and "ORIGIN(rom) + 0x70" in task6_linker
+        and "ORIGIN(rom) + 0x78" in task6_linker
+        and "PokemonMoveHistoryTask6_ScriptTeachMove = "
+        "0x023BD464 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_GTSPlaceAndSeed = "
+        "0x023BD468 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord = "
+        "0x023BD470 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_GTSRemovePartyAndRecord = "
+        "0x023BD478 | 1;" in rom_ld,
+        "task-6 resident stub ABI differs",
+    )
+    for entry_name, implementation in (
+        (
+            "MoveHistoryTask6Entry_DaycareDepositCommit",
+            "PokemonMoveHistoryTask6_DaycareDepositCommitImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_PCStoragePlaceAndSeed",
+            "PokemonMoveHistoryTask6_PCStoragePlaceAndSeedImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_ReplacePartyMove",
+            "PokemonMoveHistoryTask6_SwapPartyPokemonMoveImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_MarkHistoryMove",
+            "PokemonMoveHistoryTask6_MarkHistoryMoveImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_AppendCandidate",
+            "PokemonMoveHistoryTask6_AppendCandidateImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_ScriptTeachMove",
+            "PokemonMoveHistoryTask6_ScriptTeachMoveImpl",
+        ),
+    ):
+        entry_start = task6_entry.index(f"{entry_name}:")
+        entry_end = task6_entry.find("\n.global ", entry_start)
+        if entry_end < 0:
+            entry_end = len(task6_entry)
+        entry_body = task6_entry[entry_start:entry_end]
+        require(
+            f"b {implementation}" in entry_body
+            and "ldr r3" not in entry_body,
+            f"{entry_name} clobbers its fourth ARM EABI argument",
+        )
+    for wrapper_name in (
+        "PokemonMoveRelearn_MarkHistoryMove",
+        "PokemonMoveRelearn_Append",
+    ):
+        wrapper = function_body(without_comments(relearn), wrapper_name)
+        require(
+            all(
+                fragment in wrapper
+                for fragment in (
+                    '"push {r3}\\n"',
+                    '"mov r12, r3\\n"',
+                    '"pop {r3}\\n"',
+                    '"bx r12\\n"',
+                )
+            )
+            and '"bx r3\\n"' not in wrapper,
+            f"{wrapper_name} clobbers its fourth ARM EABI argument",
+        )
+    for helper_name, literal_targets, blx_r3_count in (
+        (
+            "PokemonMoveHistoryTask6_PlayerPartyAddCommitImpl",
+            ("PokemonMoveHistory_Seed",),
+            3,
+        ),
+        (
+            "PokemonMoveHistoryTask6_DaycareShiftAndAppendImpl",
+            (
+                "PokemonMoveHistory_Seed",
+                "PokemonMoveHistory_RecordMove",
+            ),
+            3,
+        ),
+    ):
+        helper_start = task6_entry.index(f"{helper_name}:")
+        helper_end = task6_entry.find("\n.global ", helper_start)
+        if helper_end < 0:
+            helper_end = len(task6_entry)
+        helper_body = task6_entry[helper_start:helper_end]
+        require(
+            all(f".word {target}" in helper_body for target in literal_targets)
+            and helper_body.count("blx r3") == blx_r3_count
+            and "bl PokemonMoveHistory_Seed" not in helper_body
+            and "bl PokemonMoveHistory_RecordMove" not in helper_body,
+            f"{helper_name} does not use explicit Thumb interworking",
+        )
+    require(
+        "form << 11 | 0x8000" in evolution_macros
+        and "form >= 16" in evolution_macros
+        and "(evoTable[i].target & 0x7800) >> 11" in evolution
+        and "(evoTable[i].target & 0x8000) != 0" in evolution
+        and "if (hasExplicitForm)" in evolution
+        and "u32 form = 32;" in pokemon
+        and "if (form != 32)" in pokemon,
+        "explicit evolution form-zero encoding differs",
+    )
+    require(
+        '"SPECIES_WORMADAM_SANDY": "SPECIES_BURMY"' in parent_builder
+        and '"SPECIES_WORMADAM_TRASHY": "SPECIES_BURMY"'
+        in parent_builder,
+        "Wormadam cloak parent reconciliation differs",
+    )
     for helper, source in (
         ("PokemonMoveHistory_OverlayMemcpy", history),
         ("PokemonMoveHistory_OverlayMemcpy", (
@@ -2500,7 +2923,7 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "8ece9310f046fbf6fb999becf500653879d36b268a1ba2230774abd883394fdc"
+        "e8ac941be193804f733059805bc2acfe28dae0c2a0612102339e0d0fc9861628"
     )
     require(
         make_publication_contract_matches(
@@ -3130,12 +3553,17 @@ def source_contracts() -> None:
         forced_objects_match is not None
         and {
             "$(BUILD)/pokemon.o",
+            "$(BUILD)/pokemon_storage_system.o",
+            "$(BUILD)/individual/GetMonEvolutionInternal.o",
+            "$(BUILD)/field/script_commands.o",
             "$(BUILD)/party_menu.o",
             "$(BUILD)/save.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
             "$(BUILD)/pokemon_move_history_overlay/entry.o",
             "$(BUILD)/pokemon_move_history_overlay/thumb_help.o",
+            "$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o",
+            "$(BUILD)/pokemon_move_history_task6_overlay/entry.o",
             "$(BUILD)/overlay.o",
             "$(BUILD)/other_hook.o",
             "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o",
@@ -3144,7 +3572,7 @@ def source_contracts() -> None:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the eleven capture objects",
+        "move-history provenance does not force exactly the sixteen capture objects",
     )
 
 
@@ -4948,8 +5376,30 @@ EXPECTED_OVERLAY_METADATA = {
         0x021E80E8,
         68,
         0,
-        0x2E4200,
-        0x2E6A00,
+        0x2E5200,
+        0x2E7A00,
+    ),
+    65: (
+        0x0221BE20,
+        0x4380,
+        0,
+        0x02220194,
+        0x02220198,
+        65,
+        0,
+        0x2DF800,
+        0x2E3B80,
+    ),
+    70: (
+        0x022378C0,
+        0xEF40,
+        0x160,
+        0x02246090,
+        0x02246094,
+        70,
+        0,
+        0x2E9400,
+        0x2F8340,
     ),
     129: (
         0x023D8000,
@@ -4959,30 +5409,52 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         129,
         0,
-        0x3D5200,
-        0x3DD1C0,
+        0x3DAA00,
+        0x3E29C0,
+    ),
+    131: (
+        0x023C8000,
+        0x4FD2,
+        0,
+        0,
+        0,
+        131,
+        0,
+        0x3F3400,
+        0x3F83D2,
     ),
     153: (
         OVERLAY_BASE,
-        0xFAC,
+        0xF6C,
         0,
         0,
         0,
         153,
         0,
-        0x41BE00,
-        0x41CDAC,
+        0x421600,
+        0x42256C,
     ),
     154: (
         0x023C0400,
-        0xE68,
+        0xE30,
         0,
         0,
         0,
         154,
         0,
-        0x41CE00,
-        0x41DC68,
+        0x422600,
+        0x423430,
+    ),
+    155: (
+        OVERLAY155_BASE,
+        0x6A8,
+        0,
+        0,
+        0,
+        155,
+        0,
+        0x423600,
+        0x423CA8,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -5177,6 +5649,29 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
             "flags",
         )
     ):
+        wrong_overlay131 = bytearray(rom)
+        value = struct.unpack_from(
+            "<I", wrong_overlay131, y9_offset + 131 * 32 + field * 4
+        )[0]
+        struct.pack_into(
+            "<I",
+            wrong_overlay131,
+            y9_offset + 131 * 32 + field * 4,
+            value ^ 1,
+        )
+        mutations.append((f"overlay 131 {label}", wrong_overlay131))
+    for field, label in enumerate(
+        (
+            "ID",
+            "base",
+            "RAM size",
+            "BSS size",
+            "init start",
+            "init end",
+            "file ID",
+            "flags",
+        )
+    ):
         wrong_overlay154 = bytearray(rom)
         value = struct.unpack_from(
             "<I", wrong_overlay154, y9_offset + 154 * 32 + field * 4
@@ -5188,6 +5683,29 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
             value ^ 1,
         )
         mutations.append((f"overlay 154 {label}", wrong_overlay154))
+    for field, label in enumerate(
+        (
+            "ID",
+            "base",
+            "RAM size",
+            "BSS size",
+            "init start",
+            "init end",
+            "file ID",
+            "flags",
+        )
+    ):
+        wrong_overlay155 = bytearray(rom)
+        value = struct.unpack_from(
+            "<I", wrong_overlay155, y9_offset + 155 * 32 + field * 4
+        )[0]
+        struct.pack_into(
+            "<I",
+            wrong_overlay155,
+            y9_offset + 155 * 32 + field * 4,
+            value ^ 1,
+        )
+        mutations.append((f"overlay 155 {label}", wrong_overlay155))
     for label, mutation in mutations:
         try:
             packaged_components_from_bytes(bytes(mutation))
@@ -5204,11 +5722,32 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov12_path = REPO / "base/overlay/overlay_0012.bin"
     ov68_path = REPO / "base/overlay/overlay_0068.bin"
     ov129_path = REPO / "base/overlay/overlay_0129.bin"
+    ov131_path = REPO / "base/overlay/overlay_0131.bin"
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
     ov154_path = REPO / "base/overlay/overlay_0154.bin"
+    ov155_path = REPO / "base/overlay/overlay_0155.bin"
+    task6_linked = (
+        REPO / "build/pokemon_move_history_task6_overlay_linked.o"
+    )
+    task6_overlay = (
+        REPO / "build/output_pokemon_move_history_task6_overlay.bin"
+    )
+    task6_object = (
+        REPO
+        / "build/pokemon_move_history_task6_overlay/"
+        "pokemon_move_history_task6.o"
+    )
+    task6_entry_object = (
+        REPO / "build/pokemon_move_history_task6_overlay/entry.o"
+    )
     pokemon_object = REPO / "build/pokemon.o"
     party_menu_object = REPO / "build/party_menu.o"
     save_object = REPO / "build/save.o"
+    field_script_commands_object = (
+        REPO / "build/field/script_commands.o"
+    )
+    field_linked = REPO / "build/field_linked.o"
+    field_binary = REPO / "build/output_field.bin"
     history_object = (
         REPO / "build/pokemon_move_history_overlay/pokemon_move_history.o"
     )
@@ -5233,11 +5772,20 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov12_path,
         ov68_path,
         ov129_path,
+        ov131_path,
         ov153_path,
         ov154_path,
+        ov155_path,
+        task6_linked,
+        task6_overlay,
+        task6_object,
+        task6_entry_object,
         pokemon_object,
         party_menu_object,
         save_object,
+        field_script_commands_object,
+        field_linked,
+        field_binary,
         history_object,
         relearn_object,
         summary_object,
@@ -5330,6 +5878,28 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         is None,
         "Save_Cancel still relocates to vanilla CancelAsyncSave",
     )
+    field_script_reloc = subprocess.check_output(
+        [
+            "arm-none-eabi-objdump",
+            "-r",
+            str(field_script_commands_object),
+        ],
+        text=True,
+    )
+    for target in (
+        "GetMoveMaxPP",
+        "PokemonMoveHistoryTask6_ScriptTeachMove",
+    ):
+        require(
+            re.search(rf"R_ARM_ABS32\s+{target}\b", field_script_reloc)
+            is not None
+            and re.search(
+                rf"R_ARM_THM_CALL\s+{target}\b",
+                field_script_reloc,
+            )
+            is None,
+            f"field script sanitizer lacks interworking-safe {target} calls",
+        )
 
     history_reloc = subprocess.check_output(
         [
@@ -5385,21 +5955,37 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     packaged_metadata_mutation_fixtures(rom_bytes)
     require(arm9_base == 0x02000000, "packaged ARM9 RAM base differs")
     ov12_component = packaged_overlays[12]
+    ov65_component = packaged_overlays[65]
     ov68_component = packaged_overlays[68]
+    ov70_component = packaged_overlays[70]
     ov129_component = packaged_overlays[129]
+    ov131_component = packaged_overlays[131]
     ov153_component = packaged_overlays[153]
     ov154_component = packaged_overlays[154]
+    ov155_component = packaged_overlays[155]
     ov12_base, packaged_ov12 = (
         ov12_component.ram_address,
         ov12_component.data,
+    )
+    ov65_base, packaged_ov65 = (
+        ov65_component.ram_address,
+        ov65_component.data,
     )
     ov68_base, packaged_ov68 = (
         ov68_component.ram_address,
         ov68_component.data,
     )
+    ov70_base, packaged_ov70 = (
+        ov70_component.ram_address,
+        ov70_component.data,
+    )
     ov129_base, packaged_ov129 = (
         ov129_component.ram_address,
         ov129_component.data,
+    )
+    ov131_base, packaged_ov131 = (
+        ov131_component.ram_address,
+        ov131_component.data,
     )
     ov153_base, packaged_ov153 = (
         ov153_component.ram_address,
@@ -5409,10 +5995,53 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov154_component.ram_address,
         ov154_component.data,
     )
+    ov155_base, packaged_ov155 = (
+        ov155_component.ram_address,
+        ov155_component.data,
+    )
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
+    require(
+        ov65_base == 0x0221BE20
+        and len(packaged_ov65) == 0x4380
+        and ov65_component.ram_size == len(packaged_ov65)
+        and ov65_component.bss_size == 0
+        and ov65_component.static_init_start == 0x02220194
+        and ov65_component.static_init_end == 0x02220198
+        and ov65_component.file_id == 65
+        and ov65_component.flags == 0,
+        "packaged wireless-trade overlay 65 metadata differs",
+    )
     require(ov68_base == 0x021E5900, "packaged overlay 68 base differs")
+    require(
+        ov70_base == 0x022378C0
+        and len(packaged_ov70) == 0xEF40
+        and ov70_component.ram_size == len(packaged_ov70)
+        and ov70_component.bss_size == 0x160
+        and ov70_component.static_init_start == 0x02246090
+        and ov70_component.static_init_end == 0x02246094
+        and ov70_component.file_id == 70
+        and ov70_component.flags == 0,
+        "packaged GTS overlay 70 metadata differs",
+    )
+    require(
+        ov131_base == 0x023C8000
+        and len(packaged_ov131) == 0x4FD2
+        and ov131_component.ram_size == len(packaged_ov131)
+        and ov131_component.bss_size == 0
+        and ov131_component.static_init_start == 0
+        and ov131_component.static_init_end == 0
+        and ov131_component.file_id == 131
+        and ov131_component.flags == 0
+        and ov131_component.fat_start == 0x003F3400
+        and ov131_component.fat_end == 0x003F83D2,
+        "packaged scripted-daycare field overlay 131 metadata differs",
+    )
     require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
     require(ov154_base == 0x023C0400, "packaged overlay 154 base differs")
+    require(
+        ov155_base == OVERLAY155_BASE,
+        "packaged overlay 155 base differs",
+    )
     base_arm9 = arm9_path.read_bytes()
     require(
         base_arm9.startswith(packaged_arm9)
@@ -5424,12 +6053,81 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "packaged overlay 12 differs from the current patched artifact",
     )
     require(
+        packaged_ov65
+        == (REPO / "base/overlay/overlay_0065.bin").read_bytes(),
+        "packaged wireless-trade overlay differs from patched artifact",
+    )
+    require(
         packaged_ov68 == ov68_path.read_bytes(),
         "packaged overlay 68 differs from the current patched artifact",
     )
     require(
+        packaged_ov70
+        == (REPO / "base/overlay/overlay_0070.bin").read_bytes(),
+        "packaged GTS overlay differs from patched artifact",
+    )
+    require(
+        packaged_ov65[
+            0x0221F6C4 - ov65_base:0x0221F6D4 - ov65_base
+        ]
+        == bytes.fromhex(
+            "38 1c 31 1c 22 1c 9d f1 a1 fe c0 46 c0 46 c0 46"
+        )
+        and thumb_bl_target(packaged_ov65, ov65_base, 0x0221F6CA)
+        == OVERLAY155_BASE + 0x10
+        and thumb_bl_target(packaged_ov70, ov70_base, 0x02240B72)
+        == OVERLAY155_BASE + 0x68
+        and thumb_bl_target(packaged_ov70, ov70_base, 0x02240C76)
+        == OVERLAY155_BASE + 0x68
+        and thumb_bl_target(packaged_ov70, ov70_base, 0x02240A0E)
+        == OVERLAY155_BASE + 0x70
+        and thumb_bl_target(packaged_ov70, ov70_base, 0x02240A44)
+        == OVERLAY155_BASE + 0x78,
+        "wireless/GTS packaged commit hooks differ",
+    )
+    require(
+        bytes_at(packaged_ov70, ov70_base, 0x022418A4, 0x68)
+        == bytes.fromhex(
+            "38 b5 82 b0 05 1c 69 6a ff f7 dc ff 4d 22 92 00 "
+            "04 1c a8 58 12 28 0b d1 28 68 11 1d 80 68 69 58 "
+            "32 f6 be fe 01 1c 20 1c 2f f6 de ff 02 b0 38 bd "
+            "00 20 01 90 00 90 28 68 a9 58 12 1d c0 68 aa 58 "
+            "32 f6 14 fa 28 68 01 a9 c0 68 00 aa 32 f6 54 fa "
+            "20 1c 2f f6 5b fa 02 1c 28 68 01 99 c0 68 32 f6 "
+            "7b f9 02 b0 38 bd 00 00"
+        ),
+        "retail GTS evolution copy-back/relocation body differs",
+    )
+    require(
         packaged_ov129 == ov129_path.read_bytes(),
         "packaged overlay 129 differs from the current patched artifact",
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="move-history-field-binary-"
+    ) as field_binary_directory:
+        reproduced_field_binary = (
+            Path(field_binary_directory) / "output_field.bin"
+        )
+        subprocess.run(
+            [
+                "arm-none-eabi-objcopy",
+                "-O",
+                "binary",
+                str(field_linked),
+                str(reproduced_field_binary),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        linked_field_bytes = reproduced_field_binary.read_bytes()
+    require(
+        packaged_ov131
+        == ov131_path.read_bytes()
+        == field_binary.read_bytes()
+        == linked_field_bytes,
+        "packaged scripted-daycare overlay 131 differs from linked field output",
     )
     require(
         packaged_ov153 == ov153_path.read_bytes() == overlay,
@@ -5441,6 +6139,62 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == summary_overlay.read_bytes()
         == elf_bytes_at(summary_linked, ov154_base, len(packaged_ov154)),
         "packaged overlay 154 differs from the current linked output",
+    )
+    require(
+        packaged_ov155
+        == ov155_path.read_bytes()
+        == task6_overlay.read_bytes()
+        == elf_bytes_at(task6_linked, ov155_base, len(packaged_ov155)),
+        "packaged overlay 155 differs from the current linked output",
+    )
+    require(
+        0 < len(packaged_ov155) <= OVERLAY155_LIMIT,
+        "packaged overlay 155 exceeds its fixed reservation",
+    )
+    task6_symbols = symbol_table(task6_linked)
+    for name, offset in (
+        ("MoveHistoryTask6Entry_IsCanonical", 0x00),
+        ("MoveHistoryTask6Entry_DaycareDepositCommit", 0x08),
+        ("MoveHistoryTask6Entry_TradeReplacePartySlot", 0x10),
+        ("MoveHistoryTask6Entry_HatchClearEgg", 0x18),
+        ("MoveHistoryTask6Entry_PCStorageGetAndSeed", 0x20),
+        ("MoveHistoryTask6Entry_PCStoragePlaceAndSeed", 0x28),
+        ("MoveHistoryTask6Entry_ReplacePartyMove", 0x30),
+        ("MoveHistoryTask6Entry_PlayerPartyAddCommit", 0x38),
+        ("MoveHistoryTask6Entry_DaycareShiftAndAppend", 0x40),
+        ("MoveHistoryTask6Entry_CorrectBattleFormMoves", 0x48),
+        ("MoveHistoryTask6Entry_MarkHistoryMove", 0x50),
+        ("MoveHistoryTask6Entry_AppendCandidate", 0x58),
+        ("MoveHistoryTask6Entry_ScriptTeachMove", 0x64),
+        ("MoveHistoryTask6Entry_GTSPlaceAndSeed", 0x68),
+        ("MoveHistoryTask6Entry_GTSDeleteBoxAndRecord", 0x70),
+        ("MoveHistoryTask6Entry_GTSRemovePartyAndRecord", 0x78),
+    ):
+        require(
+            task6_symbols.get(name) == ov155_base + offset,
+            f"packaged overlay 155 fixed entry differs: {name}",
+        )
+    task6_calls = packaged_thumb_calls(
+        packaged_ov155,
+        ov155_base,
+        ov155_base,
+        len(packaged_ov155),
+    )
+    require(
+        len(task6_calls) == 66
+        and sum(kind == "bl" for _address, kind, _target in task6_calls)
+        == 59
+        and sum(
+            kind == "blx_reg"
+            for _address, kind, _target in task6_calls
+        ) == 7
+        and call_inventory_sha256(task6_calls)
+        == OVERLAY155_CALL_INVENTORY_SHA256,
+        "complete overlay-155 call-site inventory differs",
+    )
+    require(
+        not any("_from_thumb" in name for name in task6_symbols),
+        "overlay 155 unexpectedly linked an ARM interworking veneer",
     )
     summary_symbols = symbol_table(summary_linked)
     require(
@@ -5470,11 +6224,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 114
+        and len(packaged_call_inventory) == 111
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
-        ) == 112
+        ) == 109
         and sum(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory
@@ -6626,7 +7380,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == bytes.fromhex(
             "22 00 58 00 10 32 12 5a ba 42 f7 d0 01 33 c2 e7 "
             "01 9b 02 aa 1b 8a 91 1d 10 30 02 22 0b 80 00 f0 "
-            "d5 fb 01 98 cc e7 01 35 18 2d b9 d1 00 25 c5 e7"
+            "b5 fb 01 98 cc e7 01 35 18 2d b9 d1 00 25 c5 e7"
         ),
         "AppendMove duplicate/capacity/eviction CFG window differs",
     )

@@ -117,9 +117,13 @@
 	.if (species > NUM_OF_MONS)
 		.error "Invalid species supplied to evolutionwithform macro.  If trying to specify an evolution into a form, split up the base species and the form (i.e. \"SPECIES_ZIGZAGOON_GALARIAN\" becomes \"SPECIES_ZIGZAGOON, 1\")."
 	.endif
+	.if (form >= 16)
+		.error "Evolution form must fit below the explicit-form marker bit."
+	.endif
 	.halfword method
 	.halfword parameter
-	.halfword (species | form << 11)
+	// Bit 15 distinguishes an explicit form zero from an ordinary evolution.
+	.halfword (species | form << 11 | 0x8000)
 .endmacro
 
 .macro terminateevodata

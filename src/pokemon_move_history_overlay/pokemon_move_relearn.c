@@ -60,42 +60,45 @@ static BOOL PokemonMoveRelearn_IsImplementedMove(u16 move)
 #endif
 }
 
-static void PokemonMoveRelearn_MarkHistoryMove(
-    const u16 *history,
-    u32 historyCount,
-    u8 *allowed,
-    u16 move)
+/*
+ * Keep the task1-5 private call targets and combined footprint while the
+ * implementations live in resident task-6 overlay 155. These tail wrappers
+ * free exactly 0x40, balancing the two canonical-gate compatibility pads.
+ */
+static void __attribute__((naked, used))
+PokemonMoveRelearn_MarkHistoryMove(
+    const u16 *history UNUSED,
+    u32 historyCount UNUSED,
+    u8 *allowed UNUSED,
+    u16 move UNUSED)
 {
-    u32 i;
-
-    for (i = 0; i < historyCount; i++) {
-        if (history[i] == move) {
-            allowed[i] = TRUE;
-        }
-    }
+    __asm__(
+        "push {r3}\n"
+        "ldr r3, 1f\n"
+        "mov r12, r3\n"
+        "pop {r3}\n"
+        "bx r12\n"
+        ".align 2\n"
+        "1: .word PokemonMoveHistoryTask6_MarkHistoryMove + 1\n"
+        ".space 0x0a\n");
 }
 
-static BOOL PokemonMoveRelearn_Append(
-    u16 *candidates,
-    u32 *count,
-    const u16 currentMoves[4],
-    u16 move)
+static BOOL __attribute__((naked, used))
+PokemonMoveRelearn_Append(
+    u16 *candidates UNUSED,
+    u32 *count UNUSED,
+    const u16 currentMoves[4] UNUSED,
+    u16 move UNUSED)
 {
-    u32 i;
-
-    if (PokemonMoveRelearn_IsCurrentMove(currentMoves, move)) {
-        return FALSE;
-    }
-    for (i = 0; i < *count; i++) {
-        if (candidates[i] == move) {
-            return FALSE;
-        }
-    }
-    if (!PokemonMoveRelearn_IsImplementedMove(move)) {
-        return FALSE;
-    }
-    candidates[(*count)++] = move;
-    return TRUE;
+    __asm__(
+        "push {r3}\n"
+        "ldr r3, 1f\n"
+        "mov r12, r3\n"
+        "pop {r3}\n"
+        "bx r12\n"
+        ".align 2\n"
+        "1: .word PokemonMoveHistoryTask6_AppendCandidate + 1\n"
+        ".space 0x16\n");
 }
 
 static BOOL PokemonMoveRelearn_IsBuiltInSpecial(
@@ -155,17 +158,13 @@ PokemonMoveRelearn_BuildCandidatesImpl(
     u32 i;
     u32 j;
 
-    if (saveData == NULL || boxPokemon == NULL
-        || GetBoxMonData(boxPokemon, MON_DATA_CHECKSUM_FAILED, NULL)
-        || !GetBoxMonData(boxPokemon, MON_DATA_SPECIES_EXISTS, NULL)) {
+    if (saveData == NULL
+        || !PokemonMoveHistoryTask6_IsCanonical(boxPokemon)) {
         return 0;
     }
 
     species = (u16)GetBoxMonData(boxPokemon, MON_DATA_SPECIES, NULL);
     form = (u16)GetBoxMonData(boxPokemon, MON_DATA_FORM, NULL);
-    if (species == SPECIES_NONE || species > MAX_MON_NUM || form >= 32) {
-        return 0;
-    }
     level = GetBoxMonData(boxPokemon, MON_DATA_LEVEL, NULL);
     for (i = 0; i < 4; i++) {
         currentMoves[i] =
@@ -336,4 +335,19 @@ PokemonMoveRelearn_BuildCandidatesImpl(
         }
     }
     return candidateCount;
+}
+
+/*
+ * The shared task-6 canonical form gate compacts the builder by 0x30. Keep
+ * generic overlay-153 code at its task1-5 sealed addresses.
+ */
+void __attribute__((
+    naked,
+    used,
+    section(".pokemon_move_history_short_branch_targets")))
+PokemonMoveHistoryTask6_CandidateBuilderLayoutPad(void)
+{
+    __asm__(
+        ".space 0x2e\n"
+        "bx lr\n");
 }

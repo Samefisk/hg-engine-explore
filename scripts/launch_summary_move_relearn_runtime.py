@@ -27,7 +27,7 @@ def _invalidate_results(arguments):
     for target in _early_result_targets(arguments):
         if not target:
             continue
-        path = os.path.abspath(target)
+        path = os.path.realpath(os.path.abspath(target))
         if path in resolved:
             continue
         resolved.append(path)

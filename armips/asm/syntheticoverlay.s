@@ -20,10 +20,15 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #2
     bl HandleLoadOverlay129 // HandleLoadOverlay(129, 2) // noinit load
 
+// load overlay 155's task-6 bridge before any resident history caller
+    mov r0, #0
+    mov r1, #155
+    bl LoadResidentOverlay
+
 // load overlay 153 as a second, untracked resident code segment
     mov r0, #0
     mov r1, #153
-    bl LoadMoveHistoryOverlay
+    bl LoadResidentOverlay
 
     mov r0, #0
     mov r0, #0
@@ -45,8 +50,8 @@ HandleLoadOverlay129:
 
 .pool
 
-LoadMoveHistoryOverlay:
-    ldr r2, =0x02007188|1 // LoadOverlayNoInit(0, 153)
+LoadResidentOverlay:
+    ldr r2, =0x02007188|1 // LoadOverlayNoInit(region 0, r1)
     bx r2
 
 .pool

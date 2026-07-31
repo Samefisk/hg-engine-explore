@@ -1684,7 +1684,11 @@ void LONG_CALL ChangePartyPokemonToForm(struct PartyPokemon *pp, u32 form);
  *  @param oldMove move to be replaced
  *  @param newMove move that will be written
  */
-void LONG_CALL SwapPartyPokemonMove(struct PartyPokemon *pp, u32 oldMove, u32 newMove);
+void LONG_CALL SwapPartyPokemonMove(
+    struct PartyPokemon *pp,
+    u32 oldMove,
+    u32 newMove,
+    BOOL recordPermanentHistory);
 
 /**
  *  @brief combine ChangePartyPokemonToForm and SwapPartyPokemonMove

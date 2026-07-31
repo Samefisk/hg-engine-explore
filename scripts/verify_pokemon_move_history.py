@@ -15,6 +15,9 @@ OVERLAY_ID = 153
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x023C0400
 OVERLAY_GUARD = 0x1000
+TASK6_OVERLAY_ID = 155
+TASK6_OVERLAY_BASE = 0x023BD400
+TASK6_OVERLAY_LIMIT = 0x023BE400
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
 DTCM_START = 0x027E0000
@@ -472,10 +475,12 @@ def build_expected_parent_payload(
             )
             parents[form_target] = candidate
 
-    # These four policy-only derivatives have no evolution edge. Keep them
+    # These policy-only derivatives have no evolution edge. Keep them
     # explicit here as a two-party policy gate: changing generator policy must
     # be reviewed independently in the final-ROM oracle.
     derived_overrides = {
+        "SPECIES_WORMADAM_SANDY": "SPECIES_BURMY",
+        "SPECIES_WORMADAM_TRASHY": "SPECIES_BURMY",
         "SPECIES_RATICATE_ALOLAN_LARGE": "SPECIES_RATTATA_ALOLAN",
         "SPECIES_DARMANITAN_ZEN_MODE_GALARIAN": "SPECIES_DARUMAKA_GALARIAN",
         "SPECIES_ARCANINE_LORD": "SPECIES_GROWLITHE_HISUIAN",
@@ -1145,6 +1150,39 @@ def main() -> None:
         "final y9 overlay IDs are not dense and ordered",
     )
     require(OVERLAY_ID < len(rows), "final y9 has no overlay 153 row")
+    require(
+        TASK6_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 155 row",
+    )
+
+    task6_row = rows[TASK6_OVERLAY_ID]
+    task6_overlay = final_overlay(rom, fat, task6_row)
+    task6_built = (
+        REPO / "build/output_pokemon_move_history_task6_overlay.bin"
+    ).read_bytes()
+    require(
+        task6_overlay == task6_built,
+        "final ROM overlay 155 differs from linked output",
+    )
+    require(
+        task6_row == (
+            TASK6_OVERLAY_ID,
+            TASK6_OVERLAY_BASE,
+            len(task6_overlay),
+            0,
+            0,
+            0,
+            TASK6_OVERLAY_ID,
+            0,
+        ),
+        "final overlay 155 row has unexpected metadata",
+    )
+    require(
+        0 < len(task6_overlay) <= (
+            TASK6_OVERLAY_LIMIT - TASK6_OVERLAY_BASE
+        ),
+        "overlay 155 exceeds its fixed 0x1000 reservation",
+    )
 
     row = rows[OVERLAY_ID]
     overlay = final_overlay(rom, fat, row)
@@ -1224,7 +1262,7 @@ def main() -> None:
 
     for other in rows:
         other_size = other[2] + other[3]
-        if other[0] == OVERLAY_ID or other_size == 0:
+        if other[0] in (OVERLAY_ID, TASK6_OVERLAY_ID) or other_size == 0:
             continue
         other_start = other[1]
         other_end = other_start + other_size
@@ -1246,9 +1284,9 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x10E000
-        and 0x110000 - heap3_size == 0x2000,
-        "heap 3 does not explicitly reserve 0x2000 for overlay 153",
+        heap3_size == 0x10D000
+        and 0x110000 - heap3_size == 0x3000,
+        "heap 3 does not explicitly reserve 0x3000 for overlays 155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1311,7 +1349,7 @@ def main() -> None:
         "FNT/FAT caches exceed the SDK archive allocation",
     )
     require(
-        archive_end + OVERLAY_GUARD <= OVERLAY_BASE,
+        archive_end + OVERLAY_GUARD <= TASK6_OVERLAY_BASE,
         f"boot FNT+FAT allocation reaches 0x{archive_end:08X}",
     )
 
@@ -1320,20 +1358,20 @@ def main() -> None:
         not ranges_overlap(
             arm9_ram,
             arm9_end,
-            OVERLAY_BASE,
+            TASK6_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "final ARM9 load image overlaps overlay 153",
+        "final ARM9 load image overlaps resident overlays 155/153",
     )
     require(
         OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
-            OVERLAY_BASE,
+            TASK6_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "overlay 153 crosses the main arena or DTCM stack boundary",
+        "resident overlays 155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")
@@ -1372,8 +1410,13 @@ def main() -> None:
     )
 
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
-    require("mov r1, #153" in startup,
-            "startup does not request overlay 153")
+    require(
+        "mov r1, #155" in startup
+        and "mov r1, #153" in startup
+        and startup.index("mov r1, #155")
+        < startup.index("mov r1, #153"),
+        "startup does not load overlay 155 before overlay 153",
+    )
     require("0x02007188|1" in startup,
             "startup does not use the untracked no-init loader")
 
@@ -1406,6 +1449,21 @@ def main() -> None:
         "PokemonMoveRelearn_BuildCandidates = 0x023BE478 | 1;" in rom_ld,
         "move-relearn candidate ABI alias is missing or moved",
     )
+    for name, api_offset in (
+        ("PokemonMoveHistoryTask6_IsCanonical", 0x00),
+        ("PokemonMoveHistoryTask6_DaycareDepositCommit", 0x08),
+        ("PokemonMoveHistoryTask6_TradeReplacePartySlot", 0x10),
+        ("PokemonMoveHistoryTask6_HatchClearEgg", 0x18),
+        ("PokemonMoveHistoryTask6_PCStorageGetAndSeed", 0x20),
+        ("PokemonMoveHistoryTask6_PCStoragePlaceAndSeed", 0x28),
+        ("SwapPartyPokemonMove", 0x30),
+    ):
+        require(
+            f"{name} = "
+            f"0x{TASK6_OVERLAY_BASE + api_offset:08X} | 1;"
+            in rom_ld,
+            f"task-6 helper ABI alias is missing or moved: {name}",
+        )
     save_trampoline = (
         REPO / "asm/pokemon_move_history_trampoline.s"
     ).read_text()

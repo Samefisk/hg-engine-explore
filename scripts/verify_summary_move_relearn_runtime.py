@@ -27,6 +27,11 @@ HISTORY_RECORD_COUNT = 319
 PARTY_OFFSET = 0xA0
 PARTY_SIZE = 8 + 6 * 0xEC
 LOCAL_FIELD_DATA_OFFSET = 0x1424
+VARS_FLAGS_SAVE_OFFSET = 0x0FD4
+DAYCARE_SAVE_OFFSET = 0x1BAC
+DAYCARE_MON_SIZE = 0xEC
+SAVED_MAP_OBJECTS_OFFSET = 0x2CC0
+SAVED_MAP_OBJECT_SIZE = 0x50
 PC_SAVE_OFFSET = 0x10000
 PC_SAVE_SIZE = 0x1E4FC
 PC_BOX_COUNT = 30
@@ -88,6 +93,17 @@ MAIN_OVERLAY_TABLE = 0x021D0DF0
 OVERLAY_ENTRY_SIZE = 8
 OVERLAY_SLOT_COUNT = 8
 SUMMARY_RELEARN_OVERLAY_ID = 154
+TASK6_DAYCARE_MAP = 38
+TASK6_DAYCARE_STORY_VAR_OFFSET = 0x8E * 2
+TASK6_DAYCARE_EXTERIOR = (368, 411)
+TASK6_DAYCARE_PARTY_MOVES = (57, 48, 109, 0)
+TASK6_DAYCARE_DEPOSITED_MOVES = (57, 48, 282, 0)
+TASK6_DAYCARE_PARTY_NEW_PP = 8
+TASK6_DAYCARE_DEPOSITED_NEW_PP = 8
+TASK6_DAYCARE_PARTY_HISTORY = CONTROLLED_HISTORY_MOVES + (109,)
+TASK6_DAYCARE_DEPOSITED_HISTORY = (57, 48, 282)
+GFIELD_SYSTEM_POINTER = 0x023DFFB4
+FUNC_EVENT_SET_SCRIPT = 0x0203FE74
 
 
 if not all(
@@ -267,6 +283,7 @@ def write_u32(emu: DeSmuME, address: int, value: int) -> None:
     write_bytes(emu, address, struct.pack("<I", value))
 
 
+
 def overlay_registry(emu: DeSmuME) -> list[tuple[int, int]]:
     return [
         (
@@ -357,6 +374,18 @@ def runtime_history(emu: DeSmuME) -> tuple[bytes, bytes]:
         f"invalid move-history pointer 0x{pointer:08X}",
     )
     return metadata, read_bytes(emu, pointer, HISTORY_IMAGE_SIZE)
+
+
+
+def history_identity_count(
+    history: bytes,
+    personality: int,
+    ot_id: int,
+) -> int:
+    return sum(
+        struct.unpack_from("<II", record) == (personality, ot_id)
+        for record in history_records(history)
+    )
 
 
 def wait_party_locked(
@@ -527,6 +556,15 @@ def validate_box_checksum(box: bytes, label: str) -> dict[str, int | bool]:
         "ot_id": ot_id,
         "species": species,
     }
+
+
+def serialized_form_and_egg(box: bytes) -> tuple[int, bool]:
+    payload = PARTY.decrypt_box_payload(box)
+    personality = struct.unpack_from("<I", box)[0]
+    permutation = (personality & 0x3E000) >> 13
+    attacks = PARTY.SUBSTRUCT_OFFSETS[permutation][1]
+    iv_word = struct.unpack_from("<I", payload, attacks + 0x10)[0]
+    return (payload[attacks + 0x18] >> 3, bool(iv_word & (1 << 30)))
 
 
 def pc_box_record(raw: bytes, base: int, box: int, slot: int) -> bytes:
@@ -1286,6 +1324,186 @@ def make_controlled_raw(
     )
 
 
+def make_task6_daycare_raw(
+    controlled_raw: bytes,
+) -> tuple[bytes, dict[str, object]]:
+    """Build an authenticated fixture immediately outside the retail daycare."""
+    raw = bytearray(controlled_raw)
+    active_counter, active_base = PARTY.active_copy(controlled_raw)
+    active_party = controlled_raw[
+        active_base + PARTY.PARTY_OFFSET:
+        active_base + PARTY.PARTY_OFFSET + PARTY.PARTY_SIZE
+    ]
+    party_source = party_record(active_party, TARGET_SLOT)
+    party_box = controlled_box_record(
+        party_source,
+        ot_id_xor=0,
+        moves=TASK6_DAYCARE_PARTY_MOVES,
+        pp=(8, 8, 8, 0),
+        pp_ups=(0, 0, 0, 0),
+    )
+    deposited_box = controlled_box_record(
+        party_source,
+        ot_id_xor=0x0BADF00D,
+        moves=TASK6_DAYCARE_DEPOSITED_MOVES,
+        pp=(8, 8, 8, 0),
+        pp_ups=(0, 0, 0, 0),
+    )
+    party_identity = box_identity(party_box)
+    deposited_identity = box_identity(deposited_box)
+    require(
+        party_identity[:2] != deposited_identity[:2]
+        and party_identity[2] == TARGET_SPECIES
+        and deposited_identity[2] == TARGET_SPECIES,
+        "daycare fixture identities are not distinct same-species owners",
+    )
+
+    for _, base in PARTY.valid_normal_copies(controlled_raw):
+        party_start = (
+            base + PARTY.PARTY_OFFSET + 8 + TARGET_SLOT * 0xEC
+        )
+        existing_party = bytearray(raw[party_start:party_start + 0xEC])
+        existing_party[:PC_MON_SIZE] = party_box
+        raw[party_start:party_start + 0xEC] = existing_party
+        raw[
+            base + DAYCARE_SAVE_OFFSET:
+            base + DAYCARE_SAVE_OFFSET + PC_MON_SIZE
+        ] = deposited_box
+        second_daycare_box = bytes(
+            raw[
+                base + DAYCARE_SAVE_OFFSET + DAYCARE_MON_SIZE:
+                base
+                + DAYCARE_SAVE_OFFSET
+                + DAYCARE_MON_SIZE
+                + PC_MON_SIZE
+            ]
+        )
+        validate_box_checksum(
+            second_daycare_box,
+            "serialized empty second daycare owner",
+        )
+        require(
+            box_identity(second_daycare_box)[2] == 0,
+            "daycare fixture second owner is not empty",
+        )
+
+        struct.pack_into(
+            "<5i",
+            raw,
+            base + LOCAL_FIELD_DATA_OFFSET,
+            TASK6_DAYCARE_MAP,
+            -1,
+            TASK6_DAYCARE_EXTERIOR[0],
+            TASK6_DAYCARE_EXTERIOR[1],
+            0,
+        )
+        struct.pack_into(
+            "<H",
+            raw,
+            base
+            + VARS_FLAGS_SAVE_OFFSET
+            + TASK6_DAYCARE_STORY_VAR_OFFSET,
+            3,
+        )
+        # Continue restores serialized map objects. Retain only the canonical
+        # player/follower, move them with the saved Location, and use the real
+        # Route 34 door warp to load the daycare's event/NPC data.
+        for index in range(2, 64):
+            struct.pack_into(
+                "<I",
+                raw,
+                base
+                + SAVED_MAP_OBJECTS_OFFSET
+                + index * SAVED_MAP_OBJECT_SIZE,
+                0,
+            )
+        for index, x in ((0, 368), (1, 367)):
+            object_offset = (
+                base
+                + SAVED_MAP_OBJECTS_OFFSET
+                + index * SAVED_MAP_OBJECT_SIZE
+            )
+            raw[object_offset + 0x0C:object_offset + 0x0F] = bytes(3)
+            struct.pack_into(
+                "<hhh",
+                raw,
+                object_offset + 0x20,
+                x,
+                0,
+                TASK6_DAYCARE_EXTERIOR[1],
+            )
+            struct.pack_into(
+                "<hhh",
+                raw,
+                object_offset + 0x26,
+                x,
+                0,
+                TASK6_DAYCARE_EXTERIOR[1],
+            )
+            struct.pack_into("<i", raw, object_offset + 0x2C, 0)
+
+        footer = base + PARTY.NORMAL_SAVE_SIZE - 0x10
+        crc = PARTY.crc16_ccitt_false(bytes(raw[base:footer]))
+        struct.pack_into("<H", raw, footer + 0x0E, crc)
+
+    _, _, selected_image = selected_persisted_history(controlled_raw)
+    payload = bytearray(selected_image[:HISTORY_FOOTER_OFFSET])
+    party_history_index = seed_history_record(
+        payload,
+        party_box,
+        TASK6_DAYCARE_PARTY_HISTORY,
+    )
+    deposited_history_index = seed_history_record(
+        payload,
+        deposited_box,
+        TASK6_DAYCARE_DEPOSITED_HISTORY,
+    )
+    for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
+        old_image = controlled_raw[offset:offset + HISTORY_IMAGE_SIZE]
+        require(
+            valid_history_image(old_image, mirror),
+            f"daycare fixture history mirror {mirror} is invalid",
+        )
+        counter = struct.unpack_from(
+            "<I", old_image, HISTORY_FOOTER_OFFSET + 4
+        )[0]
+        raw[offset:offset + HISTORY_IMAGE_SIZE] = history_image_for_mirror(
+            bytes(payload),
+            mirror,
+            counter,
+        )
+
+    fixture = bytes(raw)
+    require(
+        len(PARTY.valid_normal_copies(fixture))
+        == len(PARTY.SAVE_COPY_BASES),
+        "daycare fixture normal generations are not authenticated",
+    )
+    _, active_fixture_base = PARTY.active_copy(fixture)
+    fixture_party = fixture[
+        active_fixture_base + PARTY.PARTY_OFFSET:
+        active_fixture_base + PARTY.PARTY_OFFSET + PARTY.PARTY_SIZE
+    ]
+    validate_all_party_checksums(fixture_party)
+    validate_box_checksum(
+        fixture[
+            active_fixture_base + DAYCARE_SAVE_OFFSET:
+            active_fixture_base + DAYCARE_SAVE_OFFSET + PC_MON_SIZE
+        ],
+        "serialized daycare owner",
+    )
+    return fixture, {
+        "normal_save_counter": active_counter,
+        "party_box": party_box,
+        "party_identity": party_identity,
+        "party_history_index": party_history_index,
+        "deposited_box": deposited_box,
+        "deposited_identity": deposited_identity,
+        "deposited_history_index": deposited_history_index,
+        "history_payload": bytes(payload),
+    }
+
+
 def assert_cancel_exact(
     emu: DeSmuME,
     expected_party: bytes,
@@ -1345,7 +1563,7 @@ def normal_save(emu: DeSmuME, baseline_counter: int) -> None:
     tap(emu, "A", 60)
     tap(emu, "A", 90)
     for _ in range(8):
-        tap(emu, "A", 120)
+        HEADLESS.tap_key(emu, "A", 24, 120)
         if PARTY.save_counter_compare(
             PARTY.read_runtime_save_counter(emu),
             baseline_counter,
@@ -1749,13 +1967,415 @@ def fresh_reload_evidence(
     )
 
 
+def runtime_field_location(emu: DeSmuME) -> tuple[int, int, int, int, int]:
+    field_system = read_u32(emu, GFIELD_SYSTEM_POINTER)
+    require(
+        0x02000000 <= field_system < 0x02400000,
+        "runtime field-system pointer is invalid",
+    )
+    location = read_u32(emu, field_system + 0x20)
+    require(
+        0x02000000 <= location < 0x02400000,
+        "runtime field location pointer is invalid",
+    )
+    return struct.unpack("<5i", read_bytes(emu, location, 20))
+
+
+def runtime_daycare_box(emu: DeSmuME, slot: int) -> bytes:
+    require(slot in (0, 1), "invalid runtime daycare slot")
+    address = (
+        save_data_pointer(emu)
+        + SAVE_DYNAMIC_REGION_OFFSET
+        + DAYCARE_SAVE_OFFSET
+        + slot * DAYCARE_MON_SIZE
+    )
+    return read_bytes(emu, address, PC_MON_SIZE)
+
+
+def runtime_daycare_image(emu: DeSmuME) -> bytes:
+    return read_bytes(
+        emu,
+        save_data_pointer(emu)
+        + SAVE_DYNAMIC_REGION_OFFSET
+        + DAYCARE_SAVE_OFFSET,
+        0x1E0,
+    )
+
+
+def open_retail_daycare_lady(
+    emu: DeSmuME,
+) -> dict[str, object]:
+    """Reach std_daycare_lady through the real Route 34 door and event object."""
+    script_hits: list[int] = []
+
+    def script_started(_address: int, _size: int) -> None:
+        script_hits.append(emu.memory.register_arm9.r1)
+
+    emu.memory.register_exec(FUNC_EVENT_SET_SCRIPT, script_started)
+    try:
+        tap(emu, "B", 30)
+        hold(emu, "UP", 24, 180)
+        entrance = runtime_field_location(emu)
+        require(
+            entrance[:4] == (331, 0, 3, 12),
+            f"retail daycare entrance differs: {entrance}",
+        )
+        hold(emu, "UP", 10, 20)
+        hold(emu, "LEFT", 10, 20)
+        hold(emu, "UP", 120, 30)
+        hold(emu, "RIGHT", 10, 20)
+        tap(emu, "UP", 20)
+        service_tile = runtime_field_location(emu)
+        require(
+            service_tile == (331, 0, 3, 7, 0),
+            f"retail daycare service tile differs: {service_tile}",
+        )
+        tap(emu, "A", 120)
+    finally:
+        emu.memory.register_exec(FUNC_EVENT_SET_SCRIPT, None)
+    require(
+        script_hits == [9501],
+        f"retail daycare script boundary differs: {script_hits}",
+    )
+    return {
+        "exterior": [TASK6_DAYCARE_MAP, -1, *TASK6_DAYCARE_EXTERIOR, 0],
+        "entrance": list(entrance),
+        "service_tile": list(service_tile),
+        "script_id": script_hits[0],
+        "event_object": {"x": 3, "z": 5, "facing": "south"},
+    }
+
+
+def open_retail_daycare_party_chooser(emu: DeSmuME) -> None:
+    # Complete two messages, accept the default YES, complete the selection
+    # prompt, and let the retail party chooser finish its fade.
+    for _ in range(6):
+        HEADLESS.tap_key(emu, "A", 24, 120)
+
+
+def task6_daycare_cancel_evidence(
+    emu: DeSmuME,
+    raw: bytes,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    route = open_retail_daycare_lady(emu)
+    open_retail_daycare_party_chooser(emu)
+    # Walking legitimately increments deposited-owner daycare steps. Snapshot
+    # at the chooser transaction boundary, immediately before retail cancel.
+    before_party = wait_party_locked(emu)
+    before_daycare = runtime_daycare_image(emu)
+    before_pc = read_bytes(
+        emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+    )
+    before_metadata, before_history = runtime_history(emu)
+    HEADLESS.tap_key(emu, "B", 24, 360)
+    after_party = wait_party_locked(emu)
+    after_daycare = runtime_daycare_image(emu)
+    after_pc = read_bytes(
+        emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+    )
+    after_metadata, after_history = runtime_history(emu)
+    require(
+        after_party == before_party
+        and after_daycare == before_daycare
+        and after_pc == before_pc
+        and after_metadata == before_metadata
+        and after_history == before_history,
+        "retail daycare party-chooser cancel changed canonical state",
+    )
+    validate_all_party_checksums(after_party)
+    _, pc_base = active_pc_copy(raw)
+    validate_all_boxed_checksums(raw, pc_base)
+    screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    capture = screenshot(emu, screenshot_path.parent, screenshot_path.name)
+    return {
+        "label": "task6_daycare_cancel",
+        "evidence_kind": "actual retail std_daycare_lady cancel",
+        "route": route,
+        "party_exact": True,
+        "daycare_exact": True,
+        "pc_exact": True,
+        "history_exact": True,
+        "dirty": after_metadata[4],
+        "all_six_party_checksums_valid": True,
+        "all_900_boxed_checksums_valid": True,
+        "capture": capture,
+    }
+
+
+def task6_daycare_sanitize_evidence(
+    emu: DeSmuME,
+    raw: bytes,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    baseline_counter, before_count, before_party = PARTY.party_image(raw)
+    require(before_count == 5, "daycare fixture party count differs")
+    party_box = party_record(before_party, TARGET_SLOT)[:PC_MON_SIZE]
+    party_pid, party_ot_id, _ = box_identity(party_box)
+    deposited_box = runtime_daycare_box(emu, 0)
+    deposited_pid, deposited_ot_id, _ = box_identity(deposited_box)
+
+    route = open_retail_daycare_lady(emu)
+    open_retail_daycare_party_chooser(emu)
+    # Walking may increase deposited-owner steps. Pin the actual mutation
+    # transaction at the chooser boundary, immediately before STORE.
+    before_daycare = runtime_daycare_image(emu)
+    before_pc = read_bytes(
+        emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+    )
+    before_metadata, before_history = runtime_history(emu)
+    before_revision = struct.unpack_from("<I", before_metadata, 8)[0]
+    party_index, _, party_history_before = find_history_record(
+        before_history, party_pid, party_ot_id
+    )
+    deposited_index, _, deposited_history_before = find_history_record(
+        before_history, deposited_pid, deposited_ot_id
+    )
+    require(
+        party_history_before == TASK6_DAYCARE_PARTY_HISTORY
+        and deposited_history_before == TASK6_DAYCARE_DEPOSITED_HISTORY
+        and box_identity(before_daycare[:PC_MON_SIZE])[:2]
+        == (deposited_pid, deposited_ot_id),
+        "daycare chooser acquisition/owner state differs",
+    )
+    HEADLESS.tap_key(emu, "DOWN", 8, 60)
+    HEADLESS.tap_key(emu, "A", 24, 90)
+    HEADLESS.tap_key(emu, "A", 24, 900)
+    after_party = wait_party_locked(emu)
+    require(
+        struct.unpack_from("<i", after_party, 4)[0] == before_count - 1,
+        "retail daycare did not remove the selected party owner",
+    )
+    after_daycare = runtime_daycare_image(emu)
+    after_deposited = after_daycare[:PC_MON_SIZE]
+    after_selected = after_daycare[
+        DAYCARE_MON_SIZE:DAYCARE_MON_SIZE + PC_MON_SIZE
+    ]
+    require(
+        box_identity(after_deposited)[:2]
+        == (deposited_pid, deposited_ot_id)
+        and box_identity(after_selected)[:2] == (party_pid, party_ot_id),
+        "retail daycare deposit changed owner identity/order",
+    )
+    _, deposited_moves, deposited_pp, deposited_pp_ups = (
+        box_record_payload(after_deposited)
+    )
+    _, selected_moves, selected_pp, selected_pp_ups = (
+        box_record_payload(after_selected)
+    )
+    require(
+        deposited_moves == (57, 48, 282, 109)
+        and selected_moves == (57, 48, 109, 282)
+        and deposited_pp[3] == TASK6_DAYCARE_DEPOSITED_NEW_PP
+        and selected_pp[3] == TASK6_DAYCARE_PARTY_NEW_PP
+        and deposited_pp_ups[3] == 0
+        and selected_pp_ups[3] == 0,
+        "retail daycare sanitizer move/PP transaction differs",
+    )
+    validate_box_checksum(after_deposited, "retail deposited owner")
+    validate_box_checksum(after_selected, "retail selected owner")
+    require(
+        after_daycare[PC_MON_SIZE:DAYCARE_MON_SIZE]
+        == before_daycare[PC_MON_SIZE:DAYCARE_MON_SIZE],
+        "retail sanitizer changed the existing owner's extras/steps",
+    )
+    after_metadata, after_history = runtime_history(emu)
+    after_revision = struct.unpack_from("<I", after_metadata, 8)[0]
+    new_party_index, _, party_history_after = find_history_record(
+        after_history, party_pid, party_ot_id
+    )
+    new_deposited_index, _, deposited_history_after = find_history_record(
+        after_history, deposited_pid, deposited_ot_id
+    )
+    require(
+        new_party_index == party_index
+        and new_deposited_index == deposited_index
+        and party_history_after
+        == party_history_before + (282,)
+        and deposited_history_after
+        == deposited_history_before + (109,)
+        and history_identity_count(after_history, party_pid, party_ot_id) == 1
+        and history_identity_count(
+            after_history, deposited_pid, deposited_ot_id
+        )
+        == 1
+        and after_revision == before_revision + 2
+        and after_metadata[4] == 1,
+        "retail daycare history transaction did not commit exactly once",
+    )
+    for index, (old_record, new_record) in enumerate(
+        zip(history_records(before_history), history_records(after_history))
+    ):
+        if index not in (party_index, deposited_index):
+            require(
+                old_record == new_record,
+                f"retail daycare changed unrelated history record {index}",
+            )
+    require(
+        read_bytes(emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE)
+        == before_pc,
+        "retail daycare changed PC storage",
+    )
+    validate_all_party_checksums(after_party)
+    _, pc_base = active_pc_copy(raw)
+    validate_all_boxed_checksums(raw, pc_base)
+    screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    capture = screenshot(emu, screenshot_path.parent, screenshot_path.name)
+
+    tap(emu, "A", 120)
+    tap(emu, "A", 180)
+    retail_save_from_field(emu, baseline_counter)
+    exported = screenshot_path.with_suffix(".sav")
+    require(
+        emu.backup.export_file(str(exported)),
+        "could not export retail daycare sanitizer save",
+    )
+    persisted_raw = PARTY.extract_raw_save(exported)
+    persisted_raw_sha256 = hashlib.sha256(persisted_raw).hexdigest()
+    _, persisted_base = PARTY.active_copy(persisted_raw)
+    persisted_daycare = persisted_raw[
+        persisted_base + DAYCARE_SAVE_OFFSET:
+        persisted_base + DAYCARE_SAVE_OFFSET + 0x1E0
+    ]
+    persisted_deposited = persisted_daycare[:PC_MON_SIZE]
+    persisted_selected = persisted_daycare[
+        DAYCARE_MON_SIZE:DAYCARE_MON_SIZE + PC_MON_SIZE
+    ]
+    _, _, persisted_deposited_pp, persisted_deposited_pp_ups = (
+        box_record_payload(persisted_deposited)
+    )
+    _, _, persisted_selected_pp, persisted_selected_pp_ups = (
+        box_record_payload(persisted_selected)
+    )
+    require(
+        box_identity(persisted_deposited)[:2]
+        == (deposited_pid, deposited_ot_id)
+        and box_identity(persisted_selected)[:2]
+        == (party_pid, party_ot_id),
+        "retail daycare owners did not persist",
+    )
+    require(
+        persisted_deposited_pp[3] == TASK6_DAYCARE_DEPOSITED_NEW_PP
+        and persisted_selected_pp[3] == TASK6_DAYCARE_PARTY_NEW_PP
+        and persisted_deposited_pp_ups[3] == 0
+        and persisted_selected_pp_ups[3] == 0,
+        "retail daycare PP/PP-Up transaction did not persist",
+    )
+    _, _, persisted_history = selected_persisted_history(persisted_raw)
+    require(
+        find_history_record(
+            persisted_history, party_pid, party_ot_id
+        )[2]
+        == party_history_after
+        and find_history_record(
+            persisted_history, deposited_pid, deposited_ot_id
+        )[2]
+        == deposited_history_after,
+        "retail daycare history did not persist",
+    )
+    return {
+        "label": "task6_daycare_sanitize",
+        "evidence_kind":
+            "actual retail std_daycare_lady -> DaycareSanitizeMon -> deposit",
+        "route": route,
+        "party_identity": [party_pid, party_ot_id],
+        "deposited_identity": [deposited_pid, deposited_ot_id],
+        "party_moves": list(selected_moves),
+        "deposited_moves": list(deposited_moves),
+        "party_pp": list(selected_pp),
+        "deposited_pp": list(deposited_pp),
+        "party_pp_ups": list(selected_pp_ups),
+        "deposited_pp_ups": list(deposited_pp_ups),
+        "party_history": list(party_history_after),
+        "deposited_history": list(deposited_history_after),
+        "revision": {"before": before_revision, "after": after_revision},
+        "one_record_per_identity": True,
+        "unrelated_history_records_exact": True,
+        "pc_exact": True,
+        "all_six_party_checksums_valid": True,
+        "all_900_boxed_checksums_valid": True,
+        "exported_raw_save": str(exported),
+        "exported_raw_sha256": persisted_raw_sha256,
+        "capture": capture,
+    }
+
+
+def task6_daycare_reload_evidence(
+    emu: DeSmuME,
+    raw: bytes,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    _, count, party = PARTY.party_image(raw)
+    metadata, history = runtime_history(emu)
+    deposited = runtime_daycare_box(emu, 0)
+    selected = runtime_daycare_box(emu, 1)
+    deposited_pid, deposited_ot_id, _ = box_identity(deposited)
+    selected_pid, selected_ot_id, _ = box_identity(selected)
+    deposited_history = find_history_record(
+        history, deposited_pid, deposited_ot_id
+    )[2]
+    selected_history = find_history_record(
+        history, selected_pid, selected_ot_id
+    )[2]
+    _, _, deposited_pp, deposited_pp_ups = box_record_payload(deposited)
+    _, _, selected_pp, selected_pp_ups = box_record_payload(selected)
+    require(
+        count == 4
+        and metadata[4] == 0
+        and box_record_payload(deposited)[1] == (57, 48, 282, 109)
+        and box_record_payload(selected)[1] == (57, 48, 109, 282)
+        and deposited_pp[3] == TASK6_DAYCARE_DEPOSITED_NEW_PP
+        and selected_pp[3] == TASK6_DAYCARE_PARTY_NEW_PP
+        and deposited_pp_ups[3] == 0
+        and selected_pp_ups[3] == 0
+        and deposited_history == TASK6_DAYCARE_DEPOSITED_HISTORY + (109,)
+        and selected_history == TASK6_DAYCARE_PARTY_HISTORY + (282,)
+        and history_identity_count(
+            history, deposited_pid, deposited_ot_id
+        )
+        == 1
+        and history_identity_count(history, selected_pid, selected_ot_id)
+        == 1,
+        "fresh daycare reload lost canonical owners/history",
+    )
+    validate_all_party_checksums(party)
+    _, pc_base = active_pc_copy(raw)
+    validate_all_boxed_checksums(raw, pc_base)
+    screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    capture = screenshot(emu, screenshot_path.parent, screenshot_path.name)
+    return {
+        "label": "task6_daycare_reload",
+        "evidence_kind": "fresh emulator retail-daycare save reload",
+        "party_count": count,
+        "deposited_identity": [deposited_pid, deposited_ot_id],
+        "selected_identity": [selected_pid, selected_ot_id],
+        "deposited_history": list(deposited_history),
+        "selected_history": list(selected_history),
+        "deposited_pp": list(deposited_pp),
+        "selected_pp": list(selected_pp),
+        "deposited_pp_ups": list(deposited_pp_ups),
+        "selected_pp_ups": list(selected_pp_ups),
+        "one_record_per_identity": True,
+        "history_dirty": metadata[4],
+        "all_six_party_checksums_valid": True,
+        "all_900_boxed_checksums_valid": True,
+        "capture": capture,
+    }
+
+
+
 def run_isolated_scenario(
     rom: Path,
     raw_path: Path,
+    expected_raw_sha256: str,
     name: str,
     screenshot_path: Path,
 ) -> dict[str, object]:
     raw = raw_path.read_bytes()
+    require(
+        hashlib.sha256(raw).hexdigest() == expected_raw_sha256,
+        f"{name} controlled raw SHA-256 differs before emulation",
+    )
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     with HEADLESS.silence_native_output(True):
         emu, imported = new_emulator(rom, raw)
@@ -1767,7 +2387,19 @@ def run_isolated_scenario(
             require(party == expected_party, f"{name} boot party differs")
             metadata, history = runtime_history(emu)
             require(metadata[4] == 0, f"{name} did not boot clean history")
-            if name == "empty":
+            if name == "task6_daycare_cancel":
+                return task6_daycare_cancel_evidence(
+                    emu, raw, screenshot_path
+                )
+            elif name == "task6_daycare_sanitize":
+                return task6_daycare_sanitize_evidence(
+                    emu, raw, screenshot_path
+                )
+            elif name == "task6_daycare_reload":
+                return task6_daycare_reload_evidence(
+                    emu, raw, screenshot_path
+                )
+            elif name == "empty":
                 open_summary_moves(emu, 0)
                 party = wait_party_locked(emu)
                 metadata, history = runtime_history(emu)
@@ -2977,11 +3609,12 @@ def run_isolated_scenario(
                 }
             elif name == "terminal_bootstrap":
                 baseline_counter, _ = PARTY.active_copy(raw)
+                # T21PC0101's gentleman stays on y=16 at x=10..12. Keep the
+                # entire north leg on the fixed x=8 entrance aisle, then move
+                # east only after reaching the collision-free terminal row.
                 for key, frames in (
-                    ("UP", 30),
-                    ("RIGHT", 30),
-                    ("UP", 60),
-                    ("RIGHT", 15),
+                    ("UP", 90),
+                    ("RIGHT", 45),
                 ):
                     hold(emu, key, frames, 60)
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3064,13 +3697,6 @@ def run_isolated_scenario(
                     struct.unpack_from("<i", withdrawn_party, 4)[0] == 6,
                     "retail Withdraw did not append party slot 5",
                 )
-                withdrawn_box = runtime_box_record(
-                    emu, 0, BOX_TARGET_SLOT
-                )
-                require(
-                    box_identity(withdrawn_box)[2] == 0,
-                    "retail Withdraw did not empty Box1 slot 0",
-                )
                 withdrawn_target = party_record(withdrawn_party, 5)
                 require(
                     box_identity(withdrawn_target[:PC_MON_SIZE])[:2]
@@ -3091,6 +3717,18 @@ def run_isolated_scenario(
                 tap(emu, "A", 180)
                 touch(emu, 190, 145, 180)
                 touch(emu, 100, 146, 180)
+                require(
+                    box_identity(
+                        runtime_box_record(emu, 0, BOX_TARGET_SLOT)
+                    )[2]
+                    == 0,
+                    "retail Withdraw did not commit empty Box1 slot 0 "
+                    "when the PC application exited",
+                )
+                require(
+                    runtime_pc_modified_flags(emu) & 1,
+                    "retail Withdraw did not mark Box1 dirty at exit",
+                )
                 open_summary_moves(emu, 5)
                 party_state = locate_inactive_summary_state(
                     emu,
@@ -3157,17 +3795,6 @@ def run_isolated_scenario(
                     deposited_party == baseline_party,
                     "retail Deposit did not restore the party byte-exact",
                 )
-                deposited_target = runtime_box_record(
-                    emu, 0, BOX_TARGET_SLOT
-                )
-                require(
-                    deposited_target == expected_target,
-                    "retail Deposit did not restore Box1 slot 0 byte-exact",
-                )
-                require(
-                    runtime_pc_modified_flags(emu) & 1,
-                    "retail Withdraw/Deposit did not mark Box1 dirty",
-                )
                 deposited_metadata, deposited_history = runtime_history(emu)
                 require(
                     deposited_metadata[4] == 0
@@ -3180,6 +3807,19 @@ def run_isolated_scenario(
                 tap(emu, "A", 180)
                 touch(emu, 190, 145, 180)
                 touch(emu, 100, 146, 180)
+                deposited_target = runtime_box_record(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                require(
+                    deposited_target == expected_target,
+                    "retail Deposit did not restore Box1 slot 0 "
+                    "byte-exact at PC application exit",
+                )
+                require(
+                    runtime_pc_modified_flags(emu) & 1,
+                    "retail Withdraw/Deposit did not retain Box1 dirty "
+                    "ownership at exit",
+                )
                 retail_save_from_field(emu, baseline_counter)
                 exported = screenshot_path.with_suffix(".sav")
                 require(
@@ -4122,6 +4762,8 @@ def isolated_scenario_evidence(
     name: str,
     screenshot_path: Path,
 ) -> dict[str, object]:
+    raw_before = raw_path.read_bytes()
+    raw_sha256 = hashlib.sha256(raw_before).hexdigest()
     completed = subprocess.run(
         [
             sys.executable,
@@ -4130,6 +4772,8 @@ def isolated_scenario_evidence(
             str(rom),
             "--probe-raw",
             str(raw_path),
+            "--expected-probe-raw-sha256",
+            raw_sha256,
             "--scenario",
             name,
             "--probe-screenshot",
@@ -4145,6 +4789,9 @@ def isolated_scenario_evidence(
             "terminal_bootstrap",
             "transfer",
             "transfer_reload",
+            "task6_daycare_cancel",
+            "task6_daycare_sanitize",
+            "task6_daycare_reload",
             "boxed",
             "boxed_reload",
             "party_fail_closed",
@@ -4167,7 +4814,559 @@ def isolated_scenario_evidence(
         == BOOTSTRAP_AUTHENTICATION,
         f"{name} subprocess artifact authentication differs",
     )
+    require(
+        evidence.get("probe_raw_sha256") == raw_sha256
+        and hashlib.sha256(raw_path.read_bytes()).hexdigest() == raw_sha256,
+        f"{name} controlled raw changed across parent/child execution",
+    )
     return evidence
+
+
+def task6_serialization_surrogate_evidence(
+    controlled_raw: bytes,
+    controlled_history_payload: bytes,
+    box_fixture: dict[str, object],
+) -> dict[str, object]:
+    """Exercise authenticated save/identity boundaries without a radio peer."""
+
+    pc_copies = valid_pc_copies(controlled_raw)
+    require(
+        len(pc_copies) == len(PARTY.SAVE_COPY_BASES),
+        "task-6 surrogate requires both authenticated PC generations",
+    )
+    _, active_base = active_pc_copy(controlled_raw)
+    source = pc_box_record(
+        controlled_raw, active_base, 0, BOX_TARGET_SLOT
+    )
+    switch = pc_box_record(
+        controlled_raw, active_base, 0, BOX_SWITCH_SLOT
+    )
+    source_identity = box_identity(source)[:2]
+    source_history = find_history_record(
+        controlled_history_payload
+        + bytes(HISTORY_IMAGE_SIZE - len(controlled_history_payload)),
+        *source_identity,
+    )[2]
+    require(
+        source == box_fixture["target"]
+        and source_history == CONTROLLED_HISTORY_MOVES,
+        "task-6 surrogate source identity/history differs",
+    )
+    empty_slots = [
+        slot
+        for slot in range(2, PC_MONS_PER_BOX)
+        if box_identity(
+            pc_box_record(controlled_raw, active_base, 0, slot)
+        )[2]
+        == 0
+    ]
+    require(
+        len(empty_slots) >= 2,
+        "task-6 surrogate needs two canonical empty PC slots",
+    )
+    walker_slot, arrival_slot = empty_slots[:2]
+    canonical_empty = pc_box_record(
+        controlled_raw, active_base, 0, walker_slot
+    )
+
+    def replace_pc_slots(
+        original: bytes,
+        replacements: dict[tuple[int, int], bytes],
+    ) -> bytes:
+        updated = bytearray(original)
+        copies = valid_pc_copies(original)
+        require(
+            len(copies) == len(PARTY.SAVE_COPY_BASES),
+            "PC transaction source is not fully authenticated",
+        )
+        for _, base in copies:
+            for (box, slot), record in replacements.items():
+                validate_box_checksum(record, "PC transaction record")
+                start = (
+                    base
+                    + PC_SAVE_OFFSET
+                    + box * PC_BOX_SIZE
+                    + slot * PC_MON_SIZE
+                )
+                updated[start:start + PC_MON_SIZE] = record
+            footer = base + PC_SAVE_OFFSET + PC_SAVE_SIZE - PC_FOOTER_SIZE
+            struct.pack_into(
+                "<H",
+                updated,
+                footer + 0x0E,
+                PARTY.crc16_ccitt_false(
+                    bytes(updated[base + PC_SAVE_OFFSET:footer])
+                ),
+            )
+        result = bytes(updated)
+        require(
+            len(valid_pc_copies(result)) == len(PARTY.SAVE_COPY_BASES),
+            "PC transaction did not reauthenticate both generations",
+        )
+        return result
+
+    def assert_pc_transaction_diff(
+        before: bytes,
+        after: bytes,
+        slots: tuple[tuple[int, int], ...],
+    ) -> None:
+        allowed: set[int] = set()
+        for _, base in pc_copies:
+            for box, slot in slots:
+                start = (
+                    base
+                    + PC_SAVE_OFFSET
+                    + box * PC_BOX_SIZE
+                    + slot * PC_MON_SIZE
+                )
+                allowed.update(range(start, start + PC_MON_SIZE))
+            footer = base + PC_SAVE_OFFSET + PC_SAVE_SIZE - PC_FOOTER_SIZE
+            allowed.update((footer + 0x0E, footer + 0x0F))
+        changed = {
+            index
+            for index, (old, new) in enumerate(zip(before, after))
+            if old != new
+        }
+        require(
+            changed and changed <= allowed,
+            "PC transaction changed bytes outside its records/CRC",
+        )
+
+    def seal_history(original: bytes, payload: bytes) -> bytes:
+        updated = bytearray(original)
+        for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
+            old_image = original[offset:offset + HISTORY_IMAGE_SIZE]
+            require(
+                valid_history_image(old_image, mirror),
+                f"history mirror {mirror} is not authenticated",
+            )
+            counter = struct.unpack_from(
+                "<I", old_image, HISTORY_FOOTER_OFFSET + 4
+            )[0]
+            updated[offset:offset + HISTORY_IMAGE_SIZE] = (
+                history_image_for_mirror(payload, mirror, counter)
+            )
+        return bytes(updated)
+
+    def assert_serialized_path(
+        saved: bytes,
+        slot: int,
+        expected_box: bytes,
+        identity: tuple[int, int],
+        current_moves: tuple[int, ...],
+        history_moves: tuple[int, ...],
+    ) -> str:
+        reparsed_path = bytes(bytearray(saved))
+        _, path_base = active_pc_copy(reparsed_path)
+        path_record = pc_box_record(reparsed_path, path_base, 0, slot)
+        _, _, path_history = selected_persisted_history(reparsed_path)
+        require(
+            path_record == expected_box
+            and box_identity(path_record)[:2] == identity
+            and tuple(
+                move
+                for move in box_record_payload(path_record)[1]
+                if move != 0
+            )
+            == current_moves
+            and history_identity_count(path_history, *identity) == 1
+            and find_history_record(path_history, *identity)[2]
+            == history_moves
+            and len(validate_all_boxed_checksums(
+                reparsed_path, path_base
+            ))
+            == 900
+            and all(
+                valid_history_image(
+                    reparsed_path[
+                        offset:offset + HISTORY_IMAGE_SIZE
+                    ],
+                    mirror,
+                )
+                for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS)
+            ),
+            "serialized task-6 path failed authenticated save/reparse",
+        )
+        before_records = history_records(
+            controlled_history_payload
+            + bytes(HISTORY_IMAGE_SIZE - len(controlled_history_payload))
+        )
+        for index, record in enumerate(history_records(path_history)):
+            if struct.unpack_from("<II", record) != identity:
+                require(
+                    record == before_records[index],
+                    f"serialized task-6 path changed unrelated record {index}",
+                )
+        return hashlib.sha256(reparsed_path).hexdigest()
+
+    # Trade staging/cancel leaves canonical save bytes exact. Commit replaces
+    # the slot first, then seeds only the incoming identity's current moves.
+    incoming_moves = (90, 91, 92, 93)
+    incoming = controlled_box_record(
+        switch,
+        ot_id_xor=0x5A5AA5A5,
+        moves=incoming_moves,
+        pp=(10, 10, 10, 10),
+        pp_ups=(0, 0, 0, 0),
+    )
+    incoming_identity = box_identity(incoming)[:2]
+    staged_trade = bytes(incoming)
+    occupied_destination = pc_box_record(
+        controlled_raw, active_base, 0, BOX_TARGET_SLOT
+    )
+    destination_accepts_trade = box_identity(occupied_destination)[2] == 0
+    failed_trade = controlled_raw
+    if destination_accepts_trade:
+        failed_trade = replace_pc_slots(
+            controlled_raw, {(0, BOX_TARGET_SLOT): staged_trade}
+        )
+    require(
+        not destination_accepts_trade
+        and validate_box_checksum(
+            staged_trade, "staged failed-trade transit owner"
+        )["valid"]
+        and failed_trade == controlled_raw,
+        "occupied-destination trade abort changed canonical save bytes",
+    )
+    trade_pc = replace_pc_slots(
+        controlled_raw, {(0, BOX_TARGET_SLOT): incoming}
+    )
+    assert_pc_transaction_diff(
+        controlled_raw, trade_pc, ((0, BOX_TARGET_SLOT),)
+    )
+    trade_payload = bytearray(controlled_history_payload)
+    seed_history_record(trade_payload, incoming, incoming_moves)
+    trade_raw = seal_history(trade_pc, bytes(trade_payload))
+    _, trade_base = active_pc_copy(trade_raw)
+    trade_image = (
+        bytes(trade_payload)
+        + bytes(HISTORY_IMAGE_SIZE - len(trade_payload))
+    )
+    require(
+        source_identity != incoming_identity
+        and pc_box_record(trade_raw, trade_base, 0, BOX_TARGET_SLOT)
+        == incoming
+        and history_identity_count(trade_image, *source_identity) == 1
+        and history_identity_count(trade_image, *incoming_identity) == 1
+        and find_history_record(
+            trade_image, *source_identity
+        )[2]
+        == source_history
+        and find_history_record(
+            trade_image, *incoming_identity
+        )[2]
+        == incoming_moves,
+        "trade commit contaminated outgoing/incoming history",
+    )
+    trade_reparse_sha256 = assert_serialized_path(
+        trade_raw,
+        BOX_TARGET_SLOT,
+        incoming,
+        incoming_identity,
+        incoming_moves,
+        incoming_moves,
+    )
+
+    # Rotom appliance rewrite retains PID/OTID and appends only the proven move.
+    form_before_moves = (84, 86, 87, 88)
+    form_before = authenticated_box_variant(
+        controlled_box_record(
+            source,
+            ot_id_xor=0x3333CCCC,
+            moves=form_before_moves,
+            pp=(10, 10, 10, 10),
+            pp_ups=(0, 0, 0, 0),
+        ),
+        species=479,
+        form=0,
+        is_egg=False,
+    )
+    form_after_moves = (84, 315, 87, 88)
+    form_after = authenticated_box_variant(
+        controlled_box_record(
+            form_before,
+            ot_id_xor=0,
+            moves=form_after_moves,
+            pp=(10, 10, 10, 10),
+            pp_ups=(0, 0, 0, 0),
+        ),
+        species=479,
+        form=1,
+        is_egg=False,
+    )
+    form_identity = box_identity(form_before)[:2]
+    form_payload = bytearray(controlled_history_payload)
+    seed_history_record(form_payload, form_before, form_before_moves)
+    seed_history_record(
+        form_payload, form_after, form_before_moves + (315,)
+    )
+    form_image = (
+        bytes(form_payload)
+        + bytes(HISTORY_IMAGE_SIZE - len(form_payload))
+    )
+    require(
+        box_identity(form_after)[:2] == form_identity
+        and box_identity(form_after)[2] == 479
+        and serialized_form_and_egg(form_after) == (1, False)
+        and box_record_payload(form_after)[1] == form_after_moves
+        and history_identity_count(form_image, *form_identity) == 1
+        and find_history_record(
+            form_image, *form_identity
+        )[2]
+        == form_before_moves + (315,),
+        "persistent form rewrite lost identity/acquisition ordering",
+    )
+    invalid_form_record = form_after
+    invalid_form_history = bytes(form_payload)
+    invalid_form_rejected = False
+    try:
+        authenticated_box_variant(form_after, form=32)
+    except RuntimeError:
+        invalid_form_rejected = True
+    require(
+        invalid_form_rejected
+        and form_after == invalid_form_record
+        and bytes(form_payload) == invalid_form_history,
+        "invalid form did not fail closed before mutation",
+    )
+    form_pc = replace_pc_slots(
+        controlled_raw, {(0, walker_slot): form_after}
+    )
+    assert_pc_transaction_diff(
+        controlled_raw, form_pc, ((0, walker_slot),)
+    )
+    form_raw = seal_history(form_pc, bytes(form_payload))
+    form_reparse_sha256 = assert_serialized_path(
+        form_raw,
+        walker_slot,
+        form_after,
+        form_identity,
+        form_after_moves,
+        form_before_moves + (315,),
+    )
+
+    # Egg construction is history-free; hatch seeds inherited current moves
+    # for the egg identity without copying parent or prior-slot history.
+    egg_moves = (45, 98)
+    egg = authenticated_box_variant(
+        controlled_box_record(
+            switch,
+            ot_id_xor=0xA55AA55A,
+            moves=(45, 98, 0, 0),
+            pp=(10, 10, 0, 0),
+            pp_ups=(0, 0, 0, 0),
+        ),
+        is_egg=True,
+    )
+    egg_identity = box_identity(egg)[:2]
+    controlled_image = (
+        controlled_history_payload
+        + bytes(HISTORY_IMAGE_SIZE - len(controlled_history_payload))
+    )
+    parent_record = find_history_record(
+        controlled_image, *source_identity
+    )[1]
+    require(
+        serialized_form_and_egg(egg)[1]
+        and history_identity_count(controlled_image, *egg_identity) == 0,
+        "egg construction allocated learned-move history",
+    )
+    hatched = authenticated_box_variant(egg, is_egg=False)
+    hatch_payload = bytearray(controlled_history_payload)
+    seed_history_record(hatch_payload, hatched, egg_moves)
+    hatch_image = (
+        bytes(hatch_payload)
+        + bytes(HISTORY_IMAGE_SIZE - len(hatch_payload))
+    )
+    require(
+        not serialized_form_and_egg(hatched)[1]
+        and box_identity(hatched)[:2] == egg_identity
+        and history_identity_count(hatch_image, *egg_identity) == 1
+        and find_history_record(
+            hatch_image, *egg_identity
+        )[2]
+        == egg_moves
+        and find_history_record(
+            hatch_image, *source_identity
+        )[1]
+        == parent_record,
+        "hatch baseline inherited parent or prior-slot history",
+    )
+    egg_pc = replace_pc_slots(
+        controlled_raw, {(0, arrival_slot): egg}
+    )
+    assert_pc_transaction_diff(
+        controlled_raw, egg_pc, ((0, arrival_slot),)
+    )
+    _, egg_base = active_pc_copy(egg_pc)
+    _, _, egg_persisted_history = selected_persisted_history(egg_pc)
+    require(
+        pc_box_record(egg_pc, egg_base, 0, arrival_slot) == egg
+        and serialized_form_and_egg(
+            pc_box_record(egg_pc, egg_base, 0, arrival_slot)
+        )[1]
+        and history_identity_count(
+            egg_persisted_history, *egg_identity
+        )
+        == 0
+        and all(
+            valid_history_image(
+                egg_pc[offset:offset + HISTORY_IMAGE_SIZE], mirror
+            )
+            for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS)
+        ),
+        "serialized egg construction allocated history before hatch",
+    )
+    hatch_pc = replace_pc_slots(
+        egg_pc, {(0, arrival_slot): hatched}
+    )
+    assert_pc_transaction_diff(
+        egg_pc, hatch_pc, ((0, arrival_slot),)
+    )
+    hatch_raw = seal_history(hatch_pc, bytes(hatch_payload))
+    hatch_reparse_sha256 = assert_serialized_path(
+        hatch_raw,
+        arrival_slot,
+        hatched,
+        egg_identity,
+        egg_moves,
+        egg_moves,
+    )
+
+    # No headless radio peer exists. Exercise Pokéwalker's exact canonical
+    # 0x88 export/import boundary and both PC/history authentication layers.
+    transit = bytes(source)
+    walker_export = replace_pc_slots(
+        controlled_raw, {(0, BOX_TARGET_SLOT): canonical_empty}
+    )
+    assert_pc_transaction_diff(
+        controlled_raw, walker_export, ((0, BOX_TARGET_SLOT),)
+    )
+    walker_recovered = replace_pc_slots(
+        walker_export, {(0, BOX_TARGET_SLOT): transit}
+    )
+    require(
+        walker_recovered == controlled_raw,
+        "Pokéwalker failure recovery was not byte-exact",
+    )
+    walker_success = replace_pc_slots(
+        controlled_raw,
+        {
+            (0, BOX_TARGET_SLOT): canonical_empty,
+            (0, walker_slot): transit,
+        },
+    )
+    assert_pc_transaction_diff(
+        controlled_raw,
+        walker_success,
+        ((0, BOX_TARGET_SLOT), (0, walker_slot)),
+    )
+    _, walker_base = active_pc_copy(walker_success)
+    require(
+        pc_box_record(walker_success, walker_base, 0, walker_slot)
+        == source
+        and box_identity(
+            pc_box_record(walker_success, walker_base, 0, walker_slot)
+        )[:2]
+        == source_identity
+        and all(
+            walker_success[offset:offset + HISTORY_IMAGE_SIZE]
+            == controlled_raw[offset:offset + HISTORY_IMAGE_SIZE]
+            for offset in HISTORY_MIRROR_OFFSETS
+        ),
+        "Pokéwalker round trip changed identity/history",
+    )
+    arrival_moves = (70, 71)
+    arrival = controlled_box_record(
+        switch,
+        ot_id_xor=0xC33CC33C,
+        moves=(70, 71, 0, 0),
+        pp=(10, 10, 0, 0),
+        pp_ups=(0, 0, 0, 0),
+    )
+    arrival_identity = box_identity(arrival)[:2]
+    arrival_pc = replace_pc_slots(
+        walker_success, {(0, arrival_slot): arrival}
+    )
+    arrival_payload = bytearray(controlled_history_payload)
+    seed_history_record(arrival_payload, arrival, arrival_moves)
+    walker_arrival = seal_history(arrival_pc, bytes(arrival_payload))
+    reparsed = bytes(bytearray(walker_arrival))
+    _, reparsed_base = active_pc_copy(reparsed)
+    _, _, reparsed_history = selected_persisted_history(reparsed)
+    boxed_checksums = validate_all_boxed_checksums(
+        reparsed, reparsed_base
+    )
+    require(
+        pc_box_record(reparsed, reparsed_base, 0, arrival_slot) == arrival
+        and history_identity_count(reparsed_history, *source_identity) == 1
+        and history_identity_count(reparsed_history, *arrival_identity) == 1
+        and find_history_record(
+            reparsed_history, *source_identity
+        )[2]
+        == source_history
+        and find_history_record(
+            reparsed_history, *arrival_identity
+        )[2]
+        == arrival_moves
+        and len(boxed_checksums) == 900
+        and all(
+            valid_history_image(
+                reparsed[offset:offset + HISTORY_IMAGE_SIZE], mirror
+            )
+            for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS)
+        ),
+        "Pokéwalker arrival/save-reparse authentication differs",
+    )
+
+    return {
+        "evidence_kind":
+            "source-exact authenticated serialization surrogate",
+        "actual_ui_companion":
+            "retail Route 34 daycare script 9501 evidence",
+        "trade": {
+            "failure_save_exact": True,
+            "failure_boundary":
+                "staged authenticated transit rejected by occupied slot",
+            "outgoing_identity": list(source_identity),
+            "outgoing_history": list(source_history),
+            "incoming_identity": list(incoming_identity),
+            "incoming_baseline": list(incoming_moves),
+            "one_record_each": True,
+            "save_reparse_sha256": trade_reparse_sha256,
+        },
+        "form": {
+            "identity": list(form_identity),
+            "species": 479,
+            "form": 1,
+            "current_moves": list(form_after_moves),
+            "history": list(form_before_moves + (315,)),
+            "invalid_form_fail_closed": True,
+            "save_reparse_sha256": form_reparse_sha256,
+            "candidate_order_and_known_exclusion":
+                "task2 builder/source-static companion",
+        },
+        "egg_hatch": {
+            "identity": list(egg_identity),
+            "pre_hatch_record_count": 0,
+            "inherited_baseline": list(egg_moves),
+            "parent_and_prior_slot_excluded": True,
+            "save_reparse_sha256": hatch_reparse_sha256,
+        },
+        "pokewalker": {
+            "protocol": "source-exact 0x88 serialization surrogate",
+            "failure_recovery_exact": True,
+            "round_trip_identity": list(source_identity),
+            "round_trip_history": list(source_history),
+            "arrival_identity": list(arrival_identity),
+            "arrival_baseline": list(arrival_moves),
+        },
+        "authenticated_pc_generations": len(valid_pc_copies(reparsed)),
+        "all_900_boxed_checksums_valid": len(boxed_checksums) == 900,
+        "both_history_mirrors_valid": True,
+        "save_reparse_exact": reparsed == walker_arrival,
+        "final_sha256": hashlib.sha256(reparsed).hexdigest(),
+    }
 
 
 def target_semantic_diff(before: bytes, after: bytes) -> list[int]:
@@ -4201,6 +5400,12 @@ def run(args: argparse.Namespace) -> dict:
         controlled_history_payload,
         box_fixture,
     ) = make_controlled_raw(immutable_raw)
+    daycare_raw, daycare_fixture = make_task6_daycare_raw(controlled_raw)
+    task6_serialization_evidence = task6_serialization_surrogate_evidence(
+        controlled_raw,
+        controlled_history_payload,
+        box_fixture,
+    )
     baseline_counter, occupied, checked_party = PARTY.party_image(controlled_raw)
     require(checked_party == baseline_party, "controlled party selection differs")
     require(occupied == 5, f"fixture party count differs: {occupied}")
@@ -4241,6 +5446,8 @@ def run(args: argparse.Namespace) -> dict:
     args.export_raw.parent.mkdir(parents=True, exist_ok=True)
     args.controlled_raw.parent.mkdir(parents=True, exist_ok=True)
     args.controlled_raw.write_bytes(controlled_raw)
+    args.daycare_raw.parent.mkdir(parents=True, exist_ok=True)
+    args.daycare_raw.write_bytes(daycare_raw)
     captures: list[str] = []
     state_evidence: list[dict[str, int | str]] = []
     transition_evidence: list[dict[str, object]] = []
@@ -4854,6 +6061,46 @@ def run(args: argparse.Namespace) -> dict:
         transfer_reload_capture,
     )
     captures.extend(transfer_reload_evidence["captures"])
+    daycare_cancel_capture = (
+        args.screenshot_dir / "16_actual_daycare_cancel.png"
+    )
+    daycare_cancel_evidence = isolated_scenario_evidence(
+        rom,
+        args.daycare_raw,
+        "task6_daycare_cancel",
+        daycare_cancel_capture,
+    )
+    captures.append(daycare_cancel_evidence["capture"])
+    daycare_sanitize_capture = (
+        args.screenshot_dir / "17_actual_daycare_sanitize.png"
+    )
+    daycare_sanitize_evidence = isolated_scenario_evidence(
+        rom,
+        args.daycare_raw,
+        "task6_daycare_sanitize",
+        daycare_sanitize_capture,
+    )
+    captures.append(daycare_sanitize_evidence["capture"])
+    daycare_exported_path = Path(
+        daycare_sanitize_evidence["exported_raw_save"]
+    )
+    require(
+        hashlib.sha256(
+            PARTY.extract_raw_save(daycare_exported_path)
+        ).hexdigest()
+        == daycare_sanitize_evidence["exported_raw_sha256"],
+        "retail daycare export differs before reload child launch",
+    )
+    daycare_reload_capture = (
+        args.screenshot_dir / "18_actual_daycare_reload.png"
+    )
+    daycare_reload_evidence = isolated_scenario_evidence(
+        rom,
+        daycare_exported_path,
+        "task6_daycare_reload",
+        daycare_reload_capture,
+    )
+    captures.append(daycare_reload_evidence["capture"])
 
     # Each extra boundary/lifecycle scenario runs in a fresh emulator process.
     for scenario in ("empty", "identity", "position", "teardown"):
@@ -5057,6 +6304,21 @@ def run(args: argparse.Namespace) -> dict:
             ),
             "all_900_box_checksums_valid": len(baseline_box_checksums) == 900,
         },
+        "task6_daycare_fixture": {
+            "path": str(args.daycare_raw),
+            "sha256": hashlib.sha256(daycare_raw).hexdigest(),
+            "normal_copies_authenticated": len(
+                PARTY.valid_normal_copies(daycare_raw)
+            ),
+            "party_identity": list(daycare_fixture["party_identity"]),
+            "deposited_identity": list(
+                daycare_fixture["deposited_identity"]
+            ),
+            "history_records_seeded": [
+                daycare_fixture["party_history_index"],
+                daycare_fixture["deposited_history_index"],
+            ],
+        },
         "baseline_save_counter": baseline_counter,
         "saved_save_counter": saved_counter,
         "candidate_navigation": {
@@ -5141,6 +6403,11 @@ def run(args: argparse.Namespace) -> dict:
         "boxed_reload_evidence": boxed_reload_evidence,
         "transfer_evidence": transfer_evidence,
         "transfer_reload_evidence": transfer_reload_evidence,
+        "task6_daycare_cancel_evidence": daycare_cancel_evidence,
+        "task6_daycare_sanitize_evidence": daycare_sanitize_evidence,
+        "task6_daycare_reload_evidence": daycare_reload_evidence,
+        "task6_serialization_surrogate_evidence":
+            task6_serialization_evidence,
         "prospective_evidence": prospective_evidence,
         "control_pixel_evidence": control_pixel_evidence,
         "screenshots": captures,
@@ -5163,6 +6430,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-dsv-sha256")
     parser.add_argument("--result-json", type=Path)
     parser.add_argument("--probe-raw", type=Path)
+    parser.add_argument("--expected-probe-raw-sha256")
     parser.add_argument(
         "--scenario",
         choices=(
@@ -5179,6 +6447,9 @@ def parse_args() -> argparse.Namespace:
             "terminal_bootstrap",
             "transfer",
             "transfer_reload",
+            "task6_daycare_cancel",
+            "task6_daycare_sanitize",
+            "task6_daycare_reload",
             "boxed",
             "boxed_reload",
         ),
@@ -5204,6 +6475,13 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=REPO
         / "build/diagnostics/task4_summary_relearn/controlled-baseline.sav",
+    )
+    parser.add_argument(
+        "--daycare-raw",
+        type=Path,
+        default=REPO
+        / "build/diagnostics/task4_summary_relearn/"
+        "task6-daycare-baseline.sav",
     )
     return parser.parse_args()
 
@@ -5249,12 +6527,25 @@ if __name__ == "__main__":
         )
         if arguments.scenario is not None:
             require(arguments.probe_raw is not None, "--probe-raw is required")
+            require(
+                arguments.expected_probe_raw_sha256 is not None,
+                "--expected-probe-raw-sha256 is required",
+            )
             result = run_isolated_scenario(
                 resolved_rom,
                 arguments.probe_raw.resolve(),
+                arguments.expected_probe_raw_sha256,
                 arguments.scenario,
                 arguments.probe_screenshot.resolve(),
             )
+            final_probe_hash = hashlib.sha256(
+                arguments.probe_raw.read_bytes()
+            ).hexdigest()
+            require(
+                final_probe_hash == arguments.expected_probe_raw_sha256,
+                "controlled raw changed during isolated execution",
+            )
+            result["probe_raw_sha256"] = final_probe_hash
         elif arguments.probe_raw is not None:
             result = run_reload_probe(
                 resolved_rom,

@@ -38,11 +38,15 @@ TOOL_CONTEXT_KEYS = {"ARMIPS", "AS", "CC", "LD", "NDSTOOL", "OBJCOPY"}
 
 DEPENDENCY_FILES = (
     "build/pokemon.d",
+    "build/pokemon_storage_system.d",
+    "build/individual/GetMonEvolutionInternal.d",
+    "build/field/script_commands.d",
     "build/party_menu.d",
     "build/save.d",
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
+    "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.d",
     "build/summary_move_relearn_overlay/summary_move_relearn.d",
 )
 FIXED_INPUTS = (
@@ -56,15 +60,20 @@ FIXED_INPUTS = (
     "rom.ld",
     "rom_gen.ld",
     "armips/global.s",
+    "armips/include/macros.s",
     "armips/asm/pokemon_move_history_capture.s",
     "asm/other_hook.s",
     "asm/pokemon_move_history_overlay/entry.s",
     "asm/pokemon_move_history_overlay/thumb_help.s",
+    "asm/pokemon_move_history_task6_overlay/entry.s",
     "asm/summary_move_relearn_overlay/entry.s",
     "src/pokemon_move_history_overlay/linker.ld",
+    "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/summary_move_relearn_overlay/linker.ld",
+    "src/field/linker.ld",
     "scripts/pokemon_move_history_build_manifest.py",
     "scripts/generate_armips_symbols.py",
+    "scripts/build_move_relearn_parents.py",
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/verify_pokemon_move_history_capture.py",
@@ -75,11 +84,17 @@ FIXED_INPUTS = (
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
+    "documentation/summary_move_relearn_task6.md",
 )
 OUTPUTS = {
     "core_linked": "build/linked.o",
     "core_binary": "build/output.bin",
     "pokemon_object": "build/pokemon.o",
+    "pokemon_storage_object": "build/pokemon_storage_system.o",
+    "evolution_object": "build/individual/GetMonEvolutionInternal.o",
+    "field_script_commands_object": "build/field/script_commands.o",
+    "field_linked": "build/field_linked.o",
+    "field_binary": "build/output_field.bin",
     "party_menu_object": "build/party_menu.o",
     "save_object": "build/save.o",
     "history_object":
@@ -88,10 +103,18 @@ OUTPUTS = {
         "build/pokemon_move_history_overlay/pokemon_move_relearn.o",
     "entry_object": "build/pokemon_move_history_overlay/entry.o",
     "thumb_help_object": "build/pokemon_move_history_overlay/thumb_help.o",
+    "task6_object":
+        "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o",
+    "task6_entry_object":
+        "build/pokemon_move_history_task6_overlay/entry.o",
     "overlay_object": "build/overlay.o",
     "other_hook_object": "build/other_hook.o",
     "history_linked": "build/pokemon_move_history_overlay_linked.o",
     "history_binary": "build/output_pokemon_move_history_overlay.bin",
+    "task6_linked":
+        "build/pokemon_move_history_task6_overlay_linked.o",
+    "task6_binary":
+        "build/output_pokemon_move_history_task6_overlay.bin",
     "summary_object":
         "build/summary_move_relearn_overlay/summary_move_relearn.o",
     "summary_entry_object":
@@ -101,10 +124,16 @@ OUTPUTS = {
     "patched_arm9": "base/arm9.bin",
     "overlay_table": "base/overarm9.bin",
     "patched_overlay12": "base/overlay/overlay_0012.bin",
+    "patched_overlay23": "base/overlay/overlay_0023.bin",
+    "patched_overlay65": "base/overlay/overlay_0065.bin",
     "patched_overlay68": "base/overlay/overlay_0068.bin",
+    "patched_overlay70": "base/overlay/overlay_0070.bin",
+    "patched_overlay112": "base/overlay/overlay_0112.bin",
     "patched_overlay129": "base/overlay/overlay_0129.bin",
+    "patched_overlay131": "base/overlay/overlay_0131.bin",
     "patched_overlay153": "base/overlay/overlay_0153.bin",
     "patched_overlay154": "base/overlay/overlay_0154.bin",
+    "patched_overlay155": "base/overlay/overlay_0155.bin",
 }
 
 

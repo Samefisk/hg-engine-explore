@@ -181,4 +181,46 @@ void LONG_CALL PokemonMoveHistory_FinishSave(SaveData *saveData, BOOL success);
 void LONG_CALL PokemonMoveHistory_CancelSave(SaveData *saveData);
 int LONG_CALL PokemonMoveHistory_WriteSaveNow(SaveData *saveData);
 
+/* Boot-resident task-6 transaction/validation bridge in overlay 155. */
+BOOL LONG_CALL PokemonMoveHistoryTask6_IsCanonical(
+    struct BoxPokemon *pokemon);
+void LONG_CALL PokemonMoveHistoryTask6_DaycareDepositCommit(
+    struct Party *party,
+    u32 partySlot,
+    DaycareMon *daycareMon,
+    SaveData *saveData);
+void LONG_CALL PokemonMoveHistoryTask6_TradeReplacePartySlot(
+    struct Party *party,
+    u32 partySlot,
+    struct PartyPokemon *incoming);
+void LONG_CALL PokemonMoveHistoryTask6_HatchClearEgg(
+    struct PartyPokemon *pokemon,
+    int attr,
+    void *value);
+struct PokemonStorageSystem;
+struct BoxPokemon *LONG_CALL PokemonMoveHistoryTask6_PCStorageGetAndSeed(
+    struct PokemonStorageSystem *storage,
+    u32 boxno,
+    u32 slotno);
+BOOL LONG_CALL PokemonMoveHistoryTask6_PCStoragePlaceAndSeed(
+    struct PokemonStorageSystem *storage,
+    u32 boxno,
+    u32 slotno,
+    struct BoxPokemon *boxMon);
+BOOL LONG_CALL PokemonMoveHistoryTask6_GTSPlaceAndSeed(
+    struct PokemonStorageSystem *storage,
+    u32 boxno,
+    struct BoxPokemon *boxMon);
+void LONG_CALL PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord(
+    struct PokemonStorageSystem *storage,
+    u32 boxno,
+    u32 slotno);
+BOOL LONG_CALL PokemonMoveHistoryTask6_GTSRemovePartyAndRecord(
+    struct Party *party,
+    u32 partySlot);
+void LONG_CALL PokemonMoveHistoryTask6_ScriptTeachMove(
+    SaveData *saveData,
+    struct BoxPokemon *pokemon,
+    u32 encodedMoveSlot,
+    u32 pp);
 #endif // POKEMON_MOVE_HISTORY_H

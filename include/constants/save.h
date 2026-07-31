@@ -11,10 +11,11 @@
 #define DYNAMIC_REGION_SIZE 0x2F000
 #define DYNAMIC_REGION_BYTEWIDE_SIZE 0x2F
 /*
- * Keep 0x2000 bytes out of the boot heap allocation so resident overlay 153
- * remains beyond the complete SDK FNT+FAT archive allocation with margin.
+ * Keep 0x3000 bytes out of the boot heap allocation so resident overlays 155
+ * and 153 remain beyond the complete SDK FNT+FAT archive allocation with at
+ * least the task-5 0x1000 archive margin.
  */
-#define NEW_HEAP3_SIZE 0x10E000
+#define NEW_HEAP3_SIZE 0x10D000
 
 // done this way so scripts/make.py can understand
 #define SAVE_PAGE_MAX 0x2F

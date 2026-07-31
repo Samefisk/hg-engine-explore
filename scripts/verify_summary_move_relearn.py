@@ -75,6 +75,11 @@ def source_contracts(root: Path) -> None:
         root
         / "src/pokemon_move_history_overlay/pokemon_move_relearn.c"
     ).read_text()
+    task6 = (
+        root
+        / "src/pokemon_move_history_task6_overlay/"
+        "pokemon_move_history_task6.c"
+    ).read_text()
     hooks = (root / "hooks").read_text()
     armips_patch = (
         root / "armips/asm/summary_move_relearn.s"
@@ -104,6 +109,7 @@ def source_contracts(root: Path) -> None:
     manifest_builder = (
         root / "scripts/pokemon_move_history_build_manifest.py"
     ).read_text()
+    pokemon_core = (root / "src/pokemon.c").read_text()
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
     readonly = body(history, "PokemonMoveHistory_QueryReadOnlyImpl")
@@ -145,21 +151,24 @@ def source_contracts(root: Path) -> None:
         and "pos >= SUMMARY_PARTY_CAPACITY" in current_mon,
         "party/PC lookup does not use bounded canonical Summary ownership",
     )
-    validity = body(ui, "SummaryMoveRelearn_IsValidSpeciesAndForm")
+    validity = body(
+        task6,
+        "PokemonMoveHistoryTask6_IsCanonicalImpl",
+    )
     require(
         "species > MAX_MON_NUM" in validity
-        and "species > MAX_SPECIES_INCLUDING_FORMS" not in validity
+        and "SPECIES_BAD_EGG" in validity
+        and "MON_DATA_CHECKSUM_FAILED" in validity
+        and "MON_DATA_IS_EGG" in validity
         and "SanitizeFormNumber" in validity
-        and "PokeOtherFormMonsNoGet" in validity,
+        and "NEEDS_REVERSION" in validity
+        and "SPECIES_CASTFORM" in validity
+        and "SPECIES_CHERRIM" in validity,
         "checksummed species/form validation is not fail-closed",
     )
     entry_validity = body(ui, "SummaryMoveRelearn_IsValidEntryPokemon")
     require(
-        "pokemon != NULL" in entry_validity
-        and "MON_DATA_CHECKSUM_FAILED" in entry_validity
-        and "MON_DATA_SPECIES_EXISTS" in entry_validity
-        and "MON_DATA_IS_EGG" in entry_validity
-        and "SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)"
+        "return PokemonMoveHistoryTask6_IsCanonical(pokemon);"
         in entry_validity,
         "entry-point record validation is incomplete",
     )
@@ -172,9 +181,31 @@ def source_contracts(root: Path) -> None:
     enter = body(ui, "SummaryMoveRelearn_Enter")
     require(
         "PokemonMoveRelearn_BuildCandidates(" in enter
-        and "POKEMON_MOVE_RELEARN_MAX_CANDIDATES" in enter,
+        and "POKEMON_MOVE_RELEARN_MAX_CANDIDATES" in enter
+        and "&options" in enter,
         "entry does not use the task-2 bounded candidate builder",
     )
+    form_policy = body(ui, "SummaryMoveRelearn_AllowPersistentFormMove")
+    for fragment in (
+        "SPECIES_ROTOM",
+        "MOVE_THUNDER_SHOCK",
+        "MOVE_OVERHEAT",
+        "MOVE_HYDRO_PUMP",
+        "MOVE_BLIZZARD",
+        "MOVE_AIR_SLASH",
+        "MOVE_LEAF_STORM",
+        "SPECIES_KYUREM",
+        "MOVE_GLACIATE",
+        "MOVE_SCARY_FACE",
+        "MOVE_ICE_BURN",
+        "MOVE_FUSION_FLARE",
+        "MOVE_FREEZE_SHOCK",
+        "MOVE_FUSION_BOLT",
+    ):
+        require(
+            fragment in form_policy,
+            f"persistent form policy lost: {fragment}",
+        )
     require(
         "if (count > POKEMON_MOVE_RELEARN_MAX_CANDIDATES)" in enter,
         "candidate count is not clamped before UI indexing",
@@ -251,9 +282,9 @@ def source_contracts(root: Path) -> None:
         "MON_DATA_CHECKSUM_FAILED" in main
         and "MON_DATA_SPECIES_EXISTS" in main
         and "MON_DATA_IS_EGG" in main
-        and "!SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)" in main
+        and "!PokemonMoveHistoryTask6_IsCanonical(pokemon)" in main
         and main.index(
-            "!SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)"
+            "!PokemonMoveHistoryTask6_IsCanonical(pokemon)"
         )
         < main.index("SummaryMoveRelearn_PrintStatus("),
         "entry eligibility omits fail-closed record validation before prompt",
@@ -453,6 +484,127 @@ def source_contracts(root: Path) -> None:
         and "multiprocessing" not in runtime
         and runtime.count("subprocess.run(") >= 2,
         "runtime child evidence is no longer blocking and serialized",
+    )
+    route_start = runtime.index("def open_retail_daycare_lady(")
+    route_end = runtime.index(
+        "\ndef open_retail_daycare_party_chooser(", route_start
+    )
+    daycare_route = runtime[route_start:route_end]
+    cancel_start = runtime.index("def task6_daycare_cancel_evidence(")
+    cancel_end = runtime.index(
+        "\ndef task6_daycare_sanitize_evidence(", cancel_start
+    )
+    daycare_cancel = runtime[cancel_start:cancel_end]
+    daycare_start = runtime.index("def task6_daycare_sanitize_evidence(")
+    daycare_end = runtime.index(
+        "\ndef task6_daycare_reload_evidence(", daycare_start
+    )
+    daycare_runtime = runtime[daycare_start:daycare_end]
+    require(
+        "register_exec(FUNC_EVENT_SET_SCRIPT, script_started)"
+        in daycare_route
+        and "script_hits == [9501]" in daycare_route
+        and "(331, 0, 3, 12)" in daycare_route
+        and "(331, 0, 3, 7, 0)" in daycare_route,
+        "runtime daycare route does not authenticate the retail lady boundary",
+    )
+    require(
+        daycare_cancel.index("open_retail_daycare_party_chooser(emu)")
+        < daycare_cancel.index("before_party = wait_party_locked(emu)")
+        < daycare_cancel.index('HEADLESS.tap_key(emu, "B", 24, 360)')
+        and "after_party == before_party" in daycare_cancel
+        and "after_daycare == before_daycare" in daycare_cancel
+        and "after_metadata == before_metadata" in daycare_cancel,
+        "runtime daycare cancel is not byte-exact at the chooser boundary",
+    )
+    for fragment in (
+        'HEADLESS.tap_key(emu, "DOWN", 8, 60)',
+        'HEADLESS.tap_key(emu, "A", 24, 90)',
+        'HEADLESS.tap_key(emu, "A", 24, 900)',
+        "deposited_moves == (57, 48, 282, 109)",
+        "selected_moves == (57, 48, 109, 282)",
+        "deposited_pp[3] == TASK6_DAYCARE_DEPOSITED_NEW_PP",
+        "selected_pp[3] == TASK6_DAYCARE_PARTY_NEW_PP",
+        "persisted_deposited_pp[3] == TASK6_DAYCARE_DEPOSITED_NEW_PP",
+        "persisted_selected_pp[3] == TASK6_DAYCARE_PARTY_NEW_PP",
+        "party_history_before + (282,)",
+        "deposited_history_before + (109,)",
+        "after_revision == before_revision + 2",
+        "unrelated history record",
+        "selected_persisted_history(persisted_raw)",
+    ):
+        require(
+            fragment in daycare_runtime,
+            f"runtime daycare sanitizer evidence lost {fragment}",
+        )
+    require(
+        '"task6_daycare_cancel"' in runtime
+        and '"task6_daycare_sanitize"' in runtime
+        and '"task6_daycare_reload"' in runtime
+        and "daycare_cancel_evidence = isolated_scenario_evidence("
+        in runtime
+        and "daycare_sanitize_evidence = isolated_scenario_evidence("
+        in runtime
+        and "daycare_reload_evidence = isolated_scenario_evidence("
+        in runtime
+        and '"task6_daycare_cancel_evidence": daycare_cancel_evidence'
+        in runtime
+        and '"task6_daycare_sanitize_evidence": daycare_sanitize_evidence'
+        in runtime
+        and '"task6_daycare_reload_evidence": daycare_reload_evidence'
+        in runtime,
+        "task-6 retail daycare evidence is not included in authenticated output",
+    )
+    require(
+        '"--expected-probe-raw-sha256"' in runtime
+        and "raw_sha256 = hashlib.sha256(raw_before).hexdigest()" in runtime
+        and 'evidence.get("probe_raw_sha256") == raw_sha256' in runtime
+        and "hashlib.sha256(raw_path.read_bytes()).hexdigest() == raw_sha256"
+        in runtime
+        and '"exported_raw_sha256": persisted_raw_sha256' in runtime
+        and '"sha256": hashlib.sha256(daycare_raw).hexdigest()' in runtime,
+        "controlled task-6 fixtures are not parent/child content-pinned",
+    )
+    require(
+        "def call_thumb_function(" not in runtime
+        and "def task6_actual_hook_evidence(" not in runtime
+        and "def task6_transaction_surrogate_evidence(" not in runtime,
+        "runtime verifier retained a synthetic CPU injector or dictionary model",
+    )
+    surrogate_start = runtime.index(
+        "def task6_serialization_surrogate_evidence("
+    )
+    surrogate_end = runtime.index(
+        "\ndef target_semantic_diff(", surrogate_start
+    )
+    task6_surrogate = runtime[surrogate_start:surrogate_end]
+    for fragment in (
+        "controlled_box_record(",
+        "validate_box_checksum(record",
+        "valid_pc_copies(",
+        "history_image_for_mirror(",
+        "valid_history_image(",
+        "assert_serialized_path(",
+        "trade_reparse_sha256",
+        "form_reparse_sha256",
+        "hatch_reparse_sha256",
+        "not destination_accepts_trade",
+        "walker_recovered == controlled_raw",
+        "history_identity_count(",
+        "validate_all_boxed_checksums(",
+        '"source-exact authenticated serialization surrogate"',
+        '"source-exact 0x88 serialization surrogate"',
+    ):
+        require(
+            fragment in task6_surrogate,
+            f"authenticated task-6 serialization evidence lost {fragment}",
+        )
+    require(
+        "task6_serialization_evidence = "
+        "task6_serialization_surrogate_evidence(" in runtime
+        and '"task6_serialization_surrogate_evidence":'
+        in runtime,
+        "task-6 serialized trade/form/egg/Pokéwalker evidence is not output",
     )
     require(
         "PCStorage_SetBoxModified" not in ui
@@ -681,7 +833,9 @@ def bootstrap_host_contracts(root: Path) -> None:
             ]
         )
         require(
-            invalidated == (os.path.abspath(stale),) and not stale.exists(),
+            invalidated
+            == (os.path.realpath(os.path.abspath(stale)),)
+            and not stale.exists(),
             f"{label} did not invalidate stale evidence first",
         )
         expect_failure(exception_type, callback, label)
@@ -1338,9 +1492,8 @@ def binary_contracts(args: argparse.Namespace) -> None:
     for target in (
         "PokemonMoveRelearn_BuildCandidates",
         "PokemonMoveHistory_ReplaceMove",
+        "PokemonMoveHistoryTask6_IsCanonical",
         "Party_GetCount",
-        "PokeOtherFormMonsNoGet",
-        "SanitizeFormNumber",
         "Summary_GetPokemonData",
         "Summary_GetTouchAction",
         "Summary_GetPokemonSwitchTouch",

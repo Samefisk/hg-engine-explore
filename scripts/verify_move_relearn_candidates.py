@@ -97,13 +97,11 @@ def verify_source_contract() -> None:
         "learnset generator cannot parse the shared resident machine table",
     )
     require(
-        source.index(
-            "species == SPECIES_NONE || species > MAX_MON_NUM || form >= 32"
-        )
+        source.index("!PokemonMoveHistoryTask6_IsCanonical(boxPokemon)")
         < source.index(
             "level = GetBoxMonData(boxPokemon, MON_DATA_LEVEL, NULL);"
         ),
-        "XP-derived level is loaded before species/form bounds validation",
+        "XP-derived level is loaded before canonical owner validation",
     )
     for dependency in (
         "src/field/move_tutor.c",
@@ -431,6 +429,11 @@ def verify_parent_generator() -> None:
         parents["SPECIES_GASTRODON_EAST_SEA"]
         == "SPECIES_SHELLOS_EAST_SEA",
         "form-aware parent mapping differs",
+    )
+    require(
+        parents["SPECIES_WORMADAM_SANDY"] == "SPECIES_BURMY"
+        and parents["SPECIES_WORMADAM_TRASHY"] == "SPECIES_BURMY",
+        "Wormadam cloak lineage does not resolve to Burmy",
     )
     require(
         parents["SPECIES_LYCANROC"] == "SPECIES_ROCKRUFF"

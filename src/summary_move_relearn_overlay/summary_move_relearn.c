@@ -6,6 +6,7 @@
 #include "../../include/save.h"
 #include "../../include/summary.h"
 #include "../../include/window.h"
+#include "../../include/constants/moves.h"
 #include "../../include/constants/species.h"
 
 #define SUMMARY_RETAIL_SIZE              0x7D8
@@ -233,62 +234,56 @@ static struct BoxPokemon *SummaryMoveRelearn_GetCurrentBoxMon(
     return (struct BoxPokemon *)Summary_GetPokemonData(summary);
 }
 
-static BOOL SummaryMoveRelearn_IsValidSpeciesAndForm(
+static BOOL SummaryMoveRelearn_IsValidEntryPokemon(
     struct BoxPokemon *pokemon)
+{
+    return PokemonMoveHistoryTask6_IsCanonical(pokemon);
+}
+
+static BOOL SummaryMoveRelearn_AllowPersistentFormMove(
+    struct BoxPokemon *pokemon,
+    u16 move,
+    void *context)
 {
     u32 form;
     u32 species;
 
+    (void)context;
     species = GetBoxMonData(pokemon, MON_DATA_SPECIES, NULL);
     form = GetBoxMonData(pokemon, MON_DATA_FORM, NULL);
-    if (species == SPECIES_NONE
-        || species == SPECIES_EGG
-        || species == SPECIES_BAD_EGG
-        || species > MAX_MON_NUM
-        || form >= 32) {
+    if (species == SPECIES_ROTOM) {
+        if (form == 0) {
+            return move == MOVE_THUNDER_SHOCK;
+        }
+        if (form == 1) {
+            return move == MOVE_OVERHEAT;
+        }
+        if (form == 2) {
+            return move == MOVE_HYDRO_PUMP;
+        }
+        if (form == 3) {
+            return move == MOVE_BLIZZARD;
+        }
+        if (form == 4) {
+            return move == MOVE_AIR_SLASH;
+        }
+        if (form == 5) {
+            return move == MOVE_LEAF_STORM;
+        }
         return FALSE;
     }
-    if (form == 0) {
-        return TRUE;
+    if (species == SPECIES_KYUREM) {
+        if (form == 0) {
+            return move == MOVE_GLACIATE || move == MOVE_SCARY_FACE;
+        }
+        if (form == 1) {
+            return move == MOVE_ICE_BURN || move == MOVE_FUSION_FLARE;
+        }
+        if (form == 2) {
+            return move == MOVE_FREEZE_SHOCK || move == MOVE_FUSION_BOLT;
+        }
     }
-
-    /*
-     * Retail forms stored only in the form bits do not have form-table
-     * species. SanitizeFormNumber knows their exact legal ranges.
-     */
-    switch (species) {
-    case SPECIES_BURMY:
-    case SPECIES_WORMADAM:
-    case SPECIES_SHELLOS:
-    case SPECIES_GASTRODON:
-    case SPECIES_CHERRIM:
-    case SPECIES_ARCEUS:
-    case SPECIES_CASTFORM:
-    case SPECIES_DEOXYS:
-    case SPECIES_UNOWN:
-    case SPECIES_SHAYMIN:
-    case SPECIES_ROTOM:
-    case SPECIES_GIRATINA:
-    case SPECIES_PICHU:
-        return SanitizeFormNumber((u16)species, (u8)form) == form;
-    }
-
-    /*
-     * Extended forms are canonicalized through the 32-entry form table.
-     * A nonzero form that resolves back to the base species has no registered
-     * form and must not reach picture, candidate, or mutation code.
-     */
-    return PokeOtherFormMonsNoGet((int)species, (int)form) != (int)species;
-}
-
-static BOOL SummaryMoveRelearn_IsValidEntryPokemon(
-    struct BoxPokemon *pokemon)
-{
-    return pokemon != NULL
-        && !GetBoxMonData(pokemon, MON_DATA_CHECKSUM_FAILED, NULL)
-        && GetBoxMonData(pokemon, MON_DATA_SPECIES_EXISTS, NULL)
-        && !GetBoxMonData(pokemon, MON_DATA_IS_EGG, NULL)
-        && SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon);
+    return FALSE;
 }
 
 static void SummaryMoveRelearn_HideStatus(
@@ -537,6 +532,10 @@ static void SummaryMoveRelearn_Enter(
     struct SummaryMoveRelearnState *state,
     struct BoxPokemon *pokemon)
 {
+    static const PokemonMoveRelearnOptions options = {
+        SummaryMoveRelearn_AllowPersistentFormMove,
+        NULL,
+    };
     u32 count;
 
     state->ownerArgs = summary->baseData;
@@ -557,7 +556,7 @@ static void SummaryMoveRelearn_Enter(
         pokemon,
         state->candidates,
         POKEMON_MOVE_RELEARN_MAX_CANDIDATES,
-        NULL);
+        &options);
     if (count > POKEMON_MOVE_RELEARN_MAX_CANDIDATES) {
         count = POKEMON_MOVE_RELEARN_MAX_CANDIDATES;
     }
@@ -866,7 +865,7 @@ u32 SummaryMoveRelearn_MainState(
             return Summary_VanillaMainState(summary);
         }
         if (!state->promptVisible
-            && !SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)) {
+            && !PokemonMoveHistoryTask6_IsCanonical(pokemon)) {
             state->resumeAfterSwitch = FALSE;
             return Summary_VanillaMainState(summary);
         }

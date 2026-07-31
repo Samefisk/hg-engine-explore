@@ -533,9 +533,8 @@ BOOL PokemonMoveHistory_CaptureSnapshotImpl(
 {
     u32 i;
 
-    if (pokemon == NULL || snapshot == NULL
-        || GetBoxMonData(pokemon, MON_DATA_CHECKSUM_FAILED, NULL)
-        || GetBoxMonData(pokemon, MON_DATA_SPECIES_EXISTS, NULL) == FALSE) {
+    if (snapshot == NULL
+        || !PokemonMoveHistoryTask6_IsCanonical(pokemon)) {
         return FALSE;
     }
 
@@ -549,6 +548,19 @@ BOOL PokemonMoveHistory_CaptureSnapshotImpl(
             (u16)GetBoxMonData(pokemon, MON_DATA_MOVE1 + i, NULL);
     }
     return TRUE;
+}
+
+/*
+ * The task-6 canonical owner gate compiles 0x10 bytes smaller than the
+ * task1-5 checksum/species guard. Preserve every following sealed resident
+ * address while keeping the stronger fail-closed implementation above.
+ */
+void __attribute__((naked, used))
+PokemonMoveHistoryTask6_CaptureSnapshotLayoutPad(void)
+{
+    __asm__(
+        ".space 0x0e\n"
+        "bx lr\n");
 }
 
 static struct PokemonMoveHistoryRecord *PokemonMoveHistory_ObserveSnapshot(

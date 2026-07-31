@@ -134,12 +134,17 @@ MOVE_HISTORY_CAPTURE_MANIFEST = $(BUILD)/pokemon_move_history_capture_build.json
 MOVE_HISTORY_CAPTURE_MANIFEST_TMP = $(MOVE_HISTORY_CAPTURE_MANIFEST).tmp
 MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/pokemon.o \
+	$(BUILD)/pokemon_storage_system.o \
+	$(BUILD)/individual/GetMonEvolutionInternal.o \
+	$(BUILD)/field/script_commands.o \
 	$(BUILD)/party_menu.o \
 	$(BUILD)/save.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
 	$(BUILD)/pokemon_move_history_overlay/entry.o \
 	$(BUILD)/pokemon_move_history_overlay/thumb_help.o \
+	$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o \
+	$(BUILD)/pokemon_move_history_task6_overlay/entry.o \
 	$(BUILD)/overlay.o \
 	$(BUILD)/other_hook.o \
 	$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \

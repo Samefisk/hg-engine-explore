@@ -62,9 +62,25 @@ struct PACKED PokemonStorageSystem {
     /* 122EB */ u8 filler_122EB[0x11];
 };
 
-BOOL PCStorage_PlaceMonInBoxFirstEmptySlot(PCStorage* storage, u32 boxno, struct BoxPokemon *boxMon);
+BOOL PCStorage_PlaceMonInBoxFirstEmptySlot(
+    PCStorage *storage,
+    u32 boxno,
+    struct BoxPokemon *boxMon);
 BOOL LONG_CALL PCStorage_PlaceMonInFirstEmptySlotInAnyBox(PCStorage *storage, struct BoxPokemon *boxMon);
+BOOL LONG_CALL PCStorage_PlaceMonInBoxByIndexPair(
+    PCStorage *storage,
+    u32 boxno,
+    u32 slotno,
+    struct BoxPokemon *boxMon);
+struct BoxPokemon *LONG_CALL PCStorage_GetMonByIndexPair(
+    PCStorage *storage,
+    u32 boxno,
+    u32 slotno);
 int LONG_CALL PCStorage_FindFirstBoxWithEmptySlot(PCStorage *storage);
+BOOL LONG_CALL PCStorage_FindFirstEmptySlot(
+    PCStorage *storage,
+    int *boxno,
+    int *slotno);
 void LONG_CALL PCStorage_SetBoxModified(PCStorage *storage, u8 boxno);
 
 #endif // INCLUDE_POKEMON_STORAGE_SYSTEM_H
