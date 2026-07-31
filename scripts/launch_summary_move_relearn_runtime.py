@@ -4,6 +4,370 @@
 import sys
 
 
+def _stage_zero_startup_sys_path():
+    version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    zip_version = f"python{sys.version_info.major}{sys.version_info.minor}.zip"
+    library = sys.base_prefix + "/lib/" + version
+    return (
+        sys.base_prefix + "/lib/" + zip_version,
+        library,
+        library + "/lib-dynload",
+    )
+
+
+def _stage_zero_expected_sys_path():
+    return _stage_zero_startup_sys_path()[1:]
+
+
+if (
+    sys.flags.isolated == 1
+    and sys.flags.ignore_environment == 1
+    and sys.flags.no_site == 1
+    and sys.dont_write_bytecode
+    and sys.pycache_prefix == "/dev/null"
+    and "site" not in sys.modules
+    and tuple(sys.path) == _stage_zero_startup_sys_path()
+):
+    # The default nonexistent pythonXY.zip entry must not become executable
+    # through a mid-run filesystem substitution.
+    sys.path[:] = _stage_zero_expected_sys_path()
+    _external = sys.modules["_frozen_importlib_external"]
+    sys.path_hooks[:] = [
+        _external.FileFinder.path_hook(
+            (_external.SourceFileLoader, _external.SOURCE_SUFFIXES),
+            (_external.ExtensionFileLoader, _external.EXTENSION_SUFFIXES),
+        )
+    ]
+    sys.path_importer_cache.clear()
+    del _external
+
+
+def _stage_zero_policy_ok():
+    return (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and "site" not in sys.modules
+        and tuple(sys.path) == _stage_zero_expected_sys_path()
+    )
+
+
+_S0_SHA256_INITIAL = (
+    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
+    0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
+)
+_S0_SHA256_ROUND = (
+    0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5,
+    0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+    0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3,
+    0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+    0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC,
+    0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+    0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7,
+    0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+    0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13,
+    0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+    0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3,
+    0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+    0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5,
+    0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+    0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208,
+    0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2,
+)
+
+
+class _StageZeroSha256:
+    def __init__(self):
+        self.state = list(_S0_SHA256_INITIAL)
+        self.pending = b""
+        self.length = 0
+
+    def _block(self, block):
+        words = [
+            int.from_bytes(block[index:index + 4], "big")
+            for index in range(0, 64, 4)
+        ]
+        for index in range(16, 64):
+            x = words[index - 15]
+            y = words[index - 2]
+            s0 = ((x >> 7) | (x << 25)) ^ ((x >> 18) | (x << 14)) ^ (x >> 3)
+            s1 = ((y >> 17) | (y << 15)) ^ ((y >> 19) | (y << 13)) ^ (y >> 10)
+            words.append((words[index - 16] + s0 + words[index - 7] + s1) & 0xFFFFFFFF)
+        a, b, c, d, e, f, g, h = self.state
+        for index in range(64):
+            s1 = ((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7))
+            choose = (e & f) ^ ((~e) & g)
+            t1 = (h + s1 + choose + _S0_SHA256_ROUND[index] + words[index]) & 0xFFFFFFFF
+            s0 = ((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^ ((a >> 22) | (a << 10))
+            majority = (a & b) ^ (a & c) ^ (b & c)
+            t2 = (s0 + majority) & 0xFFFFFFFF
+            h, g, f, e, d, c, b, a = g, f, e, (d + t1) & 0xFFFFFFFF, c, b, a, (t1 + t2) & 0xFFFFFFFF
+        self.state = [
+            (old + new) & 0xFFFFFFFF
+            for old, new in zip(self.state, (a, b, c, d, e, f, g, h))
+        ]
+
+    def update(self, data):
+        self.length += len(data)
+        data = self.pending + data
+        full = len(data) & ~63
+        for index in range(0, full, 64):
+            self._block(data[index:index + 64])
+        self.pending = data[full:]
+
+    def digest(self):
+        clone = _StageZeroSha256()
+        clone.state = list(self.state)
+        clone.pending = self.pending
+        clone.length = self.length
+        tail = clone.pending + b"\x80"
+        tail += bytes((56 - len(tail) % 64) % 64)
+        tail += (clone.length * 8).to_bytes(8, "big")
+        for index in range(0, len(tail), 64):
+            clone._block(tail[index:index + 64])
+        return b"".join(value.to_bytes(4, "big") for value in clone.state)
+
+    def hexdigest(self):
+        return self.digest().hex()
+
+
+def _stage_zero_bytes_record(data):
+    digest = _StageZeroSha256()
+    digest.update(data)
+    return {"size": len(data), "sha256": digest.hexdigest()}
+
+
+def _stage_zero_file_record(path):
+    digest = _StageZeroSha256()
+    size = 0
+    with open(path, "rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+    return {"size": size, "sha256": digest.hexdigest()}
+
+
+def _stage_zero_json(data):
+    text = data.decode("utf-8")
+    cursor = 0
+
+    def whitespace():
+        nonlocal cursor
+        while cursor < len(text) and text[cursor] in " \t\r\n":
+            cursor += 1
+
+    def value():
+        nonlocal cursor
+        whitespace()
+        if cursor >= len(text):
+            raise ValueError("truncated JSON")
+        token = text[cursor]
+        if token == '"':
+            cursor += 1
+            output = []
+            while cursor < len(text):
+                token = text[cursor]
+                cursor += 1
+                if token == '"':
+                    return "".join(output)
+                if token == "\\":
+                    escape = text[cursor]
+                    cursor += 1
+                    escapes = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+                    if escape == "u":
+                        output.append(chr(int(text[cursor:cursor + 4], 16)))
+                        cursor += 4
+                    elif escape in escapes:
+                        output.append(escapes[escape])
+                    else:
+                        raise ValueError("invalid JSON escape")
+                else:
+                    output.append(token)
+            raise ValueError("unterminated JSON string")
+        if token == "{":
+            cursor += 1
+            output = {}
+            whitespace()
+            if cursor < len(text) and text[cursor] == "}":
+                cursor += 1
+                return output
+            while True:
+                key = value()
+                whitespace()
+                if not isinstance(key, str) or cursor >= len(text) or text[cursor] != ":":
+                    raise ValueError("invalid JSON object")
+                cursor += 1
+                output[key] = value()
+                whitespace()
+                if cursor < len(text) and text[cursor] == "}":
+                    cursor += 1
+                    return output
+                if cursor >= len(text) or text[cursor] != ",":
+                    raise ValueError("invalid JSON object separator")
+                cursor += 1
+        if token == "[":
+            cursor += 1
+            output = []
+            whitespace()
+            if cursor < len(text) and text[cursor] == "]":
+                cursor += 1
+                return output
+            while True:
+                output.append(value())
+                whitespace()
+                if cursor < len(text) and text[cursor] == "]":
+                    cursor += 1
+                    return output
+                if cursor >= len(text) or text[cursor] != ",":
+                    raise ValueError("invalid JSON array separator")
+                cursor += 1
+        for literal, parsed in (("true", True), ("false", False), ("null", None)):
+            if text.startswith(literal, cursor):
+                cursor += len(literal)
+                return parsed
+        start = cursor
+        while cursor < len(text) and text[cursor] in "-+0123456789.eE":
+            cursor += 1
+        number = text[start:cursor]
+        if not number:
+            raise ValueError("invalid JSON token")
+        return float(number) if any(marker in number for marker in ".eE") else int(number)
+
+    document = value()
+    whitespace()
+    if cursor != len(text):
+        raise ValueError("trailing JSON data")
+    return document
+
+
+def _stage_zero_option(arguments, name):
+    matches = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == name and index + 1 < len(arguments):
+            matches.append(arguments[index + 1])
+            index += 2
+            continue
+        if argument.startswith(name + "="):
+            matches.append(argument.split("=", 1)[1])
+        index += 1
+    if len(matches) != 1 or not matches[0]:
+        raise ValueError(name + " is required exactly once")
+    return matches[0]
+
+
+def _stage_zero_tree_record(root):
+    import posix
+    paths = []
+
+    def collect(directory, prefix=""):
+        for name in posix.listdir(directory):
+            relative = name if not prefix else prefix + "/" + name
+            path = directory + "/" + name
+            metadata = posix.lstat(path)
+            mode = metadata.st_mode & 0o170000
+            if mode == 0o040000:
+                collect(path, relative)
+            else:
+                paths.append((relative, path, mode))
+
+    collect(root)
+    digest = _StageZeroSha256()
+    count = 0
+    size = 0
+    for relative, path, mode in sorted(paths):
+        parts = relative.split("/")
+        if "__pycache__" in parts or "site-packages" in parts or relative.endswith(".pyc"):
+            continue
+        if not relative.endswith((".py", ".so", ".dylib", ".dll")):
+            continue
+        encoded = relative.encode("utf-8")
+        if mode == 0o120000:
+            target = posix.readlink(path).encode("utf-8")
+            digest.update(b"L\0" + encoded + b"\0")
+            digest.update(len(target).to_bytes(8, "little") + target)
+            count += 1
+            size += len(target)
+        elif mode == 0o100000:
+            with open(path, "rb") as stream:
+                data = stream.read()
+            leaf = _StageZeroSha256()
+            leaf.update(data)
+            digest.update(b"F\0" + encoded + b"\0")
+            digest.update(len(data).to_bytes(8, "little"))
+            digest.update(leaf.digest())
+            count += 1
+            size += len(data)
+    return {"root": root, "files": count, "size": size, "sha256": digest.hexdigest()}
+
+
+def _stage_zero_authenticate(arguments):
+    manifest_path = _stage_zero_option(arguments, "--publication-manifest")
+    expected_manifest = _stage_zero_option(arguments, "--expected-publication-manifest-sha256")
+    expected_launcher = _stage_zero_option(arguments, "--expected-runtime-launcher-sha256")
+    with open(__file__, "rb") as stream:
+        launcher_record = _stage_zero_bytes_record(stream.read())
+    if launcher_record["sha256"] != expected_launcher:
+        raise ValueError("stage-zero launcher SHA-256 differs")
+    with open(manifest_path, "rb") as stream:
+        manifest_bytes = stream.read()
+    manifest_record = _stage_zero_bytes_record(manifest_bytes)
+    if manifest_record["sha256"] != expected_manifest:
+        raise ValueError("stage-zero publication manifest SHA-256 differs")
+    document = _stage_zero_json(manifest_bytes)
+    inputs = document.get("inputs")
+    if not isinstance(inputs, dict) or inputs.get("scripts/launch_summary_move_relearn_runtime.py") != launcher_record:
+        raise ValueError("stage-zero manifest does not authenticate launcher")
+    runtime = document.get("runtime_environment")
+    if not isinstance(runtime, dict) or runtime.get("status") != "bound":
+        raise ValueError("stage-zero runtime environment is not bound")
+    python = runtime.get("python")
+    if not isinstance(python, dict):
+        raise ValueError("stage-zero Python closure is malformed")
+    repo = __file__.rsplit("/scripts/", 1)[0]
+    if python.get("entry_path") != repo + "/.venv/bin/python3" or sys.executable != python.get("entry_path"):
+        raise ValueError("stage-zero Python entry differs")
+    for name in ("executable", "shared_runtime", "pyvenv_cfg"):
+        record = python.get(name)
+        if not isinstance(record, dict) or _stage_zero_file_record(record.get("path", "")) != {"size": record.get("size"), "sha256": record.get("sha256")}:
+            raise ValueError("stage-zero Python record differs: " + name)
+    stdlib = python.get("stdlib")
+    if not isinstance(stdlib, dict) or _stage_zero_tree_record(stdlib.get("root", "")) != stdlib:
+        raise ValueError("stage-zero stdlib closure differs")
+    startup = python.get("startup_bootstrap")
+    startup_names = (
+        "abc", "codecs", "encodings", "encodings.aliases",
+        "encodings.utf_8", "io",
+    )
+    if not isinstance(startup, dict) or set(startup.get("modules", {})) != set(startup_names):
+        raise ValueError("stage-zero startup bootstrap record differs")
+    for name in startup_names:
+        record = startup["modules"][name]
+        if _stage_zero_file_record(record.get("path", "")) != {"size": record.get("size"), "sha256": record.get("sha256")}:
+            raise ValueError("stage-zero startup module differs: " + name)
+    for name, module in tuple(sys.modules.items()):
+        spec = getattr(module, "__spec__", None)
+        origin = getattr(spec, "origin", None)
+        if origin in ("built-in", "frozen"):
+            continue
+        file_origin = getattr(module, "__file__", None)
+        origin = origin if isinstance(origin, str) else file_origin
+        loader = getattr(module, "__loader__", None)
+        loader_type = loader if isinstance(loader, type) else type(loader)
+        loader_name = getattr(loader_type, "__name__", "")
+        if loader_name in ("SourcelessFileLoader", "zipimporter"):
+            raise ValueError("stage-zero forbidden loader: " + name)
+        if not isinstance(origin, str) or not (origin == __file__ or origin.startswith(stdlib["root"] + "/")):
+            raise ValueError("stage-zero module origin is outside closure: " + name)
+    return True
+
+
 def _stage_zero_result_targets(arguments):
     index = 0
     while index < len(arguments):
@@ -34,19 +398,11 @@ def _stage_zero_invalidate_results(arguments):
     return failures
 
 
-if (
-    __name__ == "__main__"
-    and (
-        not sys.dont_write_bytecode
-        or sys.pycache_prefix != "/dev/null"
-        or sys.flags.no_site != 1
-        or "site" in sys.modules
-    )
-):
+if __name__ == "__main__" and not _stage_zero_policy_ok():
     stage_zero_failures = _stage_zero_invalidate_results(sys.argv[1:])
     print(
         "Summary relearn runtime launcher failed: start Python with "
-        "-S -B and PYTHONPYCACHEPREFIX=/dev/null"
+        "-I -S -B -X pycache_prefix=/dev/null"
         + (
             "; stale-result invalidation failed: "
             + "; ".join(stage_zero_failures)
@@ -56,6 +412,23 @@ if (
         file=sys.stderr,
     )
     raise SystemExit(1)
+
+if __name__ == "__main__":
+    stage_zero_failures = _stage_zero_invalidate_results(sys.argv[1:])
+    try:
+        if stage_zero_failures:
+            raise ValueError(
+                "stale-result invalidation failed: "
+                + "; ".join(stage_zero_failures)
+            )
+        _stage_zero_authenticate(sys.argv[1:])
+    except Exception as stage_zero_error:
+        print(
+            f"Summary relearn runtime launcher failed before ordinary imports: "
+            f"{stage_zero_error}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
 import os
 
@@ -106,10 +479,36 @@ def _ensure_repo_venv(repo):
     if os.path.abspath(sys.executable) == os.path.abspath(python):
         return
     if os.path.isfile(python):
-        os.execv(
+        os.execve(
             python,
-            [python, "-S", "-B", os.path.abspath(__file__), *sys.argv[1:]],
+            [
+                python,
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
+                os.path.abspath(__file__),
+                *sys.argv[1:],
+            ],
+            {
+                "PATH": "/usr/bin:/bin",
+                "LC_ALL": "C",
+                "SDL_AUDIODRIVER": "dummy",
+            },
         )
+    raise RuntimeError("exact repository .venv/bin/python3 is absent")
+
+
+def _sanitize_process_environment():
+    os.environ.clear()
+    os.environ.update(
+        {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "SDL_AUDIODRIVER": "dummy",
+        }
+    )
 
 
 if __name__ == "__main__":
@@ -123,6 +522,7 @@ if __name__ == "__main__":
         raise SystemExit(1)
     EARLY_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     _ensure_repo_venv(EARLY_REPO)
+    _sanitize_process_environment()
 else:
     EARLY_INVALIDATED_RESULTS = ()
     EARLY_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -279,6 +679,109 @@ def _validate_file_path_record(record, label):
     return path
 
 
+def _loader_name(loader):
+    if loader is None:
+        return "None"
+    loader_type = loader if isinstance(loader, type) else type(loader)
+    return loader_type.__module__ + "." + loader_type.__qualname__
+
+
+def _path_under(path, root):
+    return path == root or path.startswith(root + os.sep)
+
+
+class RetainedSourceLoader:
+    """Identity marker for code executed only from authenticated buffers."""
+
+
+RETAINED_SOURCE_LOADER = RetainedSourceLoader()
+
+
+def _authenticate_loaded_python_modules(runtime, authenticated_paths):
+    python = runtime["python"]
+    stdlib_root = python["stdlib"]["root"]
+    package_roots = tuple(
+        record["root"] for record in runtime["packages"].values()
+    )
+    native_paths = {
+        record["path"] for record in runtime["native"]["mutable_closure"]
+    }
+    exact_sources = {
+        os.path.realpath(os.path.abspath(path)) for path in authenticated_paths
+    }
+    forbidden = set(python["bytecode_policy"]["forbidden_loaders"])
+    records = {}
+    for name, module in sorted(sys.modules.items()):
+        if not isinstance(module, types.ModuleType):
+            continue
+        spec = getattr(module, "__spec__", None)
+        spec_origin = getattr(spec, "origin", None)
+        file_origin = getattr(module, "__file__", None)
+        loader = getattr(module, "__loader__", None)
+        loader_name = _loader_name(loader)
+        short_loader = loader_name.rsplit(".", 1)[-1]
+        _require(
+            short_loader not in forbidden,
+            f"forbidden Python loader is active: {name}: {loader_name}",
+        )
+        if spec_origin in ("built-in", "frozen"):
+            records[name] = {
+                "loader": loader_name,
+                "origin": spec_origin,
+            }
+            continue
+        origin = spec_origin if isinstance(spec_origin, str) else file_origin
+        _require(
+            isinstance(origin, str) and bool(origin),
+            f"loaded Python module has no authenticated origin: {name}",
+        )
+        canonical = os.path.realpath(os.path.abspath(origin))
+        _require(
+            canonical == origin and os.path.isfile(canonical),
+            f"loaded Python module origin is not canonical: {name}: {origin}",
+        )
+        if isinstance(file_origin, str):
+            _require(
+                os.path.realpath(os.path.abspath(file_origin)) == canonical,
+                f"loaded Python module file/spec origins differ: {name}",
+            )
+        if short_loader == "SourceFileLoader":
+            _require(
+                canonical.endswith(".py")
+                and (
+                    _path_under(canonical, stdlib_root)
+                    or canonical in exact_sources
+                ),
+                f"source-loaded module is outside sealed source roots: {name}",
+            )
+        elif short_loader == "ExtensionFileLoader":
+            _require(
+                canonical in native_paths
+                or _path_under(canonical, stdlib_root)
+                or any(_path_under(canonical, root) for root in package_roots),
+                f"extension module is outside sealed native roots: {name}",
+            )
+        elif short_loader in {"RetainedSourceLoader", "RetainedPackageLoader"}:
+            _require(
+                canonical.endswith(".py")
+                and (
+                    canonical in exact_sources
+                    or any(
+                        _path_under(canonical, root) for root in package_roots
+                    )
+                ),
+                f"retained module is outside authenticated buffers: {name}",
+            )
+        else:
+            _require(
+                False,
+                f"loaded Python module uses an unauthenticated loader: "
+                f"{name}: {loader_name}",
+            )
+        records[name] = {"loader": loader_name, "origin": canonical}
+    return records
+
+
 def _primitive_runtime_authentication(document):
     runtime = _runtime_environment(document)
     _require(
@@ -316,6 +819,7 @@ def _primitive_runtime_authentication(document):
             "shared_runtime",
             "pyvenv_cfg",
             "stdlib",
+            "startup_bootstrap",
         },
         "runtime Python closure is malformed",
     )
@@ -327,9 +831,13 @@ def _primitive_runtime_authentication(document):
             "absent_zip_paths",
             "bytecode_reads_disabled",
             "dont_write_bytecode",
+            "forbidden_loaders",
+            "ignore_environment",
+            "isolated",
             "no_site",
             "pycache_prefix",
             "scope",
+            "sys_path",
         }
         and {
             key: value
@@ -339,25 +847,38 @@ def _primitive_runtime_authentication(document):
         == {
             "bytecode_reads_disabled": True,
             "dont_write_bytecode": True,
+            "forbidden_loaders": [
+                "SourcelessFileLoader",
+                "zipimporter",
+            ],
+            "ignore_environment": True,
+            "isolated": True,
             "no_site": True,
             "pycache_prefix": "/dev/null",
             "scope": (
-                "Interpreter startup and every acceptance child skip "
-                "site/.pth processing and compile Python sources without "
-                "reading or writing filesystem pyc."
+                "Interpreter startup, host binders, retained helpers, and "
+                "every acceptance child use isolated mode, ignore Python "
+                "environment configuration, skip site/.pth processing, "
+                "and restrict import lookup to the sealed stdlib paths. "
+                "Every loaded module origin and loader is authenticated; "
+                "zipimporter and sourceless bytecode are forbidden."
             ),
+            "sys_path": list(_stage_zero_expected_sys_path()),
         }
         and sys.dont_write_bytecode
         and sys.pycache_prefix == "/dev/null"
+        and sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
         and sys.flags.no_site == 1
         and "site" not in sys.modules
+        and tuple(sys.path) == _stage_zero_expected_sys_path()
         and os.stat("/dev/null").st_mode & 0o170000 == 0o020000,
         "runtime Python bytecode-bypass policy differs",
     )
     current_zip_paths = sorted(
         os.path.abspath(entry)
         for entry in sys.path
-        if isinstance(entry, str) and entry.endswith(".zip")
+        if isinstance(entry, str) and not os.path.exists(entry)
     )
     _require(
         bytecode_policy["absent_zip_paths"] == current_zip_paths
@@ -406,6 +927,28 @@ def _primitive_runtime_authentication(document):
         == stdlib,
         "runtime standard-library closure differs",
     )
+    startup = python["startup_bootstrap"]
+    startup_names = {
+        "abc", "codecs", "encodings", "encodings.aliases",
+        "encodings.utf_8", "io",
+    }
+    _require(
+        isinstance(startup, dict)
+        and set(startup) == {"modules", "scope"}
+        and isinstance(startup["modules"], dict)
+        and set(startup["modules"]) == startup_names,
+        "runtime pre-script startup bootstrap record is malformed",
+    )
+    for name, record in startup["modules"].items():
+        module = sys.modules.get(name)
+        _require(module is not None, f"startup module is absent: {name}")
+        origin = os.path.realpath(os.path.abspath(module.__file__))
+        _require(
+            _validate_file_path_record(record, f"startup module {name}")
+            == origin
+            and type(module.__loader__).__name__ == "SourceFileLoader",
+            f"startup module loader/origin differs: {name}",
+        )
     packages = runtime["packages"]
     _require(
         isinstance(packages, dict) and set(packages) == {"desmume", "PIL"},
@@ -716,7 +1259,7 @@ def _execute_module(
     module = types.ModuleType(name)
     module.__file__ = path
     module.__cached__ = None
-    module.__loader__ = None
+    module.__loader__ = RETAINED_SOURCE_LOADER
     module.__package__ = package
     module.__spec__ = None
     if package_path is not None:
@@ -859,6 +1402,9 @@ def _authentication_record(
         "desmume_executed_from_retained_source_buffers": True,
         "pillow_python_executed_from_retained_source_buffers": True,
         "pycache_bypassed": True,
+        "isolated_environment_ignored": True,
+        "loaded_python_origins_authenticated_at_start_and_end": True,
+        "sourceless_and_archive_loaders_rejected": True,
     }
 
 
@@ -900,6 +1446,26 @@ def _late_main():
         expected_verifier,
     )
     runtime_environment = _primitive_runtime_authentication(document)
+    authenticated_module_paths = list(paths.values()) + [
+        record["path"]
+        for record in runtime_environment["modules"].values()
+    ]
+    initial_meta_path = tuple(sys.meta_path)
+    initial_path_hooks = tuple(sys.path_hooks)
+    _require(
+        [_loader_name(finder) for finder in initial_meta_path]
+        == [
+            "_frozen_importlib.BuiltinImporter",
+            "_frozen_importlib.FrozenImporter",
+            "_frozen_importlib_external.PathFinder",
+        ]
+        and len(initial_path_hooks) == 1,
+        "runtime import finder closure differs before helper execution",
+    )
+    _authenticate_loaded_python_modules(
+        runtime_environment,
+        authenticated_module_paths,
+    )
     compiled = _compile_buffers(buffers, paths)
 
     manifest_module = _execute_module(
@@ -993,6 +1559,16 @@ def _late_main():
             manifest_module,
         )
         pil_loader.authenticate()
+        _require(
+            tuple(sys.path) == _stage_zero_expected_sys_path()
+            and tuple(sys.path_hooks) == initial_path_hooks
+            and tuple(sys.meta_path) == (pil_loader, *initial_meta_path),
+            "runtime import path/finder closure changed during execution",
+        )
+        _authenticate_loaded_python_modules(
+            runtime_environment,
+            authenticated_module_paths,
+        )
         _require(native_handle is not None, "sealed native handle was released")
         return json.loads(json.dumps(authentication))
 
@@ -1014,6 +1590,12 @@ def _late_main():
         "BOOTSTRAP_ROM_PATH": rom_path,
         "BOOTSTRAP_LAUNCHER_PATH": os.path.abspath(__file__),
         "BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path,
+        "BOOTSTRAP_PYTHON_PATH": os.path.abspath(sys.executable),
+        "BOOTSTRAP_CHILD_ENVIRONMENT": {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "SDL_AUDIODRIVER": "dummy",
+        },
         "BOOTSTRAP_INVALIDATED_RESULTS": EARLY_INVALIDATED_RESULTS,
     }
     exec(compiled[VERIFIER_RELATIVE], runtime_globals)

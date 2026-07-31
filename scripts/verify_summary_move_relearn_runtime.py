@@ -64,6 +64,20 @@ PERSISTED_CANDIDATES = (55, 51, 35, 103, 62, 114, 229, 243)
 HISTORY_MIRROR_OFFSETS = (0x3B000, 0x7B000)
 HISTORY_FOOTER_OFFSET = 0x4FE0
 HISTORY_FOOTER_MAGIC = 0x4D48464F
+TASK6_POKEWALKER_STAGE_ENTRY = 0x023BD420
+TASK6_POKEWALKER_ACK_FIRST_ENTRY = 0x023BD480
+TASK6_POKEWALKER_ACK_SECOND_ENTRY = 0x023BD488
+TASK6_POKEWALKER_RECOVERY_ENTRY = 0x023BD490
+TASK6_POKEWALKER_DIAGNOSTIC_POLL = 0x023BD4A0
+TASK6_POKEWALKER_MAILBOX = 0x023BD4A8
+TASK6_POKEWALKER_MAILBOX_SIZE = 0x30
+TASK6_POKEWALKER_MAILBOX_MAGIC = 0x36574B50
+TASK6_POKEWALKER_MAILBOX_VERSION = 1
+TASK6_POKEWALKER_STATUS_COMPLETE = 0xC0016D48
+TASK6_POKEWALKER_OP_STAGE = 1
+TASK6_POKEWALKER_OP_ACK_FIRST = 2
+TASK6_POKEWALKER_OP_ACK_SECOND = 3
+TASK6_POKEWALKER_OP_RECOVER = 4
 SUMMARY_STATE_ORIGINAL_MOVES_OFFSET = 134
 SUMMARY_STATE_CANDIDATE_COUNT_OFFSET = 150
 SUMMARY_STATE_CANDIDATE_CURSOR_OFFSET = 152
@@ -119,6 +133,8 @@ if not all(
         "BOOTSTRAP_ROM_PATH",
         "BOOTSTRAP_LAUNCHER_PATH",
         "BOOTSTRAP_LIBDESMUME_PATH",
+        "BOOTSTRAP_PYTHON_PATH",
+        "BOOTSTRAP_CHILD_ENVIRONMENT",
     )
 ):
     raise RuntimeError(
@@ -630,6 +646,117 @@ def write_u16(emu: DeSmuME, address: int, value: int) -> None:
 
 def write_u32(emu: DeSmuME, address: int, value: int) -> None:
     write_bytes(emu, address, struct.pack("<I", value))
+
+
+def invoke_packaged_mailbox_operation(
+    emu: DeSmuME,
+    operation: int,
+    entry: int,
+    *,
+    boxno: int = 0,
+    slotno: int = 0,
+    walker_counter_seed: int = 0,
+) -> dict[str, object]:
+    """Ask the game-native dispatcher to execute one fixed packaged entry.
+
+    The host only publishes a sealed task-6 mailbox request and cycles the
+    emulator normally. The already-running field-ready task consumes it from
+    a canonical Thumb execution context. A read-only exec callback proves the
+    requested fixed entry was actually fetched; no host register or PC writes
+    participate in this evidence.
+    """
+    allowed = {
+        TASK6_POKEWALKER_OP_STAGE: TASK6_POKEWALKER_STAGE_ENTRY,
+        TASK6_POKEWALKER_OP_ACK_FIRST: TASK6_POKEWALKER_ACK_FIRST_ENTRY,
+        TASK6_POKEWALKER_OP_ACK_SECOND: TASK6_POKEWALKER_ACK_SECOND_ENTRY,
+        TASK6_POKEWALKER_OP_RECOVER: TASK6_POKEWALKER_RECOVERY_ENTRY,
+    }
+    require(
+        allowed.get(operation) == entry,
+        "mailbox operation does not select the required packaged entry",
+    )
+    completion_before = read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x0C)
+    request_sequence = (completion_before + 1) & 0xFFFFFFFF
+    require(request_sequence != 0, "task-6 mailbox sequence wrapped")
+    state: dict[str, object] = {
+        "entry_hits": 0,
+        "poll_hits": 0,
+    }
+
+    def entry_hit(_address: int, _size: int) -> None:
+        state["entry_hits"] = int(state["entry_hits"]) + 1
+
+    def poll_hit(_address: int, _size: int) -> None:
+        state["poll_hits"] = int(state["poll_hits"]) + 1
+
+    emu.memory.register_exec(entry, entry_hit)
+    emu.memory.register_exec(TASK6_POKEWALKER_DIAGNOSTIC_POLL, poll_hit)
+    try:
+        # Magic is the release word and is published only after every payload
+        # field. The in-ROM consumer clears it before calling packaged code.
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x00, 0)
+        write_u32(
+            emu,
+            TASK6_POKEWALKER_MAILBOX + 0x04,
+            TASK6_POKEWALKER_MAILBOX_VERSION,
+        )
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x08, request_sequence)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x10, operation)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x14, boxno)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x18, slotno)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x1C, 0)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x20, 0)
+        write_u32(
+            emu,
+            TASK6_POKEWALKER_MAILBOX + 0x24,
+            walker_counter_seed,
+        )
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x28, 0)
+        write_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x2C, 0)
+        write_u32(
+            emu,
+            TASK6_POKEWALKER_MAILBOX + 0x00,
+            TASK6_POKEWALKER_MAILBOX_MAGIC,
+        )
+        for _ in range(240):
+            HEADLESS.cycle(emu, 1)
+            if (
+                read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x0C)
+                == request_sequence
+            ):
+                break
+        require(
+            read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x0C)
+            == request_sequence
+            and read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x20)
+            == TASK6_POKEWALKER_STATUS_COMPLETE
+            and read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x00) == 0
+            and state["entry_hits"] == 1
+            and int(state["poll_hits"]) >= 1,
+            "packaged mailbox diagnostic did not complete one exact entry: "
+            f"op={operation} entry=0x{entry:08X} state={state}",
+        )
+    finally:
+        emu.memory.register_exec(entry, None)
+        emu.memory.register_exec(TASK6_POKEWALKER_DIAGNOSTIC_POLL, None)
+    return {
+        "operation": operation,
+        "entry": f"0x{entry:08X}",
+        "entry_hits": state["entry_hits"],
+        "dispatcher": f"0x{TASK6_POKEWALKER_DIAGNOSTIC_POLL:08X}",
+        "dispatcher_hits": state["poll_hits"],
+        "request_sequence": request_sequence,
+        "completion_sequence": read_u32(
+            emu, TASK6_POKEWALKER_MAILBOX + 0x0C
+        ),
+        "result": read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x1C),
+        "status": f"0x{read_u32(emu, TASK6_POKEWALKER_MAILBOX + 0x20):08X}",
+        "walker_counter_seed": walker_counter_seed,
+        "walker_counter_after": read_u32(
+            emu, TASK6_POKEWALKER_MAILBOX + 0x28
+        ),
+        "host_pc_or_register_write": False,
+    }
 
 
 
@@ -2284,9 +2411,12 @@ def fresh_reload_evidence(
 ) -> tuple[bytes, bytes, bytes]:
     completed = subprocess.run(
         [
-            sys.executable,
+            BOOTSTRAP_PYTHON_PATH,
+            "-I",
             "-S",
             "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
             str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
@@ -2299,12 +2429,8 @@ def fresh_reload_evidence(
         check=False,
         capture_output=True,
         text=True,
-        timeout=90,
-        env={
-            **os.environ,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPYCACHEPREFIX": "/dev/null",
-        },
+        timeout=240,
+        env=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
     )
     require(
         completed.returncode == 0,
@@ -2723,6 +2849,336 @@ def task6_daycare_reload_evidence(
     }
 
 
+def task6_pokewalker_rom_evidence(
+    emu: DeSmuME,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    """Exercise the packaged task-6 Walker transaction entries on ARM9."""
+    save = save_data_pointer(emu)
+    metadata_address = save + SAVE_HISTORY_POINTER_OFFSET
+    history_pointer = read_u32(emu, metadata_address)
+    pc_storage = runtime_pc_storage_address(emu)
+    box_address = runtime_box_address(emu, 0, BOX_TARGET_SLOT)
+    baseline_party = runtime_party(emu)
+    baseline_pc = read_bytes(emu, pc_storage, PC_SAVE_SIZE)
+    baseline_metadata, baseline_history = runtime_history(emu)
+    baseline_box = runtime_box_record(emu, 0, BOX_TARGET_SLOT)
+    mailbox_before = read_bytes(
+        emu, TASK6_POKEWALKER_MAILBOX, TASK6_POKEWALKER_MAILBOX_SIZE
+    )
+    require(
+        mailbox_before == bytes(TASK6_POKEWALKER_MAILBOX_SIZE),
+        "task-6 diagnostic mailbox is not zero/default retail-inert",
+    )
+    pending_box = controlled_box_record(
+        baseline_box,
+        ot_id_xor=0x6E6F6E65,
+        moves=(33, 45, 98, 129),
+        pp=(10, 10, 10, 10),
+        pp_ups=(0, 0, 0, 0),
+    )
+    pending_identity = box_identity(pending_box)[:2]
+    require(
+        history_identity_count(baseline_history, *pending_identity) == 0,
+        "ROM Walker pending identity already exists",
+    )
+
+    def install_history(
+        image: bytes,
+        *,
+        revision: int,
+        dirty: int = 0,
+    ) -> None:
+        require(len(image) == HISTORY_IMAGE_SIZE, "ROM Walker history size differs")
+        write_bytes(emu, history_pointer, image)
+        write_u8(emu, metadata_address + 4, dirty)
+        write_u32(emu, metadata_address + 8, revision)
+
+    def fingerprint() -> dict[str, object]:
+        metadata, image = runtime_history(emu)
+        return {
+            "image": image,
+            "record_count": struct.unpack_from("<H", image, 14)[0],
+            "next_access_sequence": struct.unpack_from("<I", image, 20)[0],
+            "revision": struct.unpack_from("<I", metadata, 8)[0],
+            "dirty": metadata[4],
+        }
+
+    def public_fingerprint(value: dict[str, object]) -> dict[str, object]:
+        image = value["image"]
+        require(isinstance(image, bytes), "ROM Walker fingerprint image differs")
+        return {
+            "image_sha256": hashlib.sha256(image).hexdigest(),
+            "record_count": value["record_count"],
+            "next_access_sequence": value["next_access_sequence"],
+            "revision": value["revision"],
+            "dirty": value["dirty"],
+        }
+
+    invocations: list[dict[str, object]] = []
+    try:
+        write_bytes(emu, box_address, pending_box)
+        write_bytes(
+            emu,
+            TASK6_POKEWALKER_MAILBOX,
+            bytes(TASK6_POKEWALKER_MAILBOX_SIZE),
+        )
+
+        # Missing-identity cancellation: stage and the real packaged discard
+        # boundary must leave the complete task-3 store and metadata exact.
+        install_history(baseline_history, revision=0x10203040)
+        missing_before = fingerprint()
+        stage = invoke_packaged_mailbox_operation(
+            emu,
+            TASK6_POKEWALKER_OP_STAGE,
+            TASK6_POKEWALKER_STAGE_ENTRY,
+            boxno=0,
+            slotno=BOX_TARGET_SLOT,
+        )
+        require(
+            stage["result"] == box_address,
+            "packaged Walker stage returned the wrong canonical owner",
+        )
+        invocations.append(stage)
+        require(
+            fingerprint() == missing_before,
+            "packaged missing-identity stage changed task-3 state",
+        )
+        invocations.append(
+            invoke_packaged_mailbox_operation(
+                emu,
+                TASK6_POKEWALKER_OP_RECOVER,
+                TASK6_POKEWALKER_RECOVERY_ENTRY,
+            )
+        )
+        missing_after = fingerprint()
+        require(
+            missing_after == missing_before,
+            "packaged missing-identity recovery changed task-3 state",
+        )
+
+        # Full-capacity cancellation independently proves that staging cannot
+        # allocate or evict the oldest record before radio success.
+        full_image = bytearray(baseline_history)
+        full_image[:HISTORY_FOOTER_OFFSET] = bytes(HISTORY_FOOTER_OFFSET)
+        full_image[:HISTORY_HEADER_SIZE] = baseline_history[:HISTORY_HEADER_SIZE]
+        struct.pack_into("<H", full_image, 14, HISTORY_RECORD_COUNT)
+        struct.pack_into("<I", full_image, 20, 0x01000000)
+        for index in range(HISTORY_RECORD_COUNT):
+            record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+            struct.pack_into(
+                "<IIIHBBH",
+                full_image,
+                record_offset,
+                0x70000000 + index,
+                0x71000000 + index,
+                index + 1,
+                1 + index % 493,
+                1,
+                1,
+                1 + index % 467,
+            )
+        require(
+            history_identity_count(bytes(full_image), *pending_identity) == 0,
+            "ROM Walker full store collides with pending identity",
+        )
+        install_history(bytes(full_image), revision=0x50607080)
+        full_before = fingerprint()
+        oldest_before = history_records(full_before["image"])[0]
+        unrelated_before = history_records(full_before["image"])[173]
+        invocations.append(
+            invoke_packaged_mailbox_operation(
+                emu,
+                TASK6_POKEWALKER_OP_STAGE,
+                TASK6_POKEWALKER_STAGE_ENTRY,
+                boxno=0,
+                slotno=BOX_TARGET_SLOT,
+            )
+        )
+        require(
+            fingerprint() == full_before,
+            "packaged full-capacity stage changed or evicted history",
+        )
+        invocations.append(
+            invoke_packaged_mailbox_operation(
+                emu,
+                TASK6_POKEWALKER_OP_RECOVER,
+                TASK6_POKEWALKER_RECOVERY_ENTRY,
+            )
+        )
+        full_after = fingerprint()
+        require(
+            full_after == full_before
+            and history_records(full_after["image"])[0] == oldest_before
+            and history_records(full_after["image"])[173] == unrelated_before,
+            "packaged full-capacity recovery changed oldest/unrelated history",
+        )
+
+        ack_evidence: dict[str, object] = {}
+        for label, operation, entry, revision in (
+            (
+                "first",
+                TASK6_POKEWALKER_OP_ACK_FIRST,
+                TASK6_POKEWALKER_ACK_FIRST_ENTRY,
+                0x90,
+            ),
+            (
+                "second",
+                TASK6_POKEWALKER_OP_ACK_SECOND,
+                TASK6_POKEWALKER_ACK_SECOND_ENTRY,
+                0x190,
+            ),
+        ):
+            # Clear any prior pending bit through the actual recovery entry,
+            # then run this ACK entry twice against an independently reset
+            # missing-identity store.
+            invocations.append(
+                invoke_packaged_mailbox_operation(
+                    emu,
+                    TASK6_POKEWALKER_OP_RECOVER,
+                    TASK6_POKEWALKER_RECOVERY_ENTRY,
+                )
+            )
+            install_history(baseline_history, revision=revision)
+            before = fingerprint()
+            unrelated_records = history_records(before["image"])
+            stage = invoke_packaged_mailbox_operation(
+                emu,
+                TASK6_POKEWALKER_OP_STAGE,
+                TASK6_POKEWALKER_STAGE_ENTRY,
+                boxno=0,
+                slotno=BOX_TARGET_SLOT,
+            )
+            require(stage["result"] == box_address, "ACK stage owner differs")
+            invocations.append(stage)
+            counter_before = 0x1200
+            first_call = invoke_packaged_mailbox_operation(
+                emu,
+                operation,
+                entry,
+                walker_counter_seed=counter_before,
+            )
+            invocations.append(first_call)
+            once = fingerprint()
+            counter_once = int(first_call["walker_counter_after"])
+            second_call = invoke_packaged_mailbox_operation(
+                emu,
+                operation,
+                entry,
+                walker_counter_seed=counter_once,
+            )
+            invocations.append(second_call)
+            twice = fingerprint()
+            counter_twice = int(second_call["walker_counter_after"])
+            once_image = once["image"]
+            require(isinstance(once_image, bytes), "ACK image differs")
+            new_record_index = find_history_record(
+                once_image,
+                *pending_identity,
+            )[0]
+            unrelated_records_exact = all(
+                record == unrelated_records[index]
+                for index, record in enumerate(history_records(once_image))
+                if index != new_record_index
+            )
+            require(
+                once["record_count"] == before["record_count"] + 1
+                and once["next_access_sequence"]
+                == before["next_access_sequence"] + 5
+                and once["revision"] == before["revision"] + 5
+                and once["dirty"] == 1
+                and twice == once
+                and counter_once == (counter_before + 1) & 0xFFFF
+                and counter_twice == (counter_before + 2) & 0xFFFF
+                and history_identity_count(once_image, *pending_identity) == 1
+                and find_history_record(once_image, *pending_identity)[2]
+                == (33, 45, 98, 129)
+                and unrelated_records_exact,
+                f"packaged {label} ACK did not consume pending exactly once: "
+                f"before={public_fingerprint(before)!r}, "
+                f"after_first={public_fingerprint(once)!r}, "
+                f"after_second={public_fingerprint(twice)!r}, "
+                f"counter={counter_before}/{counter_once}/{counter_twice}, "
+                f"identity_count="
+                f"{history_identity_count(once_image, *pending_identity)}, "
+                f"identity_history="
+                f"{find_history_record(once_image, *pending_identity)[2]!r}",
+            )
+            ack_evidence[label] = {
+                "entry": f"0x{entry:08X}",
+                "before": public_fingerprint(before),
+                "after_first": public_fingerprint(once),
+                "after_second": public_fingerprint(twice),
+                "counter_before": counter_before,
+                "counter_after_first": counter_once,
+                "counter_after_second": counter_twice,
+                "one_allocation": True,
+                "second_revision_inert": True,
+                "one_identity_record": True,
+                "all_unrelated_records_exact": True,
+            }
+
+        entry_bytes = {
+            f"0x{address:08X}": read_bytes(emu, address, 8).hex()
+            for address in (
+                TASK6_POKEWALKER_STAGE_ENTRY,
+                TASK6_POKEWALKER_ACK_FIRST_ENTRY,
+                TASK6_POKEWALKER_ACK_SECOND_ENTRY,
+                TASK6_POKEWALKER_RECOVERY_ENTRY,
+                TASK6_POKEWALKER_DIAGNOSTIC_POLL,
+            )
+        }
+    finally:
+        write_bytes(emu, pc_storage, baseline_pc)
+        write_bytes(emu, history_pointer, baseline_history)
+        write_bytes(emu, metadata_address, baseline_metadata)
+        write_bytes(emu, TASK6_POKEWALKER_MAILBOX, mailbox_before)
+
+    restored_metadata, restored_history = runtime_history(emu)
+    require(
+        runtime_party(emu) == baseline_party
+        and read_bytes(emu, pc_storage, PC_SAVE_SIZE) == baseline_pc
+        and restored_metadata == baseline_metadata
+        and restored_history == baseline_history
+        and read_bytes(
+            emu,
+            TASK6_POKEWALKER_MAILBOX,
+            TASK6_POKEWALKER_MAILBOX_SIZE,
+        )
+        == mailbox_before,
+        "ROM Walker diagnostic did not restore all borrowed runtime state",
+    )
+    screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    capture = screenshot(emu, screenshot_path.parent, screenshot_path.name)
+    return {
+        "label": "task6_pokewalker_rom",
+        "evidence_kind": "ROM-executed packaged task-6 transaction boundary",
+        "packaged_entries": entry_bytes,
+        "invocations": invocations,
+        "missing_identity_cancel": {
+            "before": public_fingerprint(missing_before),
+            "after": public_fingerprint(missing_after),
+            "complete_store_metadata_exact": True,
+        },
+        "full_319_cancel": {
+            "before": public_fingerprint(full_before),
+            "after": public_fingerprint(full_after),
+            "complete_store_metadata_exact": True,
+            "oldest_record_exact": True,
+            "unrelated_record_exact": True,
+        },
+        "ack_entries": ack_evidence,
+        "named_source_retail_ack": "sub_02032644 increments u16 +0x124",
+        "named_source_recovery": "ov112_021EC134 restores the canonical owner",
+        "diagnostic_mailbox_restored": True,
+        "zero_magic_retail_inert": True,
+        "host_pc_or_register_write": False,
+        "party_pc_history_restored": True,
+        "task7_mode_present": False,
+        "capture": capture,
+    }
+
+
 
 def run_isolated_scenario(
     rom: Path,
@@ -2758,6 +3214,10 @@ def run_isolated_scenario(
             elif name == "task6_daycare_reload":
                 return task6_daycare_reload_evidence(
                     emu, raw, screenshot_path
+                )
+            elif name == "task6_pokewalker_rom":
+                return task6_pokewalker_rom_evidence(
+                    emu, screenshot_path
                 )
             elif name == "empty":
                 open_summary_moves(emu, 0)
@@ -5118,9 +5578,12 @@ def isolated_scenario_evidence(
     raw_sha256 = hashlib.sha256(raw_before).hexdigest()
     completed = subprocess.run(
         [
-            sys.executable,
+            BOOTSTRAP_PYTHON_PATH,
+            "-I",
             "-S",
             "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
             str(Path(BOOTSTRAP_LAUNCHER_PATH).resolve()),
             "--rom",
             str(rom),
@@ -5137,27 +5600,8 @@ def isolated_scenario_evidence(
         check=False,
         capture_output=True,
         text=True,
-        env={
-            **os.environ,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPYCACHEPREFIX": "/dev/null",
-        },
-        timeout=240
-        if name in (
-            "center_bootstrap",
-            "terminal_bootstrap",
-            "transfer",
-            "transfer_reload",
-            "task6_daycare_cancel",
-            "task6_daycare_sanitize",
-            "task6_daycare_reload",
-            "boxed",
-            "boxed_reload",
-            "party_fail_closed",
-            "pc_fail_closed",
-            "pc_teardown",
-        )
-        else 90,
+        env=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
+        timeout=240,
     )
     require(
         completed.returncode == 0,
@@ -5954,7 +6398,7 @@ def task6_serialization_surrogate_evidence(
 
     return {
         "evidence_kind":
-            "source-exact authenticated serialization surrogate",
+            "non-probative source-exact serialization oracle",
         "actual_ui_companion":
             "retail Route 34 daycare script 9501 evidence",
         "trade": {
@@ -5987,7 +6431,7 @@ def task6_serialization_surrogate_evidence(
             "save_reparse_sha256": hatch_reparse_sha256,
         },
         "pokewalker": {
-            "protocol": "source-exact 0x88 serialization surrogate",
+            "protocol": "non-probative Python oracle; see ROM evidence",
             "export_transaction": {
                 "stage_is_history_read_only": True,
                 "missing_record_cancel_image_exact": True,
@@ -6743,6 +7187,16 @@ def run(args: argparse.Namespace) -> dict:
         daycare_reload_capture,
     )
     captures.append(daycare_reload_evidence["capture"])
+    pokewalker_rom_capture = (
+        args.screenshot_dir / "19_packaged_pokewalker_transaction.png"
+    )
+    pokewalker_rom_evidence = isolated_scenario_evidence(
+        rom,
+        args.controlled_raw,
+        "task6_pokewalker_rom",
+        pokewalker_rom_capture,
+    )
+    captures.append(pokewalker_rom_evidence["capture"])
 
     # Each extra boundary/lifecycle scenario runs in a fresh emulator process.
     for scenario in ("empty", "identity", "position", "teardown"):
@@ -7048,6 +7502,7 @@ def run(args: argparse.Namespace) -> dict:
         "task6_daycare_cancel_evidence": daycare_cancel_evidence,
         "task6_daycare_sanitize_evidence": daycare_sanitize_evidence,
         "task6_daycare_reload_evidence": daycare_reload_evidence,
+        "task6_pokewalker_rom_evidence": pokewalker_rom_evidence,
         "task6_serialization_surrogate_evidence":
             task6_serialization_evidence,
         "prospective_evidence": prospective_evidence,
@@ -7092,6 +7547,7 @@ def parse_args() -> argparse.Namespace:
             "task6_daycare_cancel",
             "task6_daycare_sanitize",
             "task6_daycare_reload",
+            "task6_pokewalker_rom",
             "boxed",
             "boxed_reload",
         ),

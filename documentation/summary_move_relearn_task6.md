@@ -31,9 +31,9 @@ hooks call task-3 history APIs; there is no second history store.
 | Scripted daycare sanitizer / Mirror Herb inheritance | Existing mutation of either owner | Successful canonical move+PP write to the selected party `PartyPokemon` or deposited `DaycareMon` | Direct setters were missed | Each owner filters its own legal egg-move buffer/current set, then records through the resident task-3 transaction. Both callers compute max PP from the incoming move with zero PP Ups before mutation. The resident helper atomically writes the move, resets PP Ups, writes PP, then records. Party and deposited histories never share donor or scratch-buffer state. |
 | Daycare withdrawal | Pure transfer | Successful `PokeParty_Add` | No explicit withdrawal hook | The canonical party-add success hook seeds the same PID/OTID record after withdrawal; it does not allocate a second identity. |
 | Egg generation/inheritance | New identity construction | Temporary egg construction, then party add as egg | Intentionally none | Construction buffers and parent moves never observe. The accepted inherited/current set becomes baseline only at hatch completion. |
-| Pokéwalker export | Pure transfer | Canonical PC lookup immediately before serialization/delete, followed by IR status-15 acknowledgement | No | The lookup captures a non-dirty resident pending snapshot. Only status 15 commits that snapshot once, after retail advances the Walker transaction; preparation, serialization, deletion, and forced-save steps do not allocate, touch, or evict history. |
+| Pokéwalker export | Pure transfer | Canonical PC lookup immediately before serialization/delete, followed by either IR status-15 acknowledgement | No | The lookup captures a non-dirty resident pending snapshot. The two distinct status-15 call sites enter separately pinned resident stubs at `0x023BD480` and `0x023BD488`; both advance retail first and then share one consume-once commit. Preparation, serialization, deletion, and forced-save steps do not allocate, touch, or evict history. |
 | Pokéwalker successful return/catch placements | Existing transfer or new import | Three successful `PCStorage_PlaceMonInBoxByIndexPair` calls | No | Place first, resolve the canonical destination, then seed. Existing PID/OTID resumes one record; a new arrival receives one baseline. |
-| Pokéwalker recovery/cancel | Failed transfer recovery | Complete retail recovery helper `ov112_021EC134` | None | A wrapper runs retail restoration first and then discards pending history unconditionally, including a missing/corrupt Walker copy that skips the internal placement at `0x021EC182`. No history image, access sequence, revision, dirty flag, or unrelated record may change. |
+| Pokéwalker recovery/cancel | Failed transfer recovery | Complete retail recovery helper `ov112_021EC134` | None | A wrapper at `0x023BD490` runs retail restoration first and then discards pending history unconditionally, including a missing/corrupt Walker copy that skips the internal placement at `0x021EC182`. Named overlay-112 instructions prove the retail caller passes its live non-null application owner. A `NULL` argument is therefore reserved for sealed direct-ROM acceptance and skips only the unmapped overlay helper while executing the same real resident discard boundary. No history image, access sequence, revision, dirty flag, or unrelated record may change. |
 | Castform/Cherrim battle forms, battle Kyurem/Zacian/Zamazenta, `NEEDS_REVERSION` extended forms | Temporary/battle-only | Battle copies, not save owners | Not applicable | Rejected by the canonical permanent-owner gate or explicitly routed through transient setters. They never enter permanent history or Summary relearn. |
 
 ## Integrity and ownership rules
@@ -52,11 +52,22 @@ hooks call task-3 history APIs; there is no second history store.
   communication failure, full-party failure, egg construction, and temporary
   transit buffers do not allocate or dirty records.
 - Pokéwalker export pending state is transient overlay-155 memory, not a
-  second history store. Missing-record and full-319-record cancellation
-  fixtures prove the complete history image, oldest record, access sequence,
-  revision, dirty flag, and unrelated records remain byte-exact. A positive
-  acknowledgement fixture proves the first status-15 callback records once
-  and a duplicate callback is inert.
+  second history store. The sealed emulator harness sends monotonic,
+  task-6-only requests through the zero-initialized mailbox at `0x023BD4A8`.
+  The source-linked boot-resident field-ready SysTask call at `0x023D9ABC`
+  enters the wrapper at `0x023BD4A0`, which preserves the original overlay-131 poll
+  and returns immediately unless the exact magic/version/sequence tuple is
+  armed. The dispatcher resolves `SaveBlock2_get` and save array 41 in-ROM,
+  owns its `0x134`-byte Walker buffer, and calls the packaged stage, both ACK,
+  and recovery entries at `0x023BD420`, `0x023BD480`, `0x023BD488`, and
+  `0x023BD490`. Read-only execution callbacks authenticate those exact hits;
+  the host never rewrites ARM9 PC, CPSR, or prefetched instruction state.
+  Missing-record
+  and full-319-record cancellation fixtures compare the real task-3 store,
+  complete metadata, oldest record, access sequence, revision, dirty flag,
+  and unrelated records byte-exact. Each ACK entry is invoked twice; only the
+  first call after staging may allocate/record and advance history revision.
+  The host model remains a non-probative oracle rather than execution proof.
 - Save ownership is unchanged: the primary save/box/daycare/Pokéwalker code
   marks its ordinary owner dirty and task-3 prepare/finish/cancel publishes the
   sidecar transaction. Task 6 adds no independent save or commit path.
@@ -71,15 +82,25 @@ hooks call task-3 history APIs; there is no second history store.
   STORE/confirm. The success path proves reciprocal party/deposited-owner move
   rewrites, nonzero max PP with zero PP Ups, exactly one append per PID/OTID,
   unrelated records and all 900 PC slots unchanged, and retail save/reload.
-- Trade, Rotom form, egg/hatch, and Pokéwalker evidence uses real encrypted
+- Trade, Rotom form, egg/hatch, and Pokéwalker serialization evidence uses real encrypted
   `0x88` BoxPokemon records, both authenticated PC save generations, and both
   sealed task-3 history mirrors. Trade cancel is byte-exact; form 32 rejects
   before mutation; eggs remain history-free until the egg bit is canonically
   cleared; and Pokéwalker recovery restores the complete save byte-for-byte.
-  The Pokéwalker radio leg alone is labelled a source-exact serialization
-  surrogate because no headless peripheral peer is available. It verifies
-  exact export/import records, PC CRC ownership, round-trip identity/history,
-  new-arrival baseline, reparse persistence, and all 900 boxed checksums.
+  The unavailable peripheral serialization leg alone is labelled a
+  source-exact surrogate. Transaction-boundary evidence is ROM-executed:
+  the harness arms the fixed resident mailbox and lets the game-native
+  field-ready poll call the fixed entries, uses a real canonical PC owner and
+  the live task-3 save pointer, and supplies a private real RAM
+  `POKEWALKER`-shaped buffer to the retail ACK routine
+  (named `sub_02032644`, whose only mutation is the `u16` at offset `0x124`).
+  It authenticates every entry hit and the completion release word without
+  interrupting CPU context. The consumed magic prevents crash/retry replay;
+  completion sequence is published last, and the zero-magic retail path only
+  performs the unchanged original poll plus an inert comparison. The surrogate
+  separately verifies exact export/import records,
+  PC CRC ownership, round-trip identity/history, new-arrival baseline, reparse
+  persistence, and all 900 boxed checksums.
 - Candidate ordering and known-move exclusion remain proven by the task-2
   builder/source-static gate; the serialization surrogate does not model or
   claim execution of that builder.
@@ -102,14 +123,49 @@ hooks call task-3 history APIs; there is no second history store.
   copy, the host `.venv/bin/python3` atomically binds the publication manifest
   to the actual emulator runtime and verifies the resulting manifest again.
   An unbound or partially replaced manifest cannot launch acceptance.
-- The host binding and every acceptance child require `-S -B` with
-  `PYTHONPYCACHEPREFIX=/dev/null` from interpreter startup. The launcher checks
-  that policy before importing even `os`; Python therefore skips `site` and
-  `.pth` execution, compiles standard-library sources, and cannot read or write
-  an existing filesystem `.pyc`. A builtin-only stage-zero path removes a
-  requested stale result before rejecting a process with the wrong policy.
-  Any configured Python zip-import path is recorded and must remain absent, so
-  bytecode cannot re-enter through the interpreter's default zip search path.
+- The host binding, retained helpers, and every acceptance child use the exact
+  repository `.venv/bin/python3 -I -S -B -X pycache_prefix=/dev/null` command.
+  Stage zero requires `isolated=1` and `ignore_environment=1` before importing
+  even `os`, removes the default nonexistent `pythonXY.zip` entry, reduces
+  `sys.path` to the sealed standard-library and `lib-dynload` roots, and installs
+  a source/extension-only filesystem hook. It therefore ignores `PYTHONPATH`,
+  `PYTHONHOME`, user-site settings, arbitrary-extension zip/whl archives,
+  `sitecustomize`, `.pth`, colocated caches, and direct sourceless `.pyc` files.
+  A builtin-only stage-zero path still removes a requested stale result before
+  rejecting any flag or policy drop. Child processes receive a fixed minimal
+  environment rather than inheriting the parent environment.
+- Isolation is not treated as authentication of canonical library files. The
+  launcher has a pure stage zero that uses only startup builtin/frozen modules,
+  builtin file I/O, and its own SHA-256/JSON/tree primitives. Before importing
+  `os`, `hashlib`, `json`, `types`, or any extension module, it authenticates
+  the expected launcher and publication manifest, then the manifest-recorded
+  Python entry/executable, shared runtime, `pyvenv.cfg`, and complete stdlib
+  source/native tree. It also rejects any startup module outside that closure.
+  The host runtime bind and bound-runtime verify modes perform the same
+  pre-import closure check against an explicit pinned host record and an
+  authenticated copy of the launcher's pure stage-zero implementation. Build-
+  container seal, verify, and atomic pair-publication modes use the same stage
+  zero with a separate exact `/hg-engine` and
+  `/tmp/hg-engine-venv/bin/python3` Linux Workshop pin. That image's
+  `/usr/bin/python3.10` is effectively static (the configured
+  `libpython3.10.so` is absent), so the content-addressed executable is the
+  shared-runtime closure; its complete `/usr/lib/python3.10` source/native tree
+  and the Workshop `pyvenv.cfg` are pinned independently before ordinary
+  imports.
+  Canonical `hashlib.py` and every post-script stdlib source therefore fail
+  before substituted source can execute.
+
+  CPython necessarily executes a small canonical source bootstrap before any
+  script can run: `codecs.py`, `encodings/__init__.py`,
+  `encodings/aliases.py`, `encodings/utf_8.py`, `abc.py`, and `io.py`. Those six
+  files, together with the OS loader, exact Python executable/shared runtime,
+  and builtin/frozen import bootstrap, are the explicit irreducible pre-script
+  trust boundary. Their exact paths and hashes are recorded in
+  `startup_bootstrap`; stage zero rehashes them immediately, and the normal
+  start/end loaded-module audit revalidates their `SourceFileLoader` origins.
+  No claim is made that Python code can retroactively prevent code in those six
+  startup files from running; changing any of them invalidates the sealed host
+  and prevents evidence publication.
   The bound manifest records and revalidates the exact policy. The host binding
   content-addresses the canonical Python entry and resolved
   executable, the linked Python shared runtime, `pyvenv.cfg`, and a
@@ -125,6 +181,18 @@ hooks call task-3 history APIs; there is no second history store.
   source loaders are not consulted. The exact canonical `libdesmume` path is
   hashed before load, loaded explicitly, and rehashed with stable file
   identity immediately afterward.
+- At both the pre-helper and final reauthentication boundaries, every loaded
+  Python module is enumerated. Builtin and frozen origins are accepted; source
+  and extension origins must resolve canonically inside the content-addressed
+  standard-library, native, package, or retained-source closure with the exact
+  expected loader. `zipimporter`, `SourcelessFileLoader`, path/finder mutation,
+  module-origin aliasing, and an unsealed loader fail closed. Hostile bootstrap
+  fixtures calibrate and then reject `PYTHONPATH` source, `.whl`, an archive
+  with an arbitrary suffix, direct `module.pyc`, user `.pth`, `sitecustomize`,
+  standard `__pycache__`, missing interpreter flags, and environment leakage.
+  A calibrated canonical-stdlib poison fixture separately proves the payload is
+  executable through an ordinary source loader, then proves stage zero detects
+  the changed tree, removes stale evidence, and never executes the payload.
 - Native image enumeration uses dyld's in-process image list on macOS and
   `/proc/self/maps` on Linux. Every loaded image outside the documented
   OS-owned roots must be present in the manifest's mutable closure. The trust

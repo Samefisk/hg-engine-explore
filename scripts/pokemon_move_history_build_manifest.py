@@ -3,6 +3,191 @@
 
 from __future__ import annotations
 
+import sys
+
+
+def _isolated_startup_sys_path() -> tuple[str, str, str]:
+    version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    zip_version = f"python{sys.version_info.major}{sys.version_info.minor}.zip"
+    library = sys.base_prefix + "/lib/" + version
+    return (
+        sys.base_prefix + "/lib/" + zip_version,
+        library,
+        library + "/lib-dynload",
+    )
+
+
+def _expected_isolated_sys_path() -> tuple[str, str]:
+    return _isolated_startup_sys_path()[1:]
+
+
+if (
+    sys.flags.isolated == 1
+    and sys.flags.ignore_environment == 1
+    and sys.flags.no_site == 1
+    and sys.dont_write_bytecode
+    and sys.pycache_prefix == "/dev/null"
+    and "site" not in sys.modules
+    and tuple(sys.path) == _isolated_startup_sys_path()
+):
+    sys.path[:] = _expected_isolated_sys_path()
+    _external = sys.modules["_frozen_importlib_external"]
+    sys.path_hooks[:] = [
+        _external.FileFinder.path_hook(
+            (_external.SourceFileLoader, _external.SOURCE_SUFFIXES),
+            (_external.ExtensionFileLoader, _external.EXTENSION_SUFFIXES),
+        )
+    ]
+    sys.path_importer_cache.clear()
+    del _external
+
+
+def _isolated_startup_ok() -> bool:
+    return (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and "site" not in sys.modules
+        and tuple(sys.path) == _expected_isolated_sys_path()
+    )
+
+
+if __name__ == "__main__" and not _isolated_startup_ok():
+    raise SystemExit(
+        "move-history build manifest failed: start exact repository Python "
+        "with -I -S -B -X pycache_prefix=/dev/null"
+    )
+
+
+_PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
+    "353ca8ac6b2b7bd914fcbcd37e89208e45f4f03cc64c017330aabc125312607b"
+)
+_PINNED_STAGE_ZERO_PYTHON = {
+    "darwin": {
+        "repo": None,
+        "entry": None,
+        "executable": {
+            "path": "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3.10",
+            "size": 152624,
+            "sha256": "8a2727d72c1c94360762724bc333040776f84b49830008e4ca5f45d3d79553c8",
+        },
+        "shared_runtime": {
+            "path": "/Library/Frameworks/Python.framework/Versions/3.10/Python",
+            "size": 9762928,
+            "sha256": "5f6fad7e987aba159bd81251413697f7bf6258a46a54641b4ee93c7447dc5672",
+        },
+        "pyvenv_cfg": {
+            "size": 71,
+            "sha256": "db6c8a96f25493eda9f74f23f0b5f248a8b50a5b469b15c5ee7313875b416364",
+        },
+        "stdlib": {
+            "root": "/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10",
+            "files": 1788,
+            "size": 51435256,
+            "sha256": "4cebc4dbc8ee10c816bc500e0e95c24448657727ef065c66650d0627ebe26229",
+        },
+    },
+    "linux": {
+        "repo": "/hg-engine",
+        "entry": "/tmp/hg-engine-venv/bin/python3",
+        "executable": {
+            "path": "/usr/bin/python3.10",
+            "size": 5672072,
+            "sha256": "03bb5d246e83c44204ef38044b062fdc46c2835881874e763c44c48b4304c490",
+        },
+        "shared_runtime": None,
+        "pyvenv_cfg": {
+            "size": 71,
+            "sha256": "db6c8a96f25493eda9f74f23f0b5f248a8b50a5b469b15c5ee7313875b416364",
+        },
+        "stdlib": {
+            "root": "/usr/lib/python3.10",
+            "files": 696,
+            "size": 13697749,
+            "sha256": "24390712683ee2a599ec3140ad90abd246b8efee9c4782a2deb8f24a9a70d312",
+        },
+    },
+}
+
+
+def _pinned_stage_zero_sha256(data: bytes) -> str:
+    initial = [
+        0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
+        0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
+    ]
+    rounds = (
+        0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+        0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+        0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+        0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+        0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+        0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+        0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+        0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2,
+    )
+    original_length = len(data)
+    data += b"\x80" + bytes((55 - original_length) % 64)
+    data += (original_length * 8).to_bytes(8, "big")
+    for offset in range(0, len(data), 64):
+        block = data[offset:offset + 64]
+        words = [int.from_bytes(block[index:index + 4], "big") for index in range(0, 64, 4)]
+        for index in range(16, 64):
+            x, y = words[index - 15], words[index - 2]
+            s0 = ((x >> 7) | (x << 25)) ^ ((x >> 18) | (x << 14)) ^ (x >> 3)
+            s1 = ((y >> 17) | (y << 15)) ^ ((y >> 19) | (y << 13)) ^ (y >> 10)
+            words.append((words[index - 16] + s0 + words[index - 7] + s1) & 0xFFFFFFFF)
+        a, b, c, d, e, f, g, h = initial
+        for index in range(64):
+            s1 = ((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7))
+            choose = (e & f) ^ ((~e) & g)
+            t1 = (h + s1 + choose + rounds[index] + words[index]) & 0xFFFFFFFF
+            s0 = ((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^ ((a >> 22) | (a << 10))
+            t2 = (s0 + ((a & b) ^ (a & c) ^ (b & c))) & 0xFFFFFFFF
+            h, g, f, e, d, c, b, a = g, f, e, (d + t1) & 0xFFFFFFFF, c, b, a, (t1 + t2) & 0xFFFFFFFF
+        initial = [(old + new) & 0xFFFFFFFF for old, new in zip(initial, (a, b, c, d, e, f, g, h))]
+    return b"".join(value.to_bytes(4, "big") for value in initial).hex()
+
+
+if __name__ == "__main__" and any(
+    argument == mode or argument.startswith(mode + "=")
+    for mode in ("--seal", "--verify", "--bind-runtime", "--publish-pair")
+    for argument in sys.argv[1:]
+):
+    import posix
+
+    script_path = __file__ if __file__.startswith("/") else posix.getcwd() + "/" + __file__
+    repo_path = script_path.rsplit("/scripts/", 1)[0]
+    launcher_path = repo_path + "/scripts/launch_summary_move_relearn_runtime.py"
+    with open(launcher_path, "rb") as stage_zero_stream:
+        stage_zero_source = stage_zero_stream.read()
+    if _pinned_stage_zero_sha256(stage_zero_source) != _PINNED_STAGE_ZERO_LAUNCHER_SHA256:
+        raise SystemExit("move-history build manifest failed: pinned stage-zero launcher differs")
+    stage_zero_prefix = stage_zero_source.split(b"\nimport os\n", 1)
+    if len(stage_zero_prefix) != 2:
+        raise SystemExit("move-history build manifest failed: stage-zero boundary is absent")
+    stage_zero_namespace = {"__name__": "manifest_binder_stage_zero", "__file__": launcher_path}
+    exec(compile(stage_zero_prefix[0], launcher_path, "exec", dont_inherit=True, optimize=0), stage_zero_namespace)
+    file_record_zero = stage_zero_namespace["_stage_zero_file_record"]
+    tree_record_zero = stage_zero_namespace["_stage_zero_tree_record"]
+    pinned = _PINNED_STAGE_ZERO_PYTHON.get(sys.platform)
+    if pinned is None:
+        raise SystemExit("move-history build manifest failed: unsupported pinned platform")
+    expected_repo = pinned["repo"] if pinned["repo"] is not None else repo_path
+    expected_entry = pinned["entry"] if pinned["entry"] is not None else repo_path + "/.venv/bin/python3"
+    if repo_path != expected_repo or sys.executable != expected_entry:
+        raise SystemExit("move-history build manifest failed: pinned Python entry differs")
+    if file_record_zero(pinned["executable"]["path"]) != {key: pinned["executable"][key] for key in ("size", "sha256")}:
+        raise SystemExit("move-history build manifest failed: pinned Python executable differs")
+    if pinned["shared_runtime"] is not None and file_record_zero(pinned["shared_runtime"]["path"]) != {key: pinned["shared_runtime"][key] for key in ("size", "sha256")}:
+        raise SystemExit("move-history build manifest failed: pinned Python runtime differs")
+    pyvenv_record = file_record_zero(expected_entry.rsplit("/bin/", 1)[0] + "/pyvenv.cfg")
+    if pyvenv_record != pinned["pyvenv_cfg"]:
+        raise SystemExit("move-history build manifest failed: pinned pyvenv.cfg differs")
+    if tree_record_zero(pinned["stdlib"]["root"]) != pinned["stdlib"]:
+        raise SystemExit("move-history build manifest failed: pinned stdlib differs")
+
 import argparse
 import ctypes
 import errno
@@ -14,9 +199,9 @@ import shlex
 import shutil
 import stat
 import subprocess
-import sys
 import sysconfig
 import tempfile
+import types
 import unicodedata
 from pathlib import Path
 from typing import Any, Callable
@@ -26,6 +211,14 @@ REPO = Path(__file__).resolve().parents[1]
 SCHEMA = "pokemon-move-history-capture-build-v1"
 RUNTIME_ENVIRONMENT_SCHEMA = "summary-move-relearn-runtime-environment-v1"
 PACKAGED_ROM_LOGICAL_PATH = "@packaged-rom"
+RUNTIME_LAUNCHER_INPUT = "scripts/launch_summary_move_relearn_runtime.py"
+RUNTIME_RETAINED_SOURCE_INPUTS = (
+    "scripts/pokemon_move_history_build_manifest.py",
+    RUNTIME_LAUNCHER_INPUT,
+    "scripts/verify_summary_move_relearn_runtime.py",
+    "scripts/headless-overworld-test.py",
+    "scripts/verify_pokemon_move_history_party_integrity.py",
+)
 BUILD_CONTEXT_KEYS = {
     "ARMIPS",
     "ARMIPS_FLAGS",
@@ -46,6 +239,7 @@ DEPENDENCY_FILES = (
     "build/individual/GetMonEvolutionInternal.d",
     "build/field/script_commands.d",
     "build/party_menu.d",
+    "build/overworld_wild_spawns.d",
     "build/save.d",
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
@@ -75,7 +269,6 @@ FIXED_INPUTS = (
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/field/linker.ld",
-    "scripts/pokemon_move_history_build_manifest.py",
     "scripts/generate_armips_symbols.py",
     "scripts/build_move_relearn_parents.py",
     "scripts/generate_ld.py",
@@ -84,10 +277,7 @@ FIXED_INPUTS = (
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
     "scripts/verify_summary_move_relearn.py",
-    "scripts/launch_summary_move_relearn_runtime.py",
-    "scripts/verify_summary_move_relearn_runtime.py",
-    "scripts/headless-overworld-test.py",
-    "scripts/verify_pokemon_move_history_party_integrity.py",
+    *RUNTIME_RETAINED_SOURCE_INPUTS,
     "documentation/summary_move_relearn_task6.md",
 )
 OUTPUTS = {
@@ -159,6 +349,14 @@ RUNTIME_MODULE_RELATIVES = (
     "desmume/i18n_util.py",
     "desmume/controls.py",
     "desmume/emulator.py",
+)
+RUNTIME_STARTUP_MODULES = (
+    "abc",
+    "codecs",
+    "encodings",
+    "encodings.aliases",
+    "encodings.utf_8",
+    "io",
 )
 RUNTIME_NATIVE_SUFFIXES = (".dylib", ".dll", ".so")
 
@@ -318,16 +516,98 @@ def _under_runtime_root(path: Path, roots: tuple[str, ...]) -> bool:
     return any(text == root or text.startswith(root + os.sep) for root in roots)
 
 
+def _loader_name(loader: object) -> str:
+    if loader is None:
+        return "None"
+    loader_type = loader if isinstance(loader, type) else type(loader)
+    return loader_type.__module__ + "." + loader_type.__qualname__
+
+
+def _validate_binding_modules(stdlib_root: Path) -> None:
+    exact_sources = {
+        (REPO / relative).resolve()
+        for relative in RUNTIME_RETAINED_SOURCE_INPUTS
+    }
+    package_roots = tuple(
+        _runtime_package_root(package) for package in ("desmume", "PIL")
+    )
+    forbidden = {"SourcelessFileLoader", "zipimporter"}
+    for name, module in sorted(sys.modules.items()):
+        if not isinstance(module, types.ModuleType):
+            continue
+        spec = getattr(module, "__spec__", None)
+        spec_origin = getattr(spec, "origin", None)
+        file_origin = getattr(module, "__file__", None)
+        loader_name = _loader_name(getattr(module, "__loader__", None))
+        short_loader = loader_name.rsplit(".", 1)[-1]
+        if short_loader in forbidden:
+            raise ManifestError(
+                f"runtime binder loaded forbidden Python loader: {name}"
+            )
+        if spec_origin in ("built-in", "frozen"):
+            continue
+        origin = spec_origin if isinstance(spec_origin, str) else file_origin
+        if not isinstance(origin, str) or not origin:
+            raise ManifestError(
+                f"runtime binder module has no authenticated origin: {name}"
+            )
+        canonical = Path(os.path.realpath(os.path.abspath(origin)))
+        if canonical != Path(origin) or not canonical.is_file():
+            raise ManifestError(
+                f"runtime binder module origin is not canonical: {name}"
+            )
+        if isinstance(file_origin, str) and Path(
+            os.path.realpath(os.path.abspath(file_origin))
+        ) != canonical:
+            raise ManifestError(
+                f"runtime binder module origins differ: {name}"
+            )
+        if short_loader == "SourceFileLoader":
+            allowed = (
+                canonical.suffix == ".py"
+                and (
+                    _under_runtime_root(canonical, (str(stdlib_root),))
+                    or canonical in exact_sources
+                )
+            )
+        elif short_loader == "ExtensionFileLoader":
+            allowed = (
+                _under_runtime_root(canonical, (str(stdlib_root),))
+                or any(
+                    _under_runtime_root(canonical, (str(root),))
+                    for root in package_roots
+                )
+            )
+        elif short_loader in {"RetainedSourceLoader", "RetainedPackageLoader"}:
+            allowed = (
+                canonical.suffix == ".py"
+                and (
+                    canonical in exact_sources
+                    or any(
+                        _under_runtime_root(canonical, (str(root),))
+                        for root in package_roots
+                    )
+                )
+            )
+        else:
+            allowed = False
+        if not allowed:
+            raise ManifestError(
+                f"runtime binder module loader/origin is unsealed: "
+                f"{name}: {loader_name}: {canonical}"
+            )
+
+
 def capture_runtime_environment() -> dict[str, Any]:
-    if (
-        not sys.dont_write_bytecode
-        or sys.pycache_prefix != os.devnull
-        or sys.flags.no_site != 1
-        or "site" in sys.modules
-    ):
+    if not _isolated_startup_ok():
         raise ManifestError(
-            "runtime binding requires -S -B and "
-            "PYTHONPYCACHEPREFIX=/dev/null"
+            "runtime binding requires -I -S -B -X "
+            "pycache_prefix=/dev/null"
+        )
+    expected_entry = os.path.abspath(REPO / ".venv/bin/python3")
+    if os.path.abspath(sys.executable) != expected_entry:
+        raise ManifestError(
+            "runtime binding requires exact repository .venv/bin/python3"
         )
     if os.stat(os.devnull).st_mode & 0o170000 != 0o020000:
         raise ManifestError("runtime pycache sink is not a character device")
@@ -352,6 +632,7 @@ def capture_runtime_environment() -> dict[str, Any]:
     }[platform_name]
     libdesmume = desmume_root / libdesmume_name
     stdlib_root = Path(sysconfig.get_path("stdlib"))
+    _validate_binding_modules(stdlib_root)
     stdlib_suffixes = (".py", ".so", ".dylib", ".dll")
     executable_entry = Path(os.path.abspath(sys.executable))
     venv_root = executable_entry.parent.parent
@@ -393,12 +674,22 @@ def capture_runtime_environment() -> dict[str, Any]:
                 "absent_zip_paths": absent_zip_paths,
                 "bytecode_reads_disabled": True,
                 "dont_write_bytecode": True,
+                "forbidden_loaders": [
+                    "SourcelessFileLoader",
+                    "zipimporter",
+                ],
+                "ignore_environment": True,
+                "isolated": True,
                 "no_site": True,
                 "pycache_prefix": os.devnull,
+                "sys_path": list(_expected_isolated_sys_path()),
                 "scope": (
-                    "Interpreter startup and every acceptance child skip "
-                    "site/.pth processing and compile Python sources without "
-                    "reading or writing filesystem pyc."
+                    "Interpreter startup, host binders, retained helpers, and "
+                    "every acceptance child use isolated mode, ignore Python "
+                    "environment configuration, skip site/.pth processing, "
+                    "and restrict import lookup to the sealed stdlib paths. "
+                    "Every loaded module origin and loader is authenticated; "
+                    "zipimporter and sourceless bytecode are forbidden."
                 ),
             },
             "entry_path": str(executable_entry),
@@ -416,6 +707,21 @@ def capture_runtime_environment() -> dict[str, Any]:
                 "Python standard library",
                 suffixes=stdlib_suffixes,
             ),
+            "startup_bootstrap": {
+                "modules": {
+                    name: runtime_file_record(
+                        Path(sys.modules[name].__file__),
+                        f"pre-script startup module {name}",
+                    )
+                    for name in RUNTIME_STARTUP_MODULES
+                },
+                "scope": (
+                    "CPython loads these canonical source modules after the "
+                    "OS/Python runtime but before script stage zero. They are "
+                    "an explicit bootstrap trust boundary and are rehashed "
+                    "by stage zero and the start/end module-origin audit."
+                ),
+            },
         },
         "packages": {
             "desmume": _runtime_tree_record(desmume_root, "DeSmuME package"),

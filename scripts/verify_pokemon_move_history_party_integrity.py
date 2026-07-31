@@ -3,13 +3,97 @@
 
 from __future__ import annotations
 
+import sys
+
+
+def _isolated_helper_path() -> tuple[str, ...]:
+    version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    base = sys.base_prefix + "/lib/" + version
+    paths = (base, base + "/lib-dynload")
+    if globals().get("AUTHENTICATED_LIBDESMUME_PATH") is None:
+        venv = sys.executable.rsplit("/bin/", 1)[0]
+        paths += (venv + "/lib/" + version + "/site-packages",)
+    return paths
+
+
+def _normalize_isolated_helper_path() -> None:
+    expected = _isolated_helper_path()
+    startup = (
+        sys.base_prefix
+        + "/lib/python"
+        + str(sys.version_info.major)
+        + str(sys.version_info.minor)
+        + ".zip",
+        expected[0],
+        expected[1],
+    )
+    if (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and tuple(sys.path) == startup
+    ):
+        sys.path[:] = expected
+        external = sys.modules["_frozen_importlib_external"]
+        sys.path_hooks[:] = [
+            external.FileFinder.path_hook(
+                (external.SourceFileLoader, external.SOURCE_SUFFIXES),
+                (external.ExtensionFileLoader, external.EXTENSION_SUFFIXES),
+            )
+        ]
+        sys.path_importer_cache.clear()
+
+
+_normalize_isolated_helper_path()
+
+
+def _isolated_helper_startup() -> bool:
+    return (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and "site" not in sys.modules
+        and tuple(sys.path) == _isolated_helper_path()
+    )
+
+
+if __name__ == "__main__" and not _isolated_helper_startup():
+    import posix
+
+    script = __file__
+    if not script.startswith("/"):
+        script = posix.getcwd() + "/" + script
+    repo = script.rsplit("/scripts/", 1)[0]
+    python = repo + "/.venv/bin/python3"
+    posix.execve(
+        python,
+        [
+            python,
+            "-I",
+            "-S",
+            "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
+            script,
+            *sys.argv[1:],
+        ],
+        {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "SDL_AUDIODRIVER": "dummy",
+        },
+    )
+
 import argparse
 import hashlib
 import json
 import os
 import struct
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -74,11 +158,13 @@ def ensure_repo_venv() -> None:
     venv_python = venv / "bin/python3"
     if (
         Path(os.path.abspath(sys.executable))
-        == Path(os.path.abspath(venv_python))
-        or not venv_python.is_file()
+        != Path(os.path.abspath(venv_python))
+        or not _isolated_helper_startup()
     ):
-        return
-    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+        raise RuntimeError(
+            "party helper requires exact repository Python with "
+            "-I -S -B -X pycache_prefix=/dev/null"
+        )
 
 
 ensure_repo_venv()
@@ -313,6 +399,11 @@ def reload_party_in_fresh_process(
         completed = subprocess.run(
             [
                 sys.executable,
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
                 str(REPO / "scripts/headless-overworld-test.py"),
                 "--rom",
                 str(rom),
@@ -330,6 +421,11 @@ def reload_party_in_fresh_process(
             capture_output=True,
             text=True,
             timeout=60,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "LC_ALL": "C",
+                "SDL_AUDIODRIVER": "dummy",
+            },
         )
     require(
         completed.returncode == 0,

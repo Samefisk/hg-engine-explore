@@ -225,8 +225,54 @@ BOOL LONG_CALL PokemonMoveHistoryTask6_GTSRemovePartyAndRecord(
     u32 partySlot);
 void LONG_CALL PokemonMoveHistoryTask6_PokewalkerRadioSuccess(
     void *pokewalker);
+void LONG_CALL PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond(
+    void *pokewalker);
 void LONG_CALL PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard(
     void *pokewalkerApp);
+/*
+ * Retail-unreferenced legacy fail-stop slot. Sealed runtime evidence never
+ * redirects the host PC here; the game-native mailbox dispatcher is used.
+ */
+void LONG_CALL PokemonMoveHistoryTask6_PokewalkerDiagnosticReturn(void);
+
+#define POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_MAGIC 0x36574B50
+#define POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_VERSION 1
+#define POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_RUNNING 0x52554E36
+#define POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_COMPLETE 0xC0016D48
+#define POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED 0xBAD60000
+
+enum PokemonMoveHistoryTask6DiagnosticOperation {
+    POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STAGE = 1,
+    POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_ACK_FIRST = 2,
+    POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_ACK_SECOND = 3,
+    POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_RECOVER_DISCARD = 4,
+};
+
+typedef struct PokemonMoveHistoryTask6DiagnosticMailbox {
+    u32 magic;
+    u32 version;
+    u32 requestSequence;
+    u32 completionSequence;
+    u32 operation;
+    u32 boxno;
+    u32 slotno;
+    u32 result;
+    u32 status;
+    u32 walkerCounterSeed;
+    u32 walkerCounterAfter;
+    u32 reserved;
+} PokemonMoveHistoryTask6DiagnosticMailbox;
+
+extern volatile PokemonMoveHistoryTask6DiagnosticMailbox
+    gPokemonMoveHistoryTask6DiagnosticMailbox;
+
+/*
+ * Replaces only the already-existing overworld field-ready call to
+ * OverworldFollowerSelectorTaskPollEntry, preserving its r0 FieldSystem ABI
+ * before checking the zero-by-default task-6 mailbox.
+ */
+void LONG_CALL PokemonMoveHistoryTask6_FieldReadyDiagnosticPoll(
+    void *fieldSystem);
 void LONG_CALL PokemonMoveHistoryTask6_ScriptTeachMove(
     SaveData *saveData,
     struct BoxPokemon *pokemon,

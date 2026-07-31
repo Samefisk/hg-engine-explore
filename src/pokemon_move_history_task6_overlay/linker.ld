@@ -33,10 +33,24 @@ SECTIONS {
                     "task-6 GTS party removal ABI moved");
                 ASSERT(MoveHistoryTask6Entry_PokewalkerRadioSuccess
                         == ORIGIN(rom) + 0x80,
-                    "task-6 Pokewalker success ABI moved");
-                ASSERT(MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
+                    "task-6 Pokewalker first success ABI moved");
+                ASSERT(MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond
                         == ORIGIN(rom) + 0x88,
+                    "task-6 Pokewalker second success ABI moved");
+                ASSERT(MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
+                        == ORIGIN(rom) + 0x90,
                     "task-6 Pokewalker recovery ABI moved");
+                ASSERT(MoveHistoryTask6Entry_PokewalkerDiagnosticReturn
+                        == ORIGIN(rom) + 0x98,
+                    "task-6 Pokewalker diagnostic return ABI moved");
+                ASSERT(MoveHistoryTask6Entry_FieldReadyDiagnosticPoll
+                        == ORIGIN(rom) + 0xA0,
+                    "task-6 field-ready diagnostic poll ABI moved");
+                ASSERT(. == ORIGIN(rom) + 0xA8,
+                    "task-6 diagnostic mailbox ABI moved");
+                KEEP(*(.pokemon_move_history_task6_diagnostic_data))
+                ASSERT(. == ORIGIN(rom) + 0xD8,
+                    "task-6 diagnostic mailbox size differs");
                 KEEP(*(.pokemon_move_history_task6_short_branch_targets))
                 ASSERT(MoveHistoryTask6Entry_IsCanonical
                         == ORIGIN(rom) + 0x00,

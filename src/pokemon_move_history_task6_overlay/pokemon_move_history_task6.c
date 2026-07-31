@@ -25,6 +25,10 @@ typedef BOOL (*GTSPlaceBoxRetailFunc)(
     struct BoxPokemon *);
 typedef void (*PokewalkerRadioSuccessRetailFunc)(void *pokewalker);
 typedef void (*PokewalkerRecoveryRetailFunc)(void *pokewalkerApp);
+typedef void (*OverworldFieldReadyRetailPollFunc)(void *fieldSystem);
+
+#define TASK6_SAVE_PCSTORAGE 41
+#define TASK6_POKEWALKER_DIAGNOSTIC_WORDS (0x134 / sizeof(u32))
 
 u32 __attribute__((section(".pokemon_move_history_task6_data")))
 gPokemonMoveHistoryTask6PartyMenuSignalStorage;
@@ -36,6 +40,15 @@ gPokemonMoveHistoryTask6PartyMenuSignalStorage;
  */
 static PokemonMoveHistorySnapshot sPokewalkerPendingSnapshot;
 static BOOL sPokewalkerPendingValid;
+static u32 sPokewalkerDiagnosticBuffer[
+    TASK6_POKEWALKER_DIAGNOSTIC_WORDS];
+
+volatile PokemonMoveHistoryTask6DiagnosticMailbox
+    gPokemonMoveHistoryTask6DiagnosticMailbox
+    __attribute__((section(".pokemon_move_history_task6_diagnostic_data")));
+
+typedef char PokemonMoveHistoryTask6DiagnosticMailboxSizeAssert[
+    sizeof(PokemonMoveHistoryTask6DiagnosticMailbox) == 0x30 ? 1 : -1];
 
 BOOL PokemonMoveHistoryTask6_IsCanonicalImpl(struct BoxPokemon *pokemon)
 {
@@ -175,9 +188,113 @@ void PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl(
     PokewalkerRecoveryRetailFunc retailRecovery =
         (PokewalkerRecoveryRetailFunc)0x021EC135;
 
-    /* Restore the canonical PC owner first, then abandon transient history. */
-    retailRecovery(pokewalkerApp);
+    /*
+     * Retail's named ov112 caller always supplies its application owner.
+     * NULL is reserved for the sealed emulator diagnostic, which exercises
+     * this exact packaged pending-discard boundary while ov112 is unmapped.
+     */
+    if (pokewalkerApp != NULL) {
+        retailRecovery(pokewalkerApp);
+    }
     sPokewalkerPendingValid = FALSE;
+}
+
+static void PokemonMoveHistoryTask6_PokewalkerDiagnosticPollImpl(void)
+{
+    volatile PokemonMoveHistoryTask6DiagnosticMailbox *mailbox =
+        &gPokemonMoveHistoryTask6DiagnosticMailbox;
+    SaveData *saveData;
+    PCStorage *storage;
+    u32 requestSequence;
+    u32 operation;
+    u32 boxno;
+    u32 slotno;
+    u16 *walkerCounter;
+
+    /* The zero-initialized retail path is one load, compare, and return. */
+    if (mailbox->magic != POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_MAGIC) {
+        return;
+    }
+
+    requestSequence = mailbox->requestSequence;
+    operation = mailbox->operation;
+    boxno = mailbox->boxno;
+    slotno = mailbox->slotno;
+
+    /* Consume before any packaged call; a crash cannot replay the request. */
+    mailbox->magic = 0;
+    mailbox->result = 0;
+    mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_RUNNING;
+
+    if (mailbox->version != POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_VERSION
+        || requestSequence == 0
+        || requestSequence != mailbox->completionSequence + 1) {
+        mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED;
+        return;
+    }
+
+    saveData = SaveBlock2_get();
+    if (saveData == NULL) {
+        mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED;
+        return;
+    }
+    storage = (PCStorage *)SaveArray_Get(saveData, TASK6_SAVE_PCSTORAGE);
+    if (storage == NULL) {
+        mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED;
+        return;
+    }
+
+    switch (operation) {
+    case POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STAGE:
+        if (boxno >= NUM_PC_BOXES || slotno >= MONS_PER_BOX) {
+            mailbox->status =
+                POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED;
+            return;
+        }
+        mailbox->result = (u32)PokemonMoveHistoryTask6_PCStorageGetAndStage(
+            storage,
+            boxno,
+            slotno);
+        break;
+
+    case POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_ACK_FIRST:
+    case POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_ACK_SECOND:
+        walkerCounter = (u16 *)((u8 *)sPokewalkerDiagnosticBuffer + 0x124);
+        *walkerCounter = (u16)mailbox->walkerCounterSeed;
+        if (operation == POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_ACK_FIRST) {
+            PokemonMoveHistoryTask6_PokewalkerRadioSuccess(
+                sPokewalkerDiagnosticBuffer);
+        } else {
+            PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond(
+                sPokewalkerDiagnosticBuffer);
+        }
+        mailbox->walkerCounterAfter = *walkerCounter;
+        mailbox->result = TRUE;
+        break;
+
+    case POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_RECOVER_DISCARD:
+        PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard(NULL);
+        mailbox->result = TRUE;
+        break;
+
+    default:
+        mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED;
+        return;
+    }
+
+    mailbox->status = POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_COMPLETE;
+    /* Completion is the release word and is always published last. */
+    mailbox->completionSequence = requestSequence;
+}
+
+void PokemonMoveHistoryTask6_FieldReadyDiagnosticPollImpl(void *fieldSystem)
+{
+    OverworldFieldReadyRetailPollFunc retailPoll =
+        (OverworldFieldReadyRetailPollFunc)0x023C8011;
+
+    /* Preserve the exact replaced call before any task-6 diagnostic work. */
+    retailPoll(fieldSystem);
+    PokemonMoveHistoryTask6_PokewalkerDiagnosticPollImpl();
 }
 
 BOOL __attribute__((section(".pokemon_move_history_task6_short_branch_targets")))

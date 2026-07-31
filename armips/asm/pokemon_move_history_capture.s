@@ -14,7 +14,9 @@ PokemonMoveHistoryTask6_GTSPlaceAndSeed equ 0x023BD468
 PokemonMoveHistoryTask6_GTSDeleteBoxAndRecord equ 0x023BD470
 PokemonMoveHistoryTask6_GTSRemovePartyAndRecord equ 0x023BD478
 PokemonMoveHistoryTask6_PokewalkerRadioSuccess equ 0x023BD480
-PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard equ 0x023BD488
+PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond equ 0x023BD488
+PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard equ 0x023BD490
+PokemonMoveHistoryTask6_PokewalkerDiagnosticReturn equ 0x023BD498
 
 /*
  * Task 3 permanent move-history hooks.
@@ -138,7 +140,7 @@ PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard equ 0x023BD488
 .org 0x021ED41A
     bl PokemonMoveHistoryTask6_PokewalkerRadioSuccess
 .org 0x021EDBEE
-    bl PokemonMoveHistoryTask6_PokewalkerRadioSuccess
+    bl PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond
 
 /*
  * Status-15 recovery restores the canonical PC owner (when present) and then

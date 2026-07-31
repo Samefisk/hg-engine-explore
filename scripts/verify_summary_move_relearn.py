@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import zipfile
 from pathlib import Path
 
 
@@ -480,7 +481,8 @@ def source_contracts(root: Path) -> None:
         < launcher.index("_load_authenticated_buffers(")
         < launcher.index("_compile_buffers(")
         and "spec_from_file_location" not in launcher
-        and "SourceFileLoader" not in launcher
+        and '"SourcelessFileLoader"' in launcher
+        and '"zipimporter"' in launcher
         and '"__pycache__" in parts' in launcher
         and "compile(" in launcher
         and "dont_inherit=True" in launcher
@@ -494,14 +496,19 @@ def source_contracts(root: Path) -> None:
         "buffer authentication and pycache-free execution",
     )
     require(
-        'sys.pycache_prefix != "/dev/null"' in launcher
-        and "not sys.dont_write_bytecode" in launcher
-        and "sys.flags.no_site != 1" in launcher
-        and '"site" in sys.modules' in launcher
+        'sys.pycache_prefix == "/dev/null"' in launcher
+        and "sys.dont_write_bytecode" in launcher
+        and "sys.flags.isolated == 1" in launcher
+        and "sys.flags.ignore_environment == 1" in launcher
+        and "sys.flags.no_site == 1" in launcher
+        and '"site" not in sys.modules' in launcher
         and "_stage_zero_invalidate_results(sys.argv[1:])" in launcher
         and "posix.unlink(target)" in launcher
         and launcher.index("import sys")
-        < launcher.index('sys.pycache_prefix != "/dev/null"')
+        < launcher.index('sys.pycache_prefix == "/dev/null"')
+        < launcher.index("_stage_zero_authenticate(sys.argv[1:])")
+        < launcher.index("import os")
+        and launcher.index("_stage_zero_tree_record(stdlib.get")
         < launcher.index("import os")
         and '"bytecode_policy"' in launcher
         and '"bytecode_reads_disabled": True' in launcher
@@ -510,13 +517,27 @@ def source_contracts(root: Path) -> None:
         and '"pycache_prefix": "/dev/null"' in launcher
         and "runtime Python bytecode-bypass policy differs" in launcher
         and "capture_runtime_environment()" in launcher
-        and "runtime binding requires -S -B" in manifest_builder
+        and "runtime binding requires -I -S -B -X" in manifest_builder
         and '"bytecode_policy"' in manifest_builder
         and '"bytecode_reads_disabled": True' in manifest_builder
         and '"absent_zip_paths": absent_zip_paths' in manifest_builder
         and "runtime zip import path must be absent" in manifest_builder
         and '"no_site": True' in manifest_builder
         and '"pycache_prefix": os.devnull' in manifest_builder
+        and '"isolated": True' in manifest_builder
+        and '"ignore_environment": True' in manifest_builder
+        and "_validate_binding_modules(stdlib_root)" in manifest_builder
+        and '"startup_bootstrap"' in manifest_builder
+        and "_PINNED_STAGE_ZERO_LAUNCHER_SHA256" in manifest_builder
+        and '"entry": "/tmp/hg-engine-venv/bin/python3"' in manifest_builder
+        and '"repo": "/hg-engine"' in manifest_builder
+        and '"shared_runtime": None' in manifest_builder
+        and "24390712683ee2a599ec3140ad90abd246b8efee9c4782a2deb8f24a9a70d312"
+        in manifest_builder
+        and manifest_builder.index(
+            'tree_record_zero(pinned["stdlib"]["root"])'
+        )
+        < manifest_builder.index("import argparse")
         and "import importlib" not in launcher
         and 'sys.modules.get("_frozen_importlib")' in launcher
         and launcher.index(
@@ -529,6 +550,10 @@ def source_contracts(root: Path) -> None:
         and "runtime module differs from publication manifest" in launcher
         and "loaded mutable native image is outside sealed closure" in launcher
         and "runtime libdesmume changed across native load" in launcher
+        and "_authenticate_loaded_python_modules(" in launcher
+        and 'python["startup_bootstrap"]' in launcher
+        and "runtime import path/finder closure changed during execution"
+        in launcher
         and '"BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path' in launcher
         and "require_bound_runtime=True" in launcher
         and "create_desmume()" in headless
@@ -546,9 +571,10 @@ def source_contracts(root: Path) -> None:
     require(
         build_wrapper.count("--bind-runtime") == 1
         and build_wrapper.count("--require-bound-runtime") == 1
-        and "PYTHONDONTWRITEBYTECODE=1" in build_wrapper
-        and build_wrapper.count("PYTHONPYCACHEPREFIX=/dev/null") == 2
-        and build_wrapper.count('"$runtime_python" -S -B') == 2
+        and build_wrapper.count("/usr/bin/env -i") >= 3
+        and build_wrapper.count(
+            '"$runtime_python" -I -S -B -X pycache_prefix=/dev/null'
+        ) == 2
         and 'runtime_python=".venv/bin/python3"' in build_wrapper
         and bind_index < verify_bound_index < delta_index,
         "managed build does not bind and verify the host runtime before Delta "
@@ -557,7 +583,8 @@ def source_contracts(root: Path) -> None:
     require(
         "AUTHENTICATED_HEADLESS" in party_verifier
         and "spec_from_file_location" not in party_verifier
-        and "SourceFileLoader" not in party_verifier
+        and "SourcelessFileLoader" not in party_verifier
+        and "pycache_prefix=/dev/null" in party_verifier
         and "compile(" in party_verifier
         and "module.__cached__ = None" in party_verifier,
         "party-integrity helper can reload unauthenticated cached bytecode",
@@ -566,9 +593,13 @@ def source_contracts(root: Path) -> None:
         "subprocess.Popen" not in runtime
         and "multiprocessing" not in runtime
         and runtime.count("subprocess.run(") >= 2
+        and runtime.count('            "-I",') == 2
         and runtime.count('            "-S",') == 2
         and runtime.count('            "-B",') == 2
-        and runtime.count('"PYTHONPYCACHEPREFIX": "/dev/null"') == 2,
+        and runtime.count('            "-X",') == 2
+        and runtime.count('            "pycache_prefix=/dev/null",') == 2
+        and "**os.environ" not in runtime
+        and runtime.count("env=dict(BOOTSTRAP_CHILD_ENVIRONMENT)") == 2,
         "runtime child evidence is no longer blocking and serialized",
     )
     route_start = runtime.index("def open_retail_daycare_lady(")
@@ -641,6 +672,57 @@ def source_contracts(root: Path) -> None:
         in runtime,
         "task-6 retail daycare evidence is not included in authenticated output",
     )
+    walker_rom_start = runtime.index("def task6_pokewalker_rom_evidence(")
+    walker_rom_end = runtime.index(
+        "\n\ndef run_isolated_scenario(", walker_rom_start
+    )
+    walker_rom = runtime[walker_rom_start:walker_rom_end]
+    for fragment in (
+        "def invoke_packaged_mailbox_operation(",
+        "TASK6_POKEWALKER_STAGE_ENTRY = 0x023BD420",
+        "TASK6_POKEWALKER_ACK_FIRST_ENTRY = 0x023BD480",
+        "TASK6_POKEWALKER_ACK_SECOND_ENTRY = 0x023BD488",
+        "TASK6_POKEWALKER_RECOVERY_ENTRY = 0x023BD490",
+        "TASK6_POKEWALKER_DIAGNOSTIC_POLL = 0x023BD4A0",
+        "TASK6_POKEWALKER_MAILBOX = 0x023BD4A8",
+        "TASK6_POKEWALKER_MAILBOX_MAGIC = 0x36574B50",
+        "register_exec(entry, entry_hit)",
+        "register_exec(TASK6_POKEWALKER_DIAGNOSTIC_POLL, poll_hit)",
+        "TASK6_POKEWALKER_MAILBOX + 0x00",
+        "invoke_packaged_mailbox_operation(",
+        "complete_store_metadata_exact",
+        "full_319_cancel",
+        "oldest_record_exact",
+        "second_revision_inert",
+        "all_unrelated_records_exact",
+        "diagnostic_mailbox_restored",
+        "zero_magic_retail_inert",
+        '"host_pc_or_register_write": False',
+        "party_pc_history_restored",
+        '"evidence_kind": "ROM-executed packaged task-6 transaction boundary"',
+    ):
+        require(
+            fragment in runtime if fragment.startswith("def invoke_")
+            or fragment.startswith("TASK6_")
+            or fragment.startswith("register")
+            or fragment.startswith("emu.")
+            or fragment.startswith("registers.")
+            else fragment in walker_rom,
+            f"ROM-executed Pokewalker evidence lost {fragment}",
+        )
+    require(
+        "set_next_instruction" not in runtime
+        and "registers.r15" not in runtime
+        and "registers.cpsr" not in runtime,
+        "ROM diagnostic reintroduced unsafe host PC/CPSR control",
+    )
+    require(
+        '"task6_pokewalker_rom"' in runtime
+        and "pokewalker_rom_evidence = isolated_scenario_evidence(" in runtime
+        and '"task6_pokewalker_rom_evidence": pokewalker_rom_evidence'
+        in runtime,
+        "ROM-executed Pokewalker evidence is not in authenticated output",
+    )
     require(
         '"--expected-probe-raw-sha256"' in runtime
         and "raw_sha256 = hashlib.sha256(raw_before).hexdigest()" in runtime
@@ -655,7 +737,7 @@ def source_contracts(root: Path) -> None:
         "def call_thumb_function(" not in runtime
         and "def task6_actual_hook_evidence(" not in runtime
         and "def task6_transaction_surrogate_evidence(" not in runtime,
-        "runtime verifier retained a synthetic CPU injector or dictionary model",
+        "runtime verifier retained an obsolete synthetic hook/model entry",
     )
     surrogate_start = runtime.index(
         "def task6_serialization_surrogate_evidence("
@@ -688,8 +770,8 @@ def source_contracts(root: Path) -> None:
         '"duplicate_ack_inert": True',
         "history_identity_count(",
         "validate_all_boxed_checksums(",
-        '"source-exact authenticated serialization surrogate"',
-        '"source-exact 0x88 serialization surrogate"',
+        '"non-probative source-exact serialization oracle"',
+        '"non-probative Python oracle; see ROM evidence"',
     ):
         require(
             fragment in task6_surrogate,
@@ -895,6 +977,17 @@ def bootstrap_host_contracts(root: Path) -> None:
         ),
         launcher.__dict__,
     )
+    runtime_python = root / ".venv/bin/python3"
+    if not runtime_python.is_file():
+        managed_venv = os.environ.get("VENV")
+        require(
+            root == Path("/hg-engine")
+            and managed_venv == "/tmp/hg-engine-venv",
+            "repository runtime Python is absent outside the exact managed "
+            "build environment",
+        )
+        runtime_python = Path(managed_venv) / "bin/python3"
+    require(runtime_python.is_file(), "repository runtime Python is absent")
 
     def colocated_cache_path(source: Path) -> Path:
         return (
@@ -903,18 +996,19 @@ def bootstrap_host_contracts(root: Path) -> None:
             / f"{source.stem}.{sys.implementation.cache_tag}.pyc"
         )
 
-    source_only_environment = dict(os.environ)
-    source_only_environment.update(
-        {
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPYCACHEPREFIX": "/dev/null",
-        }
-    )
+    source_only_environment = {
+        "PATH": "/usr/bin:/bin",
+        "LC_ALL": "C",
+        "SDL_AUDIODRIVER": "dummy",
+    }
     source_only_probe = subprocess.run(
         [
-            sys.executable,
+            str(runtime_python),
+            "-I",
             "-S",
             "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
             "-v",
             "-c",
             "import hashlib, json, os, subprocess, tempfile, types",
@@ -1058,6 +1152,7 @@ def bootstrap_host_contracts(root: Path) -> None:
         source_overrides: dict[str, bytes] | None = None,
         mutate: object | None = None,
         arguments_only: bool = False,
+        environment: dict[str, str] | None = None,
     ) -> None:
         sentinel = fixture_root / "runtime-executed"
         worker = (
@@ -1086,9 +1181,12 @@ def bootstrap_host_contracts(root: Path) -> None:
         stale = fixture_root / "runtime-result.json"
         stale.write_text('{"status": "passing-stale-evidence"}\n')
         command = [
-            sys.executable,
+            str(runtime_python),
+            "-I",
             "-S",
             "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
             str(paths[launcher.LAUNCHER_RELATIVE]),
             "--result-json",
             str(stale),
@@ -1114,7 +1212,11 @@ def bootstrap_host_contracts(root: Path) -> None:
             capture_output=True,
             text=True,
             timeout=30,
-            env=source_only_environment,
+            env=(
+                source_only_environment
+                if environment is None
+                else environment
+            ),
         )
         require(
             completed.returncode != 0,
@@ -1141,7 +1243,7 @@ def bootstrap_host_contracts(root: Path) -> None:
         unsealed_environment.pop("PYTHONDONTWRITEBYTECODE", None)
         unsealed_start = subprocess.run(
             [
-                sys.executable,
+                str(runtime_python),
                 str(launcher_path),
                 "--result-json",
                 str(unsealed_stale),
@@ -1154,11 +1256,243 @@ def bootstrap_host_contracts(root: Path) -> None:
         )
         require(
             unsealed_start.returncode != 0
-            and "-S -B and PYTHONPYCACHEPREFIX=/dev/null"
+            and "-I -S -B -X pycache_prefix=/dev/null"
             in unsealed_start.stderr
             and not unsealed_stale.exists(),
             "runtime launcher accepted an unsealed startup or retained stale "
             "evidence",
+        )
+
+        hostile_root = temp / "hostile-python-startup"
+        hostile_root.mkdir()
+
+        def poison_source(sentinel: Path) -> str:
+            return f"open({str(sentinel)!r}, 'w').write('executed')\n"
+
+        attack_environments: list[tuple[str, dict[str, str], Path]] = []
+
+        pythonpath_sentinel = hostile_root / "pythonpath-executed"
+        pythonpath_root = hostile_root / "pythonpath"
+        pythonpath_root.mkdir()
+        (pythonpath_root / "hashlib.py").write_text(
+            poison_source(pythonpath_sentinel)
+        )
+        attack_environments.append(
+            (
+                "hostile PYTHONPATH source",
+                {**os.environ, "PYTHONPATH": str(pythonpath_root)},
+                pythonpath_sentinel,
+            )
+        )
+
+        for suffix in (".whl", ".arbitrary-python-archive"):
+            sentinel = hostile_root / f"archive{suffix}.executed"
+            archive = hostile_root / f"poison{suffix}"
+            with zipfile.ZipFile(archive, "w") as stream:
+                stream.writestr("hashlib.py", poison_source(sentinel))
+            attack_environments.append(
+                (
+                    f"hostile archive {suffix}",
+                    {**os.environ, "PYTHONPATH": str(archive)},
+                    sentinel,
+                )
+            )
+
+        sourceless_sentinel = hostile_root / "sourceless-executed"
+        sourceless_root = hostile_root / "sourceless"
+        sourceless_root.mkdir()
+        sourceless_code = compile(
+            poison_source(sourceless_sentinel),
+            str(sourceless_root / "hashlib.py"),
+            "exec",
+            dont_inherit=True,
+            optimize=0,
+        )
+        (sourceless_root / "hashlib.pyc").write_bytes(
+            importlib.util.MAGIC_NUMBER + bytes(12) + marshal.dumps(sourceless_code)
+        )
+        attack_environments.append(
+            (
+                "hostile direct module.pyc",
+                {**os.environ, "PYTHONPATH": str(sourceless_root)},
+                sourceless_sentinel,
+            )
+        )
+
+        site_sentinel = hostile_root / "sitecustomize-executed"
+        site_root = hostile_root / "sitecustomize"
+        site_root.mkdir()
+        (site_root / "sitecustomize.py").write_text(poison_source(site_sentinel))
+        attack_environments.append(
+            (
+                "hostile sitecustomize",
+                {**os.environ, "PYTHONPATH": str(site_root)},
+                site_sentinel,
+            )
+        )
+
+        pth_sentinel = hostile_root / "pth-executed"
+        user_base = hostile_root / "user-base"
+        user_site = (
+            user_base
+            / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}"
+            / "site-packages"
+        )
+        user_site.mkdir(parents=True)
+        (user_site / "poison.pth").write_text(
+            "import builtins; " + poison_source(pth_sentinel)
+        )
+        attack_environments.append(
+            (
+                "hostile user-site .pth",
+                {**os.environ, "PYTHONUSERBASE": str(user_base)},
+                pth_sentinel,
+            )
+        )
+
+        def isolated_policy_probe(
+            label: str,
+            environment: dict[str, str],
+            sentinel: Path,
+            flags: list[str],
+        ) -> None:
+            stale = hostile_root / (re.sub(r"\W+", "-", label) + ".json")
+            stale.write_text('{"status":"stale"}\n')
+            completed = subprocess.run(
+                [
+                    str(runtime_python),
+                    *flags,
+                    str(launcher_path),
+                    "--result-json",
+                    str(stale),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=environment,
+            )
+            require(
+                completed.returncode != 0
+                and not stale.exists()
+                and not sentinel.exists(),
+                f"{label} executed code or retained stale evidence",
+            )
+
+        exact_flags = [
+            "-I",
+            "-S",
+            "-B",
+            "-X",
+            "pycache_prefix=/dev/null",
+        ]
+        for label, environment, sentinel in attack_environments:
+            calibration_python = runtime_python
+            calibration_code = (
+                f"import site; site.addsitedir({str(user_site)!r})"
+                if ".pth" in label
+                else ("pass" if "sitecustomize" in label else "import hashlib")
+            )
+            calibration_flags = (
+                ["-S", "-B"]
+                if ".pth" in label
+                else ([] if "sitecustomize" in label else ["-S", "-B"])
+            )
+            calibration = subprocess.run(
+                [
+                    str(calibration_python),
+                    *calibration_flags,
+                    "-c",
+                    calibration_code,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=environment,
+            )
+            require(
+                calibration.returncode == 0 and sentinel.is_file(),
+                f"{label} fixture did not calibrate executable attack code",
+            )
+            sentinel.unlink()
+            isolated_policy_probe(label, environment, sentinel, exact_flags)
+
+        flag_drop_env = {
+            **os.environ,
+            "PYTHONPATH": str(pythonpath_root),
+        }
+        for label, flags in (
+            ("missing isolated flag", exact_flags[1:]),
+            ("missing no-site flag", ["-I", "-B", "-X", "pycache_prefix=/dev/null"]),
+            ("missing no-bytecode flag", ["-I", "-S", "-X", "pycache_prefix=/dev/null"]),
+            ("missing pycache sink", ["-I", "-S", "-B"]),
+        ):
+            isolated_policy_probe(label, flag_drop_env, pythonpath_sentinel, flags)
+
+        combined_hostile_environment = dict(os.environ)
+        combined_hostile_environment["PYTHONPATH"] = os.pathsep.join(
+            [
+                str(pythonpath_root),
+                str(hostile_root / "poison.whl"),
+                str(hostile_root / "poison.arbitrary-python-archive"),
+                str(sourceless_root),
+                str(site_root),
+            ]
+        )
+        combined_hostile_environment["PYTHONUSERBASE"] = str(user_base)
+        subprocess_failure_fixture(
+            temp / "subprocess-hostile-environment",
+            environment=combined_hostile_environment,
+        )
+        require(
+            all(not sentinel.exists() for _, _, sentinel in attack_environments),
+            "hostile startup code executed during authenticated fixture",
+        )
+
+        canonical_stdlib = temp / "canonical-stdlib-closure"
+        canonical_stdlib.mkdir()
+        canonical_hashlib = canonical_stdlib / "hashlib.py"
+        canonical_hashlib.write_text('VALUE = "sealed-canonical-source"\n')
+        canonical_record = launcher._stage_zero_tree_record(
+            str(canonical_stdlib)
+        )
+        canonical_sentinel = canonical_stdlib / "poison-executed"
+        canonical_hashlib.write_text(
+            f"open({str(canonical_sentinel)!r}, 'w').write('executed')\n"
+            'VALUE = "poisoned-canonical-source"\n'
+        )
+        canonical_loader = importlib.machinery.SourceFileLoader(
+            "canonical_stdlib_poison_calibration",
+            str(canonical_hashlib),
+        )
+        canonical_spec = importlib.util.spec_from_loader(
+            canonical_loader.name,
+            canonical_loader,
+        )
+        require(canonical_spec is not None, "canonical poison spec is absent")
+        canonical_module = importlib.util.module_from_spec(canonical_spec)
+        canonical_loader.exec_module(canonical_module)
+        require(
+            canonical_sentinel.is_file()
+            and canonical_module.VALUE == "poisoned-canonical-source",
+            "canonical stdlib poison fixture did not calibrate",
+        )
+        canonical_sentinel.unlink()
+        invalidate_stale(
+            temp / "canonical-stdlib-poison-result.json",
+            lambda: launcher._require(
+                launcher._stage_zero_tree_record(str(canonical_stdlib))
+                == canonical_record,
+                "stage-zero canonical stdlib closure differs",
+            ),
+            RuntimeError,
+            "canonical stdlib stage-zero poison",
+        )
+        require(
+            not canonical_sentinel.exists(),
+            "canonical stdlib poison executed before authentication",
         )
 
         startup_root = temp / "startup-pycache"
@@ -1197,7 +1531,7 @@ def bootstrap_host_contracts(root: Path) -> None:
         poisoned_environment.pop("PYTHONPYCACHEPREFIX", None)
         poisoned_environment.pop("PYTHONDONTWRITEBYTECODE", None)
         poison_calibration = subprocess.run(
-            [sys.executable, "-S", "-B", "-c", startup_command],
+            [str(runtime_python), "-S", "-B", "-c", startup_command],
             check=False,
             capture_output=True,
             text=True,
@@ -1213,7 +1547,17 @@ def bootstrap_host_contracts(root: Path) -> None:
         )
         startup_sentinel.unlink()
         source_only_execution = subprocess.run(
-            [sys.executable, "-S", "-B", "-v", "-c", startup_command],
+            [
+                str(runtime_python),
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
+                "-v",
+                "-c",
+                startup_command,
+            ],
             check=False,
             capture_output=True,
             text=True,

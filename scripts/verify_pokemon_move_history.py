@@ -1459,7 +1459,9 @@ def main() -> None:
         ("PokemonMoveHistoryTask6_PCStoragePlaceAndSeed", 0x28),
         ("SwapPartyPokemonMove", 0x30),
         ("PokemonMoveHistoryTask6_PokewalkerRadioSuccess", 0x80),
-        ("PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard", 0x88),
+        ("PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond", 0x88),
+        ("PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard", 0x90),
+        ("PokemonMoveHistoryTask6_PokewalkerDiagnosticReturn", 0x98),
     ):
         require(
             f"{name} = "

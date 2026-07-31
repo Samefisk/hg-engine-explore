@@ -44,14 +44,16 @@ OVERLAY153_CALL_INVENTORY_SHA256 = (
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
+OVERLAY155_DIAGNOSTIC_SCRATCH = 0x023BE200
+OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE = 0x134
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "e28e81b6acbb71dd64ac65c25851de7bf057bb31241cd93b25dc7b5d0333505c"
+    "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "439bf4b541e094f793b6d495a7cb90b33f6d4ae917b7869fec04242d32ffce15"
+    "f47a9465293925c3a5427218c869195c2448992aabb85c805581298b1f6124f8"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "264e227b3840778947108cba56583fe89e3a5191d5e3e3878cd7d1efe5a1da7f"
+    "e3ec459a55469ba4ef260055acdda46c1813c22499b5675fe34f31604d2732e9"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -1733,6 +1735,7 @@ def source_contracts() -> None:
         REPO / "src/pokemon_move_history_overlay/pokemon_move_relearn.c"
     ).read_text()
     pokemon = (REPO / "src/pokemon.c").read_text()
+    overworld_wild = (REPO / "src/overworld_wild_spawns.c").read_text()
     task6 = (
         REPO
         / "src/pokemon_move_history_task6_overlay/"
@@ -1826,7 +1829,7 @@ def source_contracts() -> None:
             "--managed-build-clean"
         )
         == 2
-        and build_wrapper.count("/usr/bin/env -i") == 2
+        and build_wrapper.count("/usr/bin/env -i") == 4
         and build_wrapper.count("--workdir /hg-engine") == 2
         and "/bin/bash" not in build_wrapper
         and "--pre-make && make" not in build_wrapper
@@ -2581,10 +2584,92 @@ def source_contracts() -> None:
     ordered(
         walker_recovery,
         [
+            "if (pokewalkerApp != NULL)",
             "retailRecovery(pokewalkerApp);",
             "sPokewalkerPendingValid = FALSE;",
         ],
         "Pokewalker recovery discard",
+    )
+    require(
+        "PokemonMoveHistory_Seed(" not in walker_recovery
+        and "PokemonMoveHistory_RecordSnapshot(" not in walker_recovery,
+        "Pokewalker recovery diagnostic boundary mutates persisted history",
+    )
+    diagnostic_poll = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_PokewalkerDiagnosticPollImpl",
+    )
+    ordered(
+        diagnostic_poll,
+        [
+            "if (mailbox->magic != "
+            "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_MAGIC)",
+            "requestSequence = mailbox->requestSequence;",
+            "mailbox->magic = 0;",
+            "mailbox->status = "
+            "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_RUNNING;",
+            "requestSequence != mailbox->completionSequence + 1",
+            "saveData = SaveBlock2_get();",
+            "storage = (PCStorage *)SaveArray_Get(",
+            "switch (operation)",
+            "PokemonMoveHistoryTask6_PCStorageGetAndStage(",
+            "PokemonMoveHistoryTask6_PokewalkerRadioSuccess(",
+            "PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond(",
+            "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard(NULL);",
+            "mailbox->status = "
+            "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_COMPLETE;",
+            "mailbox->completionSequence = requestSequence;",
+        ],
+        "ROM-executed Pokewalker diagnostic mailbox",
+    )
+    require(
+        "#define TASK6_SAVE_PCSTORAGE 41" in task6
+        and "TASK6_POKEWALKER_DIAGNOSTIC_WORDS" in task6
+        and "boxno >= NUM_PC_BOXES" in diagnostic_poll
+        and "slotno >= MONS_PER_BOX" in diagnostic_poll
+        and "requestSequence == 0" in diagnostic_poll
+        and diagnostic_poll.count(
+            "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_REJECTED"
+        ) >= 4,
+        "Pokewalker diagnostic validation/save ownership differs",
+    )
+    field_ready_poll = function_body(
+        without_comments(task6),
+        "PokemonMoveHistoryTask6_FieldReadyDiagnosticPollImpl",
+    )
+    ordered(
+        field_ready_poll,
+        [
+            "(OverworldFieldReadyRetailPollFunc)0x023C8011;",
+            "retailPoll(fieldSystem);",
+            "PokemonMoveHistoryTask6_PokewalkerDiagnosticPollImpl();",
+        ],
+        "field-ready retail-preserving diagnostic poll",
+    )
+    field_ready_task = function_body(
+        without_comments(overworld_wild),
+        "OverworldWildSpawns_FieldReadyTask",
+    )
+    require(
+        field_ready_task.count(
+            "OverworldFollowerSelectorTaskPollEntry(fieldSystem);"
+        ) == 1
+        and ".set OverworldFollowerSelectorTaskPollEntry, 0x023BD4A1"
+        in overworld_wild
+        and '#include "../include/pokemon_move_history.h"'
+        not in overworld_wild
+        and "if (fieldSystem != gFieldSysPtr)" in field_ready_task
+        and "if (fieldSystem->taskman != NULL)" in field_ready_task,
+        "field-ready diagnostic hook owner/calling context differs",
+    )
+    require(
+        "sizeof(PokemonMoveHistoryTask6DiagnosticMailbox) == 0x30"
+        in task6
+        and "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_MAGIC 0x36574B50"
+        in header
+        and "POKEMON_MOVE_HISTORY_TASK6_DIAGNOSTIC_STATUS_COMPLETE "
+        "0xC0016D48" in header,
+        "Pokewalker diagnostic mailbox ABI differs",
     )
     sanitizer = function_body(
         without_comments(script_commands),
@@ -2695,7 +2780,13 @@ def source_contracts() -> None:
         and "MoveHistoryTask6Entry_GTSDeleteBoxAndRecord:" in task6_entry
         and "MoveHistoryTask6Entry_GTSRemovePartyAndRecord:" in task6_entry
         and "MoveHistoryTask6Entry_PokewalkerRadioSuccess:" in task6_entry
+        and "MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond:"
+        in task6_entry
         and "MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard:" in task6_entry
+        and "MoveHistoryTask6Entry_PokewalkerDiagnosticReturn:"
+        in task6_entry
+        and "MoveHistoryTask6Entry_FieldReadyDiagnosticPoll:"
+        in task6_entry
         and "ORIGIN(rom) + 0x38" in task6_linker
         and "ORIGIN(rom) + 0x40" in task6_linker
         and "ORIGIN(rom) + 0x48" in task6_linker
@@ -2708,6 +2799,10 @@ def source_contracts() -> None:
         and "ORIGIN(rom) + 0x78" in task6_linker
         and "ORIGIN(rom) + 0x80" in task6_linker
         and "ORIGIN(rom) + 0x88" in task6_linker
+        and "ORIGIN(rom) + 0x90" in task6_linker
+        and "ORIGIN(rom) + 0x98" in task6_linker
+        and "ORIGIN(rom) + 0xA0" in task6_linker
+        and "ORIGIN(rom) + 0xA8" in task6_linker
         and "PokemonMoveHistoryTask6_ScriptTeachMove = "
         "0x023BD464 | 1;" in rom_ld
         and "PokemonMoveHistoryTask6_GTSPlaceAndSeed = "
@@ -2720,8 +2815,17 @@ def source_contracts() -> None:
         "0x023BD420 | 1;" in rom_ld
         and "PokemonMoveHistoryTask6_PokewalkerRadioSuccess = "
         "0x023BD480 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_PokewalkerRadioSuccessSecond = "
+        "0x023BD488 | 1;" in rom_ld
         and "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscard = "
-        "0x023BD488 | 1;" in rom_ld,
+        "0x023BD490 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_PokewalkerDiagnosticReturn = "
+        "0x023BD498 | 1;" in rom_ld
+        and "PokemonMoveHistoryTask6_FieldReadyDiagnosticPoll = "
+        "0x023BD4A0 | 1;" in rom_ld
+        and "gPokemonMoveHistoryTask6DiagnosticMailbox = 0x023BD4A8;"
+        in rom_ld
+        and ".org 0x023D9ABC" not in patches,
         "task-6 resident stub ABI differs",
     )
     for entry_name, implementation in (
@@ -2770,8 +2874,16 @@ def source_contracts() -> None:
             "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl",
         ),
         (
+            "MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond",
+            "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl",
+        ),
+        (
             "MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard",
             "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl",
+        ),
+        (
+            "MoveHistoryTask6Entry_FieldReadyDiagnosticPoll",
+            "PokemonMoveHistoryTask6_FieldReadyDiagnosticPollImpl",
         ),
     ):
         entry_start = task6_entry.index(f"{entry_name}:")
@@ -2785,6 +2897,17 @@ def source_contracts() -> None:
             and f".word {implementation} + 1" in entry_body,
             f"{entry_name} long entry target differs",
         )
+    diagnostic_return = task6_entry[
+        task6_entry.index("MoveHistoryTask6Entry_PokewalkerDiagnosticReturn:"):
+    ]
+    require(
+        "24: b 24b" in diagnostic_return
+        and "host PC injection is forbidden" in diagnostic_return
+        and patches.count(
+            "PokemonMoveHistoryTask6_PokewalkerDiagnosticReturn"
+        ) == 1,
+        "Pokewalker diagnostic return trap is callable from retail",
+    )
     for wrapper_name in (
         "PokemonMoveRelearn_MarkHistoryMove",
         "PokemonMoveRelearn_Append",
@@ -2920,7 +3043,7 @@ def source_contracts() -> None:
         "-7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin "
         "-y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay "
         "-t $(BASE)/banner.bin -h $(BASE)/header.bin",
-        "$(PYTHON_NO_VENV) "
+        "$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null "
         "scripts/pokemon_move_history_build_manifest.py "
         "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp "
@@ -2947,7 +3070,7 @@ def source_contracts() -> None:
         "--rom $(BUILDROM).tmp",
         "$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py "
         "--rom $(BUILDROM).tmp",
-        "$(PYTHON_NO_VENV) "
+        "$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null "
         "scripts/pokemon_move_history_build_manifest.py --publish-pair "
         "--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--candidate-rom $(BUILDROM).tmp "
@@ -3517,12 +3640,14 @@ def source_contracts() -> None:
             (
                 "before publish",
                 makefile.replace(
-                    "\t$(PYTHON_NO_VENV) "
-                    "scripts/pokemon_move_history_build_manifest.py \\\n"
+                    "\t$(VENV)/bin/python3 -I -S -B -X "
+                    "pycache_prefix=/dev/null \\\n"
+                    "\t\tscripts/pokemon_move_history_build_manifest.py \\\n"
                     "\t\t--publish-pair",
                     f"\t{command}\n"
-                    "\t$(PYTHON_NO_VENV) "
-                    "scripts/pokemon_move_history_build_manifest.py \\\n"
+                    "\t$(VENV)/bin/python3 -I -S -B -X "
+                    "pycache_prefix=/dev/null \\\n"
+                    "\t\tscripts/pokemon_move_history_build_manifest.py \\\n"
                     "\t\t--publish-pair",
                     1,
                 ),
@@ -5536,14 +5661,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     155: (
         OVERLAY155_BASE,
-        0x724,
+        0x994,
         0,
         0,
         0,
         155,
         0,
         0x423600,
-        0x423D24,
+        0x423F94,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -6197,21 +6322,23 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "wireless/GTS packaged commit hooks differ",
     )
     require(
-        thumb_bl_target(packaged_ov112, ov112_base, 0x021EE65A)
+        thumb_bl_target(packaged_ov129, ov129_base, 0x023D9ABC)
+        == OVERLAY155_BASE + 0xA0
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EE65A)
         == OVERLAY155_BASE + 0x20
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021ED41A)
         == OVERLAY155_BASE + 0x80
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EDBEE)
-        == OVERLAY155_BASE + 0x80
-        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EC0AA)
         == OVERLAY155_BASE + 0x88
+        and thumb_bl_target(packaged_ov112, ov112_base, 0x021EC0AA)
+        == OVERLAY155_BASE + 0x90
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EE86A)
         == OVERLAY155_BASE + 0x28
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EEB8C)
         == OVERLAY155_BASE + 0x28
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EEC7E)
         == OVERLAY155_BASE + 0x28,
-        "Pokewalker packaged transaction-boundary hooks differ",
+        "Pokewalker packaged transaction/poll-boundary hooks differ",
     )
     require(
         bytes_at(packaged_ov70, ov70_base, 0x022418A4, 0x68)
@@ -6279,6 +6406,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         0 < len(packaged_ov155) <= OVERLAY155_LIMIT,
         "packaged overlay 155 exceeds its fixed reservation",
     )
+    require(
+        ov155_base + len(packaged_ov155)
+        <= OVERLAY155_DIAGNOSTIC_SCRATCH
+        and OVERLAY155_DIAGNOSTIC_SCRATCH
+        + OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE
+        <= ov155_base + OVERLAY155_LIMIT,
+        "packaged overlay 155 overlaps the sealed diagnostic scratch",
+    )
     task6_symbols = symbol_table(task6_linked)
     for name, offset in (
         ("MoveHistoryTask6Entry_IsCanonical", 0x00),
@@ -6298,7 +6433,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ("MoveHistoryTask6Entry_GTSDeleteBoxAndRecord", 0x70),
         ("MoveHistoryTask6Entry_GTSRemovePartyAndRecord", 0x78),
         ("MoveHistoryTask6Entry_PokewalkerRadioSuccess", 0x80),
-        ("MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard", 0x88),
+        ("MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond", 0x88),
+        ("MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard", 0x90),
+        ("MoveHistoryTask6Entry_PokewalkerDiagnosticReturn", 0x98),
+        ("MoveHistoryTask6Entry_FieldReadyDiagnosticPoll", 0xA0),
+        ("gPokemonMoveHistoryTask6DiagnosticMailbox", 0xA8),
     ):
         require(
             task6_symbols.get(name) == ov155_base + offset,
@@ -6307,7 +6446,9 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     for offset, implementation in (
         (0x20, "PokemonMoveHistoryTask6_PCStorageGetAndStageImpl"),
         (0x80, "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl"),
-        (0x88, "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl"),
+        (0x88, "PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl"),
+        (0x90, "PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl"),
+        (0xA0, "PokemonMoveHistoryTask6_FieldReadyDiagnosticPollImpl"),
     ):
         require(
             packaged_ov155[offset:offset + 4]
@@ -6316,6 +6457,15 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             == task6_symbols.get(implementation, 0) + 1,
             f"packaged overlay 155 long entry target differs: {implementation}",
         )
+    require(
+        packaged_ov155[0x98:0xA0]
+        == bytes.fromhex("fe e7 00 00 00 00 00 00"),
+        "packaged overlay 155 diagnostic return trap differs",
+    )
+    require(
+        packaged_ov155[0xA8:0xD8] == bytes(0x30),
+        "packaged overlay 155 diagnostic mailbox is not zero-initialized",
+    )
     task6_calls = packaged_thumb_calls(
         packaged_ov155,
         ov155_base,
@@ -6323,9 +6473,9 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         len(packaged_ov155),
     )
     require(
-        len(task6_calls) == 69
+        len(task6_calls) == 75
         and sum(kind == "bl" for _address, kind, _target in task6_calls)
-        == 62
+        == 68
         and sum(
             kind == "blx_reg"
             for _address, kind, _target in task6_calls

@@ -149,13 +149,36 @@ MoveHistoryTask6Entry_PokewalkerRadioSuccess:
     .align 2
 21: .word PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl + 1
 
-.global MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
-.type MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard, %function
-MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard:
+.global MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond
+.type MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond, %function
+MoveHistoryTask6Entry_PokewalkerRadioSuccessSecond:
     ldr r3, 22f
     bx r3
     .align 2
-22: .word PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl + 1
+22: .word PokemonMoveHistoryTask6_PokewalkerRadioSuccessImpl + 1
+
+.global MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard
+.type MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard, %function
+MoveHistoryTask6Entry_PokewalkerRecoverAndDiscard:
+    ldr r3, 23f
+    bx r3
+    .align 2
+23: .word PokemonMoveHistoryTask6_PokewalkerRecoverAndDiscardImpl + 1
+
+.global MoveHistoryTask6Entry_PokewalkerDiagnosticReturn
+.type MoveHistoryTask6Entry_PokewalkerDiagnosticReturn, %function
+MoveHistoryTask6Entry_PokewalkerDiagnosticReturn:
+    /* Retail-unreferenced legacy fail-stop; host PC injection is forbidden. */
+24: b 24b
+    .space 6, 0
+
+.global MoveHistoryTask6Entry_FieldReadyDiagnosticPoll
+.type MoveHistoryTask6Entry_FieldReadyDiagnosticPoll, %function
+MoveHistoryTask6Entry_FieldReadyDiagnosticPoll:
+    ldr r3, 25f
+    bx r3
+    .align 2
+25: .word PokemonMoveHistoryTask6_FieldReadyDiagnosticPollImpl + 1
 
 .section .text, "ax", %progbits
 

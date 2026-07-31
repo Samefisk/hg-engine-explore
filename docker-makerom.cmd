@@ -17,13 +17,13 @@ if [ "$build_status" -eq 0 ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
     exit 1
   fi
-  PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=/dev/null \
-    "$runtime_python" -S -B \
+  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
+    "$runtime_python" -I -S -B -X pycache_prefix=/dev/null \
     scripts/pokemon_move_history_build_manifest.py \
     --bind-runtime build/pokemon_move_history_capture_build.json \
     --rom test.nds || exit $?
-  PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=/dev/null \
-    "$runtime_python" -S -B \
+  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
+    "$runtime_python" -I -S -B -X pycache_prefix=/dev/null \
     scripts/pokemon_move_history_build_manifest.py \
     --verify build/pokemon_move_history_capture_build.json \
     --rom test.nds --require-bound-runtime || exit $?
