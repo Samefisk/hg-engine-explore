@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Key-only Summary relearn acceptance against a preserved DeSmuME DSV."""
+"""Deterministic key/touch Summary relearn acceptance on a preserved DSV."""
 
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ import importlib.util
 import json
 import os
 import struct
+import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,12 +31,34 @@ TARGET_SLOT = 2
 TARGET_SPECIES = 72
 TARGET_REPLACEMENT_SLOT = 3
 TARGET_MOVE = 40  # Poison Sting
+CONTROLLED_MOVES = (57, 48, 352, 103)
+CONTROLLED_PP = (8, 8, 8, 1)
+CONTROLLED_PP_UPS = (0, 0, 0, 2)
+CONTROLLED_HISTORY_MOVES = (
+    57, 48, 352, 103, 62, 114, 229, 243
+)
+HISTORY_MIRROR_OFFSETS = (0x3B000, 0x7B000)
+HISTORY_FOOTER_OFFSET = 0x4FE0
+HISTORY_FOOTER_MAGIC = 0x4D48464F
 SUMMARY_STATE_ORIGINAL_MOVES_OFFSET = 134
 SUMMARY_STATE_CANDIDATE_COUNT_OFFSET = 150
+SUMMARY_STATE_CANDIDATE_CURSOR_OFFSET = 152
+SUMMARY_STATE_CANDIDATE_TOP_OFFSET = 154
+SUMMARY_STATE_PENDING_MOVE_OFFSET = 156
+SUMMARY_STATE_ORIGINAL_ARG_MOVE_OFFSET = 158
 SUMMARY_STATE_OWNER_POS_OFFSET = 160
+SUMMARY_STATE_SELECTED_SLOT_OFFSET = 161
 SUMMARY_STATE_MODE_OFFSET = 163
 SUMMARY_STATE_RETAIL_SIZE = 0x7D8
 SUMMARY_OWNER_DIRTY_OFFSET = 0x38
+SUMMARY_BASE_MOVE_OFFSET = 0x18
+SUMMARY_BASE_POS_OFFSET = 0x14
+SUMMARY_BASE_DATA_TYPE_OFFSET = 0x11
+SUMMARY_BASE_POINTER_OFFSET = 0x22C
+SUMMARY_PAGE_MODE_OFFSET = 0x7BC
+SUMMARY_CACHE_MOVES_OFFSET = 0x264
+SUMMARY_CACHE_CUR_PP_OFFSET = 0x26C
+SUMMARY_CACHE_MAX_PP_OFFSET = 0x270
 
 
 def ensure_repo_venv() -> None:
@@ -89,6 +113,13 @@ def tap(emu: DeSmuME, key: str, gap: int = 60) -> None:
     HEADLESS.tap_key(emu, key, 2, gap)
 
 
+def touch(emu: DeSmuME, x: int, y: int, gap: int = 60) -> None:
+    emu.input.touch_set_pos(x, y)
+    HEADLESS.cycle(emu, 8)
+    emu.input.touch_release()
+    HEADLESS.cycle(emu, gap)
+
+
 def screenshot(emu: DeSmuME, root: Path, name: str) -> str:
     path = root / name
     emu.screenshot().save(path)
@@ -120,6 +151,22 @@ def read_u16(emu: DeSmuME, address: int) -> int:
 
 def read_u32(emu: DeSmuME, address: int) -> int:
     return emu.memory.unsigned[address:address:4]
+
+
+def write_bytes(emu: DeSmuME, address: int, data: bytes) -> None:
+    emu.memory.unsigned[address:address + len(data):1] = data
+
+
+def write_u8(emu: DeSmuME, address: int, value: int) -> None:
+    write_bytes(emu, address, bytes((value & 0xFF,)))
+
+
+def write_u16(emu: DeSmuME, address: int, value: int) -> None:
+    write_bytes(emu, address, struct.pack("<H", value))
+
+
+def write_u32(emu: DeSmuME, address: int, value: int) -> None:
+    write_bytes(emu, address, struct.pack("<I", value))
 
 
 def runtime_party(emu: DeSmuME) -> bytes:
@@ -174,6 +221,32 @@ def party_record(party: bytes, slot: int) -> bytes:
     return party[start:start + 0xEC]
 
 
+def encrypt_box_payload(payload: bytes, checksum: int) -> bytes:
+    seed = checksum
+    encrypted = bytearray(payload)
+    for offset in range(0, len(encrypted), 2):
+        seed = (seed * 1103515245 + 24691) & 0xFFFFFFFF
+        word = struct.unpack_from("<H", encrypted, offset)[0]
+        struct.pack_into("<H", encrypted, offset, word ^ (seed >> 16))
+    return bytes(encrypted)
+
+
+def controlled_party_record(record: bytes) -> bytes:
+    payload, _, _, _ = record_payload(record)
+    payload_data = bytearray(payload)
+    pid = struct.unpack_from("<I", record)[0]
+    permutation = (pid & 0x3E000) >> 13
+    attacks = PARTY.SUBSTRUCT_OFFSETS[permutation][1]
+    struct.pack_into("<4H", payload_data, attacks, *CONTROLLED_MOVES)
+    struct.pack_into("<4B", payload_data, attacks + 8, *CONTROLLED_PP)
+    struct.pack_into("<4B", payload_data, attacks + 12, *CONTROLLED_PP_UPS)
+    checksum = sum(struct.unpack("<64H", payload_data)) & 0xFFFF
+    controlled = bytearray(record)
+    struct.pack_into("<H", controlled, 6, checksum)
+    controlled[8:0x88] = encrypt_box_payload(payload_data, checksum)
+    return bytes(controlled)
+
+
 def validate_all_party_checksums(party: bytes) -> list[dict[str, int | bool]]:
     results: list[dict[str, int | bool]] = []
     for index in range(6):
@@ -197,8 +270,13 @@ def validate_all_party_checksums(party: bytes) -> list[dict[str, int | bool]]:
     return results
 
 
-def locate_summary_relearn_state(emu: DeSmuME) -> int:
-    signature = struct.pack("<4H", 35, 48, 352, 103)
+def locate_summary_relearn_state(
+    emu: DeSmuME,
+    original_moves: tuple[int, ...] = CONTROLLED_MOVES,
+    owner_pos: int = TARGET_SLOT,
+    minimum_candidates: int = 1,
+) -> int:
+    signature = struct.pack("<4H", *original_moves)
     for chunk_address in range(0x02000000, 0x02400000, 0x10000):
         chunk = read_bytes(emu, chunk_address, 0x10000)
         offset = chunk.find(signature)
@@ -210,15 +288,11 @@ def locate_summary_relearn_state(emu: DeSmuME) -> int:
                 and read_u16(
                     emu,
                     state + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET,
-                ) == 3
+                ) >= minimum_candidates
                 and read_u8(
                     emu,
                     state + SUMMARY_STATE_OWNER_POS_OFFSET,
-                ) == TARGET_SLOT
-                and struct.unpack(
-                    "<3H",
-                    read_bytes(emu, state + 4, 6),
-                ) == (40, 55, 51)
+                ) == owner_pos
             ):
                 owner = read_u32(emu, state)
                 require(
@@ -232,6 +306,145 @@ def locate_summary_relearn_state(emu: DeSmuME) -> int:
                 return state
             offset = chunk.find(signature, offset + 1)
     raise RuntimeError("could not locate live Summary relearn state")
+
+
+def locate_inactive_summary_state(
+    emu: DeSmuME,
+    moves: tuple[int, ...] = CONTROLLED_MOVES,
+    owner_pos: int = TARGET_SLOT,
+) -> int:
+    signature = struct.pack("<4H", *moves)
+    for chunk_address in range(0x02000000, 0x02400000, 0x10000):
+        chunk = read_bytes(emu, chunk_address, 0x10000)
+        offset = chunk.find(signature)
+        while offset >= 0:
+            summary = (
+                chunk_address + offset - SUMMARY_CACHE_MOVES_OFFSET
+            )
+            owner = (
+                read_u32(emu, summary + SUMMARY_BASE_POINTER_OFFSET)
+                if summary >= 0x02000000
+                else 0
+            )
+            if (
+                0x02000000 <= owner < 0x02400000
+                and read_u8(
+                    emu, owner + SUMMARY_BASE_DATA_TYPE_OFFSET
+                )
+                == 1
+                and read_u8(emu, owner + SUMMARY_BASE_POS_OFFSET)
+                == owner_pos
+                and read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1
+            ):
+                return summary + SUMMARY_STATE_RETAIL_SIZE
+            offset = chunk.find(signature, offset + 1)
+    raise RuntimeError("could not locate inactive Summary state")
+
+
+def candidate_state(emu: DeSmuME, state: int) -> dict[str, object]:
+    count = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET)
+    cursor = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_CURSOR_OFFSET)
+    top = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_TOP_OFFSET)
+    candidates = struct.unpack(
+        f"<{count}H",
+        read_bytes(emu, state + 4, count * 2),
+    ) if count else ()
+    summary = state - SUMMARY_STATE_RETAIL_SIZE
+    cache_moves = struct.unpack(
+        "<4H",
+        read_bytes(emu, summary + SUMMARY_CACHE_MOVES_OFFSET, 8),
+    )
+    cache_cur = tuple(
+        read_bytes(emu, summary + SUMMARY_CACHE_CUR_PP_OFFSET, 4)
+    )
+    cache_max = tuple(
+        read_bytes(emu, summary + SUMMARY_CACHE_MAX_PP_OFFSET, 4)
+    )
+    return {
+        "count": count,
+        "cursor": cursor,
+        "top": top,
+        "candidates": candidates,
+        "cache_moves": cache_moves,
+        "cache_cur_pp": cache_cur,
+        "cache_max_pp": cache_max,
+    }
+
+
+def assert_candidate_viewport(
+    emu: DeSmuME,
+    state: int,
+    expected_cursor: int,
+    expected_top: int,
+    label: str,
+) -> dict[str, object]:
+    evidence = candidate_state(emu, state)
+    require(
+        evidence["cursor"] == expected_cursor
+        and evidence["top"] == expected_top,
+        f"{label} cursor/top differs: "
+        f"{evidence['cursor']}/{evidence['top']}",
+    )
+    candidates = evidence["candidates"]
+    visible = tuple(candidates[expected_top:expected_top + 4])
+    padded = visible + (0,) * (4 - len(visible))
+    require(
+        evidence["cache_moves"] == padded,
+        f"{label} visible candidate cache differs",
+    )
+    for index, move in enumerate(padded):
+        current = evidence["cache_cur_pp"][index]
+        maximum = evidence["cache_max_pp"][index]
+        if move:
+            require(
+                current == maximum and maximum > 0,
+                f"{label} candidate row {index} is not full PP: "
+                f"{current}/{maximum}",
+            )
+        else:
+            require(
+                current == 0 and maximum == 0,
+                f"{label} blank row has PP",
+            )
+    return evidence
+
+
+def assert_prospective_slot(
+    emu: DeSmuME,
+    state: int,
+    expected_slot: int,
+    label: str,
+) -> dict[str, object]:
+    summary = state - SUMMARY_STATE_RETAIL_SIZE
+    pending = read_u16(emu, state + SUMMARY_STATE_PENDING_MOVE_OFFSET)
+    selected = read_u8(emu, state + SUMMARY_STATE_SELECTED_SLOT_OFFSET)
+    moves = struct.unpack(
+        "<4H",
+        read_bytes(emu, summary + SUMMARY_CACHE_MOVES_OFFSET, 8),
+    )
+    current = tuple(
+        read_bytes(emu, summary + SUMMARY_CACHE_CUR_PP_OFFSET, 4)
+    )
+    maximum = tuple(
+        read_bytes(emu, summary + SUMMARY_CACHE_MAX_PP_OFFSET, 4)
+    )
+    require(selected == expected_slot, f"{label} selected slot differs")
+    require(
+        moves[selected] == pending and pending != 0,
+        f"{label} does not show the pending move in the selected row",
+    )
+    require(
+        current[selected] == maximum[selected] and maximum[selected] > 0,
+        f"{label} prospective row is not full PP",
+    )
+    return {
+        "label": label,
+        "selected_slot": selected,
+        "pending_move": pending,
+        "displayed_moves": moves,
+        "displayed_pp": current,
+        "displayed_max_pp": maximum,
+    }
 
 
 def summary_state_evidence(
@@ -249,6 +462,26 @@ def summary_state_evidence(
         dirty == expected_dirty,
         f"{label} Summary dirty flag {dirty} != {expected_dirty}",
     )
+    return {
+        "label": label,
+        "state": f"0x{state:08X}",
+        "owner": f"0x{owner:08X}",
+        "mode": mode,
+        "owner_dirty": dirty,
+    }
+
+
+def inactive_summary_evidence(
+    emu: DeSmuME,
+    state: int,
+    label: str,
+) -> dict[str, int | str]:
+    summary = state - SUMMARY_STATE_RETAIL_SIZE
+    owner = read_u32(emu, summary + SUMMARY_BASE_POINTER_OFFSET)
+    mode = read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET)
+    dirty = read_u32(emu, owner + SUMMARY_OWNER_DIRTY_OFFSET)
+    require(mode == 0, f"{label} mode {mode} != 0")
+    require(dirty == 0, f"{label} Summary dirty flag {dirty} != 0")
     return {
         "label": label,
         "state": f"0x{state:08X}",
@@ -283,6 +516,155 @@ def find_history_record(
     raise RuntimeError("target move-history record is missing")
 
 
+def valid_history_image(image: bytes, mirror: int) -> bool:
+    if len(image) != HISTORY_IMAGE_SIZE:
+        return False
+    try:
+        (
+            magic,
+            version,
+            header_size,
+            image_size,
+            capacity,
+            record_count,
+            moves_per_record,
+            record_size,
+        ) = struct.unpack_from("<IHHIHHHH", image)
+        (
+            footer_magic,
+            _,
+            payload_size,
+            payload_crc,
+            _,
+            footer_version,
+            footer_size,
+            footer_mirror,
+            _,
+            footer_crc,
+        ) = struct.unpack_from("<IIIIIHHHHI", image, HISTORY_FOOTER_OFFSET)
+    except struct.error:
+        return False
+    occupied = sum(record[15] == 1 for record in history_records(image))
+    footer = image[HISTORY_FOOTER_OFFSET:]
+    return (
+        magic == 0x4D484953
+        and version == 1
+        and header_size == HISTORY_HEADER_SIZE
+        and image_size == HISTORY_IMAGE_SIZE
+        and capacity == HISTORY_RECORD_COUNT
+        and record_count == occupied
+        and moves_per_record == 24
+        and record_size == HISTORY_RECORD_SIZE
+        and footer_magic == HISTORY_FOOTER_MAGIC
+        and footer_version == 1
+        and footer_size == 0x20
+        and footer_mirror == mirror
+        and payload_size == HISTORY_FOOTER_OFFSET
+        and payload_crc
+        == (zlib.crc32(image[:HISTORY_FOOTER_OFFSET]) & 0xFFFFFFFF)
+        and footer_crc
+        == (zlib.crc32(footer[:0x1C]) & 0xFFFFFFFF)
+    )
+
+
+def history_image_for_mirror(
+    payload: bytes,
+    mirror: int,
+    counter: int,
+) -> bytes:
+    require(
+        len(payload) == HISTORY_FOOTER_OFFSET,
+        "history payload has the wrong size",
+    )
+    image = bytearray(HISTORY_IMAGE_SIZE)
+    image[:HISTORY_FOOTER_OFFSET] = payload
+    struct.pack_into(
+        "<IIIIIHHHHI",
+        image,
+        HISTORY_FOOTER_OFFSET,
+        HISTORY_FOOTER_MAGIC,
+        counter,
+        HISTORY_FOOTER_OFFSET,
+        zlib.crc32(payload) & 0xFFFFFFFF,
+        0,
+        1,
+        0x20,
+        mirror,
+        0,
+        0,
+    )
+    footer_crc = zlib.crc32(
+        image[HISTORY_FOOTER_OFFSET:HISTORY_FOOTER_OFFSET + 0x1C]
+    ) & 0xFFFFFFFF
+    struct.pack_into("<I", image, HISTORY_FOOTER_OFFSET + 0x1C, footer_crc)
+    require(valid_history_image(bytes(image), mirror), "constructed history invalid")
+    return bytes(image)
+
+
+def make_controlled_raw(
+    baseline_raw: bytes,
+) -> tuple[bytes, bytes, int, int, bytes]:
+    raw = bytearray(baseline_raw)
+    copies = PARTY.valid_normal_copies(baseline_raw)
+    require(copies, "immutable fixture has no valid normal save copy")
+    active_counter, active_base = PARTY.active_copy(baseline_raw)
+
+    for _, base in copies:
+        start = base + PARTY.PARTY_OFFSET + 8 + TARGET_SLOT * 0xEC
+        record = bytes(raw[start:start + 0xEC])
+        raw[start:start + 0xEC] = controlled_party_record(record)
+        footer = base + PARTY.NORMAL_SAVE_SIZE - 0x10
+        crc = PARTY.crc16_ccitt_false(bytes(raw[base:footer]))
+        struct.pack_into("<H", raw, footer + 0x0E, crc)
+
+    controlled_party = bytes(
+        raw[
+            active_base + PARTY.PARTY_OFFSET:
+            active_base + PARTY.PARTY_OFFSET + PARTY.PARTY_SIZE
+        ]
+    )
+    validate_all_party_checksums(controlled_party)
+    target = party_record(controlled_party, TARGET_SLOT)
+    target_payload, moves, pp, pp_ups = record_payload(target)
+    require(moves == CONTROLLED_MOVES, "controlled moves were not encoded")
+    require(
+        pp[TARGET_REPLACEMENT_SLOT] == 1
+        and pp_ups[TARGET_REPLACEMENT_SLOT] == 2,
+        "controlled depleted-PP/PP-Up precondition was not encoded",
+    )
+    pid = struct.unpack_from("<I", target)[0]
+    growth = PARTY.SUBSTRUCT_OFFSETS[(pid & 0x3E000) >> 13][0]
+    ot_id = struct.unpack_from("<I", target_payload, growth + 4)[0]
+
+    valid_images = []
+    for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
+        image = baseline_raw[offset:offset + HISTORY_IMAGE_SIZE]
+        if valid_history_image(image, mirror):
+            valid_images.append(image)
+    require(valid_images, "immutable fixture has no valid history mirror")
+    payload = bytearray(valid_images[0][:HISTORY_FOOTER_OFFSET])
+    index, _, _ = find_history_record(bytes(payload) + bytes(0x20), pid, ot_id)
+    record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+    payload[record_offset + 14] = len(CONTROLLED_HISTORY_MOVES)
+    payload[record_offset + 15] = 1
+    payload[record_offset + 16:record_offset + 64] = bytes(48)
+    struct.pack_into(
+        f"<{len(CONTROLLED_HISTORY_MOVES)}H",
+        payload,
+        record_offset + 16,
+        *CONTROLLED_HISTORY_MOVES,
+    )
+    for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
+        counter = (
+            active_counter
+            if mirror == 0
+            else (active_counter - 1) & 0xFFFFFFFF
+        )
+        image = history_image_for_mirror(bytes(payload), mirror, counter)
+        raw[offset:offset + HISTORY_IMAGE_SIZE] = image
+    return bytes(raw), controlled_party, pid, ot_id, bytes(payload)
+
+
 def assert_cancel_exact(
     emu: DeSmuME,
     expected_party: bytes,
@@ -296,7 +678,18 @@ def assert_cancel_exact(
         maximum_frames=90,
     )
     metadata, history = runtime_history(emu)
-    require(actual_party == expected_party, f"{label} changed party bytes")
+    if actual_party != expected_party:
+        differences = [
+            index
+            for index, (old, new) in enumerate(
+                zip(expected_party, actual_party)
+            )
+            if old != new
+        ]
+        raise RuntimeError(
+            f"{label} changed party bytes at "
+            + ",".join(f"0x{index:X}" for index in differences[:32])
+        )
     require(metadata == expected_metadata, f"{label} changed history metadata")
     require(history == expected_history, f"{label} changed history records")
 
@@ -326,6 +719,286 @@ def normal_save(emu: DeSmuME, baseline_counter: int) -> None:
     HEADLESS.cycle(emu, 600)
 
 
+def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
+    tap(emu, "X", 20)
+    tap(emu, "A", 100)
+    # The fixture party menu uses a two-column grid (0/1, 2/3, 4/5).
+    for _ in range(party_slot // 2):
+        tap(emu, "DOWN", 20)
+    tap(emu, "A", 30)
+    tap(emu, "A", 100)
+    tap(emu, "RIGHT", 80)
+
+
+def new_emulator(
+    rom: Path,
+    raw: bytes,
+) -> tuple[DeSmuME, tempfile.NamedTemporaryFile]:
+    emu = DeSmuME()
+    emu.volume_set(0)
+    emu.open(str(rom))
+    imported = tempfile.NamedTemporaryFile(suffix=".sav")
+    PARTY.import_raw(emu, raw, imported)
+    HEADLESS.boot_to_ready(boot_arguments(), emu)
+    return emu, imported
+
+
+def close_emulator(
+    emu: DeSmuME,
+    imported: tempfile.NamedTemporaryFile,
+) -> None:
+    emu.destroy()
+    imported.close()
+
+
+def selected_persisted_history(
+    raw: bytes,
+) -> tuple[int, int, bytes]:
+    main_counter, _ = PARTY.active_copy(raw)
+    valid: list[tuple[int, int, bytes]] = []
+    for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
+        image = raw[offset:offset + HISTORY_IMAGE_SIZE]
+        if not valid_history_image(image, mirror):
+            continue
+        counter = struct.unpack_from("<I", image, HISTORY_FOOTER_OFFSET + 4)[0]
+        if PARTY.save_counter_compare(counter, main_counter) <= 0:
+            valid.append((counter, mirror, image))
+    require(valid, "saved raw has no eligible authenticated history mirror")
+    selected = valid[0]
+    for candidate in valid[1:]:
+        if PARTY.save_counter_compare(candidate[0], selected[0]) > 0:
+            selected = candidate
+    return selected
+
+
+def assert_pp_pixels(path: Path) -> dict[str, object]:
+    from PIL import Image
+
+    image = Image.open(path).convert("RGB")
+    # Candidate row 0's current/max PP glyphs on the combined 256x384 frame.
+    crop = image.crop((84, 217, 112, 234))
+    colors = crop.getcolors(maxcolors=2048) or []
+    require(
+        len(colors) >= 3,
+        "candidate PP pixel crop lacks rendered text variation",
+    )
+    dark = sum(
+        count
+        for count, color in colors
+        if max(color) - min(color) < 40 and sum(color) < 360
+    )
+    require(dark >= 4, "candidate PP crop lacks visible dark glyph pixels")
+    return {
+        "crop": [84, 217, 112, 234],
+        "distinct_colors": len(colors),
+        "dark_pixels": dark,
+        "sha256": hashlib.sha256(crop.tobytes()).hexdigest(),
+    }
+
+
+def run_reload_probe(
+    rom: Path,
+    raw_path: Path,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    raw = raw_path.read_bytes()
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    with HEADLESS.silence_native_output(True):
+        emu, imported = new_emulator(rom, raw)
+        try:
+            _, _, expected_party = PARTY.party_image(raw)
+            party, _ = PARTY.wait_for_runtime_party(
+                emu, expected_party, maximum_frames=90
+            )
+            require(
+                party == expected_party,
+                "reload probe runtime party differs from persisted bytes",
+            )
+            metadata, history = runtime_history(emu)
+            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+            screenshot(emu, screenshot_path.parent, screenshot_path.name)
+        finally:
+            close_emulator(emu, imported)
+    return {
+        "party": party.hex(),
+        "metadata": metadata.hex(),
+        "history": history.hex(),
+    }
+
+
+def fresh_reload_evidence(
+    rom: Path,
+    raw_path: Path,
+    screenshot_path: Path,
+) -> tuple[bytes, bytes, bytes]:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--rom",
+            str(rom),
+            "--probe-raw",
+            str(raw_path),
+            "--probe-screenshot",
+            str(screenshot_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    require(
+        completed.returncode == 0,
+        "fresh reload probe failed: " + completed.stderr[-1000:],
+    )
+    probe = json.loads(completed.stdout)
+    return (
+        bytes.fromhex(probe["party"]),
+        bytes.fromhex(probe["metadata"]),
+        bytes.fromhex(probe["history"]),
+    )
+
+
+def run_isolated_scenario(
+    rom: Path,
+    raw_path: Path,
+    name: str,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    raw = raw_path.read_bytes()
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    with HEADLESS.silence_native_output(True):
+        emu, imported = new_emulator(rom, raw)
+        try:
+            party = wait_party_locked(emu)
+            metadata, history = runtime_history(emu)
+            require(metadata[4] == 0, f"{name} did not boot clean history")
+            if name == "empty":
+                open_summary_moves(emu, 0)
+                party = wait_party_locked(emu)
+                metadata, history = runtime_history(emu)
+                _, moves, _, _ = record_payload(party_record(party, 0))
+                touch(emu, 40, 140, 60)
+                state = locate_summary_relearn_state(
+                    emu, moves, owner_pos=0, minimum_candidates=0
+                )
+                summary_state_evidence(
+                    emu, state, 2, 0, "natural empty candidate list"
+                )
+                require(
+                    read_u16(
+                        emu,
+                        state + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET,
+                    )
+                    == 0,
+                    "empty mode retained candidates",
+                )
+                touch(emu, 220, 176, 50)
+                summary_state_evidence(
+                    emu, state, 0, 0, "touch empty Back"
+                )
+                detail = {"mode": 0, "candidate_count": 0}
+            else:
+                open_summary_moves(emu, TARGET_SLOT)
+                party = wait_party_locked(emu)
+                metadata, history = runtime_history(emu)
+                touch(emu, 40, 140, 40)
+                state = locate_summary_relearn_state(emu)
+                owner = read_u32(emu, state)
+                if name == "identity":
+                    sentinel_move = 777
+                    write_u16(
+                        emu, owner + SUMMARY_BASE_MOVE_OFFSET, sentinel_move
+                    )
+                    write_u32(emu, state, owner + 4)
+                    HEADLESS.cycle(emu, 10)
+                    require(
+                        read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 0,
+                        "pointer identity boundary retained modal state",
+                    )
+                    require(
+                        read_u16(emu, owner + SUMMARY_BASE_MOVE_OFFSET)
+                        == sentinel_move,
+                        "pointer identity overwrote new-owner move",
+                    )
+                    detail = {
+                        "mode": 0,
+                        "new_owner_move_preserved": sentinel_move,
+                    }
+                elif name == "position":
+                    original = read_u16(
+                        emu,
+                        state + SUMMARY_STATE_ORIGINAL_ARG_MOVE_OFFSET,
+                    )
+                    write_u8(emu, owner + 0x14, 1)
+                    HEADLESS.cycle(emu, 10)
+                    require(
+                        read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 0,
+                        "position boundary retained modal state",
+                    )
+                    require(
+                        read_u16(emu, owner + SUMMARY_BASE_MOVE_OFFSET)
+                        == original,
+                        "same-owner boundary did not restore args->move",
+                    )
+                    detail = {
+                        "mode": 0,
+                        "original_arg_move_restored": original,
+                    }
+                elif name == "teardown":
+                    summary_state_evidence(
+                        emu, state, 1, 0, "active before teardown"
+                    )
+                    detail = {"mode_before_destroy": 1}
+                else:
+                    raise RuntimeError(f"unknown isolated scenario: {name}")
+            assert_cancel_exact(
+                emu, party, metadata, history, f"{name} scenario"
+            )
+            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+            screenshot(emu, screenshot_path.parent, screenshot_path.name)
+            return {
+                "label": name,
+                **detail,
+                "party_sha256": hashlib.sha256(party).hexdigest(),
+                "history_sha256": hashlib.sha256(history).hexdigest(),
+                "dirty": metadata[4],
+            }
+        finally:
+            close_emulator(emu, imported)
+
+
+def isolated_scenario_evidence(
+    rom: Path,
+    raw_path: Path,
+    name: str,
+    screenshot_path: Path,
+) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--rom",
+            str(rom),
+            "--probe-raw",
+            str(raw_path),
+            "--scenario",
+            name,
+            "--probe-screenshot",
+            str(screenshot_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    require(
+        completed.returncode == 0,
+        f"{name} subprocess failed: " + completed.stderr[-1000:],
+    )
+    return json.loads(completed.stdout)
+
+
 def target_semantic_diff(before: bytes, after: bytes) -> list[int]:
     before_payload, _, _, _ = record_payload(before)
     after_payload, _, _, _ = record_payload(after)
@@ -348,8 +1021,16 @@ def run(args: argparse.Namespace) -> dict:
             source_hash == args.expected_dsv_sha256.lower(),
             f"preserved DSV hash differs: {source_hash}",
         )
-    baseline_raw = PARTY.extract_raw_save(dsv)
-    baseline_counter, occupied, baseline_party = PARTY.party_image(baseline_raw)
+    immutable_raw = PARTY.extract_raw_save(dsv)
+    (
+        controlled_raw,
+        baseline_party,
+        target_pid,
+        target_ot_id,
+        controlled_history_payload,
+    ) = make_controlled_raw(immutable_raw)
+    baseline_counter, occupied, checked_party = PARTY.party_image(controlled_raw)
+    require(checked_party == baseline_party, "controlled party selection differs")
     require(occupied == 5, f"fixture party count differs: {occupied}")
     baseline_summary = PARTY.summarize_party(baseline_party)
     baseline_checksums = validate_all_party_checksums(baseline_party)
@@ -363,22 +1044,27 @@ def run(args: argparse.Namespace) -> dict:
         before_target
     )
     require(
-        before_moves == (35, 48, 352, 103),
-        f"Tentacool fixture moves differ: {before_moves}",
+        before_moves == CONTROLLED_MOVES
+        and before_pp[TARGET_REPLACEMENT_SLOT] == 1
+        and before_pp_ups[TARGET_REPLACEMENT_SLOT] == 2,
+        "controlled Tentacool PP/PP-Up precondition differs",
     )
 
     args.screenshot_dir.mkdir(parents=True, exist_ok=True)
     args.export_raw.parent.mkdir(parents=True, exist_ok=True)
+    args.controlled_raw.parent.mkdir(parents=True, exist_ok=True)
+    args.controlled_raw.write_bytes(controlled_raw)
     captures: list[str] = []
     state_evidence: list[dict[str, int | str]] = []
+    transition_evidence: list[dict[str, object]] = []
+    boundary_evidence: list[dict[str, object]] = []
+    prospective_evidence: list[dict[str, object]] = []
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+    # Main acceptance: every touch/key transition is asserted immediately.
     with HEADLESS.silence_native_output(True):
-        emu = DeSmuME()
-        emu.volume_set(0)
-        emu.open(str(rom))
-        with tempfile.NamedTemporaryFile(suffix=".sav") as imported:
-            PARTY.import_raw(emu, baseline_raw, imported)
-            HEADLESS.boot_to_ready(boot_arguments(), emu)
+        emu, imported = new_emulator(rom, controlled_raw)
+        try:
             boot_party, _ = PARTY.wait_for_runtime_party(
                 emu,
                 baseline_party,
@@ -392,24 +1078,12 @@ def run(args: argparse.Namespace) -> dict:
                 screenshot(emu, args.screenshot_dir, "00_visible_boot.png")
             )
 
-            # Open party slot 2 -> Summary -> Moves, using keys only.
-            tap(emu, "X", 20)
-            tap(emu, "A", 100)
-            tap(emu, "DOWN", 20)
-            tap(emu, "A", 30)
-            tap(emu, "A", 100)
-            tap(emu, "RIGHT", 80)
+            open_summary_moves(emu, TARGET_SLOT)
             captures.append(
                 screenshot(emu, args.screenshot_dir, "01_moves_prompt.png")
             )
             baseline_runtime_party = wait_party_locked(emu)
             baseline_metadata, baseline_history = runtime_history(emu)
-            target_pid = struct.unpack_from("<I", before_target)[0]
-            permutation = (target_pid & 0x3E000) >> 13
-            growth = PARTY.SUBSTRUCT_OFFSETS[permutation][0]
-            target_ot_id = struct.unpack_from(
-                "<I", before_payload, growth + 4
-            )[0]
             history_index, baseline_history_record, history_moves_before = (
                 find_history_record(
                     baseline_history,
@@ -419,12 +1093,42 @@ def run(args: argparse.Namespace) -> dict:
             )
             revision_before = struct.unpack_from("<I", baseline_metadata, 8)[0]
             dirty_before = baseline_metadata[4]
-
-            # Candidate list navigation and list cancellation.
-            tap(emu, "X", 80)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "02_candidate_list.png")
+            require(dirty_before == 0, "controlled history baseline is not clean")
+            require(
+                history_moves_before == CONTROLLED_HISTORY_MOVES,
+                "controlled history acquisition order differs",
             )
+
+            # Touch entry and full candidate PP presentation.
+            inactive_state = locate_inactive_summary_state(emu)
+            touch(emu, 40, 176, 40)
+            transition_evidence.append(
+                inactive_summary_evidence(
+                    emu,
+                    inactive_state,
+                    "left page icon is not a relearn action",
+                )
+            )
+            assert_cancel_exact(
+                emu,
+                baseline_runtime_party,
+                baseline_metadata,
+                baseline_history,
+                "non-action page icon touch",
+            )
+            # The vanilla page icon may navigate normally; return to Moves.
+            tap(emu, "RIGHT", 80)
+            require(
+                read_u8(
+                    emu,
+                    inactive_state
+                    - SUMMARY_STATE_RETAIL_SIZE
+                    + SUMMARY_PAGE_MODE_OFFSET,
+                )
+                == 1,
+                "vanilla page navigation did not return to Moves",
+            )
+            touch(emu, 40, 140, 80)
             summary_state = locate_summary_relearn_state(emu)
             state_evidence.append(
                 summary_state_evidence(
@@ -435,113 +1139,222 @@ def run(args: argparse.Namespace) -> dict:
                     "candidate list",
                 )
             )
-            tap(emu, "DOWN", 60)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "03_candidate_scrolled.png")
+            initial_view = assert_candidate_viewport(
+                emu, summary_state, 0, 0, "initial candidate list"
             )
-            tap(emu, "B", 80)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "04_list_cancel.png")
+            require(
+                initial_view["count"] > 4,
+                "controlled fixture does not exceed four visible candidates",
+            )
+            require(
+                TARGET_MOVE in initial_view["candidates"],
+                "controlled target move is not relearnable",
+            )
+            target_candidate_index = initial_view["candidates"].index(
+                TARGET_MOVE
+            )
+            candidate_capture = Path(
+                screenshot(
+                    emu,
+                    args.screenshot_dir,
+                    "02_candidate_list_full_pp.png",
+                )
+            )
+            captures.append(str(candidate_capture))
+            pp_pixel_evidence = assert_pp_pixels(candidate_capture)
+
+            # Blue Cancel from the list is exact and non-mutating.
+            touch(emu, 220, 176, 60)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 0, 0, "touch list Cancel"
+                )
             )
             assert_cancel_exact(
                 emu,
                 baseline_runtime_party,
                 baseline_metadata,
                 baseline_history,
-                "candidate-list cancellation",
-            )
-            state_evidence.append(
-                summary_state_evidence(
-                    emu,
-                    summary_state,
-                    0,
-                    0,
-                    "candidate-list cancel",
-                )
+                "touch candidate-list cancellation",
             )
 
-            # Slot cancellation.
-            tap(emu, "X", 60)
-            tap(emu, "A", 80)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "05_slot_selection.png")
-            )
-            state_evidence.append(
+            # Prompt touch -> list, Pick strip -> slot, Back strip -> list.
+            touch(emu, 40, 140, 60)
+            transition_evidence.append(
                 summary_state_evidence(
-                    emu,
-                    summary_state,
-                    3,
-                    0,
-                    "slot selection",
+                    emu, summary_state, 1, 0, "touch prompt entry"
                 )
             )
-            tap(emu, "B", 60)
-            tap(emu, "B", 80)
+            touch(emu, 30, 140, 60)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 3, 0, "touch list Pick"
+                )
+            )
+            touch(emu, 90, 140, 60)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 1, 0, "touch slot Back"
+                )
+            )
             assert_cancel_exact(
                 emu,
                 baseline_runtime_party,
                 baseline_metadata,
                 baseline_history,
-                "slot-selection cancellation",
-            )
-            state_evidence.append(
-                summary_state_evidence(
-                    emu,
-                    summary_state,
-                    0,
-                    0,
-                    "slot-selection cancel",
-                )
+                "slot-to-list cancellation",
             )
 
-            # Confirmation cancellation after choosing slot 3.
-            tap(emu, "X", 60)
-            tap(emu, "A", 60)
-            tap(emu, "UP", 40)
-            tap(emu, "A", 60)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "06_confirmation.png")
-            )
-            state_evidence.append(
+            # Candidate row -> slot, HM row -> blocked, Cancel -> slot.
+            touch(emu, 50, 24, 60)
+            transition_evidence.append(
                 summary_state_evidence(
-                    emu,
-                    summary_state,
-                    4,
-                    0,
-                    "confirmation",
+                    emu, summary_state, 3, 0, "touch candidate row"
                 )
             )
-            tap(emu, "B", 50)
-            captures.append(
-                screenshot(emu, args.screenshot_dir, "07_confirm_cancel.png")
+            touch(emu, 50, 24, 60)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 5, 0, "touch HM-protected slot"
+                )
             )
-            tap(emu, "B", 50)
-            tap(emu, "B", 80)
+            captures.append(
+                screenshot(emu, args.screenshot_dir, "03_hm_blocked.png")
+            )
             assert_cancel_exact(
                 emu,
                 baseline_runtime_party,
                 baseline_metadata,
                 baseline_history,
-                "confirmation cancellation",
+                "HM-protected rejection",
             )
-            state_evidence.append(
+            touch(emu, 220, 176, 60)
+            transition_evidence.append(
                 summary_state_evidence(
-                    emu,
-                    summary_state,
-                    0,
-                    0,
-                    "confirmation cancel",
+                    emu, summary_state, 3, 0, "touch HM blue Cancel"
                 )
             )
+            touch(emu, 90, 140, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 1, 0, "touch slot Back after HM"
+                )
+            )
+            touch(emu, 90, 140, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 0, 0, "touch list Back after HM"
+                )
+            )
+            assert_cancel_exact(
+                emu,
+                baseline_runtime_party,
+                baseline_metadata,
+                baseline_history,
+                "HM flow cancellation",
+            )
 
-            # Confirm Poison Sting over slot 3.
-            tap(emu, "X", 60)
-            tap(emu, "A", 60)
-            tap(emu, "UP", 40)
-            tap(emu, "A", 50)
-            tap(emu, "A", 90)
+            # Scroll through the four-row viewport with immediate bounds checks.
+            touch(emu, 40, 140, 50)
+            scroll_views: list[dict[str, object]] = []
+            for cursor, top in ((1, 0), (2, 0), (3, 0), (4, 1)):
+                tap(emu, "DOWN", 20)
+                scroll_views.append(
+                    assert_candidate_viewport(
+                        emu, summary_state, cursor, top, f"scroll {cursor}"
+                    )
+                )
             captures.append(
-                screenshot(emu, args.screenshot_dir, "08_success.png")
+                screenshot(emu, args.screenshot_dir, "04_candidate_scrolled.png")
+            )
+            for cursor, top in ((3, 1), (2, 1), (1, 1), (0, 0)):
+                tap(emu, "UP", 20)
+                scroll_views.append(
+                    assert_candidate_viewport(
+                        emu, summary_state, cursor, top, f"reverse scroll {cursor}"
+                    )
+                )
+
+            # Navigate directly to the controlled learnset target.
+            target_view = initial_view
+            for cursor in range(1, target_candidate_index + 1):
+                tap(emu, "DOWN", 20)
+                top = 0 if cursor < 4 else cursor - 3
+                target_view = assert_candidate_viewport(
+                    emu,
+                    summary_state,
+                    cursor,
+                    top,
+                    f"target navigation {cursor}",
+                )
+            target_row_y = 24 + 32 * (
+                target_view["cursor"] - target_view["top"]
+            )
+
+            # Row select -> slot 3 -> confirmation; Back is immediate/exact.
+            touch(emu, 50, target_row_y, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 3, 0, "touch candidate before confirm"
+                )
+            )
+            prospective_evidence.append(
+                assert_prospective_slot(
+                    emu, summary_state, 0, "inline preview before slot choice"
+                )
+            )
+            touch(emu, 50, 120, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 4, 0, "touch replacement slot"
+                )
+            )
+            captures.append(
+                screenshot(emu, args.screenshot_dir, "05_confirmation.png")
+            )
+            prospective_evidence.append(
+                assert_prospective_slot(
+                    emu, summary_state, 3, "inline preview at confirmation"
+                )
+            )
+            touch(emu, 90, 140, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 3, 0, "touch confirmation Back"
+                )
+            )
+            assert_cancel_exact(
+                emu,
+                baseline_runtime_party,
+                baseline_metadata,
+                baseline_history,
+                "confirmation-to-slot cancellation",
+            )
+            touch(emu, 90, 140, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 1, 0, "touch slot Back after confirm"
+                )
+            )
+            assert_cancel_exact(
+                emu,
+                baseline_runtime_party,
+                baseline_metadata,
+                baseline_history,
+                "confirmation cancellation at list",
+            )
+
+            # Re-select and touch OK. This is the first permanent mutation.
+            touch(emu, 50, target_row_y, 40)
+            touch(emu, 50, 120, 40)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 4, 0, "confirmation before touch OK"
+                )
+            )
+            touch(emu, 20, 140, 90)
+            captures.append(
+                screenshot(emu, args.screenshot_dir, "06_success.png")
             )
             committed_party = wait_party_locked(emu)
             committed_target = party_record(committed_party, TARGET_SLOT)
@@ -549,7 +1362,7 @@ def run(args: argparse.Namespace) -> dict:
                 committed_target
             )
             require(
-                committed_moves == (35, 48, 352, TARGET_MOVE),
+                committed_moves == (57, 48, 352, TARGET_MOVE),
                 f"confirmed replacement differs: {committed_moves}",
             )
             require(
@@ -600,19 +1413,66 @@ def run(args: argparse.Namespace) -> dict:
                 if index != history_index:
                     require(old == new, f"history record {index} changed unexpectedly")
 
-            tap(emu, "B", 80)
+            touch(emu, 220, 176, 80)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 0, 1, "touch success blue Cancel"
+                )
+            )
             captures.append(
-                screenshot(emu, args.screenshot_dir, "09_replaced_move_pp.png")
+                screenshot(emu, args.screenshot_dir, "07_replaced_move_pp.png")
             )
             normal_save(emu, baseline_counter)
             captures.append(
-                screenshot(emu, args.screenshot_dir, "10_after_save.png")
+                screenshot(emu, args.screenshot_dir, "08_after_save.png")
             )
             require(
                 emu.backup.export_file(str(args.export_raw)),
                 "DeSmuME could not export the post-save battery",
             )
-        emu.destroy()
+        finally:
+            close_emulator(emu, imported)
+
+    # Each extra lifecycle scenario runs in a fresh emulator process.
+    for scenario in ("empty", "identity", "position", "teardown"):
+        scenario_capture = (
+            args.screenshot_dir / f"09_{scenario}_scenario.png"
+        )
+        boundary_evidence.append(
+            isolated_scenario_evidence(
+                rom,
+                args.controlled_raw,
+                scenario,
+                scenario_capture,
+            )
+        )
+        captures.append(str(scenario_capture))
+
+    # After destroying an active modal overlay, a fresh boot remains exact.
+    teardown_probe_path = args.screenshot_dir / "09_teardown_reload.png"
+    controlled_probe_party, controlled_probe_metadata, controlled_probe_history = (
+        fresh_reload_evidence(
+            rom,
+            args.controlled_raw,
+            teardown_probe_path,
+        )
+    )
+    captures.append(str(teardown_probe_path))
+    _, _, selected_controlled_history = selected_persisted_history(controlled_raw)
+    require(
+        controlled_probe_party == baseline_party
+        and controlled_probe_metadata[4] == 0
+        and controlled_probe_history == selected_controlled_history,
+        "active-overlay teardown changed persisted party/history",
+    )
+    boundary_evidence.append(
+        {
+            "label": "active overlay teardown and fresh reload",
+            "party_exact": True,
+            "history_exact": True,
+            "dirty": controlled_probe_metadata[4],
+        }
+    )
 
     saved_raw = PARTY.extract_raw_save(args.export_raw)
     saved_counter, saved_count, saved_party = PARTY.party_image(saved_raw)
@@ -631,7 +1491,7 @@ def run(args: argparse.Namespace) -> dict:
     saved_target = party_record(saved_party, TARGET_SLOT)
     _, saved_moves, saved_pp, saved_pp_ups = record_payload(saved_target)
     require(
-        saved_moves == (35, 48, 352, TARGET_MOVE)
+        saved_moves == (57, 48, 352, TARGET_MOVE)
         and saved_pp[TARGET_REPLACEMENT_SLOT] == 8
         and saved_pp_ups[TARGET_REPLACEMENT_SLOT] == 0,
         "saved replacement move/PP/PP Ups differ",
@@ -659,6 +1519,7 @@ def run(args: argparse.Namespace) -> dict:
         attacks + TARGET_REPLACEMENT_SLOT * 2,
         attacks + TARGET_REPLACEMENT_SLOT * 2 + 1,
         attacks + 8 + TARGET_REPLACEMENT_SLOT,
+        attacks + 12 + TARGET_REPLACEMENT_SLOT,
     }
     require(
         set(semantic_differences) <= allowed_differences,
@@ -666,14 +1527,59 @@ def run(args: argparse.Namespace) -> dict:
         + ",".join(f"0x{offset:X}" for offset in semantic_differences),
     )
 
-    reload_screenshot = args.screenshot_dir / "11_reload.png"
-    reloaded_party = PARTY.reload_party_in_fresh_process(
+    selected_counter, selected_mirror, persisted_history = (
+        selected_persisted_history(saved_raw)
+    )
+    require(
+        selected_counter == saved_counter,
+        "persisted history generation does not match normal save generation",
+    )
+    persisted_index, persisted_record, persisted_moves = find_history_record(
+        persisted_history,
+        target_pid,
+        target_ot_id,
+    )
+    require(
+        persisted_index == history_index
+        and persisted_moves == history_moves_after
+        and persisted_record == new_history_record,
+        "persisted target history record differs from committed runtime record",
+    )
+    for index, (old, new) in enumerate(
+        zip(
+            history_records(baseline_history),
+            history_records(persisted_history),
+        )
+    ):
+        if index != history_index:
+            require(old == new, f"persisted unrelated history record {index} changed")
+
+    reload_screenshot = args.screenshot_dir / "10_saved_reload.png"
+    reloaded_party, reloaded_metadata, reloaded_history = fresh_reload_evidence(
         rom,
-        saved_raw,
+        args.export_raw,
         reload_screenshot,
     )
     captures.append(str(reload_screenshot))
     require(reloaded_party == saved_party, "fresh reload changed saved party bytes")
+    require(
+        reloaded_metadata[4] == 0,
+        "fresh reload did not select a clean authenticated history baseline",
+    )
+    require(
+        reloaded_history == persisted_history,
+        "fresh reload history differs from selected persisted mirror",
+    )
+    _, reloaded_record, reloaded_moves = find_history_record(
+        reloaded_history,
+        target_pid,
+        target_ot_id,
+    )
+    require(
+        reloaded_record == persisted_record
+        and reloaded_moves == persisted_moves,
+        "fresh reload target history revision/record differs",
+    )
     reloaded_checksums = validate_all_party_checksums(reloaded_party)
     require(
         hashlib.sha256(dsv.read_bytes()).hexdigest() == source_hash,
@@ -686,13 +1592,45 @@ def run(args: argparse.Namespace) -> dict:
         "preserved_dsv": str(dsv),
         "preserved_dsv_sha256": source_hash,
         "source_dsv_unchanged": dsv.read_bytes() == source_dsv,
+        "controlled_fixture": {
+            "derivation": "temporary authenticated raw save; source DSV immutable",
+            "path": str(args.controlled_raw),
+            "history_dirty": dirty_before,
+            "history_mirrors_valid": [
+                valid_history_image(
+                    controlled_raw[
+                        offset:offset + HISTORY_IMAGE_SIZE
+                    ],
+                    mirror,
+                )
+                for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS)
+            ],
+            "moves": list(before_moves),
+            "pp": list(before_pp),
+            "pp_ups": list(before_pp_ups),
+        },
         "baseline_save_counter": baseline_counter,
         "saved_save_counter": saved_counter,
-        "candidate_navigation": "Poison Sting -> Water Gun -> Poison Sting",
+        "candidate_navigation": {
+            "count": initial_view["count"],
+            "ordered": list(initial_view["candidates"]),
+            "viewport_scroll_proven": True,
+            "views": scroll_views,
+            "live_full_pp": {
+                "current": list(initial_view["cache_cur_pp"]),
+                "maximum": list(initial_view["cache_max_pp"]),
+            },
+            "pixel_evidence": pp_pixel_evidence,
+        },
         "cancel_paths_exact": [
-            "candidate list",
-            "slot selection",
-            "confirmation",
+            "candidate list touch Cancel",
+            "slot to list",
+            "confirmation to slot",
+            "HM rejection",
+            "empty list",
+            "identity boundary",
+            "position boundary",
+            "active teardown/reload",
         ],
         "replacement": {
             "party_slot": TARGET_SLOT,
@@ -713,6 +1651,11 @@ def run(args: argparse.Namespace) -> dict:
             "dirty_before": dirty_before,
             "dirty_after_commit": dirty_after,
             "unrelated_records_exact": True,
+            "persisted_mirror": selected_mirror,
+            "persisted_counter": selected_counter,
+            "persisted_record_exact": True,
+            "fresh_reload_dirty": reloaded_metadata[4],
+            "fresh_reload_record_exact": True,
         },
         "party": {
             "serialized_stride": "0xEC",
@@ -725,6 +1668,9 @@ def run(args: argparse.Namespace) -> dict:
             "shiny_pidgey": saved_summary[4],
         },
         "summary_state_evidence": state_evidence,
+        "immediate_touch_transitions": transition_evidence,
+        "boundary_evidence": boundary_evidence,
+        "prospective_evidence": prospective_evidence,
         "screenshots": captures,
         "exported_raw_save": str(args.export_raw),
     }
@@ -733,8 +1679,19 @@ def run(args: argparse.Namespace) -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rom", type=Path, default=REPO / "test.nds")
-    parser.add_argument("--dsv", type=Path, required=True)
+    parser.add_argument("--dsv", type=Path)
     parser.add_argument("--expected-dsv-sha256")
+    parser.add_argument("--probe-raw", type=Path)
+    parser.add_argument(
+        "--scenario",
+        choices=("empty", "identity", "position", "teardown"),
+    )
+    parser.add_argument(
+        "--probe-screenshot",
+        type=Path,
+        default=REPO
+        / "build/diagnostics/task4_summary_relearn/reload-probe.png",
+    )
     parser.add_argument(
         "--screenshot-dir",
         type=Path,
@@ -745,12 +1702,36 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=REPO / "build/diagnostics/task4_summary_relearn/post-save.sav",
     )
+    parser.add_argument(
+        "--controlled-raw",
+        type=Path,
+        default=REPO
+        / "build/diagnostics/task4_summary_relearn/controlled-baseline.sav",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(run(parse_args()), indent=2, sort_keys=True))
+        arguments = parse_args()
+        if arguments.scenario is not None:
+            require(arguments.probe_raw is not None, "--probe-raw is required")
+            result = run_isolated_scenario(
+                arguments.rom.resolve(),
+                arguments.probe_raw.resolve(),
+                arguments.scenario,
+                arguments.probe_screenshot.resolve(),
+            )
+        elif arguments.probe_raw is not None:
+            result = run_reload_probe(
+                arguments.rom.resolve(),
+                arguments.probe_raw.resolve(),
+                arguments.probe_screenshot.resolve(),
+            )
+        else:
+            require(arguments.dsv is not None, "--dsv is required")
+            result = run(arguments)
+        print(json.dumps(result, indent=2, sort_keys=True))
     except Exception as error:
         print(f"Summary relearn runtime verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

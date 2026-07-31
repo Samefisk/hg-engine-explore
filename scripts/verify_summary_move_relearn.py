@@ -186,6 +186,30 @@ def source_contracts(root: Path) -> None:
         "SUMMARY_RELEARN_SUCCESS",
     ):
         require(state in main, f"state is absent from dispatcher: {state}")
+    require(
+        "sameOwnerArgs = state->ownerArgs == summary->baseData;" in main
+        and "if (sameOwnerArgs && summary->baseData != NULL)" in main
+        and main.count(
+            "summary->baseData->move = state->originalArgMove;"
+        )
+        == 1,
+        "owner args identity no longer exclusively guards argument restore",
+    )
+    identity_guard = main.index(
+        "if (sameOwnerArgs && summary->baseData != NULL)"
+    )
+    identity_restore = main.index(
+        "summary->baseData->move = state->originalArgMove;"
+    )
+    refresh_restore = main.index(
+        "restoreMove = summary->baseData->move;"
+    )
+    require(
+        identity_guard < identity_restore < refresh_restore
+        and "state->ownerPos != summary->baseData->pos" in main
+        and "summary->baseData->move = restoreMove;" in main,
+        "identity and position boundary cleanup are not separated",
+    )
 
     require(
         "Summary_MoveRelearnDispatcher 02088494" not in hooks
@@ -235,10 +259,11 @@ def source_contracts(root: Path) -> None:
         "Summary_ClearMoveDetailWindows(summary)" in ui
         and ui.count("Summary_ClearMoveDetailWindows(summary)") >= 2
         and ui.count("Summary_UpdateMoveCursorSprite(summary)") >= 2
-        and "{ 136, 159, 8, 88 }" in ui
-        and "{ 136, 159, 8, 31 }" in ui
-        and "{ 136, 159, 32, 88 }" in ui
-        and "{ 160, 191" not in ui,
+        and "{ 136, 151, 8, 55 }" in ui
+        and "{ 136, 151, 56, 128 }" in ui
+        and "{ 136, 151, 8, 37 }" in ui
+        and "{ 136, 151, 38, 128 }" in ui
+        and "{ 165, 188, 190, 249 }" in ui,
         "modal cleanup or prompt-strip touch ownership differs",
     )
     for text in (
@@ -258,14 +283,62 @@ def source_contracts(root: Path) -> None:
         "TouchscreenHitbox_FindRectAtTouchNew" in ui
         and "sMoveRowTouchRects" in ui
         and "sPromptTouchRects" in ui
+        and "sActionTouchRects" in ui
+        and "sBackTouchRects" in ui
         and "sConfirmTouchRects" in ui,
         "entry/list/slot/confirmation touch controls are incomplete",
     )
     render_slot = body(ui, "SummaryMoveRelearn_RenderSlot")
     require(
-        render_slot.index("Summary_DrawMoveRow")
-        < render_slot.index("state->originalArgMove"),
-        "prospective move argument is restored before its retail row is drawn",
+        "summary->pokemonData.moves[state->selectedSlot] ="
+        " state->pendingMove;" in render_slot
+        and "GetMoveMaxPP(state->pendingMove, 0)" in render_slot
+        and "summary->pokemonData.curPP[state->selectedSlot] = pp;"
+        in render_slot
+        and "summary->pokemonData.maxPP[state->selectedSlot] = pp;"
+        in render_slot
+        and render_slot.index("Summary_UpdateMoveSelection(summary);")
+        < render_slot.rindex("Summary_DrawMoveRows(summary);"),
+        "slot preview is not an authoritative inline full-PP move row",
+    )
+    require(
+        "SUMMARY_MSG_PICK_BACK" in render_slot,
+        "slot selection does not render explicit Pick/Back controls",
+    )
+    require(
+        ui.count("{ 165, 188, 190, 249 }") == 3
+        and "{ 165, 188, 8, 55 }" not in ui
+        and "{ 165, 188, 56, 128 }" not in ui,
+        "lower page-button row aliases a modal label action",
+    )
+    require(
+        main.count("if (touch == 0 || touch == 1)") == 3,
+        "empty/HM/success do not accept both label Back and blue Cancel",
+    )
+    for handler, label in (
+        (list_handler, "candidate list"),
+        (slot, "slot selection"),
+    ):
+        require(
+            "touch == 0" in handler
+            and "touch == 1 || touch == 2" in handler
+            and "newKeys |= PAD_BUTTON_A" in handler
+            and "newKeys |= PAD_BUTTON_B" in handler,
+            f"{label} touch controls do not split Pick from Back/Cancel",
+        )
+    require(
+        main.count("touch == 1 || touch == 2") >= 1,
+        "confirmation touch controls do not split OK from Back/Cancel",
+    )
+    render_list = body(ui, "SummaryMoveRelearn_RenderList")
+    pp_cache = render_list.index("summary->pokemonData.curPP[i] = pp;")
+    selection = render_list.index("Summary_UpdateMoveSelection(summary);")
+    final_rows = render_list.rindex("Summary_DrawMoveRows(summary);")
+    require(
+        "GetMoveMaxPP(move, 0)" in render_list
+        and "summary->pokemonData.maxPP[i] = pp;" in render_list
+        and pp_cache < selection < final_rows,
+        "candidate full-PP cache is not the final authoritative row draw",
     )
     move_pane = body(ui, "SummaryMoveRelearn_SetMovePane")
     require(
@@ -308,18 +381,29 @@ def host_state_contracts() -> None:
 
     transitions = {
         ("inactive", "X"): ("list", False),
+        ("inactive", "touch-entry"): ("list", False),
         ("list", "B"): ("inactive", False),
+        ("list", "touch-back"): ("inactive", False),
         ("list", "A"): ("slot", False),
+        ("list", "touch-pick"): ("slot", False),
         ("slot", "B"): ("list", False),
+        ("slot", "touch-back"): ("list", False),
         ("slot", "A"): ("confirm", False),
+        ("slot", "touch-pick"): ("confirm", False),
         ("confirm", "B"): ("slot", False),
+        ("confirm", "touch-back"): ("slot", False),
         ("confirm", "A"): ("success", True),
+        ("confirm", "touch-ok"): ("success", True),
         ("hm", "B"): ("slot", False),
         ("success", "B"): ("inactive", False),
     }
     for (state, key), (_, mutates) in transitions.items():
         require(
-            mutates == (state == "confirm" and key == "A"),
+            mutates
+            == (
+                state == "confirm"
+                and key in ("A", "touch-ok")
+            ),
             f"host transition mutates outside explicit confirmation: {state}/{key}",
         )
 

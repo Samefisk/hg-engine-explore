@@ -22,9 +22,13 @@ On the normal Summary **Moves** page, the bottom prompt reads `X: Relearn`.
 
 Touch controls and every existing Summary control remain retail while relearn
 mode is inactive. The `X: Relearn` prompt is tappable; candidate and slot rows
-are tappable; the modal control strip at y=136..159 provides back and confirm
-touch regions. Confirmation assigns only the rendered `A:OK` span to commit
-and the complete rendered `B:Back` span to cancellation.
+are tappable. All rendered prompt/control labels occupy y=136..151: entry is
+x=8..87, list/slot `A:Pick` is x=8..55, list/slot `B:Back` is x=56..128,
+confirmation `A:OK` is x=8..37, and confirmation `B:Back` is x=38..128.
+The retail blue `Cancel` button at y=165..188, x=190..249 is also Back.
+The unrelated page buttons in that lower row are not modal actions. These
+regions are separate: tapping Pick/OK never aliases Back, and tapping Back
+never confirms.
 The new modal states deliberately consume navigation input so party switching,
 page changes, existing move swapping, ribbons, and stat/EV/IV modes cannot
 collide with an unfinished replacement.
@@ -45,10 +49,12 @@ The list contains at most 65 task-2 candidates and displays four rows at once.
 The selected row uses Summary's existing move-name, PP, type, category, power,
 accuracy, and description rendering. Scrolling preserves the task-2
 deterministic acquisition order. Slot selection restores the Pokémon's four
-actual move rows and uses Summary's retail fifth prospective-move row, making
-the pending replacement visible before confirmation. The prompt strip also
-prints the pending move's name while the player compares it against the
-selected old move and its detail pane.
+actual move rows, then previews the pending move directly in the highlighted
+slot with full base PP. This shows the resulting four-move set and drives
+Summary's normal type/category/power/accuracy/description pane without changing
+the Pokémon. The prompt strip continues to show explicit `A:Pick B:Back`
+controls while the player compares slots; confirmation changes those controls
+to `A:OK B:Back`.
 
 The candidate builder remains the single source of truth. Its history lookup
 is now explicitly read-only: first-time browsing does not allocate a sidecar
@@ -59,13 +65,15 @@ task 2.
 ## Cancellation and success ownership
 
 Candidate-list cancellation, empty-list dismissal, slot cancellation,
-confirmation cancellation, HM rejection, a Pokémon identity boundary, and
-Summary teardown do not call a Pokémon setter,
-history recorder, or save writer. UI-only cache changes are restored before
+confirmation cancellation, HM rejection, and a Pokémon identity/position
+boundary do not call a Pokémon setter, history recorder, or save writer.
+UI-only cache changes are restored before
 returning to the ordinary Moves page. The exit path uses retail's cursor-only
 position helper and six-window move-detail cleanup before restoring BG5, so a
 scrolled candidate cursor and stale detail text cannot leak into vanilla
-Summary. Teardown frees the enlarged Summary work block automatically.
+Summary. Application teardown frees the enlarged Summary work block; because
+no permanent mutation occurs before confirmation, destroying an active modal
+state and reloading the unchanged battery has no persisted effect.
 
 Only confirmation calls `PokemonMoveHistory_ReplaceMove`. That central task-3
 transaction:
@@ -88,8 +96,8 @@ Retail Summary code and state dispatch are ARM9-resident. Its application
 template at `0x02103A1C` now owns dynamic overlay 154 for the complete Summary
 lifetime. Overlay 154 occupies `0x023C0400..0x023C22A0`, ending exactly before
 stock overlay 133. A fixed `SRM4`/version-4 header and odd Thumb entry live at
-the overlay base. The task-4 image uses `0xB8C` bytes through `0x023C0F8C`,
-leaving `0x1314` bytes inside that reserved envelope for later Summary work.
+the overlay base. The task-4 image uses `0xB48` bytes through `0x023C0F48`,
+leaving `0x1358` bytes inside that reserved envelope for later Summary work.
 
 The state-2 call at `0x02088494` directly targets overlay 154's fixed `+0x08`
 entry. This is safe under the application-manager ownership invariant:
@@ -123,15 +131,24 @@ read-only builder call, state/cancel graph, 65-entry bounds and four-row scroll
 window, same/no-op and HM guards, confirmation-only mutation, dirty timing,
 canonical party accessor, fixed overlay ABI, Thumb relocations, Summary hook
 coexistence, packaged y9 metadata, and overlay 129/153/154 size guards.
-`scripts/verify_summary_move_relearn_runtime.py` performs a key-only
-candidate/list/slot/confirmation flow against an immutable DSV in an isolated
-emulator config, proves each cancel is byte-exact, observes Summary modes and
-its owner dirty flag, confirms one replacement, saves and reloads it, and
-validates all six serialized `0xEC` party checksums plus the shiny Pidgey.
+`scripts/verify_summary_move_relearn_runtime.py` derives a temporary,
+CRC-authenticated two-mirror fixture from the immutable DSV while leaving that
+source byte-exact. The controlled baseline has clean history, eight candidates,
+and a target slot with 1 PP and two PP Ups. Key and coordinate-touch input prove
+entry, row/strip selection, Back/OK separation, immediate state transitions,
+four-row viewport scrolling, full candidate PP in live state and pixels,
+empty-list handling, HM rejection, pointer-identity and position boundaries,
+and active-overlay teardown. The confirmed replacement alone dirties Summary
+and history, resets the slot to full base PP with zero PP Ups, then persists
+through a normal save and fresh-process reload. The reload authenticates the
+selected history mirror and target record, all unrelated history records,
+all six serialized `0xEC` party checksums, every unrelated party record, and
+the shiny Pidgey.
 
 Reserved for later tasks:
 
-- task 5: boxed Pokémon and switching coverage;
+- task 5: boxed Pokémon and actual cross-Pokémon switching coverage (task 4
+  only cancels safely when an owner identity/position boundary is observed);
 - task 6: broad gift/trade/form/daycare/Pokéwalker and unusual scripted-source
   audits;
 - task 7: optional all-compatible testing policy.

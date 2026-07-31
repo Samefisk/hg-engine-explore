@@ -17,9 +17,7 @@
 #define SUMMARY_MOVE_PAGE                1
 #define SUMMARY_PARTY_DATA               1
 #define SUMMARY_NORMAL_MODE              0
-#define SUMMARY_HEAP_ID                  0x13
 #define SUMMARY_VISIBLE_CANDIDATES       4
-#define SUMMARY_PROSPECTIVE_ROW          4
 #define SUMMARY_SHARED_TILE_WINDOW       16
 #define SUMMARY_PROMPT_WINDOW            17
 #define SUMMARY_PROSPECTIVE_WINDOW       12
@@ -84,18 +82,27 @@ static const struct SummaryTouchRect sMoveRowTouchRects[] = {
 };
 
 static const struct SummaryTouchRect sPromptTouchRects[] = {
-    { 136, 159, 8, 88 },
+    { 136, 151, 8, 87 },
+    { 0xFF, 0, 0, 0 },
+};
+
+static const struct SummaryTouchRect sActionTouchRects[] = {
+    { 136, 151, 8, 55 },
+    { 136, 151, 56, 128 },
+    { 165, 188, 190, 249 },
     { 0xFF, 0, 0, 0 },
 };
 
 static const struct SummaryTouchRect sBackTouchRects[] = {
-    { 136, 159, 8, 88 },
+    { 136, 151, 40, 128 },
+    { 165, 188, 190, 249 },
     { 0xFF, 0, 0, 0 },
 };
 
 static const struct SummaryTouchRect sConfirmTouchRects[] = {
-    { 136, 159, 8, 31 },
-    { 136, 159, 32, 88 },
+    { 136, 151, 8, 37 },
+    { 136, 151, 38, 128 },
+    { 165, 188, 190, 249 },
     { 0xFF, 0, 0, 0 },
 };
 
@@ -115,9 +122,6 @@ extern void LONG_CALL Summary_RebuildMoveCategoryIcons(
     struct SummaryState *summary);
 extern void LONG_CALL Summary_DrawMoveRows(
     struct SummaryState *summary);
-extern void LONG_CALL Summary_DrawMoveRow(
-    struct SummaryState *summary,
-    u32 slot);
 extern void LONG_CALL Summary_ClearMoveDetailWindows(
     struct SummaryState *summary);
 extern void LONG_CALL Summary_ShowHmBlockedMessage(
@@ -132,7 +136,6 @@ extern void LONG_CALL ScheduleSetBgPosText(
     u32 op,
     s32 value);
 extern void LONG_CALL PlaySE(u32 sequence);
-extern String *LONG_CALL GetMoveName(u32 move, u32 heapId);
 
 static struct SummaryMoveRelearnState *SummaryMoveRelearn_GetState(
     struct SummaryState *summary)
@@ -248,39 +251,6 @@ static void SummaryMoveRelearn_HideStatus(
         (struct Window *)&summary->addlWindows[SUMMARY_PROMPT_WINDOW]);
 }
 
-static void SummaryMoveRelearn_PrintPendingMove(
-    struct SummaryState *summary,
-    u16 move)
-{
-    GF_BGL_BMPWIN *window;
-    String *moveName;
-
-    if (summary->addlWindows == NULL
-        || summary->addlWindowCount <= SUMMARY_PROMPT_WINDOW) {
-        return;
-    }
-    moveName = GetMoveName(move, SUMMARY_HEAP_ID);
-    if (moveName == NULL) {
-        SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_PICK_SLOT);
-        return;
-    }
-    window = &summary->addlWindows[SUMMARY_PROMPT_WINDOW];
-    ClearWindowTilemapAndScheduleTransfer(
-        (struct Window *)&summary->addlWindows[SUMMARY_SHARED_TILE_WINDOW]);
-    FillWindowPixelBuffer(window, 0);
-    AddTextPrinterParameterizedWithColor(
-        window,
-        0,
-        moveName,
-        0,
-        0,
-        0xFF,
-        SUMMARY_TEXT_COLOR,
-        NULL);
-    ScheduleWindowCopyToVram((struct Window *)window);
-    String_Delete(moveName);
-}
-
 static int SummaryMoveRelearn_GetTouch(
     const struct SummaryTouchRect *rects)
 {
@@ -359,7 +329,6 @@ static void SummaryMoveRelearn_RenderList(
         summary->pokemonData.maxPP[i] = pp;
     }
     SummaryMoveRelearn_ClearProspective(summary);
-    Summary_DrawMoveRows(summary);
     summary->baseData->move = 0;
     Summary_RebuildMoveCategoryIcons(summary);
     summary->baseData->move = state->originalArgMove;
@@ -367,6 +336,12 @@ static void SummaryMoveRelearn_RenderList(
         summary,
         (u8)(state->candidateCursor - state->candidateTop));
     Summary_UpdateMoveSelection(summary);
+    /*
+     * Selection updates own the detail pane and can consume the same cached
+     * move data. Draw the rows last so their name and full-PP presentation is
+     * authoritative for the completed frame.
+     */
+    Summary_DrawMoveRows(summary);
     SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_PICK_BACK);
 }
 
@@ -374,23 +349,26 @@ static void SummaryMoveRelearn_RenderSlot(
     struct SummaryState *summary,
     struct SummaryMoveRelearnState *state)
 {
+    u8 pp;
+
     SummaryMoveRelearn_RestoreCache(summary, state);
-    summary->baseData->move = state->pendingMove;
-    Summary_DrawMoveRows(summary);
+    pp = (u8)GetMoveMaxPP(state->pendingMove, 0);
+    summary->pokemonData.moves[state->selectedSlot] = state->pendingMove;
+    summary->pokemonData.curPP[state->selectedSlot] = pp;
+    summary->pokemonData.maxPP[state->selectedSlot] = pp;
     SummaryMoveRelearn_ClearProspective(summary);
-    Summary_DrawMoveRow(summary, SUMMARY_PROSPECTIVE_ROW);
-    ScheduleWindowCopyToVram(
-        (struct Window *)&summary->addlWindows[SUMMARY_PROSPECTIVE_WINDOW]);
+    summary->baseData->move = 0;
     Summary_RebuildMoveCategoryIcons(summary);
-    /*
-     * The retail fifth row reads args->move only while it is drawn. Restore
-     * the caller-owned argument immediately so forced teardown has no stale
-     * pending move to expose.
-     */
     summary->baseData->move = state->originalArgMove;
     SummaryMoveRelearn_SetCursor(summary, state->selectedSlot);
     Summary_UpdateMoveSelection(summary);
-    SummaryMoveRelearn_PrintPendingMove(summary, state->pendingMove);
+    /*
+     * Preview the resulting four-move set in place. The selected row carries
+     * the pending name/full PP and the retail detail pane describes it, while
+     * the canonical Pokémon remains untouched until confirmation.
+     */
+    Summary_DrawMoveRows(summary);
+    SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_PICK_BACK);
 }
 
 static void SummaryMoveRelearn_End(
@@ -530,8 +508,13 @@ static void SummaryMoveRelearn_HandleList(
         && state->candidateTop + touch < state->candidateCount) {
         state->candidateCursor = state->candidateTop + touch;
         newKeys |= PAD_BUTTON_A;
-    } else if (SummaryMoveRelearn_GetTouch(sBackTouchRects) == 0) {
-        newKeys |= PAD_BUTTON_B;
+    } else {
+        touch = SummaryMoveRelearn_GetTouch(sActionTouchRects);
+        if (touch == 0) {
+            newKeys |= PAD_BUTTON_A;
+        } else if (touch == 1 || touch == 2) {
+            newKeys |= PAD_BUTTON_B;
+        }
     }
     if (newKeys & PAD_BUTTON_B) {
         SummaryMoveRelearn_End(summary, state);
@@ -562,8 +545,13 @@ static void SummaryMoveRelearn_HandleSlot(
     if (touch >= 0 && touch < 4) {
         state->selectedSlot = (u8)touch;
         newKeys |= PAD_BUTTON_A;
-    } else if (SummaryMoveRelearn_GetTouch(sBackTouchRects) == 0) {
-        newKeys |= PAD_BUTTON_B;
+    } else {
+        touch = SummaryMoveRelearn_GetTouch(sActionTouchRects);
+        if (touch == 0) {
+            newKeys |= PAD_BUTTON_A;
+        } else if (touch == 1 || touch == 2) {
+            newKeys |= PAD_BUTTON_B;
+        }
     }
     if (newKeys & PAD_BUTTON_B) {
         state->mode = SUMMARY_RELEARN_LIST;
@@ -578,6 +566,12 @@ static void SummaryMoveRelearn_HandleSlot(
         PlaySE(SUMMARY_SELECT_SE);
         SummaryMoveRelearn_RenderSlot(summary, state);
     } else if (newKeys & PAD_BUTTON_A) {
+        /*
+         * A row touch selects and activates in the same frame. Refresh the
+         * inline preview before entering confirmation so that row is the
+         * prospective move the player is confirming.
+         */
+        SummaryMoveRelearn_RenderSlot(summary, state);
         oldMove = (u16)GetBoxMonData(
             &pokemon->box,
             MON_DATA_MOVE1 + state->selectedSlot,
@@ -646,26 +640,39 @@ u32 SummaryMoveRelearn_MainState(
     u32 newKeys;
     u32 repeatKeys;
     u32 vanillaState;
+    BOOL sameOwnerArgs;
     int touch;
 
     state = SummaryMoveRelearn_GetState(summary);
     pokemon = SummaryMoveRelearn_GetCurrentMon(summary);
+    sameOwnerArgs = state->ownerArgs == summary->baseData;
     if (state->mode != SUMMARY_RELEARN_INACTIVE
-        && (state->ownerArgs != summary->baseData
+        && (!sameOwnerArgs
+            || summary->baseData == NULL
             || state->ownerPos != summary->baseData->pos
             || pokemon == NULL)) {
-        summary->baseData->move = state->originalArgMove;
+        u16 restoreMove;
+
+        /*
+         * args->move belongs to the args object, not the overlay position.
+         * A position boundary on the same object restores our temporary
+         * value; an identity boundary must preserve the new owner's value.
+         */
+        if (sameOwnerArgs && summary->baseData != NULL) {
+            summary->baseData->move = state->originalArgMove;
+        }
         state->mode = SUMMARY_RELEARN_INACTIVE;
         state->candidateCount = 0;
         state->promptVisible = FALSE;
         SummaryMoveRelearn_HideStatus(summary);
         SummaryMoveRelearn_ClearProspective(summary);
-        if (pokemon != NULL) {
+        if (pokemon != NULL && summary->baseData != NULL) {
+            restoreMove = summary->baseData->move;
             Summary_RefreshPokemonData(summary);
             Summary_DrawMoveRows(summary);
             summary->baseData->move = 0;
             Summary_RebuildMoveCategoryIcons(summary);
-            summary->baseData->move = state->originalArgMove;
+            summary->baseData->move = restoreMove;
             SummaryMoveRelearn_SetCursor(summary, 0);
             Summary_UpdateMoveCursorSprite(summary);
             Summary_ClearMoveDetailWindows(summary);
@@ -717,7 +724,8 @@ u32 SummaryMoveRelearn_MainState(
             newKeys,
             repeatKeys);
     } else if (state->mode == SUMMARY_RELEARN_EMPTY) {
-        if (SummaryMoveRelearn_GetTouch(sBackTouchRects) == 0) {
+        touch = SummaryMoveRelearn_GetTouch(sBackTouchRects);
+        if (touch == 0 || touch == 1) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
@@ -734,7 +742,7 @@ u32 SummaryMoveRelearn_MainState(
         touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
         if (touch == 0) {
             newKeys |= PAD_BUTTON_A;
-        } else if (touch == 1) {
+        } else if (touch == 1 || touch == 2) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & PAD_BUTTON_B) {
@@ -744,7 +752,8 @@ u32 SummaryMoveRelearn_MainState(
             SummaryMoveRelearn_Commit(summary, state, pokemon);
         }
     } else if (state->mode == SUMMARY_RELEARN_HM_BLOCKED) {
-        if (SummaryMoveRelearn_GetTouch(sBackTouchRects) == 0) {
+        touch = SummaryMoveRelearn_GetTouch(sBackTouchRects);
+        if (touch == 0 || touch == 1) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
@@ -752,7 +761,8 @@ u32 SummaryMoveRelearn_MainState(
             SummaryMoveRelearn_RenderSlot(summary, state);
         }
     } else if (state->mode == SUMMARY_RELEARN_SUCCESS) {
-        if (SummaryMoveRelearn_GetTouch(sBackTouchRects) == 0) {
+        touch = SummaryMoveRelearn_GetTouch(sBackTouchRects);
+        if (touch == 0 || touch == 1) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
