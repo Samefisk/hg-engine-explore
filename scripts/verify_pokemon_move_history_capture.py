@@ -42,7 +42,7 @@ OVERLAY153_CALL_INVENTORY_SHA256 = (
     "a18047923b29b4154dcc1abdb29510a598371c23892198d4611d2866250dc8f6"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "bc63b5093468e94836639063c341a0693afa2a8d8e794ea6b2bd19daed34399e"
+    "30b2d3ada02dc7956418353fbc95534d27a2411bcf89d0682b83101a65eff946"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "9b39fd50bc4d208ab520f2d9a933cad33602c99c810149f2e7ff51e1a180e427"
@@ -2363,6 +2363,20 @@ def source_contracts() -> None:
         "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp"
     )
+    summary_verifier_command = (
+        "scripts/verify_summary_move_relearn.py \\\n"
+        "\t\t--arm9 $(BASE)/arm9.bin \\\n"
+        "\t\t--y9 $(BASE)/overarm9.bin \\\n"
+        "\t\t--overlay129 $(BASE)/overlay/overlay_0129.bin \\\n"
+        "\t\t--overlay154 $(BASE)/overlay/overlay_0154.bin \\\n"
+        "\t\t--linked-overlay154 "
+        "$(BUILD)/output_summary_move_relearn_overlay.bin \\\n"
+        "\t\t--summary-linked "
+        "$(BUILD)/summary_move_relearn_overlay_linked.o \\\n"
+        "\t\t--summary-object "
+        "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \\\n"
+        "\t\t--core-linked $(LINK)"
+    )
     final_verifier_command = (
         "scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp"
     )
@@ -2400,6 +2414,17 @@ def source_contracts() -> None:
         '--context "OBJCOPY=$(OBJCOPY)" --context "ARMIPS=$(ARMIPS)" '
         '--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" '
         '--context "NDSTOOL=$(NDSTOOL)"',
+        "$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py "
+        "--arm9 $(BASE)/arm9.bin --y9 $(BASE)/overarm9.bin "
+        "--overlay129 $(BASE)/overlay/overlay_0129.bin "
+        "--overlay154 $(BASE)/overlay/overlay_0154.bin "
+        "--linked-overlay154 "
+        "$(BUILD)/output_summary_move_relearn_overlay.bin "
+        "--summary-linked "
+        "$(BUILD)/summary_move_relearn_overlay_linked.o "
+        "--summary-object "
+        "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o "
+        "--core-linked $(LINK)",
         "$(PYTHON_NO_VENV) "
         "scripts/verify_pokemon_move_history_capture.py "
         "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
@@ -2450,17 +2475,6 @@ def source_contracts() -> None:
         "$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py "
         "--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9",
         "$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py",
-        "$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py "
-        "--arm9 $(BASE)/arm9.bin --y9 $(BASE)/overarm9.bin "
-        "--overlay129 $(BASE)/overlay/overlay_0129.bin "
-        "--overlay154 $(BASE)/overlay/overlay_0154.bin "
-        "--linked-overlay154 "
-        "$(BUILD)/output_summary_move_relearn_overlay.bin "
-        "--summary-linked "
-        "$(BUILD)/summary_move_relearn_overlay_linked.o "
-        "--summary-object "
-        "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o "
-        "--core-linked $(LINK)",
         '@echo "Making ROM..."',
         *expected_publication_tail,
     ]
@@ -2521,9 +2535,9 @@ def source_contracts() -> None:
         1,
     )
     require(
-        exact_package_commands[2]
+        exact_package_commands[3]
         not in make_recipe_commands(ignored_prefix_makefile)
-        and exact_package_commands[2]
+        and exact_package_commands[3]
         not in make_recipe_commands(ignored_suffix_makefile),
         "Make error-ignoring mutation fixture does not fail closed",
     )
@@ -2536,7 +2550,7 @@ def source_contracts() -> None:
         1,
     )
     require(
-        exact_package_commands[2]
+        exact_package_commands[3]
         not in make_target_recipe_commands(
             detached_target_makefile,
             "all",
@@ -3037,6 +3051,7 @@ def source_contracts() -> None:
         "post-publication target mutation passes authentication",
     )
     seal_start = makefile.find(seal_command)
+    summary_verifier_start = makefile.find(summary_verifier_command)
     verifier_start = makefile.find(verifier_command)
     seal_block = (
         makefile[seal_start:verifier_start]
@@ -3045,12 +3060,14 @@ def source_contracts() -> None:
     )
     require(
         makefile.count("scripts/verify_pokemon_move_history_capture.py") == 1
+        and makefile.count("scripts/verify_summary_move_relearn.py") == 1
         and makefile.count(
             "scripts/pokemon_move_history_build_manifest.py"
         ) == 2
         and makefile.count(final_verifier_command) == 1
         and package_command in makefile
         and seal_command in makefile
+        and summary_verifier_command in makefile
         and "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp" in seal_block
         and verifier_command in makefile
@@ -3063,6 +3080,7 @@ def source_contracts() -> None:
         and "--final-rom $(BUILDROM)" in makefile
         and "mv $(BUILDROM).tmp $(BUILDROM)" not in makefile
         and makefile.index(package_command) < makefile.index(seal_command)
+        < summary_verifier_start
         < makefile.index(verifier_command)
         < makefile.index(final_verifier_command)
         < makefile.index(publish_command),

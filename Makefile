@@ -311,15 +311,6 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
 	$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py
-	$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py \
-		--arm9 $(BASE)/arm9.bin \
-		--y9 $(BASE)/overarm9.bin \
-		--overlay129 $(BASE)/overlay/overlay_0129.bin \
-		--overlay154 $(BASE)/overlay/overlay_0154.bin \
-		--linked-overlay154 $(BUILD)/output_summary_move_relearn_overlay.bin \
-		--summary-linked $(BUILD)/summary_move_relearn_overlay_linked.o \
-		--summary-object $(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
-		--core-linked $(LINK)
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
@@ -332,6 +323,15 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--context "ARMIPS=$(ARMIPS)" \
 		--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" \
 		--context "NDSTOOL=$(NDSTOOL)"
+	$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py \
+		--arm9 $(BASE)/arm9.bin \
+		--y9 $(BASE)/overarm9.bin \
+		--overlay129 $(BASE)/overlay/overlay_0129.bin \
+		--overlay154 $(BASE)/overlay/overlay_0154.bin \
+		--linked-overlay154 $(BUILD)/output_summary_move_relearn_overlay.bin \
+		--summary-linked $(BUILD)/summary_move_relearn_overlay_linked.o \
+		--summary-object $(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
+		--core-linked $(LINK)
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
 		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
