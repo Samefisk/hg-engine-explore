@@ -50,7 +50,7 @@ def verify_source_contract() -> None:
     ):
         require(fragment in header, f"public contract lost: {fragment}")
     for fragment in (
-        "PokemonMoveHistory_QueryImpl(",
+        "PokemonMoveHistory_QueryReadOnlyImpl(",
         "LoadLevelUpLearnset_HandleAlternateForm(",
         "CODE_ADDON_MOVE_RELEARN_PARENTS",
         "CODE_ADDON_MACHINE_LEARNSETS",
@@ -68,6 +68,10 @@ def verify_source_contract() -> None:
         require(fragment in source, f"runtime policy lost: {fragment}")
     require("sys_AllocMemory" not in source, "candidate builder gained heap use")
     require("sys_FreeMemory" not in source, "candidate builder gained heap use")
+    require(
+        "PokemonMoveHistory_QueryImpl(" not in source,
+        "candidate discovery regained observable history allocation/mutation",
+    )
     require(
         "MoveHistoryEntry_BuildRelearnCandidates:" in entry
         and "b PokemonMoveRelearn_BuildCandidatesImpl" in entry,
@@ -367,20 +371,21 @@ def verify_shared_move_tables() -> None:
         REPO / "include/constants/generated/learnsets.h"
     ).read_text()
 
-    candidate_tutors = array_moves(
-        candidate_source,
-        "static const u16 sMoveRelearnTutorMoves",
-    )
     tutor_start = tutor_source.index("TutorMove sTutorMoves[]")
     tutor_end = tutor_source.index("};", tutor_start)
     field_tutors = re.findall(
         r"\{\s*(MOVE_[A-Z0-9_]+)\s*,",
         tutor_source[tutor_start:tutor_end],
     )
-    require(
-        candidate_tutors == field_tutors,
-        "resident tutor move order differs from the field tutor table",
-    )
+    for fragment in (
+        "u16 tutorMoves[NUM_TUTOR_MOVES]",
+        "TUTOR_MOVE_IDS_OFFSET",
+        "tutorMoves[i]",
+    ):
+        require(
+            fragment in candidate_source,
+            f"candidate builder lost shared tutor archive access: {fragment}",
+        )
     machine_moves = array_moves(item_source, "const u16 sMachineMoves[]")
     machine_count = int(
         re.search(r"#define NUM_MACHINE_MOVES\s+(\d+)", constants).group(1)
@@ -393,8 +398,8 @@ def verify_shared_move_tables() -> None:
         "resident machine table length differs from generated bitsets",
     )
     require(
-        len(candidate_tutors) == tutor_count,
-        "resident tutor table length differs from generated bitsets",
+        len(field_tutors) == tutor_count,
+        "field tutor table length differs from generated archive",
     )
 
 

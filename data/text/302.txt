@@ -206,3 +206,9 @@ Sp. Def↓
 Speed↓
 EV
 IV
+X: Relearn
+A:Pick B:Back
+None. B:Back
+Pick a slot.
+A:OK B:Back
+Relearned!

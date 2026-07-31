@@ -822,7 +822,13 @@ def build_expected_learnset_payloads(
         "level": level,
         "egg": struct.pack(f"<{len(egg_values)}H", *egg_values),
         "machine": struct.pack(f"<{len(machine_values)}I", *machine_values),
-        "tutor": struct.pack(f"<{len(tutor_values)}I", *tutor_values),
+        "tutor": (
+            struct.pack(f"<{len(tutor_values)}I", *tutor_values)
+            + struct.pack(
+                f"<{len(tutor_moves)}H",
+                *(move_ids[move] for move in tutor_moves),
+            )
+        ),
     }
     dimensions = {
         "species": len(species_ids),
@@ -1461,11 +1467,11 @@ def main() -> None:
     )
     require(
         re.search(
-            r"R_ARM_THM_CALL\s+PokemonMoveHistory_QueryImpl\b",
+            r"R_ARM_THM_CALL\s+PokemonMoveHistory_QueryReadOnlyImpl\b",
             candidate_relocations,
         )
         is not None,
-        "candidate builder does not call QueryImpl directly within overlay 153",
+        "candidate builder does not call the read-only query within overlay 153",
     )
     require(
         re.search(

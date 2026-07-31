@@ -40,12 +40,16 @@ DEPENDENCY_FILES = (
     "build/pokemon.d",
     "build/party_menu.d",
     "build/save.d",
+    "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
+    "build/summary_move_relearn_overlay/summary_move_relearn.d",
 )
 FIXED_INPUTS = (
     "Makefile",
+    "bytereplacement",
     "docker-makerom.cmd",
+    "data/text/302.txt",
     "hooks",
     "overlays.mk",
     "rom.nds",
@@ -53,15 +57,20 @@ FIXED_INPUTS = (
     "rom_gen.ld",
     "armips/global.s",
     "armips/asm/pokemon_move_history_capture.s",
+    "asm/other_hook.s",
     "asm/pokemon_move_history_overlay/entry.s",
     "asm/pokemon_move_history_overlay/thumb_help.s",
+    "asm/summary_move_relearn_overlay/entry.s",
     "src/pokemon_move_history_overlay/linker.ld",
+    "src/summary_move_relearn_overlay/linker.ld",
     "scripts/pokemon_move_history_build_manifest.py",
     "scripts/generate_armips_symbols.py",
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/verify_pokemon_move_history_capture.py",
     "scripts/verify_pokemon_move_history.py",
+    "scripts/verify_move_relearn_candidates.py",
+    "scripts/verify_summary_move_relearn.py",
 )
 OUTPUTS = {
     "core_linked": "build/linked.o",
@@ -75,14 +84,23 @@ OUTPUTS = {
         "build/pokemon_move_history_overlay/pokemon_move_relearn.o",
     "entry_object": "build/pokemon_move_history_overlay/entry.o",
     "thumb_help_object": "build/pokemon_move_history_overlay/thumb_help.o",
+    "overlay_object": "build/overlay.o",
+    "other_hook_object": "build/other_hook.o",
     "history_linked": "build/pokemon_move_history_overlay_linked.o",
     "history_binary": "build/output_pokemon_move_history_overlay.bin",
+    "summary_object":
+        "build/summary_move_relearn_overlay/summary_move_relearn.o",
+    "summary_entry_object":
+        "build/summary_move_relearn_overlay/entry.o",
+    "summary_linked": "build/summary_move_relearn_overlay_linked.o",
+    "summary_binary": "build/output_summary_move_relearn_overlay.bin",
     "patched_arm9": "base/arm9.bin",
     "overlay_table": "base/overarm9.bin",
     "patched_overlay12": "base/overlay/overlay_0012.bin",
     "patched_overlay68": "base/overlay/overlay_0068.bin",
     "patched_overlay129": "base/overlay/overlay_0129.bin",
     "patched_overlay153": "base/overlay/overlay_0153.bin",
+    "patched_overlay154": "base/overlay/overlay_0154.bin",
 }
 
 

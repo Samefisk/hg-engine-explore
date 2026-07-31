@@ -162,6 +162,11 @@ def write_learnset_constants_header(num_machine_moves, max_num_levelup_moves, ma
         f.write(f"#define NUM_TUTOR_MOVES   {num_tutor_moves}\n\n")
         f.write(f"#define MACHINE_LEARNSETS_BITFIELD_COUNT ((NUM_MACHINE_MOVES + 31) / 32)\n")
         f.write(f"#define TUTOR_LEARNSETS_BITFIELD_COUNT   ((NUM_TUTOR_MOVES + 31) / 32)\n\n")
+        f.write(
+            "#define TUTOR_MOVE_IDS_OFFSET            "
+            "((MAX_SPECIES_INCLUDING_FORMS + 1) * "
+            "TUTOR_LEARNSETS_BITFIELD_COUNT * sizeof(u32))\n\n"
+        )
         f.write("#endif // GENERATED_LEARNSET_CONSTANTS_H\n")
 
 
@@ -311,7 +316,14 @@ def write_tutor_data(species_dict, moves_dict, species_learnsets, tutor_moves, o
         out.write("#include \"../../include/types.h\"\n")
         out.write("#include \"../../include/constants/species.h\"\n")
         out.write("#include \"../../include/constants/generated/learnsets.h\"\n\n")
-        out.write("const u32 UNUSED TutorLearnsets[][TUTOR_LEARNSETS_BITFIELD_COUNT] = {\n")
+        out.write("const struct {\n")
+        out.write(
+            f"    u32 learnsets[{max_species_index + 1}]"
+            "[TUTOR_LEARNSETS_BITFIELD_COUNT];\n"
+        )
+        out.write("    u16 moveIds[NUM_TUTOR_MOVES];\n")
+        out.write("} UNUSED TutorMoveData = {\n")
+        out.write("    .learnsets = {\n")
 
         for species_id in range(max_species_index + 1):
             species_name = species_id_to_name.get(species_id)
@@ -328,8 +340,18 @@ def write_tutor_data(species_dict, moves_dict, species_learnsets, tutor_moves, o
                     parts[word] |= (1 << bit)
 
             formatted = ", ".join(f"0x{val:08X}" for val in parts)
-            out.write(f"    [{species_name if species_name else 'SPECIES_NONE'}] = {{ {formatted} }},\n")
+            out.write(
+                f"        [{species_name if species_name else 'SPECIES_NONE'}]"
+                f" = {{ {formatted} }},\n"
+            )
 
+        out.write("    },\n")
+        out.write("    .moveIds = {\n")
+        for move_name in tutor_moves:
+            if move_name not in moves_dict:
+                raise ValueError(f"unknown tutor move: {move_name}")
+            out.write(f"        0x{moves_dict[move_name]:04X},\n")
+        out.write("    },\n")
         out.write("};\n")
 
 

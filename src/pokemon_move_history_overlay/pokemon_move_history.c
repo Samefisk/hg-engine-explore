@@ -707,12 +707,12 @@ void PokemonMoveHistory_DeleteMoveSlotImpl(
     MonDeleteMoveSlot_Original(pokemon, slot);
 }
 
-u32 __attribute__((section(".pokemon_move_history_short_branch_targets")))
-PokemonMoveHistory_QueryImpl(
+static u32 PokemonMoveHistory_QueryRecord(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
     u16 *movesOut,
-    u32 movesOutCapacity)
+    u32 movesOutCapacity,
+    BOOL observe)
 {
     PokemonMoveHistorySnapshot snapshot;
     struct PokemonMoveHistoryRecord *record;
@@ -721,7 +721,16 @@ PokemonMoveHistory_QueryImpl(
     if (!PokemonMoveHistory_CaptureSnapshotImpl(pokemon, &snapshot)) {
         return 0;
     }
-    record = PokemonMoveHistory_ObserveSnapshot(saveData, &snapshot);
+    if (observe) {
+        record = PokemonMoveHistory_ObserveSnapshot(saveData, &snapshot);
+    } else if (saveData == NULL || saveData->pokemonMoveHistory == NULL) {
+        record = NULL;
+    } else {
+        record = PokemonMoveHistory_FindRecord(
+            saveData->pokemonMoveHistory,
+            snapshot.personality,
+            snapshot.otId);
+    }
     if (record == NULL) {
         return 0;
     }
@@ -737,6 +746,35 @@ PokemonMoveHistory_QueryImpl(
             copyCount * sizeof(u16));
     }
     return record->moveCount;
+}
+
+u32 __attribute__((section(".pokemon_move_history_short_branch_targets")))
+PokemonMoveHistory_QueryImpl(
+    SaveData *saveData,
+    struct BoxPokemon *pokemon,
+    u16 *movesOut,
+    u32 movesOutCapacity)
+{
+    return PokemonMoveHistory_QueryRecord(
+        saveData,
+        pokemon,
+        movesOut,
+        movesOutCapacity,
+        TRUE);
+}
+
+u32 PokemonMoveHistory_QueryReadOnlyImpl(
+    SaveData *saveData,
+    struct BoxPokemon *pokemon,
+    u16 *movesOut,
+    u32 movesOutCapacity)
+{
+    return PokemonMoveHistory_QueryRecord(
+        saveData,
+        pokemon,
+        movesOut,
+        movesOutCapacity,
+        FALSE);
 }
 
 BOOL PokemonMoveHistory_CommitIfDirtyImpl(SaveData *saveData)

@@ -39,10 +39,10 @@ REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x1000
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "14d53cf039cb048a94a3c164f985d466c5318adfb1f2d09961f1ee038dfcdd6b"
+    "a18047923b29b4154dcc1abdb29510a598371c23892198d4611d2866250dc8f6"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "32eb029257514bb2f7c52ba70bdc1584fa5e3a8717a2772c0f7348c8eb83062b"
+    "bc63b5093468e94836639063c341a0693afa2a8d8e794ea6b2bd19daed34399e"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "9b39fd50bc4d208ab520f2d9a933cad33602c99c810149f2e7ff51e1a180e427"
@@ -59,7 +59,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "f9a09d1628b31c1decdd5f3ff798f9c220bb4e0afa95ff0973fd3e48479a9369",
+        "13ac28beb07bed07418d954b15432e7520258e341b99bfd9fdc2f68f678d678f",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2005,6 +2005,48 @@ def source_contracts() -> None:
         "AppendMove does not execute and consume exactly one recordable-move "
         "predicate before mutation",
     )
+    query_record = function_body(
+        history_code,
+        "PokemonMoveHistory_QueryRecord",
+    )
+    query_observing = function_body(
+        history_code,
+        "PokemonMoveHistory_QueryImpl",
+    )
+    query_read_only = function_body(
+        history_code,
+        "PokemonMoveHistory_QueryReadOnlyImpl",
+    )
+    require(
+        query_observing.count("PokemonMoveHistory_QueryRecord(") == 1
+        and "TRUE" in query_observing
+        and "FALSE" not in query_observing
+        and query_read_only.count("PokemonMoveHistory_QueryRecord(") == 1
+        and "FALSE" in query_read_only
+        and "TRUE" not in query_read_only,
+        "observing/read-only query wrappers do not select distinct exact paths",
+    )
+    require(
+        query_record.count("PokemonMoveHistory_ObserveSnapshot(") == 1
+        and query_record.count("PokemonMoveHistory_FindRecord(") == 1
+        and query_record.index("if (observe)")
+        < query_record.index("PokemonMoveHistory_ObserveSnapshot(")
+        < query_record.index("else if (saveData == NULL")
+        < query_record.index("PokemonMoveHistory_FindRecord("),
+        "shared query does not branch from observation to lookup-only access",
+    )
+    for mutation in (
+        "PokemonMoveHistory_AllocateStore(",
+        "PokemonMoveHistory_AllocateRecord(",
+        "PokemonMoveHistory_AppendMove(",
+        "pokemonMoveHistoryDirty",
+        "pokemonMoveHistoryRevision",
+        "nextAccessSequence",
+    ):
+        require(
+            mutation not in query_record and mutation not in query_read_only,
+            f"read-only history query contains mutation path {mutation!r}",
+        )
     append = function_body(history_code, "PokemonMoveHistory_AppendMove")
     append_guard = APPEND_RECORDABLE_GUARD_RE.search(append)
     require(append_guard is not None, "AppendMove executable guard is missing")
@@ -2408,6 +2450,17 @@ def source_contracts() -> None:
         "$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py "
         "--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9",
         "$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py",
+        "$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py "
+        "--arm9 $(BASE)/arm9.bin --y9 $(BASE)/overarm9.bin "
+        "--overlay129 $(BASE)/overlay/overlay_0129.bin "
+        "--overlay154 $(BASE)/overlay/overlay_0154.bin "
+        "--linked-overlay154 "
+        "$(BUILD)/output_summary_move_relearn_overlay.bin "
+        "--summary-linked "
+        "$(BUILD)/summary_move_relearn_overlay_linked.o "
+        "--summary-object "
+        "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o "
+        "--core-linked $(LINK)",
         '@echo "Making ROM..."',
         *expected_publication_tail,
     ]
@@ -2417,7 +2470,7 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "0a0bc3c7fde914a13336a939b7b9de3b4cd67f7bc2ca76d8615a753c26cc7af7"
+        "8ece9310f046fbf6fb999becf500653879d36b268a1ba2230774abd883394fdc"
     )
     require(
         make_publication_contract_matches(
@@ -3049,11 +3102,15 @@ def source_contracts() -> None:
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
             "$(BUILD)/pokemon_move_history_overlay/entry.o",
             "$(BUILD)/pokemon_move_history_overlay/thumb_help.o",
+            "$(BUILD)/overlay.o",
+            "$(BUILD)/other_hook.o",
+            "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o",
+            "$(BUILD)/summary_move_relearn_overlay/entry.o",
         }
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "task-3 provenance does not force exactly the seven capture objects",
+        "move-history provenance does not force exactly the eleven capture objects",
     )
 
 
@@ -4873,24 +4930,35 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     153: (
         OVERLAY_BASE,
-        0xFB4,
+        0xFAC,
         0,
         0,
         0,
         153,
         0,
         0x41BE00,
-        0x41CDB4,
+        0x41CDAC,
+    ),
+    154: (
+        0x023C0400,
+        0xB8C,
+        0,
+        0,
+        0,
+        154,
+        0,
+        0x41CE00,
+        0x41D98C,
     ),
 }
 OVERLAY129_THUNKS = {
-    0x023DA86E: bytes.fromhex("18 47"),
-    0x023DA874: bytes.fromhex("30 47"),
-    0x023DCB1C: bytes.fromhex("18 47"),
-    0x023DCB20: bytes.fromhex("28 47"),
-    0x023DE0D2: bytes.fromhex("18 47"),
-    0x023DE0D4: bytes.fromhex("30 47"),
-    0x023DE0D6: bytes.fromhex("38 47"),
+    0x023DA872: bytes.fromhex("18 47"),
+    0x023DA878: bytes.fromhex("30 47"),
+    0x023DCB20: bytes.fromhex("18 47"),
+    0x023DCB24: bytes.fromhex("28 47"),
+    0x023DE0D6: bytes.fromhex("18 47"),
+    0x023DE0D8: bytes.fromhex("30 47"),
+    0x023DE0DA: bytes.fromhex("38 47"),
 }
 
 
@@ -5058,11 +5126,34 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
     struct.pack_into("<I", duplicate, y9_offset + 153 * 32, 152)
     mutations.append(("duplicate overlay ID", duplicate))
     wrong_size = bytearray(rom)
-    struct.pack_into("<I", wrong_size, y9_offset + 153 * 32 + 8, 0xFB0)
+    struct.pack_into("<I", wrong_size, y9_offset + 153 * 32 + 8, 0xFA8)
     mutations.append(("overlay 153 RAM size", wrong_size))
     wrong_flags = bytearray(rom)
     struct.pack_into("<I", wrong_flags, y9_offset + 129 * 32 + 28, 1)
     mutations.append(("overlay 129 flags", wrong_flags))
+    for field, label in enumerate(
+        (
+            "ID",
+            "base",
+            "RAM size",
+            "BSS size",
+            "init start",
+            "init end",
+            "file ID",
+            "flags",
+        )
+    ):
+        wrong_overlay154 = bytearray(rom)
+        value = struct.unpack_from(
+            "<I", wrong_overlay154, y9_offset + 154 * 32 + field * 4
+        )[0]
+        struct.pack_into(
+            "<I",
+            wrong_overlay154,
+            y9_offset + 154 * 32 + field * 4,
+            value ^ 1,
+        )
+        mutations.append((f"overlay 154 {label}", wrong_overlay154))
     for label, mutation in mutations:
         try:
             packaged_components_from_bytes(bytes(mutation))
@@ -5080,6 +5171,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov68_path = REPO / "base/overlay/overlay_0068.bin"
     ov129_path = REPO / "base/overlay/overlay_0129.bin"
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
+    ov154_path = REPO / "base/overlay/overlay_0154.bin"
     pokemon_object = REPO / "build/pokemon.o"
     party_menu_object = REPO / "build/party_menu.o"
     save_object = REPO / "build/save.o"
@@ -5089,6 +5181,16 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     relearn_object = (
         REPO / "build/pokemon_move_history_overlay/pokemon_move_relearn.o"
     )
+    summary_object = (
+        REPO / "build/summary_move_relearn_overlay/summary_move_relearn.o"
+    )
+    summary_entry_object = (
+        REPO / "build/summary_move_relearn_overlay/entry.o"
+    )
+    summary_linked = REPO / "build/summary_move_relearn_overlay_linked.o"
+    summary_overlay = REPO / "build/output_summary_move_relearn_overlay.bin"
+    overlay_object = REPO / "build/overlay.o"
+    other_hook_object = REPO / "build/other_hook.o"
     core_linked = REPO / "build/linked.o"
     required_artifacts = (
         linked,
@@ -5098,11 +5200,18 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov68_path,
         ov129_path,
         ov153_path,
+        ov154_path,
         pokemon_object,
         party_menu_object,
         save_object,
         history_object,
         relearn_object,
+        summary_object,
+        summary_entry_object,
+        summary_linked,
+        summary_overlay,
+        overlay_object,
+        other_hook_object,
         core_linked,
         rom_path,
     )
@@ -5245,6 +5354,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov68_component = packaged_overlays[68]
     ov129_component = packaged_overlays[129]
     ov153_component = packaged_overlays[153]
+    ov154_component = packaged_overlays[154]
     ov12_base, packaged_ov12 = (
         ov12_component.ram_address,
         ov12_component.data,
@@ -5261,9 +5371,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov153_component.ram_address,
         ov153_component.data,
     )
+    ov154_base, packaged_ov154 = (
+        ov154_component.ram_address,
+        ov154_component.data,
+    )
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
     require(ov68_base == 0x021E5900, "packaged overlay 68 base differs")
     require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
+    require(ov154_base == 0x023C0400, "packaged overlay 154 base differs")
     base_arm9 = arm9_path.read_bytes()
     require(
         base_arm9.startswith(packaged_arm9)
@@ -5286,6 +5401,21 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         packaged_ov153 == ov153_path.read_bytes() == overlay,
         "packaged overlay 153 differs from the current linked output",
     )
+    require(
+        packaged_ov154
+        == ov154_path.read_bytes()
+        == summary_overlay.read_bytes()
+        == elf_bytes_at(summary_linked, ov154_base, len(packaged_ov154)),
+        "packaged overlay 154 differs from the current linked output",
+    )
+    summary_symbols = symbol_table(summary_linked)
+    require(
+        struct.unpack_from("<II", packaged_ov154, 0)
+        == (0x344D5253, 4)
+        and summary_symbols.get("SummaryMoveRelearn_Entry")
+        == ov154_base + 8,
+        "packaged overlay 154 header or fixed entry differs",
+    )
     linked_overlay = elf_bytes_at(
         linked,
         ov153_base,
@@ -5306,11 +5436,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 109
+        and len(packaged_call_inventory) == 114
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
-        ) == 107
+        ) == 112
         and sum(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory
@@ -5474,12 +5604,12 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD6C4,
+            0x023DD6C8,
             0x38,
             "1f1d2eece6cdadcf00a99da5e46c656d488207975dffa6390c3ae4c9d193f3d0",
             [
-                (0x023DD6DC, "bl", 0x023DE0D2),
-                (0x023DD6E4, "bl", 0x023DE0D2),
+                (0x023DD6E0, "bl", 0x023DE0D6),
+                (0x023DD6E8, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5487,19 +5617,19 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD8B0,
+            0x023DD8B4,
             0xCC,
             "6cd2ca42c366bdacf938c67058e17559d60ffaedbb3b3c8c6f00b18d12eaffe6",
             [
-                (0x023DD8C4, "bl", 0x023DE0D4),
-                (0x023DD8D2, "bl", 0x023DD7EC),
-                (0x023DD8E2, "bl", 0x023DE0D4),
-                (0x023DD8F4, "bl", 0x023DD7EC),
-                (0x023DD910, "bl", 0x023DE0D6),
-                (0x023DD928, "bl", 0x023DE0D6),
-                (0x023DD934, "bl", 0x023DE0D2),
-                (0x023DD93C, "bl", 0x023DE0D2),
-                (0x023DD944, "bl", 0x023DE0D2),
+                (0x023DD8C8, "bl", 0x023DE0D8),
+                (0x023DD8D6, "bl", 0x023DD7F0),
+                (0x023DD8E6, "bl", 0x023DE0D8),
+                (0x023DD8F8, "bl", 0x023DD7F0),
+                (0x023DD914, "bl", 0x023DE0DA),
+                (0x023DD92C, "bl", 0x023DE0DA),
+                (0x023DD938, "bl", 0x023DE0D6),
+                (0x023DD940, "bl", 0x023DE0D6),
+                (0x023DD948, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5507,14 +5637,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDA1C,
+            0x023DDA20,
             0x58,
             "e48cab0c691f760112a4cb6de3aa855293345566f4e6ef4dd0308a4e77eba7bc",
             [
-                (0x023DDA24, "bl", 0x023DE0D2),
-                (0x023DDA2C, "bl", 0x023DE0D2),
-                (0x023DDA50, "bl", 0x023DE0D2),
-                (0x023DDA58, "bl", 0x023DE0D2),
+                (0x023DDA28, "bl", 0x023DE0D6),
+                (0x023DDA30, "bl", 0x023DE0D6),
+                (0x023DDA54, "bl", 0x023DE0D6),
+                (0x023DDA5C, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5522,14 +5652,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDA88,
+            0x023DDA8C,
             0x94,
             "d0ab077f4a074d4bdb9dd0d4a7cae88d312f3632cf4aa28881a6312e8de63ef0",
             [
-                (0x023DDAAE, "bl", 0x023DE0D2),
-                (0x023DDAB6, "bl", 0x023DE0D2),
-                (0x023DDABE, "bl", 0x023DE0D2),
-                (0x023DDAD2, "bl", 0x023DE0D2),
+                (0x023DDAB2, "bl", 0x023DE0D6),
+                (0x023DDABA, "bl", 0x023DE0D6),
+                (0x023DDAC2, "bl", 0x023DE0D6),
+                (0x023DDAD6, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5537,23 +5667,23 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDA74,
+            0x023DDA78,
             0x14,
             "1a870f9245779d7c51a37ec7e2c59ed6f83f3d3fbc70bd84eab5c1d028866f88",
-            [(0x023DDA7C, "bl", 0x023DDA1C)],
+            [(0x023DDA80, "bl", 0x023DDA20)],
         ),
         (
             "Save_WriteFileAsync",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DE040,
+            0x023DE044,
             0x40,
             "84d8babc3bbbec9575f468493c19f98c08af8e0bc39a68594bc30cb93fdbfce0",
             [
-                (0x023DE052, "bl", 0x023DDF14),
-                (0x023DE062, "bl", 0x023DDA88),
-                (0x023DE06C, "bl", 0x023DE0D2),
+                (0x023DE056, "bl", 0x023DDF18),
+                (0x023DE066, "bl", 0x023DDA8C),
+                (0x023DE070, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5561,16 +5691,16 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDB1C,
+            0x023DDB20,
             0x6C,
             "760a810448748647fed89c9ba587fdda6e4d439482dc478df2cc57e8336aa48e",
             [
-                (0x023DDB30, "bl", 0x023DE0D2),
-                (0x023DDB3A, "bl", 0x023DE0D2),
-                (0x023DDB48, "bl", 0x023DE0D2),
-                (0x023DDB50, "bl", 0x023DE0D2),
-                (0x023DDB5C, "bl", 0x023DE0D2),
-                (0x023DDB64, "bl", 0x023DE0D2),
+                (0x023DDB34, "bl", 0x023DE0D6),
+                (0x023DDB3E, "bl", 0x023DE0D6),
+                (0x023DDB4C, "bl", 0x023DE0D6),
+                (0x023DDB54, "bl", 0x023DE0D6),
+                (0x023DDB60, "bl", 0x023DE0D6),
+                (0x023DDB68, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5578,31 +5708,31 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDB88,
+            0x023DDB8C,
             0x10,
             "b58e7ced034221bcc71a863e62fe4c97a82f88b9d35e8d6b89e162462fa017b5",
-            [(0x023DDB8E, "bl", 0x023DDB1C)],
+            [(0x023DDB92, "bl", 0x023DDB20)],
         ),
         (
             "SaveData_New",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDC14,
+            0x023DDC18,
             0x118,
             "b077470b6728b6e5a54f89ae10afe4e00a26df1f3884071ab64c8552588d9296",
             [
-                (0x023DDC1C, "bl", 0x023DE0D2),
-                (0x023DDC2A, "bl", 0x023DE0D2),
-                (0x023DDC36, "bl", 0x023DE0D2),
-                (0x023DDC3C, "bl", 0x023DE0D2),
-                (0x023DDC5A, "bl", 0x023DE0D2),
-                (0x023DDC64, "bl", 0x023DDB98),
-                (0x023DDC6C, "bl", 0x023DE0D2),
-                (0x023DDC8C, "bl", 0x023DD6C4),
-                (0x023DDC94, "bl", 0x023DD8B0),
-                (0x023DDCAE, "bl", 0x023DE0D2),
-                (0x023DDCD4, "bl", 0x023DE0D2),
+                (0x023DDC20, "bl", 0x023DE0D6),
+                (0x023DDC2E, "bl", 0x023DE0D6),
+                (0x023DDC3A, "bl", 0x023DE0D6),
+                (0x023DDC40, "bl", 0x023DE0D6),
+                (0x023DDC5E, "bl", 0x023DE0D6),
+                (0x023DDC68, "bl", 0x023DDB9C),
+                (0x023DDC70, "bl", 0x023DE0D6),
+                (0x023DDC90, "bl", 0x023DD6C8),
+                (0x023DDC98, "bl", 0x023DD8B4),
+                (0x023DDCB2, "bl", 0x023DE0D6),
+                (0x023DDCD8, "bl", 0x023DE0D6),
             ],
         ),
         (
@@ -5610,15 +5740,15 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DA154,
+            0x023DA158,
             0x6C,
             "fff8695ccb309e47286f0f4aeb8f67d1b1327c732a4b3896b3f91647e41f3357",
             [
-                (0x023DA164, "bl", 0x023DA86E),
-                (0x023DA180, "bl", 0x023DA874),
-                (0x023DA188, "bl", 0x023DA86E),
-                (0x023DA194, "bl", 0x023DA86E),
-                (0x023DA19E, "bl", 0x023DA86E),
+                (0x023DA168, "bl", 0x023DA872),
+                (0x023DA184, "bl", 0x023DA878),
+                (0x023DA18C, "bl", 0x023DA872),
+                (0x023DA198, "bl", 0x023DA872),
+                (0x023DA1A2, "bl", 0x023DA872),
             ],
         ),
         (
@@ -5626,21 +5756,21 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DC704,
+            0x023DC708,
             0x158,
             "457614c6a8b8e13d158ca0dab84536a662443e233db5fd29570bf2df861d481c",
             [
-                (0x023DC718, "bl", 0x023DCB1C),
-                (0x023DC726, "bl", 0x023DCB20),
-                (0x023DC732, "bl", 0x023DCB20),
-                (0x023DC73E, "bl", 0x023DCB20),
-                (0x023DC750, "bl", 0x023DCB1C),
-                (0x023DC79E, "bl", 0x023DCB1C),
-                (0x023DC7AC, "bl", 0x023DCB1C),
-                (0x023DC7C4, "bl", 0x023DCB1C),
-                (0x023DC806, "bl", 0x023DCB1C),
-                (0x023DC81A, "bl", 0x023DCB1C),
-                (0x023DC82A, "bl", 0x023DCB1C),
+                (0x023DC71C, "bl", 0x023DCB20),
+                (0x023DC72A, "bl", 0x023DCB24),
+                (0x023DC736, "bl", 0x023DCB24),
+                (0x023DC742, "bl", 0x023DCB24),
+                (0x023DC754, "bl", 0x023DCB20),
+                (0x023DC7A2, "bl", 0x023DCB20),
+                (0x023DC7B0, "bl", 0x023DCB20),
+                (0x023DC7C8, "bl", 0x023DCB20),
+                (0x023DC80A, "bl", 0x023DCB20),
+                (0x023DC81E, "bl", 0x023DCB20),
+                (0x023DC82E, "bl", 0x023DCB20),
             ],
         ),
         (
@@ -5648,14 +5778,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BEE0E,
+            0x023BEE62,
             0x40,
-            "ced2d2e052a86f717ab05b09c45715d1af3813af1f8393fdd10c913791f18571",
+            "01f2dac0aa30ed1ffe055eeb6226cde16c87ec8b7af61f6fdbe43854c316b835",
             [
-                (0x023BEE1A, "bl", 0x023BE984),
-                (0x023BEE2C, "bl", 0x023BED78),
-                (0x023BEE38, "bl", 0x023BEC00),
-                (0x023BEE46, "bl", 0x023BEB40),
+                (0x023BEE6E, "bl", 0x023BE998),
+                (0x023BEE80, "bl", 0x023BED64),
+                (0x023BEE8C, "bl", 0x023BEC14),
+                (0x023BEE9A, "bl", 0x023BEB54),
             ],
         ),
         (
@@ -5663,21 +5793,21 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BEE5A,
+            0x023BEEAE,
             0xE2,
-            "e6e7567a8f66f2d7976ef3bfedab0a2f878c26bba5fd4d224fee58a2b461a7b9",
+            "ef4ace59124ef75f5aef506f273369063a5f57e6276b767fa00866ada2f064ad",
             [
-                (0x023BEE7A, "bl", 0x023BE984),
-                (0x023BEE90, "bl", 0x023BF2B4),
-                (0x023BEEA2, "bl", 0x023BED78),
-                (0x023BEEAC, "bl", 0x023BF2B4),
-                (0x023BEEB4, "bl", 0x023BEC00),
-                (0x023BEEC4, "bl", 0x023BF2B4),
-                (0x023BEEDA, "bl", 0x023BF2B4),
-                (0x023BEEE4, "bl", 0x023BF2B4),
-                (0x023BEEF8, "bl", 0x023BF2B4),
-                (0x023BEF04, "bl", 0x023BF2B4),
-                (0x023BEF26, "bl", 0x023BEB40),
+                (0x023BEECE, "bl", 0x023BE998),
+                (0x023BEEE4, "bl", 0x023BF314),
+                (0x023BEEF6, "bl", 0x023BED64),
+                (0x023BEF00, "bl", 0x023BF314),
+                (0x023BEF08, "bl", 0x023BEC14),
+                (0x023BEF18, "bl", 0x023BF314),
+                (0x023BEF2E, "bl", 0x023BF314),
+                (0x023BEF38, "bl", 0x023BF314),
+                (0x023BEF4C, "bl", 0x023BF314),
+                (0x023BEF58, "bl", 0x023BF314),
+                (0x023BEF7A, "bl", 0x023BEB54),
             ],
         ),
         (
@@ -5685,13 +5815,13 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BEF3C,
+            0x023BEF90,
             0x30,
-            "c94dd14bb322c730304ef5b86976842f0e27a27a1e530d8339d67eaf5cf9daa0",
+            "5eb2b7cd1c9fb308667c36cb13fea4f799c7b13cd108c2420fb95f2045c56755",
             [
-                (0x023BEF4C, "bl", 0x023BF2B4),
-                (0x023BEF52, "bl", 0x023BEDEC),
-                (0x023BEF5C, "bl", 0x023BF2B4),
+                (0x023BEFA0, "bl", 0x023BF314),
+                (0x023BEFA6, "bl", 0x023BEE40),
+                (0x023BEFB0, "bl", 0x023BF314),
             ],
         ),
         (
@@ -5699,12 +5829,12 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BED00,
+            0x023BECEC,
             0x44,
-            "b2c79876bcafbce1176bd49f7c64e029458a2d953b03c7dfcd5c230615e558ea",
+            "2d00abfe7ef6b1ed89cb3a7c81ae5e5ade6173d32e8bd1ca09b3419a99754cd4",
             [
-                (0x023BED1C, "bl", 0x023BE9AC),
-                (0x023BED26, "bl", 0x023BE8FC),
+                (0x023BED08, "bl", 0x023BE9C0),
+                (0x023BED12, "bl", 0x023BE910),
             ],
         ),
         (
@@ -5712,12 +5842,12 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BED44,
+            0x023BED30,
             0x24,
-            "3440b778eeaabc81c2f85b3fde6923fcd37c4fe01c68bb88f86bcf4753eec32d",
+            "983d59ba89ec948d7262494b02b521a74e80c7d8bfc352c09ddf20151beb6e17",
             [
-                (0x023BED52, "bl", 0x023BE8FC),
-                (0x023BED58, "bl", 0x023BE9AC),
+                (0x023BED3E, "bl", 0x023BE910),
+                (0x023BED44, "bl", 0x023BE9C0),
             ],
         ),
         (
@@ -5725,18 +5855,18 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BE9E4,
+            0x023BE9F8,
             0x15C,
-            "7a1f814b4ca9a074ecda423eb0b0a8b720880ec62b918c3b0685db83e1ed9ec4",
+            "3f0b338efb81f270c8c832e7d0a6c73efcbf22b77d116ad7d4b98ca9d8af7276",
             [
-                (0x023BEA02, "bl", 0x023BF2BA),
-                (0x023BEA0C, "bl", 0x023BE80C),
-                (0x023BEA3A, "bl", 0x023BF2BA),
-                (0x023BEA44, "bl", 0x023BE80C),
-                (0x023BEA68, "bl", 0x023BE8FC),
-                (0x023BEA6E, "bl", 0x023BE9AC),
-                (0x023BEAAA, "bl", 0x023BF2B4),
-                (0x023BEAB4, "bl", 0x023BE80C),
+                (0x023BEA16, "bl", 0x023BF31A),
+                (0x023BEA20, "bl", 0x023BE820),
+                (0x023BEA4E, "bl", 0x023BF31A),
+                (0x023BEA58, "bl", 0x023BE820),
+                (0x023BEA7C, "bl", 0x023BE910),
+                (0x023BEA82, "bl", 0x023BE9C0),
+                (0x023BEABE, "bl", 0x023BF314),
+                (0x023BEAC8, "bl", 0x023BE820),
             ],
         ),
         (
@@ -5744,29 +5874,29 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BED68,
+            0x023BED54,
             0x10,
-            "1ab5fa79b585edc2df7b5c64a5798e19d5835d9cfdad321a8ec745dc3574b469",
-            [(0x023BED6E, "bl", 0x023BE9E4)],
+            "33991e37e6727cdb4ac714a5a21db5f8724ce8a6145aac8f6fc6df513b0881a8",
+            [(0x023BED5A, "bl", 0x023BE9F8)],
         ),
         (
             "PokemonMoveHistory_CommitIfDirtyImpl",
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BEF6C,
+            0x023BEFCC,
             0x170,
-            "9f904b9ee2b566d2cec45bf8d3e13b60cd80b8fdb68469052fa506fced943e03",
+            "7956b4e8e773c6999592049a21a76917339c45b8b127793cac51b3429bcbe65f",
             [
-                (0x023BEF8E, "bl", 0x023BF2B4),
-                (0x023BEFA8, "bl", 0x023BE8FC),
-                (0x023BEFEC, "bl", 0x023BF2BA),
-                (0x023BF00A, "bl", 0x023BE7D8),
-                (0x023BF014, "bl", 0x023BE7D8),
-                (0x023BF022, "bl", 0x023BF2BA),
-                (0x023BF036, "bl", 0x023BF2B4),
-                (0x023BF04E, "bl", 0x023BF2B4),
-                (0x023BF05E, "bl", 0x023BF2B4),
+                (0x023BEFEE, "bl", 0x023BF314),
+                (0x023BF008, "bl", 0x023BE910),
+                (0x023BF04C, "bl", 0x023BF31A),
+                (0x023BF06A, "bl", 0x023BE7B8),
+                (0x023BF074, "bl", 0x023BE7B8),
+                (0x023BF082, "bl", 0x023BF31A),
+                (0x023BF096, "bl", 0x023BF314),
+                (0x023BF0AE, "bl", 0x023BF314),
+                (0x023BF0BE, "bl", 0x023BF314),
             ],
         ),
         (
@@ -5774,14 +5904,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF0DC,
+            0x023BF13C,
             0x48,
-            "13ef47f7f585bee326a229131d447b374db4fc06e091f4b22a9d658a76d9a3ac",
+            "ef5bbb55838eff324a19af108d92b1ccf2a97a35ec60794303b8c4c6ef347623",
             [
-                (0x023BF0E2, "bl", 0x023BF2B4),
-                (0x023BF0EC, "bl", 0x023BF2B4),
-                (0x023BF108, "bl", 0x023BF2B4),
-                (0x023BF110, "bl", 0x023BEDEC),
+                (0x023BF142, "bl", 0x023BF314),
+                (0x023BF14C, "bl", 0x023BF314),
+                (0x023BF168, "bl", 0x023BF314),
+                (0x023BF170, "bl", 0x023BEE40),
             ],
         ),
         (
@@ -5789,23 +5919,23 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF124,
+            0x023BF184,
             0x08,
-            "17ec10b2f043947411fd01b036c9ab28698ab1f733c113b253ad6aa1495b09ef",
-            [(0x023BF126, "bl", 0x023BED68)],
+            "0bd2342f190999b88042fa9312a4d2b56090881c1a3e9b29d7626a7523fe654e",
+            [(0x023BF186, "bl", 0x023BED54)],
         ),
         (
             "PokemonMoveHistory_PrepareSaveImpl",
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF12C,
+            0x023BF18C,
             0x2C,
-            "2e956897097795aacacd521f68dc87d010442dda74a482986887c6874b56ad24",
+            "7589290dd45d818465cb92b2cbf956e2323aa837fac7faba1c550db4d9d4e1d4",
             [
-                (0x023BF13E, "bl", 0x023BE9E4),
-                (0x023BF144, "bl", 0x023BF0DC),
-                (0x023BF14A, "bl", 0x023BEF6C),
+                (0x023BF19E, "bl", 0x023BE9F8),
+                (0x023BF1A4, "bl", 0x023BF13C),
+                (0x023BF1AA, "bl", 0x023BEFCC),
             ],
         ),
         (
@@ -5813,7 +5943,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF158,
+            0x023BF1B8,
             0x60,
             "7f037a772072138bfc251db15417674fdd2e239df1292eb17f012a982738b967",
             [],
@@ -5823,7 +5953,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF1B8,
+            0x023BF218,
             0x30,
             "485ddd855b50dbf52cd5b8a9de6d92ca1a28c20ced429c48e8575a5806f5b557",
             [],
@@ -5833,14 +5963,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF1E8,
+            0x023BF248,
             0x50,
-            "4088c6bcb5640b79981956d48e8d8200215db20a3cf187f1ff8714ac383d9021",
+            "cac9be4a9ac82731fe28e6abe16a97e51fa8de30bac5a70fae99dd5d3a4c636f",
             [
-                (0x023BF1F4, "bl", 0x023BF2B4),
-                (0x023BF206, "bl", 0x023BF2B4),
-                (0x023BF218, "bl", 0x023BF2B4),
-                (0x023BF222, "bl", 0x023BF2B8),
+                (0x023BF254, "bl", 0x023BF314),
+                (0x023BF266, "bl", 0x023BF314),
+                (0x023BF278, "bl", 0x023BF314),
+                (0x023BF282, "bl", 0x023BF318),
             ],
         ),
         (
@@ -5848,17 +5978,17 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             linked,
             packaged_ov153,
             ov153_base,
-            0x023BF238,
+            0x023BF298,
             0x7C,
             "9e428237d862e99d378f1d4427e22c15cddc60f40b509033398a5515634a6e4a",
             [
-                (0x023BF250, "bl", 0x023BF2B4),
-                (0x023BF260, "bl", 0x023BF2B6),
-                (0x023BF26E, "bl", 0x023BF2B6),
-                (0x023BF278, "bl", 0x023BF2B6),
-                (0x023BF282, "bl", 0x023BF2B6),
-                (0x023BF28A, "bl", 0x023BF2B4),
-                (0x023BF290, "bl", 0x023BF1E8),
+                (0x023BF2B0, "bl", 0x023BF314),
+                (0x023BF2C0, "bl", 0x023BF316),
+                (0x023BF2CE, "bl", 0x023BF316),
+                (0x023BF2D8, "bl", 0x023BF316),
+                (0x023BF2E2, "bl", 0x023BF316),
+                (0x023BF2EA, "bl", 0x023BF314),
+                (0x023BF2F0, "bl", 0x023BF248),
             ],
         ),
     )
@@ -5893,6 +6023,124 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             f"{name} packaged BL/BLX call allowlist differs",
         )
 
+    for name in (
+        "PokemonMoveHistory_QueryRecord",
+        "PokemonMoveHistory_QueryImpl",
+        "PokemonMoveHistory_QueryReadOnlyImpl",
+        "PokemonMoveHistory_CaptureSnapshotImpl",
+        "PokemonMoveHistory_ObserveSnapshot",
+        "PokemonMoveHistory_FindRecord",
+        "PokemonMoveHistory_OverlayMemcpy",
+    ):
+        require(name in symbols, f"linked query symbol is missing: {name}")
+    query_record_address = symbols["PokemonMoveHistory_QueryRecord"]
+    query_observing_address = symbols["PokemonMoveHistory_QueryImpl"]
+    query_read_only_address = symbols[
+        "PokemonMoveHistory_QueryReadOnlyImpl"
+    ]
+    require(
+        linked_symbol_sizes.get("PokemonMoveHistory_QueryRecord") == 0x68
+        and linked_symbol_sizes.get("PokemonMoveHistory_QueryImpl") == 0x0C
+        and linked_symbol_sizes.get("PokemonMoveHistory_QueryReadOnlyImpl")
+        == 0x0C,
+        "observing/read-only query body sizes differ",
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            query_observing_address,
+            6,
+        )
+        == bytes.fromhex("13 b5 01 24 00 94")
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            query_read_only_address,
+            6,
+        )
+        == bytes.fromhex("13 b5 00 24 00 94"),
+        "query wrappers do not pass exact TRUE/FALSE observation arguments",
+    )
+    require(
+        packaged_thumb_calls(
+            packaged_ov153,
+            ov153_base,
+            query_observing_address,
+            0x0C,
+        )
+        == [
+            (
+                query_observing_address + 6,
+                "bl",
+                query_record_address,
+            )
+        ]
+        and packaged_thumb_calls(
+            packaged_ov153,
+            ov153_base,
+            query_read_only_address,
+            0x0C,
+        )
+        == [
+            (
+                query_read_only_address + 6,
+                "bl",
+                query_record_address,
+            )
+        ],
+        "query wrappers do not call only the shared query body",
+    )
+    query_record_calls = packaged_thumb_calls(
+        packaged_ov153,
+        ov153_base,
+        query_record_address,
+        0x68,
+    )
+    require(
+        query_record_calls
+        == [
+            (
+                query_record_address + 0x0E,
+                "bl",
+                symbols["PokemonMoveHistory_CaptureSnapshotImpl"],
+            ),
+            (
+                query_record_address + 0x26,
+                "bl",
+                symbols["PokemonMoveHistory_ObserveSnapshot"],
+            ),
+            (
+                query_record_address + 0x46,
+                "bl",
+                symbols["PokemonMoveHistory_OverlayMemcpy"],
+            ),
+            (
+                query_record_address + 0x5E,
+                "bl",
+                symbols["PokemonMoveHistory_FindRecord"],
+            ),
+        ],
+        "shared query gained an unauthenticated call or mutation path",
+    )
+    require(
+        bytes_at(
+            packaged_ov153,
+            ov153_base,
+            query_record_address + 0x1C,
+            4,
+        )
+        == bytes.fromhex("0a 9b 00 2b")
+        and thumb_conditional_branch(
+            packaged_ov153,
+            ov153_base,
+            query_record_address + 0x20,
+            0,
+        )
+        == query_record_address + 0x4E,
+        "FALSE observation argument does not bypass ObserveSnapshot",
+    )
+
     for entry_offset, implementation in (
         (0x00, "PokemonMoveHistory_InitImpl"),
         (0x08, "PokemonMoveHistory_LoadImpl"),
@@ -5920,12 +6168,12 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             f"lifecycle entry 0x{entry_offset:X} target/body differs",
         )
     for literal_address, expected_target in (
-        (0x023DD6F8, OVERLAY_BASE + 0x11),
-        (0x023DD978, OVERLAY_BASE + 0x49),
-        (0x023DDA70, OVERLAY_BASE + 0x51),
-        (0x023DDAF8, OVERLAY_BASE + 0x59),
-        (0x023DDB80, OVERLAY_BASE + 0x61),
-        (0x023DDD04, OVERLAY_BASE + 0x01),
+        (0x023DD6FC, OVERLAY_BASE + 0x11),
+        (0x023DD97C, OVERLAY_BASE + 0x49),
+        (0x023DDA74, OVERLAY_BASE + 0x51),
+        (0x023DDAFC, OVERLAY_BASE + 0x59),
+        (0x023DDB84, OVERLAY_BASE + 0x61),
+        (0x023DDD08, OVERLAY_BASE + 0x01),
     ):
         require(
             struct.unpack_from(
@@ -5936,14 +6184,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             f"save lifecycle literal 0x{literal_address:08X} differs",
         )
     for hook_address, expected_bytes in (
-        (0x020271B0, "00 48 00 47 15 dc 3d 02"),
-        (0x020274A8, "00 49 08 47 c5 d6 3d 02"),
-        (0x02027550, "00 4a 10 47 75 da 3d 02"),
-        (0x02027564, "00 49 08 47 41 e0 3d 02"),
-        (0x020275A4, "00 49 08 47 89 db 3d 02"),
-        (0x02027AD4, "00 49 08 47 b1 d8 3d 02"),
-        (0x02027BDC, "00 4b 18 47 1d da 3d 02"),
-        (0x02027CEC, "00 4b 18 47 89 da 3d 02"),
+        (0x020271B0, "00 48 00 47 19 dc 3d 02"),
+        (0x020274A8, "00 49 08 47 c9 d6 3d 02"),
+        (0x02027550, "00 4a 10 47 79 da 3d 02"),
+        (0x02027564, "00 49 08 47 45 e0 3d 02"),
+        (0x020275A4, "00 49 08 47 8d db 3d 02"),
+        (0x02027AD4, "00 49 08 47 b5 d8 3d 02"),
+        (0x02027BDC, "00 4b 18 47 21 da 3d 02"),
+        (0x02027CEC, "00 4b 18 47 8d da 3d 02"),
     ):
         require(
             bytes_at(packaged_arm9, arm9_base, hook_address, 8)
@@ -5951,9 +6199,9 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             f"save lifecycle hook 0x{hook_address:08X} differs",
         )
     for literal_address, expected_target in (
-        (0x023BF118, 0x02074905),
-        (0x023BF11C, 0x02074641),
-        (0x023BF120, 0x02074645),
+        (0x023BF178, 0x02074905),
+        (0x023BF17C, 0x02074641),
+        (0x023BF180, 0x02074645),
     ):
         require(
             struct.unpack_from(
@@ -5964,13 +6212,13 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             f"SeedParty accessor literal 0x{literal_address:08X} differs",
         )
 
-    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA154, 0x6C)
+    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA158, 0x6C)
     require(
         overlay129_thunks_match(packaged_ov129, ov129_base),
         "overlay-129 interworking thunk bodies/registers differ",
     )
     mutated_thunk = bytearray(packaged_ov129)
-    mutated_thunk[0x023DA86E - ov129_base] = 0x20
+    mutated_thunk[0x023DA872 - ov129_base] = 0x20
     require(
         not overlay129_thunks_match(bytes(mutated_thunk), ov129_base),
         "mutated overlay-129 thunk register passes exact authentication",
@@ -5986,7 +6234,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             party_body.count(struct.pack("<I", target)) == 1,
             f"PartyMenu_LearnMoveToSlot target 0x{target:08X} differs",
         )
-    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC704, 0x158)
+    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC708, 0x158)
     for target in (
         0x0201AA8D,
         0x0206E541,
@@ -6003,7 +6251,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         )
     replace_start = symbols["PokemonMoveHistory_ReplaceMoveImpl"] - ov153_base
     delete_start = symbols["PokemonMoveHistory_DeleteMoveSlotImpl"] - ov153_base
-    delete_end = symbols["PokemonMoveHistory_CommitIfDirtyImpl"] - ov153_base
+    delete_size = linked_symbol_sizes.get(
+        "PokemonMoveHistory_DeleteMoveSlotImpl",
+        0,
+    )
+    delete_end = delete_start + delete_size
     replace_bytes = packaged_ov153[replace_start:delete_start]
     delete_bytes = packaged_ov153[delete_start:delete_end]
     replace_address = symbols["PokemonMoveHistory_ReplaceMoveImpl"]
@@ -6014,6 +6266,10 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(
         replace_size == 0xE2 and len(replace_bytes) == replace_size,
         "ReplaceMove packaged body size/layout differs from authenticated build",
+    )
+    require(
+        delete_size == 0x30 and len(delete_bytes) == delete_size,
+        "DeleteMoveSlot packaged body size/layout differs from authenticated build",
     )
     false_address = replace_address + 0x12
     require(
@@ -6336,7 +6592,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == bytes.fromhex(
             "22 00 58 00 10 32 12 5a ba 42 f7 d0 01 33 c2 e7 "
             "01 9b 02 aa 1b 8a 91 1d 10 30 02 22 0b 80 00 f0 "
-            "af fb 01 98 cc e7 01 35 18 2d b9 d1 00 25 c5 e7"
+            "d5 fb 01 98 cc e7 01 35 18 2d b9 d1 00 25 c5 e7"
         ),
         "AppendMove duplicate/capacity/eviction CFG window differs",
     )

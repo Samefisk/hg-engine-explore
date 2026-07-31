@@ -18,66 +18,11 @@ extern void *PokemonMoveHistory_OverlayMemset(
     void *destination,
     int value,
     u32 size);
-u32 PokemonMoveHistory_QueryImpl(
+u32 PokemonMoveHistory_QueryReadOnlyImpl(
     SaveData *saveData,
     struct BoxPokemon *pokemon,
     u16 *movesOut,
     u32 movesOutCapacity);
-
-static const u16 sMoveRelearnTutorMoves[NUM_TUTOR_MOVES] = {
-    MOVE_DIVE,
-    MOVE_MUD_SLAP,
-    MOVE_FURY_CUTTER,
-    MOVE_ICY_WIND,
-    MOVE_ROLLOUT,
-    MOVE_THUNDER_PUNCH,
-    MOVE_FIRE_PUNCH,
-    MOVE_SUPERPOWER,
-    MOVE_ICE_PUNCH,
-    MOVE_IRON_HEAD,
-    MOVE_AQUA_TAIL,
-    MOVE_OMINOUS_WIND,
-    MOVE_GASTRO_ACID,
-    MOVE_SNORE,
-    MOVE_SPITE,
-    MOVE_AIR_CUTTER,
-    MOVE_HELPING_HAND,
-    MOVE_ENDEAVOR,
-    MOVE_OUTRAGE,
-    MOVE_ANCIENT_POWER,
-    MOVE_SYNTHESIS,
-    MOVE_SIGNAL_BEAM,
-    MOVE_ZEN_HEADBUTT,
-    MOVE_VACUUM_WAVE,
-    MOVE_EARTH_POWER,
-    MOVE_GUNK_SHOT,
-    MOVE_TWISTER,
-    MOVE_SEED_BOMB,
-    MOVE_IRON_DEFENSE,
-    MOVE_MAGNET_RISE,
-    MOVE_LAST_RESORT,
-    MOVE_BOUNCE,
-    MOVE_TRICK,
-    MOVE_HEAT_WAVE,
-    MOVE_KNOCK_OFF,
-    MOVE_SUCKER_PUNCH,
-    MOVE_SWIFT,
-    MOVE_UPROAR,
-    MOVE_SUPER_FANG,
-    MOVE_PAIN_SPLIT,
-    MOVE_STRING_SHOT,
-    MOVE_TAILWIND,
-    MOVE_GRAVITY,
-    MOVE_WORRY_SEED,
-    MOVE_MAGIC_COAT,
-    MOVE_ROLE_PLAY,
-    MOVE_HEAL_BELL,
-    MOVE_LOW_KICK,
-    MOVE_SKY_ATTACK,
-    MOVE_BLOCK,
-    MOVE_BUG_BITE,
-    MOVE_HEADBUTT,
-};
 
 union MoveRelearnSourceData {
     u32 level[MAX_LEVELUP_MOVES];
@@ -196,6 +141,7 @@ PokemonMoveRelearn_BuildCandidatesImpl(
     union MoveRelearnSourceData source;
     u16 candidates[POKEMON_MOVE_RELEARN_MAX_CANDIDATES];
     u16 history[POKEMON_MOVE_HISTORY_MAX_MOVES];
+    u16 tutorMoves[NUM_TUTOR_MOVES];
     u16 currentMoves[4];
     u8 historyAllowed[POKEMON_MOVE_HISTORY_MAX_MOVES];
     u16 species;
@@ -226,7 +172,11 @@ PokemonMoveRelearn_BuildCandidatesImpl(
             (u16)GetBoxMonData(boxPokemon, MON_DATA_MOVE1 + i, NULL);
     }
 
-    historyCount = PokemonMoveHistory_QueryImpl(
+    /*
+     * Candidate browsing is observational. Opening and cancelling Summary
+     * relearn mode must not allocate, reorder, or dirty the history sidecar.
+     */
+    historyCount = PokemonMoveHistory_QueryReadOnlyImpl(
         saveData,
         boxPokemon,
         history,
@@ -238,6 +188,12 @@ PokemonMoveRelearn_BuildCandidatesImpl(
         historyAllowed,
         0,
         sizeof(historyAllowed));
+    ArchiveDataLoadOfs(
+        tutorMoves,
+        ARC_CODE_ADDONS,
+        CODE_ADDON_TUTOR_LEARNSETS,
+        TUTOR_MOVE_IDS_OFFSET,
+        sizeof(tutorMoves));
     candidateCount = 0;
     lineageSpecies = (u16)PokeOtherFormMonsNoGet(species, form);
 
@@ -329,7 +285,7 @@ PokemonMoveRelearn_BuildCandidatesImpl(
                     history,
                     historyCount,
                     historyAllowed,
-                    sMoveRelearnTutorMoves[i]);
+                    tutorMoves[i]);
             }
         }
 
