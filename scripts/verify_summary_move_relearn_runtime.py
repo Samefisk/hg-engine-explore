@@ -27,6 +27,23 @@ HISTORY_RECORD_SIZE = 0x40
 HISTORY_RECORD_COUNT = 319
 PARTY_OFFSET = 0xA0
 PARTY_SIZE = 8 + 6 * 0xEC
+LOCAL_FIELD_DATA_OFFSET = 0x1424
+PC_SAVE_OFFSET = 0x10000
+PC_SAVE_SIZE = 0x1E4FC
+PC_BOX_COUNT = 30
+PC_BOX_SIZE = 0x1000
+PC_MON_SIZE = 0x88
+PC_MONS_PER_BOX = 30
+PC_STORAGE_BOXES_SIZE = PC_BOX_COUNT * PC_BOX_SIZE
+PC_FOOTER_SIZE = 0x10
+PC_SAVE_SLOT = 1
+SAVE_DYNAMIC_REGION_OFFSET = 0x10
+PC_ACTIVE_BOX_OFFSET = PC_STORAGE_BOXES_SIZE
+PC_MODIFIED_FLAGS_OFFSET = PC_STORAGE_BOXES_SIZE + 4
+BOX_TARGET_SLOT = 0
+BOX_SWITCH_SLOT = 1
+BOX_TARGET_OT_ID_XOR = 0x13579BDF
+BOX_SWITCH_OT_ID_XOR = 0x2468ACE0
 TARGET_SLOT = 2
 TARGET_SPECIES = 72
 TARGET_REPLACEMENT_SLOT = 3
@@ -38,6 +55,7 @@ CONTROLLED_HISTORY_MOVES = (
     57, 48, 352, 103, 62, 114, 229, 243
 )
 CONTROLLED_CANDIDATES = (40, 55, 51, 35, 62, 114, 229, 243)
+PERSISTED_CANDIDATES = (55, 51, 35, 103, 62, 114, 229, 243)
 HISTORY_MIRROR_OFFSETS = (0x3B000, 0x7B000)
 HISTORY_FOOTER_OFFSET = 0x4FE0
 HISTORY_FOOTER_MAGIC = 0x4D48464F
@@ -50,6 +68,8 @@ SUMMARY_STATE_ORIGINAL_ARG_MOVE_OFFSET = 158
 SUMMARY_STATE_OWNER_POS_OFFSET = 160
 SUMMARY_STATE_SELECTED_SLOT_OFFSET = 161
 SUMMARY_STATE_MODE_OFFSET = 163
+SUMMARY_STATE_RESUME_AFTER_SWITCH_OFFSET = 165
+SUMMARY_STATE_OWNER_POKEMON_OFFSET = 168
 SUMMARY_STATE_RETAIL_SIZE = 0x7D8
 SUMMARY_OWNER_DIRTY_OFFSET = 0x38
 SUMMARY_BASE_MOVE_OFFSET = 0x18
@@ -214,6 +234,43 @@ def runtime_party(emu: DeSmuME) -> bytes:
     return read_bytes(emu, save_data_pointer(emu) + PARTY_OFFSET, PARTY_SIZE)
 
 
+def runtime_pc_storage_address(emu: DeSmuME) -> int:
+    return (
+        save_data_pointer(emu)
+        + SAVE_DYNAMIC_REGION_OFFSET
+        + PC_SAVE_OFFSET
+    )
+
+
+def runtime_box_address(
+    emu: DeSmuME,
+    box: int,
+    slot: int,
+) -> int:
+    require(0 <= box < PC_BOX_COUNT, f"invalid runtime box index {box}")
+    require(0 <= slot < PC_MONS_PER_BOX, f"invalid runtime box slot {slot}")
+    return (
+        runtime_pc_storage_address(emu)
+        + box * PC_BOX_SIZE
+        + slot * PC_MON_SIZE
+    )
+
+
+def runtime_box_record(
+    emu: DeSmuME,
+    box: int,
+    slot: int,
+) -> bytes:
+    return read_bytes(emu, runtime_box_address(emu, box, slot), PC_MON_SIZE)
+
+
+def runtime_pc_modified_flags(emu: DeSmuME) -> int:
+    return read_u32(
+        emu,
+        runtime_pc_storage_address(emu) + PC_MODIFIED_FLAGS_OFFSET,
+    )
+
+
 def runtime_history(emu: DeSmuME) -> tuple[bytes, bytes]:
     save = save_data_pointer(emu)
     metadata = read_bytes(
@@ -288,6 +345,126 @@ def controlled_party_record(record: bytes) -> bytes:
     return bytes(controlled)
 
 
+def box_identity(box: bytes) -> tuple[int, int, int]:
+    require(len(box) == PC_MON_SIZE, "BoxPokemon record has the wrong size")
+    pid = struct.unpack_from("<I", box)[0]
+    payload = PARTY.decrypt_box_payload(box)
+    permutation = (pid & 0x3E000) >> 13
+    growth = PARTY.SUBSTRUCT_OFFSETS[permutation][0]
+    species = struct.unpack_from("<H", payload, growth)[0]
+    ot_id = struct.unpack_from("<I", payload, growth + 4)[0]
+    return pid, ot_id, species
+
+
+def box_record_payload(
+    box: bytes,
+) -> tuple[bytes, tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    return record_payload(box + bytes(0xEC - PC_MON_SIZE))
+
+
+def controlled_box_record(
+    record: bytes,
+    *,
+    ot_id_xor: int,
+    moves: tuple[int, int, int, int] | None = None,
+    pp: tuple[int, int, int, int] | None = None,
+    pp_ups: tuple[int, int, int, int] | None = None,
+) -> bytes:
+    """Derive a distinct, authenticated BoxPokemon without changing its PID."""
+    source = record[:PC_MON_SIZE]
+    payload = bytearray(PARTY.decrypt_box_payload(source))
+    pid = struct.unpack_from("<I", source)[0]
+    permutation = (pid & 0x3E000) >> 13
+    growth = PARTY.SUBSTRUCT_OFFSETS[permutation][0]
+    attacks = PARTY.SUBSTRUCT_OFFSETS[permutation][1]
+    original_ot_id = struct.unpack_from("<I", payload, growth + 4)[0]
+    struct.pack_into("<I", payload, growth + 4, original_ot_id ^ ot_id_xor)
+    if moves is not None:
+        struct.pack_into("<4H", payload, attacks, *moves)
+    if pp is not None:
+        struct.pack_into("<4B", payload, attacks + 8, *pp)
+    if pp_ups is not None:
+        struct.pack_into("<4B", payload, attacks + 12, *pp_ups)
+    checksum = sum(struct.unpack("<64H", payload)) & 0xFFFF
+    controlled = bytearray(source)
+    struct.pack_into("<H", controlled, 6, checksum)
+    controlled[8:] = encrypt_box_payload(bytes(payload), checksum)
+    validate_box_checksum(bytes(controlled), "controlled BoxPokemon")
+    return bytes(controlled)
+
+
+def validate_box_checksum(box: bytes, label: str) -> dict[str, int | bool]:
+    require(len(box) == PC_MON_SIZE, f"{label} has the wrong serialized size")
+    stored = struct.unpack_from("<H", box, 6)[0]
+    payload = PARTY.decrypt_box_payload(box)
+    calculated = sum(struct.unpack("<64H", payload)) & 0xFFFF
+    require(
+        stored == calculated,
+        f"{label} checksum 0x{stored:04X} != 0x{calculated:04X}",
+    )
+    pid, ot_id, species = box_identity(box)
+    return {
+        "stored": stored,
+        "calculated": calculated,
+        "valid": True,
+        "pid": pid,
+        "ot_id": ot_id,
+        "species": species,
+    }
+
+
+def pc_box_record(raw: bytes, base: int, box: int, slot: int) -> bytes:
+    require(0 <= box < PC_BOX_COUNT, f"invalid box index {box}")
+    require(0 <= slot < PC_MONS_PER_BOX, f"invalid box slot {slot}")
+    start = base + PC_SAVE_OFFSET + box * PC_BOX_SIZE + slot * PC_MON_SIZE
+    return raw[start:start + PC_MON_SIZE]
+
+
+def valid_pc_copies(raw: bytes) -> list[tuple[int, int]]:
+    copies: list[tuple[int, int]] = []
+    for base in PARTY.SAVE_COPY_BASES:
+        footer = base + PC_SAVE_OFFSET + PC_SAVE_SIZE - PC_FOOTER_SIZE
+        counter, size, magic, slot, crc = struct.unpack_from(
+            "<IIIHH", raw, footer
+        )
+        if (
+            size == PC_SAVE_SIZE
+            and magic == PARTY.SAVE_MAGIC
+            and slot == PC_SAVE_SLOT
+            and crc
+            == PARTY.crc16_ccitt_false(
+                raw[base + PC_SAVE_OFFSET:footer]
+            )
+        ):
+            copies.append((counter, base))
+    return copies
+
+
+def active_pc_copy(raw: bytes) -> tuple[int, int]:
+    copies = valid_pc_copies(raw)
+    require(copies, "raw save has no valid authenticated PC generation")
+    selected = copies[0]
+    for candidate in copies[1:]:
+        if PARTY.save_counter_compare(candidate[0], selected[0]) > 0:
+            selected = candidate
+    return selected
+
+
+def validate_all_boxed_checksums(
+    raw: bytes,
+    base: int,
+) -> list[dict[str, int | bool]]:
+    results: list[dict[str, int | bool]] = []
+    for box in range(PC_BOX_COUNT):
+        for slot in range(PC_MONS_PER_BOX):
+            record = pc_box_record(raw, base, box, slot)
+            checked = validate_box_checksum(
+                record, f"serialized PC box {box} slot {slot}"
+            )
+            results.append({"box": box, "slot": slot, **checked})
+    return results
+
+
 def validate_all_party_checksums(party: bytes) -> list[dict[str, int | bool]]:
     results: list[dict[str, int | bool]] = []
     for index in range(6):
@@ -353,6 +530,7 @@ def locate_inactive_summary_state(
     emu: DeSmuME,
     moves: tuple[int, ...] = CONTROLLED_MOVES,
     owner_pos: int = TARGET_SLOT,
+    data_type: int = 1,
 ) -> int:
     signature = struct.pack("<4H", *moves)
     for chunk_address in range(0x02000000, 0x02400000, 0x10000):
@@ -372,7 +550,7 @@ def locate_inactive_summary_state(
                 and read_u8(
                     emu, owner + SUMMARY_BASE_DATA_TYPE_OFFSET
                 )
-                == 1
+                == data_type
                 and read_u8(emu, owner + SUMMARY_BASE_POS_OFFSET)
                 == owner_pos
                 and read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1
@@ -512,6 +690,55 @@ def summary_state_evidence(
     }
 
 
+def wait_summary_identity(
+    emu: DeSmuME,
+    state: int,
+    *,
+    expected_pos: int,
+    expected_mode: int,
+    expected_owner_pokemon: int | None = None,
+    maximum_frames: int = 360,
+) -> dict[str, object]:
+    summary = state - SUMMARY_STATE_RETAIL_SIZE
+    for elapsed in range(maximum_frames + 1):
+        owner = read_u32(emu, state)
+        pos = (
+            read_u8(emu, owner + SUMMARY_BASE_POS_OFFSET)
+            if 0x02000000 <= owner < 0x02400000
+            else 0xFF
+        )
+        mode = read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET)
+        owner_pokemon = read_u32(
+            emu, state + SUMMARY_STATE_OWNER_POKEMON_OFFSET
+        )
+        resume = read_u8(
+            emu, state + SUMMARY_STATE_RESUME_AFTER_SWITCH_OFFSET
+        )
+        if (
+            pos == expected_pos
+            and mode == expected_mode
+            and (
+                expected_owner_pokemon is None
+                or owner_pokemon == expected_owner_pokemon
+            )
+        ):
+            return {
+                "elapsed_frames": elapsed,
+                "summary": f"0x{summary:08X}",
+                "owner": f"0x{owner:08X}",
+                "pos": pos,
+                "mode": mode,
+                "owner_pokemon": f"0x{owner_pokemon:08X}",
+                "resume_after_switch": resume,
+            }
+        HEADLESS.cycle(emu, 1)
+    raise RuntimeError(
+        f"Summary identity pos={expected_pos} mode={expected_mode} "
+        f"not reached; final pos={pos} mode={mode} "
+        f"owner_pokemon=0x{owner_pokemon:08X} resume={resume}"
+    )
+
+
 def inactive_summary_evidence(
     emu: DeSmuME,
     state: int,
@@ -642,9 +869,72 @@ def history_image_for_mirror(
     return bytes(image)
 
 
+def seed_history_record(
+    payload: bytearray,
+    box: bytes,
+    moves: tuple[int, ...],
+) -> int:
+    pid, ot_id, species = box_identity(box)
+    try:
+        index, _, _ = find_history_record(
+            bytes(payload) + bytes(HISTORY_IMAGE_SIZE - len(payload)),
+            pid,
+            ot_id,
+        )
+    except RuntimeError:
+        index = next(
+            (
+                candidate
+                for candidate, record in enumerate(
+                    history_records(
+                        bytes(payload)
+                        + bytes(HISTORY_IMAGE_SIZE - len(payload))
+                    )
+                )
+                if record[15] == 0
+            ),
+            -1,
+        )
+        require(index >= 0, "controlled history has no free record")
+        record_count = struct.unpack_from("<H", payload, 14)[0]
+        next_access = struct.unpack_from("<I", payload, 20)[0] + 1
+        struct.pack_into("<H", payload, 14, record_count + 1)
+        struct.pack_into("<I", payload, 20, next_access)
+        record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+        payload[record_offset:record_offset + HISTORY_RECORD_SIZE] = bytes(
+            HISTORY_RECORD_SIZE
+        )
+        struct.pack_into(
+            "<IIIHBB",
+            payload,
+            record_offset,
+            pid,
+            ot_id,
+            next_access,
+            species,
+            0,
+            1,
+        )
+    record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
+    require(
+        len(moves) <= 24 and all(move != 0 for move in moves),
+        "controlled history moves are invalid",
+    )
+    payload[record_offset + 14] = len(moves)
+    payload[record_offset + 15] = 1
+    payload[record_offset + 16:record_offset + 64] = bytes(48)
+    struct.pack_into(
+        f"<{len(moves)}H",
+        payload,
+        record_offset + 16,
+        *moves,
+    )
+    return index
+
+
 def make_controlled_raw(
     baseline_raw: bytes,
-) -> tuple[bytes, bytes, int, int, bytes]:
+) -> tuple[bytes, bytes, int, int, bytes, dict[str, object]]:
     raw = bytearray(baseline_raw)
     copies = PARTY.valid_normal_copies(baseline_raw)
     require(copies, "immutable fixture has no valid normal save copy")
@@ -677,6 +967,57 @@ def make_controlled_raw(
     growth = PARTY.SUBSTRUCT_OFFSETS[(pid & 0x3E000) >> 13][0]
     ot_id = struct.unpack_from("<I", target_payload, growth + 4)[0]
 
+    target_box = controlled_box_record(
+        target,
+        ot_id_xor=BOX_TARGET_OT_ID_XOR,
+        moves=CONTROLLED_MOVES,
+        pp=CONTROLLED_PP,
+        pp_ups=CONTROLLED_PP_UPS,
+    )
+    switch_source = party_record(controlled_party, 3)
+    _, switch_moves, switch_pp, switch_pp_ups = record_payload(switch_source)
+    switch_box = controlled_box_record(
+        switch_source,
+        ot_id_xor=BOX_SWITCH_OT_ID_XOR,
+        moves=switch_moves,
+        pp=switch_pp,
+        pp_ups=switch_pp_ups,
+    )
+    target_box_identity = box_identity(target_box)
+    switch_box_identity = box_identity(switch_box)
+    require(
+        target_box_identity[:2] != (pid, ot_id)
+        and switch_box_identity[:2] != (pid, ot_id)
+        and target_box_identity[:2] != switch_box_identity[:2],
+        "controlled boxed identities are not distinct",
+    )
+    pc_copies = valid_pc_copies(baseline_raw)
+    require(
+        len(pc_copies) == len(PARTY.SAVE_COPY_BASES),
+        "immutable fixture does not have both valid PC generations",
+    )
+    for _, base in pc_copies:
+        box_start = base + PC_SAVE_OFFSET
+        raw[
+            box_start + BOX_TARGET_SLOT * PC_MON_SIZE:
+            box_start + (BOX_TARGET_SLOT + 1) * PC_MON_SIZE
+        ] = target_box
+        raw[
+            box_start + BOX_SWITCH_SLOT * PC_MON_SIZE:
+            box_start + (BOX_SWITCH_SLOT + 1) * PC_MON_SIZE
+        ] = switch_box
+        struct.pack_into("<I", raw, box_start + PC_ACTIVE_BOX_OFFSET, 0)
+        struct.pack_into("<I", raw, box_start + PC_MODIFIED_FLAGS_OFFSET, 0)
+        footer = base + PC_SAVE_OFFSET + PC_SAVE_SIZE - PC_FOOTER_SIZE
+        crc = PARTY.crc16_ccitt_false(
+            bytes(raw[base + PC_SAVE_OFFSET:footer])
+        )
+        struct.pack_into("<H", raw, footer + 0x0E, crc)
+    require(
+        len(valid_pc_copies(bytes(raw))) == len(PARTY.SAVE_COPY_BASES),
+        "controlled PC generations are not authenticated",
+    )
+
     valid_images = []
     for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
         image = baseline_raw[offset:offset + HISTORY_IMAGE_SIZE]
@@ -684,16 +1025,20 @@ def make_controlled_raw(
             valid_images.append(image)
     require(valid_images, "immutable fixture has no valid history mirror")
     payload = bytearray(valid_images[0][:HISTORY_FOOTER_OFFSET])
-    index, _, _ = find_history_record(bytes(payload) + bytes(0x20), pid, ot_id)
-    record_offset = HISTORY_HEADER_SIZE + index * HISTORY_RECORD_SIZE
-    payload[record_offset + 14] = len(CONTROLLED_HISTORY_MOVES)
-    payload[record_offset + 15] = 1
-    payload[record_offset + 16:record_offset + 64] = bytes(48)
-    struct.pack_into(
-        f"<{len(CONTROLLED_HISTORY_MOVES)}H",
+    seed_history_record(
         payload,
-        record_offset + 16,
-        *CONTROLLED_HISTORY_MOVES,
+        target[:PC_MON_SIZE],
+        CONTROLLED_HISTORY_MOVES,
+    )
+    target_box_history_index = seed_history_record(
+        payload,
+        target_box,
+        CONTROLLED_HISTORY_MOVES,
+    )
+    switch_box_history_index = seed_history_record(
+        payload,
+        switch_box,
+        tuple(move for move in switch_moves if move != 0),
     )
     for mirror, offset in enumerate(HISTORY_MIRROR_OFFSETS):
         counter = (
@@ -703,7 +1048,34 @@ def make_controlled_raw(
         )
         image = history_image_for_mirror(bytes(payload), mirror, counter)
         raw[offset:offset + HISTORY_IMAGE_SIZE] = image
-    return bytes(raw), controlled_party, pid, ot_id, bytes(payload)
+    controlled_raw = bytes(raw)
+    _, active_pc_base = active_pc_copy(controlled_raw)
+    active_target = pc_box_record(
+        controlled_raw, active_pc_base, 0, BOX_TARGET_SLOT
+    )
+    active_switch = pc_box_record(
+        controlled_raw, active_pc_base, 0, BOX_SWITCH_SLOT
+    )
+    require(
+        active_target == target_box and active_switch == switch_box,
+        "controlled active PC generation differs",
+    )
+    return (
+        controlled_raw,
+        controlled_party,
+        pid,
+        ot_id,
+        bytes(payload),
+        {
+            "active_base": active_pc_base,
+            "target": target_box,
+            "switch": switch_box,
+            "target_identity": target_box_identity,
+            "switch_identity": switch_box_identity,
+            "target_history_index": target_box_history_index,
+            "switch_history_index": switch_box_history_index,
+        },
+    )
 
 
 def assert_cancel_exact(
@@ -731,6 +1103,27 @@ def assert_cancel_exact(
             f"{label} changed party bytes at "
             + ",".join(f"0x{index:X}" for index in differences[:32])
         )
+    require(metadata == expected_metadata, f"{label} changed history metadata")
+    require(history == expected_history, f"{label} changed history records")
+
+
+def assert_box_cancel_exact(
+    emu: DeSmuME,
+    expected_target: bytes,
+    expected_switch: bytes,
+    expected_metadata: bytes,
+    expected_history: bytes,
+    label: str,
+) -> None:
+    actual_target = runtime_box_record(emu, 0, BOX_TARGET_SLOT)
+    actual_switch = runtime_box_record(emu, 0, BOX_SWITCH_SLOT)
+    require(actual_target == expected_target, f"{label} changed boxed target")
+    require(actual_switch == expected_switch, f"{label} changed boxed switch peer")
+    require(
+        runtime_pc_modified_flags(emu) == 0,
+        f"{label} dirtied PC storage before a committed replacement",
+    )
+    metadata, history = runtime_history(emu)
     require(metadata == expected_metadata, f"{label} changed history metadata")
     require(history == expected_history, f"{label} changed history records")
 
@@ -766,9 +1159,153 @@ def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
     # The fixture party menu uses a two-column grid (0/1, 2/3, 4/5).
     for _ in range(party_slot // 2):
         tap(emu, "DOWN", 20)
+    if party_slot % 2:
+        tap(emu, "RIGHT", 20)
     tap(emu, "A", 30)
     tap(emu, "A", 100)
     tap(emu, "RIGHT", 80)
+
+
+def hold(emu: DeSmuME, key: str, frames: int, gap: int = 20) -> None:
+    HEADLESS.hold_key(emu, key, frames, gap)
+
+
+def open_retail_pc_storage_menu(
+    emu: DeSmuME,
+    *,
+    terminal_boot: bool = False,
+) -> None:
+    if not terminal_boot:
+        # Key-only route from the immutable fixture through the actual Center
+        # warp, followed by the east aisle that avoids the moving NPC at
+        # T21PC0101 (11,16).
+        for key, frames in (
+            ("LEFT", 90),
+            ("DOWN", 150),
+            ("RIGHT", 60),
+            ("DOWN", 100),
+            ("LEFT", 140),
+            ("UP", 60),
+            ("LEFT", 90),
+            ("UP", 140),
+        ):
+            hold(emu, key, frames, 12)
+        HEADLESS.cycle(emu, 300)
+        for key, frames in (
+            ("UP", 30),
+            ("RIGHT", 60),
+            ("UP", 60),
+            ("LEFT", 15),
+        ):
+            hold(emu, key, frames)
+    else:
+        # The boxed post-save reload was retail-saved at the same interaction
+        # tile, so only restore the facing direction.
+        HEADLESS.cycle(emu, 120)
+    tap(emu, "UP", 20)
+    tap(emu, "A", 80)
+
+    # Boot text -> owner selection -> Someone's PC introduction.
+    for _ in range(4):
+        tap(emu, "A", 60)
+    tap(emu, "A", 80)
+    for _ in range(3):
+        tap(emu, "A", 80)
+
+
+def open_retail_pc_move_ui(
+    emu: DeSmuME,
+    *,
+    terminal_boot: bool = False,
+) -> None:
+    open_retail_pc_storage_menu(emu, terminal_boot=terminal_boot)
+    # The storage menu starts on Deposit. Down selects Move Pokémon.
+    tap(emu, "DOWN", 30)
+    tap(emu, "A", 180)
+
+
+def open_retail_box_summary_moves(
+    emu: DeSmuME,
+    screenshot_root: Path,
+    prefix: str,
+    *,
+    terminal_boot: bool = False,
+) -> tuple[int, list[str]]:
+    captures: list[str] = []
+    open_retail_pc_move_ui(emu, terminal_boot=terminal_boot)
+    captures.append(
+        screenshot(emu, screenshot_root, f"{prefix}_pc_move_ui.png")
+    )
+
+    # Touch the actual first boxed record, then its retail Summary command.
+    touch(emu, 16, 56, 60)
+    touch(emu, 210, 76, 180)
+    captures.append(
+        screenshot(emu, screenshot_root, f"{prefix}_pc_summary_info.png")
+    )
+    hold(emu, "RIGHT", 5, 100)
+    captures.append(
+        screenshot(emu, screenshot_root, f"{prefix}_pc_summary_moves.png")
+    )
+    state = locate_inactive_summary_state(
+        emu,
+        moves=box_record_payload(
+            runtime_box_record(emu, 0, BOX_TARGET_SLOT)
+        )[1],
+        owner_pos=BOX_TARGET_SLOT,
+        data_type=2,
+    )
+    return state, captures
+
+
+def exit_pc_and_retail_save(
+    emu: DeSmuME,
+    baseline_counter: int,
+) -> None:
+    # Context menu -> box UI -> "Continue Box operations?" -> No.
+    tap(emu, "B", 60)
+    tap(emu, "B", 60)
+    tap(emu, "DOWN", 20)
+    tap(emu, "A", 180)
+    # Storage operation menu -> See Ya; PC owner menu -> Switch Off.
+    touch(emu, 190, 145, 180)
+    touch(emu, 100, 146, 180)
+    retail_save_from_field(emu, baseline_counter)
+
+
+def retail_save_from_field(
+    emu: DeSmuME,
+    baseline_counter: int,
+) -> None:
+    # Retail field Save touch, text advance, explicit Yes, and completion.
+    touch(emu, 125, 80, 120)
+    tap(emu, "A", 90)
+    tap(emu, "A", 60)
+    tap(emu, "A", 90)
+    for _ in range(8):
+        tap(emu, "A", 120)
+        if (
+            PARTY.save_counter_compare(
+                PARTY.read_runtime_save_counter(emu),
+                baseline_counter,
+            )
+            > 0
+        ):
+            break
+    require(
+        PARTY.save_counter_compare(
+            PARTY.read_runtime_save_counter(emu),
+            baseline_counter,
+        )
+        > 0,
+        "retail save did not advance the normal save counter",
+    )
+    # The counter becomes visible before all backup pages finish writing.
+    HEADLESS.cycle(emu, 2000)
+    # Retail returns to the still-open field menu after saving. Close it so a
+    # derived bootstrap always resumes in the overworld, never by navigating
+    # a persisted menu with what are intended to be movement keys.
+    tap(emu, "B", 120)
 
 
 def new_emulator(
@@ -1114,6 +1651,967 @@ def run_isolated_scenario(
                     "confirmed_pp_ups": list(changed_pp_ups),
                     "history_dirty_after_confirm": changed_metadata[4],
                 }
+            elif name == "party_switch":
+                open_summary_moves(emu, TARGET_SLOT)
+                party, _ = PARTY.wait_for_runtime_party(
+                    emu, expected_party, maximum_frames=90
+                )
+                metadata, history = runtime_history(emu)
+                tap(emu, "X", 20)
+                state = locate_summary_relearn_state(emu)
+                initial = candidate_state(emu, state)
+                original_owner_pokemon = read_u32(
+                    emu, state + SUMMARY_STATE_OWNER_POKEMON_OFFSET
+                )
+                switches: list[dict[str, object]] = []
+
+                # The retail party icon hitboxes are actions 4..9. Slot 3 is
+                # the right icon in the middle row and has no candidates.
+                touch(emu, 224, 92, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=3, expected_mode=2
+                )
+                switched_candidates = candidate_state(emu, state)
+                require(
+                    read_u32(
+                        emu,
+                        state + SUMMARY_STATE_OWNER_POKEMON_OFFSET,
+                    )
+                    != original_owner_pokemon,
+                    "party list switch retained the old BoxPokemon owner",
+                )
+                require(
+                    switched_candidates["candidates"] == (),
+                    "party list switch did not rebuild the peer empty state",
+                )
+                switches.append({"from_mode": 1, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party list real switch",
+                )
+
+                # Slot 2 is the left icon in the middle retail party row.
+                touch(emu, 184, 84, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=TARGET_SLOT, expected_mode=1
+                )
+                require(
+                    candidate_state(emu, state)["candidates"]
+                    == initial["candidates"],
+                    "party slot-state switch did not rebuild target candidates",
+                )
+                switches.append({"from_mode": 2, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party empty-state real switch",
+                )
+
+                tap(emu, "A", 12)
+                require(
+                    read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 3,
+                    "party target did not enter slot mode",
+                )
+                touch(emu, 224, 92, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=3, expected_mode=2
+                )
+                require(
+                    candidate_state(emu, state)["candidates"] == (),
+                    "party slot-state switch retained target candidates",
+                )
+                switches.append({"from_mode": 3, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party slot real switch",
+                )
+
+                touch(emu, 184, 84, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=TARGET_SLOT, expected_mode=1
+                )
+                require(
+                    candidate_state(emu, state)["candidates"]
+                    == initial["candidates"],
+                    "party empty-state return did not rebuild target",
+                )
+                switches.append({"from_mode": 2, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party empty-state return",
+                )
+
+                tap(emu, "A", 12)
+                for _ in range(3):
+                    tap(emu, "DOWN", 8)
+                tap(emu, "A", 12)
+                require(
+                    read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 4,
+                    "party target did not enter confirmation mode",
+                )
+                touch(emu, 224, 92, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=3, expected_mode=2
+                )
+                require(
+                    candidate_state(emu, state)["candidates"] == (),
+                    "party confirmation-state switch did not rebuild peer",
+                )
+                switches.append({"from_mode": 4, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party confirmation real switch",
+                )
+                tap(emu, "B", 20)
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                return {
+                    "label": name,
+                    "switches": switches,
+                    "initial_candidates": list(initial["candidates"]),
+                    "peer_candidates": list(
+                        switched_candidates["candidates"]
+                    ),
+                    "old_transactions_cancelled_exact": True,
+                    "party_exact": True,
+                    "history_exact": True,
+                    "dirty": metadata[4],
+                }
+            elif name == "center_bootstrap":
+                baseline_counter, _ = PARTY.active_copy(raw)
+                for key, frames in (
+                    ("LEFT", 90),
+                    ("DOWN", 150),
+                    ("RIGHT", 60),
+                    ("DOWN", 100),
+                    ("LEFT", 140),
+                    ("UP", 60),
+                    ("LEFT", 90),
+                    ("UP", 140),
+                ):
+                    hold(emu, key, frames, 12)
+                HEADLESS.cycle(emu, 300)
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                retail_save_from_field(emu, baseline_counter)
+                exported = screenshot_path.with_suffix(".sav")
+                require(
+                    emu.backup.export_file(str(exported)),
+                    "could not export retail Center bootstrap",
+                )
+                saved_raw = PARTY.extract_raw_save(exported)
+                saved_counter, saved_base = PARTY.active_copy(saved_raw)
+                location = struct.unpack_from(
+                    "<5i",
+                    saved_raw,
+                    saved_base + LOCAL_FIELD_DATA_OFFSET,
+                )
+                require(
+                    location[:4] == (69, -1, 8, 19),
+                    f"retail Center bootstrap location differs: {location}",
+                )
+                return {
+                    "label": name,
+                    "retail_save": True,
+                    "location": list(location),
+                    "generation": saved_counter,
+                    "normal_copies_authenticated": len(
+                        PARTY.valid_normal_copies(saved_raw)
+                    ),
+                    "exported_raw_save": str(exported),
+                    "capture": str(screenshot_path),
+                }
+            elif name == "terminal_bootstrap":
+                baseline_counter, _ = PARTY.active_copy(raw)
+                for key, frames in (
+                    ("UP", 30),
+                    ("RIGHT", 30),
+                    ("RIGHT", 30),
+                    ("UP", 60),
+                    ("LEFT", 15),
+                ):
+                    hold(emu, key, frames, 60)
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                retail_save_from_field(emu, baseline_counter)
+                exported = screenshot_path.with_suffix(".sav")
+                require(
+                    emu.backup.export_file(str(exported)),
+                    "could not export retail terminal bootstrap",
+                )
+                saved_raw = PARTY.extract_raw_save(exported)
+                saved_counter, saved_base = PARTY.active_copy(saved_raw)
+                location = struct.unpack_from(
+                    "<5i",
+                    saved_raw,
+                    saved_base + LOCAL_FIELD_DATA_OFFSET,
+                )
+                require(
+                    location[:4] == (69, -1, 11, 13),
+                    f"retail terminal bootstrap location differs: {location}",
+                )
+                return {
+                    "label": name,
+                    "retail_save": True,
+                    "location": list(location),
+                    "generation": saved_counter,
+                    "normal_copies_authenticated": len(
+                        PARTY.valid_normal_copies(saved_raw)
+                    ),
+                    "exported_raw_save": str(exported),
+                    "capture": str(screenshot_path),
+                }
+            elif name == "transfer":
+                baseline_counter, _ = PARTY.active_copy(raw)
+                baseline_pc_counter, baseline_pc_base = active_pc_copy(raw)
+                _, baseline_count, baseline_party = PARTY.party_image(raw)
+                require(
+                    baseline_count == 5,
+                    "transfer input does not have one empty party slot",
+                )
+                expected_target = pc_box_record(
+                    raw, baseline_pc_base, 0, BOX_TARGET_SLOT
+                )
+                target_pid, target_ot_id, target_species = box_identity(
+                    expected_target
+                )
+                require(
+                    target_species == TARGET_SPECIES,
+                    "transfer input does not contain the boxed target",
+                )
+                metadata, initial_history = runtime_history(emu)
+                history_index, _, initial_history_moves = find_history_record(
+                    initial_history, target_pid, target_ot_id
+                )
+                require(
+                    metadata[4] == 0
+                    and initial_history_moves.count(TARGET_MOVE) == 1,
+                    "transfer input history is not clean and singular",
+                )
+                captures: list[str] = []
+
+                # Retail Withdraw: the storage menu starts on Deposit, and its
+                # right-hand item is Withdraw. Box1 starts on slot zero and the
+                # first context command is the canonical WITHDRAW operation.
+                open_retail_pc_storage_menu(emu, terminal_boot=True)
+                tap(emu, "RIGHT", 30)
+                tap(emu, "A", 180)
+                tap(emu, "A", 60)
+                touch(emu, 210, 76, 180)
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_withdrawn.png",
+                    )
+                )
+                withdrawn_party = wait_party_locked(emu)
+                require(
+                    struct.unpack_from("<i", withdrawn_party, 4)[0] == 6,
+                    "retail Withdraw did not append party slot 5",
+                )
+                withdrawn_box = runtime_box_record(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                require(
+                    box_identity(withdrawn_box)[2] == 0,
+                    "retail Withdraw did not empty Box1 slot 0",
+                )
+                withdrawn_target = party_record(withdrawn_party, 5)
+                require(
+                    box_identity(withdrawn_target[:PC_MON_SIZE])[:2]
+                    == (target_pid, target_ot_id),
+                    "retail Withdraw changed the target PID/OTID",
+                )
+                withdrawn_metadata, withdrawn_history = runtime_history(emu)
+                require(
+                    withdrawn_metadata[4] == 0
+                    and withdrawn_history == initial_history,
+                    "retail Withdraw dirtied or changed move history",
+                )
+
+                # Exit Withdraw mode and the PC, then view the moved identity
+                # through the actual party Summary and rebuild its candidates.
+                tap(emu, "B", 60)
+                tap(emu, "DOWN", 20)
+                tap(emu, "A", 180)
+                touch(emu, 190, 145, 180)
+                touch(emu, 100, 146, 180)
+                open_summary_moves(emu, 5)
+                party_state = locate_inactive_summary_state(
+                    emu,
+                    moves=record_payload(withdrawn_target)[1],
+                    owner_pos=5,
+                    data_type=1,
+                )
+                tap(emu, "X", 30)
+                withdrawn_candidates = candidate_state(emu, party_state)
+                require(
+                    withdrawn_candidates["candidates"]
+                    == PERSISTED_CANDIDATES,
+                    "party Summary candidate order did not follow transfer",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_party_summary.png",
+                    )
+                )
+                tap(emu, "B", 30)
+                tap(emu, "B", 30)
+                wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                )
+                HEADLESS.cycle(emu, 120)
+                tap(emu, "B", 120)
+                tap(emu, "B", 120)
+
+                # Retail Deposit: reopen the same terminal, choose Deposit,
+                # select party slot 5, and use the first DEPOSIT command.
+                open_retail_pc_storage_menu(emu, terminal_boot=True)
+                touch(emu, 64, 48, 180)
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_deposit_party.png",
+                    )
+                )
+                tap(emu, "DOWN", 30)
+                tap(emu, "DOWN", 30)
+                tap(emu, "RIGHT", 30)
+                tap(emu, "A", 60)
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_deposit_context.png",
+                    )
+                )
+                touch(emu, 210, 76, 180)
+                tap(emu, "A", 180)
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_deposited.png",
+                    )
+                )
+                deposited_party = wait_party_locked(emu)
+                require(
+                    deposited_party == baseline_party,
+                    "retail Deposit did not restore the party byte-exact",
+                )
+                deposited_target = runtime_box_record(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                require(
+                    deposited_target == expected_target,
+                    "retail Deposit did not restore Box1 slot 0 byte-exact",
+                )
+                require(
+                    runtime_pc_modified_flags(emu) & 1,
+                    "retail Withdraw/Deposit did not mark Box1 dirty",
+                )
+                deposited_metadata, deposited_history = runtime_history(emu)
+                require(
+                    deposited_metadata[4] == 0
+                    and deposited_history == initial_history,
+                    "retail Deposit dirtied or changed move history",
+                )
+
+                tap(emu, "B", 60)
+                tap(emu, "DOWN", 20)
+                tap(emu, "A", 180)
+                touch(emu, 190, 145, 180)
+                touch(emu, 100, 146, 180)
+                retail_save_from_field(emu, baseline_counter)
+                exported = screenshot_path.with_suffix(".sav")
+                require(
+                    emu.backup.export_file(str(exported)),
+                    "could not export retail transfer save",
+                )
+                saved_raw = PARTY.extract_raw_save(exported)
+                saved_counter, saved_count, saved_party = PARTY.party_image(
+                    saved_raw
+                )
+                saved_pc_counter, saved_pc_base = active_pc_copy(saved_raw)
+                require(
+                    PARTY.save_counter_compare(
+                        saved_counter, baseline_counter
+                    )
+                    > 0
+                    and PARTY.save_counter_compare(
+                        saved_pc_counter, baseline_pc_counter
+                    )
+                    > 0,
+                    "retail transfer save did not advance save ownership",
+                )
+                require(
+                    saved_count == 5 and saved_party == baseline_party,
+                    "retail transfer save changed the restored party",
+                )
+                require(
+                    saved_raw[
+                        saved_pc_base + PC_SAVE_OFFSET:
+                        saved_pc_base
+                        + PC_SAVE_OFFSET
+                        + PC_STORAGE_BOXES_SIZE
+                    ]
+                    == raw[
+                        baseline_pc_base + PC_SAVE_OFFSET:
+                        baseline_pc_base
+                        + PC_SAVE_OFFSET
+                        + PC_STORAGE_BOXES_SIZE
+                    ],
+                    "retail transfer save changed a boxed record",
+                )
+                saved_checksums = validate_all_boxed_checksums(
+                    saved_raw, saved_pc_base
+                )
+                validate_all_party_checksums(saved_party)
+                _, _, saved_history = selected_persisted_history(saved_raw)
+                saved_history_index, _, saved_history_moves = (
+                    find_history_record(
+                        saved_history, target_pid, target_ot_id
+                    )
+                )
+                require(
+                    saved_history == initial_history
+                    and saved_history_index == history_index
+                    and saved_history_moves.count(TARGET_MOVE) == 1,
+                    "retail transfer duplicated or orphaned history",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_after_save.png",
+                    )
+                )
+                return {
+                    "label": name,
+                    "actual_retail_withdraw_and_deposit": True,
+                    "identity": [target_pid, target_ot_id],
+                    "party_slot_after_withdraw": 5,
+                    "party_candidate_order": list(
+                        withdrawn_candidates["candidates"]
+                    ),
+                    "box_slot_after_deposit": BOX_TARGET_SLOT,
+                    "history_record_index": history_index,
+                    "history_move_count": saved_history_moves.count(
+                        TARGET_MOVE
+                    ),
+                    "history_unchanged": True,
+                    "box1_dirty_before_save": True,
+                    "party_restored_exact": True,
+                    "all_900_saved_checksums_valid": len(
+                        saved_checksums
+                    )
+                    == 900,
+                    "saved_generation": saved_counter,
+                    "saved_pc_generation": saved_pc_counter,
+                    "exported_raw_save": str(exported),
+                    "captures": captures,
+                }
+            elif name == "boxed":
+                baseline_counter, _ = PARTY.active_copy(raw)
+                baseline_pc_counter, baseline_pc_base = active_pc_copy(raw)
+                expected_target = pc_box_record(
+                    raw, baseline_pc_base, 0, BOX_TARGET_SLOT
+                )
+                expected_switch = pc_box_record(
+                    raw, baseline_pc_base, 0, BOX_SWITCH_SLOT
+                )
+                target_pid, target_ot_id, _ = box_identity(expected_target)
+                metadata, history = runtime_history(emu)
+                require(metadata[4] == 0, "boxed scenario history is dirty")
+                state, captures = open_retail_box_summary_moves(
+                    emu,
+                    screenshot_path.parent,
+                    screenshot_path.stem,
+                    terminal_boot=True,
+                )
+                inactive_summary_evidence(
+                    emu, state, "actual PC Summary moves page"
+                )
+                assert_box_cancel_exact(
+                    emu,
+                    expected_target,
+                    expected_switch,
+                    metadata,
+                    history,
+                    "actual PC Summary entry",
+                )
+                transitions: list[dict[str, object]] = []
+
+                # Touch entry, scroll deeply, and cancel byte-exact.
+                touch(emu, 40, 140, 60)
+                initial = assert_candidate_viewport(
+                    emu, state, 0, 0, "boxed touch candidate list"
+                )
+                require(
+                    initial["candidates"] == CONTROLLED_CANDIDATES,
+                    "boxed candidate acquisition order differs",
+                )
+                for _ in range(5):
+                    tap(emu, "DOWN", 10)
+                scrolled = candidate_state(emu, state)
+                require(
+                    scrolled["cursor"] == 5 and scrolled["top"] == 2,
+                    "boxed list did not scroll to the expected deep viewport",
+                )
+                tap(emu, "B", 30)
+                summary_state_evidence(
+                    emu, state, 0, 0, "boxed deep-list cancel"
+                )
+                assert_box_cancel_exact(
+                    emu,
+                    expected_target,
+                    expected_switch,
+                    metadata,
+                    history,
+                    "boxed deep-list cancel",
+                )
+
+                # Re-enter by key and use the actual PC next/previous arrows
+                # from list, slot, HM, and confirmation states.
+                tap(emu, "X", 30)
+                initial = assert_candidate_viewport(
+                    emu, state, 0, 0, "boxed key candidate list"
+                )
+                target_owner = read_u32(
+                    emu, state + SUMMARY_STATE_OWNER_POKEMON_OFFSET
+                )
+                require(
+                    target_owner
+                    == runtime_box_address(emu, 0, BOX_TARGET_SLOT),
+                    "boxed Summary target owner is not canonical PC storage",
+                )
+                for from_mode in (1, 3, 5, 4):
+                    if from_mode == 3:
+                        tap(emu, "A", 20)
+                    elif from_mode == 5:
+                        tap(emu, "A", 20)
+                        tap(emu, "A", 30)
+                    elif from_mode == 4:
+                        tap(emu, "A", 20)
+                        for _ in range(3):
+                            tap(emu, "DOWN", 8)
+                        tap(emu, "A", 30)
+                    require(
+                        read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET)
+                        == from_mode,
+                        f"boxed pre-switch mode {from_mode} was not reached",
+                    )
+                    touch(emu, 215, 115, 30)
+                    switched = wait_summary_identity(
+                        emu,
+                        state,
+                        expected_pos=BOX_SWITCH_SLOT,
+                        expected_mode=2,
+                        expected_owner_pokemon=runtime_box_address(
+                            emu, 0, BOX_SWITCH_SLOT
+                        ),
+                    )
+                    transitions.append(
+                        {"from_mode": from_mode, "to": "empty", **switched}
+                    )
+                    assert_box_cancel_exact(
+                        emu,
+                        expected_target,
+                        expected_switch,
+                        metadata,
+                        history,
+                        f"boxed mode {from_mode} next switch",
+                    )
+                    touch(emu, 215, 50, 30)
+                    switched_back = wait_summary_identity(
+                        emu,
+                        state,
+                        expected_pos=BOX_TARGET_SLOT,
+                        expected_mode=1,
+                        expected_owner_pokemon=target_owner,
+                    )
+                    require(
+                        candidate_state(emu, state)["candidates"]
+                        == initial["candidates"],
+                        f"boxed mode {from_mode} switch retained peer state",
+                    )
+                    transitions.append(
+                        {"from_mode": 2, "to": "list", **switched_back}
+                    )
+
+                # Permanent mutation occurs only after this explicit confirm.
+                tap(emu, "A", 20)
+                for _ in range(3):
+                    tap(emu, "DOWN", 8)
+                tap(emu, "A", 30)
+                tap(emu, "A", 120)
+                summary_state_evidence(
+                    emu, state, 6, 1, "boxed confirmed replacement"
+                )
+                changed_target = runtime_box_record(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                _, changed_moves, changed_pp, changed_pp_ups = (
+                    box_record_payload(changed_target)
+                )
+                require(
+                    changed_moves == (57, 48, 352, TARGET_MOVE)
+                    and changed_pp[TARGET_REPLACEMENT_SLOT] == 8
+                    and changed_pp_ups[TARGET_REPLACEMENT_SLOT] == 0,
+                    "boxed replacement move/PP/PP Ups differ",
+                )
+                validate_box_checksum(changed_target, "runtime boxed target")
+                require(
+                    runtime_box_record(emu, 0, BOX_SWITCH_SLOT)
+                    == expected_switch,
+                    "boxed replacement changed the switch peer",
+                )
+                require(
+                    runtime_pc_modified_flags(emu) == 0,
+                    "Summary dirtied PC storage before returning to its parent",
+                )
+                committed_metadata, committed_history = runtime_history(emu)
+                history_index, _, history_moves_before = find_history_record(
+                    history, target_pid, target_ot_id
+                )
+                committed_index, _, history_moves_after = find_history_record(
+                    committed_history, target_pid, target_ot_id
+                )
+                require(
+                    committed_index == history_index
+                    and history_moves_after[
+                        :len(history_moves_before)
+                    ]
+                    == history_moves_before
+                    and history_moves_after.count(TARGET_MOVE) == 1,
+                    "boxed replacement did not update one identity record once",
+                )
+                for index, (old, new) in enumerate(
+                    zip(
+                        history_records(history),
+                        history_records(committed_history),
+                    )
+                ):
+                    if index != history_index:
+                        require(
+                            old == new,
+                            f"boxed replacement changed history record {index}",
+                        )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_boxed_success.png",
+                    )
+                )
+
+                # A real switch from success keeps the confirmed write, drops
+                # only old modal state, and rebuilds the target without the
+                # newly known move when switching back.
+                touch(emu, 215, 115, 30)
+                wait_summary_identity(
+                    emu,
+                    state,
+                    expected_pos=BOX_SWITCH_SLOT,
+                    expected_mode=2,
+                )
+                touch(emu, 215, 50, 30)
+                wait_summary_identity(
+                    emu,
+                    state,
+                    expected_pos=BOX_TARGET_SLOT,
+                    expected_mode=1,
+                )
+                require(
+                    TARGET_MOVE
+                    not in candidate_state(emu, state)["candidates"],
+                    "boxed success switch rebuilt a now-known candidate",
+                )
+                tap(emu, "B", 30)
+                tap(emu, "B", 180)
+                require(
+                    runtime_pc_modified_flags(emu) & 1,
+                    "PC Summary parent did not dirty the active box",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_pc_parent_dirty.png",
+                    )
+                )
+                exit_pc_and_retail_save(emu, baseline_counter)
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_after_save.png",
+                    )
+                )
+                exported = screenshot_path.with_suffix(".sav")
+                require(
+                    emu.backup.export_file(str(exported)),
+                    "DeSmuME could not export boxed post-save battery",
+                )
+                saved_raw = PARTY.extract_raw_save(exported)
+                saved_counter, saved_count, saved_party = PARTY.party_image(
+                    saved_raw
+                )
+                saved_pc_counter, saved_pc_base = active_pc_copy(saved_raw)
+                saved_target = pc_box_record(
+                    saved_raw, saved_pc_base, 0, BOX_TARGET_SLOT
+                )
+                saved_switch = pc_box_record(
+                    saved_raw, saved_pc_base, 0, BOX_SWITCH_SLOT
+                )
+                require(
+                    PARTY.save_counter_compare(
+                        saved_counter, baseline_counter
+                    )
+                    > 0
+                    and PARTY.save_counter_compare(
+                        saved_pc_counter, baseline_pc_counter
+                    )
+                    > 0,
+                    "boxed retail save did not publish newer generations",
+                )
+                require(
+                    saved_count == 5
+                    and saved_party == expected_party,
+                    "boxed path changed one or more party records",
+                )
+                validate_all_party_checksums(saved_party)
+                require(
+                    PARTY.summarize_party(saved_party)[4]["shiny"] is True,
+                    "boxed path corrupted shiny Pidgey",
+                )
+                require(
+                    saved_target == changed_target
+                    and saved_switch == expected_switch,
+                    "boxed replacement did not persist exactly",
+                )
+                for box in range(PC_BOX_COUNT):
+                    for slot in range(PC_MONS_PER_BOX):
+                        if box == 0 and slot == BOX_TARGET_SLOT:
+                            continue
+                        require(
+                            pc_box_record(
+                                saved_raw, saved_pc_base, box, slot
+                            )
+                            == pc_box_record(
+                                raw, baseline_pc_base, box, slot
+                            ),
+                            f"unrelated PC box {box} slot {slot} changed",
+                        )
+                saved_checksums = validate_all_boxed_checksums(
+                    saved_raw, saved_pc_base
+                )
+                _, _, persisted_history = selected_persisted_history(
+                    saved_raw
+                )
+                persisted_index, _, persisted_moves = find_history_record(
+                    persisted_history, target_pid, target_ot_id
+                )
+                require(
+                    persisted_index == history_index
+                    and persisted_moves.count(TARGET_MOVE) == 1,
+                    "boxed history did not persist once",
+                )
+                return {
+                    "label": name,
+                    "actual_terminal_and_pc_ui": True,
+                    "actual_box_summary": True,
+                    "switch_transitions": transitions,
+                    "candidate_order": list(initial["candidates"]),
+                    "confirmed_moves": list(changed_moves),
+                    "confirmed_pp": list(changed_pp),
+                    "confirmed_pp_ups": list(changed_pp_ups),
+                    "pc_parent_dirty_flags": 1,
+                    "saved_pc_generation": saved_pc_counter,
+                    "all_900_saved_checksums_valid": len(
+                        saved_checksums
+                    )
+                    == 900,
+                    "party_exact": True,
+                    "shiny_pidgey_valid": True,
+                    "history_record_index": history_index,
+                    "history_move_count": history_moves_after.count(
+                        TARGET_MOVE
+                    ),
+                    "exported_raw_save": str(exported),
+                    "captures": captures,
+                }
+            elif name == "boxed_reload":
+                _, persisted_pc_base = active_pc_copy(raw)
+                persisted_target = pc_box_record(
+                    raw, persisted_pc_base, 0, BOX_TARGET_SLOT
+                )
+                _, persisted_moves, persisted_pp, persisted_pp_ups = (
+                    box_record_payload(persisted_target)
+                )
+                require(
+                    persisted_moves == (57, 48, 352, TARGET_MOVE)
+                    and persisted_pp[TARGET_REPLACEMENT_SLOT] == 8
+                    and persisted_pp_ups[TARGET_REPLACEMENT_SLOT] == 0,
+                    "boxed reload input lacks the persisted replacement",
+                )
+                state, captures = open_retail_box_summary_moves(
+                    emu,
+                    screenshot_path.parent,
+                    screenshot_path.stem,
+                    terminal_boot=True,
+                )
+                tap(emu, "X", 30)
+                reloaded = candidate_state(emu, state)
+                require(
+                    TARGET_MOVE not in reloaded["candidates"],
+                    "fresh PC Summary still offers the persisted move",
+                )
+                touch(emu, 215, 115, 30)
+                wait_summary_identity(
+                    emu,
+                    state,
+                    expected_pos=BOX_SWITCH_SLOT,
+                    expected_mode=2,
+                )
+                touch(emu, 215, 50, 30)
+                wait_summary_identity(
+                    emu,
+                    state,
+                    expected_pos=BOX_TARGET_SLOT,
+                    expected_mode=1,
+                )
+                tap(emu, "B", 30)
+                metadata, persisted_history = runtime_history(emu)
+                pid, ot_id, _ = box_identity(persisted_target)
+                history_index, _, history_moves = find_history_record(
+                    persisted_history, pid, ot_id
+                )
+                require(
+                    history_moves.count(TARGET_MOVE) == 1,
+                    "fresh reload history duplicated the boxed move",
+                )
+                _, _, reloaded_party = PARTY.party_image(raw)
+                validate_all_party_checksums(reloaded_party)
+                reloaded_checksums = validate_all_boxed_checksums(
+                    raw, persisted_pc_base
+                )
+                require(
+                    PARTY.summarize_party(reloaded_party)[4]["shiny"] is True,
+                    "fresh boxed reload corrupted shiny Pidgey",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_persisted_summary.png",
+                    )
+                )
+                return {
+                    "label": name,
+                    "actual_terminal_and_pc_ui": True,
+                    "actual_box_summary": True,
+                    "persisted_moves": list(persisted_moves),
+                    "persisted_pp": list(persisted_pp),
+                    "persisted_pp_ups": list(persisted_pp_ups),
+                    "candidate_order_without_known_move": list(
+                        reloaded["candidates"]
+                    ),
+                    "history_record_index": history_index,
+                    "history_move_count": history_moves.count(TARGET_MOVE),
+                    "history_dirty": metadata[4],
+                    "all_900_checksums_valid": len(reloaded_checksums)
+                    == 900,
+                    "captures": captures,
+                }
+            elif name == "transfer_reload":
+                _, persisted_pc_base = active_pc_copy(raw)
+                persisted_target = pc_box_record(
+                    raw, persisted_pc_base, 0, BOX_TARGET_SLOT
+                )
+                pid, ot_id, species = box_identity(persisted_target)
+                require(
+                    species == TARGET_SPECIES,
+                    "transfer reload lost the boxed target",
+                )
+                _, count, persisted_party = PARTY.party_image(raw)
+                require(
+                    count == 5,
+                    "transfer reload did not retain the restored party count",
+                )
+                validate_all_party_checksums(persisted_party)
+                persisted_checksums = validate_all_boxed_checksums(
+                    raw, persisted_pc_base
+                )
+                _, _, persisted_history = selected_persisted_history(raw)
+                history_index, _, history_moves = find_history_record(
+                    persisted_history, pid, ot_id
+                )
+                require(
+                    history_moves.count(TARGET_MOVE) == 1,
+                    "transfer reload duplicated or orphaned history",
+                )
+                state, captures = open_retail_box_summary_moves(
+                    emu,
+                    screenshot_path.parent,
+                    screenshot_path.stem,
+                    terminal_boot=True,
+                )
+                tap(emu, "X", 30)
+                reloaded = candidate_state(emu, state)
+                require(
+                    reloaded["candidates"] == PERSISTED_CANDIDATES,
+                    "boxed candidate order changed after transfer reload",
+                )
+                metadata, runtime_persisted_history = runtime_history(emu)
+                require(
+                    metadata[4] == 0
+                    and runtime_persisted_history == persisted_history,
+                    "transfer reload selected dirty or different history",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_continuity.png",
+                    )
+                )
+                return {
+                    "label": name,
+                    "actual_terminal_and_pc_ui": True,
+                    "actual_box_summary": True,
+                    "identity": [pid, ot_id],
+                    "box_slot": BOX_TARGET_SLOT,
+                    "candidate_order": list(reloaded["candidates"]),
+                    "history_record_index": history_index,
+                    "history_move_count": history_moves.count(TARGET_MOVE),
+                    "history_dirty": metadata[4],
+                    "all_900_checksums_valid": len(
+                        persisted_checksums
+                    )
+                    == 900,
+                    "party_count": count,
+                    "captures": captures,
+                }
             else:
                 require(
                     not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
@@ -1328,7 +2826,16 @@ def isolated_scenario_evidence(
         check=False,
         capture_output=True,
         text=True,
-        timeout=90,
+        timeout=240
+        if name in (
+            "center_bootstrap",
+            "terminal_bootstrap",
+            "transfer",
+            "transfer_reload",
+            "boxed",
+            "boxed_reload",
+        )
+        else 90,
     )
     require(
         completed.returncode == 0,
@@ -1366,12 +2873,28 @@ def run(args: argparse.Namespace) -> dict:
         target_pid,
         target_ot_id,
         controlled_history_payload,
+        box_fixture,
     ) = make_controlled_raw(immutable_raw)
     baseline_counter, occupied, checked_party = PARTY.party_image(controlled_raw)
     require(checked_party == baseline_party, "controlled party selection differs")
     require(occupied == 5, f"fixture party count differs: {occupied}")
     baseline_summary = PARTY.summarize_party(baseline_party)
     baseline_checksums = validate_all_party_checksums(baseline_party)
+    controlled_pc_counter, controlled_pc_base = active_pc_copy(controlled_raw)
+    baseline_box_checksums = validate_all_boxed_checksums(
+        controlled_raw, controlled_pc_base
+    )
+    baseline_target_box = pc_box_record(
+        controlled_raw, controlled_pc_base, 0, BOX_TARGET_SLOT
+    )
+    baseline_switch_box = pc_box_record(
+        controlled_raw, controlled_pc_base, 0, BOX_SWITCH_SLOT
+    )
+    require(
+        baseline_target_box == box_fixture["target"]
+        and baseline_switch_box == box_fixture["switch"],
+        "controlled active boxed records differ from fixture metadata",
+    )
     require(
         baseline_summary[4]["shiny"] is True
         and baseline_summary[4]["species"] == 16,
@@ -1903,6 +3426,77 @@ def run(args: argparse.Namespace) -> dict:
     )
     captures.append(str(key_capture))
 
+    party_switch_capture = (
+        args.screenshot_dir / "09_party_real_switching.png"
+    )
+    party_switch_evidence = isolated_scenario_evidence(
+        rom,
+        args.controlled_raw,
+        "party_switch",
+        party_switch_capture,
+    )
+    captures.append(str(party_switch_capture))
+
+    center_bootstrap_capture = (
+        args.screenshot_dir / "10_retail_center_bootstrap.png"
+    )
+    center_bootstrap_evidence = isolated_scenario_evidence(
+        rom,
+        args.controlled_raw,
+        "center_bootstrap",
+        center_bootstrap_capture,
+    )
+    captures.append(str(center_bootstrap_capture))
+    terminal_bootstrap_capture = (
+        args.screenshot_dir / "11_retail_terminal_bootstrap.png"
+    )
+    terminal_bootstrap_evidence = isolated_scenario_evidence(
+        rom,
+        Path(center_bootstrap_evidence["exported_raw_save"]),
+        "terminal_bootstrap",
+        terminal_bootstrap_capture,
+    )
+    captures.append(str(terminal_bootstrap_capture))
+
+    boxed_capture = args.screenshot_dir / "12_actual_boxed_summary.png"
+    boxed_evidence = isolated_scenario_evidence(
+        rom,
+        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        "boxed",
+        boxed_capture,
+    )
+    captures.extend(boxed_evidence["captures"])
+    boxed_reload_capture = (
+        args.screenshot_dir / "13_actual_boxed_reload.png"
+    )
+    boxed_reload_evidence = isolated_scenario_evidence(
+        rom,
+        Path(boxed_evidence["exported_raw_save"]),
+        "boxed_reload",
+        boxed_reload_capture,
+    )
+    captures.extend(boxed_reload_evidence["captures"])
+    transfer_capture = (
+        args.screenshot_dir / "14_retail_box_party_box_transfer.png"
+    )
+    transfer_evidence = isolated_scenario_evidence(
+        rom,
+        Path(boxed_evidence["exported_raw_save"]),
+        "transfer",
+        transfer_capture,
+    )
+    captures.extend(transfer_evidence["captures"])
+    transfer_reload_capture = (
+        args.screenshot_dir / "15_retail_transfer_reload.png"
+    )
+    transfer_reload_evidence = isolated_scenario_evidence(
+        rom,
+        Path(transfer_evidence["exported_raw_save"]),
+        "transfer_reload",
+        transfer_reload_capture,
+    )
+    captures.extend(transfer_reload_evidence["captures"])
+
     # Each extra boundary/lifecycle scenario runs in a fresh emulator process.
     for scenario in ("empty", "identity", "position", "teardown"):
         scenario_capture = (
@@ -1947,6 +3541,22 @@ def run(args: argparse.Namespace) -> dict:
 
     saved_raw = PARTY.extract_raw_save(args.export_raw)
     saved_counter, saved_count, saved_party = PARTY.party_image(saved_raw)
+    saved_pc_counter, saved_pc_base = active_pc_copy(saved_raw)
+    saved_box_checksums = validate_all_boxed_checksums(
+        saved_raw, saved_pc_base
+    )
+    baseline_pc_image = controlled_raw[
+        controlled_pc_base + PC_SAVE_OFFSET:
+        controlled_pc_base + PC_SAVE_OFFSET + PC_STORAGE_BOXES_SIZE
+    ]
+    saved_pc_image = saved_raw[
+        saved_pc_base + PC_SAVE_OFFSET:
+        saved_pc_base + PC_SAVE_OFFSET + PC_STORAGE_BOXES_SIZE
+    ]
+    require(
+        saved_pc_image == baseline_pc_image,
+        "party-only acceptance changed one or more serialized PC records",
+    )
     require(saved_count == occupied, "save changed occupied party count")
     require(
         PARTY.save_counter_compare(saved_counter, baseline_counter) > 0,
@@ -2079,6 +3689,15 @@ def run(args: argparse.Namespace) -> dict:
             "moves": list(before_moves),
             "pp": list(before_pp),
             "pp_ups": list(before_pp_ups),
+            "pc_generation": controlled_pc_counter,
+            "pc_copies_authenticated": len(valid_pc_copies(controlled_raw)),
+            "boxed_target_identity": list(
+                box_fixture["target_identity"]
+            ),
+            "boxed_switch_identity": list(
+                box_fixture["switch_identity"]
+            ),
+            "all_900_box_checksums_valid": len(baseline_box_checksums) == 900,
         },
         "baseline_save_counter": baseline_counter,
         "saved_save_counter": saved_counter,
@@ -2138,10 +3757,29 @@ def run(args: argparse.Namespace) -> dict:
             "fresh_reload_exact": True,
             "shiny_pidgey": saved_summary[4],
         },
+        "pc_storage": {
+            "serialized_box_stride": "0x1000",
+            "serialized_box_mon_stride": "0x88",
+            "baseline_generation": controlled_pc_counter,
+            "saved_generation": saved_pc_counter,
+            "both_baseline_copies_authenticated": True,
+            "all_900_baseline_checksums_valid": len(
+                baseline_box_checksums
+            ) == 900,
+            "all_900_saved_checksums_valid": len(saved_box_checksums) == 900,
+            "party_only_path_records_exact": True,
+        },
         "summary_state_evidence": state_evidence,
         "immediate_touch_transitions": transition_evidence,
         "boundary_evidence": boundary_evidence,
         "key_only_evidence": key_only_evidence,
+        "party_switch_evidence": party_switch_evidence,
+        "retail_center_bootstrap_evidence": center_bootstrap_evidence,
+        "retail_terminal_bootstrap_evidence": terminal_bootstrap_evidence,
+        "boxed_evidence": boxed_evidence,
+        "boxed_reload_evidence": boxed_reload_evidence,
+        "transfer_evidence": transfer_evidence,
+        "transfer_reload_evidence": transfer_reload_evidence,
         "prospective_evidence": prospective_evidence,
         "control_pixel_evidence": control_pixel_evidence,
         "screenshots": captures,
@@ -2157,7 +3795,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--probe-raw", type=Path)
     parser.add_argument(
         "--scenario",
-        choices=("empty", "identity", "position", "teardown", "keys"),
+        choices=(
+            "empty",
+            "identity",
+            "position",
+            "teardown",
+            "keys",
+            "party_switch",
+            "center_bootstrap",
+            "terminal_bootstrap",
+            "transfer",
+            "transfer_reload",
+            "boxed",
+            "boxed_reload",
+        ),
     )
     parser.add_argument(
         "--probe-screenshot",

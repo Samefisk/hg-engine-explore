@@ -80,6 +80,8 @@ def source_contracts(root: Path) -> None:
     ).read_text()
     overlay_source = (root / "src/overlay.c").read_text()
     messages = (root / "data/text/302.txt").read_text()
+    summary_header = (root / "include/summary.h").read_text()
+    storage = (root / "src/pokemon_storage_system.c").read_text()
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
     readonly = body(history, "PokemonMoveHistory_QueryReadOnlyImpl")
@@ -101,11 +103,24 @@ def source_contracts(root: Path) -> None:
         "shared query does not separate lookup from observation",
     )
 
-    current_mon = body(ui, "SummaryMoveRelearn_GetCurrentMon")
+    current_mon = body(ui, "SummaryMoveRelearn_GetCurrentBoxMon")
     require(
-        "Party_GetMonByIndex(party, pos)" in current_mon
-        and "party->members" not in current_mon,
-        "party lookup does not use the canonical accessor",
+        current_mon.count("Summary_GetPokemonData(summary)") == 2
+        and "Party_GetMonByIndex" not in current_mon
+        and "storage->boxes" not in current_mon
+        and "summary->baseData->dataType == SUMMARY_PARTY_DATA"
+        in current_mon
+        and "summary->baseData->dataType != SUMMARY_BOX_DATA"
+        in current_mon
+        and "summary->baseData->limit != MONS_PER_BOX" in current_mon
+        and "pos >= (u32)Party_GetCount(party)" in current_mon,
+        "party/PC lookup does not use bounded canonical Summary ownership",
+    )
+    require(
+        "/* 0x30 */ void *menuInputState;" in summary_header
+        and "/* 0x34 */ BOOL isFlag982Set;" in summary_header
+        and "/* 0x38 */ BOOL pokemonChanged;" in summary_header,
+        "Summary arguments do not name the retail PC ownership tail",
     )
     enter = body(ui, "SummaryMoveRelearn_Enter")
     require(
@@ -145,7 +160,7 @@ def source_contracts(root: Path) -> None:
         "permanent mutation is not isolated to the confirmation worker",
     )
     replace_at = commit.index("PokemonMoveHistory_ReplaceMove(")
-    dirty_at = commit.index("summary->baseData + 0x38")
+    dirty_at = commit.index("summary->baseData->pokemonChanged = TRUE;")
     require(
         replace_at < dirty_at,
         "Summary dirty ownership is marked before replacement success",
@@ -156,7 +171,15 @@ def source_contracts(root: Path) -> None:
         and "SummaryMoveRelearn_IsCachedCandidate" in commit,
         "commit-time no-op/HM/candidate revalidation is incomplete",
     )
-    for cancel_body, label in ((end, "end"), (list_handler, "list")):
+    navigation_cancel = body(
+        ui,
+        "SummaryMoveRelearn_CancelForNavigation",
+    )
+    for cancel_body, label in (
+        (end, "end"),
+        (list_handler, "list"),
+        (navigation_cancel, "navigation"),
+    ):
         require(
             "PokemonMoveHistory_ReplaceMove" not in cancel_body
             and "SetBoxMonData" not in cancel_body,
@@ -179,8 +202,9 @@ def source_contracts(root: Path) -> None:
     )
     require(
         "MON_DATA_CHECKSUM_FAILED" in main
+        and "MON_DATA_SPECIES_EXISTS" in main
         and "MON_DATA_IS_EGG" in main,
-        "entry eligibility omits checksum/egg safety",
+        "entry eligibility omits empty/checksum/egg safety",
     )
     for state in (
         "SUMMARY_RELEARN_LIST",
@@ -212,15 +236,62 @@ def source_contracts(root: Path) -> None:
     require(
         identity_guard < identity_restore < refresh_restore
         and "state->ownerPos != summary->baseData->pos" in main
+        and "state->ownerPokemon != pokemon" in main
         and "summary->baseData->move = restoreMove;" in main,
         "identity and position boundary cleanup are not separated",
+    )
+    require(
+        "state->ownerArgs == summary->baseData" in navigation_cancel
+        and "state->ownerPos == summary->baseData->pos"
+        in navigation_cancel
+        and "state->ownerPokemon\n            == "
+        "SummaryMoveRelearn_GetCurrentBoxMon(summary)"
+        in navigation_cancel
+        and "state->resumeAfterSwitch = resumeAfterSwitch;"
+        in navigation_cancel,
+        "switch cancellation can restore UI cache to the wrong owner",
+    )
+    owns_touch = body(ui, "SummaryMoveRelearn_OwnsCurrentTouch")
+    require(
+        "SummaryMoveRelearn_OwnsCurrentTouch(summary, state)" in main
+        and "Summary_GetTouchAction(summary)" in main
+        and "Summary_GetPokemonSwitchTouch()" in main
+        and "touchAction >= 4 && touchAction <= 9" in main
+        and "repeatKeys & (PAD_KEY_LEFT | PAD_KEY_RIGHT)" in main
+        and "return Summary_VanillaMainState(summary);" in main
+        and "SummaryMoveRelearn_GetTouch(sMoveRowTouchRects)" in owns_touch
+        and "SummaryMoveRelearn_GetTouch(sConfirmTouchRects)" in owns_touch,
+        "modal switching/page gestures do not preserve retail delegation",
+    )
+    require(
+        "if (state->resumeAfterSwitch)" in main
+        and "SummaryMoveRelearn_Enter(summary, state, pokemon);" in main
+        and "state->ownerPokemon = pokemon;" in enter
+        and "state->candidateCursor = 0;" in enter
+        and "state->candidateTop = 0;" in enter
+        and "state->pendingMove = 0;" in enter,
+        "new identity does not receive a fresh candidate transaction",
+    )
+    require(
+        "PCStorage_SetBoxModified" not in ui
+        and storage.count("PCStorage_SetBoxModified(storage, boxno)") >= 3,
+        "Summary bypasses PC ownership or canonical storage paths lost dirtying",
+    )
+    observe = body(history, "PokemonMoveHistory_ObserveSnapshot")
+    capture = body(history, "PokemonMoveHistory_CaptureSnapshotImpl")
+    require(
+        "snapshot->personality =" in capture
+        and "snapshot->otId =" in capture
+        and "snapshot->personality" in observe
+        and "snapshot->otId" in observe,
+        "normal transfer continuity is not anchored to PID/OTID history identity",
     )
 
     require(
         "Summary_MoveRelearnDispatcher 02088494" not in hooks
         and "arm9 Summary_IVEV 02088B60 1" in hooks
         and "arm9 Summary_Entry_Hook 0208D2C4 1" in hooks,
-        "task4 hook does not coexist with retail extensions",
+        "Summary hook does not coexist with retail extensions",
     )
     require(
         ".org 0x02088494" in armips_patch
@@ -247,7 +318,7 @@ def source_contracts(root: Path) -> None:
     )
     require(
         "Summary_MoveRelearnDispatcher" not in resident_hook_source,
-        "task4 still consumes resident overlay-129 dispatcher space",
+        "Summary relearn still consumes resident overlay-129 dispatcher space",
     )
     require(
         "ovyId <= OVERLAY_POKEMON_MOVE_HISTORY" in overlay_source,
@@ -419,6 +490,13 @@ def host_state_contracts() -> None:
         ("confirm", "touch-ok"): ("success", True),
         ("hm", "B"): ("slot", False),
         ("success", "B"): ("inactive", False),
+        ("list", "party-touch-switch"): ("list", False),
+        ("slot", "box-arrow-switch"): ("list", False),
+        ("confirm", "party-touch-switch"): ("list", False),
+        ("hm", "box-arrow-switch"): ("list", False),
+        ("empty", "party-touch-switch"): ("list", False),
+        ("success", "box-arrow-switch"): ("list", False),
+        ("list", "page-change"): ("inactive", False),
     }
     for (state, key), (_, mutates) in transitions.items():
         require(
@@ -625,12 +703,19 @@ def binary_contracts(args: argparse.Namespace) -> None:
     for target in (
         "PokemonMoveRelearn_BuildCandidates",
         "PokemonMoveHistory_ReplaceMove",
-        "Party_GetMonByIndex",
+        "Party_GetCount",
+        "Summary_GetPokemonData",
+        "Summary_GetTouchAction",
+        "Summary_GetPokemonSwitchTouch",
         "Summary_VanillaMainState",
     ):
         require(
-            re.search(rf"R_ARM_ABS32\s+{target}\b", relocations) is not None,
-            f"task4 lacks a typed interworking relocation to {target}",
+            re.search(rf"R_ARM_ABS32\s+{target}\b", relocations) is not None
+            and re.search(
+                rf"R_ARM_THM_CALL\s+{target}\b",
+                relocations,
+            ) is None,
+            f"Summary relearn lacks a safe typed relocation to {target}",
         )
 
 

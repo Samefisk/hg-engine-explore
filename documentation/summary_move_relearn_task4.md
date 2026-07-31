@@ -1,9 +1,10 @@
 # Summary move relearn — task 4 inline party flow
 
-Task 4 adds an in-Summary candidate browser and confirmed move replacement for
-the currently displayed party Pokémon. It does not add boxed Pokémon/switching
-coverage, audit broad unusual acquisition paths, or enable the optional
-all-compatible policy.
+Task 4 added the original in-Summary candidate browser and confirmed party
+replacement flow. Task 5's boxed ownership and identity-safe switching
+extension is documented in `summary_move_relearn_task5.md`; the task-4
+verification discussion below records the earlier party-only acceptance
+boundary.
 
 ## Player controls
 
@@ -156,8 +157,7 @@ Pidgey.
 
 Reserved for later tasks:
 
-- task 5: boxed Pokémon and actual cross-Pokémon switching coverage (task 4
-  only cancels safely when an owner identity/position boundary is observed);
+- task 5: delivered separately in `summary_move_relearn_task5.md`;
 - task 6: broad gift/trade/form/daycare/Pokéwalker and unusual scripted-source
   audits;
 - task 7: optional all-compatible testing policy.

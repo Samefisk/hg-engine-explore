@@ -2,6 +2,7 @@
 #include "../../include/message.h"
 #include "../../include/pokemon.h"
 #include "../../include/pokemon_move_history.h"
+#include "../../include/pokemon_storage_system.h"
 #include "../../include/save.h"
 #include "../../include/summary.h"
 #include "../../include/window.h"
@@ -16,6 +17,7 @@
 
 #define SUMMARY_MOVE_PAGE                1
 #define SUMMARY_PARTY_DATA               1
+#define SUMMARY_BOX_DATA                 2
 #define SUMMARY_NORMAL_MODE              0
 #define SUMMARY_VISIBLE_CANDIDATES       4
 #define SUMMARY_SHARED_TILE_WINDOW       16
@@ -31,6 +33,8 @@
 
 #define PAD_BUTTON_A                     0x0001
 #define PAD_BUTTON_B                     0x0002
+#define PAD_KEY_RIGHT                    0x0010
+#define PAD_KEY_LEFT                     0x0020
 #define PAD_KEY_UP                       0x0040
 #define PAD_KEY_DOWN                     0x0080
 #define PAD_BUTTON_X                     0x0400
@@ -64,6 +68,8 @@ struct SummaryMoveRelearnState {
     u8 originalCursor;
     u8 mode;
     u8 promptVisible;
+    u8 resumeAfterSwitch;
+    struct BoxPokemon *ownerPokemon;
 };
 
 struct SummaryTouchRect {
@@ -126,6 +132,9 @@ extern void LONG_CALL Summary_ClearMoveDetailWindows(
     struct SummaryState *summary);
 extern void LONG_CALL Summary_ShowHmBlockedMessage(
     struct SummaryState *summary);
+extern int LONG_CALL Summary_GetPokemonSwitchTouch(void);
+extern u32 LONG_CALL Summary_GetTouchAction(
+    struct SummaryState *summary);
 extern int LONG_CALL TouchscreenHitbox_FindRectAtTouchNew(
     const void *hitboxes);
 extern void LONG_CALL ClearWindowTilemapAndScheduleTransfer(
@@ -181,22 +190,36 @@ static BOOL SummaryMoveRelearn_IsStable(
     return (*(u8 *)((u8 *)summary + SUMMARY_TRANSITION_OFFSET) & 0xF0) == 0;
 }
 
-static struct PartyPokemon *SummaryMoveRelearn_GetCurrentMon(
+static struct BoxPokemon *SummaryMoveRelearn_GetCurrentBoxMon(
     struct SummaryState *summary)
 {
+    void *pokemon;
     struct Party *party;
     u32 pos;
 
     if (summary == NULL || summary->baseData == NULL
-        || summary->baseData->dataType != SUMMARY_PARTY_DATA) {
+        || summary->baseData->ppd == NULL) {
         return NULL;
     }
-    party = (struct Party *)summary->baseData->ppd;
     pos = summary->baseData->pos;
-    if (party == NULL || pos >= (u32)Party_GetCount(party)) {
+    if (summary->baseData->dataType == SUMMARY_PARTY_DATA) {
+        party = (struct Party *)summary->baseData->ppd;
+        if (pos >= (u32)Party_GetCount(party)
+            || pos >= summary->baseData->limit) {
+            return NULL;
+        }
+        pokemon = Summary_GetPokemonData(summary);
+        if (pokemon == NULL) {
+            return NULL;
+        }
+        return &((struct PartyPokemon *)pokemon)->box;
+    }
+    if (summary->baseData->dataType != SUMMARY_BOX_DATA
+        || summary->baseData->limit != MONS_PER_BOX
+        || pos >= MONS_PER_BOX) {
         return NULL;
     }
-    return Party_GetMonByIndex(party, pos);
+    return (struct BoxPokemon *)Summary_GetPokemonData(summary);
 }
 
 static void SummaryMoveRelearn_PrintStatus(
@@ -393,14 +416,14 @@ static void SummaryMoveRelearn_End(
 }
 
 static BOOL SummaryMoveRelearn_IsKnown(
-    struct PartyPokemon *pokemon,
+    struct BoxPokemon *pokemon,
     u16 move)
 {
     u32 i;
 
     for (i = 0; i < 4; i++) {
         if ((u16)GetBoxMonData(
-                &pokemon->box,
+                pokemon,
                 MON_DATA_MOVE1 + i,
                 NULL) == move) {
             return TRUE;
@@ -426,11 +449,12 @@ static BOOL SummaryMoveRelearn_IsCachedCandidate(
 static void SummaryMoveRelearn_Enter(
     struct SummaryState *summary,
     struct SummaryMoveRelearnState *state,
-    struct PartyPokemon *pokemon)
+    struct BoxPokemon *pokemon)
 {
     u32 count;
 
     state->ownerArgs = summary->baseData;
+    state->ownerPokemon = pokemon;
     state->ownerPos = summary->baseData->pos;
     state->originalCursor =
         SummaryMoveRelearn_GetCursor(summary) & 0x0F;
@@ -439,11 +463,12 @@ static void SummaryMoveRelearn_Enter(
     state->candidateTop = 0;
     state->selectedSlot = 0;
     state->pendingMove = 0;
+    state->resumeAfterSwitch = FALSE;
     SummaryMoveRelearn_SaveCache(summary, state);
 
     count = PokemonMoveRelearn_BuildCandidates(
         SaveBlock2_get(),
-        &pokemon->box,
+        pokemon,
         state->candidates,
         POKEMON_MOVE_RELEARN_MAX_CANDIDATES,
         NULL);
@@ -534,7 +559,7 @@ static void SummaryMoveRelearn_HandleList(
 static void SummaryMoveRelearn_HandleSlot(
     struct SummaryState *summary,
     struct SummaryMoveRelearnState *state,
-    struct PartyPokemon *pokemon,
+    struct BoxPokemon *pokemon,
     u32 newKeys,
     u32 repeatKeys)
 {
@@ -573,7 +598,7 @@ static void SummaryMoveRelearn_HandleSlot(
          */
         SummaryMoveRelearn_RenderSlot(summary, state);
         oldMove = (u16)GetBoxMonData(
-            &pokemon->box,
+            pokemon,
             MON_DATA_MOVE1 + state->selectedSlot,
             NULL);
         if (oldMove == state->pendingMove) {
@@ -592,12 +617,12 @@ static void SummaryMoveRelearn_HandleSlot(
 static void SummaryMoveRelearn_Commit(
     struct SummaryState *summary,
     struct SummaryMoveRelearnState *state,
-    struct PartyPokemon *pokemon)
+    struct BoxPokemon *pokemon)
 {
     u16 oldMove;
 
     oldMove = (u16)GetBoxMonData(
-        &pokemon->box,
+        pokemon,
         MON_DATA_MOVE1 + state->selectedSlot,
         NULL);
     if (!SummaryMoveRelearn_IsCachedCandidate(state, state->pendingMove)
@@ -605,7 +630,7 @@ static void SummaryMoveRelearn_Commit(
         || oldMove == state->pendingMove
         || (oldMove != 0 && MoveIsHM(oldMove))
         || !PokemonMoveHistory_ReplaceMove(
-            &pokemon->box,
+            pokemon,
             state->pendingMove,
             state->selectedSlot)) {
         state->mode = SUMMARY_RELEARN_SLOT;
@@ -617,7 +642,7 @@ static void SummaryMoveRelearn_Commit(
      * This is Summary's canonical ownership signal. The parent field/app
      * path observes it after Summary exits; the UI never writes a save.
      */
-    *(u32 *)((u8 *)summary->baseData + 0x38) = TRUE;
+    summary->baseData->pokemonChanged = TRUE;
     Summary_RefreshPokemonData(summary);
     SummaryMoveRelearn_SaveCache(summary, state);
     summary->baseData->move = state->originalArgMove;
@@ -632,24 +657,72 @@ static void SummaryMoveRelearn_Commit(
     SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_SUCCESS);
 }
 
+static void SummaryMoveRelearn_CancelForNavigation(
+    struct SummaryState *summary,
+    struct SummaryMoveRelearnState *state,
+    BOOL resumeAfterSwitch)
+{
+    if (state->ownerArgs == summary->baseData
+        && state->ownerPos == summary->baseData->pos
+        && state->ownerPokemon
+            == SummaryMoveRelearn_GetCurrentBoxMon(summary)) {
+        SummaryMoveRelearn_RestoreCache(summary, state);
+        summary->baseData->move = state->originalArgMove;
+    }
+    SummaryMoveRelearn_HideStatus(summary);
+    SummaryMoveRelearn_ClearProspective(summary);
+    SummaryMoveRelearn_SetMovePane(summary, FALSE);
+    Summary_ClearMoveDetailWindows(summary);
+    state->mode = SUMMARY_RELEARN_INACTIVE;
+    state->candidateCount = 0;
+    state->pendingMove = 0;
+    state->promptVisible = FALSE;
+    state->resumeAfterSwitch = resumeAfterSwitch;
+    state->ownerPokemon = NULL;
+}
+
+static BOOL SummaryMoveRelearn_OwnsCurrentTouch(
+    struct SummaryState *summary,
+    struct SummaryMoveRelearnState *state)
+{
+    int touch;
+
+    if (state->mode == SUMMARY_RELEARN_LIST
+        || state->mode == SUMMARY_RELEARN_SLOT) {
+        return SummaryMoveRelearn_GetTouch(sMoveRowTouchRects) >= 0
+            || SummaryMoveRelearn_GetTouch(sActionTouchRects) >= 0;
+    }
+    if (state->mode == SUMMARY_RELEARN_EMPTY) {
+        return SummaryMoveRelearn_GetTouch(sBackTouchRects) >= 0;
+    }
+    touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
+    if (state->mode == SUMMARY_RELEARN_SUCCESS) {
+        return touch == 2;
+    }
+    return touch >= 0;
+}
+
 u32 SummaryMoveRelearn_MainState(
     struct SummaryState *summary)
 {
     struct SummaryMoveRelearnState *state;
-    struct PartyPokemon *pokemon;
+    struct BoxPokemon *pokemon;
     u32 newKeys;
     u32 repeatKeys;
     u32 vanillaState;
     BOOL sameOwnerArgs;
+    u32 touchAction;
+    int switchTouch;
     int touch;
 
     state = SummaryMoveRelearn_GetState(summary);
-    pokemon = SummaryMoveRelearn_GetCurrentMon(summary);
+    pokemon = SummaryMoveRelearn_GetCurrentBoxMon(summary);
     sameOwnerArgs = state->ownerArgs == summary->baseData;
     if (state->mode != SUMMARY_RELEARN_INACTIVE
         && (!sameOwnerArgs
             || summary->baseData == NULL
             || state->ownerPos != summary->baseData->pos
+            || state->ownerPokemon != pokemon
             || pokemon == NULL)) {
         u16 restoreMove;
 
@@ -664,6 +737,8 @@ u32 SummaryMoveRelearn_MainState(
         state->mode = SUMMARY_RELEARN_INACTIVE;
         state->candidateCount = 0;
         state->promptVisible = FALSE;
+        state->resumeAfterSwitch = FALSE;
+        state->ownerPokemon = NULL;
         SummaryMoveRelearn_HideStatus(summary);
         SummaryMoveRelearn_ClearProspective(summary);
         if (pokemon != NULL && summary->baseData != NULL) {
@@ -686,12 +761,21 @@ u32 SummaryMoveRelearn_MainState(
             || SummaryMoveRelearn_GetPage(summary) != SUMMARY_MOVE_PAGE
             || !SummaryMoveRelearn_IsStable(summary)
             || GetBoxMonData(
-                &pokemon->box,
+                pokemon,
                 MON_DATA_CHECKSUM_FAILED,
                 NULL)
-            || GetBoxMonData(&pokemon->box, MON_DATA_IS_EGG, NULL)) {
+            || !GetBoxMonData(
+                pokemon,
+                MON_DATA_SPECIES_EXISTS,
+                NULL)
+            || GetBoxMonData(pokemon, MON_DATA_IS_EGG, NULL)) {
+            state->resumeAfterSwitch = FALSE;
             state->promptVisible = FALSE;
             return Summary_VanillaMainState(summary);
+        }
+        if (state->resumeAfterSwitch) {
+            SummaryMoveRelearn_Enter(summary, state, pokemon);
+            return 2;
         }
         if (!state->promptVisible) {
             SummaryMoveRelearn_PrintStatus(
@@ -717,6 +801,27 @@ u32 SummaryMoveRelearn_MainState(
 
     newKeys = SummaryMoveRelearn_GetNewKeys();
     repeatKeys = SummaryMoveRelearn_GetRepeatKeys();
+    if (!SummaryMoveRelearn_OwnsCurrentTouch(summary, state)) {
+        touchAction = Summary_GetTouchAction(summary);
+        switchTouch = summary->baseData->dataType == SUMMARY_BOX_DATA
+            ? Summary_GetPokemonSwitchTouch()
+            : -1;
+        if ((repeatKeys & (PAD_KEY_LEFT | PAD_KEY_RIGHT))
+            || touchAction <= 9
+            || switchTouch == 0
+            || switchTouch == 1) {
+            BOOL resumeAfterSwitch =
+                (touchAction >= 4 && touchAction <= 9)
+                || switchTouch == 0
+                || switchTouch == 1;
+
+            SummaryMoveRelearn_CancelForNavigation(
+                summary,
+                state,
+                resumeAfterSwitch);
+            return Summary_VanillaMainState(summary);
+        }
+    }
     if (state->mode == SUMMARY_RELEARN_LIST) {
         SummaryMoveRelearn_HandleList(
             summary,

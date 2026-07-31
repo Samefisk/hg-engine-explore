@@ -559,6 +559,8 @@ AI_TypeCheckCalc = 0x022521C8 | 1;
 AI_ShouldUseNormalTypeEffCalc = 0x02252178 | 1;
 
 Summary_GetPokemonData = 0x0208A520 | 1;
+Summary_GetPokemonSwitchTouch = 0x0208AEB4 | 1;
+Summary_GetTouchAction = 0x0208E544 | 1;
 Summary_PickStatusIcon = 0x0208AD64 | 1;
 Summary_PrintString = 0x0208C778 | 1;
 Summary_NumberToString = 0x0208C87C | 1;

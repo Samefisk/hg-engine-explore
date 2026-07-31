@@ -14,28 +14,35 @@ enum SummaryStringJustify {
 };
 
 struct SummaryBaseData {
-    void *ppd;                  /* 0x00 */
-    void *config;               /* 0x04 */
-    u16  *playerName;           /* 0x08 */
-    u32  playerID;              /* 0x0C */
-    u8   playerGender;          /* 0x10 */
-    u8   dataType;              /* 0x11 */
-    u8   mode;
-    u8   limit;
-    u8   pos;
-    u8   pageFlag;
+    /* 0x00 */ void *ppd;
+    /* 0x04 */ void *config;
+    /* 0x08 */ u16  *playerName;
+    /* 0x0C */ u32  playerID;
+    /* 0x10 */ u8   playerGender;
+    /* 0x11 */ u8   dataType;
+    /* 0x12 */ u8   mode;
+    /* 0x13 */ u8   limit;
+    /* 0x14 */ u8   pos;
+    /* 0x15 */ u8   pageFlag;
 
-    u8   selectedMoveOut;
-    u8   selectedModeOut;
-    u16  move;
+    /* 0x16 */ u8   selectedMoveOut;
+    /* 0x17 */ u8   selectedModeOut;
+    /* 0x18 */ u16  move;
 
-    u32  dexDisplayMode;
+    /* 0x1C */ u32  dexDisplayMode;
 
-    void *ribbons;
-    void *pokeblocks;
-    void *cry;
+    /* 0x20 */ void *ribbons;
+    /* 0x24 */ void *pokeblocks;
+    /* 0x28 */ void *cry;
 
-    BOOL contest;
+    /* 0x2C */ BOOL contest;
+    /*
+     * Summary treats the MenuInputStateMgr as opaque. Mutation ownership is
+     * returned to the field or PC parent through pokemonChanged at +0x38.
+     */
+    /* 0x30 */ void *menuInputState;
+    /* 0x34 */ BOOL isFlag982Set;
+    /* 0x38 */ BOOL pokemonChanged;
 };
 
 struct SummaryPokemonData {
