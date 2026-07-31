@@ -6,6 +6,7 @@
 #include "../../include/save.h"
 #include "../../include/summary.h"
 #include "../../include/window.h"
+#include "../../include/constants/species.h"
 
 #define SUMMARY_RETAIL_SIZE              0x7D8
 #define SUMMARY_RELEARN_STATE_SIZE       0x0C0
@@ -17,6 +18,7 @@
 
 #define SUMMARY_MOVE_PAGE                1
 #define SUMMARY_PARTY_DATA               1
+#define SUMMARY_PARTY_CAPACITY           6
 #define SUMMARY_BOX_DATA                 2
 #define SUMMARY_NORMAL_MODE              0
 #define SUMMARY_VISIBLE_CANDIDATES       4
@@ -193,6 +195,8 @@ static BOOL SummaryMoveRelearn_IsStable(
 static struct BoxPokemon *SummaryMoveRelearn_GetCurrentBoxMon(
     struct SummaryState *summary)
 {
+    int count;
+    u32 limit;
     void *pokemon;
     struct Party *party;
     u32 pos;
@@ -202,10 +206,17 @@ static struct BoxPokemon *SummaryMoveRelearn_GetCurrentBoxMon(
         return NULL;
     }
     pos = summary->baseData->pos;
+    limit = summary->baseData->limit;
     if (summary->baseData->dataType == SUMMARY_PARTY_DATA) {
         party = (struct Party *)summary->baseData->ppd;
-        if (pos >= (u32)Party_GetCount(party)
-            || pos >= summary->baseData->limit) {
+        count = Party_GetCount(party);
+        if (count < 1
+            || count > SUMMARY_PARTY_CAPACITY
+            || limit < 1
+            || limit > SUMMARY_PARTY_CAPACITY
+            || pos >= (u32)count
+            || pos >= limit
+            || pos >= SUMMARY_PARTY_CAPACITY) {
             return NULL;
         }
         pokemon = Summary_GetPokemonData(summary);
@@ -220,6 +231,54 @@ static struct BoxPokemon *SummaryMoveRelearn_GetCurrentBoxMon(
         return NULL;
     }
     return (struct BoxPokemon *)Summary_GetPokemonData(summary);
+}
+
+static BOOL SummaryMoveRelearn_IsValidSpeciesAndForm(
+    struct BoxPokemon *pokemon)
+{
+    u32 form;
+    u32 species;
+
+    species = GetBoxMonData(pokemon, MON_DATA_SPECIES, NULL);
+    form = GetBoxMonData(pokemon, MON_DATA_FORM, NULL);
+    if (species == SPECIES_NONE
+        || species == SPECIES_EGG
+        || species == SPECIES_BAD_EGG
+        || species > MAX_MON_NUM
+        || form >= 32) {
+        return FALSE;
+    }
+    if (form == 0) {
+        return TRUE;
+    }
+
+    /*
+     * Retail forms stored only in the form bits do not have form-table
+     * species. SanitizeFormNumber knows their exact legal ranges.
+     */
+    switch (species) {
+    case SPECIES_BURMY:
+    case SPECIES_WORMADAM:
+    case SPECIES_SHELLOS:
+    case SPECIES_GASTRODON:
+    case SPECIES_CHERRIM:
+    case SPECIES_ARCEUS:
+    case SPECIES_CASTFORM:
+    case SPECIES_DEOXYS:
+    case SPECIES_UNOWN:
+    case SPECIES_SHAYMIN:
+    case SPECIES_ROTOM:
+    case SPECIES_GIRATINA:
+    case SPECIES_PICHU:
+        return SanitizeFormNumber((u16)species, (u8)form) == form;
+    }
+
+    /*
+     * Extended forms are canonicalized through the 32-entry form table.
+     * A nonzero form that resolves back to the base species has no registered
+     * form and must not reach picture, candidate, or mutation code.
+     */
+    return PokeOtherFormMonsNoGet((int)species, (int)form) != (int)species;
 }
 
 static void SummaryMoveRelearn_PrintStatus(
@@ -770,7 +829,15 @@ u32 SummaryMoveRelearn_MainState(
                 NULL)
             || GetBoxMonData(pokemon, MON_DATA_IS_EGG, NULL)) {
             state->resumeAfterSwitch = FALSE;
+            if (state->promptVisible) {
+                SummaryMoveRelearn_HideStatus(summary);
+            }
             state->promptVisible = FALSE;
+            return Summary_VanillaMainState(summary);
+        }
+        if (!state->promptVisible
+            && !SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)) {
+            state->resumeAfterSwitch = FALSE;
             return Summary_VanillaMainState(summary);
         }
         if (state->resumeAfterSwitch) {

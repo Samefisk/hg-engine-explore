@@ -42,8 +42,13 @@ priority, including their exact blank gaps.
 Summary never indexes a serialized party or box array. It validates the
 supported owner and bounds, then uses `Summary_GetPokemonData`. Party results
 are reduced to their named `box` prefix; PC results are already the canonical
-boxed record. Raw contiguous `dataType == 0`, non-PC boxed limits, eggs, empty
-slots, checksum failures, and unsupported owners fail closed.
+boxed record. Party resolution first caches the signed `Party_GetCount`
+result and requires count and Summary limit to both be in `1..6`, with
+position below count, limit, and the physical six-record capacity. Raw
+contiguous `dataType == 0`, non-PC boxed limits, invalid positions, eggs,
+empty slots, checksum failures, species outside the base-species domain,
+invalid forms, and unsupported owners fail closed before the prompt or
+candidate builder.
 
 Candidate construction remains the task-2
 `PokemonMoveRelearn_BuildCandidates` call. It is read-only, excludes known
@@ -117,6 +122,28 @@ unloaded on return to the PC exactly as it is for field Summary. Task state
 remains in the zeroed Summary work extension, and overlay 153 remains the
 resident history/candidate ABI owner.
 
+Focused lifecycle acceptance reads the live overlay registry during the
+actual terminal → Move Pokémon → boxed context menu → Summary nesting. It
+requires overlay 154 active in the first child, inactive after the parent
+resumes, a complete fresh-zero `0xC0` extension on a second Summary opening,
+and a second registry-confirmed unload. Party switching acceptance separately
+uses the real party icons from HM-blocked and success states: HM cancellation
+is byte-exact, while success preserves the single committed mutation/history
+only on the original identity and rebuilds the correct candidates on return.
+
+Controlled fail-closed acceptance opens the retail Summary Info page first.
+Party fixtures are applied before navigating to Moves. PC ownership fixtures
+are applied on the exact frame retail page mode changes to Moves, before the
+custom eligibility pass; this prevents unrelated vanilla transition refresh
+code from dereferencing deliberately malformed positions. Party probes cover
+signed counts `-1`, `0`, and `7`, limits `0` and `7`, position `6`,
+`dataType == 0`, empty, egg, checksum-failed, species `MAX_MON_NUM + 1`, and
+Tentacool form 31. The real PC child covers `dataType == 0`, boxed limit 29,
+position 30, and the same record faults. Every probe requires the entire
+extension to remain zero, owner and PC dirty flags to remain clear, and party,
+PC storage, and history bytes to remain exact. The valid natural zero-
+candidate case remains a separate mode-2 test.
+
 Task 5 does not audit daycare, trade, gift, scripted, form-change, Pokéwalker,
 or other unusual acquisition paths (task 6). It does not enable the optional
 all-compatible testing policy (task 7). Raw temporary/rental Summary owners
@@ -127,13 +154,13 @@ are deliberately excluded.
 The task-5 Workshop artifact used by the final headless acceptance has:
 
 - ROM SHA-256
-  `5048ce95266dbf62e1bf9e2a2eb56c8831730badf744d5a4636dd255fe6e1a11`;
+  `a9b74d768cb4c42105148de38ce92c89324f98b9a3ea3445a8a4bab3f612f117`;
 - publication manifest SHA-256
-  `cf1b79d1f4b5dd497669b2457e879d3686e94f5fc596c4f562bf7f1659525188`;
+  `77058f2eb6f43ab1820279181be2e0ad7d2113fb671adc7e324012de0ec1f77f`;
 - overlay 154 SHA-256
-  `7828a5c4d1359501c7445c914aca09930a5d1b249a2bc282ef13acde5b366c47`,
-  size `0xCDC` (3292 bytes), base `0x023C0400`, reserved size `0x1EA0`,
-  and remaining headroom `0x11C4` (4548 bytes).
+  `3d728bd9b02ec5d338d21053f43597a335d9335b5277b51556ce5eb9840e1932`,
+  size `0xDCC` (3532 bytes), base `0x023C0400`, reserved size `0x1EA0`,
+  and remaining headroom `0x10D4` (4308 bytes).
 
 The controlled fixture is derived from the immutable source DSV with SHA-256
 `75ddaf8a974d50c70d403e6658bd8497351a5fca0b729a854d6483c39018054d`.

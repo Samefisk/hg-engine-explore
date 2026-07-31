@@ -68,12 +68,16 @@ SUMMARY_STATE_ORIGINAL_ARG_MOVE_OFFSET = 158
 SUMMARY_STATE_OWNER_POS_OFFSET = 160
 SUMMARY_STATE_SELECTED_SLOT_OFFSET = 161
 SUMMARY_STATE_MODE_OFFSET = 163
+SUMMARY_STATE_PROMPT_VISIBLE_OFFSET = 164
 SUMMARY_STATE_RESUME_AFTER_SWITCH_OFFSET = 165
 SUMMARY_STATE_OWNER_POKEMON_OFFSET = 168
 SUMMARY_STATE_RETAIL_SIZE = 0x7D8
+SUMMARY_STATE_EXTENSION_SIZE = 0xC0
 SUMMARY_OWNER_DIRTY_OFFSET = 0x38
+SUMMARY_OWNER_ARGS_SIZE = 0x3C
 SUMMARY_BASE_MOVE_OFFSET = 0x18
 SUMMARY_BASE_POS_OFFSET = 0x14
+SUMMARY_BASE_LIMIT_OFFSET = 0x13
 SUMMARY_BASE_DATA_TYPE_OFFSET = 0x11
 SUMMARY_BASE_POINTER_OFFSET = 0x22C
 SUMMARY_PAGE_MODE_OFFSET = 0x7BC
@@ -393,6 +397,49 @@ def controlled_box_record(
     return bytes(controlled)
 
 
+def authenticated_box_variant(
+    box: bytes,
+    *,
+    species: int | None = None,
+    form: int | None = None,
+    is_egg: bool | None = None,
+) -> bytes:
+    """Patch named BoxPokemon fields and reauthenticate its encrypted payload."""
+    require(len(box) == PC_MON_SIZE, "variant BoxPokemon has wrong size")
+    payload = bytearray(PARTY.decrypt_box_payload(box))
+    pid = struct.unpack_from("<I", box)[0]
+    permutation = (pid & 0x3E000) >> 13
+    growth = PARTY.SUBSTRUCT_OFFSETS[permutation][0]
+    attacks = PARTY.SUBSTRUCT_OFFSETS[permutation][1]
+    if species is not None:
+        struct.pack_into("<H", payload, growth, species)
+    if is_egg is not None:
+        iv_word = struct.unpack_from("<I", payload, attacks + 0x10)[0]
+        if is_egg:
+            iv_word |= 1 << 30
+        else:
+            iv_word &= ~(1 << 30)
+        struct.pack_into("<I", payload, attacks + 0x10, iv_word)
+    if form is not None:
+        require(0 <= form < 32, "serialized form is not five-bit")
+        form_byte = payload[attacks + 0x18]
+        payload[attacks + 0x18] = (form_byte & 0x07) | (form << 3)
+    checksum = sum(struct.unpack("<64H", payload)) & 0xFFFF
+    variant = bytearray(box)
+    struct.pack_into("<H", variant, 6, checksum)
+    variant[8:] = encrypt_box_payload(bytes(payload), checksum)
+    validate_box_checksum(bytes(variant), "authenticated invalid fixture")
+    return bytes(variant)
+
+
+def checksum_failed_box_variant(box: bytes) -> bytes:
+    """Set BoxPokemon.checksum_fail without invoking a data accessor."""
+    require(len(box) == PC_MON_SIZE, "checksum fixture has wrong size")
+    variant = bytearray(box)
+    struct.pack_into("<H", variant, 4, struct.unpack_from("<H", box, 4)[0] | 4)
+    return bytes(variant)
+
+
 def validate_box_checksum(box: bytes, label: str) -> dict[str, int | bool]:
     require(len(box) == PC_MON_SIZE, f"{label} has the wrong serialized size")
     stored = struct.unpack_from("<H", box, 6)[0]
@@ -529,8 +576,9 @@ def locate_summary_relearn_state(
 def locate_inactive_summary_state(
     emu: DeSmuME,
     moves: tuple[int, ...] = CONTROLLED_MOVES,
-    owner_pos: int = TARGET_SLOT,
-    data_type: int = 1,
+    owner_pos: int | None = TARGET_SLOT,
+    data_type: int | None = 1,
+    page_mode: int | None = 1,
 ) -> int:
     signature = struct.pack("<4H", *moves)
     for chunk_address in range(0x02000000, 0x02400000, 0x10000):
@@ -547,13 +595,23 @@ def locate_inactive_summary_state(
             )
             if (
                 0x02000000 <= owner < 0x02400000
-                and read_u8(
-                    emu, owner + SUMMARY_BASE_DATA_TYPE_OFFSET
+                and (
+                    data_type is None
+                    or read_u8(
+                        emu, owner + SUMMARY_BASE_DATA_TYPE_OFFSET
+                    )
+                    == data_type
                 )
-                == data_type
-                and read_u8(emu, owner + SUMMARY_BASE_POS_OFFSET)
-                == owner_pos
-                and read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1
+                and (
+                    owner_pos is None
+                    or read_u8(emu, owner + SUMMARY_BASE_POS_OFFSET)
+                    == owner_pos
+                )
+                and (
+                    page_mode is None
+                    or read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET)
+                    == page_mode
+                )
             ):
                 return summary + SUMMARY_STATE_RETAIL_SIZE
             offset = chunk.find(signature, offset + 1)
@@ -756,6 +814,87 @@ def inactive_summary_evidence(
         "owner": f"0x{owner:08X}",
         "mode": mode,
         "owner_dirty": dirty,
+    }
+
+
+def assert_fail_closed_fixture(
+    emu: DeSmuME,
+    state: int,
+    *,
+    label: str,
+    expected_party: bytes,
+    expected_pc: bytes,
+    expected_owner_args: bytes,
+    expected_metadata: bytes,
+    expected_history: bytes,
+) -> dict[str, object]:
+    summary = state - SUMMARY_STATE_RETAIL_SIZE
+    owner = read_u32(emu, summary + SUMMARY_BASE_POINTER_OFFSET)
+    require(
+        read_bytes(emu, state, SUMMARY_STATE_EXTENSION_SIZE)
+        == bytes(SUMMARY_STATE_EXTENSION_SIZE),
+        f"{label} observed candidates or entered the relearn extension",
+    )
+    require(
+        read_bytes(emu, owner, SUMMARY_OWNER_ARGS_SIZE)
+        == expected_owner_args,
+        f"{label} changed Summary ownership arguments",
+    )
+    require(
+        read_u32(emu, owner + SUMMARY_OWNER_DIRTY_OFFSET) == 0,
+        f"{label} dirtied the Summary owner",
+    )
+    actual_party = runtime_party(emu)
+    if actual_party != expected_party:
+        differences = [
+            index
+            for index, (old, new) in enumerate(
+                zip(expected_party, actual_party)
+            )
+            if old != new
+        ]
+        raise RuntimeError(
+            f"{label} changed party at "
+            + ",".join(f"0x{index:X}" for index in differences[:32])
+        )
+    actual_pc = read_bytes(
+        emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+    )
+    if actual_pc != expected_pc:
+        differences = [
+            index
+            for index, (old, new) in enumerate(zip(expected_pc, actual_pc))
+            if old != new
+        ]
+        raise RuntimeError(
+            f"{label} changed PC storage at "
+            + ",".join(f"0x{index:X}" for index in differences[:32])
+        )
+    metadata, history = runtime_history(emu)
+    require(metadata == expected_metadata, f"{label} changed history metadata")
+    require(history == expected_history, f"{label} changed history image")
+    return {
+        "label": label,
+        "mode": read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET),
+        "prompt_visible": read_u8(
+            emu, state + SUMMARY_STATE_PROMPT_VISIBLE_OFFSET
+        ),
+        "candidate_count": read_u16(
+            emu, state + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET
+        ),
+        "pending_move": read_u16(
+            emu, state + SUMMARY_STATE_PENDING_MOVE_OFFSET
+        ),
+        "owner_pokemon": read_u32(
+            emu, state + SUMMARY_STATE_OWNER_POKEMON_OFFSET
+        ),
+        "owner_dirty": read_u32(emu, owner + SUMMARY_OWNER_DIRTY_OFFSET),
+        "pc_dirty": runtime_pc_modified_flags(emu),
+        "party_sha256": hashlib.sha256(expected_party).hexdigest(),
+        "pc_sha256": hashlib.sha256(expected_pc).hexdigest(),
+        "history_sha256": hashlib.sha256(expected_history).hexdigest(),
+        "extension_zero": True,
+        "no_builder_history_or_setter_observation": True,
     }
 
 
@@ -1153,7 +1292,7 @@ def normal_save(emu: DeSmuME, baseline_counter: int) -> None:
     HEADLESS.cycle(emu, 600)
 
 
-def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
+def open_summary_info(emu: DeSmuME, party_slot: int) -> None:
     tap(emu, "X", 20)
     tap(emu, "A", 100)
     # The fixture party menu uses a two-column grid (0/1, 2/3, 4/5).
@@ -1163,7 +1302,43 @@ def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
         tap(emu, "RIGHT", 20)
     tap(emu, "A", 30)
     tap(emu, "A", 100)
+
+
+def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
+    open_summary_info(emu, party_slot)
     tap(emu, "RIGHT", 80)
+
+
+def navigate_to_moves_with_injection(
+    emu: DeSmuME,
+    summary: int,
+    inject,
+    label: str,
+) -> None:
+    """Inject at the retail Info->Moves boundary before custom eligibility."""
+    require(
+        read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) != 1,
+        f"{label} did not begin on Info",
+    )
+    key_mask = HEADLESS.keymask(HEADLESS.key_constant("RIGHT"))
+    injected = False
+    for _ in range(2):
+        HEADLESS.set_key_mask(emu, key_mask)
+        emu.cycle(False)
+        if read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1:
+            inject()
+            injected = True
+            break
+    HEADLESS.set_key_mask(emu, 0)
+    if not injected:
+        for _ in range(180):
+            emu.cycle(False)
+            if read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1:
+                inject()
+                injected = True
+                break
+    require(injected, f"{label} did not reach the real Moves boundary")
+    HEADLESS.cycle(emu, 80)
 
 
 def hold(emu: DeSmuME, key: str, frames: int, gap: int = 20) -> None:
@@ -1520,6 +1695,343 @@ def run_isolated_scenario(
                     emu, state, 0, 0, "touch empty Back"
                 )
                 detail = {"mode": 0, "candidate_count": 0}
+            elif name == "party_fail_closed":
+                require(
+                    not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
+                    "party malformed fixture booted with overlay 154 active",
+                )
+                open_summary_info(emu, TARGET_SLOT)
+                wait_overlay_active(emu, SUMMARY_RELEARN_OVERLAY_ID, True)
+                baseline_party = runtime_party(emu)
+                baseline_pc = read_bytes(
+                    emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+                )
+                baseline_metadata, baseline_history = runtime_history(emu)
+                state = locate_inactive_summary_state(
+                    emu, page_mode=None
+                )
+                summary = state - SUMMARY_STATE_RETAIL_SIZE
+                owner = read_u32(
+                    emu, summary + SUMMARY_BASE_POINTER_OFFSET
+                )
+                baseline_owner = read_bytes(
+                    emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                )
+                require(
+                    read_bytes(emu, state, SUMMARY_STATE_EXTENSION_SIZE)
+                    == bytes(SUMMARY_STATE_EXTENSION_SIZE),
+                    "party malformed fixture did not begin with fresh state",
+                )
+                party_address = save_data_pointer(emu) + PARTY_OFFSET
+                target_address = (
+                    party_address + 8 + TARGET_SLOT * 0xEC
+                )
+                target_box = party_record(
+                    baseline_party, TARGET_SLOT
+                )[:PC_MON_SIZE]
+                empty_party_box = party_record(
+                    baseline_party, 5
+                )[:PC_MON_SIZE]
+                require(
+                    box_identity(empty_party_box)[2] == 0,
+                    "party fixture slot 5 is not an actual empty record",
+                )
+                invalid_boxes = {
+                    "empty_record": empty_party_box,
+                    "egg": authenticated_box_variant(
+                        target_box, is_egg=True
+                    ),
+                    "checksum_failure": checksum_failed_box_variant(
+                        target_box
+                    ),
+                    "species_1076": authenticated_box_variant(
+                        target_box, species=1076
+                    ),
+                    "tentacool_form_31": authenticated_box_variant(
+                        target_box, form=31
+                    ),
+                }
+                probes: list[tuple[str, str, int | bytes]] = [
+                    ("count_negative_one", "count", 0xFFFFFFFF),
+                    ("count_zero", "count", 0),
+                    ("count_seven", "count", 7),
+                    ("limit_zero", "limit", 0),
+                    ("limit_seven", "limit", 7),
+                    ("position_six", "position", 6),
+                    ("data_type_zero", "data_type", 0),
+                    *(
+                        (label, "box", box)
+                        for label, box in invalid_boxes.items()
+                    ),
+                ]
+                fixture_results: list[dict[str, object]] = []
+                for label, kind, value in probes:
+                    if kind == "count":
+                        write_u32(emu, party_address + 4, int(value))
+                    elif kind == "limit":
+                        write_u8(
+                            emu,
+                            owner + SUMMARY_BASE_LIMIT_OFFSET,
+                            int(value),
+                        )
+                    elif kind == "position":
+                        write_u8(
+                            emu,
+                            owner + SUMMARY_BASE_POS_OFFSET,
+                            int(value),
+                        )
+                    elif kind == "data_type":
+                        write_u8(
+                            emu,
+                            owner + SUMMARY_BASE_DATA_TYPE_OFFSET,
+                            int(value),
+                        )
+                    else:
+                        write_bytes(emu, target_address, bytes(value))
+
+                    malformed_party = runtime_party(emu)
+                    malformed_pc = read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    malformed_owner = read_bytes(
+                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    )
+                    tap(emu, "RIGHT", 80)
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        == 1,
+                        f"{label} did not reach the real Moves page",
+                    )
+                    tap(emu, "X", 16)
+                    touch(emu, 40, 140, 24)
+                    fixture_results.append(
+                        assert_fail_closed_fixture(
+                            emu,
+                            state,
+                            label=f"party {label}",
+                            expected_party=malformed_party,
+                            expected_pc=malformed_pc,
+                            expected_owner_args=malformed_owner,
+                            expected_metadata=baseline_metadata,
+                            expected_history=baseline_history,
+                        )
+                    )
+
+                    # Restore the exact retail owners before vanilla page/exit
+                    # handling sees the next controlled malformed fixture.
+                    write_bytes(emu, party_address, baseline_party)
+                    write_bytes(emu, owner, baseline_owner)
+                    tap(emu, "LEFT", 80)
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        != 1,
+                        f"{label} did not return to Info",
+                    )
+                    require(
+                        runtime_party(emu) == baseline_party
+                        and read_bytes(
+                            emu,
+                            runtime_pc_storage_address(emu),
+                            PC_SAVE_SIZE,
+                        )
+                        == baseline_pc
+                        and runtime_history(emu)
+                        == (baseline_metadata, baseline_history),
+                        f"{label} restoration changed persistent owners",
+                    )
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                tap(emu, "B", 40)
+                wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                )
+                return {
+                    "label": name,
+                    "actual_party_summary_info_to_moves": True,
+                    "fixture_count": len(fixture_results),
+                    "fixtures": fixture_results,
+                    "valid_zero_candidate_kept_separate": True,
+                    "overlay_unloaded": True,
+                }
+            elif name == "pc_fail_closed":
+                require(
+                    not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
+                    "PC malformed fixture booted with overlay 154 active",
+                )
+                open_retail_pc_move_ui(emu, terminal_boot=True)
+                touch(emu, 16, 56, 60)
+                touch(emu, 210, 76, 180)
+                wait_overlay_active(emu, SUMMARY_RELEARN_OVERLAY_ID, True)
+                target_box = runtime_box_record(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                empty_pc_box = runtime_box_record(emu, 0, 2)
+                require(
+                    box_identity(empty_pc_box)[2] == 0,
+                    "PC fixture slot 2 is not an actual empty record",
+                )
+                target_moves = box_record_payload(target_box)[1]
+                state = locate_inactive_summary_state(
+                    emu,
+                    moves=target_moves,
+                    owner_pos=BOX_TARGET_SLOT,
+                    data_type=2,
+                    page_mode=None,
+                )
+                summary = state - SUMMARY_STATE_RETAIL_SIZE
+                owner = read_u32(
+                    emu, summary + SUMMARY_BASE_POINTER_OFFSET
+                )
+                baseline_owner = read_bytes(
+                    emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                )
+                baseline_party = runtime_party(emu)
+                baseline_pc = read_bytes(
+                    emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+                )
+                baseline_metadata, baseline_history = runtime_history(emu)
+                require(
+                    read_bytes(emu, state, SUMMARY_STATE_EXTENSION_SIZE)
+                    == bytes(SUMMARY_STATE_EXTENSION_SIZE),
+                    "PC malformed fixture did not begin with fresh state",
+                )
+                target_address = runtime_box_address(
+                    emu, 0, BOX_TARGET_SLOT
+                )
+                invalid_boxes = {
+                    "empty_record": empty_pc_box,
+                    "egg": authenticated_box_variant(
+                        target_box, is_egg=True
+                    ),
+                    "checksum_failure": checksum_failed_box_variant(
+                        target_box
+                    ),
+                    "species_1076": authenticated_box_variant(
+                        target_box, species=1076
+                    ),
+                    "tentacool_form_31": authenticated_box_variant(
+                        target_box, form=31
+                    ),
+                }
+                probes = [
+                    ("data_type_zero", "data_type", 0),
+                    ("non_pc_box_limit_29", "limit", 29),
+                    ("position_30", "position", 30),
+                    *(
+                        (label, "box", box)
+                        for label, box in invalid_boxes.items()
+                    ),
+                ]
+                fixture_results = []
+                for label, kind, value in probes:
+                    def inject_probe() -> None:
+                        if kind == "data_type":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_DATA_TYPE_OFFSET,
+                                int(value),
+                            )
+                        elif kind == "limit":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_LIMIT_OFFSET,
+                                int(value),
+                            )
+                        elif kind == "position":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_POS_OFFSET,
+                                int(value),
+                            )
+                        else:
+                            write_bytes(
+                                emu, target_address, bytes(value)
+                            )
+
+                    navigate_to_moves_with_injection(
+                        emu,
+                        summary,
+                        inject_probe,
+                        f"PC {label}",
+                    )
+                    malformed_party = runtime_party(emu)
+                    malformed_pc = read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    malformed_owner = read_bytes(
+                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    )
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        == 1,
+                        f"PC {label} did not reach the real Moves page",
+                    )
+                    tap(emu, "X", 16)
+                    touch(emu, 40, 140, 24)
+                    fixture_results.append(
+                        assert_fail_closed_fixture(
+                            emu,
+                            state,
+                            label=f"PC {label}",
+                            expected_party=malformed_party,
+                            expected_pc=malformed_pc,
+                            expected_owner_args=malformed_owner,
+                            expected_metadata=baseline_metadata,
+                            expected_history=baseline_history,
+                        )
+                    )
+                    write_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        baseline_pc,
+                    )
+                    write_bytes(emu, owner, baseline_owner)
+                    tap(emu, "LEFT", 80)
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        != 1,
+                        f"PC {label} did not return to Info",
+                    )
+                    require(
+                        runtime_party(emu) == baseline_party
+                        and runtime_history(emu)
+                        == (baseline_metadata, baseline_history),
+                        f"PC {label} restoration changed persistent owners",
+                    )
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                tap(emu, "B", 40)
+                wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                )
+                require(
+                    read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    == baseline_pc,
+                    "PC malformed fixture exit changed storage",
+                )
+                return {
+                    "label": name,
+                    "actual_terminal_pc_summary_info_to_moves": True,
+                    "fixture_count": len(fixture_results),
+                    "fixtures": fixture_results,
+                    "overlay_unloaded": True,
+                }
             elif name == "keys":
                 open_summary_moves(emu, TARGET_SLOT)
                 party, _ = PARTY.wait_for_runtime_party(
@@ -1776,7 +2288,153 @@ def run_isolated_scenario(
                     history,
                     "party confirmation real switch",
                 )
-                tap(emu, "B", 20)
+
+                # Return to the target, select Surf in slot 0, and exercise a
+                # real party-icon switch out of the HM-blocked modal.
+                touch(emu, 184, 84, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=TARGET_SLOT, expected_mode=1
+                )
+                require(
+                    candidate_state(emu, state)["candidates"]
+                    == initial["candidates"],
+                    "party confirmation return did not rebuild target",
+                )
+                switches.append({"from_mode": 2, **switched})
+                tap(emu, "A", 12)
+                tap(emu, "A", 12)
+                require(
+                    read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 5,
+                    "party target did not enter HM-blocked mode",
+                )
+                hm_party = wait_party_locked(emu)
+                hm_metadata, hm_history = runtime_history(emu)
+                require(
+                    hm_party == party
+                    and hm_metadata == metadata
+                    and hm_history == history,
+                    "party HM block changed data before switching",
+                )
+                touch(emu, 224, 92, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=3, expected_mode=2
+                )
+                require(
+                    candidate_state(emu, state)["candidates"] == (),
+                    "party HM-state switch retained target candidates",
+                )
+                switches.append({"from_mode": 5, **switched})
+                assert_cancel_exact(
+                    emu,
+                    party,
+                    metadata,
+                    history,
+                    "party HM-blocked real switch",
+                )
+
+                # Commit on the target, then use the actual party icons while
+                # the success modal is visible. The commit must stay solely on
+                # the old identity and remain visible when that identity
+                # returns.
+                touch(emu, 184, 84, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=TARGET_SLOT, expected_mode=1
+                )
+                require(
+                    candidate_state(emu, state)["candidates"]
+                    == initial["candidates"],
+                    "party HM return did not rebuild target candidates",
+                )
+                switches.append({"from_mode": 2, **switched})
+                tap(emu, "A", 12)
+                for _ in range(3):
+                    tap(emu, "DOWN", 8)
+                tap(emu, "A", 12)
+                require(
+                    read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 4,
+                    "party target did not re-enter confirmation mode",
+                )
+                tap(emu, "A", 20)
+                require(
+                    read_u8(emu, state + SUMMARY_STATE_MODE_OFFSET) == 6,
+                    "party target did not enter success mode",
+                )
+                committed_party = wait_party_locked(emu)
+                committed_metadata, committed_history = runtime_history(emu)
+                _, committed_moves, committed_pp, committed_pp_ups = (
+                    record_payload(
+                        party_record(committed_party, TARGET_SLOT)
+                    )
+                )
+                require(
+                    committed_moves
+                    == (57, 48, 352, TARGET_MOVE)
+                    and committed_pp[TARGET_REPLACEMENT_SLOT] == 8
+                    and committed_pp_ups[TARGET_REPLACEMENT_SLOT] == 0,
+                    "party success committed the wrong move/PP state",
+                )
+                for party_slot in range(6):
+                    if party_slot != TARGET_SLOT:
+                        require(
+                            party_record(committed_party, party_slot)
+                            == party_record(party, party_slot),
+                            f"party success changed peer slot {party_slot}",
+                        )
+                target_pid, target_ot_id, _ = box_identity(
+                    party_record(party, TARGET_SLOT)[:PC_MON_SIZE]
+                )
+                old_history_index, _, old_history_moves = (
+                    find_history_record(history, target_pid, target_ot_id)
+                )
+                new_history_index, _, new_history_moves = (
+                    find_history_record(
+                        committed_history, target_pid, target_ot_id
+                    )
+                )
+                require(
+                    committed_metadata[4] == 1
+                    and new_history_index == old_history_index
+                    and new_history_moves[:len(old_history_moves)]
+                    == old_history_moves
+                    and new_history_moves.count(TARGET_MOVE) == 1,
+                    "party success history identity/order differs",
+                )
+                for history_slot, (old_record, new_record) in enumerate(
+                    zip(
+                        history_records(history),
+                        history_records(committed_history),
+                    )
+                ):
+                    if history_slot != old_history_index:
+                        require(
+                            old_record == new_record,
+                            "party success changed a peer history record",
+                        )
+                touch(emu, 224, 92, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=3, expected_mode=2
+                )
+                switches.append({"from_mode": 6, **switched})
+                require(
+                    candidate_state(emu, state)["candidates"] == ()
+                    and wait_party_locked(emu) == committed_party
+                    and runtime_history(emu)
+                    == (committed_metadata, committed_history),
+                    "party success switch contaminated the peer or commit",
+                )
+                touch(emu, 184, 84, 30)
+                switched = wait_summary_identity(
+                    emu, state, expected_pos=TARGET_SLOT, expected_mode=1
+                )
+                switches.append({"from_mode": 2, **switched})
+                require(
+                    candidate_state(emu, state)["candidates"]
+                    == PERSISTED_CANDIDATES
+                    and wait_party_locked(emu) == committed_party
+                    and runtime_history(emu)
+                    == (committed_metadata, committed_history),
+                    "party success return lost committed identity candidates",
+                )
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
                 screenshot(emu, screenshot_path.parent, screenshot_path.name)
                 return {
@@ -1787,9 +2445,19 @@ def run_isolated_scenario(
                         switched_candidates["candidates"]
                     ),
                     "old_transactions_cancelled_exact": True,
-                    "party_exact": True,
-                    "history_exact": True,
-                    "dirty": metadata[4],
+                    "hm_switch_party_history_exact": True,
+                    "success_target_moves": list(committed_moves),
+                    "success_target_pp": list(committed_pp),
+                    "success_target_pp_ups": list(committed_pp_ups),
+                    "success_peer_exact": True,
+                    "success_history_record_index": new_history_index,
+                    "success_history_move_count": new_history_moves.count(
+                        TARGET_MOVE
+                    ),
+                    "success_return_candidates": list(
+                        candidate_state(emu, state)["candidates"]
+                    ),
+                    "dirty": committed_metadata[4],
                 }
             elif name == "center_bootstrap":
                 baseline_counter, _ = PARTY.active_copy(raw)
@@ -2612,6 +3280,179 @@ def run_isolated_scenario(
                     "party_count": count,
                     "captures": captures,
                 }
+            elif name == "pc_teardown":
+                require(
+                    not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
+                    "PC lifecycle booted with overlay 154 active",
+                )
+                registry_before = overlay_registry(emu)
+                baseline_party = runtime_party(emu)
+                baseline_pc = read_bytes(
+                    emu, runtime_pc_storage_address(emu), PC_SAVE_SIZE
+                )
+                baseline_metadata, baseline_history = runtime_history(emu)
+                target_moves = box_record_payload(
+                    runtime_box_record(emu, 0, BOX_TARGET_SLOT)
+                )[1]
+                captures: list[str] = []
+                open_retail_pc_move_ui(emu, terminal_boot=True)
+                touch(emu, 16, 56, 60)
+                touch(emu, 210, 76, 180)
+                first_load_frames = wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, True
+                )
+                registry_first_child = overlay_registry(emu)
+                first_state = locate_inactive_summary_state(
+                    emu,
+                    moves=target_moves,
+                    owner_pos=BOX_TARGET_SLOT,
+                    data_type=2,
+                    page_mode=None,
+                )
+                require(
+                    read_bytes(
+                        emu, first_state, SUMMARY_STATE_EXTENSION_SIZE
+                    )
+                    == bytes(SUMMARY_STATE_EXTENSION_SIZE),
+                    "first nested PC Summary extension was not fresh-zero",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_first_child.png",
+                    )
+                )
+                tap(emu, "RIGHT", 80)
+                tap(emu, "X", 20)
+                active_state = locate_summary_relearn_state(
+                    emu,
+                    original_moves=target_moves,
+                    owner_pos=BOX_TARGET_SLOT,
+                )
+                summary_state_evidence(
+                    emu, active_state, 1, 0, "first nested PC child"
+                )
+                tap(emu, "B", 20)
+                summary_state_evidence(
+                    emu, active_state, 0, 0, "first PC modal cancel"
+                )
+                tap(emu, "B", 40)
+                first_unload_frames = wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                )
+                HEADLESS.cycle(emu, 120)
+                registry_first_parent = overlay_registry(emu)
+                require(
+                    runtime_party(emu) == baseline_party
+                    and read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    == baseline_pc
+                    and runtime_history(emu)
+                    == (baseline_metadata, baseline_history),
+                    "first nested PC return changed owners",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_first_parent.png",
+                    )
+                )
+
+                # The retail context menu is still open on the same boxed
+                # identity. Reopen its real Summary child without replacing
+                # the parent or synthesizing an overlay pointer.
+                touch(emu, 210, 76, 180)
+                second_load_frames = wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, True
+                )
+                registry_second_child = overlay_registry(emu)
+                second_state = locate_inactive_summary_state(
+                    emu,
+                    moves=target_moves,
+                    owner_pos=BOX_TARGET_SLOT,
+                    data_type=2,
+                    page_mode=None,
+                )
+                require(
+                    read_bytes(
+                        emu, second_state, SUMMARY_STATE_EXTENSION_SIZE
+                    )
+                    == bytes(SUMMARY_STATE_EXTENSION_SIZE),
+                    "second nested PC Summary retained extension bytes",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_second_child.png",
+                    )
+                )
+                tap(emu, "RIGHT", 80)
+                tap(emu, "X", 20)
+                second_active = locate_summary_relearn_state(
+                    emu,
+                    original_moves=target_moves,
+                    owner_pos=BOX_TARGET_SLOT,
+                )
+                tap(emu, "B", 20)
+                summary_state_evidence(
+                    emu, second_active, 0, 0, "second PC modal cancel"
+                )
+                tap(emu, "B", 40)
+                second_unload_frames = wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                )
+                HEADLESS.cycle(emu, 120)
+                registry_second_parent = overlay_registry(emu)
+                require(
+                    runtime_party(emu) == baseline_party
+                    and read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    == baseline_pc
+                    and runtime_history(emu)
+                    == (baseline_metadata, baseline_history),
+                    "second nested PC return changed owners",
+                )
+                captures.append(
+                    screenshot(
+                        emu,
+                        screenshot_path.parent,
+                        f"{screenshot_path.stem}_second_parent.png",
+                    )
+                )
+                return {
+                    "label": name,
+                    "actual_terminal_pc_parent": True,
+                    "actual_nested_summary_children": 2,
+                    "overlay154_inactive_before": True,
+                    "overlay154_active_first_child": True,
+                    "overlay154_inactive_first_parent": True,
+                    "overlay154_active_second_child": True,
+                    "overlay154_inactive_second_parent": True,
+                    "first_extension_zero_bytes": SUMMARY_STATE_EXTENSION_SIZE,
+                    "second_extension_zero_bytes": SUMMARY_STATE_EXTENSION_SIZE,
+                    "first_load_frames": first_load_frames,
+                    "first_unload_frames": first_unload_frames,
+                    "second_load_frames": second_load_frames,
+                    "second_unload_frames": second_unload_frames,
+                    "registries": {
+                        "before": registry_before,
+                        "first_child": registry_first_child,
+                        "first_parent": registry_first_parent,
+                        "second_child": registry_second_child,
+                        "second_parent": registry_second_parent,
+                    },
+                    "party_pc_history_exact": True,
+                    "captures": captures,
+                }
             else:
                 require(
                     not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
@@ -2834,6 +3675,9 @@ def isolated_scenario_evidence(
             "transfer_reload",
             "boxed",
             "boxed_reload",
+            "party_fail_closed",
+            "pc_fail_closed",
+            "pc_teardown",
         )
         else 90,
     )
@@ -3437,6 +4281,17 @@ def run(args: argparse.Namespace) -> dict:
     )
     captures.append(str(party_switch_capture))
 
+    party_fail_closed_capture = (
+        args.screenshot_dir / "09_party_fail_closed.png"
+    )
+    party_fail_closed_evidence = isolated_scenario_evidence(
+        rom,
+        args.controlled_raw,
+        "party_fail_closed",
+        party_fail_closed_capture,
+    )
+    captures.append(str(party_fail_closed_capture))
+
     center_bootstrap_capture = (
         args.screenshot_dir / "10_retail_center_bootstrap.png"
     )
@@ -3457,6 +4312,27 @@ def run(args: argparse.Namespace) -> dict:
         terminal_bootstrap_capture,
     )
     captures.append(str(terminal_bootstrap_capture))
+
+    pc_fail_closed_capture = (
+        args.screenshot_dir / "11_pc_fail_closed.png"
+    )
+    pc_fail_closed_evidence = isolated_scenario_evidence(
+        rom,
+        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        "pc_fail_closed",
+        pc_fail_closed_capture,
+    )
+    captures.append(str(pc_fail_closed_capture))
+    pc_teardown_capture = (
+        args.screenshot_dir / "11_pc_nested_lifecycle.png"
+    )
+    pc_teardown_evidence = isolated_scenario_evidence(
+        rom,
+        Path(terminal_bootstrap_evidence["exported_raw_save"]),
+        "pc_teardown",
+        pc_teardown_capture,
+    )
+    captures.extend(pc_teardown_evidence["captures"])
 
     boxed_capture = args.screenshot_dir / "12_actual_boxed_summary.png"
     boxed_evidence = isolated_scenario_evidence(
@@ -3774,8 +4650,11 @@ def run(args: argparse.Namespace) -> dict:
         "boundary_evidence": boundary_evidence,
         "key_only_evidence": key_only_evidence,
         "party_switch_evidence": party_switch_evidence,
+        "party_fail_closed_evidence": party_fail_closed_evidence,
         "retail_center_bootstrap_evidence": center_bootstrap_evidence,
         "retail_terminal_bootstrap_evidence": terminal_bootstrap_evidence,
+        "pc_fail_closed_evidence": pc_fail_closed_evidence,
+        "pc_teardown_evidence": pc_teardown_evidence,
         "boxed_evidence": boxed_evidence,
         "boxed_reload_evidence": boxed_reload_evidence,
         "transfer_evidence": transfer_evidence,
@@ -3792,6 +4671,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rom", type=Path, default=REPO / "test.nds")
     parser.add_argument("--dsv", type=Path)
     parser.add_argument("--expected-dsv-sha256")
+    parser.add_argument("--result-json", type=Path)
     parser.add_argument("--probe-raw", type=Path)
     parser.add_argument(
         "--scenario",
@@ -3802,6 +4682,9 @@ def parse_args() -> argparse.Namespace:
             "teardown",
             "keys",
             "party_switch",
+            "party_fail_closed",
+            "pc_fail_closed",
+            "pc_teardown",
             "center_bootstrap",
             "terminal_bootstrap",
             "transfer",
@@ -3855,7 +4738,11 @@ if __name__ == "__main__":
         else:
             require(arguments.dsv is not None, "--dsv is required")
             result = run(arguments)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
+        if arguments.result_json is not None:
+            arguments.result_json.parent.mkdir(parents=True, exist_ok=True)
+            arguments.result_json.write_text(rendered)
+        print(rendered, end="")
     except Exception as error:
         print(f"Summary relearn runtime verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

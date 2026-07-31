@@ -82,6 +82,9 @@ def source_contracts(root: Path) -> None:
     messages = (root / "data/text/302.txt").read_text()
     summary_header = (root / "include/summary.h").read_text()
     storage = (root / "src/pokemon_storage_system.c").read_text()
+    runtime = (
+        root / "scripts/verify_summary_move_relearn_runtime.py"
+    ).read_text()
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
     readonly = body(history, "PokemonMoveHistory_QueryReadOnlyImpl")
@@ -113,8 +116,23 @@ def source_contracts(root: Path) -> None:
         and "summary->baseData->dataType != SUMMARY_BOX_DATA"
         in current_mon
         and "summary->baseData->limit != MONS_PER_BOX" in current_mon
-        and "pos >= (u32)Party_GetCount(party)" in current_mon,
+        and "count = Party_GetCount(party);" in current_mon
+        and "count < 1" in current_mon
+        and "count > SUMMARY_PARTY_CAPACITY" in current_mon
+        and "limit < 1" in current_mon
+        and "limit > SUMMARY_PARTY_CAPACITY" in current_mon
+        and "pos >= (u32)count" in current_mon
+        and "pos >= limit" in current_mon
+        and "pos >= SUMMARY_PARTY_CAPACITY" in current_mon,
         "party/PC lookup does not use bounded canonical Summary ownership",
+    )
+    validity = body(ui, "SummaryMoveRelearn_IsValidSpeciesAndForm")
+    require(
+        "species > MAX_MON_NUM" in validity
+        and "species > MAX_SPECIES_INCLUDING_FORMS" not in validity
+        and "SanitizeFormNumber" in validity
+        and "PokeOtherFormMonsNoGet" in validity,
+        "checksummed species/form validation is not fail-closed",
     )
     require(
         "/* 0x30 */ void *menuInputState;" in summary_header
@@ -203,8 +221,13 @@ def source_contracts(root: Path) -> None:
     require(
         "MON_DATA_CHECKSUM_FAILED" in main
         and "MON_DATA_SPECIES_EXISTS" in main
-        and "MON_DATA_IS_EGG" in main,
-        "entry eligibility omits empty/checksum/egg safety",
+        and "MON_DATA_IS_EGG" in main
+        and "!SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)" in main
+        and main.index(
+            "!SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)"
+        )
+        < main.index("SummaryMoveRelearn_PrintStatus("),
+        "entry eligibility omits fail-closed record validation before prompt",
     )
     for state in (
         "SUMMARY_RELEARN_LIST",
@@ -272,6 +295,35 @@ def source_contracts(root: Path) -> None:
         and "state->pendingMove = 0;" in enter,
         "new identity does not receive a fresh candidate transaction",
     )
+    for runtime_contract in (
+        '"count_negative_one"',
+        '"count_zero"',
+        '"count_seven"',
+        '"limit_zero"',
+        '"limit_seven"',
+        '"position_six"',
+        '"data_type_zero"',
+        '"empty_record"',
+        '"egg"',
+        '"checksum_failure"',
+        '"species_1076"',
+        '"tentacool_form_31"',
+        '"non_pc_box_limit_29"',
+        '"position_30"',
+        '"party_fail_closed"',
+        '"pc_fail_closed"',
+        '"from_mode": 5',
+        '"from_mode": 6',
+        '"pc_teardown"',
+        '"first_child"',
+        '"second_child"',
+        "SUMMARY_STATE_EXTENSION_SIZE",
+    ):
+        require(
+            runtime_contract in runtime,
+            f"runtime malformed/switch/lifecycle probe missing: "
+            f"{runtime_contract}",
+        )
     require(
         "PCStorage_SetBoxModified" not in ui
         and storage.count("PCStorage_SetBoxModified(storage, boxno)") >= 3,
@@ -704,6 +756,8 @@ def binary_contracts(args: argparse.Namespace) -> None:
         "PokemonMoveRelearn_BuildCandidates",
         "PokemonMoveHistory_ReplaceMove",
         "Party_GetCount",
+        "PokeOtherFormMonsNoGet",
+        "SanitizeFormNumber",
         "Summary_GetPokemonData",
         "Summary_GetTouchAction",
         "Summary_GetPokemonSwitchTouch",
