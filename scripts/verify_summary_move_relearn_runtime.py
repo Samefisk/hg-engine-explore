@@ -37,6 +37,7 @@ CONTROLLED_PP_UPS = (0, 0, 0, 2)
 CONTROLLED_HISTORY_MOVES = (
     57, 48, 352, 103, 62, 114, 229, 243
 )
+CONTROLLED_CANDIDATES = (40, 55, 51, 35, 62, 114, 229, 243)
 HISTORY_MIRROR_OFFSETS = (0x3B000, 0x7B000)
 HISTORY_FOOTER_OFFSET = 0x4FE0
 HISTORY_FOOTER_MAGIC = 0x4D48464F
@@ -59,6 +60,10 @@ SUMMARY_PAGE_MODE_OFFSET = 0x7BC
 SUMMARY_CACHE_MOVES_OFFSET = 0x264
 SUMMARY_CACHE_CUR_PP_OFFSET = 0x26C
 SUMMARY_CACHE_MAX_PP_OFFSET = 0x270
+MAIN_OVERLAY_TABLE = 0x021D0DF0
+OVERLAY_ENTRY_SIZE = 8
+OVERLAY_SLOT_COUNT = 8
+SUMMARY_RELEARN_OVERLAY_ID = 154
 
 
 def ensure_repo_venv() -> None:
@@ -167,6 +172,42 @@ def write_u16(emu: DeSmuME, address: int, value: int) -> None:
 
 def write_u32(emu: DeSmuME, address: int, value: int) -> None:
     write_bytes(emu, address, struct.pack("<I", value))
+
+
+def overlay_registry(emu: DeSmuME) -> list[tuple[int, int]]:
+    return [
+        (
+            read_u32(emu, MAIN_OVERLAY_TABLE + index * OVERLAY_ENTRY_SIZE),
+            read_u32(
+                emu,
+                MAIN_OVERLAY_TABLE + index * OVERLAY_ENTRY_SIZE + 4,
+            ),
+        )
+        for index in range(OVERLAY_SLOT_COUNT)
+    ]
+
+
+def overlay_is_active(emu: DeSmuME, overlay_id: int) -> bool:
+    return any(
+        current_id == overlay_id and active == 1
+        for current_id, active in overlay_registry(emu)
+    )
+
+
+def wait_overlay_active(
+    emu: DeSmuME,
+    overlay_id: int,
+    expected: bool,
+    maximum_frames: int = 600,
+) -> int:
+    for frame in range(maximum_frames + 1):
+        if overlay_is_active(emu, overlay_id) == expected:
+            return frame
+        HEADLESS.cycle(emu, 1)
+    raise RuntimeError(
+        f"overlay {overlay_id} active={expected} not reached; "
+        f"registry={overlay_registry(emu)}"
+    )
 
 
 def runtime_party(emu: DeSmuME) -> bytes:
@@ -796,6 +837,46 @@ def assert_pp_pixels(path: Path) -> dict[str, object]:
     }
 
 
+def assert_control_pixels(
+    path: Path,
+    *,
+    label: str,
+    a_span: tuple[int, int],
+    gap_span: tuple[int, int],
+    b_span: tuple[int, int],
+) -> dict[str, object]:
+    from PIL import Image
+
+    image = Image.open(path).convert("RGB")
+
+    def dark_pixels(left: int, right: int) -> int:
+        crop = image.crop((left, 192 + 139, right, 192 + 151))
+        return sum(
+            1
+            for red, green, blue in crop.getdata()
+            if max(red, green, blue) - min(red, green, blue) < 55
+            and red + green + blue < 450
+        )
+
+    a_dark = dark_pixels(*a_span)
+    gap_dark = dark_pixels(*gap_span)
+    b_dark = dark_pixels(*b_span)
+    require(a_dark > 0, f"{label} A/OK pixels are absent")
+    require(gap_dark == 0, f"{label} dead gap contains glyph pixels")
+    require(b_dark > 0, f"{label} Back-edge pixels are absent")
+    return {
+        "label": label,
+        "y": [139, 151],
+        "a_span": list(a_span),
+        "gap_span": list(gap_span),
+        "b_span": list(b_span),
+        "a_dark_pixels": a_dark,
+        "gap_dark_pixels": gap_dark,
+        "b_dark_pixels": b_dark,
+        "capture_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
 def run_reload_probe(
     rom: Path,
     raw_path: Path,
@@ -870,7 +951,11 @@ def run_isolated_scenario(
     with HEADLESS.silence_native_output(True):
         emu, imported = new_emulator(rom, raw)
         try:
-            party = wait_party_locked(emu)
+            _, _, expected_party = PARTY.party_image(raw)
+            party, _ = PARTY.wait_for_runtime_party(
+                emu, expected_party, maximum_frames=90
+            )
+            require(party == expected_party, f"{name} boot party differs")
             metadata, history = runtime_history(emu)
             require(metadata[4] == 0, f"{name} did not boot clean history")
             if name == "empty":
@@ -898,9 +983,149 @@ def run_isolated_scenario(
                     emu, state, 0, 0, "touch empty Back"
                 )
                 detail = {"mode": 0, "candidate_count": 0}
-            else:
+            elif name == "keys":
                 open_summary_moves(emu, TARGET_SLOT)
-                party = wait_party_locked(emu)
+                party, _ = PARTY.wait_for_runtime_party(
+                    emu, expected_party, maximum_frames=90
+                )
+                metadata, history = runtime_history(emu)
+                inactive = locate_inactive_summary_state(emu)
+                transitions: list[dict[str, object]] = []
+
+                tap(emu, "X", 12)
+                state = locate_summary_relearn_state(emu)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 1, 0, "key X entry"
+                    )
+                )
+                initial = assert_candidate_viewport(
+                    emu, state, 0, 0, "key X candidate list"
+                )
+                require(
+                    initial["candidates"] == CONTROLLED_CANDIDATES,
+                    "key-only candidate order differs",
+                )
+                assert_cancel_exact(
+                    emu, party, metadata, history, "key X entry"
+                )
+
+                tap(emu, "A", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 3, 0, "key A list to slot"
+                    )
+                )
+                assert_prospective_slot(
+                    emu, state, 0, "key A initial slot preview"
+                )
+                tap(emu, "B", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 1, 0, "key B slot to list"
+                    )
+                )
+                assert_cancel_exact(
+                    emu, party, metadata, history, "key B slot cancel"
+                )
+
+                tap(emu, "A", 12)
+                for selected in (1, 2, 3):
+                    tap(emu, "DOWN", 12)
+                    assert_prospective_slot(
+                        emu,
+                        state,
+                        selected,
+                        f"key DOWN slot {selected}",
+                    )
+                tap(emu, "A", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 4, 0, "key A slot to confirmation"
+                    )
+                )
+                tap(emu, "B", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 3, 0, "key B confirmation to slot"
+                    )
+                )
+                assert_cancel_exact(
+                    emu, party, metadata, history, "key B confirmation cancel"
+                )
+
+                tap(emu, "B", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 1, 0, "key B slot to list again"
+                    )
+                )
+                tap(emu, "A", 12)
+                for _ in range(3):
+                    tap(emu, "DOWN", 12)
+                tap(emu, "A", 12)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 4, 0, "key A confirmation before success"
+                    )
+                )
+                assert_cancel_exact(
+                    emu, party, metadata, history, "key confirmation pending"
+                )
+                tap(emu, "A", 20)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 6, 1, "key A confirmed success"
+                    )
+                )
+                changed_party = wait_party_locked(emu)
+                _, changed_moves, changed_pp, changed_pp_ups = record_payload(
+                    party_record(changed_party, TARGET_SLOT)
+                )
+                require(
+                    changed_moves == (57, 48, 352, TARGET_MOVE)
+                    and changed_pp[TARGET_REPLACEMENT_SLOT] == 8
+                    and changed_pp_ups[TARGET_REPLACEMENT_SLOT] == 0,
+                    "key-only confirmed replacement differs",
+                )
+                changed_metadata, changed_history = runtime_history(emu)
+                require(
+                    changed_metadata[4] == 1
+                    and changed_history != history,
+                    "key-only success did not update history",
+                )
+                tap(emu, "B", 20)
+                transitions.append(
+                    summary_state_evidence(
+                        emu, state, 0, 1, "key B dismisses success"
+                    )
+                )
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot(emu, screenshot_path.parent, screenshot_path.name)
+                return {
+                    "label": name,
+                    "entry_state": f"0x{inactive:08X}",
+                    "transitions": transitions,
+                    "candidate_order": list(initial["candidates"]),
+                    "cancel_party_exact": True,
+                    "cancel_history_exact": True,
+                    "confirmed_moves": list(changed_moves),
+                    "confirmed_pp": list(changed_pp),
+                    "confirmed_pp_ups": list(changed_pp_ups),
+                    "history_dirty_after_confirm": changed_metadata[4],
+                }
+            else:
+                require(
+                    not overlay_is_active(emu, SUMMARY_RELEARN_OVERLAY_ID),
+                    f"{name} overlay 154 active before Summary",
+                )
+                open_summary_moves(emu, TARGET_SLOT)
+                wait_overlay_active(
+                    emu, SUMMARY_RELEARN_OVERLAY_ID, True
+                )
+                party, _ = PARTY.wait_for_runtime_party(
+                    emu, expected_party, maximum_frames=90
+                )
                 metadata, history = runtime_history(emu)
                 touch(emu, 40, 140, 40)
                 state = locate_summary_relearn_state(emu)
@@ -949,7 +1174,120 @@ def run_isolated_scenario(
                     summary_state_evidence(
                         emu, state, 1, 0, "active before teardown"
                     )
-                    detail = {"mode_before_destroy": 1}
+                    tap(emu, "B", 20)
+                    summary_state_evidence(
+                        emu, state, 0, 0, "modal cancel before Summary exit"
+                    )
+                    assert_cancel_exact(
+                        emu,
+                        party,
+                        metadata,
+                        history,
+                        "modal cancel before Summary exit",
+                    )
+                    tap(emu, "B", 20)
+                    first_unload_frames = wait_overlay_active(
+                        emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                    )
+                    HEADLESS.cycle(emu, 150)
+                    assert_cancel_exact(
+                        emu,
+                        party,
+                        metadata,
+                        history,
+                        "real Summary exit",
+                    )
+                    party_exit_path = screenshot_path.with_name(
+                        screenshot_path.stem
+                        + "_party_exit"
+                        + screenshot_path.suffix
+                    )
+                    screenshot(
+                        emu, party_exit_path.parent, party_exit_path.name
+                    )
+
+                    # The returned Party menu retains the selected Pokémon.
+                    tap(emu, "A", 30)
+                    tap(emu, "A", 100)
+                    tap(emu, "RIGHT", 80)
+                    wait_overlay_active(
+                        emu, SUMMARY_RELEARN_OVERLAY_ID, True
+                    )
+                    fresh_state = locate_inactive_summary_state(emu)
+                    inactive_summary_evidence(
+                        emu, fresh_state, "fresh Summary after overlay reload"
+                    )
+                    require(
+                        read_u16(
+                            emu,
+                            fresh_state
+                            + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET,
+                        )
+                        == 0
+                        and read_u16(
+                            emu,
+                            fresh_state
+                            + SUMMARY_STATE_PENDING_MOVE_OFFSET,
+                        )
+                        == 0,
+                        "fresh Summary retained prior modal data",
+                    )
+                    assert_cancel_exact(
+                        emu,
+                        party,
+                        metadata,
+                        history,
+                        "fresh Summary after overlay reload",
+                    )
+                    tap(emu, "X", 20)
+                    fresh_state = locate_summary_relearn_state(emu)
+                    fresh_view = assert_candidate_viewport(
+                        emu,
+                        fresh_state,
+                        0,
+                        0,
+                        "reloaded Summary candidate list",
+                    )
+                    tap(emu, "B", 20)
+                    summary_state_evidence(
+                        emu,
+                        fresh_state,
+                        0,
+                        0,
+                        "reloaded Summary modal cancel",
+                    )
+                    assert_cancel_exact(
+                        emu,
+                        party,
+                        metadata,
+                        history,
+                        "reloaded Summary modal cancel",
+                    )
+                    tap(emu, "B", 20)
+                    second_unload_frames = wait_overlay_active(
+                        emu, SUMMARY_RELEARN_OVERLAY_ID, False
+                    )
+                    HEADLESS.cycle(emu, 120)
+                    assert_cancel_exact(
+                        emu,
+                        party,
+                        metadata,
+                        history,
+                        "second real Summary exit",
+                    )
+                    detail = {
+                        "mode_before_exit": 1,
+                        "overlay_active_before_exit": True,
+                        "first_unload_frames": first_unload_frames,
+                        "party_exit_screenshot": str(party_exit_path),
+                        "overlay_reloaded": True,
+                        "fresh_mode": 0,
+                        "fresh_candidate_count": 0,
+                        "fresh_pending_move": 0,
+                        "reentry_candidate_count": fresh_view["count"],
+                        "second_unload_frames": second_unload_frames,
+                        "overlay_inactive_after_second_exit": True,
+                    }
                 else:
                     raise RuntimeError(f"unknown isolated scenario: {name}")
             assert_cancel_exact(
@@ -1059,6 +1397,7 @@ def run(args: argparse.Namespace) -> dict:
     transition_evidence: list[dict[str, object]] = []
     boundary_evidence: list[dict[str, object]] = []
     prospective_evidence: list[dict[str, object]] = []
+    control_pixel_evidence: list[dict[str, object]] = []
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
     # Main acceptance: every touch/key transition is asserted immediately.
@@ -1162,8 +1501,51 @@ def run(args: argparse.Namespace) -> dict:
             )
             captures.append(str(candidate_capture))
             pp_pixel_evidence = assert_pp_pixels(candidate_capture)
+            control_pixel_evidence.append(
+                assert_control_pixels(
+                    candidate_capture,
+                    label="candidate Pick/Back glyph boundaries",
+                    a_span=(8, 40),
+                    gap_span=(40, 44),
+                    b_span=(44, 49),
+                )
+            )
+
+            # Exact exclusive edges: x40..43 are blank; x44 is Back.
+            for x in (40, 43):
+                touch(emu, x, 140, 20)
+                transition_evidence.append(
+                    summary_state_evidence(
+                        emu,
+                        summary_state,
+                        1,
+                        0,
+                        f"touch list dead gap x{x}",
+                    )
+                )
+                assert_cancel_exact(
+                    emu,
+                    baseline_runtime_party,
+                    baseline_metadata,
+                    baseline_history,
+                    f"list dead-gap touch x{x}",
+                )
+            touch(emu, 44, 140, 20)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 0, 0, "touch list Back glyph edge x44"
+                )
+            )
+            assert_cancel_exact(
+                emu,
+                baseline_runtime_party,
+                baseline_metadata,
+                baseline_history,
+                "list Back glyph-edge cancellation",
+            )
 
             # Blue Cancel from the list is exact and non-mutating.
+            touch(emu, 40, 140, 30)
             touch(emu, 220, 176, 60)
             transition_evidence.append(
                 summary_state_evidence(
@@ -1185,16 +1567,31 @@ def run(args: argparse.Namespace) -> dict:
                     emu, summary_state, 1, 0, "touch prompt entry"
                 )
             )
-            touch(emu, 30, 140, 60)
+            touch(emu, 39, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
-                    emu, summary_state, 3, 0, "touch list Pick"
+                    emu, summary_state, 3, 0, "touch list Pick edge x39"
                 )
             )
-            touch(emu, 90, 140, 60)
+            for x in (40, 43):
+                touch(emu, x, 140, 20)
+                transition_evidence.append(
+                    summary_state_evidence(
+                        emu,
+                        summary_state,
+                        3,
+                        0,
+                        f"touch slot dead gap x{x}",
+                    )
+                )
+            touch(emu, 44, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
-                    emu, summary_state, 1, 0, "touch slot Back"
+                    emu,
+                    summary_state,
+                    1,
+                    0,
+                    "touch slot Back glyph edge x44",
                 )
             )
             assert_cancel_exact(
@@ -1205,7 +1602,8 @@ def run(args: argparse.Namespace) -> dict:
                 "slot-to-list cancellation",
             )
 
-            # Candidate row -> slot, HM row -> blocked, Cancel -> slot.
+            # Candidate row -> slot, HM row -> blocked; all visible dismissal
+            # controls return to the slot without mutation.
             touch(emu, 50, 24, 60)
             transition_evidence.append(
                 summary_state_evidence(
@@ -1218,8 +1616,18 @@ def run(args: argparse.Namespace) -> dict:
                     emu, summary_state, 5, 0, "touch HM-protected slot"
                 )
             )
-            captures.append(
+            hm_capture = Path(
                 screenshot(emu, args.screenshot_dir, "03_hm_blocked.png")
+            )
+            captures.append(str(hm_capture))
+            control_pixel_evidence.append(
+                assert_control_pixels(
+                    hm_capture,
+                    label="HM OK/Back glyph boundaries",
+                    a_span=(8, 31),
+                    gap_span=(31, 35),
+                    b_span=(35, 40),
+                )
             )
             assert_cancel_exact(
                 emu,
@@ -1228,19 +1636,39 @@ def run(args: argparse.Namespace) -> dict:
                 baseline_history,
                 "HM-protected rejection",
             )
-            touch(emu, 220, 176, 60)
+            touch(emu, 20, 140, 30)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 3, 0, "touch HM A:OK dismissal"
+                )
+            )
+            touch(emu, 50, 24, 20)
+            summary_state_evidence(
+                emu, summary_state, 5, 0, "touch HM row for Back probe"
+            )
+            touch(emu, 35, 140, 30)
+            transition_evidence.append(
+                summary_state_evidence(
+                    emu, summary_state, 3, 0, "touch HM B:Back edge x35"
+                )
+            )
+            touch(emu, 50, 24, 20)
+            summary_state_evidence(
+                emu, summary_state, 5, 0, "touch HM row for blue Cancel"
+            )
+            touch(emu, 220, 176, 30)
             transition_evidence.append(
                 summary_state_evidence(
                     emu, summary_state, 3, 0, "touch HM blue Cancel"
                 )
             )
-            touch(emu, 90, 140, 40)
+            touch(emu, 44, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
                     emu, summary_state, 1, 0, "touch slot Back after HM"
                 )
             )
-            touch(emu, 90, 140, 40)
+            touch(emu, 44, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
                     emu, summary_state, 0, 0, "touch list Back after HM"
@@ -1309,18 +1737,50 @@ def run(args: argparse.Namespace) -> dict:
                     emu, summary_state, 4, 0, "touch replacement slot"
                 )
             )
-            captures.append(
+            confirmation_capture = Path(
                 screenshot(emu, args.screenshot_dir, "05_confirmation.png")
+            )
+            captures.append(str(confirmation_capture))
+            control_pixel_evidence.append(
+                assert_control_pixels(
+                    confirmation_capture,
+                    label="confirmation OK/Back glyph boundaries",
+                    a_span=(8, 31),
+                    gap_span=(31, 35),
+                    b_span=(35, 40),
+                )
             )
             prospective_evidence.append(
                 assert_prospective_slot(
                     emu, summary_state, 3, "inline preview at confirmation"
                 )
             )
-            touch(emu, 90, 140, 40)
+            for x in (31, 34):
+                touch(emu, x, 140, 20)
+                transition_evidence.append(
+                    summary_state_evidence(
+                        emu,
+                        summary_state,
+                        4,
+                        0,
+                        f"touch confirmation dead gap x{x}",
+                    )
+                )
+                assert_cancel_exact(
+                    emu,
+                    baseline_runtime_party,
+                    baseline_metadata,
+                    baseline_history,
+                    f"confirmation dead-gap touch x{x}",
+                )
+            touch(emu, 35, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
-                    emu, summary_state, 3, 0, "touch confirmation Back"
+                    emu,
+                    summary_state,
+                    3,
+                    0,
+                    "touch confirmation Back glyph edge x35",
                 )
             )
             assert_cancel_exact(
@@ -1330,7 +1790,7 @@ def run(args: argparse.Namespace) -> dict:
                 baseline_history,
                 "confirmation-to-slot cancellation",
             )
-            touch(emu, 90, 140, 40)
+            touch(emu, 44, 140, 30)
             transition_evidence.append(
                 summary_state_evidence(
                     emu, summary_state, 1, 0, "touch slot Back after confirm"
@@ -1433,7 +1893,17 @@ def run(args: argparse.Namespace) -> dict:
         finally:
             close_emulator(emu, imported)
 
-    # Each extra lifecycle scenario runs in a fresh emulator process.
+    # A separate no-touch path proves the documented modal X/A/B controls.
+    key_capture = args.screenshot_dir / "09_key_only_scenario.png"
+    key_only_evidence = isolated_scenario_evidence(
+        rom,
+        args.controlled_raw,
+        "keys",
+        key_capture,
+    )
+    captures.append(str(key_capture))
+
+    # Each extra boundary/lifecycle scenario runs in a fresh emulator process.
     for scenario in ("empty", "identity", "position", "teardown"):
         scenario_capture = (
             args.screenshot_dir / f"09_{scenario}_scenario.png"
@@ -1448,7 +1918,8 @@ def run(args: argparse.Namespace) -> dict:
         )
         captures.append(str(scenario_capture))
 
-    # After destroying an active modal overlay, a fresh boot remains exact.
+    # A fresh process also selects the unchanged controlled baseline exactly;
+    # the teardown subprocess itself already proves two real unloads/reloads.
     teardown_probe_path = args.screenshot_dir / "09_teardown_reload.png"
     controlled_probe_party, controlled_probe_metadata, controlled_probe_history = (
         fresh_reload_evidence(
@@ -1463,11 +1934,11 @@ def run(args: argparse.Namespace) -> dict:
         controlled_probe_party == baseline_party
         and controlled_probe_metadata[4] == 0
         and controlled_probe_history == selected_controlled_history,
-        "active-overlay teardown changed persisted party/history",
+        "post-lifecycle fresh boot changed persisted party/history",
     )
     boundary_evidence.append(
         {
-            "label": "active overlay teardown and fresh reload",
+            "label": "post-lifecycle fresh boot",
             "party_exact": True,
             "history_exact": True,
             "dirty": controlled_probe_metadata[4],
@@ -1630,7 +2101,7 @@ def run(args: argparse.Namespace) -> dict:
             "empty list",
             "identity boundary",
             "position boundary",
-            "active teardown/reload",
+            "real Summary exit, overlay unload/reload, and second exit",
         ],
         "replacement": {
             "party_slot": TARGET_SLOT,
@@ -1670,7 +2141,9 @@ def run(args: argparse.Namespace) -> dict:
         "summary_state_evidence": state_evidence,
         "immediate_touch_transitions": transition_evidence,
         "boundary_evidence": boundary_evidence,
+        "key_only_evidence": key_only_evidence,
         "prospective_evidence": prospective_evidence,
+        "control_pixel_evidence": control_pixel_evidence,
         "screenshots": captures,
         "exported_raw_save": str(args.export_raw),
     }
@@ -1684,7 +2157,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--probe-raw", type=Path)
     parser.add_argument(
         "--scenario",
-        choices=("empty", "identity", "position", "teardown"),
+        choices=("empty", "identity", "position", "teardown", "keys"),
     )
     parser.add_argument(
         "--probe-screenshot",

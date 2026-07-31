@@ -87,8 +87,8 @@ static const struct SummaryTouchRect sPromptTouchRects[] = {
 };
 
 static const struct SummaryTouchRect sActionTouchRects[] = {
-    { 136, 151, 8, 55 },
-    { 136, 151, 56, 128 },
+    { 136, 151, 8, 41 },
+    { 136, 151, 45, 128 },
     { 165, 188, 190, 249 },
     { 0xFF, 0, 0, 0 },
 };
@@ -100,8 +100,8 @@ static const struct SummaryTouchRect sBackTouchRects[] = {
 };
 
 static const struct SummaryTouchRect sConfirmTouchRects[] = {
-    { 136, 151, 8, 37 },
-    { 136, 151, 38, 128 },
+    { 136, 151, 8, 32 },
+    { 136, 151, 36, 128 },
     { 165, 188, 190, 249 },
     { 0xFF, 0, 0, 0 },
 };
@@ -752,8 +752,10 @@ u32 SummaryMoveRelearn_MainState(
             SummaryMoveRelearn_Commit(summary, state, pokemon);
         }
     } else if (state->mode == SUMMARY_RELEARN_HM_BLOCKED) {
-        touch = SummaryMoveRelearn_GetTouch(sBackTouchRects);
-        if (touch == 0 || touch == 1) {
+        touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
+        if (touch == 0) {
+            newKeys |= PAD_BUTTON_A;
+        } else if (touch == 1 || touch == 2) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
@@ -761,8 +763,8 @@ u32 SummaryMoveRelearn_MainState(
             SummaryMoveRelearn_RenderSlot(summary, state);
         }
     } else if (state->mode == SUMMARY_RELEARN_SUCCESS) {
-        touch = SummaryMoveRelearn_GetTouch(sBackTouchRects);
-        if (touch == 0 || touch == 1) {
+        touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
+        if (touch == 2) {
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {

@@ -22,10 +22,13 @@ On the normal Summary **Moves** page, the bottom prompt reads `X: Relearn`.
 
 Touch controls and every existing Summary control remain retail while relearn
 mode is inactive. The `X: Relearn` prompt is tappable; candidate and slot rows
-are tappable. All rendered prompt/control labels occupy y=136..151: entry is
-x=8..87, list/slot `A:Pick` is x=8..55, list/slot `B:Back` is x=56..128,
-confirmation `A:OK` is x=8..37, and confirmation `B:Back` is x=38..128.
-The retail blue `Cancel` button at y=165..188, x=190..249 is also Back.
+are tappable. All rendered prompt/control labels occupy y=[136,151): entry is
+x=[8,87), list/slot `A:Pick` is x=[8,40), list/slot `B:Back` is
+x=[44,128), confirmation `A:OK` is x=[8,31), and confirmation `B:Back` is
+x=[35,128). The blank x=[40,44) and x=[31,35) gaps deliberately perform no
+action. The retail blue `Cancel` button at y=[165,188), x=[190,249) is also
+Back. On the HM-blocked message, both visible `A:OK` and `B:Back` controls
+dismiss back to slot selection; neither can replace the protected move.
 The unrelated page buttons in that lower row are not modal actions. These
 regions are separate: tapping Pick/OK never aliases Back, and tapping Back
 never confirms.
@@ -71,9 +74,12 @@ UI-only cache changes are restored before
 returning to the ordinary Moves page. The exit path uses retail's cursor-only
 position helper and six-window move-detail cleanup before restoring BG5, so a
 scrolled candidate cursor and stale detail text cannot leak into vanilla
-Summary. Application teardown frees the enlarged Summary work block; because
-no permanent mutation occurs before confirmation, destroying an active modal
-state and reloading the unchanged battery has no persisted effect.
+Summary. Normal `B` exit after modal cancellation lets the application manager
+unload overlay 154 and free the enlarged Summary work block. A subsequent
+Summary launch receives a fresh inactive extension with zero candidates and no
+pending move. Because no permanent mutation occurs before confirmation, both
+real same-process unload/reload boundaries leave party and history bytes
+unchanged.
 
 Only confirmation calls `PokemonMoveHistory_ReplaceMove`. That central task-3
 transaction:
@@ -96,8 +102,8 @@ Retail Summary code and state dispatch are ARM9-resident. Its application
 template at `0x02103A1C` now owns dynamic overlay 154 for the complete Summary
 lifetime. Overlay 154 occupies `0x023C0400..0x023C22A0`, ending exactly before
 stock overlay 133. A fixed `SRM4`/version-4 header and odd Thumb entry live at
-the overlay base. The task-4 image uses `0xB48` bytes through `0x023C0F48`,
-leaving `0x1358` bytes inside that reserved envelope for later Summary work.
+the overlay base. The task-4 image uses `0xB4C` bytes through `0x023C0F4C`,
+leaving `0x1354` bytes inside that reserved envelope for later Summary work.
 
 The state-2 call at `0x02088494` directly targets overlay 154's fixed `+0x08`
 entry. This is safe under the application-manager ownership invariant:
@@ -138,12 +144,15 @@ and a target slot with 1 PP and two PP Ups. Key and coordinate-touch input prove
 entry, row/strip selection, Back/OK separation, immediate state transitions,
 four-row viewport scrolling, full candidate PP in live state and pixels,
 empty-list handling, HM rejection, pointer-identity and position boundaries,
-and active-overlay teardown. The confirmed replacement alone dirties Summary
-and history, resets the slot to full base PP with zero PP Ups, then persists
-through a normal save and fresh-process reload. The reload authenticates the
-selected history mirror and target record, all unrelated history records,
-all six serialized `0xEC` party checksums, every unrelated party record, and
-the shiny Pidgey.
+and two real Summary exits around an overlay-154 unload/reload observed in the
+vanilla loaded-overlay registry. A separate no-touch scenario proves immediate
+`X` entry, `A` list/slot/confirmation/success transitions, and byte-exact `B`
+returns/cancellation. The confirmed replacement alone dirties Summary and
+history, resets the slot to full base PP with zero PP Ups, then persists through
+a normal save and fresh-process reload. The reload authenticates the selected
+history mirror and target record, all unrelated history records, all six
+serialized `0xEC` party checksums, every unrelated party record, and the shiny
+Pidgey.
 
 Reserved for later tasks:
 

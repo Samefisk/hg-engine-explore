@@ -4941,14 +4941,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     154: (
         0x023C0400,
-        0xB48,
+        0xB4C,
         0,
         0,
         0,
         154,
         0,
         0x41CE00,
-        0x41D948,
+        0x41D94C,
     ),
 }
 OVERLAY129_THUNKS = {

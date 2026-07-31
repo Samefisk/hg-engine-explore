@@ -48,6 +48,11 @@ def body(source: str, name: str) -> str:
     return source[start : cursor - 1]
 
 
+def rect_contains(rect: tuple[int, int, int, int], x: int, y: int) -> bool:
+    top, bottom, left, right = rect
+    return top <= y < bottom and left <= x < right
+
+
 def source_contracts(root: Path) -> None:
     ui = (
         root
@@ -259,12 +264,28 @@ def source_contracts(root: Path) -> None:
         "Summary_ClearMoveDetailWindows(summary)" in ui
         and ui.count("Summary_ClearMoveDetailWindows(summary)") >= 2
         and ui.count("Summary_UpdateMoveCursorSprite(summary)") >= 2
-        and "{ 136, 151, 8, 55 }" in ui
-        and "{ 136, 151, 56, 128 }" in ui
-        and "{ 136, 151, 8, 37 }" in ui
-        and "{ 136, 151, 38, 128 }" in ui
+        and "{ 136, 151, 8, 41 }" in ui
+        and "{ 136, 151, 45, 128 }" in ui
+        and "{ 136, 151, 8, 32 }" in ui
+        and "{ 136, 151, 36, 128 }" in ui
         and "{ 165, 188, 190, 249 }" in ui,
         "modal cleanup or prompt-strip touch ownership differs",
+    )
+    action_pick = (136, 151, 8, 41)
+    action_back = (136, 151, 45, 128)
+    confirm_ok = (136, 151, 8, 32)
+    confirm_back = (136, 151, 36, 128)
+    require(
+        rect_contains(action_pick, 40, 140)
+        and not rect_contains(action_pick, 41, 140)
+        and not rect_contains(action_back, 44, 140)
+        and rect_contains(action_back, 45, 140)
+        and rect_contains(confirm_ok, 31, 140)
+        and not rect_contains(confirm_ok, 32, 140)
+        and not rect_contains(confirm_back, 35, 140)
+        and rect_contains(confirm_back, 36, 140)
+        and not rect_contains(confirm_ok, 36, 140),
+        "exclusive prompt hitbox edges overlap glyphs or omit dead gaps",
     )
     for text in (
         "X: Relearn",
@@ -312,8 +333,9 @@ def source_contracts(root: Path) -> None:
         "lower page-button row aliases a modal label action",
     )
     require(
-        main.count("if (touch == 0 || touch == 1)") == 3,
-        "empty/HM/success do not accept both label Back and blue Cancel",
+        main.count("if (touch == 0 || touch == 1)") == 1
+        and main.count("if (touch == 2)") == 1,
+        "empty Back/Cancel or success blue-Cancel ownership differs",
     )
     for handler, label in (
         (list_handler, "candidate list"),
@@ -327,8 +349,9 @@ def source_contracts(root: Path) -> None:
             f"{label} touch controls do not split Pick from Back/Cancel",
         )
     require(
-        main.count("touch == 1 || touch == 2") >= 1,
-        "confirmation touch controls do not split OK from Back/Cancel",
+        main.count("SummaryMoveRelearn_GetTouch(sConfirmTouchRects)") == 3
+        and main.count("touch == 1 || touch == 2") >= 2,
+        "confirmation/HM touch controls do not map OK and Back/Cancel",
     )
     render_list = body(ui, "SummaryMoveRelearn_RenderList")
     pp_cache = render_list.index("summary->pokemonData.curPP[i] = pp;")
@@ -535,6 +558,34 @@ def binary_contracts(args: argparse.Namespace) -> None:
         entry == OVERLAY_BASE + 8,
         "packaged task4 entry moved from fixed +0x08",
     )
+    for symbol, expected in (
+        (
+            "sPromptTouchRects",
+            bytes.fromhex("88970857 ff000000"),
+        ),
+        (
+            "sActionTouchRects",
+            bytes.fromhex(
+                "88970829 88972d80 a5bcbef9 ff000000"
+            ),
+        ),
+        (
+            "sBackTouchRects",
+            bytes.fromhex("88972880 a5bcbef9 ff000000"),
+        ),
+        (
+            "sConfirmTouchRects",
+            bytes.fromhex(
+                "88970820 88972480 a5bcbef9 ff000000"
+            ),
+        ),
+    ):
+        address = symbol_address(args.summary_linked, symbol)
+        offset = address - OVERLAY_BASE
+        require(
+            overlay154[offset:offset + len(expected)] == expected,
+            f"packaged touch rectangles differ: {symbol}",
+        )
 
     require(OVERLAY153_ID < len(rows), "y9 has no overlay 153 row")
     require(
