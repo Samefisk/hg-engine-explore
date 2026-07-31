@@ -81,6 +81,7 @@ SUMMARY_BASE_LIMIT_OFFSET = 0x13
 SUMMARY_BASE_DATA_TYPE_OFFSET = 0x11
 SUMMARY_BASE_POINTER_OFFSET = 0x22C
 SUMMARY_PAGE_MODE_OFFSET = 0x7BC
+SUMMARY_TRANSITION_OFFSET = 0x7BF
 SUMMARY_CACHE_MOVES_OFFSET = 0x264
 SUMMARY_CACHE_CUR_PP_OFFSET = 0x26C
 SUMMARY_CACHE_MAX_PP_OFFSET = 0x270
@@ -113,14 +114,113 @@ def load_module(name: str, path: Path):
     return module
 
 
-HEADLESS = load_module(
-    "summary_relearn_headless",
-    REPO / "scripts/headless-overworld-test.py",
+MANIFEST = load_module(
+    "summary_relearn_manifest",
+    REPO / "scripts/pokemon_move_history_build_manifest.py",
 )
-PARTY = load_module(
-    "summary_relearn_party",
-    REPO / "scripts/verify_pokemon_move_history_party_integrity.py",
-)
+HEADLESS = None
+PARTY = None
+SUBPROCESS_AUTHENTICATION_ARGS: list[str] = []
+
+
+def load_runtime_helpers() -> None:
+    global HEADLESS, PARTY
+
+    HEADLESS = load_module(
+        "summary_relearn_headless",
+        REPO / "scripts/headless-overworld-test.py",
+    )
+    PARTY = load_module(
+        "summary_relearn_party",
+        REPO / "scripts/verify_pokemon_move_history_party_integrity.py",
+    )
+
+
+def artifact_authentication(
+    rom: Path,
+    publication_manifest: Path,
+) -> dict[str, object]:
+    document = MANIFEST.verify_manifest(publication_manifest, rom)
+    verifier_path = Path(__file__).resolve()
+    helper_paths = (
+        REPO / "scripts/headless-overworld-test.py",
+        REPO / "scripts/verify_pokemon_move_history_party_integrity.py",
+    )
+    input_records = document["inputs"]
+    verifier_relative = verifier_path.relative_to(REPO).as_posix()
+    verifier_record = MANIFEST.file_record(verifier_path)
+    require(
+        input_records.get(verifier_relative) == verifier_record,
+        "publication manifest does not seal this runtime verifier",
+    )
+    helper_records: dict[str, object] = {}
+    for helper_path in helper_paths:
+        relative = helper_path.relative_to(REPO).as_posix()
+        record = MANIFEST.file_record(helper_path)
+        require(
+            input_records.get(relative) == record,
+            f"publication manifest does not seal runtime helper {relative}",
+        )
+        helper_records[relative] = record
+    return {
+        "schema": "summary-move-relearn-runtime-artifact-v1",
+        "rom": MANIFEST.file_record(rom),
+        "publication_manifest": MANIFEST.file_record(
+            publication_manifest
+        ),
+        "runtime_verifier": verifier_record,
+        "runtime_helpers": helper_records,
+        "authenticated_at_start_and_end": True,
+    }
+
+
+def validate_expected_authentication(
+    authentication: dict[str, object],
+    *,
+    expected_manifest_sha256: str | None,
+    expected_verifier_sha256: str | None,
+) -> None:
+    manifest_record = authentication["publication_manifest"]
+    verifier_record = authentication["runtime_verifier"]
+    require(
+        isinstance(manifest_record, dict)
+        and isinstance(verifier_record, dict),
+        "runtime artifact authentication records are malformed",
+    )
+    if expected_manifest_sha256 is not None:
+        require(
+            manifest_record.get("sha256") == expected_manifest_sha256,
+            "publication manifest SHA-256 differs from the required artifact",
+        )
+    if expected_verifier_sha256 is not None:
+        require(
+            verifier_record.get("sha256") == expected_verifier_sha256,
+            "runtime verifier SHA-256 differs from the required revision",
+        )
+
+
+def write_result_atomic(path: Path, rendered: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(rendered)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def require(condition: bool, message: str) -> None:
@@ -1313,8 +1413,9 @@ def navigate_to_moves_with_injection(
     emu: DeSmuME,
     summary: int,
     inject,
+    capture,
     label: str,
-) -> None:
+) -> object:
     """Inject at the retail Info->Moves boundary before custom eligibility."""
     require(
         read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) != 1,
@@ -1322,11 +1423,13 @@ def navigate_to_moves_with_injection(
     )
     key_mask = HEADLESS.keymask(HEADLESS.key_constant("RIGHT"))
     injected = False
+    captured = None
     for _ in range(2):
         HEADLESS.set_key_mask(emu, key_mask)
         emu.cycle(False)
         if read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1:
             inject()
+            captured = capture()
             injected = True
             break
     HEADLESS.set_key_mask(emu, 0)
@@ -1335,10 +1438,29 @@ def navigate_to_moves_with_injection(
             emu.cycle(False)
             if read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET) == 1:
                 inject()
+                captured = capture()
                 injected = True
                 break
     require(injected, f"{label} did not reach the real Moves boundary")
     HEADLESS.cycle(emu, 80)
+    return captured
+
+
+def assert_malformed_navigation_consumed(
+    emu: DeSmuME,
+    summary: int,
+    *,
+    expected_page: int,
+    expected_transition: int,
+    label: str,
+) -> None:
+    require(
+        read_u8(emu, summary + SUMMARY_PAGE_MODE_OFFSET)
+        == expected_page
+        and read_u8(emu, summary + SUMMARY_TRANSITION_OFFSET)
+        == expected_transition,
+        f"{label} delegated malformed navigation",
+    )
 
 
 def hold(emu: DeSmuME, key: str, frames: int, gap: int = 20) -> None:
@@ -1634,6 +1756,7 @@ def fresh_reload_evidence(
             str(raw_path),
             "--probe-screenshot",
             str(screenshot_path),
+            *SUBPROCESS_AUTHENTICATION_ARGS,
         ],
         check=False,
         capture_output=True,
@@ -1766,39 +1889,94 @@ def run_isolated_scenario(
                 ]
                 fixture_results: list[dict[str, object]] = []
                 for label, kind, value in probes:
-                    if kind == "count":
-                        write_u32(emu, party_address + 4, int(value))
-                    elif kind == "limit":
-                        write_u8(
-                            emu,
-                            owner + SUMMARY_BASE_LIMIT_OFFSET,
-                            int(value),
-                        )
-                    elif kind == "position":
-                        write_u8(
-                            emu,
-                            owner + SUMMARY_BASE_POS_OFFSET,
-                            int(value),
-                        )
-                    elif kind == "data_type":
-                        write_u8(
-                            emu,
-                            owner + SUMMARY_BASE_DATA_TYPE_OFFSET,
-                            int(value),
-                        )
-                    else:
-                        write_bytes(emu, target_address, bytes(value))
+                    def inject_probe() -> None:
+                        if kind == "count":
+                            write_u32(
+                                emu, party_address + 4, int(value)
+                            )
+                        elif kind == "limit":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_LIMIT_OFFSET,
+                                int(value),
+                            )
+                        elif kind == "position":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_POS_OFFSET,
+                                int(value),
+                            )
+                        elif kind == "data_type":
+                            write_u8(
+                                emu,
+                                owner + SUMMARY_BASE_DATA_TYPE_OFFSET,
+                                int(value),
+                            )
+                        else:
+                            write_bytes(
+                                emu, target_address, bytes(value)
+                            )
 
-                    malformed_party = runtime_party(emu)
-                    malformed_pc = read_bytes(
+                    def capture_probe() -> tuple[
+                        bytes,
+                        bytes,
+                        bytes,
+                        bytes,
+                        bytes,
+                        int,
+                        int,
+                    ]:
+                        captured_metadata, captured_history = (
+                            runtime_history(emu)
+                        )
+                        return (
+                            runtime_party(emu),
+                            read_bytes(
+                                emu,
+                                runtime_pc_storage_address(emu),
+                                PC_SAVE_SIZE,
+                            ),
+                            read_bytes(
+                                emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                            ),
+                            captured_metadata,
+                            captured_history,
+                            read_u8(
+                                emu,
+                                summary + SUMMARY_PAGE_MODE_OFFSET,
+                            ),
+                            read_u8(
+                                emu,
+                                summary + SUMMARY_TRANSITION_OFFSET,
+                            ),
+                        )
+
+                    captured_probe = navigate_to_moves_with_injection(
                         emu,
-                        runtime_pc_storage_address(emu),
-                        PC_SAVE_SIZE,
+                        summary,
+                        inject_probe,
+                        capture_probe,
+                        f"party {label}",
                     )
-                    malformed_owner = read_bytes(
-                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    require(
+                        isinstance(captured_probe, tuple)
+                        and len(captured_probe) == 7,
+                        f"party {label} lacks a pre-frame fixture snapshot",
                     )
-                    tap(emu, "RIGHT", 80)
+                    (
+                        malformed_party,
+                        malformed_pc,
+                        malformed_owner,
+                        malformed_metadata,
+                        malformed_history,
+                        malformed_page,
+                        malformed_transition,
+                    ) = captured_probe
+                    require(
+                        malformed_metadata == baseline_metadata
+                        and malformed_history == baseline_history,
+                        f"party {label} changed history during injection",
+                    )
                     require(
                         read_u8(
                             emu, summary + SUMMARY_PAGE_MODE_OFFSET
@@ -1806,6 +1984,31 @@ def run_isolated_scenario(
                         == 1,
                         f"{label} did not reach the real Moves page",
                     )
+                    if kind != "box":
+                        tap(emu, "LEFT", 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"party {label} LEFT",
+                        )
+                        tap(emu, "RIGHT", 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"party {label} RIGHT",
+                        )
+                        touch(emu, 224, 92, 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"party {label} switch touch",
+                        )
                     tap(emu, "X", 16)
                     touch(emu, 40, 140, 24)
                     fixture_results.append(
@@ -1816,9 +2019,12 @@ def run_isolated_scenario(
                             expected_party=malformed_party,
                             expected_pc=malformed_pc,
                             expected_owner_args=malformed_owner,
-                            expected_metadata=baseline_metadata,
-                            expected_history=baseline_history,
+                            expected_metadata=malformed_metadata,
+                            expected_history=malformed_history,
                         )
+                    )
+                    fixture_results[-1]["expected_snapshot_phase"] = (
+                        "immediate_post_injection_pre_frame"
                     )
 
                     # Restore the exact retail owners before vanilla page/exit
@@ -1845,6 +2051,93 @@ def run_isolated_scenario(
                         == (baseline_metadata, baseline_history),
                         f"{label} restoration changed persistent owners",
                     )
+                post_prompt_results: list[dict[str, object]] = []
+                for label, invalid_box, activation in (
+                    (
+                        "post_prompt_species_1076_key",
+                        invalid_boxes["species_1076"],
+                        "key",
+                    ),
+                    (
+                        "post_prompt_tentacool_form_31_touch",
+                        invalid_boxes["tentacool_form_31"],
+                        "touch",
+                    ),
+                ):
+                    tap(emu, "RIGHT", 80)
+                    expected_prompt = bytearray(
+                        SUMMARY_STATE_EXTENSION_SIZE
+                    )
+                    expected_prompt[
+                        SUMMARY_STATE_PROMPT_VISIBLE_OFFSET
+                    ] = 1
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        == 1
+                        and read_bytes(
+                            emu, state, SUMMARY_STATE_EXTENSION_SIZE
+                        )
+                        == bytes(expected_prompt),
+                        f"party {label} did not display a clean prompt",
+                    )
+                    write_bytes(emu, target_address, invalid_box)
+                    malformed_party = runtime_party(emu)
+                    malformed_pc = read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    malformed_owner = read_bytes(
+                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    )
+                    malformed_metadata, malformed_history = (
+                        runtime_history(emu)
+                    )
+                    if activation == "key":
+                        tap(emu, "X", 24)
+                    else:
+                        touch(emu, 40, 140, 24)
+                    evidence = assert_fail_closed_fixture(
+                        emu,
+                        state,
+                        label=f"party {label}",
+                        expected_party=malformed_party,
+                        expected_pc=malformed_pc,
+                        expected_owner_args=malformed_owner,
+                        expected_metadata=malformed_metadata,
+                        expected_history=malformed_history,
+                    )
+                    evidence.update(
+                        {
+                            "injection_phase":
+                                "after_prompt_before_activation",
+                            "activation": activation,
+                            "expected_snapshot_phase":
+                                "immediate_post_injection_pre_frame",
+                        }
+                    )
+                    post_prompt_results.append(evidence)
+                    write_bytes(emu, party_address, baseline_party)
+                    write_bytes(emu, owner, baseline_owner)
+                    tap(emu, "LEFT", 80)
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        != 1
+                        and runtime_party(emu) == baseline_party
+                        and read_bytes(
+                            emu,
+                            runtime_pc_storage_address(emu),
+                            PC_SAVE_SIZE,
+                        )
+                        == baseline_pc
+                        and runtime_history(emu)
+                        == (baseline_metadata, baseline_history),
+                        f"party {label} restoration changed owners",
+                    )
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
                 screenshot(emu, screenshot_path.parent, screenshot_path.name)
                 tap(emu, "B", 40)
@@ -1856,6 +2149,9 @@ def run_isolated_scenario(
                     "actual_party_summary_info_to_moves": True,
                     "fixture_count": len(fixture_results),
                     "fixtures": fixture_results,
+                    "post_prompt_fixture_count":
+                        len(post_prompt_results),
+                    "post_prompt_fixtures": post_prompt_results,
                     "valid_zero_candidate_kept_separate": True,
                     "overlay_unloaded": True,
                 }
@@ -1954,20 +2250,88 @@ def run_isolated_scenario(
                                 emu, target_address, bytes(value)
                             )
 
-                    navigate_to_moves_with_injection(
-                        emu,
-                        summary,
-                        inject_probe,
-                        f"PC {label}",
+                    def capture_probe() -> tuple[
+                        bytes,
+                        bytes,
+                        bytes,
+                        bytes,
+                        bytes,
+                        int,
+                        int,
+                    ]:
+                        captured_metadata, captured_history = (
+                            runtime_history(emu)
+                        )
+                        return (
+                            runtime_party(emu),
+                            read_bytes(
+                                emu,
+                                runtime_pc_storage_address(emu),
+                                PC_SAVE_SIZE,
+                            ),
+                            read_bytes(
+                                emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                            ),
+                            captured_metadata,
+                            captured_history,
+                            read_u8(
+                                emu,
+                                summary + SUMMARY_PAGE_MODE_OFFSET,
+                            ),
+                            read_u8(
+                                emu,
+                                summary + SUMMARY_TRANSITION_OFFSET,
+                            ),
+                        )
+
+                    if kind == "box":
+                        captured_probe = navigate_to_moves_with_injection(
+                            emu,
+                            summary,
+                            inject_probe,
+                            capture_probe,
+                            f"PC {label}",
+                        )
+                    else:
+                        # Retail transition code resolves the current box
+                        # before the hooked main-state callback. Inject owner
+                        # corruption only after that real transition is
+                        # stable, then snapshot before the first guarded frame.
+                        tap(emu, "RIGHT", 80)
+                        require(
+                            read_u8(
+                                emu,
+                                summary + SUMMARY_PAGE_MODE_OFFSET,
+                            )
+                            == 1
+                            and read_u8(
+                                emu,
+                                summary + SUMMARY_TRANSITION_OFFSET,
+                            )
+                            & 0xF0
+                            == 0,
+                            f"PC {label} did not reach stable Moves",
+                        )
+                        inject_probe()
+                        captured_probe = capture_probe()
+                    require(
+                        isinstance(captured_probe, tuple)
+                        and len(captured_probe) == 7,
+                        f"PC {label} lacks a pre-frame fixture snapshot",
                     )
-                    malformed_party = runtime_party(emu)
-                    malformed_pc = read_bytes(
-                        emu,
-                        runtime_pc_storage_address(emu),
-                        PC_SAVE_SIZE,
-                    )
-                    malformed_owner = read_bytes(
-                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    (
+                        malformed_party,
+                        malformed_pc,
+                        malformed_owner,
+                        malformed_metadata,
+                        malformed_history,
+                        malformed_page,
+                        malformed_transition,
+                    ) = captured_probe
+                    require(
+                        malformed_metadata == baseline_metadata
+                        and malformed_history == baseline_history,
+                        f"PC {label} changed history during injection",
                     )
                     require(
                         read_u8(
@@ -1976,6 +2340,31 @@ def run_isolated_scenario(
                         == 1,
                         f"PC {label} did not reach the real Moves page",
                     )
+                    if kind != "box":
+                        tap(emu, "LEFT", 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"PC {label} LEFT",
+                        )
+                        tap(emu, "RIGHT", 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"PC {label} RIGHT",
+                        )
+                        touch(emu, 215, 115, 12)
+                        assert_malformed_navigation_consumed(
+                            emu,
+                            summary,
+                            expected_page=malformed_page,
+                            expected_transition=malformed_transition,
+                            label=f"PC {label} switch touch",
+                        )
                     tap(emu, "X", 16)
                     touch(emu, 40, 140, 24)
                     fixture_results.append(
@@ -1986,9 +2375,12 @@ def run_isolated_scenario(
                             expected_party=malformed_party,
                             expected_pc=malformed_pc,
                             expected_owner_args=malformed_owner,
-                            expected_metadata=baseline_metadata,
-                            expected_history=baseline_history,
+                            expected_metadata=malformed_metadata,
+                            expected_history=malformed_history,
                         )
+                    )
+                    fixture_results[-1]["expected_snapshot_phase"] = (
+                        "immediate_post_injection_pre_frame"
                     )
                     write_bytes(
                         emu,
@@ -2010,6 +2402,106 @@ def run_isolated_scenario(
                         == (baseline_metadata, baseline_history),
                         f"PC {label} restoration changed persistent owners",
                     )
+                owner_probe_hashes = {
+                    evidence["pc_sha256"]
+                    for evidence in fixture_results[:3]
+                }
+                require(
+                    len(owner_probe_hashes) == 1,
+                    "PC position_30 pre-frame storage hash differs from "
+                    "owner-only probes",
+                )
+                post_prompt_results: list[dict[str, object]] = []
+                for label, invalid_box, activation in (
+                    (
+                        "post_prompt_species_1076_key",
+                        invalid_boxes["species_1076"],
+                        "key",
+                    ),
+                    (
+                        "post_prompt_tentacool_form_31_touch",
+                        invalid_boxes["tentacool_form_31"],
+                        "touch",
+                    ),
+                ):
+                    tap(emu, "RIGHT", 80)
+                    expected_prompt = bytearray(
+                        SUMMARY_STATE_EXTENSION_SIZE
+                    )
+                    expected_prompt[
+                        SUMMARY_STATE_PROMPT_VISIBLE_OFFSET
+                    ] = 1
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        == 1
+                        and read_bytes(
+                            emu, state, SUMMARY_STATE_EXTENSION_SIZE
+                        )
+                        == bytes(expected_prompt),
+                        f"PC {label} did not display a clean prompt",
+                    )
+                    write_bytes(emu, target_address, invalid_box)
+                    malformed_party = runtime_party(emu)
+                    malformed_pc = read_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        PC_SAVE_SIZE,
+                    )
+                    malformed_owner = read_bytes(
+                        emu, owner, SUMMARY_OWNER_ARGS_SIZE
+                    )
+                    malformed_metadata, malformed_history = (
+                        runtime_history(emu)
+                    )
+                    if activation == "key":
+                        tap(emu, "X", 24)
+                    else:
+                        touch(emu, 40, 140, 24)
+                    evidence = assert_fail_closed_fixture(
+                        emu,
+                        state,
+                        label=f"PC {label}",
+                        expected_party=malformed_party,
+                        expected_pc=malformed_pc,
+                        expected_owner_args=malformed_owner,
+                        expected_metadata=malformed_metadata,
+                        expected_history=malformed_history,
+                    )
+                    evidence.update(
+                        {
+                            "injection_phase":
+                                "after_prompt_before_activation",
+                            "activation": activation,
+                            "expected_snapshot_phase":
+                                "immediate_post_injection_pre_frame",
+                        }
+                    )
+                    post_prompt_results.append(evidence)
+                    write_bytes(
+                        emu,
+                        runtime_pc_storage_address(emu),
+                        baseline_pc,
+                    )
+                    write_bytes(emu, owner, baseline_owner)
+                    tap(emu, "LEFT", 80)
+                    require(
+                        read_u8(
+                            emu, summary + SUMMARY_PAGE_MODE_OFFSET
+                        )
+                        != 1
+                        and runtime_party(emu) == baseline_party
+                        and read_bytes(
+                            emu,
+                            runtime_pc_storage_address(emu),
+                            PC_SAVE_SIZE,
+                        )
+                        == baseline_pc
+                        and runtime_history(emu)
+                        == (baseline_metadata, baseline_history),
+                        f"PC {label} restoration changed owners",
+                    )
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
                 screenshot(emu, screenshot_path.parent, screenshot_path.name)
                 tap(emu, "B", 40)
@@ -2030,6 +2522,12 @@ def run_isolated_scenario(
                     "actual_terminal_pc_summary_info_to_moves": True,
                     "fixture_count": len(fixture_results),
                     "fixtures": fixture_results,
+                    "pre_frame_owner_probe_pc_sha256":
+                        next(iter(owner_probe_hashes)),
+                    "position_30_hash_matches_owner_only_probes": True,
+                    "post_prompt_fixture_count":
+                        len(post_prompt_results),
+                    "post_prompt_fixtures": post_prompt_results,
                     "overlay_unloaded": True,
                 }
             elif name == "keys":
@@ -2508,9 +3006,8 @@ def run_isolated_scenario(
                 for key, frames in (
                     ("UP", 30),
                     ("RIGHT", 30),
-                    ("RIGHT", 30),
                     ("UP", 60),
-                    ("LEFT", 15),
+                    ("RIGHT", 15),
                 ):
                     hold(emu, key, frames, 60)
                 screenshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3663,6 +4160,7 @@ def isolated_scenario_evidence(
             name,
             "--probe-screenshot",
             str(screenshot_path),
+            *SUBPROCESS_AUTHENTICATION_ARGS,
         ],
         check=False,
         capture_output=True,
@@ -4669,6 +5167,13 @@ def run(args: argparse.Namespace) -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rom", type=Path, default=REPO / "test.nds")
+    parser.add_argument(
+        "--publication-manifest",
+        type=Path,
+        default=REPO / "build/pokemon_move_history_capture_build.json",
+    )
+    parser.add_argument("--expected-publication-manifest-sha256")
+    parser.add_argument("--expected-runtime-verifier-sha256")
     parser.add_argument("--dsv", type=Path)
     parser.add_argument("--expected-dsv-sha256")
     parser.add_argument("--result-json", type=Path)
@@ -4721,27 +5226,63 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     try:
         arguments = parse_args()
+        if arguments.result_json is not None:
+            arguments.result_json.unlink(missing_ok=True)
+        resolved_rom = arguments.rom.resolve()
+        resolved_manifest = arguments.publication_manifest.resolve()
+        authentication = artifact_authentication(
+            resolved_rom,
+            resolved_manifest,
+        )
+        validate_expected_authentication(
+            authentication,
+            expected_manifest_sha256=(
+                arguments.expected_publication_manifest_sha256
+            ),
+            expected_verifier_sha256=(
+                arguments.expected_runtime_verifier_sha256
+            ),
+        )
+        SUBPROCESS_AUTHENTICATION_ARGS.extend(
+            (
+                "--publication-manifest",
+                str(resolved_manifest),
+                "--expected-publication-manifest-sha256",
+                str(authentication["publication_manifest"]["sha256"]),
+                "--expected-runtime-verifier-sha256",
+                str(authentication["runtime_verifier"]["sha256"]),
+            )
+        )
+        load_runtime_helpers()
         if arguments.scenario is not None:
             require(arguments.probe_raw is not None, "--probe-raw is required")
             result = run_isolated_scenario(
-                arguments.rom.resolve(),
+                resolved_rom,
                 arguments.probe_raw.resolve(),
                 arguments.scenario,
                 arguments.probe_screenshot.resolve(),
             )
         elif arguments.probe_raw is not None:
             result = run_reload_probe(
-                arguments.rom.resolve(),
+                resolved_rom,
                 arguments.probe_raw.resolve(),
                 arguments.probe_screenshot.resolve(),
             )
         else:
             require(arguments.dsv is not None, "--dsv is required")
             result = run(arguments)
+        final_authentication = artifact_authentication(
+            resolved_rom,
+            resolved_manifest,
+        )
+        require(
+            final_authentication == authentication,
+            "runtime artifact authentication changed during execution",
+        )
+        result["artifact_authentication"] = final_authentication
         rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
         if arguments.result_json is not None:
-            arguments.result_json.parent.mkdir(parents=True, exist_ok=True)
-            arguments.result_json.write_text(rendered)
+            write_result_atomic(arguments.result_json, rendered)
         print(rendered, end="")
     except Exception as error:
         print(f"Summary relearn runtime verification failed: {error}", file=sys.stderr)

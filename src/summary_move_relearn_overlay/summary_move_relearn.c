@@ -281,6 +281,33 @@ static BOOL SummaryMoveRelearn_IsValidSpeciesAndForm(
     return PokeOtherFormMonsNoGet((int)species, (int)form) != (int)species;
 }
 
+static BOOL SummaryMoveRelearn_IsValidEntryPokemon(
+    struct BoxPokemon *pokemon)
+{
+    return pokemon != NULL
+        && !GetBoxMonData(pokemon, MON_DATA_CHECKSUM_FAILED, NULL)
+        && GetBoxMonData(pokemon, MON_DATA_SPECIES_EXISTS, NULL)
+        && !GetBoxMonData(pokemon, MON_DATA_IS_EGG, NULL)
+        && SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon);
+}
+
+static void SummaryMoveRelearn_HideStatus(
+    struct SummaryState *summary);
+
+static void SummaryMoveRelearn_RejectEntry(
+    struct SummaryState *summary,
+    struct SummaryMoveRelearnState *state)
+{
+    if (state->promptVisible) {
+        SummaryMoveRelearn_HideStatus(summary);
+    }
+    state->candidateCount = 0;
+    state->pendingMove = 0;
+    state->promptVisible = FALSE;
+    state->resumeAfterSwitch = FALSE;
+    state->ownerPokemon = NULL;
+}
+
 static void SummaryMoveRelearn_PrintStatus(
     struct SummaryState *summary,
     u32 message)
@@ -815,8 +842,11 @@ u32 SummaryMoveRelearn_MainState(
     }
 
     if (state->mode == SUMMARY_RELEARN_INACTIVE) {
-        if (pokemon == NULL
-            || summary->baseData->mode != SUMMARY_NORMAL_MODE
+        if (pokemon == NULL) {
+            SummaryMoveRelearn_RejectEntry(summary, state);
+            return 2;
+        }
+        if (summary->baseData->mode != SUMMARY_NORMAL_MODE
             || SummaryMoveRelearn_GetPage(summary) != SUMMARY_MOVE_PAGE
             || !SummaryMoveRelearn_IsStable(summary)
             || GetBoxMonData(
@@ -841,6 +871,10 @@ u32 SummaryMoveRelearn_MainState(
             return Summary_VanillaMainState(summary);
         }
         if (state->resumeAfterSwitch) {
+            if (!SummaryMoveRelearn_IsValidEntryPokemon(pokemon)) {
+                SummaryMoveRelearn_RejectEntry(summary, state);
+                return 2;
+            }
             SummaryMoveRelearn_Enter(summary, state, pokemon);
             return 2;
         }
@@ -855,6 +889,10 @@ u32 SummaryMoveRelearn_MainState(
             newKeys |= PAD_BUTTON_X;
         }
         if (newKeys & PAD_BUTTON_X) {
+            if (!SummaryMoveRelearn_IsValidEntryPokemon(pokemon)) {
+                SummaryMoveRelearn_RejectEntry(summary, state);
+                return 2;
+            }
             PlaySE(SUMMARY_SELECT_SE);
             SummaryMoveRelearn_Enter(summary, state, pokemon);
             return 2;

@@ -48,7 +48,9 @@ position below count, limit, and the physical six-record capacity. Raw
 contiguous `dataType == 0`, non-PC boxed limits, invalid positions, eggs,
 empty slots, checksum failures, species outside the base-species domain,
 invalid forms, and unsupported owners fail closed before the prompt or
-candidate builder.
+candidate builder. A malformed owner or position is consumed by the custom
+dispatcher and is never delegated to retail Summary code that could resolve
+the invalid storage reference.
 
 Candidate construction remains the task-2
 `PokemonMoveRelearn_BuildCandidates` call. It is read-only, excludes known
@@ -132,10 +134,15 @@ is byte-exact, while success preserves the single committed mutation/history
 only on the original identity and rebuilds the correct candidates on return.
 
 Controlled fail-closed acceptance opens the retail Summary Info page first.
-Party fixtures are applied before navigating to Moves. PC ownership fixtures
-are applied on the exact frame retail page mode changes to Moves, before the
-custom eligibility pass; this prevents unrelated vanilla transition refresh
-code from dereferencing deliberately malformed positions. Party probes cover
+Party and PC record fixtures are injected on the exact frame retail page mode
+changes to Moves. PC owner-metadata fixtures are injected only after the same
+real retail transition reaches a stable Moves page, because transition code
+resolves the current boxed slot before the hooked main-state callback.
+Expected owner, party, complete PC storage, and history bytes are captured
+immediately after injection and before another emulated frame. The custom
+guard then consumes malformed owner input without delegating it to retail
+lookup code. This proves that position 30 has the same pre-frame PC hash as
+owner-only `dataType` and limit probes. Party probes cover
 signed counts `-1`, `0`, and `7`, limits `0` and `7`, position `6`,
 `dataType == 0`, empty, egg, checksum-failed, species `MAX_MON_NUM + 1`, and
 Tentacool form 31. The real PC child covers `dataType == 0`, boxed limit 29,
@@ -143,6 +150,23 @@ position 30, and the same record faults. Every probe requires the entire
 extension to remain zero, owner and PC dirty flags to remain clear, and party,
 PC storage, and history bytes to remain exact. The valid natural zero-
 candidate case remains a separate mode-2 test.
+
+Species and form are also revalidated immediately before both possible
+`SummaryMoveRelearn_Enter` calls: the resumed-switch path and the shared
+key/touch prompt path. Authenticated party and PC fixtures first display the
+real prompt, then inject invalid species for key activation and invalid form
+for touch activation. Rejection clears the prompt to a zero extension without
+candidate construction, history observation, setters, dirtying, or byte
+changes beyond the controlled injected record.
+
+Runtime results are provenance-bound evidence. The publication manifest seals
+the runtime verifier plus its headless and party-integrity helpers. Every run
+verifies that manifest and the exact ROM before importing those helpers,
+repeats authentication after emulation, records the ROM, publication manifest,
+verifier, and helper SHA-256 records in its JSON, and atomically publishes
+only after the start/end records agree. An old result is removed before
+authentication, so a changed verifier or manifest cannot leave stale passing
+evidence.
 
 Task 5 does not audit daycare, trade, gift, scripted, form-change, Pokéwalker,
 or other unusual acquisition paths (task 6). It does not enable the optional
@@ -154,13 +178,17 @@ are deliberately excluded.
 The task-5 Workshop artifact used by the final headless acceptance has:
 
 - ROM SHA-256
-  `a9b74d768cb4c42105148de38ce92c89324f98b9a3ea3445a8a4bab3f612f117`;
+  `24afe7078d3986c0f282d4908d22fd8eda4e5d7df0721092da9b986f8c6a0177`;
 - publication manifest SHA-256
-  `77058f2eb6f43ab1820279181be2e0ad7d2113fb671adc7e324012de0ec1f77f`;
+  `ad4a5eb43c542eeb45dcda9052ad29faf774bcc05d4a7e59c656cdfeb5629940`;
+- runtime verifier SHA-256
+  `664f18e4912e9ab0aa489524ffffa23e4ab0e34faf2b656fe9d8cd51154f600a`;
+- runtime result SHA-256
+  `0c23a8ea6c78a05279ac6d00a122cfeddb51bd978ca25e0bf888a13d35abfc5a`;
 - overlay 154 SHA-256
-  `3d728bd9b02ec5d338d21053f43597a335d9335b5277b51556ce5eb9840e1932`,
-  size `0xDCC` (3532 bytes), base `0x023C0400`, reserved size `0x1EA0`,
-  and remaining headroom `0x10D4` (4308 bytes).
+  `bec4bed715e1d8282c71e077075b0dd2c71627f579a91a62b6cc6aa38b96435b`,
+  size `0xE68` (3688 bytes), base `0x023C0400`, reserved size `0x1EA0`,
+  and remaining headroom `0x1038` (4152 bytes).
 
 The controlled fixture is derived from the immutable source DSV with SHA-256
 `75ddaf8a974d50c70d403e6658bd8497351a5fca0b729a854d6483c39018054d`.

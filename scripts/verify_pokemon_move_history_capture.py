@@ -1985,6 +1985,20 @@ def source_contracts() -> None:
         and OUTPUTS.get("save_object") == "build/save.o",
         "save lifecycle/generator provenance inputs are not sealed",
     )
+    for runtime_evidence_input in (
+        "scripts/verify_summary_move_relearn_runtime.py",
+        "scripts/headless-overworld-test.py",
+        "scripts/verify_pokemon_move_history_party_integrity.py",
+    ):
+        require(
+            FIXED_INPUTS.count(runtime_evidence_input) == 1,
+            f"runtime evidence input is not uniquely sealed: "
+            f"{runtime_evidence_input}",
+        )
+    require(
+        len(FIXED_INPUTS) == len(set(FIXED_INPUTS)),
+        "fixed manifest inputs contain duplicate paths",
+    )
 
     for api in (
         "PokemonMoveHistory_ReplaceMove",
@@ -4959,14 +4973,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     154: (
         0x023C0400,
-        0xDCC,
+        0xE68,
         0,
         0,
         0,
         154,
         0,
         0x41CE00,
-        0x41DBCC,
+        0x41DC68,
     ),
 }
 OVERLAY129_THUNKS = {

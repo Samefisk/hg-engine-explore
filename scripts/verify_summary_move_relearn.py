@@ -85,6 +85,9 @@ def source_contracts(root: Path) -> None:
     runtime = (
         root / "scripts/verify_summary_move_relearn_runtime.py"
     ).read_text()
+    manifest_builder = (
+        root / "scripts/pokemon_move_history_build_manifest.py"
+    ).read_text()
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
     readonly = body(history, "PokemonMoveHistory_QueryReadOnlyImpl")
@@ -133,6 +136,16 @@ def source_contracts(root: Path) -> None:
         and "SanitizeFormNumber" in validity
         and "PokeOtherFormMonsNoGet" in validity,
         "checksummed species/form validation is not fail-closed",
+    )
+    entry_validity = body(ui, "SummaryMoveRelearn_IsValidEntryPokemon")
+    require(
+        "pokemon != NULL" in entry_validity
+        and "MON_DATA_CHECKSUM_FAILED" in entry_validity
+        and "MON_DATA_SPECIES_EXISTS" in entry_validity
+        and "MON_DATA_IS_EGG" in entry_validity
+        and "SummaryMoveRelearn_IsValidSpeciesAndForm(pokemon)"
+        in entry_validity,
+        "entry-point record validation is incomplete",
     )
     require(
         "/* 0x30 */ void *menuInputState;" in summary_header
@@ -229,6 +242,33 @@ def source_contracts(root: Path) -> None:
         < main.index("SummaryMoveRelearn_PrintStatus("),
         "entry eligibility omits fail-closed record validation before prompt",
     )
+    require(
+        "if (pokemon == NULL) {\n"
+        "            SummaryMoveRelearn_RejectEntry(summary, state);\n"
+        "            return 2;\n"
+        "        }" in main,
+        "invalid Summary ownership can still delegate into retail lookup",
+    )
+    pre_entry_checks = re.findall(
+        r"if \(!SummaryMoveRelearn_IsValidEntryPokemon\(pokemon\)\) "
+        r"\{\s*SummaryMoveRelearn_RejectEntry\(summary, state\);"
+        r"\s*return 2;\s*\}\s*"
+        r"(?:PlaySE\(SUMMARY_SELECT_SE\);\s*)?"
+        r"SummaryMoveRelearn_Enter\(summary, state, pokemon\);",
+        main,
+    )
+    require(
+        len(pre_entry_checks) == 2
+        and main.count(
+            "if (!SummaryMoveRelearn_IsValidEntryPokemon(pokemon))"
+        )
+        == 2
+        and main.count(
+            "SummaryMoveRelearn_Enter(summary, state, pokemon);"
+        )
+        == 2,
+        "both resume and key/touch entry paths must revalidate immediately",
+    )
     for state in (
         "SUMMARY_RELEARN_LIST",
         "SUMMARY_RELEARN_EMPTY",
@@ -310,6 +350,16 @@ def source_contracts(root: Path) -> None:
         '"tentacool_form_31"',
         '"non_pc_box_limit_29"',
         '"position_30"',
+        '"post_prompt_species_1076_key"',
+        '"post_prompt_tentacool_form_31_touch"',
+        '"immediate_post_injection_pre_frame"',
+        '"position_30_hash_matches_owner_only_probes"',
+        'label=f"party {label} LEFT"',
+        'label=f"party {label} RIGHT"',
+        'label=f"party {label} switch touch"',
+        'label=f"PC {label} LEFT"',
+        'label=f"PC {label} RIGHT"',
+        'label=f"PC {label} switch touch"',
         '"party_fail_closed"',
         '"pc_fail_closed"',
         '"from_mode": 5',
@@ -324,6 +374,27 @@ def source_contracts(root: Path) -> None:
             f"runtime malformed/switch/lifecycle probe missing: "
             f"{runtime_contract}",
         )
+    for sealed_runtime_input in (
+        '"scripts/verify_summary_move_relearn_runtime.py"',
+        '"scripts/headless-overworld-test.py"',
+        '"scripts/verify_pokemon_move_history_party_integrity.py"',
+    ):
+        require(
+            manifest_builder.count(sealed_runtime_input) == 1,
+            f"runtime evidence input is not uniquely sealed: "
+            f"{sealed_runtime_input}",
+        )
+    require(
+        "MANIFEST.verify_manifest(publication_manifest, rom)" in runtime
+        and '"publication_manifest": MANIFEST.file_record(' in runtime
+        and '"runtime_verifier": verifier_record' in runtime
+        and '"artifact_authentication"' in runtime
+        and "final_authentication == authentication" in runtime
+        and "arguments.result_json.unlink(missing_ok=True)" in runtime
+        and "os.replace(temporary_path, path)" in runtime,
+        "runtime evidence is not fail-closed against verifier/publication "
+        "revision or atomic publication",
+    )
     require(
         "PCStorage_SetBoxModified" not in ui
         and storage.count("PCStorage_SetBoxModified(storage, boxno)") >= 3,
