@@ -408,6 +408,8 @@ PRIMITIVE_FIELDS = [
     "attentiveLocomotion",
     "attentiveTarget",
     "activeReaction",
+    "tiredLocomotion",
+    "tiredTarget",
     "tiredReaction",
 ]
 
@@ -420,6 +422,8 @@ PRIMITIVE_FIELD_LABELS = {
     "attentiveLocomotion": "Active locomotion",
     "attentiveTarget": "Active target",
     "activeReaction": "Active reaction",
+    "tiredLocomotion": "Tired locomotion",
+    "tiredTarget": "Tired target",
     "tiredReaction": "Tired reaction",
 }
 
@@ -460,6 +464,8 @@ FIELD_PREFIXES = {
     "attentiveLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "attentiveTarget": "OW_WILD_BEHAVIOR_TARGET_",
     "activeReaction": "OW_WILD_BEHAVIOR_REACTION_",
+    "tiredLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
+    "tiredTarget": "OW_WILD_BEHAVIOR_TARGET_",
     "tiredReaction": "OW_WILD_BEHAVIOR_REACTION_",
 }
 
@@ -1145,7 +1151,11 @@ def normalize_c_expr(expr: str) -> str:
     expr = expr.strip()
     expr = re.sub(r"\bTRUE\b", "1", expr)
     expr = re.sub(r"\bFALSE\b", "0", expr)
-    expr = re.sub(r"(?<=\d)[uUlL]+\b", "", expr)
+    expr = re.sub(
+        r"\b(0[xX][0-9A-Fa-f]+|0[bB][01]+|\d+)[uUlL]+\b",
+        r"\1",
+        expr,
+    )
     expr = re.sub(r"\((?:u|s)?(?:8|16|32|64|int|long|BOOL)\)", "", expr)
     return expr
 
@@ -2202,6 +2212,8 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
         "attentiveLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "attentiveLocomotion", macros),
         "attentiveTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "attentiveTarget", macros),
         "activeReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "activeReaction", macros),
+        "tiredLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "tiredLocomotion", macros),
+        "tiredTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "tiredTarget", macros),
         "tiredReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "tiredReaction", macros),
     }
 
@@ -2235,11 +2247,22 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
         primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
         if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
             primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "chillTarget", macros)
+    else:
+        primitives["chillLocomotion"] = make_value(
+            "OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "chillLocomotion", macros
+        )
+        primitives["chillTarget"] = make_value(
+            "OW_WILD_BEHAVIOR_TARGET_NONE", "chillTarget", macros
+        )
 
     primitives["attentiveLocomotion"] = copy.deepcopy(profile["movementStyle"])
     primitives["attentiveTarget"] = copy.deepcopy(profile["targetSelector"])
     active_behavior = numeric(profile["attentiveState"])
-    if active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
+    if active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_WANDER"):
+        primitives["attentiveTarget"] = make_value(
+            "OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY", "attentiveTarget", macros
+        )
+    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
         primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
         if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
             primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
@@ -2265,6 +2288,19 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
             primitives["alertLogic"] = alert["alertLogic"]
             primitives["alertReaction"] = alert["alertReaction"]
 
+    tired_behavior = numeric(profile["tiredState"])
+    tired_targets = {
+        macros.get("OW_WILD_BEHAVIOR_KIND_WANDER"): "OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY",
+        macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"): "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"): "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER",
+        macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"): "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        macros.get("OW_WILD_BEHAVIOR_KIND_RAM"): "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+        macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"): "OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
+    }
+    tired_target = tired_targets.get(tired_behavior)
+    if tired_target is not None:
+        primitives["tiredLocomotion"] = copy.deepcopy(profile["specialAction"])
+        primitives["tiredTarget"] = make_value(tired_target, "tiredTarget", macros)
     if numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE"):
         primitives["tiredReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_TIRED", "tiredReaction", macros)
 
@@ -2570,6 +2606,8 @@ def behavior_override_mask_summary(behavior: dict) -> dict:
 
 
 def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[dict]:
+    """Apply the runtime resolver's post-override validation sequence exactly."""
+
     changes = []
 
     def set_field(field: str, raw: str) -> None:
@@ -2587,43 +2625,61 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             }
         )
 
-    for allow_field, min_field, max_field in (
-        ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
-        ("attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"),
-        ("tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"),
+    behavior_kind_max = macros.get("OW_WILD_BEHAVIOR_KIND_NO_VISUAL", 11)
+    movement_style_max = macros.get("OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP", 7)
+    if (numeric(profile["chillState"]) or 0) > behavior_kind_max:
+        set_field("chillState", "OW_WILD_BEHAVIOR_KIND_IDLE")
+    for movement_field in ("chillAction", "movementStyle", "specialAction"):
+        if (numeric(profile[movement_field]) or 0) > movement_style_max:
+            set_field(movement_field, "OW_WILD_BEHAVIOR_LOCOMOTION_NONE")
+    if (numeric(profile["alertSpecialAction"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW", 2
     ):
-        if numeric(profile[allow_field]) not in {
-            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
-            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
-        }:
-            set_field(allow_field, "OW_WILD_BEHAVIOR_BOOL_YES")
-        if (numeric(profile[max_field]) or 0) < (numeric(profile[min_field]) or 0):
-            set_field(max_field, profile[min_field]["raw"])
-    if (numeric(profile["spawnDestinationMinDistance"]) or 0) < 1:
-        set_field("spawnDestinationMinDistance", "1")
-    elif (numeric(profile["spawnDestinationMinDistance"]) or 0) > 8:
-        set_field("spawnDestinationMinDistance", "8")
-    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < 1:
-        set_field("spawnDestinationMaxDistance", "1")
-    elif (numeric(profile["spawnDestinationMaxDistance"]) or 0) > 8:
-        set_field("spawnDestinationMaxDistance", "8")
-    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
-        set_field("spawnDestinationMaxDistance", profile["spawnDestinationMinDistance"]["raw"])
-    if (numeric(profile["attentiveChaseBoostDistance"]) or 0) > 32:
-        set_field("attentiveChaseBoostDistance", "32")
-    if (numeric(profile["attentiveChaseBoostSpeed"]) or 0) > 4:
-        set_field("attentiveChaseBoostSpeed", "4")
-    if (numeric(profile["attentiveCircleRadius"]) or 0) > 8:
-        set_field("attentiveCircleRadius", "8")
-    for bool_field in (
-        "attentiveContinueWhenArrived",
-        "attentiveAvoidPreviousTile",
+        set_field("alertSpecialAction", "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE")
+    if (numeric(profile["overworldLimit"]) or 0) > macros.get("OW_WILD_MAX_SPAWNS", 10):
+        set_field("overworldLimit", "OW_WILD_MAX_SPAWNS")
+    if (numeric(profile["attentiveChaseBoostDistance"]) or 0) > macros.get(
+        "OW_WILD_SPAWNER_MOVEMENT_RANGE", 32
     ):
-        if numeric(profile[bool_field]) not in {
-            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
-            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
-        }:
-            set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_NO")
+        set_field("attentiveChaseBoostDistance", "OW_WILD_SPAWNER_MOVEMENT_RANGE")
+    if (numeric(profile["attentiveChaseBoostSpeed"]) or 0) > macros.get(
+        "OW_WILD_SPAWNER_MOVEMENT_SPEED_4", 4
+    ):
+        set_field("attentiveChaseBoostSpeed", "OW_WILD_SPAWNER_MOVEMENT_SPEED_4")
+    if (numeric(profile["hopAllowNonCardinal"]) or 0) > macros.get("OW_WILD_BEHAVIOR_BOOL_YES", 1):
+        set_field("hopAllowNonCardinal", "OW_WILD_BEHAVIOR_BOOL_YES")
+    if (numeric(profile["hopMaxDistance"]) or 0) < (numeric(profile["hopMinDistance"]) or 0):
+        set_field("hopMaxDistance", profile["hopMinDistance"]["raw"])
+    if (numeric(profile["ramAccelerationSteps"]) or 0) > macros.get(
+        "OW_WILD_SPAWNER_MOVEMENT_RANGE", 32
+    ):
+        set_field("ramAccelerationSteps", "OW_WILD_SPAWNER_MOVEMENT_RANGE")
+    if (numeric(profile["chainMovementVariance"]) or 0) > macros.get(
+        "OW_WILD_SPAWNER_MOVEMENT_RANGE", 32
+    ):
+        set_field("chainMovementVariance", "OW_WILD_SPAWNER_MOVEMENT_RANGE")
+    if (numeric(profile["chainPauseAction"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND", 2
+    ):
+        set_field("chainPauseAction", "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE")
+    if (numeric(profile["attentiveCircleRadius"]) or 0) > macros.get(
+        "OW_WILD_SPAWNER_CIRCLE_PLAYER_MAX_RADIUS", 8
+    ):
+        set_field("attentiveCircleRadius", "OW_WILD_SPAWNER_CIRCLE_PLAYER_MAX_RADIUS")
+    for bool_field in ("attentiveContinueWhenArrived", "attentiveAvoidPreviousTile"):
+        if (numeric(profile[bool_field]) or 0) > macros.get("OW_WILD_BEHAVIOR_BOOL_YES", 1):
+            set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_YES")
+    if (numeric(profile["chillTarget"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE", 8
+    ):
+        set_field("chillTarget", "OW_WILD_BEHAVIOR_TARGET_NONE")
+    if (numeric(profile["targetSelector"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER", 9
+    ):
+        set_field("targetSelector", "OW_WILD_BEHAVIOR_TARGET_NONE")
+    for state_field in ("attentiveState", "tiredState"):
+        if (numeric(profile[state_field]) or 0) > behavior_kind_max:
+            set_field(state_field, "OW_WILD_BEHAVIOR_KIND_NONE")
     if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
         set_field("tiredState", "OW_WILD_BEHAVIOR_KIND_ASLEEP")
         set_field("stamina", "1")
@@ -2648,18 +2704,55 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
         and numeric(profile["restTime"]) == 0
     ):
         set_field("restTime", "1")
+    if (numeric(profile["jumpLevel"]) or 0) > macros.get("OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH", 2):
+        set_field("jumpLevel", "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH")
+    if (numeric(profile["spawnState"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP", 3
+    ):
+        set_field("spawnState", "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR")
+    if (numeric(profile["alertState"]) or 0) > macros.get("OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH", 2):
+        set_field("alertState", "OW_WILD_BEHAVIOR_ALERT_STATE_NONE")
+    alert_emote = numeric(profile["alertEmote"]) or 0
+    if alert_emote > macros.get("OW_WILD_SPAWNER_BUBBLE_ID_SLEEP", 13) \
+            and alert_emote != macros.get("OW_WILD_SPAWNER_BUBBLE_ID_NONE", 0xFF):
+        set_field("alertEmote", "OW_WILD_SPAWNER_BUBBLE_ID_NONE")
+    if (numeric(profile["alertRange"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_ALERT_RANGE_TERRAIN_ONLY", 5
+    ):
+        set_field("alertRange", "OW_WILD_BEHAVIOR_ALERT_RANGE_NONE")
+    if (numeric(profile["spawnDestination"]) or 0) > macros.get(
+        "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER", 16
+    ):
+        set_field("spawnDestination", "OW_WILD_SPAWN_DESTINATION_POOL")
+    spawn_minimum = macros.get("OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE", 1)
+    spawn_maximum = macros.get("OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE", 8)
+    if (numeric(profile["spawnDestinationMinDistance"]) or 0) < spawn_minimum:
+        set_field("spawnDestinationMinDistance", "OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE")
+    elif (numeric(profile["spawnDestinationMinDistance"]) or 0) > spawn_maximum:
+        set_field("spawnDestinationMinDistance", "OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE")
+    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < spawn_minimum:
+        set_field("spawnDestinationMaxDistance", "OW_WILD_PLAYER_RELATIVE_SPAWN_MIN_DISTANCE")
+    elif (numeric(profile["spawnDestinationMaxDistance"]) or 0) > spawn_maximum:
+        set_field("spawnDestinationMaxDistance", "OW_WILD_PLAYER_RELATIVE_SPAWN_MAX_DISTANCE")
+    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
+        set_field("spawnDestinationMaxDistance", profile["spawnDestinationMinDistance"]["raw"])
+    if (numeric(profile["attentiveBattle"]) or 0) > macros.get(
+        "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH", 2
+    ):
+        set_field("attentiveBattle", "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE")
     return changes
 
 
 def parse_group_species(source: str, macros: dict[str, int]) -> dict[int, list[str]]:
+    groups: dict[int, list[str]] = {}
     match = re.search(
-        r"static\s+u32\s+OverworldWildSpawns_GetBehaviorGroupFlags\s*\([^)]*\)\s*\{(.*?)\n\}",
+        r"static\s+u32\s+OverworldWildSpawns_GetBehaviorGroupFlagsForTypes"
+        r"\s*\([^)]*\)\s*\{(.*?)^\}",
         source,
-        flags=re.S,
+        flags=re.S | re.M,
     )
     if not match:
-        return {}
-    groups: dict[int, list[str]] = {}
+        return groups
     for cases, group_expr in re.findall(
         r"((?:\s*case\s+SPECIES_[A-Z0-9_]+\s*:\s*)+)flags\s*\|=\s*([^;]+);",
         match.group(1),
@@ -2675,8 +2768,8 @@ def parse_group_species(source: str, macros: dict[str, int]) -> dict[int, list[s
             group_value = macros.get(group_symbol)
             if group_value is None:
                 continue
-            groups.setdefault(group_value, [])
-            groups[group_value].extend(case_species)
+            members = groups.setdefault(group_value, [])
+            members.extend(symbol for symbol in case_species if symbol not in members)
     return groups
 
 
@@ -4162,9 +4255,14 @@ def match_summary(match: dict, macros: dict[str, int], group_labels: dict[int, d
 def class_for_context(context: dict, class_rules: list[dict], class_count: int, macros: dict[str, int]) -> tuple[int, list[dict]]:
     behavior_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     hits = []
-    for rule in class_rules:
-        context["behaviorClass"] = behavior_class
+    # The runtime evaluates every full match against the unchanged incoming
+    # context, then applies the compact species table as a separate second pass.
+    for rule in (item for item in class_rules if item.get("storage") != "species"):
         if match_applies(context, rule["match"], macros):
+            behavior_class = numeric(rule["behaviorClass"]) or 0
+            hits.append(rule)
+    for rule in (item for item in class_rules if item.get("storage") == "species"):
+        if numeric(rule["match"]["species"]) == context["species"]:
             behavior_class = numeric(rule["behaviorClass"]) or 0
             hits.append(rule)
     if behavior_class >= class_count:
@@ -15976,7 +16074,8 @@ HTML = r"""<!doctype html>
       { key: "spawn", label: "Spawn", icon: "footstep", typeClass: "type-movement", fields: ["spawnLocomotion"] },
       { key: "chill", label: "Chill", icon: "leaf", typeClass: "type-grass", fields: ["chillLocomotion", "chillTarget"] },
       { key: "alert", label: "Alert", icon: "target", typeClass: "type-placement", fields: ["alertLogic", "alertReaction"] },
-      { key: "active", label: "Active", icon: "bolt", typeClass: "type-flow", fields: ["attentiveLocomotion", "attentiveTarget", "activeReaction", "tiredReaction"] },
+      { key: "active", label: "Active", icon: "bolt", typeClass: "type-flow", fields: ["attentiveLocomotion", "attentiveTarget", "activeReaction"] },
+      { key: "tired", label: "Tired", icon: "clock", typeClass: "type-test", fields: ["tiredLocomotion", "tiredTarget", "tiredReaction"] },
     ];
     let collapsedSections = readCollapsedSections();
     let routeSpawnTypeFilters = readRouteSpawnTypeFilters();
