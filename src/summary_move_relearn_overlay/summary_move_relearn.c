@@ -55,8 +55,8 @@
 
 #define SUMMARY_TEXT_COLOR               0x00010200
 #define SUMMARY_PULSE_FRAMES             24
-#define SUMMARY_BORDER_GREEN             5
-#define SUMMARY_BORDER_RED               6
+#define SUMMARY_BORDER_GREEN             9
+#define SUMMARY_BORDER_RED               5
 
 enum SummaryMoveRelearnMode {
     SUMMARY_RELEARN_INACTIVE,

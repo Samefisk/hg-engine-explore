@@ -450,6 +450,8 @@ def source_contracts(root: Path) -> None:
     require(
         "SUMMARY_PULSE_FRAMES" in pulse_tick
         and "state->pulseIncoming = !state->pulseIncoming;" in pulse_tick
+        and "#define SUMMARY_BORDER_GREEN             9" in ui
+        and "#define SUMMARY_BORDER_RED               5" in ui
         and "SUMMARY_BORDER_GREEN" in pulse_phase
         and "SUMMARY_BORDER_RED" in pulse_phase
         and pulse_border.count("FillWindowPixelRect(") == 4
