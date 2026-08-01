@@ -120,52 +120,72 @@ hooks call task-3 history APIs; there is no second history store.
 
 - The container build publishes the ROM/build pair with an explicit unbound
   runtime slot. After that managed build succeeds, and before Delta receives a
-  copy, the host `.venv/bin/python3` atomically binds the publication manifest
-  to the actual emulator runtime and verifies the resulting manifest again.
-  An unbound or partially replaced manifest cannot launch acceptance.
-- The host binding, retained helpers, and every acceptance child use the exact
-  repository `.venv/bin/python3 -I -S -B -X pycache_prefix=/dev/null` command.
-  Stage zero requires `isolated=1` and `ignore_environment=1` before importing
-  even `os`, removes the default nonexistent `pythonXY.zip` entry, reduces
-  `sys.path` to the sealed standard-library and `lib-dynload` roots, and installs
-  a source/extension-only filesystem hook. It therefore ignores `PYTHONPATH`,
-  `PYTHONHOME`, user-site settings, arbitrary-extension zip/whl archives,
-  `sitecustomize`, `.pth`, colocated caches, and direct sourceless `.pyc` files.
-  A builtin-only stage-zero path still removes a requested stale result before
-  rejecting any flag or policy drop. Child processes receive a fixed minimal
-  environment rather than inheriting the parent environment.
-- Isolation is not treated as authentication of canonical library files. The
-  launcher has a pure stage zero that uses only startup builtin/frozen modules,
-  builtin file I/O, and its own SHA-256/JSON/tree primitives. Before importing
-  `os`, `hashlib`, `json`, `types`, or any extension module, it authenticates
-  the expected launcher and publication manifest, then the manifest-recorded
-  Python entry/executable, shared runtime, `pyvenv.cfg`, and complete stdlib
-  source/native tree. It also rejects any startup module outside that closure.
-  The host runtime bind and bound-runtime verify modes perform the same
-  pre-import closure check against an explicit pinned host record and an
-  authenticated copy of the launcher's pure stage-zero implementation. Build-
-  container seal, verify, and atomic pair-publication modes use the same stage
-  zero with a separate exact `/hg-engine` and
-  `/tmp/hg-engine-venv/bin/python3` Linux Workshop pin. That image's
-  `/usr/bin/python3.10` is effectively static (the configured
-  `libpython3.10.so` is absent), so the content-addressed executable is the
-  shared-runtime closure; its complete `/usr/lib/python3.10` source/native tree
-  and the Workshop `pyvenv.cfg` are pinned independently before ordinary
-  imports.
-  Canonical `hashlib.py` and every post-script stdlib source therefore fail
-  before substituted source can execute.
-
-  CPython necessarily executes a small canonical source bootstrap before any
-  script can run: `codecs.py`, `encodings/__init__.py`,
-  `encodings/aliases.py`, `encodings/utf_8.py`, `abc.py`, and `io.py`. Those six
-  files, together with the OS loader, exact Python executable/shared runtime,
-  and builtin/frozen import bootstrap, are the explicit irreducible pre-script
-  trust boundary. Their exact paths and hashes are recorded in
-  `startup_bootstrap`; stage zero rehashes them immediately, and the normal
-  start/end loaded-module audit revalidates their `SourceFileLoader` origins.
-  No claim is made that Python code can retroactively prevent code in those six
-  startup files from running; changing any of them invalidates the sealed host
-  and prevents evidence publication.
+  copy, the managed wrapper compiles the sealed native trust anchor without a
+  random Mach-O UUID (`-Wl,-no_uuid`) and ad-hoc signs it without a timestamp,
+  then invokes the host runtime binder through that anchor. This makes repeated
+  verifier and Workshop compilations byte-reproducible instead of replacing a
+  published bootstrap with a semantically equivalent, differently hashed
+  binary. The binder
+  atomically records the bootstrap binary, committed inventory, source,
+  build/link command, compiler identity, code-directory hash, and sole linked
+  image before verifying the bound manifest again. An unbound or partially
+  replaced manifest cannot launch acceptance.
+- The native bootstrap runs before CPython. It contains an internal SHA-256
+  implementation and links only Apple-protected `libSystem`; it does not load
+  OpenSSL, CommonCrypto, Python, or repository code in its own pre-main closure.
+  Its committed inventory individually records the exact repository venv
+  symlink chain and `pyvenv.cfg`, canonical Python executable/framework,
+  complete pycache-excluding standard library, required-absent
+  `python310.zip`, all retained runtime sources, complete DeSmuME and Pillow
+  trees, `libssl`, `libcrypto`, and the remaining mutable native closure.
+  Regular leaves are opened without following symlinks. Symlink hops and their
+  parent directories are retained separately, and the exact alias chain must
+  resolve to the canonical executable.
+- Every retained descriptor is hashed before fork and watched with
+  `EVFILT_VNODE` for write, extension, delete, rename, link, revoke, and
+  topology changes. The bootstrap sanitizes the entire child environment and
+  executes only the authenticated `.venv/bin/python3` alias. Before fork it
+  validates the exact argv prefix `-I -S -B -X pycache_prefix=/dev/null` and
+  an individually authenticated approved entry path (runtime launcher or
+  publication binder); dropped, reordered, or extra interpreter flags fail
+  closed before CPython. Python must publish the exact READY
+  message; the native parent then rehashes every descriptor and canonical path
+  before returning GO. Monitoring continues until child exit, followed by one
+  final complete descriptor/path reauthentication. Native stale-result
+  invalidation occurs before closure authentication, so a blocked startup
+  cannot preserve a prior passing result.
+- The dropped-`-S` regression uses a real temporary `.pth` in the canonical
+  venv `site-packages`: direct isolated Python without `-S` first proves that
+  the marker runs before the script, then the native anchor proves the same
+  argv is rejected without a marker or stale result. The fixture is removed in
+  a `finally` boundary; the exact flag set skips it.
+- This closes the former six-module pre-script gap. A canonical `abc.py`
+  fixture writes a marker, atomically restores its original sealed bytes, and
+  then executes the original module; direct Python proves that payload runs and
+  defeats a later Python hash, while the native launch rejects it before the
+  marker exists. A separately compiled `libssl.1.1.dylib` wrapper uses a real
+  constructor, restores the original canonical dylib, and re-exports its
+  symbols; direct `_hashlib` loading proves constructor execution, while the
+  native launch again rejects it before the marker. Both negative runs also
+  prove stale-result removal. Existing calibrated `PYTHONPATH`, `.whl`,
+  arbitrary archive, direct `.pyc`, `.pth`, `sitecustomize`, `__pycache__`,
+  flag-drop, environment-drop, and child-propagation fixtures remain.
+- The root of trust is stated narrowly. The external acceptance caller pins
+  the published native-bootstrap SHA-256 before invocation; Darwin AMFI enforces
+  the ad-hoc code-directory page hashes, and the bootstrap verifies that same
+  external digest from its own retained canonical descriptor. Pre-main trust is
+  limited to the kernel, dyld shared cache, and Apple-protected `libSystem`.
+  Ad-hoc signing by itself is explicitly not claimed as an identity root, and
+  macOS has no usable unprivileged `fexecve`/`execveat` equivalent. The retained
+  alias/canonical descriptors, vnode monitoring, READY/GO barrier, and repeated
+  identity/hash checks bracket that unavoidable path-based `execve` handoff.
+- After GO, Python still requires `isolated=1`, `ignore_environment=1`, no site,
+  no bytecode, the `/dev/null` pycache sink, the normalized source/extension-only
+  path hook, and the manifest-recorded native-bootstrap environment. It then
+  authenticates the publication manifest, ROM, loaded module origins/loaders,
+  and runtime closure before any retained helper runs. This inner validation is
+  defense in depth and publication authentication; it is no longer the
+  pre-Python trust anchor.
   The bound manifest records and revalidates the exact policy. The host binding
   content-addresses the canonical Python entry and resolved
   executable, the linked Python shared runtime, `pyvenv.cfg`, and a
@@ -201,11 +221,6 @@ hooks call task-3 history APIs; there is no second history store.
   the Python framework/runtime, Pillow extensions, `libdesmume`, SDL2, GLib,
   Intl, and PCRE2 remain content-addressed rather than delegated to that OS
   boundary.
-- The explicit bootstrap boundary is the selected Python executable/runtime
-  and the OS loader before the in-process source tree hashes can be computed.
-  The no-site/no-pyc policy removes mutable bytecode and `.pth` execution from
-  that boundary; any later source/native substitution fails before evidence
-  publication and again at end-of-run reauthentication.
 - The complete runtime trees, retained buffers, mutable native image set,
   ROM, publication manifest, helpers, and evidence artifacts are rehashed at
   the end. The same version-3 authentication object is compared by every

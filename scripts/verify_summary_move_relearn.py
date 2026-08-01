@@ -516,6 +516,12 @@ def source_contracts(root: Path) -> None:
         and '"no_site": True' in launcher
         and '"pycache_prefix": "/dev/null"' in launcher
         and "runtime Python bytecode-bypass policy differs" in launcher
+        and "NATIVE_BOOTSTRAP_AUTHENTICATION = _native_bootstrap_gate()"
+        in launcher
+        and "native bootstrap did not release Python execution" in launcher
+        and 'runtime["native_bootstrap"]' in launcher
+        and '"BOOTSTRAP_NATIVE_PREFIX": tuple(native_prefix)' in launcher
+        and "os.execve(" not in launcher
         and "capture_runtime_environment()" in launcher
         and "runtime binding requires -I -S -B -X" in manifest_builder
         and '"bytecode_policy"' in manifest_builder
@@ -552,6 +558,10 @@ def source_contracts(root: Path) -> None:
         and "runtime libdesmume changed across native load" in launcher
         and "_authenticate_loaded_python_modules(" in launcher
         and 'python["startup_bootstrap"]' in launcher
+        and "_native_bootstrap_runtime_record()" in manifest_builder
+        and "SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256" in manifest_builder
+        and "native bootstrap has a non-OS runtime dependency"
+        in manifest_builder
         and "runtime import path/finder closure changed during execution"
         in launcher
         and '"BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path' in launcher
@@ -572,10 +582,11 @@ def source_contracts(root: Path) -> None:
         build_wrapper.count("--bind-runtime") == 1
         and build_wrapper.count("--require-bound-runtime") == 1
         and build_wrapper.count("/usr/bin/env -i") >= 3
-        and build_wrapper.count(
-            '"$runtime_python" -I -S -B -X pycache_prefix=/dev/null'
-        ) == 2
-        and 'runtime_python=".venv/bin/python3"' in build_wrapper
+        and build_wrapper.count('"$native_bootstrap"') == 2
+        and build_wrapper.count("--expected-inventory-sha256") == 2
+        and build_wrapper.count("--expected-self-sha256") == 2
+        and 'runtime_python="$PWD/.venv/bin/python3"' in build_wrapper
+        and "build_summary_move_relearn_native_bootstrap.sh" in build_wrapper
         and bind_index < verify_bound_index < delta_index,
         "managed build does not bind and verify the host runtime before Delta "
         "publication",
@@ -598,6 +609,7 @@ def source_contracts(root: Path) -> None:
         and runtime.count('            "-B",') == 2
         and runtime.count('            "-X",') == 2
         and runtime.count('            "pycache_prefix=/dev/null",') == 2
+        and runtime.count("*BOOTSTRAP_NATIVE_PREFIX") == 2
         and "**os.environ" not in runtime
         and runtime.count("env=dict(BOOTSTRAP_CHILD_ENVIRONMENT)") == 2,
         "runtime child evidence is no longer blocking and serialized",
@@ -958,6 +970,94 @@ def source_contracts(root: Path) -> None:
 
 
 def bootstrap_host_contracts(root: Path) -> None:
+    native_source_path = (
+        root / "scripts/summary_move_relearn_native_bootstrap.c"
+    )
+    native_build_path = (
+        root / "scripts/build_summary_move_relearn_native_bootstrap.sh"
+    )
+    native_inventory_path = (
+        root / "scripts/summary_move_relearn_native_inventory.txt"
+    )
+    native_source = native_source_path.read_text()
+    native_build = native_build_path.read_text()
+    require(
+        all(
+            token in native_source
+            for token in (
+                "SMR_EXPECTED_INVENTORY_SHA256",
+                "O_NOFOLLOW_ANY",
+                "EVFILT_VNODE",
+                "NOTE_WRITE",
+                "NOTE_RENAME",
+                "SUMMARY_MOVE_RELEARN_PYTHON_READY_V1",
+                "SUMMARY_MOVE_RELEARN_NATIVE_GO_V1",
+                "validate_exec_chain",
+                "validate_python_command",
+                'strcmp(command[1], "-I")',
+                'strcmp(command[2], "-S")',
+                'strcmp(command[3], "-B")',
+                'strcmp(command[4], "-X")',
+                'strcmp(command[5], "pycache_prefix=/dev/null")',
+                '"/scripts/launch_summary_move_relearn_runtime.py"',
+                '"/scripts/pokemon_move_history_build_manifest.py"',
+                "require_descriptor_capacity",
+                "reauthenticate_inventory",
+                "execve(inventory->alias->path",
+            )
+        )
+        and "-Werror -pedantic" in native_build
+        and "-Wl,-no_uuid" in native_build
+        and "/usr/bin/codesign --verify --strict" in native_build
+        and "/usr/lib/libSystem" in native_build,
+        "native pre-Python trust-anchor source/build contract differs",
+    )
+    if sys.platform != "darwin":
+        return
+    require(
+        native_inventory_path.is_file(),
+        "native bootstrap inventory is absent",
+    )
+    native_build_result = subprocess.run(
+        [str(native_build_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    require(
+        native_build_result.returncode == 0,
+        "native bootstrap did not compile: "
+        + native_build_result.stderr[-1000:],
+    )
+    native_fields = native_build_result.stdout.strip().split()
+    require(
+        len(native_fields) == 3
+        and native_fields[0].isdigit()
+        and re.fullmatch(r"[0-9a-f]{64}", native_fields[1]) is not None
+        and re.fullmatch(r"[0-9a-f]{64}", native_fields[2]) is not None,
+        "native bootstrap publication record is malformed",
+    )
+    native_bootstrap = root / "build/summary_move_relearn_native_bootstrap"
+    native_self_sha256 = native_fields[1]
+    native_inventory_sha256 = native_fields[2]
+    require(
+        hashlib.sha256(native_bootstrap.read_bytes()).hexdigest()
+        == native_self_sha256
+        and hashlib.sha256(native_inventory_path.read_bytes()).hexdigest()
+        == native_inventory_sha256,
+        "native bootstrap publication digest differs",
+    )
+    native_prefix = [
+        str(native_bootstrap),
+        "--inventory",
+        str(native_inventory_path.resolve()),
+        "--expected-inventory-sha256",
+        native_inventory_sha256,
+        "--expected-self-sha256",
+        native_self_sha256,
+    ]
     launcher_path = (
         root / "scripts/launch_summary_move_relearn_runtime.py"
     )
@@ -1181,6 +1281,10 @@ def bootstrap_host_contracts(root: Path) -> None:
         stale = fixture_root / "runtime-result.json"
         stale.write_text('{"status": "passing-stale-evidence"}\n')
         command = [
+            *native_prefix,
+            "--invalidate-result",
+            str(stale),
+            "--",
             str(runtime_python),
             "-I",
             "-S",
@@ -1243,6 +1347,10 @@ def bootstrap_host_contracts(root: Path) -> None:
         unsealed_environment.pop("PYTHONDONTWRITEBYTECODE", None)
         unsealed_start = subprocess.run(
             [
+                *native_prefix,
+                "--invalidate-result",
+                str(unsealed_stale),
+                "--",
                 str(runtime_python),
                 str(launcher_path),
                 "--result-json",
@@ -1256,7 +1364,7 @@ def bootstrap_host_contracts(root: Path) -> None:
         )
         require(
             unsealed_start.returncode != 0
-            and "-I -S -B -X pycache_prefix=/dev/null"
+            and "native bootstrap: Python invocation policy differs"
             in unsealed_start.stderr
             and not unsealed_stale.exists(),
             "runtime launcher accepted an unsealed startup or retained stale "
@@ -1361,6 +1469,10 @@ def bootstrap_host_contracts(root: Path) -> None:
             stale.write_text('{"status":"stale"}\n')
             completed = subprocess.run(
                 [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(stale),
+                    "--",
                     str(runtime_python),
                     *flags,
                     str(launcher_path),
@@ -1425,11 +1537,71 @@ def bootstrap_host_contracts(root: Path) -> None:
         }
         for label, flags in (
             ("missing isolated flag", exact_flags[1:]),
-            ("missing no-site flag", ["-I", "-B", "-X", "pycache_prefix=/dev/null"]),
             ("missing no-bytecode flag", ["-I", "-S", "-X", "pycache_prefix=/dev/null"]),
             ("missing pycache sink", ["-I", "-S", "-B"]),
         ):
             isolated_policy_probe(label, flag_drop_env, pythonpath_sentinel, flags)
+
+        # Calibrate the exact pre-READY exposure that -S closes.  -I ignores
+        # PYTHONPATH and user-site paths, so a PYTHONPATH sentinel cannot prove
+        # the missing-no-site case.  A canonical venv site-packages .pth is
+        # processed by the real interpreter when -S is absent.  The native
+        # anchor must reject that argv before fork, while the exact flags must
+        # skip the .pth and still invalidate the deliberately stale result.
+        canonical_pth_sentinel = hostile_root / "canonical-pth-executed"
+        canonical_site_packages = (
+            runtime_python.parent.parent
+            / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}"
+            / "site-packages"
+        )
+        canonical_flag_pth = (
+            canonical_site_packages / "summary_move_relearn_flag_drop.pth"
+        )
+        require(
+            canonical_site_packages.is_dir() and not canonical_flag_pth.exists(),
+            "canonical flag-drop fixture path is unavailable",
+        )
+        canonical_flag_pth.write_text(
+            "import builtins; " + poison_source(canonical_pth_sentinel)
+        )
+        try:
+            calibration = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "pass",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={**os.environ, "PYTHONPATH": str(pythonpath_root)},
+            )
+            require(
+                calibration.returncode == 0 and canonical_pth_sentinel.is_file(),
+                "canonical missing-no-site fixture did not execute before script",
+            )
+            canonical_pth_sentinel.unlink()
+            isolated_policy_probe(
+                "canonical pth exact flags",
+                dict(os.environ),
+                canonical_pth_sentinel,
+                exact_flags,
+            )
+            isolated_policy_probe(
+                "missing no-site flag",
+                dict(os.environ),
+                canonical_pth_sentinel,
+                ["-I", "-B", "-X", "pycache_prefix=/dev/null"],
+            )
+        finally:
+            canonical_flag_pth.unlink(missing_ok=True)
+            canonical_pth_sentinel.unlink(missing_ok=True)
 
         combined_hostile_environment = dict(os.environ)
         combined_hostile_environment["PYTHONPATH"] = os.pathsep.join(
@@ -1450,6 +1622,260 @@ def bootstrap_host_contracts(root: Path) -> None:
             all(not sentinel.exists() for _, _, sentinel in attack_environments),
             "hostile startup code executed during authenticated fixture",
         )
+
+        # Exercise the exact canonical CPython startup path.  The payload
+        # restores the sealed source before returning, so any Python-only
+        # post-start hash would miss it.  The native bootstrap must reject the
+        # file before CPython starts and must invalidate stale evidence itself.
+        canonical_abc = (
+            Path(sys.base_prefix)
+            / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}"
+            / "abc.py"
+        ).resolve()
+        abc_original = canonical_abc.read_bytes()
+        abc_backup = canonical_abc.with_name(
+            f".{canonical_abc.name}.task6-sealed-original-{os.getpid()}"
+        )
+        abc_sentinel = temp / "canonical-abc-self-restore-executed"
+        abc_payload = (
+            "import posix as _task6_posix\n"
+            f"_task6_fd = _task6_posix.open({str(abc_sentinel)!r}, "
+            "_task6_posix.O_WRONLY | _task6_posix.O_CREAT | "
+            "_task6_posix.O_TRUNC, 0o600)\n"
+            "_task6_posix.write(_task6_fd, b'executed')\n"
+            "_task6_posix.close(_task6_fd)\n"
+            f"_task6_posix.rename({str(abc_backup)!r}, __file__)\n"
+            f"exec(compile({abc_original.decode('utf-8')!r}, __file__, "
+            "'exec'), globals(), globals())\n"
+        ).encode("utf-8")
+
+        def install_abc_attack() -> None:
+            require(
+                canonical_abc.read_bytes() == abc_original
+                and not abc_backup.exists(),
+                "canonical abc.py was not sealed before attack fixture",
+            )
+            os.replace(canonical_abc, abc_backup)
+            canonical_abc.write_bytes(abc_payload)
+
+        try:
+            install_abc_attack()
+            abc_calibration = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "pass",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                abc_calibration.returncode == 0
+                and abc_sentinel.is_file()
+                and canonical_abc.read_bytes() == abc_original
+                and not abc_backup.exists(),
+                "canonical self-restoring abc.py fixture did not calibrate",
+            )
+            abc_sentinel.unlink()
+            install_abc_attack()
+            abc_stale = temp / "canonical-abc-bootstrap-result.json"
+            abc_stale.write_text('{"status":"stale"}\n')
+            abc_blocked = subprocess.run(
+                [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(abc_stale),
+                    "--",
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "pass",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                abc_blocked.returncode != 0
+                and "closure differs" in abc_blocked.stderr
+                and not abc_sentinel.exists()
+                and not abc_stale.exists(),
+                "native bootstrap accepted self-restoring canonical abc.py",
+            )
+        finally:
+            if abc_backup.exists():
+                if canonical_abc.exists():
+                    canonical_abc.unlink()
+                os.replace(abc_backup, canonical_abc)
+            require(
+                canonical_abc.read_bytes() == abc_original,
+                "canonical abc.py fixture did not restore exact bytes",
+            )
+
+        # The native variant wraps the exact mutable libssl dependency, writes
+        # a marker from its constructor, atomically restores the original
+        # canonical dylib, and re-exports the original symbols.  Direct Python
+        # proves the constructor really runs; the bootstrap must stop it first.
+        canonical_ssl = (
+            Path(sys.base_prefix) / "lib/libssl.1.1.dylib"
+        ).resolve()
+        ssl_original = canonical_ssl.read_bytes()
+        ssl_backup = canonical_ssl.with_name(
+            f".{canonical_ssl.name}.task6-sealed-original-{os.getpid()}"
+        )
+        ssl_sentinel = temp / "canonical-libssl-constructor-executed"
+        ssl_source = temp / "self_restoring_ssl.c"
+        ssl_wrapper = temp / "self_restoring_libssl.dylib"
+        ssl_reexport = temp / "sealed_original_libssl.dylib"
+        ssl_reexport.write_bytes(ssl_original)
+        ssl_source.write_text(
+            "#include <fcntl.h>\n#include <stdio.h>\n#include <unistd.h>\n"
+            "__attribute__((constructor)) static void task6_probe(void) {\n"
+            f"  int fd = open({json.dumps(str(ssl_sentinel))}, O_WRONLY | O_CREAT | "
+            "O_TRUNC, 0600);\n"
+            "  if (fd >= 0) { (void)write(fd, \"executed\", 8); close(fd); }\n"
+            f"  (void)rename({json.dumps(str(ssl_backup))}, "
+            f"{json.dumps(str(canonical_ssl))});\n"
+            "}\n"
+        )
+        require(not ssl_backup.exists(), "native fixture backup already exists")
+        ssl_compile = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "--sdk",
+                "macosx",
+                "clang",
+                "-dynamiclib",
+                str(ssl_source),
+                f"-Wl,-reexport_library,{ssl_reexport}",
+                "-o",
+                str(ssl_wrapper),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            ssl_compile.returncode == 0,
+            "self-restoring native fixture did not compile: "
+            + ssl_compile.stderr[-1000:],
+        )
+        ssl_sign = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                str(ssl_wrapper),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(ssl_sign.returncode == 0, "native fixture signing failed")
+        ssl_wrapper_bytes = ssl_wrapper.read_bytes()
+
+        def install_ssl_attack() -> None:
+            require(
+                canonical_ssl.read_bytes() == ssl_original,
+                "canonical libssl was not sealed before attack fixture",
+            )
+            if not ssl_backup.exists():
+                os.link(canonical_ssl, ssl_backup)
+            temporary_wrapper = canonical_ssl.with_name(
+                f".{canonical_ssl.name}.task6-poison-{os.getpid()}"
+            )
+            temporary_wrapper.write_bytes(ssl_wrapper_bytes)
+            os.chmod(temporary_wrapper, 0o775)
+            os.replace(temporary_wrapper, canonical_ssl)
+
+        try:
+            install_ssl_attack()
+            ssl_calibration = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "import hashlib; print(hashlib.sha256(b'x').hexdigest())",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                ssl_calibration.returncode == 0
+                and ssl_sentinel.is_file()
+                and canonical_ssl.read_bytes() == ssl_original
+                and not ssl_backup.exists(),
+                "self-restoring libssl constructor fixture did not calibrate",
+            )
+            ssl_sentinel.unlink()
+            install_ssl_attack()
+            ssl_stale = temp / "canonical-libssl-bootstrap-result.json"
+            ssl_stale.write_text('{"status":"stale"}\n')
+            ssl_blocked = subprocess.run(
+                [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(ssl_stale),
+                    "--",
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "import hashlib",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                ssl_blocked.returncode != 0
+                and "closure differs" in ssl_blocked.stderr
+                and not ssl_sentinel.exists()
+                and not ssl_stale.exists(),
+                "native bootstrap accepted self-restoring libssl constructor",
+            )
+        finally:
+            if ssl_backup.exists():
+                if canonical_ssl.exists():
+                    canonical_ssl.unlink()
+                os.replace(ssl_backup, canonical_ssl)
+            require(
+                canonical_ssl.read_bytes() == ssl_original,
+                "canonical libssl fixture did not restore exact bytes",
+            )
 
         canonical_stdlib = temp / "canonical-stdlib-closure"
         canonical_stdlib.mkdir()

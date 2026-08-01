@@ -4,6 +4,74 @@
 import sys
 
 
+_NATIVE_BOOTSTRAP_PROTOCOL = "summary-move-relearn-native-bootstrap-v1"
+_NATIVE_BOOTSTRAP_READY = b"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
+_NATIVE_BOOTSTRAP_GO = b"SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
+
+
+def _native_bootstrap_gate():
+    """Stop before stage zero unless the native trust parent releases us."""
+    if __name__ != "__main__":
+        return {}
+    import posix
+
+    environment = posix.environ
+    if environment.get(b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL") != (
+        _NATIVE_BOOTSTRAP_PROTOCOL.encode("ascii")
+    ):
+        raise SystemExit(
+            "Summary relearn runtime requires the authenticated native bootstrap"
+        )
+    try:
+        ready_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD"].decode(
+                "ascii"
+            )
+        )
+        go_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD"].decode(
+                "ascii"
+            )
+        )
+    except (KeyError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap handshake is malformed") from error
+    if ready_fd < 3 or go_fd < 3 or ready_fd == go_fd:
+        raise SystemExit("native bootstrap handshake descriptors are invalid")
+    if posix.write(ready_fd, _NATIVE_BOOTSTRAP_READY) != len(
+        _NATIVE_BOOTSTRAP_READY
+    ):
+        raise SystemExit("native bootstrap readiness write was incomplete")
+    received = b""
+    while len(received) < len(_NATIVE_BOOTSTRAP_GO):
+        chunk = posix.read(go_fd, len(_NATIVE_BOOTSTRAP_GO) - len(received))
+        if not chunk:
+            break
+        received += chunk
+    posix.close(ready_fd)
+    posix.close(go_fd)
+    if received != _NATIVE_BOOTSTRAP_GO:
+        raise SystemExit("native bootstrap did not release Python execution")
+    required = (
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256",
+    )
+    try:
+        record = {
+            name.decode("ascii"): environment[name].decode("utf-8")
+            for name in required
+        }
+    except (KeyError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap authentication record is absent") from error
+    if any(not value for value in record.values()):
+        raise SystemExit("native bootstrap authentication record is empty")
+    return record
+
+
+NATIVE_BOOTSTRAP_AUTHENTICATION = _native_bootstrap_gate()
+
+
 def _stage_zero_startup_sys_path():
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     zip_version = f"python{sys.version_info.major}{sys.version_info.minor}.zip"
@@ -327,6 +395,36 @@ def _stage_zero_authenticate(arguments):
     runtime = document.get("runtime_environment")
     if not isinstance(runtime, dict) or runtime.get("status") != "bound":
         raise ValueError("stage-zero runtime environment is not bound")
+    bootstrap = runtime.get("native_bootstrap")
+    if not isinstance(bootstrap, dict):
+        raise ValueError("stage-zero native bootstrap record is absent")
+    for name, environment_name in (
+        ("binary", "SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH"),
+        (
+            "inventory",
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH",
+        ),
+    ):
+        record = bootstrap.get(name)
+        if (
+            not isinstance(record, dict)
+            or record.get("path")
+            != NATIVE_BOOTSTRAP_AUTHENTICATION.get(environment_name)
+            or _stage_zero_file_record(record.get("path", ""))
+            != {
+                "size": record.get("size"),
+                "sha256": record.get("sha256"),
+            }
+        ):
+            raise ValueError("stage-zero native bootstrap record differs: " + name)
+    if bootstrap["binary"]["sha256"] != NATIVE_BOOTSTRAP_AUTHENTICATION.get(
+        "SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256"
+    ) or bootstrap["inventory"]["sha256"] != (
+        NATIVE_BOOTSTRAP_AUTHENTICATION.get(
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256"
+        )
+    ):
+        raise ValueError("stage-zero native bootstrap digest pin differs")
     python = runtime.get("python")
     if not isinstance(python, dict):
         raise ValueError("stage-zero Python closure is malformed")
@@ -478,35 +576,26 @@ def _ensure_repo_venv(repo):
     python = os.path.join(venv, "bin", "python3")
     if os.path.abspath(sys.executable) == os.path.abspath(python):
         return
-    if os.path.isfile(python):
-        os.execve(
-            python,
-            [
-                python,
-                "-I",
-                "-S",
-                "-B",
-                "-X",
-                "pycache_prefix=/dev/null",
-                os.path.abspath(__file__),
-                *sys.argv[1:],
-            ],
-            {
-                "PATH": "/usr/bin:/bin",
-                "LC_ALL": "C",
-                "SDL_AUDIODRIVER": "dummy",
-            },
-        )
-    raise RuntimeError("exact repository .venv/bin/python3 is absent")
+    raise RuntimeError(
+        "native bootstrap did not execute exact repository .venv/bin/python3"
+    )
 
 
 def _sanitize_process_environment():
+    bootstrap_environment = {
+        key: value
+        for key, value in NATIVE_BOOTSTRAP_AUTHENTICATION.items()
+    }
     os.environ.clear()
     os.environ.update(
         {
             "PATH": "/usr/bin:/bin",
             "LC_ALL": "C",
             "SDL_AUDIODRIVER": "dummy",
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL": (
+                _NATIVE_BOOTSTRAP_PROTOCOL
+            ),
+            **bootstrap_environment,
         }
     )
 
@@ -789,6 +878,7 @@ def _primitive_runtime_authentication(document):
         == {
             "schema",
             "status",
+            "native_bootstrap",
             "platform",
             "python",
             "packages",
@@ -796,6 +886,90 @@ def _primitive_runtime_authentication(document):
             "native",
         },
         "runtime environment field set differs",
+    )
+    bootstrap = runtime["native_bootstrap"]
+    _require(
+        isinstance(bootstrap, dict)
+        and set(bootstrap)
+        == {
+            "schema",
+            "binary",
+            "inventory",
+            "source",
+            "build_helper",
+            "compile",
+            "codesign",
+            "linked_images",
+            "root_of_trust",
+        }
+        and bootstrap["schema"]
+        == "summary-move-relearn-native-bootstrap-v1",
+        "native bootstrap provenance is malformed",
+    )
+    bootstrap_path = os.path.realpath(
+        os.path.join(EARLY_REPO, "build/summary_move_relearn_native_bootstrap")
+    )
+    inventory_path = os.path.realpath(
+        os.path.join(
+            EARLY_REPO,
+            "scripts/summary_move_relearn_native_inventory.txt",
+        )
+    )
+    _require(
+        _validate_file_path_record(
+            bootstrap["binary"], "native bootstrap binary"
+        )
+        == bootstrap_path
+        and _validate_file_path_record(
+            bootstrap["inventory"], "native bootstrap inventory"
+        )
+        == inventory_path
+        and _validate_file_path_record(
+            bootstrap["source"], "native bootstrap source"
+        )
+        == os.path.realpath(
+            os.path.join(
+                EARLY_REPO,
+                "scripts/summary_move_relearn_native_bootstrap.c",
+            )
+        )
+        and _validate_file_path_record(
+            bootstrap["build_helper"], "native bootstrap build helper"
+        )
+        == os.path.realpath(
+            os.path.join(
+                EARLY_REPO,
+                "scripts/build_summary_move_relearn_native_bootstrap.sh",
+            )
+        ),
+        "native bootstrap sealed paths differ",
+    )
+    _require(
+        NATIVE_BOOTSTRAP_AUTHENTICATION
+        == {
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH": bootstrap_path,
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256": bootstrap[
+                "binary"
+            ]["sha256"],
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH": inventory_path,
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256": bootstrap[
+                "inventory"
+            ]["sha256"],
+        },
+        "native bootstrap parent authentication differs",
+    )
+    _require(
+        bootstrap["linked_images"]
+        and len(bootstrap["linked_images"]) == 1
+        and bootstrap["linked_images"][0].startswith(
+            "/usr/lib/libSystem.B.dylib "
+        )
+        and isinstance(bootstrap["codesign"], dict)
+        and bootstrap["codesign"].get("CDHash")
+        and isinstance(bootstrap["compile"], dict)
+        and bootstrap["compile"].get("compiler_codesign", {}).get("CDHash")
+        and "external acceptance caller pins" in bootstrap["root_of_trust"],
+        "native bootstrap trust boundary differs",
     )
     platform_record = runtime["platform"]
     _require(
@@ -1499,6 +1673,16 @@ def _late_main():
         runtime_environment,
         manifest_module,
     )
+    native_bootstrap = runtime_environment["native_bootstrap"]
+    native_prefix = [
+        native_bootstrap["binary"]["path"],
+        "--inventory",
+        native_bootstrap["inventory"]["path"],
+        "--expected-inventory-sha256",
+        native_bootstrap["inventory"]["sha256"],
+        "--expected-self-sha256",
+        native_bootstrap["binary"]["sha256"],
+    ]
     headless_module = _execute_module(
         "summary_relearn_headless",
         paths[HEADLESS_RELATIVE],
@@ -1512,6 +1696,13 @@ def _late_main():
         {
             "AUTHENTICATED_HEADLESS": headless_module,
             "AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path,
+            "AUTHENTICATED_NATIVE_PREFIX": tuple(native_prefix),
+            "AUTHENTICATED_PYTHON_PATH": os.path.abspath(sys.executable),
+            "AUTHENTICATED_CHILD_ENVIRONMENT": {
+                "PATH": "/usr/bin:/bin",
+                "LC_ALL": "C",
+                "SDL_AUDIODRIVER": "dummy",
+            },
         },
     )
     authentication = _authentication_record(
@@ -1520,7 +1711,6 @@ def _late_main():
         records,
         runtime_environment,
     )
-
     def reauthenticate():
         with open(manifest_path, "rb") as stream:
             _require(
@@ -1591,6 +1781,7 @@ def _late_main():
         "BOOTSTRAP_LAUNCHER_PATH": os.path.abspath(__file__),
         "BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path,
         "BOOTSTRAP_PYTHON_PATH": os.path.abspath(sys.executable),
+        "BOOTSTRAP_NATIVE_PREFIX": tuple(native_prefix),
         "BOOTSTRAP_CHILD_ENVIRONMENT": {
             "PATH": "/usr/bin:/bin",
             "LC_ALL": "C",

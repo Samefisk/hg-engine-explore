@@ -53,7 +53,7 @@ EXPECTED_MAKEFILE_SHA256 = (
     "f47a9465293925c3a5427218c869195c2448992aabb85c805581298b1f6124f8"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "e3ec459a55469ba4ef260055acdda46c1813c22499b5675fe34f31604d2732e9"
+    "a8ad8ed39e23aa90dc554f07619518af0974f332b7579649fc7c1b18bc0598c6"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -2038,6 +2038,10 @@ def source_contracts() -> None:
         "scripts/pokemon_move_history_build_manifest.py",
         "scripts/headless-overworld-test.py",
         "scripts/verify_pokemon_move_history_party_integrity.py",
+        "scripts/build_summary_move_relearn_native_bootstrap.sh",
+        "scripts/generate_summary_move_relearn_native_inventory.py",
+        "scripts/summary_move_relearn_native_bootstrap.c",
+        "scripts/summary_move_relearn_native_inventory.txt",
     ):
         require(
             FIXED_INPUTS.count(runtime_evidence_input) == 1,

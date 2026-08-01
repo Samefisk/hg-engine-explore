@@ -6,6 +6,50 @@ from __future__ import annotations
 import sys
 
 
+def _native_bootstrap_gate() -> None:
+    if __name__ != "__main__":
+        return
+    import posix
+
+    environment = posix.environ
+    if environment.get(b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL") != (
+        b"summary-move-relearn-native-bootstrap-v1"
+    ):
+        raise SystemExit("party verifier requires the native bootstrap")
+    try:
+        ready_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD"].decode(
+                "ascii"
+            )
+        )
+        go_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD"].decode(
+                "ascii"
+            )
+        )
+    except (KeyError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap handshake is malformed") from error
+    ready = b"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
+    expected = b"SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
+    if ready_fd < 3 or go_fd < 3 or ready_fd == go_fd:
+        raise SystemExit("native bootstrap handshake descriptors are invalid")
+    if posix.write(ready_fd, ready) != len(ready):
+        raise SystemExit("native bootstrap readiness write was incomplete")
+    received = b""
+    while len(received) < len(expected):
+        chunk = posix.read(go_fd, len(expected) - len(received))
+        if not chunk:
+            break
+        received += chunk
+    posix.close(ready_fd)
+    posix.close(go_fd)
+    if received != expected:
+        raise SystemExit("native bootstrap did not release verifier execution")
+
+
+_native_bootstrap_gate()
+
+
 def _isolated_helper_path() -> tuple[str, ...]:
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     base = sys.base_prefix + "/lib/" + version
@@ -62,30 +106,8 @@ def _isolated_helper_startup() -> bool:
 
 
 if __name__ == "__main__" and not _isolated_helper_startup():
-    import posix
-
-    script = __file__
-    if not script.startswith("/"):
-        script = posix.getcwd() + "/" + script
-    repo = script.rsplit("/scripts/", 1)[0]
-    python = repo + "/.venv/bin/python3"
-    posix.execve(
-        python,
-        [
-            python,
-            "-I",
-            "-S",
-            "-B",
-            "-X",
-            "pycache_prefix=/dev/null",
-            script,
-            *sys.argv[1:],
-        ],
-        {
-            "PATH": "/usr/bin:/bin",
-            "LC_ALL": "C",
-            "SDL_AUDIODRIVER": "dummy",
-        },
+    raise SystemExit(
+        "party verifier requires exact isolated Python from the native bootstrap"
     )
 
 import argparse
@@ -97,6 +119,28 @@ import subprocess
 import tempfile
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+
+
+if __name__ == "__main__":
+    _bootstrap_path = os.environ["SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH"]
+    _inventory_path = os.environ[
+        "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH"
+    ]
+    AUTHENTICATED_NATIVE_PREFIX = (
+        _bootstrap_path,
+        "--inventory",
+        _inventory_path,
+        "--expected-inventory-sha256",
+        os.environ["SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256"],
+        "--expected-self-sha256",
+        os.environ["SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256"],
+    )
+    AUTHENTICATED_PYTHON_PATH = os.path.abspath(sys.executable)
+    AUTHENTICATED_CHILD_ENVIRONMENT = {
+        "PATH": "/usr/bin:/bin",
+        "LC_ALL": "C",
+        "SDL_AUDIODRIVER": "dummy",
+    }
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -392,13 +436,26 @@ def reload_party_in_fresh_process(
     raw: bytes,
     screenshot: Path,
 ) -> bytes:
+    native_prefix = globals().get("AUTHENTICATED_NATIVE_PREFIX")
+    python_path = globals().get("AUTHENTICATED_PYTHON_PATH")
+    child_environment = globals().get("AUTHENTICATED_CHILD_ENVIRONMENT")
+    require(
+        isinstance(native_prefix, tuple)
+        and native_prefix
+        and isinstance(python_path, str)
+        and python_path
+        and isinstance(child_environment, dict),
+        "fresh-process reload requires authenticated native bootstrap state",
+    )
     _, _, expected_party = party_image(raw)
     with tempfile.NamedTemporaryFile(suffix=".sav") as saved:
         saved.write(raw)
         saved.flush()
         completed = subprocess.run(
             [
-                sys.executable,
+                *native_prefix,
+                "--",
+                python_path,
                 "-I",
                 "-S",
                 "-B",
@@ -421,11 +478,7 @@ def reload_party_in_fresh_process(
             capture_output=True,
             text=True,
             timeout=60,
-            env={
-                "PATH": "/usr/bin:/bin",
-                "LC_ALL": "C",
-                "SDL_AUDIODRIVER": "dummy",
-            },
+            env=dict(child_environment),
         )
     require(
         completed.returncode == 0,

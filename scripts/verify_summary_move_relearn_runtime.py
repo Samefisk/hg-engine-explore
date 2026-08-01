@@ -134,6 +134,7 @@ if not all(
         "BOOTSTRAP_LAUNCHER_PATH",
         "BOOTSTRAP_LIBDESMUME_PATH",
         "BOOTSTRAP_PYTHON_PATH",
+        "BOOTSTRAP_NATIVE_PREFIX",
         "BOOTSTRAP_CHILD_ENVIRONMENT",
     )
 ):
@@ -2411,6 +2412,8 @@ def fresh_reload_evidence(
 ) -> tuple[bytes, bytes, bytes]:
     completed = subprocess.run(
         [
+            *BOOTSTRAP_NATIVE_PREFIX,
+            "--",
             BOOTSTRAP_PYTHON_PATH,
             "-I",
             "-S",
@@ -5578,6 +5581,8 @@ def isolated_scenario_evidence(
     raw_sha256 = hashlib.sha256(raw_before).hexdigest()
     completed = subprocess.run(
         [
+            *BOOTSTRAP_NATIVE_PREFIX,
+            "--",
             BOOTSTRAP_PYTHON_PATH,
             "-I",
             "-S",

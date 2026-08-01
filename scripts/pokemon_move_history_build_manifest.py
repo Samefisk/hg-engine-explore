@@ -6,6 +6,79 @@ from __future__ import annotations
 import sys
 
 
+_NATIVE_BOOTSTRAP_PROTOCOL = "summary-move-relearn-native-bootstrap-v1"
+_NATIVE_BOOTSTRAP_READY = b"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
+_NATIVE_BOOTSTRAP_GO = b"SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
+
+
+def _native_bootstrap_gate() -> dict[str, str]:
+    if __name__ != "__main__":
+        return {}
+    binding = any(
+        argument == "--bind-runtime"
+        or argument.startswith("--bind-runtime=")
+        or argument == "--require-bound-runtime"
+        for argument in sys.argv[1:]
+    )
+    import posix
+
+    environment = posix.environ
+    present = environment.get(
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL"
+    ) == _NATIVE_BOOTSTRAP_PROTOCOL.encode("ascii")
+    if not binding and not present:
+        return {}
+    if not present:
+        raise SystemExit(
+            "runtime manifest binding requires the authenticated native bootstrap"
+        )
+    try:
+        ready_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD"].decode(
+                "ascii"
+            )
+        )
+        go_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD"].decode(
+                "ascii"
+            )
+        )
+    except (KeyError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap handshake is malformed") from error
+    if ready_fd < 3 or go_fd < 3 or ready_fd == go_fd:
+        raise SystemExit("native bootstrap handshake descriptors are invalid")
+    if posix.write(ready_fd, _NATIVE_BOOTSTRAP_READY) != len(
+        _NATIVE_BOOTSTRAP_READY
+    ):
+        raise SystemExit("native bootstrap readiness write was incomplete")
+    received = b""
+    while len(received) < len(_NATIVE_BOOTSTRAP_GO):
+        chunk = posix.read(go_fd, len(_NATIVE_BOOTSTRAP_GO) - len(received))
+        if not chunk:
+            break
+        received += chunk
+    posix.close(ready_fd)
+    posix.close(go_fd)
+    if received != _NATIVE_BOOTSTRAP_GO:
+        raise SystemExit("native bootstrap did not release Python execution")
+    keys = (
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH",
+        b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256",
+    )
+    try:
+        return {
+            key.decode("ascii"): environment[key].decode("utf-8")
+            for key in keys
+        }
+    except (KeyError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap authentication record is absent") from error
+
+
+NATIVE_BOOTSTRAP_AUTHENTICATION = _native_bootstrap_gate()
+
+
 def _isolated_startup_sys_path() -> tuple[str, str, str]:
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     zip_version = f"python{sys.version_info.major}{sys.version_info.minor}.zip"
@@ -62,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "353ca8ac6b2b7bd914fcbcd37e89208e45f4f03cc64c017330aabc125312607b"
+    "ead740f63b8395b86c957617813faa7bd98cdcc89f6b58e01b4a61047ac175c0"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -277,6 +350,10 @@ FIXED_INPUTS = (
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
     "scripts/verify_summary_move_relearn.py",
+    "scripts/build_summary_move_relearn_native_bootstrap.sh",
+    "scripts/generate_summary_move_relearn_native_inventory.py",
+    "scripts/summary_move_relearn_native_bootstrap.c",
+    "scripts/summary_move_relearn_native_inventory.txt",
     *RUNTIME_RETAINED_SOURCE_INPUTS,
     "documentation/summary_move_relearn_task6.md",
 )
@@ -359,6 +436,19 @@ RUNTIME_STARTUP_MODULES = (
     "io",
 )
 RUNTIME_NATIVE_SUFFIXES = (".dylib", ".dll", ".so")
+NATIVE_BOOTSTRAP_RELATIVE = "build/summary_move_relearn_native_bootstrap"
+NATIVE_BOOTSTRAP_SOURCE_RELATIVE = (
+    "scripts/summary_move_relearn_native_bootstrap.c"
+)
+NATIVE_BOOTSTRAP_INVENTORY_RELATIVE = (
+    "scripts/summary_move_relearn_native_inventory.txt"
+)
+NATIVE_BOOTSTRAP_BUILD_RELATIVE = (
+    "scripts/build_summary_move_relearn_native_bootstrap.sh"
+)
+NATIVE_BOOTSTRAP_COMPILER = Path(
+    "/Library/Developer/CommandLineTools/usr/bin/clang"
+)
 
 
 def unbound_runtime_environment() -> dict[str, Any]:
@@ -598,6 +688,135 @@ def _validate_binding_modules(stdlib_root: Path) -> None:
             )
 
 
+def _codesign_metadata(path: Path, label: str) -> dict[str, str]:
+    completed = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--verbose=4", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    output = completed.stdout + completed.stderr
+    if completed.returncode != 0:
+        raise ManifestError(f"{label} code signature is invalid")
+    fields: dict[str, str] = {}
+    for line in output.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            if key in {
+                "Identifier",
+                "CDHash",
+                "Signature",
+                "TeamIdentifier",
+            }:
+                fields[key] = value
+    if not fields.get("Identifier") or not fields.get("CDHash"):
+        raise ManifestError(f"{label} code-sign identity is incomplete")
+    return fields
+
+
+def _native_bootstrap_runtime_record() -> dict[str, Any]:
+    if sys.platform != "darwin":
+        raise ManifestError("native runtime bootstrap is Darwin-specific")
+    names = {
+        "path": "SUMMARY_MOVE_RELEARN_BOOTSTRAP_PATH",
+        "sha256": "SUMMARY_MOVE_RELEARN_BOOTSTRAP_SELF_SHA256",
+        "inventory_path": "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_PATH",
+        "inventory_sha256": (
+            "SUMMARY_MOVE_RELEARN_BOOTSTRAP_INVENTORY_SHA256"
+        ),
+    }
+    values = {key: os.environ.get(name) for key, name in names.items()}
+    if any(not isinstance(value, str) or not value for value in values.values()):
+        raise ManifestError("native bootstrap authentication environment is absent")
+    bootstrap_path = Path(os.path.abspath(values["path"]))
+    inventory_path = Path(os.path.abspath(values["inventory_path"]))
+    if bootstrap_path != REPO / NATIVE_BOOTSTRAP_RELATIVE:
+        raise ManifestError("native bootstrap path differs")
+    if inventory_path != REPO / NATIVE_BOOTSTRAP_INVENTORY_RELATIVE:
+        raise ManifestError("native bootstrap inventory path differs")
+    bootstrap_record = runtime_file_record(
+        bootstrap_path, "native bootstrap binary"
+    )
+    inventory_record = runtime_file_record(
+        inventory_path, "native bootstrap inventory"
+    )
+    if bootstrap_record["sha256"] != values["sha256"]:
+        raise ManifestError("native bootstrap external SHA-256 pin differs")
+    if inventory_record["sha256"] != values["inventory_sha256"]:
+        raise ManifestError("native bootstrap compiled inventory pin differs")
+    linked = subprocess.run(
+        ["/usr/bin/otool", "-L", str(bootstrap_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    dependency_lines = [
+        line.strip() for line in linked.stdout.splitlines()[1:] if line.strip()
+    ]
+    if linked.returncode != 0 or len(dependency_lines) != 1 or not (
+        dependency_lines[0].startswith("/usr/lib/libSystem.B.dylib ")
+    ):
+        raise ManifestError("native bootstrap has a non-OS runtime dependency")
+    compiler = NATIVE_BOOTSTRAP_COMPILER
+    compiler_version = subprocess.run(
+        [str(compiler), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    if compiler_version.returncode != 0 or not compiler_version.stdout:
+        raise ManifestError("native bootstrap compiler provenance is absent")
+    return {
+        "schema": "summary-move-relearn-native-bootstrap-v1",
+        "binary": bootstrap_record,
+        "inventory": inventory_record,
+        "source": runtime_file_record(
+            REPO / NATIVE_BOOTSTRAP_SOURCE_RELATIVE,
+            "native bootstrap source",
+        ),
+        "build_helper": runtime_file_record(
+            REPO / NATIVE_BOOTSTRAP_BUILD_RELATIVE,
+            "native bootstrap build helper",
+        ),
+        "compile": {
+            "compiler_path": str(compiler),
+            "compiler_version": compiler_version.stdout.splitlines()[0],
+            "compiler_codesign": _codesign_metadata(
+                compiler, "native bootstrap compiler"
+            ),
+            "command": (
+                "/usr/bin/xcrun --sdk macosx clang "
+                "-std=c11 -O2 -Wall -Wextra -Werror -pedantic -Wl,-no_uuid "
+                "-DSMR_EXPECTED_INVENTORY_SHA256=<sealed-inventory-sha256> "
+                "scripts/summary_move_relearn_native_bootstrap.c "
+                "-o build/summary_move_relearn_native_bootstrap"
+            ),
+            "codesign_command": (
+                "/usr/bin/codesign --force --sign - --timestamp=none "
+                "--identifier com.samefisk.hgengine.summary-relearn-bootstrap "
+                "build/summary_move_relearn_native_bootstrap"
+            ),
+        },
+        "codesign": _codesign_metadata(
+            bootstrap_path, "native bootstrap binary"
+        ),
+        "linked_images": dependency_lines,
+        "root_of_trust": (
+            "The external acceptance caller pins the reported bootstrap "
+            "SHA-256 before launch. Darwin AMFI validates the ad-hoc code "
+            "directory/pages; the binary then self-checks that external "
+            "digest. Pre-main trust is limited to the kernel, dyld shared "
+            "cache, and Apple-protected libSystem. The bootstrap retains "
+            "and monitors the complete mutable Python/native closure until "
+            "the child exits. Ad-hoc signing alone is not claimed as an "
+            "identity root."
+        ),
+    }
+
+
 def capture_runtime_environment() -> dict[str, Any]:
     if not _isolated_startup_ok():
         raise ManifestError(
@@ -663,6 +882,7 @@ def capture_runtime_environment() -> dict[str, Any]:
     return {
         "schema": RUNTIME_ENVIRONMENT_SCHEMA,
         "status": "bound",
+        "native_bootstrap": _native_bootstrap_runtime_record(),
         "platform": {
             "system": platform_name,
             "machine": os.uname().machine,
@@ -960,6 +1180,7 @@ def _validate_runtime_environment(
     if not isinstance(runtime, dict) or set(runtime) != {
         "schema",
         "status",
+        "native_bootstrap",
         "platform",
         "python",
         "packages",

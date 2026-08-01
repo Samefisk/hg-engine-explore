@@ -2,6 +2,50 @@
 import sys
 
 
+def _native_bootstrap_gate():
+    if __name__ != "__main__":
+        return
+    import posix
+
+    environment = posix.environ
+    if environment.get(b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL") != (
+        b"summary-move-relearn-native-bootstrap-v1"
+    ):
+        raise SystemExit("headless helper requires the native bootstrap")
+    try:
+        ready_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD"].decode(
+                "ascii"
+            )
+        )
+        go_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD"].decode(
+                "ascii"
+            )
+        )
+    except (KeyError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap handshake is malformed") from error
+    ready = b"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
+    expected = b"SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
+    if ready_fd < 3 or go_fd < 3 or ready_fd == go_fd:
+        raise SystemExit("native bootstrap handshake descriptors are invalid")
+    if posix.write(ready_fd, ready) != len(ready):
+        raise SystemExit("native bootstrap readiness write was incomplete")
+    received = b""
+    while len(received) < len(expected):
+        chunk = posix.read(go_fd, len(expected) - len(received))
+        if not chunk:
+            break
+        received += chunk
+    posix.close(ready_fd)
+    posix.close(go_fd)
+    if received != expected:
+        raise SystemExit("native bootstrap did not release helper execution")
+
+
+_native_bootstrap_gate()
+
+
 def _isolated_helper_path():
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     base = sys.base_prefix + "/lib/" + version
@@ -59,30 +103,8 @@ def _isolated_helper_startup():
 
 
 if __name__ == "__main__" and not _isolated_helper_startup():
-    import posix
-
-    script = __file__
-    if not script.startswith("/"):
-        script = posix.getcwd() + "/" + script
-    repo = script.rsplit("/scripts/", 1)[0]
-    python = repo + "/.venv/bin/python3"
-    posix.execve(
-        python,
-        [
-            python,
-            "-I",
-            "-S",
-            "-B",
-            "-X",
-            "pycache_prefix=/dev/null",
-            script,
-            *sys.argv[1:],
-        ],
-        {
-            "PATH": "/usr/bin:/bin",
-            "LC_ALL": "C",
-            "SDL_AUDIODRIVER": "dummy",
-        },
+    raise SystemExit(
+        "headless helper requires exact isolated Python from the native bootstrap"
     )
 
 import argparse
