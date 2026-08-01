@@ -4,9 +4,11 @@
 #include "../../include/pokemon_move_history.h"
 #include "../../include/pokemon_storage_system.h"
 #include "../../include/save.h"
+#include "../../include/sound.h"
 #include "../../include/summary.h"
 #include "../../include/window.h"
 #include "../../include/constants/moves.h"
+#include "../../include/constants/sndseq.h"
 #include "../../include/constants/species.h"
 
 #define SUMMARY_RETAIL_SIZE              0x7D8
@@ -42,7 +44,6 @@
 #define PAD_KEY_DOWN                     0x0080
 #define PAD_BUTTON_X                     0x0400
 
-#define SUMMARY_SELECT_SE                0x069B
 #define SUMMARY_TEXT_COLOR               0x00010200
 
 enum SummaryMoveRelearnMode {
@@ -53,6 +54,7 @@ enum SummaryMoveRelearnMode {
     SUMMARY_RELEARN_CONFIRM,
     SUMMARY_RELEARN_HM_BLOCKED,
     SUMMARY_RELEARN_SUCCESS,
+    SUMMARY_RELEARN_CLOSING,
 };
 
 struct SummaryMoveRelearnState {
@@ -72,6 +74,7 @@ struct SummaryMoveRelearnState {
     u8 mode;
     u8 promptVisible;
     u8 resumeAfterSwitch;
+    u8 successCueActive;
     struct BoxPokemon *ownerPokemon;
 };
 
@@ -115,6 +118,13 @@ static const struct SummaryTouchRect sConfirmTouchRects[] = {
     { 0xFF, 0, 0, 0 },
 };
 
+static const struct SummaryTouchRect sSuccessTouchRects[] = {
+    { 136, 151, 40, 81 },
+    { 136, 151, 84, 128 },
+    { 165, 188, 190, 249 },
+    { 0xFF, 0, 0, 0 },
+};
+
 typedef char SummaryMoveRelearnStateFits[
     sizeof(struct SummaryMoveRelearnState) <= SUMMARY_RELEARN_STATE_SIZE
         ? 1 : -1];
@@ -135,6 +145,8 @@ extern void LONG_CALL Summary_ClearMoveDetailWindows(
     struct SummaryState *summary);
 extern void LONG_CALL Summary_ShowHmBlockedMessage(
     struct SummaryState *summary);
+extern BOOL LONG_CALL Summary_CloseMovePane(
+    struct SummaryState *summary);
 extern int LONG_CALL Summary_GetPokemonSwitchTouch(void);
 extern u32 LONG_CALL Summary_GetTouchAction(
     struct SummaryState *summary);
@@ -147,7 +159,27 @@ extern void LONG_CALL ScheduleSetBgPosText(
     u32 bgId,
     u32 op,
     s32 value);
-extern void LONG_CALL PlaySE(u32 sequence);
+extern BOOL LONG_CALL IsSEPlaying(u16 sequence);
+
+static void SummaryMoveRelearn_PlayMenuSE(
+    struct SummaryMoveRelearnState *state,
+    u16 sequence)
+{
+    (void)state;
+    PlaySE(sequence);
+}
+
+static void SummaryMoveRelearn_PlayMoreSE(
+    struct SummaryMoveRelearnState *state)
+{
+    if (state->successCueActive) {
+        state->successCueActive = FALSE;
+        if (IsSEPlaying(SEQ_SE_DP_KON)) {
+            return;
+        }
+    }
+    PlaySE(SEQ_SE_DP_DECIDE);
+}
 
 static struct SummaryMoveRelearnState *SummaryMoveRelearn_GetState(
     struct SummaryState *summary)
@@ -300,6 +332,7 @@ static void SummaryMoveRelearn_RejectEntry(
     state->pendingMove = 0;
     state->promptVisible = FALSE;
     state->resumeAfterSwitch = FALSE;
+    state->successCueActive = FALSE;
     state->ownerPokemon = NULL;
 }
 
@@ -487,13 +520,25 @@ static void SummaryMoveRelearn_End(
     Summary_RebuildMoveCategoryIcons(summary);
     summary->baseData->move = state->originalArgMove;
     SummaryMoveRelearn_SetCursor(summary, state->originalCursor);
-    Summary_UpdateMoveCursorSprite(summary);
-    Summary_ClearMoveDetailWindows(summary);
-    state->mode = SUMMARY_RELEARN_INACTIVE;
+    SummaryMoveRelearn_HideStatus(summary);
+    state->mode = SUMMARY_RELEARN_CLOSING;
     state->candidateCount = 0;
+    state->pendingMove = 0;
+    state->promptVisible = FALSE;
+    Summary_CloseMovePane(summary);
+}
+
+static void SummaryMoveRelearn_FinishClose(
+    struct SummaryState *summary,
+    struct SummaryMoveRelearnState *state)
+{
+    if (!Summary_CloseMovePane(summary)) {
+        return;
+    }
+    state->mode = SUMMARY_RELEARN_INACTIVE;
+    state->successCueActive = FALSE;
     SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_RELEARN_PROMPT);
     state->promptVisible = TRUE;
-    SummaryMoveRelearn_SetMovePane(summary, FALSE);
 }
 
 static BOOL SummaryMoveRelearn_IsKnown(
@@ -577,6 +622,9 @@ static void SummaryMoveRelearn_MoveListCursor(
     struct SummaryMoveRelearnState *state,
     BOOL down)
 {
+    u16 oldCursor;
+
+    oldCursor = state->candidateCursor;
     if (down) {
         state->candidateCursor++;
         if (state->candidateCursor >= state->candidateCount) {
@@ -600,8 +648,10 @@ static void SummaryMoveRelearn_MoveListCursor(
             < state->candidateCount) {
         state->candidateTop = 0;
     }
-    PlaySE(SUMMARY_SELECT_SE);
-    SummaryMoveRelearn_RenderList(summary, state);
+    if (state->candidateCursor != oldCursor) {
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_SELECT);
+        SummaryMoveRelearn_RenderList(summary, state);
+    }
 }
 
 static void SummaryMoveRelearn_HandleList(
@@ -627,13 +677,14 @@ static void SummaryMoveRelearn_HandleList(
         }
     }
     if (newKeys & PAD_BUTTON_B) {
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_GS_GEARCANCEL);
         SummaryMoveRelearn_End(summary, state);
     } else if (repeatKeys & PAD_KEY_UP) {
         SummaryMoveRelearn_MoveListCursor(summary, state, FALSE);
     } else if (repeatKeys & PAD_KEY_DOWN) {
         SummaryMoveRelearn_MoveListCursor(summary, state, TRUE);
     } else if (newKeys & PAD_BUTTON_A) {
-        PlaySE(SUMMARY_SELECT_SE);
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_DECIDE);
         state->pendingMove = state->candidates[state->candidateCursor];
         state->selectedSlot = 0;
         state->mode = SUMMARY_RELEARN_SLOT;
@@ -664,16 +715,17 @@ static void SummaryMoveRelearn_HandleSlot(
         }
     }
     if (newKeys & PAD_BUTTON_B) {
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_GS_GEARCANCEL);
         state->mode = SUMMARY_RELEARN_LIST;
         SummaryMoveRelearn_RenderList(summary, state);
     } else if (repeatKeys & PAD_KEY_UP) {
         state->selectedSlot =
             state->selectedSlot == 0 ? 3 : state->selectedSlot - 1;
-        PlaySE(SUMMARY_SELECT_SE);
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_SELECT);
         SummaryMoveRelearn_RenderSlot(summary, state);
     } else if (repeatKeys & PAD_KEY_DOWN) {
         state->selectedSlot = (state->selectedSlot + 1) & 3;
-        PlaySE(SUMMARY_SELECT_SE);
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_SELECT);
         SummaryMoveRelearn_RenderSlot(summary, state);
     } else if (newKeys & PAD_BUTTON_A) {
         /*
@@ -687,12 +739,15 @@ static void SummaryMoveRelearn_HandleSlot(
             MON_DATA_MOVE1 + state->selectedSlot,
             NULL);
         if (oldMove == state->pendingMove) {
+            SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_CUSTOM06);
             SummaryMoveRelearn_RenderSlot(summary, state);
         } else if (oldMove != 0 && MoveIsHM(oldMove)) {
+            SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_CUSTOM06);
             state->mode = SUMMARY_RELEARN_HM_BLOCKED;
             Summary_ShowHmBlockedMessage(summary);
             SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_CONFIRM);
         } else {
+            SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_DECIDE);
             state->mode = SUMMARY_RELEARN_CONFIRM;
             SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_CONFIRM);
         }
@@ -718,6 +773,7 @@ static void SummaryMoveRelearn_Commit(
             pokemon,
             state->pendingMove,
             state->selectedSlot)) {
+        SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_CUSTOM06);
         state->mode = SUMMARY_RELEARN_SLOT;
         SummaryMoveRelearn_RenderSlot(summary, state);
         return;
@@ -738,6 +794,8 @@ static void SummaryMoveRelearn_Commit(
     summary->baseData->move = state->originalArgMove;
     SummaryMoveRelearn_SetCursor(summary, state->selectedSlot);
     Summary_UpdateMoveSelection(summary);
+    state->successCueActive = TRUE;
+    PlaySE(SEQ_SE_DP_KON);
     state->mode = SUMMARY_RELEARN_SUCCESS;
     SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_SUCCESS);
 }
@@ -763,6 +821,7 @@ static void SummaryMoveRelearn_CancelForNavigation(
     state->pendingMove = 0;
     state->promptVisible = FALSE;
     state->resumeAfterSwitch = resumeAfterSwitch;
+    state->successCueActive = FALSE;
     state->ownerPokemon = NULL;
 }
 
@@ -780,10 +839,10 @@ static BOOL SummaryMoveRelearn_OwnsCurrentTouch(
     if (state->mode == SUMMARY_RELEARN_EMPTY) {
         return SummaryMoveRelearn_GetTouch(sBackTouchRects) >= 0;
     }
-    touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
     if (state->mode == SUMMARY_RELEARN_SUCCESS) {
-        return touch == 2;
+        return SummaryMoveRelearn_GetTouch(sSuccessTouchRects) >= 0;
     }
+    touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
     return touch >= 0;
 }
 
@@ -823,6 +882,7 @@ u32 SummaryMoveRelearn_MainState(
         state->candidateCount = 0;
         state->promptVisible = FALSE;
         state->resumeAfterSwitch = FALSE;
+        state->successCueActive = FALSE;
         state->ownerPokemon = NULL;
         SummaryMoveRelearn_HideStatus(summary);
         SummaryMoveRelearn_ClearProspective(summary);
@@ -838,6 +898,11 @@ u32 SummaryMoveRelearn_MainState(
             Summary_ClearMoveDetailWindows(summary);
         }
         SummaryMoveRelearn_SetMovePane(summary, FALSE);
+    }
+
+    if (state->mode == SUMMARY_RELEARN_CLOSING) {
+        SummaryMoveRelearn_FinishClose(summary, state);
+        return 2;
     }
 
     if (state->mode == SUMMARY_RELEARN_INACTIVE) {
@@ -889,10 +954,13 @@ u32 SummaryMoveRelearn_MainState(
         }
         if (newKeys & PAD_BUTTON_X) {
             if (!SummaryMoveRelearn_IsValidEntryPokemon(pokemon)) {
+                SummaryMoveRelearn_PlayMenuSE(
+                    state,
+                    SEQ_SE_DP_CUSTOM06);
                 SummaryMoveRelearn_RejectEntry(summary, state);
                 return 2;
             }
-            PlaySE(SUMMARY_SELECT_SE);
+            SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_DECIDE);
             SummaryMoveRelearn_Enter(summary, state, pokemon);
             return 2;
         }
@@ -905,6 +973,17 @@ u32 SummaryMoveRelearn_MainState(
 
     newKeys = SummaryMoveRelearn_GetNewKeys();
     repeatKeys = SummaryMoveRelearn_GetRepeatKeys();
+    if (state->mode == SUMMARY_RELEARN_SUCCESS) {
+        touch = SummaryMoveRelearn_GetTouch(sSuccessTouchRects);
+        if (touch == 1 || touch == 2) {
+            newKeys |= PAD_BUTTON_B;
+        }
+        if (newKeys & PAD_BUTTON_B) {
+            PlaySE(SEQ_SE_GS_GEARCANCEL);
+            SummaryMoveRelearn_End(summary, state);
+            return 2;
+        }
+    }
     if (!SummaryMoveRelearn_OwnsCurrentTouch(summary, state)) {
         touchAction = Summary_GetTouchAction(summary);
         switchTouch = summary->baseData->dataType == SUMMARY_BOX_DATA
@@ -938,6 +1017,11 @@ u32 SummaryMoveRelearn_MainState(
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
+            SummaryMoveRelearn_PlayMenuSE(
+                state,
+                (newKeys & PAD_BUTTON_B)
+                    ? SEQ_SE_GS_GEARCANCEL
+                    : SEQ_SE_DP_DECIDE);
             SummaryMoveRelearn_End(summary, state);
         }
     } else if (state->mode == SUMMARY_RELEARN_SLOT) {
@@ -955,6 +1039,9 @@ u32 SummaryMoveRelearn_MainState(
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & PAD_BUTTON_B) {
+            SummaryMoveRelearn_PlayMenuSE(
+                state,
+                SEQ_SE_GS_GEARCANCEL);
             state->mode = SUMMARY_RELEARN_SLOT;
             SummaryMoveRelearn_RenderSlot(summary, state);
         } else if (newKeys & PAD_BUTTON_A) {
@@ -968,16 +1055,31 @@ u32 SummaryMoveRelearn_MainState(
             newKeys |= PAD_BUTTON_B;
         }
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
+            SummaryMoveRelearn_PlayMenuSE(
+                state,
+                (newKeys & PAD_BUTTON_B)
+                    ? SEQ_SE_GS_GEARCANCEL
+                    : SEQ_SE_DP_DECIDE);
             state->mode = SUMMARY_RELEARN_SLOT;
             SummaryMoveRelearn_RenderSlot(summary, state);
         }
     } else if (state->mode == SUMMARY_RELEARN_SUCCESS) {
-        touch = SummaryMoveRelearn_GetTouch(sConfirmTouchRects);
-        if (touch == 2) {
-            newKeys |= PAD_BUTTON_B;
+        touch = SummaryMoveRelearn_GetTouch(sSuccessTouchRects);
+        if (touch == 0) {
+            newKeys |= PAD_BUTTON_A;
         }
-        if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_B)) {
-            SummaryMoveRelearn_End(summary, state);
+        if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_X)) {
+            SummaryMoveRelearn_PlayMoreSE(state);
+            SummaryMoveRelearn_Enter(summary, state, pokemon);
+        } else if (repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)) {
+            BOOL down = (repeatKeys & PAD_KEY_DOWN) != 0;
+
+            SummaryMoveRelearn_Enter(summary, state, pokemon);
+            if (state->mode == SUMMARY_RELEARN_LIST) {
+                SummaryMoveRelearn_MoveListCursor(summary, state, down);
+            } else {
+                SummaryMoveRelearn_PlayMenuSE(state, SEQ_SE_DP_DECIDE);
+            }
         }
     } else {
         SummaryMoveRelearn_SetMovePane(summary, FALSE);

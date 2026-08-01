@@ -211,4 +211,4 @@ A:Pick B:Back
 None. B:Back
 Pick a slot.
 A:OK B:Back
-Relearned!
+Done! A:More B:Done

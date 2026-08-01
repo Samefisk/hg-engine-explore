@@ -372,6 +372,9 @@ def source_contracts(root: Path) -> None:
     slot = body(ui, "SummaryMoveRelearn_HandleSlot")
     commit = body(ui, "SummaryMoveRelearn_Commit")
     end = body(ui, "SummaryMoveRelearn_End")
+    finish_close = body(ui, "SummaryMoveRelearn_FinishClose")
+    play_menu_se = body(ui, "SummaryMoveRelearn_PlayMenuSE")
+    play_more_se = body(ui, "SummaryMoveRelearn_PlayMoreSE")
     list_handler = body(ui, "SummaryMoveRelearn_HandleList")
     require(
         "MoveIsHM(oldMove)" in slot
@@ -417,8 +420,25 @@ def source_contracts(root: Path) -> None:
     require(
         "SummaryMoveRelearn_RestoreCache" in end
         and "state->originalArgMove" in end
-        and "state->originalCursor" in end,
+        and "state->originalCursor" in end
+        and "state->mode = SUMMARY_RELEARN_CLOSING;" in end
+        and "Summary_CloseMovePane(summary);" in end
+        and "Summary_CloseMovePane(summary)" in finish_close
+        and "state->mode = SUMMARY_RELEARN_INACTIVE;" in finish_close,
         "cancellation does not restore transient Summary presentation",
+    )
+    require(
+        "PlaySE(sequence);" in play_menu_se
+        and "IsSEPlaying(SEQ_SE_DP_KON)" in play_more_se
+        and "state->successCueActive = FALSE;" in play_more_se
+        and "PlaySE(SEQ_SE_DP_DECIDE);" in play_more_se
+        and "SEQ_SE_DP_SELECT" in ui
+        and "SEQ_SE_DP_DECIDE" in ui
+        and "SEQ_SE_GS_GEARCANCEL" in ui
+        and "SEQ_SE_DP_CUSTOM06" in ui
+        and commit.count("PlaySE(SEQ_SE_DP_KON);") == 1
+        and "PlaySE(SEQ_SE_DP_DECIDE)" not in commit,
+        "Summary relearn sound mapping or singleton success cue differs",
     )
 
     main = body(ui, "SummaryMoveRelearn_MainState")
@@ -449,9 +469,12 @@ def source_contracts(root: Path) -> None:
     )
     pre_entry_checks = re.findall(
         r"if \(!SummaryMoveRelearn_IsValidEntryPokemon\(pokemon\)\) "
-        r"\{\s*SummaryMoveRelearn_RejectEntry\(summary, state\);"
+        r"\{\s*(?:SummaryMoveRelearn_PlayMenuSE\(\s*state,\s*"
+        r"SEQ_SE_DP_CUSTOM06\);\s*)?"
+        r"SummaryMoveRelearn_RejectEntry\(summary, state\);"
         r"\s*return 2;\s*\}\s*"
-        r"(?:PlaySE\(SUMMARY_SELECT_SE\);\s*)?"
+        r"(?:SummaryMoveRelearn_PlayMenuSE\(state, "
+        r"SEQ_SE_DP_DECIDE\);\s*)?"
         r"SummaryMoveRelearn_Enter\(summary, state, pokemon\);",
         main,
     )
@@ -464,8 +487,18 @@ def source_contracts(root: Path) -> None:
         and main.count(
             "SummaryMoveRelearn_Enter(summary, state, pokemon);"
         )
-        == 2,
+        == 4,
         "both resume and key/touch entry paths must revalidate immediately",
+    )
+    success_handler = main[main.index(
+        "state->mode == SUMMARY_RELEARN_SUCCESS"
+    ):]
+    require(
+        "SummaryMoveRelearn_PlayMoreSE(state);" in success_handler
+        and "SEQ_SE_GS_GEARCANCEL" in success_handler
+        and success_handler.index("SEQ_SE_GS_GEARCANCEL")
+        < success_handler.index("SummaryMoveRelearn_PlayMoreSE(state);"),
+        "success More suppression or Done cancel sound mapping differs",
     )
     for state in (
         "SUMMARY_RELEARN_LIST",
@@ -474,6 +507,7 @@ def source_contracts(root: Path) -> None:
         "SUMMARY_RELEARN_CONFIRM",
         "SUMMARY_RELEARN_HM_BLOCKED",
         "SUMMARY_RELEARN_SUCCESS",
+        "SUMMARY_RELEARN_CLOSING",
     ):
         require(state in main, f"state is absent from dispatcher: {state}")
     require(
@@ -521,8 +555,23 @@ def source_contracts(root: Path) -> None:
         and "repeatKeys & (PAD_KEY_LEFT | PAD_KEY_RIGHT)" in main
         and "return Summary_VanillaMainState(summary);" in main
         and "SummaryMoveRelearn_GetTouch(sMoveRowTouchRects)" in owns_touch
-        and "SummaryMoveRelearn_GetTouch(sConfirmTouchRects)" in owns_touch,
+        and "SummaryMoveRelearn_GetTouch(sConfirmTouchRects)" in owns_touch
+        and "SummaryMoveRelearn_GetTouch(sSuccessTouchRects)" in owns_touch,
         "modal switching/page gestures do not preserve retail delegation",
+    )
+    success_dispatch = main[main.index(
+        "state->mode == SUMMARY_RELEARN_SUCCESS"
+    ):]
+    require(
+        "newKeys & PAD_BUTTON_B" in success_dispatch
+        and "newKeys & (PAD_BUTTON_A | PAD_BUTTON_X)" in success_dispatch
+        and "repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)" in success_dispatch
+        and success_dispatch.count(
+            "SummaryMoveRelearn_Enter(summary, state, pokemon);"
+        )
+        == 2
+        and "SummaryMoveRelearn_End(summary, state);" in success_dispatch,
+        "success controls do not provide More/Done and directional recovery",
     )
     require(
         "if (state->resumeAfterSwitch)" in main
@@ -1039,11 +1088,14 @@ def source_contracts(root: Path) -> None:
     require(
         "Summary_ClearMoveDetailWindows(summary)" in ui
         and ui.count("Summary_ClearMoveDetailWindows(summary)") >= 2
-        and ui.count("Summary_UpdateMoveCursorSprite(summary)") >= 2
+        and ui.count("Summary_UpdateMoveCursorSprite(summary)") >= 1
+        and "Summary_CloseMovePane(summary)" in ui
         and "{ 136, 151, 8, 41 }" in ui
         and "{ 136, 151, 45, 128 }" in ui
         and "{ 136, 151, 8, 32 }" in ui
         and "{ 136, 151, 36, 128 }" in ui
+        and "{ 136, 151, 40, 81 }" in ui
+        and "{ 136, 151, 84, 128 }" in ui
         and "{ 165, 188, 190, 249 }" in ui,
         "modal cleanup or prompt-strip touch ownership differs",
     )
@@ -1069,7 +1121,7 @@ def source_contracts(root: Path) -> None:
         "None. B:Back",
         "Pick a slot.",
         "A:OK B:Back",
-        "Relearned!",
+        "Done! A:More B:Done",
     ):
         require(text in messages, f"Summary control message is missing: {text}")
     require(
@@ -1082,7 +1134,8 @@ def source_contracts(root: Path) -> None:
         and "sPromptTouchRects" in ui
         and "sActionTouchRects" in ui
         and "sBackTouchRects" in ui
-        and "sConfirmTouchRects" in ui,
+        and "sConfirmTouchRects" in ui
+        and "sSuccessTouchRects" in ui,
         "entry/list/slot/confirmation touch controls are incomplete",
     )
     render_slot = body(ui, "SummaryMoveRelearn_RenderSlot")
@@ -1103,15 +1156,17 @@ def source_contracts(root: Path) -> None:
         "slot selection does not render explicit Pick/Back controls",
     )
     require(
-        ui.count("{ 165, 188, 190, 249 }") == 3
+        ui.count("{ 165, 188, 190, 249 }") == 4
         and "{ 165, 188, 8, 55 }" not in ui
         and "{ 165, 188, 56, 128 }" not in ui,
         "lower page-button row aliases a modal label action",
     )
     require(
         main.count("if (touch == 0 || touch == 1)") == 1
-        and main.count("if (touch == 2)") == 1,
-        "empty Back/Cancel or success blue-Cancel ownership differs",
+        and "SummaryMoveRelearn_GetTouch(sSuccessTouchRects)" in main
+        and main.count("if (touch == 0)") >= 3
+        and main.count("touch == 1 || touch == 2") >= 3,
+        "empty or success action/Back touch ownership differs",
     )
     for handler, label in (
         (list_handler, "candidate list"),
@@ -1125,7 +1180,7 @@ def source_contracts(root: Path) -> None:
             f"{label} touch controls do not split Pick from Back/Cancel",
         )
     require(
-        main.count("SummaryMoveRelearn_GetTouch(sConfirmTouchRects)") == 3
+        main.count("SummaryMoveRelearn_GetTouch(sConfirmTouchRects)") == 2
         and main.count("touch == 1 || touch == 2") >= 2,
         "confirmation/HM touch controls do not map OK and Back/Cancel",
     )
@@ -1144,7 +1199,8 @@ def source_contracts(root: Path) -> None:
         "ScheduleSetBgPosText(summary->bgl, 5, 0, visible ? 0x80 : 0)"
         in move_pane
         and "SummaryMoveRelearn_SetMovePane(summary, TRUE)" in enter
-        and "SummaryMoveRelearn_SetMovePane(summary, FALSE)" in end
+        and "Summary_CloseMovePane(summary)" in end
+        and "Summary_CloseMovePane(summary)" in finish_close
         and "SummaryMoveRelearn_SetMovePane(summary, FALSE)" in main,
         "retail detail pane is not shown and restored around modal ownership",
     )
@@ -4459,6 +4515,11 @@ def host_state_contracts() -> None:
         ("confirm", "touch-ok"): ("success", True),
         ("hm", "B"): ("slot", False),
         ("success", "B"): ("inactive", False),
+        ("success", "A"): ("list", False),
+        ("success", "X"): ("list", False),
+        ("success", "Down"): ("list", False),
+        ("success", "touch-more"): ("list", False),
+        ("success", "touch-done"): ("inactive", False),
         ("list", "party-touch-switch"): ("list", False),
         ("slot", "box-arrow-switch"): ("list", False),
         ("confirm", "party-touch-switch"): ("list", False),

@@ -19,7 +19,12 @@ On the normal Summary **Moves** page, the bottom prompt reads `X: Relearn`.
   slot selection without changing anything.
 - HM-protected slots show the retail Summary HM-forget message and remain in a
   valid slot-selection flow. `A` or `B` dismisses the message.
-- Success: `A` or `B` returns to the ordinary Moves page.
+- Success: the prompt reads `Done! A:More B:Done`. `A` rebuilds the current
+  Pokémon's candidates and returns immediately to the refreshed list (or the
+  empty state); `B` closes through Summary's retail move-pane transition and
+  returns to the ordinary Moves page. `X` is a shortcut for More. `Up/Down`
+  also returns to the refreshed list and moves its cursor in the requested
+  direction, so the success acknowledgement never looks frozen.
 
 Touch controls and every existing Summary control remain retail while relearn
 mode is inactive. The `X: Relearn` prompt is tappable; candidate and slot rows
@@ -30,6 +35,8 @@ x=[35,128). The blank x=[40,44) and x=[31,35) gaps deliberately perform no
 action. The retail blue `Cancel` button at y=[165,188), x=[190,249) is also
 Back. On the HM-blocked message, both visible `A:OK` and `B:Back` controls
 dismiss back to slot selection; neither can replace the protected move.
+On success, the visible `A:More` and `B:Done` controls use x=[40,80) and
+x=[84,127) respectively; blue `Cancel` is Done.
 The unrelated page buttons in that lower row are not modal actions. These
 regions are separate: tapping Pick/OK never aliases Back, and tapping Back
 never confirms.
@@ -43,10 +50,11 @@ The state sequence is:
 
 ```text
 inactive -> list / empty -> slot -> confirm -> success
-                ^            |       |
-                |------------B       B
-                             |
-                        HM blocked
+             ^  ^            |       |  |
+             |  |------------B       |  B -> closing -> inactive
+             |               |       |
+             +---------- A/Up/Down/X |
+                        HM blocked    |
 ```
 
 The list contains at most 65 task-2 candidates and displays four rows at once.
@@ -71,11 +79,13 @@ task 2.
 Candidate-list cancellation, empty-list dismissal, slot cancellation,
 confirmation cancellation, HM rejection, and a Pokémon identity/position
 boundary do not call a Pokémon setter, history recorder, or save writer.
-UI-only cache changes are restored before
-returning to the ordinary Moves page. The exit path uses retail's cursor-only
-position helper and six-window move-detail cleanup before restoring BG5, so a
-scrolled candidate cursor and stale detail text cannot leak into vanilla
-Summary. Normal `B` exit after modal cancellation lets the application manager
+UI-only cache changes are restored before returning to the ordinary Moves
+page. User-driven Done/cancel enters a no-input closing state and drives
+retail's multi-frame `sub_0208A63C` move-pane close to completion. This hides
+selection sprites, restores the normal Summary marker and windows, and resets
+the retail `+0x7BE` transition byte before input returns to vanilla. Navigation
+and identity boundaries remain vanilla-owned and use their existing immediate
+refresh path. Normal `B` exit after modal cancellation lets the application manager
 unload overlay 154 and free the enlarged Summary work block. A subsequent
 Summary launch receives a fresh inactive extension with zero candidates and no
 pending move. Because no permanent mutation occurs before confirmation, both
@@ -96,6 +106,15 @@ known/same moves and HM-protected old slots again at commit time, and sets
 Summary arguments offset `+0x38` only after the transaction returns `TRUE`.
 That is the existing Summary/parent ownership signal; no UI callback writes a
 save directly.
+
+Successful confirmation plays `SEQ_SE_DP_KON` exactly once. Cursor movement,
+accepted selections, Back/Done, and invalid/HM actions use
+`SEQ_SE_DP_SELECT`, `SEQ_SE_DP_DECIDE`, `SEQ_SE_GS_GEARCANCEL`, and
+`SEQ_SE_DP_CUSTOM06` respectively. Only an immediate `A:More`/`X` decide cue
+is suppressed while the success cue is still active; `B:Done` retains its
+cancel cue and later list input retains its mapped feedback. Page/Pokémon
+navigation, identity cleanup, and teardown
+add no custom sound; vanilla owns those transitions.
 
 ## Residency and lifecycle
 

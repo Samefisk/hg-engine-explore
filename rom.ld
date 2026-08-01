@@ -568,6 +568,7 @@ Summary_PrintCurrentOverMax = 0x0208C8C8 | 1;
 Summary_PrintStatStringAccountForStat = 0x0208C7F8 | 1;
 Summary_PrintStringGeneric = 0x0208C850 | 1;
 Summary_VanillaMainState = 0x02088B40 | 1;
+Summary_CloseMovePane = 0x0208A63C | 1;
 Summary_RefreshPokemonData = 0x020897C0 | 1;
 Summary_UpdateMoveSelection = 0x0208A79C | 1;
 Summary_UpdateMoveCursorSprite = 0x0208BBDC | 1;
@@ -579,6 +580,7 @@ Summary_ShowHmBlockedMessage = 0x0208DBF0 | 1;
 TouchscreenHitbox_FindRectAtTouchNew = 0x02025224 | 1;
 ClearWindowTilemapAndScheduleTransfer = 0x0201D8E4 | 1;
 ScheduleSetBgPosText = 0x0201F238 | 1;
+IsSEPlaying = 0x02006184 | 1;
 CopyBoxPokemonToPokemon = 0x02071780 | 1;
 
 GetExpByGrowthRateAndLevel = 0x0206FD30 | 1;

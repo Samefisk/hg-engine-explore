@@ -5656,14 +5656,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     154: (
         0x023C0400,
-        0xE30,
+        0xFA4,
         0,
         0,
         0,
         154,
         0,
         0x422600,
-        0x423430,
+        0x4235A4,
     ),
     155: (
         OVERLAY155_BASE,
