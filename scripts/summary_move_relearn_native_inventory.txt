@@ -2101,11 +2101,14 @@ F	1251	1ceb2b1f7af8e395098ac102916af5fc2e2a056f6ec33e1bdf583c9fbe845f28	/Users/c
 F	810	eab07065188f48d85e232c24a1349bfbd3a7a61823dd943824f31fc9647df437	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/.venv/lib/python3.10/site-packages/desmume/i18n_util.py
 F	4475328	b064437a3c8af7ae538eb0bdf4151ac695ad1b2825b506ef55cbd36e70d294ab	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/.venv/lib/python3.10/site-packages/desmume/libdesmume.dylib
 F	71	db6c8a96f25493eda9f74f23f0b5f248a8b50a5b469b15c5ee7313875b416364	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/.venv/pyvenv.cfg
-M	1909	0e737b7fbb2a566305522d07f4883d59e1e9424392e4f4525be3702a5d9e2973	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts
+M	91	d56ae75379921a7d580f49d15e902f0cf5807d8c5dd2f4c9e007be610d501107	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/build/summary_move_relearn_native
+M	2008	a4e80ab5445ad1c1c8f2b7b28be3586f2877e95465bb41f7a1b9e60ec5638de2	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts
 F	24139	136407b2c6ecce7aa57492517880be778b02ed15b7699afb058103cae4dc562c	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/headless-overworld-test.py
-F	64577	0f5b109aa95c2a6537e4c39d68f21f7fa3045a94bbb61bcab2e644b1acc8cb1d	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/launch_summary_move_relearn_runtime.py
-F	77184	a15b40fd2ba09f1bd60c531dee03f397f98b2a2084e5682b149a0753cacd8815	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/pokemon_move_history_build_manifest.py
-F	21519	25431b31e8c1e4633d28420b13c60c23344239b77b9b745be5b736eb73823786	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/verify_pokemon_move_history_party_integrity.py
-F	292510	94c9c4ac24375794dbf6564e07374898fdfdc75d9612babd65abff073f0455e3	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/verify_summary_move_relearn_runtime.py
+F	66204	e8626576a6b204808b93aca1a3bb8bc86622c158fc37adeb4d3dc36d2e591e94	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/launch_summary_move_relearn_runtime.py
+F	78679	20c09e7abb0bf51658415400f4fd17bf6dcf4cddf925c3e87c14ace0ad89adaf	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/pokemon_move_history_build_manifest.py
+F	10520	e4693ed36cdd6c19129f2aa7240c46bbdb6e96f5f0b8608987a7d0acc713e996	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/summary_move_relearn_protected_spawn.py
+F	6059	e6e9c6e8540ed4439cc463f4ca9826467b772ce8cdf96bec5839c5dbece5ca5e	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/summary_move_relearn_protected_spawn.swift
+F	21785	6641a23ea4df29f600ba66937a6c92f13bf6455f68d7de4c06aec0816dc879e0	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/verify_pokemon_move_history_party_integrity.py
+F	292682	2b595a4ae90c92800b955374e4ecf8120b080587ed5c308880584e7f14a1730a	/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync/scripts/verify_summary_move_relearn_runtime.py
 D	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	/usr/local/bin
 L	70	554bd3ab1c16d469dcf086b3538526e3c2d1d79a7af6c753f97dda54c7c36891	/usr/local/bin/python3

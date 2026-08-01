@@ -17,8 +17,8 @@ if [ "$build_status" -eq 0 ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
     exit 1
   fi
-  native_bootstrap_expected_sha256="8288d2522a1d9c4dc6f63f43dcdd09b81079c5b3c13f4e1517942c1e56158b9d"
-  native_bootstrap_expected_cdhash="98782a6d415471aced75ef90b292b4b9a447c0ab"
+  native_bootstrap_expected_sha256="eb0d3804b69caea0073cade507aa8d990b4fe8f5c7a6f1197b1cd1d8ccc8ad6b"
+  native_bootstrap_expected_cdhash="19326c05ac8ad0bbb86ef5290e672f761bf3a8a9"
   native_record=$(./scripts/build_summary_move_relearn_native_bootstrap.sh \
     "$native_bootstrap_expected_sha256" \
     "$native_bootstrap_expected_cdhash") || exit $?
@@ -27,7 +27,7 @@ if [ "$build_status" -eq 0 ]; then
     echo "Malformed native bootstrap build record" >&2
     exit 1
   fi
-  native_bootstrap="$PWD/build/summary_move_relearn_native_bootstrap"
+  native_bootstrap="$PWD/build/summary_move_relearn_native/summary_move_relearn_native_bootstrap"
   native_bootstrap_sha256="$2"
   native_inventory_sha256="$3"
   native_bootstrap_cdhash="$4"
@@ -37,6 +37,9 @@ if [ "$build_status" -eq 0 ]; then
     exit 1
   fi
   native_inventory="$PWD/scripts/summary_move_relearn_native_inventory.txt"
+  protected_spawn_source="$PWD/scripts/summary_move_relearn_protected_spawn.swift"
+  protected_spawn_source_sha256="e6e9c6e8540ed4439cc463f4ca9826467b772ce8cdf96bec5839c5dbece5ca5e"
+  protected_spawn_swift_cdhash="100b213164b4fd6521129ccd725d35cb674cef15"
   authenticate_native_bootstrap() {
     actual_sha256=$(/usr/bin/shasum -a 256 "$native_bootstrap" | /usr/bin/awk '{print $1}') || return 1
     [ "$actual_sha256" = "$native_bootstrap_expected_sha256" ] || return 1
@@ -54,8 +57,74 @@ if [ "$build_status" -eq 0 ]; then
       '^[[:space:]]*/usr/lib/libSystem\.B\.dylib ' || return 1
     ! /usr/bin/otool -l "$native_bootstrap" | /usr/bin/grep -q 'LC_UUID'
   }
+  protected_native_bootstrap() {
+    separator=$(printf '\037') || return 1
+    serialized_argv=
+    for protected_argument in "$@"; do
+      [ -n "$protected_argument" ] || return 1
+      case "$protected_argument" in *"$separator"*) return 1;; esac
+      if [ -z "$serialized_argv" ]; then
+        serialized_argv=$protected_argument
+      else
+        serialized_argv="$serialized_argv$separator$protected_argument"
+      fi
+    done
+    [ -n "$serialized_argv" ] || return 1
+    [ -f "$protected_spawn_source" ] && [ ! -L "$protected_spawn_source" ] || return 1
+    exec 9<"$protected_spawn_source" || return 1
+    protected_source_with_sentinel=$(/bin/cat <&9; printf '.') || return 1
+    exec 9<&-
+    protected_source=${protected_source_with_sentinel%.}
+    actual_source_sha256=$(printf '%s' "$protected_source" \
+      | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}') || return 1
+    [ "$actual_source_sha256" = "$protected_spawn_source_sha256" ] || return 1
+    /usr/bin/codesign --verify --strict \
+      -R '=identifier "com.apple.dt.xcode_select.tool-shim" and anchor apple' \
+      /usr/bin/swift || return 1
+    swift_signature=$(/usr/bin/codesign -d --verbose=4 /usr/bin/swift 2>&1) \
+      || return 1
+    [ "$(printf '%s\n' "$swift_signature" \
+      | /usr/bin/awk -F= '/^CDHash=/{print $2}')" \
+      = "$protected_spawn_swift_cdhash" ] || return 1
+    protected_child_environment="LC_ALL=C${separator}PATH=/usr/bin:/bin"
+    if [ -n "${SUMMARY_MOVE_RELEARN_PROTECTED_SPAWNED_FIFO-}" ] \
+      || [ -n "${SUMMARY_MOVE_RELEARN_PROTECTED_CONTINUE_FIFO-}" ]; then
+      [ -n "${SUMMARY_MOVE_RELEARN_PROTECTED_SPAWNED_FIFO-}" ] \
+        && [ -n "${SUMMARY_MOVE_RELEARN_PROTECTED_CONTINUE_FIFO-}" ] || return 1
+      printf '%s' "$protected_source" | /usr/bin/env -i \
+        PATH=/usr/bin:/bin LC_ALL=C \
+        SMR_PROTECTED_ARGV="$serialized_argv" \
+        SMR_PROTECTED_ENV="$protected_child_environment" \
+        SMR_PROTECTED_EXPECTED_PATH="$native_bootstrap" \
+        SMR_PROTECTED_EXPECTED_CDHASH="$native_bootstrap_expected_cdhash" \
+        SMR_PROTECTED_EXPECTED_FLAGS=22012b01 \
+        SMR_PROTECTED_SPAWNED_FIFO="$SUMMARY_MOVE_RELEARN_PROTECTED_SPAWNED_FIFO" \
+        SMR_PROTECTED_CONTINUE_FIFO="$SUMMARY_MOVE_RELEARN_PROTECTED_CONTINUE_FIFO" \
+        /usr/bin/swift -
+    else
+      printf '%s' "$protected_source" | /usr/bin/env -i \
+        PATH=/usr/bin:/bin LC_ALL=C \
+        SMR_PROTECTED_ARGV="$serialized_argv" \
+        SMR_PROTECTED_ENV="$protected_child_environment" \
+        SMR_PROTECTED_EXPECTED_PATH="$native_bootstrap" \
+        SMR_PROTECTED_EXPECTED_CDHASH="$native_bootstrap_expected_cdhash" \
+        SMR_PROTECTED_EXPECTED_FLAGS=22012b01 \
+        /usr/bin/swift -
+    fi
+  }
   authenticate_native_bootstrap || exit $?
-  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
+  if [ -n "${SUMMARY_MOVE_RELEARN_BIND_AUTHENTICATED_FIFO-}" ] \
+    || [ -n "${SUMMARY_MOVE_RELEARN_BIND_CONTINUE_FIFO-}" ]; then
+    [ -n "${SUMMARY_MOVE_RELEARN_BIND_AUTHENTICATED_FIFO-}" ] \
+      && [ -n "${SUMMARY_MOVE_RELEARN_BIND_CONTINUE_FIFO-}" ] || exit 1
+    [ -p "$SUMMARY_MOVE_RELEARN_BIND_AUTHENTICATED_FIFO" ] \
+      && [ -p "$SUMMARY_MOVE_RELEARN_BIND_CONTINUE_FIFO" ] || exit 1
+    printf 'AUTHENTICATED\n' >"$SUMMARY_MOVE_RELEARN_BIND_AUTHENTICATED_FIFO"
+    IFS= read -r bind_continuation \
+      <"$SUMMARY_MOVE_RELEARN_BIND_CONTINUE_FIFO"
+    [ "$bind_continuation" = "CONTINUE" ] || exit 1
+  fi
+  protected_native_bootstrap \
     "$native_bootstrap" \
     --inventory "$native_inventory" \
     --expected-inventory-sha256 "$native_inventory_sha256" \
@@ -65,7 +134,7 @@ if [ "$build_status" -eq 0 ]; then
     --bind-runtime build/pokemon_move_history_capture_build.json \
     --rom test.nds || exit $?
   authenticate_native_bootstrap || exit $?
-  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
+  protected_native_bootstrap \
     "$native_bootstrap" \
     --inventory "$native_inventory" \
     --expected-inventory-sha256 "$native_inventory_sha256" \

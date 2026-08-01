@@ -159,8 +159,9 @@ hooks call task-3 history APIs; there is no second history store.
   Every sealed regular or executable leaf also requires an `M` record for its
   immediate parent. This includes the framework `bin` directory and
   `Python.app/Contents/MacOS`, so a sibling executable, extension, or package
-  cannot appear beside an otherwise exact leaf. The final graph contains 150
-  membership directories.
+  cannot appear beside an otherwise exact leaf. The dedicated published
+  bootstrap directory is covered by the same rule. The final graph contains
+  151 membership directories.
 - Every retained descriptor is hashed before fork and watched with
   `EVFILT_VNODE` for write, extension, delete, rename, link, revoke, and
   topology changes. The bootstrap sanitizes the entire child environment and
@@ -213,9 +214,13 @@ hooks call task-3 history APIs; there is no second history store.
   independently authenticates the signed temporary candidate, atomically moves
   it into place, and repeats full-file hash, CDHash, strict CodeDirectory,
   entitlement, linkage, and no-UUID checks on the published path. It never
-  executes the published file to derive identity; an after-`mv` substitution
-  fixture calibrates a valid self-reporting ad-hoc replacement and proves final
-  publication fails. Darwin AMFI enforces
+  executes the published file to derive identity. Every production handoff is
+  made through an exact, committed Swift controller source executed by the
+  Apple-protected `/usr/bin/swift`; the controller starts the child suspended,
+  authenticates the live process against the externally sealed executable path
+  and CDHash, and only then resumes it. Publication and managed-wrapper
+  replacement fixtures prove that a different executable cannot reach user
+  code or preserve stale acceptance evidence. Darwin AMFI enforces
   the ad-hoc code-directory page hashes plus hardened/restricted/library
   validation before `main`, and the bootstrap verifies that same
   external digest from its own retained canonical descriptor. Pre-main trust is
@@ -230,10 +235,10 @@ hooks call task-3 history APIs; there is no second history store.
   intentionally unprotected copy, then proves the exact published bootstrap
   creates neither constructor marker nor dyld log while still invalidating
   stale evidence. Ad-hoc identity by itself is explicitly not claimed as an
-  identity root, and
-  macOS has no usable unprivileged `fexecve`/`execveat` equivalent. The retained
-  alias/canonical descriptors, vnode monitoring, READY/GO barrier, and repeated
-  identity/hash checks bracket that unavoidable path-based `execve` handoff.
+  identity root. The OS-protected controller, live suspended-process
+  authentication, retained alias/canonical descriptors, vnode monitoring,
+  READY/GO barrier, and repeated identity/hash checks form the process handoff
+  boundary.
 - After GO, Python still requires `isolated=1`, `ignore_environment=1`, no site,
   no bytecode, the `/dev/null` pycache sink, the normalized source/extension-only
   path hook, and the manifest-recorded native-bootstrap environment. It then

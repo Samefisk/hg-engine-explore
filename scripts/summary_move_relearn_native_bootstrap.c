@@ -1584,9 +1584,7 @@ int main(int argc, char **argv) {
         || memcmp(actual_inventory_digest, options.inventory_digest, 32) != 0
         || read_bounded_fd(inventory_fd, &inventory_data, &index) != 0
         || index != inventory_size
-        || parse_inventory(inventory_data, index, &inventory) != 0
-        || require_descriptor_capacity(inventory.count) != 0
-        || validate_parent_records(&inventory) != 0) {
+        || parse_inventory(inventory_data, index, &inventory) != 0) {
         fprintf(stderr, "native bootstrap: inventory authentication failed\n");
         goto cleanup;
     }
@@ -1597,7 +1595,9 @@ int main(int argc, char **argv) {
         || append_anchor(&inventory, options.inventory_path, inventory_size,
             options.inventory_digest) != 0
         || append_anchor(&inventory, self_path, self_anchor_size,
-            options.self_digest) != 0) {
+            options.self_digest) != 0
+        || require_descriptor_capacity(inventory.count) != 0
+        || validate_parent_records(&inventory) != 0) {
         fprintf(stderr, "native bootstrap: trust-anchor retention failed\n");
         goto cleanup;
     }

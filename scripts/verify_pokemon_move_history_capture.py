@@ -53,7 +53,7 @@ EXPECTED_MAKEFILE_SHA256 = (
     "f47a9465293925c3a5427218c869195c2448992aabb85c805581298b1f6124f8"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "e808fbf54c58220b92fbfece30cd2d698968011f807e6e01a052da85aa4b5de0"
+    "77e269149bcc2e00d8389b8d383bb657a0af607b6bb0c07a2fbcf29d3222aab8"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -2042,6 +2042,8 @@ def source_contracts() -> None:
         "scripts/generate_summary_move_relearn_native_inventory.py",
         "scripts/summary_move_relearn_native_bootstrap.c",
         "scripts/summary_move_relearn_native_inventory.txt",
+        "scripts/summary_move_relearn_protected_spawn.py",
+        "scripts/summary_move_relearn_protected_spawn.swift",
     ):
         require(
             FIXED_INPUTS.count(runtime_evidence_input) == 1,

@@ -437,11 +437,16 @@ def reload_party_in_fresh_process(
     screenshot: Path,
 ) -> bytes:
     native_prefix = globals().get("AUTHENTICATED_NATIVE_PREFIX")
+    native_runner = globals().get("AUTHENTICATED_NATIVE_RUNNER")
+    native_cdhash = globals().get("AUTHENTICATED_NATIVE_CDHASH")
     python_path = globals().get("AUTHENTICATED_PYTHON_PATH")
     child_environment = globals().get("AUTHENTICATED_CHILD_ENVIRONMENT")
     require(
         isinstance(native_prefix, tuple)
         and native_prefix
+        and callable(native_runner)
+        and isinstance(native_cdhash, str)
+        and native_cdhash
         and isinstance(python_path, str)
         and python_path
         and isinstance(child_environment, dict),
@@ -451,7 +456,7 @@ def reload_party_in_fresh_process(
     with tempfile.NamedTemporaryFile(suffix=".sav") as saved:
         saved.write(raw)
         saved.flush()
-        completed = subprocess.run(
+        completed = native_runner(
             [
                 *native_prefix,
                 "--",
@@ -474,11 +479,11 @@ def reload_party_in_fresh_process(
                 "--screenshot",
                 str(screenshot),
             ],
-            check=False,
+            expected_cdhash=native_cdhash,
+            child_environment=dict(child_environment),
             capture_output=True,
             text=True,
             timeout=60,
-            env=dict(child_environment),
         )
     require(
         completed.returncode == 0,

@@ -135,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "0f5b109aa95c2a6537e4c39d68f21f7fa3045a94bbb61bcab2e644b1acc8cb1d"
+    "e8626576a6b204808b93aca1a3bb8bc86622c158fc37adeb4d3dc36d2e591e94"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -292,6 +292,7 @@ RUNTIME_RETAINED_SOURCE_INPUTS = (
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
+    "scripts/summary_move_relearn_protected_spawn.py",
 )
 BUILD_CONTEXT_KEYS = {
     "ARMIPS",
@@ -354,6 +355,7 @@ FIXED_INPUTS = (
     "scripts/build_summary_move_relearn_native_bootstrap.sh",
     "scripts/generate_summary_move_relearn_native_inventory.py",
     "scripts/summary_move_relearn_native_bootstrap.c",
+    "scripts/summary_move_relearn_protected_spawn.swift",
     "scripts/summary_move_relearn_native_inventory.txt",
     *RUNTIME_RETAINED_SOURCE_INPUTS,
     "documentation/summary_move_relearn_task6.md",
@@ -437,7 +439,9 @@ RUNTIME_STARTUP_MODULES = (
     "io",
 )
 RUNTIME_NATIVE_SUFFIXES = (".dylib", ".dll", ".so")
-NATIVE_BOOTSTRAP_RELATIVE = "build/summary_move_relearn_native_bootstrap"
+NATIVE_BOOTSTRAP_RELATIVE = (
+    "build/summary_move_relearn_native/summary_move_relearn_native_bootstrap"
+)
 NATIVE_BOOTSTRAP_SOURCE_RELATIVE = (
     "scripts/summary_move_relearn_native_bootstrap.c"
 )
@@ -447,6 +451,10 @@ NATIVE_BOOTSTRAP_INVENTORY_RELATIVE = (
 NATIVE_BOOTSTRAP_BUILD_RELATIVE = (
     "scripts/build_summary_move_relearn_native_bootstrap.sh"
 )
+PROTECTED_SPAWN_SOURCE_RELATIVE = (
+    "scripts/summary_move_relearn_protected_spawn.swift"
+)
+PROTECTED_SPAWN_SYSTEM_CONTROLLER = Path("/usr/bin/swift")
 NATIVE_BOOTSTRAP_COMPILER = Path(
     "/Library/Developer/CommandLineTools/usr/bin/clang"
 )
@@ -927,6 +935,22 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
             REPO / NATIVE_BOOTSTRAP_BUILD_RELATIVE,
             "native bootstrap build helper",
         ),
+        "protected_spawn_source": runtime_file_record(
+            REPO / PROTECTED_SPAWN_SOURCE_RELATIVE,
+            "protected spawn source",
+        ),
+        "protected_spawn_controller": {
+            "path": str(PROTECTED_SPAWN_SYSTEM_CONTROLLER),
+            "codesign": _codesign_metadata(
+                PROTECTED_SPAWN_SYSTEM_CONTROLLER,
+                "protected spawn system controller",
+            ),
+            "dynamic_code_flags": "0x22012b01",
+            "primitive": (
+                "POSIX_SPAWN_START_SUSPENDED then live-PID csops CDHash, "
+                "code-status, and executable-path authentication before SIGCONT"
+            ),
+        },
         "compile": {
             "compiler_path": str(compiler),
             "compiler_version": compiler_version.stdout.splitlines()[0],
@@ -938,13 +962,15 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
                 "-std=c11 -O2 -Wall -Wextra -Werror -pedantic -Wl,-no_uuid "
                 "-DSMR_EXPECTED_INVENTORY_SHA256=<sealed-inventory-sha256> "
                 "scripts/summary_move_relearn_native_bootstrap.c "
-                "-o build/summary_move_relearn_native_bootstrap"
+                "-o build/summary_move_relearn_native/"
+                "summary_move_relearn_native_bootstrap"
             ),
             "codesign_command": (
                 "/usr/bin/codesign --force --sign - --timestamp=none "
                 "--options runtime,restrict,library,hard,kill "
                 "--identifier com.samefisk.hgengine.summary-relearn-bootstrap "
-                "build/summary_move_relearn_native_bootstrap"
+                "build/summary_move_relearn_native/"
+                "summary_move_relearn_native_bootstrap"
             ),
         },
         "codesign": bootstrap_codesign,
@@ -960,7 +986,13 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
             "candidate and atomically published file against both pins, with "
             "strict signature, exact-empty entitlement slots, sole-libSystem "
             "linkage, and no-UUID checks repeated after publication; executable "
-            "stdout is never an identity authority. Darwin AMFI validates the "
+            "stdout is never an identity authority. Every production launch "
+            "is instead made by the Apple-signed, sealed-system-volume Swift "
+            "controller with POSIX_SPAWN_START_SUSPENDED. The controller "
+            "validates the kernel-bound child PID's exact external CDHash, "
+            "dynamic code flags, and executable path before SIGCONT; a path "
+            "replacement is killed and reaped before dyld or user code. "
+            "Darwin AMFI validates the "
             "ad-hoc CodeDirectory/pages and the binary self-checks the external "
             "full-file digest. Pre-main trust is limited to the kernel, dyld "
             "shared cache, and Apple-protected libSystem. Hardened runtime, "

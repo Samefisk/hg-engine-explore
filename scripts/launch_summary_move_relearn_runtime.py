@@ -660,6 +660,9 @@ HEADLESS_RELATIVE = "scripts/headless-overworld-test.py"
 PARTY_RELATIVE = (
     "scripts/verify_pokemon_move_history_party_integrity.py"
 )
+PROTECTED_SPAWN_RELATIVE = (
+    "scripts/summary_move_relearn_protected_spawn.py"
+)
 RUNTIME_MODULE_RELATIVES = (
     "desmume/__init__.py",
     "desmume/i18n_util.py",
@@ -672,6 +675,7 @@ AUTHENTICATED_SOURCES = (
     MANIFEST_HELPER_RELATIVE,
     HEADLESS_RELATIVE,
     PARTY_RELATIVE,
+    PROTECTED_SPAWN_RELATIVE,
 )
 
 
@@ -924,6 +928,8 @@ def _primitive_runtime_authentication(document):
             "inventory",
             "source",
             "build_helper",
+            "protected_spawn_source",
+            "protected_spawn_controller",
             "compile",
             "codesign",
             "code_signature",
@@ -936,7 +942,11 @@ def _primitive_runtime_authentication(document):
         "native bootstrap provenance is malformed",
     )
     bootstrap_path = os.path.realpath(
-        os.path.join(EARLY_REPO, "build/summary_move_relearn_native_bootstrap")
+        os.path.join(
+            EARLY_REPO,
+            "build/summary_move_relearn_native/"
+            "summary_move_relearn_native_bootstrap",
+        )
     )
     inventory_path = os.path.realpath(
         os.path.join(
@@ -969,6 +979,15 @@ def _primitive_runtime_authentication(document):
             os.path.join(
                 EARLY_REPO,
                 "scripts/build_summary_move_relearn_native_bootstrap.sh",
+            )
+        )
+        and _validate_file_path_record(
+            bootstrap["protected_spawn_source"], "protected spawn source"
+        )
+        == os.path.realpath(
+            os.path.join(
+                EARLY_REPO,
+                "scripts/summary_move_relearn_protected_spawn.swift",
             )
         ),
         "native bootstrap sealed paths differ",
@@ -1025,6 +1044,19 @@ def _primitive_runtime_authentication(document):
         == bootstrap["external_seal"]["cdhash"]
         and isinstance(bootstrap["compile"], dict)
         and bootstrap["compile"].get("compiler_codesign", {}).get("CDHash")
+        and bootstrap["protected_spawn_controller"].get("path")
+        == "/usr/bin/swift"
+        and bootstrap["protected_spawn_controller"].get(
+            "dynamic_code_flags"
+        )
+        == "0x22012b01"
+        and bootstrap["protected_spawn_controller"].get("codesign", {}).get(
+            "Identifier"
+        )
+        == "com.apple.dt.xcode_select.tool-shim"
+        and bootstrap["protected_spawn_controller"].get("codesign", {}).get(
+            "CDHash"
+        )
         and "external publication caller supplies" in bootstrap["root_of_trust"]
         and "enforced by dyld/AMFI before main" in bootstrap["root_of_trust"],
         "native bootstrap trust boundary differs",
@@ -1747,6 +1779,11 @@ def _late_main():
         compiled[HEADLESS_RELATIVE],
         {"AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path},
     )
+    protected_spawn_module = _execute_module(
+        "summary_relearn_protected_spawn",
+        paths[PROTECTED_SPAWN_RELATIVE],
+        compiled[PROTECTED_SPAWN_RELATIVE],
+    )
     party_module = _execute_module(
         "summary_relearn_party",
         paths[PARTY_RELATIVE],
@@ -1755,6 +1792,12 @@ def _late_main():
             "AUTHENTICATED_HEADLESS": headless_module,
             "AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path,
             "AUTHENTICATED_NATIVE_PREFIX": tuple(native_prefix),
+            "AUTHENTICATED_NATIVE_RUNNER": (
+                protected_spawn_module.run_native_bootstrap
+            ),
+            "AUTHENTICATED_NATIVE_CDHASH": native_bootstrap["codesign"][
+                "CDHash"
+            ],
             "AUTHENTICATED_PYTHON_PATH": os.path.abspath(sys.executable),
             "AUTHENTICATED_CHILD_ENVIRONMENT": {
                 "PATH": "/usr/bin:/bin",
@@ -1840,6 +1883,8 @@ def _late_main():
         "BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path,
         "BOOTSTRAP_PYTHON_PATH": os.path.abspath(sys.executable),
         "BOOTSTRAP_NATIVE_PREFIX": tuple(native_prefix),
+        "BOOTSTRAP_NATIVE_RUNNER": protected_spawn_module.run_native_bootstrap,
+        "BOOTSTRAP_NATIVE_CDHASH": native_bootstrap["codesign"]["CDHash"],
         "BOOTSTRAP_CHILD_ENVIRONMENT": {
             "PATH": "/usr/bin:/bin",
             "LC_ALL": "C",

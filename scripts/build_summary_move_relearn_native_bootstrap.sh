@@ -13,12 +13,13 @@ if test "$#" -ne 2; then
 fi
 expected_self_sha256=$1
 expected_cdhash=$2
-inventory_sha256="05928c73428c2876ec954aff477e74fb94b84c006f097d67f628596f7e181cda"
+inventory_sha256="ce00dc1692ea90def6a45b45a24c7dba1fa0ed62b47555bc35207336a4f48453"
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 source_path="$repo_root/scripts/summary_move_relearn_native_bootstrap.c"
 inventory_path="$repo_root/scripts/summary_move_relearn_native_inventory.txt"
-output_path="$repo_root/build/summary_move_relearn_native_bootstrap"
-temporary_path="$output_path.tmp.$$"
+output_directory="$repo_root/build/summary_move_relearn_native"
+output_path="$output_directory/summary_move_relearn_native_bootstrap"
+temporary_path="$repo_root/build/.summary_move_relearn_native_bootstrap.tmp.$$"
 compiler="/usr/bin/xcrun"
 
 case "$inventory_sha256" in
@@ -36,7 +37,7 @@ test "${#expected_cdhash}" -eq 40
 test -f "$source_path"
 test -f "$inventory_path"
 test -x "$compiler"
-mkdir -p "$repo_root/build"
+mkdir -p "$repo_root/build" "$output_directory"
 
 cleanup() {
     if test -e "$temporary_path" || test -L "$temporary_path"; then
@@ -96,6 +97,7 @@ authenticate_binary() {
     --identifier com.samefisk.hgengine.summary-relearn-bootstrap \
     "$temporary_path"
 authenticate_binary "$temporary_path" "temporary candidate"
+candidate_size=$(/usr/bin/stat -f '%z' "$temporary_path")
 
 /bin/mv -f "$temporary_path" "$output_path"
 
@@ -115,7 +117,22 @@ if test -n "$published_fifo" || test -n "$continue_fifo"; then
 fi
 
 authenticate_binary "$output_path" "published binary"
-self_size=$(/usr/bin/stat -f '%z' "$output_path")
+
+# The receipt below describes the already-authenticated candidate object, not
+# whatever a later pathname lookup may resolve.  Hostile tests may substitute
+# after final authentication; the protected live-process launch gate remains
+# the sole authority for execution.
+authenticated_fifo=${SUMMARY_MOVE_RELEARN_NATIVE_AUTHENTICATED_FIFO-}
+report_fifo=${SUMMARY_MOVE_RELEARN_NATIVE_REPORT_FIFO-}
+if test -n "$authenticated_fifo" || test -n "$report_fifo"; then
+    test -n "$authenticated_fifo" && test -n "$report_fifo"
+    test "${authenticated_fifo#/}" != "$authenticated_fifo"
+    test "${report_fifo#/}" != "$report_fifo"
+    test -p "$authenticated_fifo" && test -p "$report_fifo"
+    printf 'AUTHENTICATED\n' >"$authenticated_fifo"
+    IFS= read -r report_continuation <"$report_fifo"
+    test "$report_continuation" = "REPORT"
+fi
 trap - EXIT HUP INT TERM
 printf '%s\t%s\t%s\t%s\n' \
-    "$self_size" "$expected_self_sha256" "$inventory_sha256" "$expected_cdhash"
+    "$candidate_size" "$expected_self_sha256" "$inventory_sha256" "$expected_cdhash"

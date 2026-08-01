@@ -41,10 +41,10 @@ OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
 MAX_CANDIDATES = 65
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
-    "8288d2522a1d9c4dc6f63f43dcdd09b81079c5b3c13f4e1517942c1e56158b9d"
+    "eb0d3804b69caea0073cade507aa8d990b4fe8f5c7a6f1197b1cd1d8ccc8ad6b"
 )
 NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
-    "98782a6d415471aced75ef90b292b4b9a447c0ab"
+    "19326c05ac8ad0bbb86ef5290e672f761bf3a8a9"
 )
 
 
@@ -237,8 +237,30 @@ def source_contracts(root: Path) -> None:
         root / "scripts/pokemon_move_history_build_manifest.py"
     ).read_text()
     build_wrapper = (root / "docker-makerom.cmd").read_text()
+    protected_spawn = (
+        root / "scripts/summary_move_relearn_protected_spawn.py"
+    ).read_text()
+    protected_spawn_swift = (
+        root / "scripts/summary_move_relearn_protected_spawn.swift"
+    ).read_text()
     headless = (root / "scripts/headless-overworld-test.py").read_text()
     pokemon_core = (root / "src/pokemon.c").read_text()
+
+    protected_tree = ast.parse(protected_spawn)
+    protected_literals = [
+        ast.literal_eval(node.value)
+        for node in protected_tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "PROTECTED_SPAWN_SOURCE"
+            for target in node.targets
+        )
+    ]
+    require(
+        protected_literals == [protected_spawn_swift],
+        "Workshop and retained-runtime protected-spawn sources differ",
+    )
 
     query = body(history, "PokemonMoveHistory_QueryRecord")
     readonly = body(history, "PokemonMoveHistory_QueryReadOnlyImpl")
@@ -556,6 +578,7 @@ def source_contracts(root: Path) -> None:
         '"scripts/pokemon_move_history_build_manifest.py"',
         '"scripts/headless-overworld-test.py"',
         '"scripts/verify_pokemon_move_history_party_integrity.py"',
+        '"scripts/summary_move_relearn_protected_spawn.py"',
     ):
         require(
             manifest_builder.count(sealed_runtime_input) == 1,
@@ -646,6 +669,18 @@ def source_contracts(root: Path) -> None:
         and "native bootstrap did not release Python execution" in launcher
         and 'runtime["native_bootstrap"]' in launcher
         and '"BOOTSTRAP_NATIVE_PREFIX": tuple(native_prefix)' in launcher
+        and '"BOOTSTRAP_NATIVE_RUNNER"' in launcher
+        and '"BOOTSTRAP_NATIVE_CDHASH"' in launcher
+        and "run_native_bootstrap" in protected_spawn
+        and "POSIX_SPAWN_START_SUSPENDED" in protected_spawn
+        and "csops(child, 5" in protected_spawn
+        and "liveCDHashText == expectedCDHash" in protected_spawn
+        and "liveFlags == expectedFlags" in protected_spawn
+        and "killAndReap(child)" in protected_spawn
+        and "kill(child, SIGCONT)" in protected_spawn
+        and "start_new_session=True" in protected_spawn
+        and "os.killpg(process.pid, signal.SIGKILL)" in protected_spawn
+        and "POSIX_SPAWN_START_SUSPENDED" in protected_spawn_swift
         and "os.execve(" not in launcher
         and "capture_runtime_environment()" in launcher
         and "runtime binding requires -I -S -B -X" in manifest_builder
@@ -707,9 +742,7 @@ def source_contracts(root: Path) -> None:
         build_wrapper.count("--bind-runtime") == 1
         and build_wrapper.count("--require-bound-runtime") == 1
         and build_wrapper.count("/usr/bin/env -i") >= 3
-        and build_wrapper.count(
-            '\n    "$native_bootstrap" \\\n    --inventory'
-        ) == 2
+        and build_wrapper.count("protected_native_bootstrap \\") == 2
         and build_wrapper.count("--expected-inventory-sha256") == 2
         and build_wrapper.count("--expected-self-sha256") == 2
         and 'runtime_python="$PWD/.venv/bin/python3"' in build_wrapper
@@ -719,6 +752,9 @@ def source_contracts(root: Path) -> None:
         and f'native_bootstrap_expected_cdhash="{NATIVE_BOOTSTRAP_EXPECTED_CDHASH}"'
         in build_wrapper
         and "authenticate_native_bootstrap" in build_wrapper
+        and "SMR_PROTECTED_EXPECTED_CDHASH" in build_wrapper
+        and "POSIX_SPAWN_START_SUSPENDED" not in build_wrapper
+        and "/usr/bin/swift -" in build_wrapper
         and 'entitlements=$(/usr/bin/codesign -d --entitlements -'
         in build_wrapper
         and bind_index < verify_bound_index < delta_index,
@@ -737,7 +773,7 @@ def source_contracts(root: Path) -> None:
     require(
         "subprocess.Popen" not in runtime
         and "multiprocessing" not in runtime
-        and runtime.count("subprocess.run(") >= 2
+        and runtime.count("BOOTSTRAP_NATIVE_RUNNER(") == 2
         and runtime.count('            "-I",') == 2
         and runtime.count('            "-S",') == 2
         and runtime.count('            "-B",') == 2
@@ -745,7 +781,9 @@ def source_contracts(root: Path) -> None:
         and runtime.count('            "pycache_prefix=/dev/null",') == 2
         and runtime.count("*BOOTSTRAP_NATIVE_PREFIX") == 2
         and "**os.environ" not in runtime
-        and runtime.count("env=dict(BOOTSTRAP_CHILD_ENVIRONMENT)") == 2,
+        and runtime.count(
+            "child_environment=dict(BOOTSTRAP_CHILD_ENVIRONMENT)"
+        ) == 2,
         "runtime child evidence is no longer blocking and serialized",
     )
     route_start = runtime.index("def open_retail_daycare_lady(")
@@ -1164,11 +1202,18 @@ def bootstrap_host_contracts(root: Path) -> None:
         "native pre-Python trust-anchor source/build contract differs",
     )
     require(
+        native_source.index("append_anchor(&inventory, options.inventory_path")
+        < native_source.rindex("validate_parent_records(&inventory)"),
+        "dynamic bootstrap anchors are not parent-validated",
+    )
+    require(
         "--print-self-record" not in native_build
         and "expected_self_sha256=$1" in native_build
         and "expected_cdhash=$2" in native_build
         and 'authenticate_binary "$temporary_path"' in native_build
         and 'authenticate_binary "$output_path"' in native_build
+        and 'candidate_size=$(/usr/bin/stat' in native_build
+        and '"$candidate_size" "$expected_self_sha256"' in native_build
         and "entitlement set is nonempty" in native_build,
         "native bootstrap publication still derives identity from execution",
     )
@@ -1180,6 +1225,11 @@ def bootstrap_host_contracts(root: Path) -> None:
         and "follow_symlinks=False" in native_generator,
         "native directory-membership inventory generator differs",
     )
+    require(
+        'add_membership_directory(records, REPO / "build/summary_move_relearn_native")'
+        in native_generator,
+        "published bootstrap parent is not an authored membership record",
+    )
     if sys.platform != "darwin":
         return
     require(
@@ -1190,9 +1240,17 @@ def bootstrap_host_contracts(root: Path) -> None:
     require(runtime_python.is_file(), "repository runtime Python is absent")
     prebuild_sha256 = (
         hashlib.sha256(
-            (root / "build/summary_move_relearn_native_bootstrap").read_bytes()
+            (
+                root
+                / "build/summary_move_relearn_native/"
+                "summary_move_relearn_native_bootstrap"
+            ).read_bytes()
         ).hexdigest()
-        if (root / "build/summary_move_relearn_native_bootstrap").is_file()
+        if (
+            root
+            / "build/summary_move_relearn_native/"
+            "summary_move_relearn_native_bootstrap"
+        ).is_file()
         else None
     )
     native_build_result = subprocess.run(
@@ -1223,7 +1281,11 @@ def bootstrap_host_contracts(root: Path) -> None:
         and native_fields[3] == NATIVE_BOOTSTRAP_EXPECTED_CDHASH,
         "native bootstrap publication record is malformed",
     )
-    native_bootstrap = root / "build/summary_move_relearn_native_bootstrap"
+    native_bootstrap = (
+        root
+        / "build/summary_move_relearn_native/"
+        "summary_move_relearn_native_bootstrap"
+    )
     native_self_sha256 = native_fields[1]
     native_inventory_sha256 = native_fields[2]
     native_cdhash = native_fields[3]
@@ -1311,6 +1373,7 @@ def bootstrap_host_contracts(root: Path) -> None:
     expected_membership_paths = {
         str(root / ".venv"),
         str(root / "scripts"),
+        str(root / "build/summary_move_relearn_native"),
         str(base),
         str(base / "lib"),
     }
@@ -1698,6 +1761,140 @@ def bootstrap_host_contracts(root: Path) -> None:
     ) as temporary:
         temp = Path(temporary)
 
+        protected_module_path = (
+            root / "scripts/summary_move_relearn_protected_spawn.py"
+        )
+        protected_module = types.ModuleType(
+            "summary_relearn_protected_spawn_fixture"
+        )
+        protected_module.__file__ = str(protected_module_path)
+        exec(
+            compile(
+                protected_module_path.read_bytes(),
+                str(protected_module_path),
+                "exec",
+                dont_inherit=True,
+                optimize=0,
+            ),
+            protected_module.__dict__,
+        )
+        delimiter_result = temp / "post-delimiter-result.json"
+        delimiter_result.write_text('{"status":"preserved"}\n')
+        protected_module._invalidate_explicit_results(
+            [
+                str(native_bootstrap),
+                "--",
+                str(launcher_path),
+                "--invalidate-result",
+                str(delimiter_result),
+            ]
+        )
+        require(
+            delimiter_result.read_text() == '{"status":"preserved"}\n',
+            "protected runner treated an entry argument as a native control",
+        )
+
+        timeout_stale = temp / "protected-timeout-stale.json"
+        timeout_stale.write_text('{"status":"stale"}\n')
+        timeout_spawned_fifo = temp / "protected-timeout-spawned.fifo"
+        timeout_continue_fifo = temp / "protected-timeout-continue.fifo"
+        os.mkfifo(timeout_spawned_fifo, 0o600)
+        os.mkfifo(timeout_continue_fifo, 0o600)
+        timeout_spawned_fd = os.open(
+            timeout_spawned_fifo, os.O_RDONLY | os.O_NONBLOCK
+        )
+        timeout_expired = False
+        try:
+            try:
+                protected_module.run_native_bootstrap(
+                    [
+                        *native_prefix,
+                        "--invalidate-result",
+                        str(timeout_stale),
+                        "--",
+                        str(runtime_python),
+                        "-I",
+                        "-S",
+                        "-B",
+                        "-X",
+                        "pycache_prefix=/dev/null",
+                        str(launcher_path),
+                        "--rom",
+                        str(root / "test.nds"),
+                    ],
+                    expected_cdhash=native_cdhash,
+                    child_environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                    capture_output=True,
+                    text=True,
+                    timeout=0.5,
+                    spawned_fifo=str(timeout_spawned_fifo),
+                    continue_fifo=str(timeout_continue_fifo),
+                )
+            except subprocess.TimeoutExpired:
+                timeout_expired = True
+            timeout_notice = os.read(timeout_spawned_fd, 128)
+        finally:
+            os.close(timeout_spawned_fd)
+        process_table = subprocess.run(
+            ["/bin/ps", "-axo", "command="],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        ).stdout
+        require(
+            timeout_expired
+            and timeout_notice == b"SPAWNED\n"
+            and str(timeout_stale) not in process_table
+            and not timeout_stale.exists(),
+            "protected runner timeout did not terminate its owned process "
+            "group and invalidate stale evidence",
+        )
+
+        actual_parent_sibling = native_bootstrap.parent / "hostile-sibling.dylib"
+        parent_stale = temp / "bootstrap-parent-stale.json"
+        require(
+            not actual_parent_sibling.exists()
+            and not actual_parent_sibling.is_symlink(),
+            "actual bootstrap parent sibling fixture already exists",
+        )
+        parent_stale.write_text('{"status":"stale"}\n')
+        actual_parent_sibling.write_bytes(b"hostile sibling")
+        try:
+            parent_result = protected_module.run_native_bootstrap(
+                [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(parent_stale),
+                    "--",
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    str(launcher_path),
+                    "--rom",
+                    str(root / "test.nds"),
+                ],
+                expected_cdhash=native_cdhash,
+                child_environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        finally:
+            actual_parent_sibling.unlink()
+        require(
+            parent_result.returncode != 0
+            and "closure differs: " + str(native_bootstrap.parent)
+            in parent_result.stderr
+            and "runtime launcher failed" not in parent_result.stderr
+            and not parent_stale.exists(),
+            "actual bootstrap parent sibling did not reject before Python",
+        )
+
         for entitlement_key, label in (
             ("com.apple.security.get-task-allow", "get-task-allow"),
             (
@@ -2040,16 +2237,23 @@ def bootstrap_host_contracts(root: Path) -> None:
                 payload.extend(name)
             return len(payload), hashlib.sha256(payload).hexdigest()
 
-        fake_inventory = supervisor_root / "inventory.txt"
+        anchor_parent = supervisor_root / "anchors"
+        anchor_parent.mkdir()
+        fake_inventory = anchor_parent / "inventory.txt"
+        fixture_bootstrap = anchor_parent / "native-bootstrap"
+        fake_inventory.write_bytes(b"")
+        fixture_bootstrap.write_bytes(b"")
         absent_path = absent_parent / "never-created"
         alias_target = os.readlink(fake_alias).encode()
         executable_bytes = fake_python.read_bytes()
         launcher_bytes = fake_launcher.read_bytes()
         executable_membership = membership_record(executable_parent)
         script_membership = membership_record(script_parent)
+        anchor_membership = membership_record(anchor_parent)
         empty_sha256 = hashlib.sha256(b"").hexdigest()
         fake_inventory.write_text(
             "summary-move-relearn-native-bootstrap-inventory-v2\n"
+            f"M\t{anchor_membership[0]}\t{anchor_membership[1]}\t{anchor_parent}\n"
             f"M\t{executable_membership[0]}\t{executable_membership[1]}\t{executable_parent}\n"
             f"E\t{len(executable_bytes)}\t{hashlib.sha256(executable_bytes).hexdigest()}\t{fake_python}\n"
             f"A\t{len(alias_target)}\t{hashlib.sha256(alias_target).hexdigest()}\t{fake_alias}\n"
@@ -2059,7 +2263,6 @@ def bootstrap_host_contracts(root: Path) -> None:
             f"N\t0\t{empty_sha256}\t{absent_path}\n"
         )
         fake_inventory_sha256 = hashlib.sha256(fake_inventory.read_bytes()).hexdigest()
-        fixture_bootstrap = supervisor_root / "native-bootstrap"
         fixture_compile = subprocess.run(
             [
                 "/usr/bin/xcrun",
@@ -2197,8 +2400,15 @@ def bootstrap_host_contracts(root: Path) -> None:
         shutil.copy2(native_inventory_path, publication_inventory)
         malicious_source = temp / "publication_substitute.c"
         malicious_binary = temp / "publication-substitute"
+        malicious_sentinel = temp / "publication-substitute.executed"
         malicious_source.write_text(
-            "#include <stdio.h>\n#include <string.h>\n"
+            "#include <fcntl.h>\n#include <stdio.h>\n#include <stdlib.h>\n"
+            "#include <string.h>\n#include <unistd.h>\n"
+            "__attribute__((constructor)) static void hostile(void) {\n"
+            "  const char *path = getenv(\"SMR_HOSTILE_SENTINEL\");\n"
+            "  if (path != NULL) { int fd = open(path, O_WRONLY | O_CREAT | "
+            "O_TRUNC, 0600); if (fd >= 0) { (void)write(fd, \"executed\", 8); "
+            "close(fd); } }\n}\n"
             "int main(int argc, char **argv) {\n"
             "  if (argc == 2 && strcmp(argv[1], \"--print-self-record\") == 0) {\n"
             f"    puts(\"72144\\t{native_self_sha256}\\t"
@@ -2254,17 +2464,23 @@ def bootstrap_host_contracts(root: Path) -> None:
             capture_output=True,
             text=True,
             timeout=30,
-            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            env={
+                "PATH": "/usr/bin:/bin",
+                "LC_ALL": "C",
+                "SMR_HOSTILE_SENTINEL": str(malicious_sentinel),
+            },
         )
         require(
             malicious_compile.returncode == 0
             and malicious_sign.returncode == 0
             and malicious_direct.returncode == 0
             and len(malicious_direct.stdout.strip().split("\t")) == 4
+            and malicious_sentinel.read_bytes() == b"executed"
             and hashlib.sha256(malicious_binary.read_bytes()).hexdigest()
             != native_self_sha256,
             "publication substitution fixture did not calibrate",
         )
+        malicious_sentinel.unlink()
         published_fifo = temp / "publication-published.fifo"
         continue_fifo = temp / "publication-continue.fifo"
         os.mkfifo(published_fifo, 0o600)
@@ -2305,7 +2521,11 @@ def bootstrap_host_contracts(root: Path) -> None:
                 and publication_process.poll() is None,
                 "publication substitution fixture did not reach the barrier",
             )
-            substituted = publication_build / "summary_move_relearn_native_bootstrap"
+            substituted = (
+                publication_build
+                / "summary_move_relearn_native/"
+                "summary_move_relearn_native_bootstrap"
+            )
             replacement = publication_build / "publication-substitute.tmp"
             shutil.copy2(malicious_binary, replacement)
             os.replace(replacement, substituted)
@@ -2328,6 +2548,113 @@ def bootstrap_host_contracts(root: Path) -> None:
             if publication_process.poll() is None:
                 publication_process.kill()
                 publication_process.communicate(timeout=5)
+
+        authenticated_fifo = temp / "publication-authenticated.fifo"
+        report_fifo = temp / "publication-report.fifo"
+        os.mkfifo(authenticated_fifo, 0o600)
+        os.mkfifo(report_fifo, 0o600)
+        authenticated_fd = os.open(
+            authenticated_fifo, os.O_RDONLY | os.O_NONBLOCK
+        )
+        authenticated_environment = {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "LANG": "C",
+            "SUMMARY_MOVE_RELEARN_NATIVE_AUTHENTICATED_FIFO": str(
+                authenticated_fifo
+            ),
+            "SUMMARY_MOVE_RELEARN_NATIVE_REPORT_FIFO": str(report_fifo),
+        }
+        authenticated_process = subprocess.Popen(
+            [
+                str(publication_helper),
+                native_self_sha256,
+                signature_provenance["code_directory"]["sha256"][:40],
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=authenticated_environment,
+        )
+        try:
+            deadline = time.monotonic() + 90
+            authenticated_message = b""
+            while time.monotonic() < deadline and not authenticated_message:
+                try:
+                    authenticated_message = os.read(authenticated_fd, 128)
+                except BlockingIOError:
+                    pass
+                if authenticated_process.poll() is not None:
+                    break
+                if not authenticated_message:
+                    time.sleep(0.01)
+            require(
+                authenticated_message == b"AUTHENTICATED\n"
+                and authenticated_process.poll() is None,
+                "post-authentication publication barrier was not reached",
+            )
+            substituted = (
+                publication_build
+                / "summary_move_relearn_native/"
+                "summary_move_relearn_native_bootstrap"
+            )
+            replacement = publication_build / "post-auth-substitute.tmp"
+            shutil.copy2(malicious_binary, replacement)
+            os.replace(replacement, substituted)
+            report_fd = os.open(report_fifo, os.O_WRONLY)
+            try:
+                os.write(report_fd, b"REPORT\n")
+            finally:
+                os.close(report_fd)
+            receipt_stdout, receipt_stderr = authenticated_process.communicate(
+                timeout=30
+            )
+            require(
+                authenticated_process.returncode == 0
+                and receipt_stdout.strip().split()[1:]
+                == [native_self_sha256, native_inventory_sha256, native_cdhash]
+                and "differs" not in receipt_stderr,
+                "publication receipt was not object-bound",
+            )
+
+            protected_stale = temp / "protected-substitution-stale.json"
+            protected_stale.write_text('{"status":"stale"}\n')
+            protected_result = protected_module.run_native_bootstrap(
+                [
+                    str(substituted),
+                    "--invalidate-result",
+                    str(protected_stale),
+                    "--print-self-record",
+                ],
+                expected_cdhash=native_cdhash,
+                child_environment={
+                    "PATH": "/usr/bin:/bin",
+                    "LC_ALL": "C",
+                    "SMR_HOSTILE_SENTINEL": str(malicious_sentinel),
+                },
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            require(
+                protected_result.returncode == 126
+                and protected_result.stdout == ""
+                and "live process identity differs" in protected_result.stderr
+                and not malicious_sentinel.exists()
+                and not protected_stale.exists(),
+                "protected post-publication launch executed substituted code "
+                "or retained stale evidence: "
+                f"rc={protected_result.returncode} "
+                f"stdout={protected_result.stdout[-300:]!r} "
+                f"stderr={protected_result.stderr[-500:]!r} "
+                f"sentinel={malicious_sentinel.exists()} "
+                f"stale={protected_stale.exists()}",
+            )
+        finally:
+            os.close(authenticated_fd)
+            if authenticated_process.poll() is None:
+                authenticated_process.kill()
+                authenticated_process.communicate(timeout=5)
 
         unsealed_stale = temp / "unsealed-startup-result.json"
         unsealed_stale.write_text('{"status": "stale"}\n')

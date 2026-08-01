@@ -27,6 +27,8 @@ RUNTIME_SOURCES = (
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
+    "scripts/summary_move_relearn_protected_spawn.py",
+    "scripts/summary_move_relearn_protected_spawn.swift",
 )
 BASE = Path("/Library/Frameworks/Python.framework/Versions/3.10")
 STDLIB = BASE / "lib/python3.10"
@@ -254,6 +256,7 @@ def build_inventory() -> str:
     add_regular(records, REPO / ".venv/pyvenv.cfg")
     add_membership_directory(records, REPO / ".venv")
     add_membership_directory(records, REPO / "scripts")
+    add_membership_directory(records, REPO / "build/summary_move_relearn_native")
     add_membership_directory(records, BASE)
     add_membership_directory(records, BASE / "lib")
     for relative in RUNTIME_SOURCES:

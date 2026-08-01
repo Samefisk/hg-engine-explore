@@ -135,6 +135,8 @@ if not all(
         "BOOTSTRAP_LIBDESMUME_PATH",
         "BOOTSTRAP_PYTHON_PATH",
         "BOOTSTRAP_NATIVE_PREFIX",
+        "BOOTSTRAP_NATIVE_RUNNER",
+        "BOOTSTRAP_NATIVE_CDHASH",
         "BOOTSTRAP_CHILD_ENVIRONMENT",
     )
 ):
@@ -2410,7 +2412,7 @@ def fresh_reload_evidence(
     raw_path: Path,
     screenshot_path: Path,
 ) -> tuple[bytes, bytes, bytes]:
-    completed = subprocess.run(
+    completed = BOOTSTRAP_NATIVE_RUNNER(
         [
             *BOOTSTRAP_NATIVE_PREFIX,
             "--",
@@ -2429,11 +2431,11 @@ def fresh_reload_evidence(
             str(screenshot_path),
             *SUBPROCESS_AUTHENTICATION_ARGS,
         ],
-        check=False,
+        expected_cdhash=BOOTSTRAP_NATIVE_CDHASH,
+        child_environment=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
         capture_output=True,
         text=True,
         timeout=240,
-        env=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
     )
     require(
         completed.returncode == 0,
@@ -5579,7 +5581,7 @@ def isolated_scenario_evidence(
 ) -> dict[str, object]:
     raw_before = raw_path.read_bytes()
     raw_sha256 = hashlib.sha256(raw_before).hexdigest()
-    completed = subprocess.run(
+    completed = BOOTSTRAP_NATIVE_RUNNER(
         [
             *BOOTSTRAP_NATIVE_PREFIX,
             "--",
@@ -5602,10 +5604,10 @@ def isolated_scenario_evidence(
             str(screenshot_path),
             *SUBPROCESS_AUTHENTICATION_ARGS,
         ],
-        check=False,
+        expected_cdhash=BOOTSTRAP_NATIVE_CDHASH,
+        child_environment=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
         capture_output=True,
         text=True,
-        env=dict(BOOTSTRAP_CHILD_ENVIRONMENT),
         timeout=240,
     )
     require(
