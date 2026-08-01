@@ -13,7 +13,7 @@ if test "$#" -ne 2; then
 fi
 expected_self_sha256=$1
 expected_cdhash=$2
-inventory_sha256="ce00dc1692ea90def6a45b45a24c7dba1fa0ed62b47555bc35207336a4f48453"
+inventory_sha256="59b770df696ddaf6858fbae02185093dfa301b9a6e8d09d0115c66c93fb09f38"
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 source_path="$repo_root/scripts/summary_move_relearn_native_bootstrap.c"
 inventory_path="$repo_root/scripts/summary_move_relearn_native_inventory.txt"

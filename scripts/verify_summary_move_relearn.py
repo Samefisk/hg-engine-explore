@@ -41,10 +41,10 @@ OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
 MAX_CANDIDATES = 65
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
-    "eb0d3804b69caea0073cade507aa8d990b4fe8f5c7a6f1197b1cd1d8ccc8ad6b"
+    "306261c018307d16848b8c9ed4ad123791cc52bc8d1482bc39a71c2abcbe3289"
 )
 NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
-    "19326c05ac8ad0bbb86ef5290e672f761bf3a8a9"
+    "157089f002c7dc85c676d0e2f14a4c69af04e63d"
 )
 
 
@@ -676,10 +676,19 @@ def source_contracts(root: Path) -> None:
         and "csops(child, 5" in protected_spawn
         and "liveCDHashText == expectedCDHash" in protected_spawn
         and "liveFlags == expectedFlags" in protected_spawn
-        and "killAndReap(child)" in protected_spawn
+        and "killAndReap(&childState)" in protected_spawn
         and "kill(child, SIGCONT)" in protected_spawn
+        and "struct ChildState" in protected_spawn
+        and "guard child.owned && !child.terminal" in protected_spawn
+        and "errno == ECHILD" in protected_spawn
+        and "clock_gettime(CLOCK_MONOTONIC" in protected_spawn
+        and "waitpid(child.pid, &status, WNOHANG)" in protected_spawn
+        and "while childState.owned" in protected_spawn
         and "start_new_session=True" in protected_spawn
         and "os.killpg(process.pid, signal.SIGKILL)" in protected_spawn
+        and "process.wait(timeout=CONTROLLER_CLEANUP_TIMEOUT_SECONDS)"
+        in protected_spawn
+        and "if process.returncode != 0:" in protected_spawn
         and "POSIX_SPAWN_START_SUSPENDED" in protected_spawn_swift
         and "os.execve(" not in launcher
         and "capture_runtime_environment()" in launcher
@@ -1792,6 +1801,137 @@ def bootstrap_host_contracts(root: Path) -> None:
         require(
             delimiter_result.read_text() == '{"status":"preserved"}\n',
             "protected runner treated an entry argument as a native control",
+        )
+
+        original_subprocess = protected_module.subprocess
+        original_killpg = protected_module.os.killpg
+
+        class NonzeroController:
+            pid = 991001
+            returncode = 126
+
+            def communicate(self, *, input, timeout):
+                nonzero_stale.write_text('{"status":"recreated"}\n')
+                return "", "rejected"
+
+        nonzero_stale = temp / "protected-nonzero-stale.json"
+        nonzero_stale.write_text('{"status":"stale"}\n')
+        protected_module.subprocess = types.SimpleNamespace(
+            PIPE=original_subprocess.PIPE,
+            CompletedProcess=original_subprocess.CompletedProcess,
+            Popen=lambda *arguments, **keywords: NonzeroController(),
+        )
+        try:
+            nonzero_result = protected_module.run_native_bootstrap(
+                [
+                    str(native_bootstrap),
+                    "--invalidate-result",
+                    str(nonzero_stale),
+                    "--print-self-record",
+                ],
+                expected_cdhash=native_cdhash,
+                child_environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+        finally:
+            protected_module.subprocess = original_subprocess
+        require(
+            nonzero_result.returncode == 126 and not nonzero_stale.exists(),
+            "nonzero protected controller retained recreated stale evidence",
+        )
+
+        class FailedClearController:
+            pid = 991002
+            returncode = 126
+
+            def communicate(self, *, input, timeout):
+                failed_clear_target.mkdir()
+                return "", "rejected"
+
+        failed_clear_target = temp / "protected-failed-clear"
+        protected_module.subprocess = types.SimpleNamespace(
+            PIPE=original_subprocess.PIPE,
+            CompletedProcess=original_subprocess.CompletedProcess,
+            Popen=lambda *arguments, **keywords: FailedClearController(),
+        )
+        failed_clear_propagated = False
+        try:
+            protected_module.run_native_bootstrap(
+                [
+                    str(native_bootstrap),
+                    "--invalidate-result",
+                    str(failed_clear_target),
+                    "--print-self-record",
+                ],
+                expected_cdhash=native_cdhash,
+                child_environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+        except IsADirectoryError:
+            failed_clear_propagated = True
+        finally:
+            protected_module.subprocess = original_subprocess
+        require(
+            failed_clear_propagated,
+            "nonzero protected controller suppressed result-clear failure",
+        )
+
+        class UnreapedController:
+            pid = 991003
+            returncode = None
+            wait_timeout = None
+
+            def communicate(self, *, input, timeout):
+                bounded_stale.write_text('{"status":"recreated"}\n')
+                raise original_subprocess.TimeoutExpired("swift", timeout)
+
+            def wait(self, *, timeout):
+                self.wait_timeout = timeout
+                raise original_subprocess.TimeoutExpired("swift", timeout)
+
+        bounded_stale = temp / "protected-bounded-cleanup-stale.json"
+        bounded_stale.write_text('{"status":"stale"}\n')
+        unreaped = UnreapedController()
+        killed_groups: list[tuple[int, int]] = []
+        protected_module.subprocess = types.SimpleNamespace(
+            PIPE=original_subprocess.PIPE,
+            CompletedProcess=original_subprocess.CompletedProcess,
+            Popen=lambda *arguments, **keywords: unreaped,
+        )
+        protected_module.os.killpg = (
+            lambda pid, operation: killed_groups.append((pid, operation))
+        )
+        bounded_failure = False
+        try:
+            protected_module.run_native_bootstrap(
+                [
+                    str(native_bootstrap),
+                    "--invalidate-result",
+                    str(bounded_stale),
+                    "--print-self-record",
+                ],
+                expected_cdhash=native_cdhash,
+                child_environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                capture_output=True,
+                text=True,
+                timeout=0.01,
+            )
+        except RuntimeError as error:
+            bounded_failure = "cleanup did not complete" in str(error)
+        finally:
+            protected_module.subprocess = original_subprocess
+            protected_module.os.killpg = original_killpg
+        require(
+            bounded_failure
+            and unreaped.wait_timeout
+            == protected_module.CONTROLLER_CLEANUP_TIMEOUT_SECONDS
+            and killed_groups == [(unreaped.pid, signal.SIGKILL)]
+            and not bounded_stale.exists(),
+            "protected controller cleanup wait was unbounded or fail-open",
         )
 
         timeout_stale = temp / "protected-timeout-stale.json"

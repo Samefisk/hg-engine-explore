@@ -62,10 +62,55 @@ func stopped(_ status: Int32) -> Bool {
     return (status & 0xff) == 0x7f
 }
 
-func killAndReap(_ pid: pid_t) {
-    _ = kill(pid, SIGKILL)
+struct ChildState {
+    let pid: pid_t
+    var owned = true
+    var terminal = false
+    var status: Int32? = nil
+}
+
+func markTerminal(_ child: inout ChildState, _ status: Int32) {
+    child.owned = false
+    child.terminal = true
+    child.status = status
+}
+
+func markNoChild(_ child: inout ChildState) {
+    child.owned = false
+    child.terminal = true
+}
+
+func monotonicNanoseconds() -> UInt64? {
+    var value = timespec()
+    guard clock_gettime(CLOCK_MONOTONIC, &value) == 0 else { return nil }
+    return UInt64(value.tv_sec) * 1_000_000_000 + UInt64(value.tv_nsec)
+}
+
+func killAndReap(_ child: inout ChildState) -> Bool {
+    guard child.owned && !child.terminal else { return true }
+    if kill(child.pid, SIGKILL) < 0 && errno != ESRCH { return false }
+    guard let started = monotonicNanoseconds() else { return false }
+    let deadline = started + 5_000_000_000
     var status: Int32 = 0
-    while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+    while true {
+        let waited = waitpid(child.pid, &status, WNOHANG)
+        if waited == child.pid {
+            markTerminal(&child, status)
+            return true
+        }
+        if waited < 0 {
+            if errno == EINTR { continue }
+            if errno == ECHILD {
+                markNoChild(&child)
+                return true
+            }
+            return false
+        }
+        guard let now = monotonicNanoseconds(), now < deadline else {
+            return false
+        }
+        usleep(1000)
+    }
 }
 
 let arguments = decodeFields("SMR_PROTECTED_ARGV")
@@ -109,6 +154,7 @@ guard spawnResult == 0 && child > 0 else {
     fputs("protected spawn: posix_spawn failed\n", stderr)
     exit(125)
 }
+var childState = ChildState(pid: child)
 
 var stopStatus: Int32 = 0
 var observedStop = false
@@ -116,13 +162,18 @@ for _ in 0..<5000 {
     let waited = waitpid(child, &stopStatus, WNOHANG | WUNTRACED)
     if waited == child {
         observedStop = stopped(stopStatus)
+        if !observedStop { markTerminal(&childState, stopStatus) }
         break
     }
-    if waited < 0 && errno != EINTR { break }
+    if waited < 0 && errno != EINTR {
+        if errno == ECHILD { markNoChild(&childState) }
+        break
+    }
     usleep(1000)
 }
 if !observedStop || !fifoBarrier() {
-    killAndReap(child)
+    let cleaned = !childState.owned || killAndReap(&childState)
+    if !cleaned { fputs("protected spawn: child cleanup timed out\n", stderr) }
     fputs("protected spawn: child did not reach authenticated stop\n", stderr)
     exit(125)
 }
@@ -149,25 +200,36 @@ guard cdhashResult == 0,
       liveCDHashText == expectedCDHash,
       liveFlags == expectedFlags,
       livePath == expectedPath else {
-    killAndReap(child)
+    let cleaned = !childState.owned || killAndReap(&childState)
+    if !cleaned { fputs("protected spawn: child cleanup timed out\n", stderr) }
     fputs("protected spawn: live process identity differs\n", stderr)
     exit(126)
 }
 
 guard kill(child, SIGCONT) == 0 else {
-    killAndReap(child)
+    let cleaned = !childState.owned || killAndReap(&childState)
+    if !cleaned { fputs("protected spawn: child cleanup timed out\n", stderr) }
     fputs("protected spawn: child release failed\n", stderr)
     exit(125)
 }
 var exitStatus: Int32 = 0
 var waited: pid_t = -1
-repeat { waited = waitpid(child, &exitStatus, 0) }
-while waited < 0 && errno == EINTR
-guard waited == child else {
-    killAndReap(child)
+while childState.owned {
+    waited = waitpid(child, &exitStatus, 0)
+    if waited == child {
+        markTerminal(&childState, exitStatus)
+        break
+    }
+    if waited < 0 && errno == EINTR { continue }
+    if waited < 0 && errno == ECHILD { markNoChild(&childState) }
+    break
+}
+guard childState.terminal, let terminalStatus = childState.status else {
+    let cleaned = !childState.owned || killAndReap(&childState)
+    if !cleaned { fputs("protected spawn: child cleanup timed out\n", stderr) }
     exit(125)
 }
-if (exitStatus & 0x7f) == 0 {
-    exit((exitStatus >> 8) & 0xff)
+if (terminalStatus & 0x7f) == 0 {
+    exit((terminalStatus >> 8) & 0xff)
 }
-exit(128 + (exitStatus & 0x7f))
+exit(128 + (terminalStatus & 0x7f))
