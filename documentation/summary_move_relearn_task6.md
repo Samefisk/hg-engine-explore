@@ -156,6 +156,11 @@ hooks call task-3 history APIs; there is no second history store.
   loader make them non-importable. Any new package shadow, direct bytecode,
   extension, archive, link, rename, or entry-type substitution changes a
   monitored membership digest before Python can run.
+  Every sealed regular or executable leaf also requires an `M` record for its
+  immediate parent. This includes the framework `bin` directory and
+  `Python.app/Contents/MacOS`, so a sibling executable, extension, or package
+  cannot appear beside an otherwise exact leaf. The final graph contains 150
+  membership directories.
 - Every retained descriptor is hashed before fork and watched with
   `EVFILT_VNODE` for write, extension, delete, rename, link, revoke, and
   topology changes. The bootstrap sanitizes the entire child environment and
@@ -170,10 +175,17 @@ hooks call task-3 history APIs; there is no second history store.
   in 64-event batches to empty, retries interruption, and fails closed on any
   data/topology event or a bounded continuous backlog; attribute-only events
   require immediate exact record reauthentication. A sealed native self-test
-  calibrates more than one batch of attribute events followed by a write and
-  proves the write cannot remain queued across the boundary. Native stale-result
-  invalidation occurs before closure authentication, so a blocked startup
-  cannot preserve a prior passing result.
+  consumes and authenticates the first 64 non-decisive events from the same
+  production kqueue, then proves the production drain rejects the later write.
+  Native stale-result targets are collected before strict argv parsing and
+  unlinked without following the final node. Regular files, symlinks, FIFOs,
+  and sockets are removed; directories, permission failures, and every error
+  other than `ENOENT` fail closed. Malformed and overflowing argv therefore
+  cannot preserve a prior passing result. Child ownership and saved wait status
+  are centralized: stopped/pre-GO/EPIPE failures close the protocol, signal
+  only an unreaped owned PID, and reap within a five-second bound. A one-second
+  hostile READY fixture proves bounded cleanup for stopped, exited, and
+  closed-pipe children with no surviving process group.
 - The dropped-`-S` regression uses a real temporary `.pth` in the canonical
   venv `site-packages`: direct isolated Python without `-S` first proves that
   the marker runs before the script, then the native anchor proves the same
@@ -196,13 +208,24 @@ hooks call task-3 history APIs; there is no second history store.
   directory closure rejects the same membership before fork with no marker or
   stale result. Separate direct-`.pyc` and new-symlink negatives cover entry
   names/types, and the authoring generator is required to reject the symlink.
-- The root of trust is stated narrowly. The external acceptance caller pins
-  the published native-bootstrap SHA-256 before invocation; Darwin AMFI enforces
+- The root of trust is stated narrowly. The managed external caller supplies
+  reviewed native-bootstrap SHA-256 and CDHash constants. The build helper
+  independently authenticates the signed temporary candidate, atomically moves
+  it into place, and repeats full-file hash, CDHash, strict CodeDirectory,
+  entitlement, linkage, and no-UUID checks on the published path. It never
+  executes the published file to derive identity; an after-`mv` substitution
+  fixture calibrates a valid self-reporting ad-hoc replacement and proves final
+  publication fails. Darwin AMFI enforces
   the ad-hoc code-directory page hashes plus hardened/restricted/library
   validation before `main`, and the bootstrap verifies that same
   external digest from its own retained canonical descriptor. Pre-main trust is
   limited to the kernel, dyld shared cache, and Apple-protected `libSystem`.
-  Dyld-enabling entitlements are forbidden. A real constructor fixture first
+  The signature superblob is parsed structurally and must contain exactly the
+  CodeDirectory, requirements, and CMS-wrapper slots; XML and DER entitlement
+  slots are absent, `codesign` emits an empty dictionary, and the manifest
+  records the exact empty key set plus full CodeDirectory and superblob hashes.
+  Re-signed `get-task-allow` and `allow-unsigned-executable-memory` fixtures
+  retain the old hardened flag string yet are rejected. A real constructor fixture first
   calibrates `DYLD_INSERT_LIBRARIES` and `DYLD_PRINT_TO_FILE` against an
   intentionally unprotected copy, then proves the exact published bootstrap
   creates neither constructor marker nor dyld log while still invalidating

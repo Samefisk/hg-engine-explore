@@ -12,12 +12,14 @@ import json
 import marshal
 import os
 import re
+import signal
 import shutil
 import stat
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import zipfile
 from pathlib import Path
@@ -38,11 +40,132 @@ OVERLAY129_END = 0x023E0000
 OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
 MAX_CANDIDATES = 65
+NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
+    "8288d2522a1d9c4dc6f63f43dcdd09b81079c5b3c13f4e1517942c1e56158b9d"
+)
+NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
+    "98782a6d415471aced75ef90b292b4b9a447c0ab"
+)
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"Summary move relearn verification failed: {message}")
+
+
+def native_code_signature_provenance(path: Path) -> dict[str, object]:
+    data = path.read_bytes()
+    if len(data) < 32 or struct.unpack_from("<I", data, 0)[0] != 0xFEEDFACF:
+        raise ValueError("not the exact thin 64-bit Mach-O")
+    command_count = struct.unpack_from("<I", data, 16)[0]
+    command_bytes = struct.unpack_from("<I", data, 20)[0]
+    cursor = 32
+    command_end = cursor + command_bytes
+    if command_end > len(data):
+        raise ValueError("load commands are truncated")
+    signature_ranges: list[tuple[int, int]] = []
+    for _ in range(command_count):
+        if cursor + 8 > command_end:
+            raise ValueError("load command header is truncated")
+        command, size = struct.unpack_from("<II", data, cursor)
+        if size < 8 or cursor + size > command_end:
+            raise ValueError("load command is malformed")
+        if command == 0x1D:
+            if size != 16:
+                raise ValueError("code-sign command is malformed")
+            signature_ranges.append(struct.unpack_from("<II", data, cursor + 8))
+        cursor += size
+    if cursor != command_end or len(signature_ranges) != 1:
+        raise ValueError("code-sign command count differs")
+    signature_offset, signature_size = signature_ranges[0]
+    if (
+        signature_size < 12
+        or signature_offset > len(data)
+        or signature_size > len(data) - signature_offset
+    ):
+        raise ValueError("code signature is out of bounds")
+    allocation = data[signature_offset : signature_offset + signature_size]
+    magic, logical_size, slot_count = struct.unpack_from(">III", allocation, 0)
+    if (
+        magic != 0xFADE0CC0
+        or logical_size < 12 + slot_count * 8
+        or logical_size > len(allocation)
+    ):
+        raise ValueError("signature superblob is malformed")
+    logical = allocation[:logical_size]
+    padding = allocation[logical_size:]
+    if any(padding):
+        raise ValueError("signature allocation padding is nonzero")
+    slots: list[dict[str, object]] = []
+    slot_types: list[int] = []
+    occupied: list[tuple[int, int]] = []
+    code_directory: bytes | None = None
+    for index in range(slot_count):
+        slot_type, offset = struct.unpack_from(">II", logical, 12 + index * 8)
+        if offset < 12 + slot_count * 8 or offset + 8 > logical_size:
+            raise ValueError("signature slot offset is malformed")
+        blob_magic, blob_size = struct.unpack_from(">II", logical, offset)
+        if blob_size < 8 or blob_size > logical_size - offset:
+            raise ValueError("signature slot is truncated")
+        if slot_type in slot_types:
+            raise ValueError("signature slot is duplicated")
+        if any(offset < end and start < offset + blob_size for start, end in occupied):
+            raise ValueError("signature slots overlap")
+        occupied.append((offset, offset + blob_size))
+        slot_types.append(slot_type)
+        blob = logical[offset : offset + blob_size]
+        slots.append(
+            {
+                "type": slot_type,
+                "magic": f"0x{blob_magic:08x}",
+                "size": blob_size,
+                "sha256": hashlib.sha256(blob).hexdigest(),
+            }
+        )
+        if slot_type == 0:
+            if blob_magic != 0xFADE0C02:
+                raise ValueError("CodeDirectory magic differs")
+            code_directory = blob
+    entitlement_probe = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--entitlements", "-", str(path)],
+        check=False,
+        capture_output=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    if entitlement_probe.returncode != 0:
+        raise ValueError("codesign entitlement inspection failed")
+    if slot_types != [0, 2, 0x10000] or code_directory is None:
+        raise ValueError("signature entitlement/slot set is not exactly empty")
+    if entitlement_probe.stdout != b"":
+        raise ValueError("entitlement dictionary is not exactly empty")
+    return {
+        "schema": "summary-move-relearn-code-signature-v1",
+        "slots": slots,
+        "code_directory": {
+            "size": len(code_directory),
+            "sha256": hashlib.sha256(code_directory).hexdigest(),
+        },
+        "superblob": {
+            "size": logical_size,
+            "sha256": hashlib.sha256(logical).hexdigest(),
+        },
+        "allocation": {
+            "size": signature_size,
+            "padding_size": len(padding),
+            "padding_sha256": hashlib.sha256(padding).hexdigest(),
+        },
+        "entitlements": {
+            "policy": "exactly-empty",
+            "keys": [],
+            "xml_slot": False,
+            "der_slot": False,
+            "codesign_stdout": {
+                "size": 0,
+                "sha256": hashlib.sha256(b"").hexdigest(),
+            },
+        },
+    }
 
 
 def body(source: str, name: str) -> str:
@@ -584,11 +707,20 @@ def source_contracts(root: Path) -> None:
         build_wrapper.count("--bind-runtime") == 1
         and build_wrapper.count("--require-bound-runtime") == 1
         and build_wrapper.count("/usr/bin/env -i") >= 3
-        and build_wrapper.count('"$native_bootstrap"') == 2
+        and build_wrapper.count(
+            '\n    "$native_bootstrap" \\\n    --inventory'
+        ) == 2
         and build_wrapper.count("--expected-inventory-sha256") == 2
         and build_wrapper.count("--expected-self-sha256") == 2
         and 'runtime_python="$PWD/.venv/bin/python3"' in build_wrapper
         and "build_summary_move_relearn_native_bootstrap.sh" in build_wrapper
+        and f'native_bootstrap_expected_sha256="{NATIVE_BOOTSTRAP_EXPECTED_SHA256}"'
+        in build_wrapper
+        and f'native_bootstrap_expected_cdhash="{NATIVE_BOOTSTRAP_EXPECTED_CDHASH}"'
+        in build_wrapper
+        and "authenticate_native_bootstrap" in build_wrapper
+        and 'entitlements=$(/usr/bin/codesign -d --entitlements -'
+        in build_wrapper
         and bind_index < verify_bound_index < delta_index,
         "managed build does not bind and verify the host runtime before Delta "
         "publication",
@@ -1014,6 +1146,12 @@ def bootstrap_host_contracts(root: Path) -> None:
                 "--self-test-event-backlog",
                 "reauthenticate_inventory",
                 "execve(inventory->alias->path",
+                "collect_result_targets",
+                "invalidate_result_path",
+                "terminate_and_reap",
+                "WNOHANG | WUNTRACED",
+                "F_SETNOSIGPIPE",
+                "ChildState",
             )
         )
         and "-Werror -pedantic" in native_build
@@ -1024,6 +1162,15 @@ def bootstrap_host_contracts(root: Path) -> None:
         and "/usr/bin/codesign --verify --strict" in native_build
         and "/usr/lib/libSystem" in native_build,
         "native pre-Python trust-anchor source/build contract differs",
+    )
+    require(
+        "--print-self-record" not in native_build
+        and "expected_self_sha256=$1" in native_build
+        and "expected_cdhash=$2" in native_build
+        and 'authenticate_binary "$temporary_path"' in native_build
+        and 'authenticate_binary "$output_path"' in native_build
+        and "entitlement set is nonempty" in native_build,
+        "native bootstrap publication still derives identity from execution",
     )
     require(
         "summary-move-relearn-native-bootstrap-inventory-v2" in native_generator
@@ -1049,7 +1196,11 @@ def bootstrap_host_contracts(root: Path) -> None:
         else None
     )
     native_build_result = subprocess.run(
-        [str(native_build_path)],
+        [
+            str(native_build_path),
+            NATIVE_BOOTSTRAP_EXPECTED_SHA256,
+            NATIVE_BOOTSTRAP_EXPECTED_CDHASH,
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -1063,15 +1214,19 @@ def bootstrap_host_contracts(root: Path) -> None:
     )
     native_fields = native_build_result.stdout.strip().split()
     require(
-        len(native_fields) == 3
+        len(native_fields) == 4
         and native_fields[0].isdigit()
         and re.fullmatch(r"[0-9a-f]{64}", native_fields[1]) is not None
-        and re.fullmatch(r"[0-9a-f]{64}", native_fields[2]) is not None,
+        and re.fullmatch(r"[0-9a-f]{64}", native_fields[2]) is not None
+        and re.fullmatch(r"[0-9a-f]{40}", native_fields[3]) is not None
+        and native_fields[1] == NATIVE_BOOTSTRAP_EXPECTED_SHA256
+        and native_fields[3] == NATIVE_BOOTSTRAP_EXPECTED_CDHASH,
         "native bootstrap publication record is malformed",
     )
     native_bootstrap = root / "build/summary_move_relearn_native_bootstrap"
     native_self_sha256 = native_fields[1]
     native_inventory_sha256 = native_fields[2]
+    native_cdhash = native_fields[3]
     require(
         hashlib.sha256(native_bootstrap.read_bytes()).hexdigest()
         == native_self_sha256
@@ -1080,7 +1235,11 @@ def bootstrap_host_contracts(root: Path) -> None:
         "native bootstrap publication digest differs",
     )
     repeated_build = subprocess.run(
-        [str(native_build_path)],
+        [
+            str(native_build_path),
+            NATIVE_BOOTSTRAP_EXPECTED_SHA256,
+            NATIVE_BOOTSTRAP_EXPECTED_CDHASH,
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -1109,10 +1268,18 @@ def bootstrap_host_contracts(root: Path) -> None:
         "native bootstrap contains a non-reproducible Mach-O UUID",
     )
     inventory_lines = native_inventory_path.read_text().splitlines()
-    membership_paths = {
-        line.split("\t", 3)[3]
+    inventory_records = [
+        line.split("\t", 3)
         for line in inventory_lines[1:]
-        if line.startswith("M\t") and len(line.split("\t", 3)) == 4
+        if len(line.split("\t", 3)) == 4
+    ]
+    membership_paths = {
+        fields[3] for fields in inventory_records if fields[0] == "M"
+    }
+    regular_parent_paths = {
+        str(Path(fields[3]).parent)
+        for fields in inventory_records
+        if fields[0] in {"F", "E"}
     }
     def graph_directories(graph_root: Path, prune: set[str]) -> set[str]:
         pending = [graph_root.resolve()]
@@ -1156,6 +1323,7 @@ def bootstrap_host_contracts(root: Path) -> None:
     expected_membership_paths.update(
         graph_directories(site_packages / "PIL", {"__pycache__"})
     )
+    expected_membership_paths.update(regular_parent_paths)
     with tempfile.TemporaryDirectory(prefix="summary-relearn-inventory-") as generated_dir:
         generated_inventory = Path(generated_dir) / "inventory.txt"
         generated = subprocess.run(
@@ -1184,22 +1352,32 @@ def bootstrap_host_contracts(root: Path) -> None:
     require(
         inventory_lines[0]
         == "summary-move-relearn-native-bootstrap-inventory-v2"
-        and len(membership_paths) == 148
         and membership_paths == expected_membership_paths,
         "native directory-membership inventory coverage differs",
     )
-    backlog_probe = subprocess.run(
-        [str(native_bootstrap), "--self-test-event-backlog"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
-    )
     require(
-        backlog_probe.returncode == 0
-        and "vnode event" in backlog_probe.stderr,
-        "native event-backlog drain self-test failed",
+        all(str(Path(fields[3]).parent) in membership_paths
+            for fields in inventory_records if fields[0] in {"F", "E"}),
+        "native regular/executable parent membership differs",
+    )
+    for _ in range(3):
+        backlog_probe = subprocess.run(
+            [str(native_bootstrap), "--self-test-event-backlog"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            backlog_probe.returncode == 0
+            and "same-kqueue first-batch=64" in backlog_probe.stderr
+            and "vnode event" in backlog_probe.stderr,
+            "native same-kqueue event-backlog drain self-test failed",
+        )
+    require(
+        "calibration_queue" not in native_source,
+        "native backlog self-test still uses a different calibration queue",
     )
     signature_probe = subprocess.run(
         ["/usr/bin/codesign", "-d", "--verbose=4", str(native_bootstrap)],
@@ -1210,21 +1388,13 @@ def bootstrap_host_contracts(root: Path) -> None:
         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
     )
     signature_text = signature_probe.stdout + signature_probe.stderr
-    entitlement_probe = subprocess.run(
-        [
-            "/usr/bin/codesign",
-            "-d",
-            "--entitlements",
-            ":-",
-            str(native_bootstrap),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
-    )
-    entitlement_text = entitlement_probe.stdout + entitlement_probe.stderr
+    try:
+        signature_provenance = native_code_signature_provenance(native_bootstrap)
+    except ValueError as error:
+        raise SystemExit(
+            "Summary move relearn verification failed: native bootstrap "
+            f"signature provenance differs: {error}"
+        ) from error
     require(
         signature_probe.returncode == 0
         and "flags=0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
@@ -1233,10 +1403,21 @@ def bootstrap_host_contracts(root: Path) -> None:
         "native bootstrap pre-main restricted signature differs",
     )
     require(
-        entitlement_probe.returncode == 0
-        and "allow-dyld-environment-variables" not in entitlement_text
-        and "disable-library-validation" not in entitlement_text,
-        "native bootstrap entitlement policy differs",
+        signature_provenance["entitlements"]
+        == {
+            "policy": "exactly-empty",
+            "keys": [],
+            "xml_slot": False,
+            "der_slot": False,
+            "codesign_stdout": {
+                "size": 0,
+                "sha256": hashlib.sha256(b"").hexdigest(),
+            },
+        }
+        and signature_provenance["code_directory"]["sha256"][:40]
+        == native_cdhash
+        and f"CDHash={native_cdhash}" in signature_text,
+        "native bootstrap exact-empty entitlement policy differs",
     )
     native_prefix = [
         str(native_bootstrap),
@@ -1516,6 +1697,637 @@ def bootstrap_host_contracts(root: Path) -> None:
         prefix="summary-relearn-bootstrap-"
     ) as temporary:
         temp = Path(temporary)
+
+        for entitlement_key, label in (
+            ("com.apple.security.get-task-allow", "get-task-allow"),
+            (
+                "com.apple.security.cs.allow-unsigned-executable-memory",
+                "allow-unsigned-executable-memory",
+            ),
+        ):
+            entitled = temp / f"entitled-{label}-bootstrap"
+            entitlement_plist = temp / f"entitled-{label}.plist"
+            shutil.copy2(native_bootstrap, entitled)
+            entitlement_plist.write_text(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+                "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+                "<plist version=\"1.0\"><dict><key>"
+                + entitlement_key
+                + "</key><true/></dict></plist>\n"
+            )
+            entitled_sign = subprocess.run(
+                [
+                    "/usr/bin/codesign",
+                    "--force",
+                    "--sign",
+                    "-",
+                    "--timestamp=none",
+                    "--options",
+                    "runtime,restrict,library,hard,kill",
+                    "--identifier",
+                    "com.samefisk.hgengine.summary-relearn-bootstrap",
+                    "--entitlements",
+                    str(entitlement_plist),
+                    str(entitled),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            entitled_signature = subprocess.run(
+                ["/usr/bin/codesign", "-d", "--verbose=4", str(entitled)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            entitled_text = (
+                entitled_signature.stdout + entitled_signature.stderr
+            )
+            entitled_direct = subprocess.run(
+                [str(entitled), "--print-self-record"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            require(
+                entitled_sign.returncode == 0
+                and entitled_signature.returncode == 0
+                and "flags=0x12b02(adhoc,hard,kill,restrict,"
+                "library-validation,runtime)" in entitled_text
+                and "allow-dyld-environment-variables" not in entitled_text
+                and "disable-library-validation" not in entitled_text
+                and entitled_direct.returncode == 0,
+                f"{label} entitlement fixture did not calibrate",
+            )
+            try:
+                native_code_signature_provenance(entitled)
+            except ValueError as error:
+                require(
+                    "entitlement" in str(error) or "slot set" in str(error),
+                    f"{label} fixture failed for an unrelated reason",
+                )
+            else:
+                require(False, f"{label} entitlement fixture was accepted")
+
+        def malformed_invalidation(arguments: list[str], label: str) -> subprocess.CompletedProcess[str]:
+            completed = subprocess.run(
+                arguments,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            require(
+                completed.returncode != 0,
+                f"{label} invalidation fixture unexpectedly succeeded",
+            )
+            return completed
+
+        malformed_stale = temp / "malformed-argv-result.json"
+        malformed_stale.write_text('{"status":"stale"}\n')
+        malformed_invalidation(
+            [
+                *native_prefix,
+                "--invalidate-result",
+                str(malformed_stale),
+                "--unknown-bootstrap-option",
+            ],
+            "malformed argv",
+        )
+        require(
+            not os.path.lexists(malformed_stale),
+            "malformed argv retained stale result",
+        )
+        unknown_first_stale = temp / "unknown-first-result.json"
+        unknown_first_stale.write_text('{"status":"stale"}\n')
+        malformed_invalidation(
+            [
+                str(native_bootstrap),
+                "--unknown-bootstrap-option",
+                "--invalidate-result",
+                str(unknown_first_stale),
+            ],
+            "unknown-before-result",
+        )
+        require(
+            not os.path.lexists(unknown_first_stale),
+            "unknown-before-result retained stale evidence",
+        )
+        missing_inventory_stale = temp / "missing-inventory-result.json"
+        missing_inventory_stale.write_text('{"status":"stale"}\n')
+        malformed_invalidation(
+            [
+                str(native_bootstrap),
+                "--inventory",
+                "--invalidate-result",
+                str(missing_inventory_stale),
+            ],
+            "missing inventory before result",
+        )
+        require(
+            not os.path.lexists(missing_inventory_stale),
+            "missing inventory value consumed the result marker",
+        )
+
+        symlink_target = temp / "symlink-result-target.json"
+        symlink_target_bytes = b'{"protected":true}\n'
+        symlink_target.write_bytes(symlink_target_bytes)
+        symlink_result = temp / "symlink-result.json"
+        symlink_result.symlink_to(symlink_target)
+        malformed_invalidation(
+            [
+                str(native_bootstrap),
+                "--invalidate-result",
+                str(symlink_result),
+                "--unknown-bootstrap-option",
+            ],
+            "symlink result",
+        )
+        require(
+            not os.path.lexists(symlink_result)
+            and symlink_target.read_bytes() == symlink_target_bytes,
+            "symlink result invalidation followed or retained the link",
+        )
+
+        fifo_result = temp / "fifo-result.json"
+        os.mkfifo(fifo_result, 0o600)
+        malformed_invalidation(
+            [
+                str(native_bootstrap),
+                "--invalidate-result",
+                str(fifo_result),
+                "--unknown-bootstrap-option",
+            ],
+            "FIFO result",
+        )
+        require(
+            not os.path.lexists(fifo_result),
+            "FIFO result invalidation retained the node",
+        )
+
+        directory_result = temp / "directory-result.json"
+        directory_result.mkdir()
+        directory_child = directory_result / "protected"
+        directory_child.write_bytes(b"protected")
+        directory_blocked = malformed_invalidation(
+            [
+                str(native_bootstrap),
+                "--invalidate-result",
+                str(directory_result),
+                "--unknown-bootstrap-option",
+            ],
+            "directory result",
+        )
+        require(
+            "result invalidation failed" in directory_blocked.stderr
+            and directory_child.read_bytes() == b"protected",
+            "directory result invalidation did not fail closed",
+        )
+
+        locked_parent = temp / "locked-result-parent"
+        locked_parent.mkdir(mode=0o700)
+        locked_result = locked_parent / "stale.json"
+        locked_result.write_text('{"status":"stale"}\n')
+        removable_result = temp / "aggregate-removable-result.json"
+        removable_result.write_text('{"status":"stale"}\n')
+        os.chmod(locked_parent, 0o500)
+        try:
+            permission_blocked = malformed_invalidation(
+                [
+                    str(native_bootstrap),
+                    "--invalidate-result",
+                    str(locked_result),
+                    "--invalidate-result",
+                    str(removable_result),
+                    "--unknown-bootstrap-option",
+                ],
+                "permission failure",
+            )
+            require(
+                "result invalidation failed" in permission_blocked.stderr
+                and os.path.lexists(locked_result)
+                and not os.path.lexists(removable_result),
+                "result invalidation did not aggregate permission failure",
+            )
+        finally:
+            os.chmod(locked_parent, 0o700)
+
+        overflow_results = [
+            temp / f"overflow-result-{index:02d}.json" for index in range(66)
+        ]
+        overflow_arguments = [str(native_bootstrap)]
+        for stale in overflow_results:
+            stale.write_text('{"status":"stale"}\n')
+            overflow_arguments.extend(["--invalidate-result", str(stale)])
+        overflow_arguments.append("--unknown-bootstrap-option")
+        malformed_invalidation(overflow_arguments, "result overflow")
+        require(
+            all(not os.path.lexists(stale) for stale in overflow_results),
+            "stage-zero result overflow retained stale evidence",
+        )
+        empty_result = malformed_invalidation(
+            [str(native_bootstrap), "--invalidate-result="],
+            "empty result path",
+        )
+        require(
+            "result invalidation failed" in empty_result.stderr,
+            "empty result path did not fail closed before validation",
+        )
+
+        supervisor_root = (temp / "supervisor-state-machine").resolve()
+        executable_parent = supervisor_root / "runtime"
+        script_parent = supervisor_root / "scripts"
+        absent_parent = supervisor_root / "absent"
+        executable_parent.mkdir(parents=True)
+        script_parent.mkdir()
+        absent_parent.mkdir()
+        fake_python_source = supervisor_root / "fake_python.c"
+        fake_python = executable_parent / "fake-python"
+        fake_alias = executable_parent / "python3"
+        fake_launcher = script_parent / "launch_summary_move_relearn_runtime.py"
+        fake_python_source.write_text(
+            "#include <signal.h>\n#include <stdlib.h>\n#include <string.h>\n"
+            "#include <unistd.h>\n"
+            "int main(int argc, char **argv) {\n"
+            "  const char *ready = getenv(\"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD\");\n"
+            "  const char *go = getenv(\"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD\");\n"
+            "  const char message[] = \"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\\n\";\n"
+            "  int ready_fd = ready ? atoi(ready) : -1;\n"
+            "  int go_fd = go ? atoi(go) : -1;\n"
+            "  const char *mode = argc > 7 ? argv[7] : \"\";\n"
+            "  if (strcmp(mode, \"stop-before-ready\") == 0) raise(SIGSTOP);\n"
+            "  if (strcmp(mode, \"exit-before-ready\") == 0) return 42;\n"
+            "  if (ready_fd < 0 || write(ready_fd, message, sizeof(message)-1) "
+            "!= (ssize_t)(sizeof(message)-1)) return 43;\n"
+            "  close(ready_fd);\n"
+            "  if (strcmp(mode, \"ready-close-go\") == 0) { close(go_fd); sleep(30); return 0; }\n"
+            "  if (strcmp(mode, \"ready-stop\") == 0) raise(SIGSTOP);\n"
+            "  sleep(30); return 0;\n"
+            "}\n"
+        )
+        fake_compile = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "--sdk",
+                "macosx",
+                "clang",
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wl,-no_uuid",
+                str(fake_python_source),
+                "-o",
+                str(fake_python),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            fake_compile.returncode == 0,
+            "supervisor fake Python did not compile: " + fake_compile.stderr[-1000:],
+        )
+        fake_sign = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                str(fake_python),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(fake_sign.returncode == 0, "supervisor fake Python signing failed")
+        fake_alias.symlink_to(fake_python.name)
+        fake_launcher.write_text("# authenticated command-policy fixture\n")
+
+        def membership_record(directory: Path) -> tuple[int, str]:
+            members: list[tuple[bytes, bytes]] = []
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    metadata = entry.stat(follow_symlinks=False)
+                    kind = (
+                        b"F" if stat.S_ISREG(metadata.st_mode)
+                        else b"D" if stat.S_ISDIR(metadata.st_mode)
+                        else b"L" if stat.S_ISLNK(metadata.st_mode)
+                        else b"?"
+                    )
+                    require(kind != b"?", "supervisor inventory member differs")
+                    members.append((os.fsencode(entry.name), kind))
+            payload = bytearray(
+                b"summary-move-relearn-directory-membership-v1\0"
+            )
+            for name, kind in sorted(members):
+                payload.extend(kind)
+                payload.extend(len(name).to_bytes(8, "big"))
+                payload.extend(name)
+            return len(payload), hashlib.sha256(payload).hexdigest()
+
+        fake_inventory = supervisor_root / "inventory.txt"
+        absent_path = absent_parent / "never-created"
+        alias_target = os.readlink(fake_alias).encode()
+        executable_bytes = fake_python.read_bytes()
+        launcher_bytes = fake_launcher.read_bytes()
+        executable_membership = membership_record(executable_parent)
+        script_membership = membership_record(script_parent)
+        empty_sha256 = hashlib.sha256(b"").hexdigest()
+        fake_inventory.write_text(
+            "summary-move-relearn-native-bootstrap-inventory-v2\n"
+            f"M\t{executable_membership[0]}\t{executable_membership[1]}\t{executable_parent}\n"
+            f"E\t{len(executable_bytes)}\t{hashlib.sha256(executable_bytes).hexdigest()}\t{fake_python}\n"
+            f"A\t{len(alias_target)}\t{hashlib.sha256(alias_target).hexdigest()}\t{fake_alias}\n"
+            f"M\t{script_membership[0]}\t{script_membership[1]}\t{script_parent}\n"
+            f"F\t{len(launcher_bytes)}\t{hashlib.sha256(launcher_bytes).hexdigest()}\t{fake_launcher}\n"
+            f"D\t0\t{empty_sha256}\t{absent_parent}\n"
+            f"N\t0\t{empty_sha256}\t{absent_path}\n"
+        )
+        fake_inventory_sha256 = hashlib.sha256(fake_inventory.read_bytes()).hexdigest()
+        fixture_bootstrap = supervisor_root / "native-bootstrap"
+        fixture_compile = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "--sdk",
+                "macosx",
+                "clang",
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-pedantic",
+                "-Wl,-no_uuid",
+                f'-DSMR_EXPECTED_INVENTORY_SHA256="{fake_inventory_sha256}"',
+                str(native_source_path),
+                "-o",
+                str(fixture_bootstrap),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            fixture_compile.returncode == 0,
+            "supervisor fixture bootstrap did not compile: "
+            + fixture_compile.stderr[-1000:],
+        )
+        fixture_sign = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                "--options",
+                "runtime,restrict,library,hard,kill",
+                "--identifier",
+                "com.samefisk.hgengine.summary-relearn-supervisor-fixture",
+                str(fixture_bootstrap),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(fixture_sign.returncode == 0, "supervisor fixture signing failed")
+        fixture_bootstrap_sha256 = hashlib.sha256(
+            fixture_bootstrap.read_bytes()
+        ).hexdigest()
+        for mode in (
+            "stop-before-ready",
+            "ready-close-go",
+            "ready-stop",
+            "exit-before-ready",
+        ):
+            supervisor_stale = supervisor_root / f"{mode}-stale.json"
+            supervisor_stale.write_text('{"status":"stale"}\n')
+            supervisor_command = [
+                str(fixture_bootstrap),
+                "--inventory",
+                str(fake_inventory),
+                "--expected-inventory-sha256",
+                fake_inventory_sha256,
+                "--expected-self-sha256",
+                fixture_bootstrap_sha256,
+                "--invalidate-result",
+                str(supervisor_stale),
+                "--ready-timeout-seconds",
+                "1",
+                "--",
+                str(fake_alias),
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
+                str(fake_launcher),
+                mode,
+            ]
+            started = time.monotonic()
+            process = subprocess.Popen(
+                supervisor_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            try:
+                _, supervisor_stderr = process.communicate(timeout=8)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate(timeout=5)
+                require(False, f"{mode} supervisor fixture exceeded bound")
+            elapsed = time.monotonic() - started
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                group_absent = True
+            else:
+                group_absent = False
+            require(
+                process.returncode != 0
+                and process.returncode != -signal.SIGPIPE
+                and elapsed < 7
+                and group_absent
+                and not os.path.lexists(supervisor_stale)
+                and "authenticated child failed" in supervisor_stderr,
+                f"{mode} child ownership/timeout cleanup differs: "
+                f"rc={process.returncode} elapsed={elapsed:.3f} "
+                f"group_absent={group_absent} "
+                f"stale={os.path.lexists(supervisor_stale)} "
+                f"stderr={supervisor_stderr[-500:]!r}",
+            )
+
+        publication_repo = temp / "publication-race-repo"
+        publication_scripts = publication_repo / "scripts"
+        publication_build = publication_repo / "build"
+        publication_scripts.mkdir(parents=True)
+        publication_build.mkdir()
+        publication_helper = (
+            publication_scripts / "build_summary_move_relearn_native_bootstrap.sh"
+        )
+        publication_source = (
+            publication_scripts / "summary_move_relearn_native_bootstrap.c"
+        )
+        publication_inventory = (
+            publication_scripts / "summary_move_relearn_native_inventory.txt"
+        )
+        shutil.copy2(native_build_path, publication_helper)
+        shutil.copy2(native_source_path, publication_source)
+        shutil.copy2(native_inventory_path, publication_inventory)
+        malicious_source = temp / "publication_substitute.c"
+        malicious_binary = temp / "publication-substitute"
+        malicious_source.write_text(
+            "#include <stdio.h>\n#include <string.h>\n"
+            "int main(int argc, char **argv) {\n"
+            "  if (argc == 2 && strcmp(argv[1], \"--print-self-record\") == 0) {\n"
+            f"    puts(\"72144\\t{native_self_sha256}\\t"
+            f"{native_inventory_sha256}\\t"
+            f"{signature_provenance['code_directory']['sha256'][:40]}\");\n"
+            "    return 0;\n"
+            "  }\n  return 0;\n}\n"
+        )
+        malicious_compile = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "--sdk",
+                "macosx",
+                "clang",
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wl,-no_uuid",
+                str(malicious_source),
+                "-o",
+                str(malicious_binary),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        malicious_sign = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                "--options",
+                "runtime,restrict,library,hard,kill",
+                "--identifier",
+                "com.samefisk.hgengine.summary-relearn-bootstrap",
+                str(malicious_binary),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        malicious_direct = subprocess.run(
+            [str(malicious_binary), "--print-self-record"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            malicious_compile.returncode == 0
+            and malicious_sign.returncode == 0
+            and malicious_direct.returncode == 0
+            and len(malicious_direct.stdout.strip().split("\t")) == 4
+            and hashlib.sha256(malicious_binary.read_bytes()).hexdigest()
+            != native_self_sha256,
+            "publication substitution fixture did not calibrate",
+        )
+        published_fifo = temp / "publication-published.fifo"
+        continue_fifo = temp / "publication-continue.fifo"
+        os.mkfifo(published_fifo, 0o600)
+        os.mkfifo(continue_fifo, 0o600)
+        published_fd = os.open(published_fifo, os.O_RDONLY | os.O_NONBLOCK)
+        publication_environment = {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "LANG": "C",
+            "SUMMARY_MOVE_RELEARN_NATIVE_PUBLISHED_FIFO": str(published_fifo),
+            "SUMMARY_MOVE_RELEARN_NATIVE_CONTINUE_FIFO": str(continue_fifo),
+        }
+        publication_process = subprocess.Popen(
+            [
+                str(publication_helper),
+                native_self_sha256,
+                signature_provenance["code_directory"]["sha256"][:40],
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=publication_environment,
+        )
+        try:
+            deadline = time.monotonic() + 90
+            published_message = b""
+            while time.monotonic() < deadline and not published_message:
+                try:
+                    published_message = os.read(published_fd, 128)
+                except BlockingIOError:
+                    pass
+                if publication_process.poll() is not None:
+                    break
+                if not published_message:
+                    time.sleep(0.01)
+            require(
+                published_message == b"PUBLISHED\n"
+                and publication_process.poll() is None,
+                "publication substitution fixture did not reach the barrier",
+            )
+            substituted = publication_build / "summary_move_relearn_native_bootstrap"
+            replacement = publication_build / "publication-substitute.tmp"
+            shutil.copy2(malicious_binary, replacement)
+            os.replace(replacement, substituted)
+            continue_fd = os.open(continue_fifo, os.O_WRONLY)
+            try:
+                os.write(continue_fd, b"CONTINUE\n")
+            finally:
+                os.close(continue_fd)
+            publication_stdout, publication_stderr = publication_process.communicate(
+                timeout=30
+            )
+            require(
+                publication_process.returncode != 0
+                and publication_stdout == ""
+                and "published binary SHA-256 differs" in publication_stderr,
+                "published bootstrap substitution was accepted",
+            )
+        finally:
+            os.close(published_fd)
+            if publication_process.poll() is None:
+                publication_process.kill()
+                publication_process.communicate(timeout=5)
 
         unsealed_stale = temp / "unsealed-startup-result.json"
         unsealed_stale.write_text('{"status": "stale"}\n')
@@ -1948,6 +2760,64 @@ def bootstrap_host_contracts(root: Path) -> None:
             lambda: direct_pyc.write_bytes(b"hostile-direct-bytecode"),
             "direct-pyc",
         )
+        executable_parent_sibling = (
+            base / "bin/task6_uninventoried_extension.so"
+        )
+        membership_negative(
+            executable_parent_sibling,
+            lambda: executable_parent_sibling.write_bytes(
+                b"hostile executable-parent extension"
+            ),
+            "executable-parent-extension",
+        )
+        native_parent = (
+            base / "Resources/Python.app/Contents/MacOS"
+        )
+        native_parent_package = native_parent / "task6_uninventoried_package"
+        native_parent_init = native_parent_package / "__init__.py"
+        native_parent_stale = temp / "native-parent-package-result.json"
+        native_parent_sentinel = temp / "native-parent-package-executed"
+        require(
+            not native_parent_package.exists(),
+            "native-parent package fixture already exists",
+        )
+        native_parent_package.mkdir()
+        native_parent_init.write_text("raise SystemExit('untrusted package')\n")
+        native_parent_stale.write_text('{"status":"stale"}\n')
+        try:
+            native_parent_blocked = subprocess.run(
+                [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(native_parent_stale),
+                    "--",
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    str(launcher_path),
+                    "--result-json",
+                    str(native_parent_sentinel),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                native_parent_blocked.returncode != 0
+                and "closure differs" in native_parent_blocked.stderr
+                and not native_parent_stale.exists()
+                and not native_parent_sentinel.exists(),
+                "native executable-parent package membership was accepted",
+            )
+        finally:
+            native_parent_init.unlink(missing_ok=True)
+            if native_parent_package.exists():
+                native_parent_package.rmdir()
         unsupported_link = canonical_stdlib / "task6_uninventoried_link"
         membership_negative(
             unsupported_link,

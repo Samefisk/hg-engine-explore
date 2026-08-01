@@ -168,6 +168,11 @@ def add_regular(
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode) or path.resolve() != path:
         raise InventoryError(f"inventory file is not canonical: {path}")
+    # A sealed leaf is not sufficient when its writable immediate parent can
+    # acquire a sibling package, extension, or executable before the leaf is
+    # opened. Keep this invariant centralized so future bound leaves cannot be
+    # added without also sealing their lookup namespace.
+    add_membership_directory(records, path.parent)
     data = path.read_bytes()
     value = (kind, len(data), digest(data))
     prior = records.get(path)

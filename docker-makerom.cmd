@@ -17,16 +17,44 @@ if [ "$build_status" -eq 0 ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
     exit 1
   fi
-  native_record=$(./scripts/build_summary_move_relearn_native_bootstrap.sh) || exit $?
+  native_bootstrap_expected_sha256="8288d2522a1d9c4dc6f63f43dcdd09b81079c5b3c13f4e1517942c1e56158b9d"
+  native_bootstrap_expected_cdhash="98782a6d415471aced75ef90b292b4b9a447c0ab"
+  native_record=$(./scripts/build_summary_move_relearn_native_bootstrap.sh \
+    "$native_bootstrap_expected_sha256" \
+    "$native_bootstrap_expected_cdhash") || exit $?
   set -- $native_record
-  if [ "$#" -ne 3 ]; then
+  if [ "$#" -ne 4 ]; then
     echo "Malformed native bootstrap build record" >&2
     exit 1
   fi
   native_bootstrap="$PWD/build/summary_move_relearn_native_bootstrap"
   native_bootstrap_sha256="$2"
   native_inventory_sha256="$3"
+  native_bootstrap_cdhash="$4"
+  if [ "$native_bootstrap_sha256" != "$native_bootstrap_expected_sha256" ] \
+    || [ "$native_bootstrap_cdhash" != "$native_bootstrap_expected_cdhash" ]; then
+    echo "Native bootstrap differs from external publication seal" >&2
+    exit 1
+  fi
   native_inventory="$PWD/scripts/summary_move_relearn_native_inventory.txt"
+  authenticate_native_bootstrap() {
+    actual_sha256=$(/usr/bin/shasum -a 256 "$native_bootstrap" | /usr/bin/awk '{print $1}') || return 1
+    [ "$actual_sha256" = "$native_bootstrap_expected_sha256" ] || return 1
+    /usr/bin/codesign --verify --strict "$native_bootstrap" || return 1
+    signature=$(/usr/bin/codesign -d --verbose=4 "$native_bootstrap" 2>&1) || return 1
+    actual_cdhash=$(printf '%s\n' "$signature" | /usr/bin/awk -F= '/^CDHash=/{print $2}')
+    [ "$actual_cdhash" = "$native_bootstrap_expected_cdhash" ] || return 1
+    printf '%s\n' "$signature" | /usr/bin/grep -q \
+      'CodeDirectory .*flags=0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)' || return 1
+    entitlements=$(/usr/bin/codesign -d --entitlements - "$native_bootstrap" 2>/dev/null) || return 1
+    [ -z "$entitlements" ] || return 1
+    dependencies=$(/usr/bin/otool -L "$native_bootstrap") || return 1
+    [ "$(printf '%s\n' "$dependencies" | /usr/bin/awk 'NR > 1 && NF {count++} END {print count+0}')" -eq 1 ] || return 1
+    printf '%s\n' "$dependencies" | /usr/bin/grep -q \
+      '^[[:space:]]*/usr/lib/libSystem\.B\.dylib ' || return 1
+    ! /usr/bin/otool -l "$native_bootstrap" | /usr/bin/grep -q 'LC_UUID'
+  }
+  authenticate_native_bootstrap || exit $?
   /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
     "$native_bootstrap" \
     --inventory "$native_inventory" \
@@ -36,6 +64,7 @@ if [ "$build_status" -eq 0 ]; then
     "$PWD/scripts/pokemon_move_history_build_manifest.py" \
     --bind-runtime build/pokemon_move_history_capture_build.json \
     --rom test.nds || exit $?
+  authenticate_native_bootstrap || exit $?
   /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
     "$native_bootstrap" \
     --inventory "$native_inventory" \

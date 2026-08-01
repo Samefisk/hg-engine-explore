@@ -130,6 +130,19 @@ typedef struct {
     int self_digest_set;
 } Options;
 
+typedef struct {
+    const char **paths;
+    size_t count;
+} ResultTargets;
+
+typedef struct {
+    pid_t pid;
+    int status;
+    int owned;
+    int terminal;
+    int stopped;
+} ChildState;
+
 static const uint32_t sha256_rounds[64] = {
     0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U,
     0x3956c25bU, 0x59f111f1U, 0x923f82a4U, 0xab1c5ed5U,
@@ -924,7 +937,8 @@ static int validate_parent_records(Inventory *inventory) {
         char parent[PATH_MAX], *slash;
         InventoryRecord *parent_record;
         if (record->kind != 'A' && record->kind != 'L'
-            && record->kind != 'N')
+            && record->kind != 'N' && record->kind != 'F'
+            && record->kind != 'E')
             continue;
         if (strlen(record->path) >= sizeof(parent))
             return -1;
@@ -938,7 +952,12 @@ static int validate_parent_records(Inventory *inventory) {
             *slash = '\0';
         parent_record = inventory_find(inventory, parent);
         if (parent_record == NULL
-            || (parent_record->kind != 'D' && parent_record->kind != 'M'))
+            || ((record->kind == 'F' || record->kind == 'E')
+                && parent_record->kind != 'M')
+            || ((record->kind == 'A' || record->kind == 'L'
+                    || record->kind == 'N')
+                && parent_record->kind != 'D'
+                && parent_record->kind != 'M'))
             return -1;
     }
     return 0;
@@ -1011,24 +1030,22 @@ static int event_backlog_self_test(void) {
     char paths[EVENT_BACKLOG_SELF_TEST_FILES][PATH_MAX];
     int descriptors[EVENT_BACKLOG_SELF_TEST_FILES];
     InventoryRecord records[EVENT_BACKLOG_SELF_TEST_FILES];
-    int queue = -1, calibration_queue = -1;
-    struct kevent calibration[EVENT_BACKLOG_SELF_TEST_FILES * 2U];
+    int queue = -1;
+    struct kevent first_batch[64];
     struct timespec timeout = {1, 0};
     size_t index, created = 0;
-    int count, saw_attribute = 0, saw_write = 0;
-    int write_event_index = -1, result = -1, stage = 0;
+    int count, result = -1, stage = 0;
     memset(descriptors, -1, sizeof(descriptors));
     memset(records, 0, sizeof(records));
     if (mkdtemp(directory) == NULL)
         return -1;
     stage = 1;
     queue = kqueue();
-    calibration_queue = kqueue();
-    if (queue < 0 || calibration_queue < 0)
+    if (queue < 0)
         goto cleanup;
     stage = 2;
     for (index = 0; index < EVENT_BACKLOG_SELF_TEST_FILES; index++) {
-        struct kevent changes[2];
+        struct kevent change;
         struct stat metadata;
         int written = snprintf(paths[index], sizeof(paths[index]),
             "%s/event-%03zu", directory, index);
@@ -1048,12 +1065,10 @@ static int event_backlog_self_test(void) {
             goto cleanup;
         records[index].device = metadata.st_dev;
         records[index].inode = metadata.st_ino;
-        EV_SET(&changes[0], (uintptr_t)descriptors[index], EVFILT_VNODE,
+        EV_SET(&change, (uintptr_t)descriptors[index], EVFILT_VNODE,
             EV_ADD | EV_CLEAR, NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB, 0,
             &records[index]);
-        changes[1] = changes[0];
-        if (kevent(queue, &changes[0], 1, NULL, 0, NULL) != 0
-            || kevent(calibration_queue, &changes[1], 1, NULL, 0, NULL) != 0)
+        if (kevent(queue, &change, 1, NULL, 0, NULL) != 0)
             goto cleanup;
     }
     stage = 3;
@@ -1063,29 +1078,24 @@ static int event_backlog_self_test(void) {
     if (write(descriptors[EVENT_BACKLOG_SELF_TEST_FILES - 1], "x", 1) != 1)
         goto cleanup;
     stage = 4;
-    count = kevent(calibration_queue, NULL, 0, calibration,
-        (int)(sizeof(calibration) / sizeof(calibration[0])), &timeout);
-    if (count <= 64) {
-        fprintf(stderr, "native bootstrap: backlog calibration count=%d\n", count);
+    count = kevent(queue, NULL, 0, first_batch,
+        (int)(sizeof(first_batch) / sizeof(first_batch[0])), &timeout);
+    if (count != (int)(sizeof(first_batch) / sizeof(first_batch[0]))) {
+        fprintf(stderr, "native bootstrap: same-kqueue first-batch=%d\n", count);
         goto cleanup;
     }
     for (int event = 0; event < count; event++) {
-        if ((calibration[event].fflags & NOTE_ATTRIB) != 0)
-            saw_attribute = 1;
-        if ((calibration[event].fflags & (NOTE_WRITE | NOTE_EXTEND)) != 0) {
-            saw_write = 1;
-            if (calibration[event].udata
-                    == &records[EVENT_BACKLOG_SELF_TEST_FILES - 1])
-                write_event_index = event;
+        InventoryRecord *record = first_batch[event].udata;
+        if (first_batch[event].fflags != NOTE_ATTRIB || record == NULL
+            || record == &records[EVENT_BACKLOG_SELF_TEST_FILES - 1]
+            || reauthenticate_record(record) != 0) {
+            fprintf(stderr,
+                "native bootstrap: same-kqueue first batch is decisive at %d\n",
+                event);
+            goto cleanup;
         }
     }
-    if (!saw_attribute || !saw_write || write_event_index < 64) {
-        fprintf(stderr,
-            "native bootstrap: backlog calibration flags attrib=%d write=%d "
-            "write-index=%d\n",
-            saw_attribute, saw_write, write_event_index);
-        goto cleanup;
-    }
+    fprintf(stderr, "native bootstrap: same-kqueue first-batch=64\n");
     if (monitor_clean(queue) != 0) {
         fprintf(stderr, "native bootstrap: backlog drain accepted mutation\n");
         goto cleanup;
@@ -1095,8 +1105,6 @@ static int event_backlog_self_test(void) {
 cleanup:
     if (queue >= 0)
         close(queue);
-    if (calibration_queue >= 0)
-        close(calibration_queue);
     for (index = 0; index < created; index++) {
         if (descriptors[index] >= 0)
             close(descriptors[index]);
@@ -1109,8 +1117,58 @@ cleanup:
     return result;
 }
 
+static int poll_child(ChildState *child) {
+    for (;;) {
+        pid_t waited;
+        if (!child->owned)
+            return child->terminal ? 1 : -1;
+        waited = waitpid(child->pid, &child->status, WNOHANG | WUNTRACED);
+        if (waited == 0)
+            return 0;
+        if (waited == child->pid) {
+            if (WIFEXITED(child->status) || WIFSIGNALED(child->status)) {
+                child->terminal = 1;
+                child->stopped = 0;
+                child->owned = 0;
+            } else if (WIFSTOPPED(child->status)) {
+                child->stopped = 1;
+            }
+            return 1;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == ECHILD)
+            child->owned = 0;
+        return -1;
+    }
+}
+
+static int terminate_and_reap(ChildState *child) {
+    struct timespec started, now, delay = {0, 10000000};
+    if (!child->owned)
+        return child->terminal ? 0 : -1;
+    if (kill(child->pid, SIGKILL) != 0 && errno != ESRCH)
+        return -1;
+    if (clock_gettime(CLOCK_MONOTONIC, &started) != 0)
+        return -1;
+    while (child->owned) {
+        int polled = poll_child(child);
+        if (polled < 0)
+            return -1;
+        if (child->terminal)
+            return 0;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0
+            || now.tv_sec - started.tv_sec >= 5) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+        (void)nanosleep(&delay, NULL);
+    }
+    return child->terminal ? 0 : -1;
+}
+
 static int exact_read(int fd, const char *expected, unsigned timeout_seconds,
-    int queue, pid_t child) {
+    int queue, ChildState *child) {
     size_t expected_size = strlen(expected), used = 0;
     char buffer[128];
     struct timespec started, now, delay = {0, 10000000};
@@ -1128,7 +1186,7 @@ static int exact_read(int fd, const char *expected, unsigned timeout_seconds,
             return -1;
         if (!monitor_clean(queue))
             return -1;
-        if (waitpid(child, NULL, WNOHANG) == child)
+        if (poll_child(child) != 0 || child->stopped)
             return -1;
         if (clock_gettime(CLOCK_MONOTONIC, &now) != 0
             || (uint64_t)(now.tv_sec - started.tv_sec) >= timeout_seconds) {
@@ -1155,16 +1213,89 @@ static int exact_write(int fd, const char *message) {
     return 0;
 }
 
-static void invalidate_results(const Options *options) {
+static int lexical_absolute_path(const char *path) {
+    const char *component;
+    size_t path_size;
+    if (path == NULL || path[0] != '/' || path[1] == '/' || path[1] == '\0'
+        || strchr(path, '\t') != NULL || strchr(path, '\n') != NULL
+        || strchr(path, '\r') != NULL)
+        return 0;
+    path_size = strlen(path);
+    if (path[path_size - 1] == '/')
+        return 0;
+    component = path + 1;
+    while (*component != '\0') {
+        const char *slash = strchr(component, '/');
+        size_t size = slash == NULL ? strlen(component)
+            : (size_t)(slash - component);
+        if (size == 0 || (size == 1 && component[0] == '.')
+            || (size == 2 && component[0] == '.' && component[1] == '.'))
+            return 0;
+        if (slash == NULL)
+            break;
+        component = slash + 1;
+    }
+    return 1;
+}
+
+static int invalidate_result_path(const char *path) {
+    if (!lexical_absolute_path(path)) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (unlink(path) == 0 || errno == ENOENT)
+        return 0;
+    return -1;
+}
+
+static int invalidate_results(const ResultTargets *targets) {
     size_t index;
-    for (index = 0; index < options->result_count; index++) {
-        const char *path = options->result_paths[index];
-        struct stat metadata;
-        if (lstat(path, &metadata) == 0) {
-            if (S_ISREG(metadata.st_mode))
-                (void)unlink(path);
+    int result = 0;
+    for (index = 0; index < targets->count; index++) {
+        if (invalidate_result_path(targets->paths[index]) != 0) {
+            fprintf(stderr, "native bootstrap: result invalidation failed: %s\n",
+                targets->paths[index]);
+            result = -1;
         }
     }
+    return result;
+}
+
+static int collect_result_targets(int argc, char **argv,
+    ResultTargets *targets) {
+    int index, malformed = 0;
+    targets->paths = calloc((size_t)argc, sizeof(*targets->paths));
+    targets->count = 0;
+    if (targets->paths == NULL)
+        return -1;
+    for (index = 1; index < argc; index++) {
+        const char *argument = argv[index];
+        if (strcmp(argument, "--") == 0)
+            break;
+        if (strcmp(argument, "--invalidate-result") == 0) {
+            if (index + 1 >= argc || strncmp(argv[index + 1], "--", 2) == 0) {
+                malformed = 1;
+                continue;
+            }
+            targets->paths[targets->count++] = argv[++index];
+            continue;
+        }
+        if (strncmp(argument, "--invalidate-result=", 20) == 0) {
+            targets->paths[targets->count++] = argument + 20;
+            continue;
+        }
+        if (strcmp(argument, "--inventory") == 0
+            || strcmp(argument, "--expected-inventory-sha256") == 0
+            || strcmp(argument, "--expected-self-sha256") == 0
+            || strcmp(argument, "--ready-timeout-seconds") == 0) {
+            if (index + 1 < argc
+                && strncmp(argv[index + 1], "--", 2) != 0)
+                index++;
+            else
+                malformed = 1;
+        }
+    }
+    return malformed ? -1 : 0;
 }
 
 static int parse_options(int argc, char **argv, Options *options) {
@@ -1207,6 +1338,7 @@ static int parse_options(int argc, char **argv, Options *options) {
         }
         OPTION_VALUE("--invalidate-result");
         if (value != NULL) {
+            if (!lexical_absolute_path(value)) return -1;
             if (options->result_count == MAX_RESULT_PATHS) return -1;
             options->result_paths[options->result_count++] = value;
             continue;
@@ -1310,69 +1442,89 @@ static int child_exec(const Inventory *inventory, const Options *options,
 static int supervise_child(Inventory *inventory, Options *options,
     const char *self_path, char **command, int queue) {
     int ready_pipe[2] = {-1, -1}, go_pipe[2] = {-1, -1};
-    pid_t child;
-    int status = 0, failed = 0, flags;
+    ChildState child = {0};
+    int failed = 0, flags, setup_complete = 0;
     struct timespec delay = {0, 10000000};
     if (pipe(ready_pipe) != 0 || pipe(go_pipe) != 0)
-        return -1;
+        goto cleanup;
     flags = fcntl(ready_pipe[0], F_GETFL);
     if (flags < 0 || fcntl(ready_pipe[0], F_SETFL, flags | O_NONBLOCK) != 0)
-        return -1;
-    child = fork();
-    if (child < 0)
-        return -1;
-    if (child == 0) {
+        goto cleanup;
+#ifdef F_SETNOSIGPIPE
+    if (fcntl(go_pipe[1], F_SETNOSIGPIPE, 1) != 0)
+        goto cleanup;
+#else
+#error "Darwin F_SETNOSIGPIPE is required"
+#endif
+    child.pid = fork();
+    if (child.pid < 0)
+        goto cleanup;
+    if (child.pid == 0) {
         close(ready_pipe[0]);
         close(go_pipe[1]);
         if (child_exec(inventory, options, self_path, command,
                 ready_pipe[1], go_pipe[0]) != 0)
             _exit(126);
     }
+    child.owned = 1;
+    setup_complete = 1;
     close(ready_pipe[1]);
+    ready_pipe[1] = -1;
     close(go_pipe[0]);
+    go_pipe[0] = -1;
     if (exact_read(ready_pipe[0], READY_MESSAGE,
-            options->ready_timeout_seconds, queue, child) != 0
+            options->ready_timeout_seconds, queue, &child) != 0
         || !monitor_clean(queue)
         || reauthenticate_inventory(inventory) != 0
         || !monitor_clean(queue)
         || exact_write(go_pipe[1], GO_MESSAGE) != 0)
         failed = 1;
     close(ready_pipe[0]);
+    ready_pipe[0] = -1;
     close(go_pipe[1]);
-    for (;;) {
-        pid_t waited = waitpid(child, &status, WNOHANG);
-        if (waited == child)
-            break;
-        if (waited < 0) {
-            if (errno == EINTR)
-                continue;
+    go_pipe[1] = -1;
+    if (failed) {
+        if (terminate_and_reap(&child) != 0)
             failed = 1;
-            (void)kill(child, SIGKILL);
-            while (waitpid(child, &status, 0) < 0 && errno == EINTR)
-                ;
-            break;
+    } else {
+        while (!child.terminal) {
+            int polled = poll_child(&child);
+            if (polled < 0 || child.stopped || !monitor_clean(queue)) {
+                failed = 1;
+                if (terminate_and_reap(&child) != 0)
+                    failed = 1;
+                break;
+            }
+            if (!child.terminal)
+                (void)nanosleep(&delay, NULL);
         }
-        if (!monitor_clean(queue)) {
-            failed = 1;
-            (void)kill(child, SIGKILL);
-        }
-        (void)nanosleep(&delay, NULL);
     }
     if (!monitor_clean(queue) || reauthenticate_inventory(inventory) != 0
         || !monitor_clean(queue))
         failed = 1;
-    if (failed || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        if (!WIFEXITED(status))
-            kill(child, SIGKILL);
-        (void)waitpid(child, &status, 0);
+    if (failed || !child.terminal || !WIFEXITED(child.status)
+        || WEXITSTATUS(child.status) != 0) {
         errno = EAUTH;
-        return -1;
+        failed = 1;
     }
-    return 0;
+
+cleanup:
+    if (ready_pipe[0] >= 0)
+        close(ready_pipe[0]);
+    if (ready_pipe[1] >= 0)
+        close(ready_pipe[1]);
+    if (go_pipe[0] >= 0)
+        close(go_pipe[0]);
+    if (go_pipe[1] >= 0)
+        close(go_pipe[1]);
+    if (child.owned && terminate_and_reap(&child) != 0)
+        failed = 1;
+    return setup_complete && !failed ? 0 : -1;
 }
 
 int main(int argc, char **argv) {
     Options options;
+    ResultTargets result_targets = {0};
     Inventory inventory = {0};
     unsigned char *inventory_data = NULL;
     unsigned char actual_inventory_digest[32];
@@ -1387,16 +1539,33 @@ int main(int argc, char **argv) {
     int inventory_fd = -1, queue = -1;
     size_t index;
     int success = 0;
+    int targets_valid;
 
-    if (argc == 2 && strcmp(argv[1], "--self-test-event-backlog") == 0)
-        return event_backlog_self_test() == 0 ? 0 : 1;
-    if (parse_options(argc, argv, &options) != 0) {
+    targets_valid = collect_result_targets(argc, argv, &result_targets) == 0;
+    if (invalidate_results(&result_targets) != 0) {
+        free(result_targets.paths);
+        return 1;
+    }
+    if (!targets_valid) {
         fprintf(stderr, "native bootstrap: invalid arguments\n");
+        free(result_targets.paths);
         return 2;
     }
-    if (options.print_self_record)
-        return self_record(NULL, 0, 1) == 0 ? 0 : 1;
-    invalidate_results(&options);
+    if (argc == 2 && strcmp(argv[1], "--self-test-event-backlog") == 0) {
+        int self_test = event_backlog_self_test() == 0 ? 0 : 1;
+        free(result_targets.paths);
+        return self_test;
+    }
+    if (parse_options(argc, argv, &options) != 0) {
+        fprintf(stderr, "native bootstrap: invalid arguments\n");
+        free(result_targets.paths);
+        return 2;
+    }
+    if (options.print_self_record) {
+        int printed = self_record(NULL, 0, 1) == 0 ? 0 : 1;
+        free(result_targets.paths);
+        return printed;
+    }
     if (parse_digest(compiled_inventory_sha256,
             compiled_inventory_digest) != 0
         || memcmp(compiled_inventory_digest, options.inventory_digest, 32) != 0) {
@@ -1416,7 +1585,8 @@ int main(int argc, char **argv) {
         || read_bounded_fd(inventory_fd, &inventory_data, &index) != 0
         || index != inventory_size
         || parse_inventory(inventory_data, index, &inventory) != 0
-        || require_descriptor_capacity(inventory.count) != 0) {
+        || require_descriptor_capacity(inventory.count) != 0
+        || validate_parent_records(&inventory) != 0) {
         fprintf(stderr, "native bootstrap: inventory authentication failed\n");
         goto cleanup;
     }
@@ -1440,8 +1610,7 @@ int main(int argc, char **argv) {
             goto cleanup;
         }
     }
-    if (validate_exec_chain(&inventory) != 0
-        || validate_parent_records(&inventory) != 0) {
+    if (validate_exec_chain(&inventory) != 0) {
         fprintf(stderr, "native bootstrap: Python exec alias chain differs\n");
         goto cleanup;
     }
@@ -1464,8 +1633,8 @@ int main(int argc, char **argv) {
     success = 1;
 
 cleanup:
-    if (!success)
-        invalidate_results(&options);
+    if (!success && invalidate_results(&result_targets) != 0)
+        success = 0;
     if (queue >= 0)
         close(queue);
     if (inventory_fd >= 0)
@@ -1479,5 +1648,6 @@ cleanup:
     }
     free(inventory.items);
     free(inventory_data);
+    free(result_targets.paths);
     return success ? 0 : 1;
 }

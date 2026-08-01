@@ -135,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "cd3426c14f3c790f3154c8b5369e49e8e04057192adc504d8a250ba88c8ca239"
+    "0f5b109aa95c2a6537e4c39d68f21f7fa3045a94bbb61bcab2e644b1acc8cb1d"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -271,6 +271,7 @@ import re
 import shlex
 import shutil
 import stat
+import struct
 import subprocess
 import sysconfig
 import tempfile
@@ -724,6 +725,120 @@ def _codesign_metadata(path: Path, label: str) -> dict[str, str]:
     return fields
 
 
+def _code_signature_provenance(path: Path, label: str) -> dict[str, Any]:
+    data = path.read_bytes()
+    if len(data) < 32 or struct.unpack_from("<I", data, 0)[0] != 0xFEEDFACF:
+        raise ManifestError(f"{label} is not the exact thin 64-bit Mach-O")
+    command_count = struct.unpack_from("<I", data, 16)[0]
+    command_bytes = struct.unpack_from("<I", data, 20)[0]
+    cursor = 32
+    command_end = cursor + command_bytes
+    if command_end > len(data):
+        raise ManifestError(f"{label} load commands are truncated")
+    signature_ranges: list[tuple[int, int]] = []
+    for _ in range(command_count):
+        if cursor + 8 > command_end:
+            raise ManifestError(f"{label} load command header is truncated")
+        command, size = struct.unpack_from("<II", data, cursor)
+        if size < 8 or cursor + size > command_end:
+            raise ManifestError(f"{label} load command is malformed")
+        if command == 0x1D:
+            if size != 16:
+                raise ManifestError(f"{label} code-sign command is malformed")
+            signature_ranges.append(struct.unpack_from("<II", data, cursor + 8))
+        cursor += size
+    if cursor != command_end or len(signature_ranges) != 1:
+        raise ManifestError(f"{label} code-sign command count differs")
+    signature_offset, signature_size = signature_ranges[0]
+    if (
+        signature_size < 12
+        or signature_offset > len(data)
+        or signature_size > len(data) - signature_offset
+    ):
+        raise ManifestError(f"{label} code signature is out of bounds")
+    allocation = data[signature_offset : signature_offset + signature_size]
+    magic, logical_size, slot_count = struct.unpack_from(">III", allocation, 0)
+    if (
+        magic != 0xFADE0CC0
+        or logical_size < 12 + slot_count * 8
+        or logical_size > len(allocation)
+    ):
+        raise ManifestError(f"{label} signature superblob is malformed")
+    logical = allocation[:logical_size]
+    padding = allocation[logical_size:]
+    if any(padding):
+        raise ManifestError(f"{label} signature allocation padding is nonzero")
+    slots: list[dict[str, object]] = []
+    slot_types: list[int] = []
+    occupied: list[tuple[int, int]] = []
+    code_directory: bytes | None = None
+    for index in range(slot_count):
+        slot_type, offset = struct.unpack_from(">II", logical, 12 + index * 8)
+        if offset < 12 + slot_count * 8 or offset + 8 > logical_size:
+            raise ManifestError(f"{label} signature slot offset is malformed")
+        blob_magic, blob_size = struct.unpack_from(">II", logical, offset)
+        if blob_size < 8 or blob_size > logical_size - offset:
+            raise ManifestError(f"{label} signature slot is truncated")
+        if slot_type in slot_types:
+            raise ManifestError(f"{label} signature slot is duplicated")
+        for start, end in occupied:
+            if offset < end and start < offset + blob_size:
+                raise ManifestError(f"{label} signature slots overlap")
+        occupied.append((offset, offset + blob_size))
+        slot_types.append(slot_type)
+        blob = logical[offset : offset + blob_size]
+        slots.append(
+            {
+                "type": slot_type,
+                "magic": f"0x{blob_magic:08x}",
+                "size": blob_size,
+                "sha256": hashlib.sha256(blob).hexdigest(),
+            }
+        )
+        if slot_type == 0:
+            if blob_magic != 0xFADE0C02:
+                raise ManifestError(f"{label} CodeDirectory magic differs")
+            code_directory = blob
+    if slot_types != [0, 2, 0x10000] or code_directory is None:
+        raise ManifestError(f"{label} signature slot set differs")
+    entitlement_probe = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--entitlements", "-", str(path)],
+        check=False,
+        capture_output=True,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    if entitlement_probe.returncode != 0 or entitlement_probe.stdout != b"":
+        raise ManifestError(f"{label} entitlement dictionary is not empty")
+    code_directory_sha256 = hashlib.sha256(code_directory).hexdigest()
+    return {
+        "schema": "summary-move-relearn-code-signature-v1",
+        "slots": slots,
+        "code_directory": {
+            "size": len(code_directory),
+            "sha256": code_directory_sha256,
+        },
+        "superblob": {
+            "size": logical_size,
+            "sha256": hashlib.sha256(logical).hexdigest(),
+        },
+        "allocation": {
+            "size": signature_size,
+            "padding_size": len(padding),
+            "padding_sha256": hashlib.sha256(padding).hexdigest(),
+        },
+        "entitlements": {
+            "policy": "exactly-empty",
+            "keys": [],
+            "xml_slot": False,
+            "der_slot": False,
+            "codesign_stdout": {
+                "size": 0,
+                "sha256": hashlib.sha256(b"").hexdigest(),
+            },
+        },
+    }
+
+
 def _native_bootstrap_runtime_record() -> dict[str, Any]:
     if sys.platform != "darwin":
         raise ManifestError("native runtime bootstrap is Darwin-specific")
@@ -781,6 +896,9 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
     bootstrap_codesign = _codesign_metadata(
         bootstrap_path, "native bootstrap binary"
     )
+    bootstrap_signature = _code_signature_provenance(
+        bootstrap_path, "native bootstrap binary"
+    )
     expected_flags = (
         "0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
     )
@@ -791,21 +909,11 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
         raise ManifestError(
             "native bootstrap lacks the exact hardened/restricted launch policy"
         )
-    entitlements = subprocess.run(
-        ["/usr/bin/codesign", "-d", "--entitlements", ":-", str(bootstrap_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
-    )
-    entitlement_text = entitlements.stdout + entitlements.stderr
-    if (
-        entitlements.returncode != 0
-        or "allow-dyld-environment-variables" in entitlement_text
-        or "disable-library-validation" in entitlement_text
-    ):
+    if bootstrap_codesign.get("CDHash") != bootstrap_signature[
+        "code_directory"
+    ]["sha256"][:40]:
         raise ManifestError(
-            "native bootstrap entitlement policy could not be authenticated"
+            "native bootstrap CodeDirectory provenance differs"
         )
     return {
         "schema": "summary-move-relearn-native-bootstrap-v1",
@@ -840,16 +948,25 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
             ),
         },
         "codesign": bootstrap_codesign,
+        "code_signature": bootstrap_signature,
+        "external_seal": {
+            "sha256": bootstrap_record["sha256"],
+            "cdhash": bootstrap_codesign["CDHash"],
+        },
         "linked_images": dependency_lines,
         "root_of_trust": (
-            "The external acceptance caller pins the reported bootstrap "
-            "SHA-256 before launch. Darwin AMFI validates the ad-hoc code "
-            "directory/pages; the binary then self-checks that external "
-            "digest. Pre-main trust is limited to the kernel, dyld shared "
-            "cache, and Apple-protected libSystem. Hardened runtime, restrict, "
-            "library validation, hard, and kill CodeDirectory flags are "
-            "enforced by dyld/AMFI before main, with no dyld-enabling "
-            "entitlements. The bootstrap retains "
+            "The external publication caller supplies the reviewed bootstrap "
+            "SHA-256 and CDHash. The build helper authenticates the temporary "
+            "candidate and atomically published file against both pins, with "
+            "strict signature, exact-empty entitlement slots, sole-libSystem "
+            "linkage, and no-UUID checks repeated after publication; executable "
+            "stdout is never an identity authority. Darwin AMFI validates the "
+            "ad-hoc CodeDirectory/pages and the binary self-checks the external "
+            "full-file digest. Pre-main trust is limited to the kernel, dyld "
+            "shared cache, and Apple-protected libSystem. Hardened runtime, "
+            "restrict, library validation, hard, and kill CodeDirectory flags "
+            "are enforced by dyld/AMFI before main, with an exactly empty "
+            "entitlement set. The bootstrap retains "
             "and monitors the complete mutable Python/native closure until "
             "the child exits. Ad-hoc signing alone is not claimed as an "
             "identity root."

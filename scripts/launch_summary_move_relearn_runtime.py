@@ -425,6 +425,33 @@ def _stage_zero_authenticate(arguments):
         )
     ):
         raise ValueError("stage-zero native bootstrap digest pin differs")
+    external_seal = bootstrap.get("external_seal")
+    code_signature = bootstrap.get("code_signature")
+    if (
+        external_seal
+        != {
+            "sha256": bootstrap["binary"]["sha256"],
+            "cdhash": bootstrap.get("codesign", {}).get("CDHash"),
+        }
+        or not isinstance(code_signature, dict)
+        or code_signature.get("entitlements")
+        != {
+            "policy": "exactly-empty",
+            "keys": [],
+            "xml_slot": False,
+            "der_slot": False,
+            "codesign_stdout": {
+                "size": 0,
+                "sha256": (
+                    "e3b0c44298fc1c149afbf4c8996fb924"
+                    "27ae41e4649b934ca495991b7852b855"
+                ),
+            },
+        }
+        or code_signature.get("code_directory", {}).get("sha256", "")[:40]
+        != external_seal["cdhash"]
+    ):
+        raise ValueError("stage-zero native bootstrap external seal differs")
     python = runtime.get("python")
     if not isinstance(python, dict):
         raise ValueError("stage-zero Python closure is malformed")
@@ -899,6 +926,8 @@ def _primitive_runtime_authentication(document):
             "build_helper",
             "compile",
             "codesign",
+            "code_signature",
+            "external_seal",
             "linked_images",
             "root_of_trust",
         }
@@ -969,9 +998,34 @@ def _primitive_runtime_authentication(document):
         and bootstrap["codesign"].get("CodeDirectoryFlags")
         == "0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
         and bootstrap["codesign"].get("RuntimeVersion")
+        and bootstrap["external_seal"]
+        == {
+            "sha256": bootstrap["binary"]["sha256"],
+            "cdhash": bootstrap["codesign"]["CDHash"],
+        }
+        and bootstrap["code_signature"].get("schema")
+        == "summary-move-relearn-code-signature-v1"
+        and bootstrap["code_signature"].get("entitlements")
+        == {
+            "policy": "exactly-empty",
+            "keys": [],
+            "xml_slot": False,
+            "der_slot": False,
+            "codesign_stdout": {
+                "size": 0,
+                "sha256": (
+                    "e3b0c44298fc1c149afbf4c8996fb924"
+                    "27ae41e4649b934ca495991b7852b855"
+                ),
+            },
+        }
+        and bootstrap["code_signature"].get("code_directory", {}).get(
+            "sha256", ""
+        )[:40]
+        == bootstrap["external_seal"]["cdhash"]
         and isinstance(bootstrap["compile"], dict)
         and bootstrap["compile"].get("compiler_codesign", {}).get("CDHash")
-        and "external acceptance caller pins" in bootstrap["root_of_trust"]
+        and "external publication caller supplies" in bootstrap["root_of_trust"]
         and "enforced by dyld/AMFI before main" in bootstrap["root_of_trust"],
         "native bootstrap trust boundary differs",
     )
