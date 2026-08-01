@@ -54,7 +54,7 @@ extern void OverworldFollowerSelectorTaskPollEntry(FieldSystem *fieldSystem);
 __asm__(
     ".global OverworldFollowerSelectorTaskPollEntry\n"
     ".type OverworldFollowerSelectorTaskPollEntry, %function\n"
-    ".set OverworldFollowerSelectorTaskPollEntry, 0x023C8011\n");
+    ".set OverworldFollowerSelectorTaskPollEntry, 0x023BD4A1\n");
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad);
 

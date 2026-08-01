@@ -977,6 +977,7 @@ void  LONG_CALL SetBoxMonData(struct BoxPokemon *boxmon, int id, const void *buf
  *  @return PartyPokemon requested
  */
 struct PartyPokemon * LONG_CALL Party_GetMonByIndex(struct Party *party, int pos);
+int LONG_CALL Party_GetCount(struct Party *party);
 
 /**
  *  @brief grab personal field accounting for form (for vanilla forms)
@@ -1683,7 +1684,11 @@ void LONG_CALL ChangePartyPokemonToForm(struct PartyPokemon *pp, u32 form);
  *  @param oldMove move to be replaced
  *  @param newMove move that will be written
  */
-void LONG_CALL SwapPartyPokemonMove(struct PartyPokemon *pp, u32 oldMove, u32 newMove);
+void LONG_CALL SwapPartyPokemonMove(
+    struct PartyPokemon *pp,
+    u32 oldMove,
+    u32 newMove,
+    BOOL recordPermanentHistory);
 
 /**
  *  @brief combine ChangePartyPokemonToForm and SwapPartyPokemonMove

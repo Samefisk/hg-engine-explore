@@ -4,6 +4,7 @@
 #include "../include/item.h"
 #include "../include/party_menu.h"
 #include "../include/pokemon.h"
+#include "../include/pokemon_move_history.h"
 #include "../include/message.h"
 #include "../include/types.h"
 #include "../include/window.h"
@@ -230,12 +231,10 @@ int PartyMenu_ItemUseFunc_ReuseItem(struct PartyMenu *wk) {
 }
 
 void PartyMenu_LearnMoveToSlot(struct PartyMenu *partyMenu, struct PartyPokemon *mon, int moveIdx) {
-    int data = partyMenu->args->moveId;
-    SetMonData(mon, MON_DATA_MOVE1 + moveIdx, &data);
-    data = 0;
-    SetMonData(mon, MON_DATA_MOVE1PPUP + moveIdx, &data);
-    data = GetMoveMaxPP(partyMenu->args->moveId, 0);
-    SetMonData(mon, MON_DATA_MOVE1PP + moveIdx, &data);
+    PokemonMoveHistory_ReplaceMove(
+        &mon->box,
+        partyMenu->args->moveId,
+        moveIdx);
     if (partyMenu->args->itemId != ITEM_NONE) {
 #ifdef REUSABLE_TMS
     BOOL consumeItem = IS_ITEM_TR(partyMenu->args->itemId);

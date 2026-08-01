@@ -130,6 +130,29 @@ FILESYS := $(BASE)/root
 LINK = $(BUILD)/linked.o
 OUTPUT = $(BUILD)/output.bin
 
+MOVE_HISTORY_CAPTURE_MANIFEST = $(BUILD)/pokemon_move_history_capture_build.json
+MOVE_HISTORY_CAPTURE_MANIFEST_TMP = $(MOVE_HISTORY_CAPTURE_MANIFEST).tmp
+MOVE_HISTORY_CAPTURE_OBJECTS = \
+	$(BUILD)/pokemon.o \
+	$(BUILD)/pokemon_storage_system.o \
+	$(BUILD)/individual/GetMonEvolutionInternal.o \
+	$(BUILD)/field/script_commands.o \
+	$(BUILD)/party_menu.o \
+	$(BUILD)/save.o \
+	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
+	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
+	$(BUILD)/pokemon_move_history_overlay/entry.o \
+	$(BUILD)/pokemon_move_history_overlay/thumb_help.o \
+	$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o \
+	$(BUILD)/pokemon_move_history_task6_overlay/entry.o \
+	$(BUILD)/overlay.o \
+	$(BUILD)/other_hook.o \
+	$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
+	$(BUILD)/summary_move_relearn_overlay/entry.o
+.PHONY: FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
+$(MOVE_HISTORY_CAPTURE_OBJECTS): FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
+FORCE_MOVE_HISTORY_CAPTURE_OBJECTS:
+
 INCLUDE_SRCS := $(wildcard $(INCLUDE_SUBDIR)/*.h)
 
 C_SRCS := $(wildcard $(C_SUBDIR)/*.c)
@@ -292,8 +315,39 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--overlay-table $(BASE)/overarm9.bin
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
+	$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py
 	@echo "Making ROM..."
-	$(NDSTOOL) -c $(BUILDROM) -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
+	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
+		scripts/pokemon_move_history_build_manifest.py \
+		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp \
+		--context "CC=$(CC)" --context "CFLAGS=$(CFLAGS)" \
+		--context "AS=$(AS)" --context "ASFLAGS=$(ASFLAGS)" \
+		--context "LD=$(LD)" --context "LDFLAGS=$(LDFLAGS)" \
+		--context "OBJCOPY=$(OBJCOPY)" \
+		--context "ARMIPS=$(ARMIPS)" \
+		--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" \
+		--context "NDSTOOL=$(NDSTOOL)"
+	$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py \
+		--arm9 $(BASE)/arm9.bin \
+		--y9 $(BASE)/overarm9.bin \
+		--overlay129 $(BASE)/overlay/overlay_0129.bin \
+		--overlay154 $(BASE)/overlay/overlay_0154.bin \
+		--linked-overlay154 $(BUILD)/output_summary_move_relearn_overlay.bin \
+		--summary-linked $(BUILD)/summary_move_relearn_overlay_linked.o \
+		--summary-object $(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
+		--core-linked $(LINK)
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
+		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
+	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
+		scripts/pokemon_move_history_build_manifest.py \
+		--publish-pair \
+		--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) \
+		--candidate-rom $(BUILDROM).tmp \
+		--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) \
+		--final-rom $(BUILDROM)
 	@echo "Done.  See output $(BUILDROM)."
 
 
@@ -506,6 +560,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "tutor moves:"
 	cp $(TUTORLEARNSET_BIN) $(TUTORLEARNSET_TARGET)
+
+	@echo "move relearn parents:"
+	cp $(MOVE_RELEARN_PARENTS_BIN) $(MOVE_RELEARN_PARENTS_TARGET)
 
 	@echo "battle tests:"
 	cp $(BATTLETESTS_BIN) $(BATTLETESTS_TARGET)

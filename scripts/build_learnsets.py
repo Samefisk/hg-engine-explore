@@ -13,6 +13,10 @@ import json
 import os
 import argparse
 import glob
+import hashlib
+import tempfile
+import fcntl
+from pathlib import Path
 
 
 def load_species_header(file_path):
@@ -49,7 +53,10 @@ def load_machine_move_list(file_path):
     with open(file_path, encoding='utf-8') as f:
         for line in f:
             line = line.strip()
-            if 'static const u16 sMachineMoves[]' in line:
+            if re.search(
+                r'\b(?:static\s+)?const\s+u16\s+sMachineMoves\s*\[\s*\]',
+                line,
+            ):
                 in_array = True
                 continue
             if in_array:
@@ -155,6 +162,11 @@ def write_learnset_constants_header(num_machine_moves, max_num_levelup_moves, ma
         f.write(f"#define NUM_TUTOR_MOVES   {num_tutor_moves}\n\n")
         f.write(f"#define MACHINE_LEARNSETS_BITFIELD_COUNT ((NUM_MACHINE_MOVES + 31) / 32)\n")
         f.write(f"#define TUTOR_LEARNSETS_BITFIELD_COUNT   ((NUM_TUTOR_MOVES + 31) / 32)\n\n")
+        f.write(
+            "#define TUTOR_MOVE_IDS_OFFSET            "
+            "((MAX_SPECIES_INCLUDING_FORMS + 1) * "
+            "TUTOR_LEARNSETS_BITFIELD_COUNT * sizeof(u32))\n\n"
+        )
         f.write("#endif // GENERATED_LEARNSET_CONSTANTS_H\n")
 
 
@@ -304,7 +316,14 @@ def write_tutor_data(species_dict, moves_dict, species_learnsets, tutor_moves, o
         out.write("#include \"../../include/types.h\"\n")
         out.write("#include \"../../include/constants/species.h\"\n")
         out.write("#include \"../../include/constants/generated/learnsets.h\"\n\n")
-        out.write("const u32 UNUSED TutorLearnsets[][TUTOR_LEARNSETS_BITFIELD_COUNT] = {\n")
+        out.write("const struct {\n")
+        out.write(
+            f"    u32 learnsets[{max_species_index + 1}]"
+            "[TUTOR_LEARNSETS_BITFIELD_COUNT];\n"
+        )
+        out.write("    u16 moveIds[NUM_TUTOR_MOVES];\n")
+        out.write("} UNUSED TutorMoveData = {\n")
+        out.write("    .learnsets = {\n")
 
         for species_id in range(max_species_index + 1):
             species_name = species_id_to_name.get(species_id)
@@ -321,9 +340,155 @@ def write_tutor_data(species_dict, moves_dict, species_learnsets, tutor_moves, o
                     parts[word] |= (1 << bit)
 
             formatted = ", ".join(f"0x{val:08X}" for val in parts)
-            out.write(f"    [{species_name if species_name else 'SPECIES_NONE'}] = {{ {formatted} }},\n")
+            out.write(
+                f"        [{species_name if species_name else 'SPECIES_NONE'}]"
+                f" = {{ {formatted} }},\n"
+            )
 
+        out.write("    },\n")
+        out.write("    .moveIds = {\n")
+        for move_name in tutor_moves:
+            if move_name not in moves_dict:
+                raise ValueError(f"unknown tutor move: {move_name}")
+            out.write(f"        0x{moves_dict[move_name]:04X},\n")
+        out.write("    },\n")
         out.write("};\n")
+
+
+def generate_build_outputs(
+    output_paths,
+    species_dict,
+    moves_dict,
+    species_learnsets,
+    machine_moves,
+    tutor_moves,
+    max_num_levelup_moves,
+    max_num_egg_moves,
+):
+    if output_paths.get("constants_header"):
+        write_learnset_constants_header(
+            len(machine_moves),
+            max_num_levelup_moves,
+            max_num_egg_moves,
+            len(tutor_moves),
+            output_paths["constants_header"],
+        )
+    if output_paths.get("levelup_constants"):
+        write_learnset_constants_inc(
+            max_num_levelup_moves,
+            output_paths["levelup_constants"],
+        )
+    if output_paths.get("machine"):
+        write_machine_data(
+            species_dict,
+            species_learnsets,
+            machine_moves,
+            output_paths["machine"],
+        )
+    if output_paths.get("levelup"):
+        write_levelup_data(
+            species_dict,
+            moves_dict,
+            species_learnsets,
+            max_num_levelup_moves,
+            output_paths["levelup"],
+        )
+    if output_paths.get("egg"):
+        write_eggmove_data(
+            species_dict,
+            moves_dict,
+            species_learnsets,
+            max_num_egg_moves,
+            output_paths["egg"],
+        )
+    if output_paths.get("tutor"):
+        write_tutor_data(
+            species_dict,
+            moves_dict,
+            species_learnsets,
+            tutor_moves,
+            output_paths["tutor"],
+        )
+
+
+def atomic_generate_and_publish(
+    output_paths,
+    completion_stamp,
+    generate,
+):
+    destinations = {
+        name: Path(path)
+        for name, path in output_paths.items()
+        if path is not None
+    }
+    required = {
+        "constants_header",
+        "levelup_constants",
+        "machine",
+        "levelup",
+        "egg",
+        "tutor",
+    }
+    if set(destinations) != required:
+        missing = ", ".join(sorted(required - set(destinations)))
+        raise ValueError(
+            "atomic learnset generation requires every output"
+            + (f"; missing: {missing}" if missing else "")
+        )
+
+    stamp = Path(completion_stamp)
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = stamp.with_suffix(stamp.suffix + ".lock")
+    common_root = Path(
+        os.path.commonpath(
+            [str(path.resolve()) for path in (*destinations.values(), stamp)]
+        )
+    )
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        stamp.unlink(missing_ok=True)
+
+        # Stage every output before publishing any of them. The completion
+        # stamp is replaced only after all destination replaces succeed, so an
+        # interruption can leave old/partial outputs but never a valid stamp.
+        with tempfile.TemporaryDirectory(
+            prefix=".learnsets-atomic-",
+            dir=common_root,
+        ) as temporary:
+            temporary_root = Path(temporary)
+            staged = {
+                name: temporary_root / name
+                for name in destinations
+            }
+            generate({name: str(path) for name, path in staged.items()})
+
+            manifest = []
+            for name in sorted(staged):
+                data = staged[name].read_bytes()
+                if not data:
+                    raise ValueError(f"generated learnset output {name} is empty")
+                manifest.append(
+                    f"{hashlib.sha256(data).hexdigest()}  "
+                    f"{destinations[name].as_posix()}"
+                )
+
+            for name, destination in destinations.items():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if (
+                    destination.is_file()
+                    and destination.read_bytes() == staged[name].read_bytes()
+                ):
+                    continue
+                os.replace(staged[name], destination)
+
+            stamp_temporary = temporary_root / "completion-stamp"
+            stamp_temporary.write_text(
+                "learnsets-v1\n" + "\n".join(manifest) + "\n",
+                encoding="utf-8",
+            )
+            with stamp_temporary.open("rb") as stamp_file:
+                os.fsync(stamp_file.fileno())
+            os.replace(stamp_temporary, stamp)
 
 
 if __name__ == "__main__":
@@ -336,6 +501,9 @@ if __name__ == "__main__":
     parser.add_argument("--eggout")
     parser.add_argument("--tutorout")
     parser.add_argument("--constsout", action='store_true')
+    parser.add_argument("--constantsout")
+    parser.add_argument("--levelupconstantsout")
+    parser.add_argument("--completion-stamp")
     parser.add_argument("--dump")
 
     # generate
@@ -372,7 +540,15 @@ if __name__ == "__main__":
         with open(args.generate, "w", encoding="utf-8") as f:
             json.dump(merged_for_dump, f, indent=2)
 
-    if any([args.machineout, args.levelupout, args.eggout, args.tutorout, args.constsout]):
+    if any([
+        args.machineout,
+        args.levelupout,
+        args.eggout,
+        args.tutorout,
+        args.constsout,
+        args.constantsout,
+        args.levelupconstantsout,
+    ]):
         form_to_base = load_form_to_species_mapping("data/FormToSpeciesMapping.c")
         
         if not args.learnsets:
@@ -404,27 +580,49 @@ if __name__ == "__main__":
             for data in species_learnsets.values()
         )
 
-        if args.constsout:
-            write_learnset_constants_header(
-                len(machine_moves),
+        output_paths = {
+            "constants_header": (
+                args.constantsout
+                or (
+                    "include/constants/generated/learnsets.h"
+                    if args.constsout
+                    else None
+                )
+            ),
+            "levelup_constants": (
+                args.levelupconstantsout
+                or (
+                    "armips/include/generated/levelup.s"
+                    if args.constsout
+                    else None
+                )
+            ),
+            "machine": args.machineout,
+            "levelup": args.levelupout,
+            "egg": args.eggout,
+            "tutor": args.tutorout,
+        }
+
+        def generate_to(paths):
+            generate_build_outputs(
+                paths,
+                species_dict,
+                moves_dict,
+                species_learnsets,
+                machine_moves,
+                tutor_moves,
                 max_num_levelup_moves,
                 max_num_egg_moves,
-                len(tutor_moves),
-                "include/constants/generated/learnsets.h",
             )
-            write_learnset_constants_inc(max_num_levelup_moves, "armips/include/generated/levelup.s")
 
-        if args.machineout:
-            write_machine_data(species_dict, species_learnsets, machine_moves, args.machineout)
-
-        if args.levelupout:
-            write_levelup_data(species_dict, moves_dict, species_learnsets, max_num_levelup_moves, args.levelupout)
-
-        if args.eggout:
-            write_eggmove_data(species_dict, moves_dict, species_learnsets, max_num_egg_moves, args.eggout)
-
-        if args.tutorout:
-            write_tutor_data(species_dict, moves_dict, species_learnsets, tutor_moves, args.tutorout)
+        if args.completion_stamp:
+            atomic_generate_and_publish(
+                output_paths,
+                args.completion_stamp,
+                generate_to,
+            )
+        else:
+            generate_to(output_paths)
         
         if args.dump:
             os.makedirs(os.path.dirname(args.dump), exist_ok=True)

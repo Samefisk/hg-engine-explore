@@ -427,11 +427,12 @@ u16 GetMonEvolutionInternal(struct Party *party, struct PartyPokemon *pokemon, u
     }
 
     if (target) {
-        u32 form = (evoTable[i].target & 0xF800) >> 11;
+        u32 form = (evoTable[i].target & 0x7800) >> 11;
+        BOOL hasExplicitForm = (evoTable[i].target & 0x8000) != 0;
 
-        if (form)
-        {
-            gEvolutionSceneOverride[0][0] = GetMonData(pokemon, MON_DATA_SPECIES, NULL);
+        if (hasExplicitForm) {
+            gEvolutionSceneOverride[0][0] =
+                GetMonData(pokemon, MON_DATA_SPECIES, NULL);
             gEvolutionSceneOverride[0][1] = GetMonData(pokemon, MON_DATA_FORM, NULL);
             gEvolutionSceneOverride[1][0] = target;
             gEvolutionSceneOverride[1][1] = form;

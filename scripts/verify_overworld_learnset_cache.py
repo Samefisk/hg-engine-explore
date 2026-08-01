@@ -540,9 +540,12 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
         "POKEFORMDATATBL_TARGET := $(BUILD)/a028/9_11",
         "NARC_FILES += $(POKEFORMDATATBL_BIN)",
         "cp $(POKEFORMDATATBL_BIN) $(POKEFORMDATATBL_TARGET)",
+        "MOVE_RELEARN_PARENTS_TARGET := $(BUILD)/a028/9_20",
+        "NARC_FILES += $(MOVE_RELEARN_PARENTS_BIN)",
+        "cp $(MOVE_RELEARN_PARENTS_BIN) $(MOVE_RELEARN_PARENTS_TARGET)",
     ):
         source = move_recipe if fragment.startswith("cp ") else codetables
-        require(fragment in source, f"a028 form-table dependency/copy contract differs: {fragment}")
+        require(fragment in source, f"a028 dependency/copy contract differs: {fragment}")
     require(
         "NARCHIVE := $(PYTHON) tools/narcpy.py" in makefile,
         "a028 creator is not the authenticated narcpy path",
@@ -559,19 +562,34 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
         all((a028_dir / entry).is_file() for entry in entries),
         "a028 source directory contains a non-file member",
     )
-    require(len(entries) == 20, f"a028 source has {len(entries)} members instead of 20")
+    require(len(entries) == 21, f"a028 source has {len(entries)} members instead of 21")
     require(entries[11] == "9_11", f"a028 member 11 is {entries[11]} instead of 9_11")
+    require(entries[20] == "9_20", f"a028 member 20 is {entries[20]} instead of 9_20")
     a028_path = repo / "base/root/a/0/2/8"
     form_path = repo / "build/a028/9_11"
+    parent_path = repo / "build/a028/9_20"
     require(a028_path.is_file(), f"fresh packaged a028 is missing: {a028_path}")
     require(form_path.is_file(), f"verified form table is missing: {form_path}")
+    require(parent_path.is_file(), f"move-relearn parent table is missing: {parent_path}")
+    require(
+        parent_path.stat().st_size == ROW_COUNT * 2,
+        "move-relearn parent table size differs from one u16 per species/form",
+    )
     a028_members = narc_members(a028_path.read_bytes(), "packaged a028")
     require(
-        len(a028_members) == len(entries) == 20,
+        len(a028_members) == len(entries) == 21,
         "packaged a028 member count differs from authenticated sorted source directory",
     )
     verify_exact_packaged_payload(form_path.read_bytes(), a028_members[11], "a028 member 11 (9_11)")
-    reports.append(f"a028[11]=9_11=0x{len(a028_members[11]):X}/20 members")
+    verify_exact_packaged_payload(
+        parent_path.read_bytes(),
+        a028_members[20],
+        "a028 member 20 (9_20)",
+    )
+    reports.append(
+        f"a028[11]=9_11=0x{len(a028_members[11]):X}; "
+        f"a028[20]=9_20=0x{len(a028_members[20]):X}/21 members"
+    )
     print("cache packaged NARC gate: " + "; ".join(reports))
 
 

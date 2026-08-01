@@ -49,7 +49,8 @@ OverworldFieldService_ShutdownTransientServices(void)
 static BOOL IsOverworldFieldOverlay(u32 ovyId)
 {
     return ovyId == OVERLAY_GETMONEVOLUTION_SPECIFIC
-        || ovyId >= OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION;
+        || (ovyId >= OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION
+            && ovyId <= OVERLAY_POKEMON_MOVE_HISTORY);
 }
 
 static BOOL ResetOverworldFieldServiceState(void)

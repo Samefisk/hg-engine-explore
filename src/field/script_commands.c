@@ -6,6 +6,7 @@
 #include "../../include/constants/file.h"
 #include "../../include/message.h"
 #include "../../include/pokemon.h"
+#include "../../include/pokemon_move_history.h"
 #include "../../include/rtc.h"
 #include "../../include/save.h"
 #include "../../include/script.h"
@@ -237,9 +238,13 @@ BOOL ScrCmd_DaycareSanitizeMon(SCRIPTCONTEXT *ctx) {
                     for (u8 j = 0; j < numAvailableToInheritMoves; j++) {
                         if (donorMoves[i] == baby_egg_moves[j]) {
                             newMove = baby_egg_moves[j];
-                            SetMonData(partyMon, MON_DATA_MOVE1 + potentialOverrideMoveSlot, &newMove);
-                            pp = GetMonData(partyMon, MON_DATA_MOVE1MAXPP + potentialOverrideMoveSlot, NULL);
-                            SetMonData(partyMon, MON_DATA_MOVE1PP + potentialOverrideMoveSlot, &pp);
+                            pp = GetMoveMaxPP((u16)newMove, 0);
+                            PokemonMoveHistoryTask6_ScriptTeachMove(
+                                fieldSystem->savedata,
+                                &partyMon->box,
+                                (newMove << 8)
+                                    | potentialOverrideMoveSlot,
+                                pp);
                             potentialOverrideMoveSlot++;
                             if (potentialOverrideMoveSlot >= 4) {
                                 break;
@@ -268,7 +273,7 @@ BOOL ScrCmd_DaycareSanitizeMon(SCRIPTCONTEXT *ctx) {
             // debugsyscall(buf);
 
             for (u8 i = 0; i < 4; i++) {
-                inheriterMoves[i] = GetMonData(partyMon, MON_DATA_MOVE1 + i, NULL);
+                inheriterMoves[i] = GetBoxMonData(daycareMon, MON_DATA_MOVE1 + i, NULL);
                 // sprintf(buf, "inheriterMoves %d: %d.\n", i, inheriterMoves[i]);
                 // debugsyscall(buf);
             }
@@ -278,8 +283,8 @@ BOOL ScrCmd_DaycareSanitizeMon(SCRIPTCONTEXT *ctx) {
 
                 u32 numAvailableToInheritMoves = 0;
                 for (u8 i = 0; i < numEggMoves; i++) {
-                    if (temp_egg_moves[i] != inheriterMoves[0] && temp_egg_moves[i] != inheriterMoves[1] && temp_egg_moves[i] != inheriterMoves[2] && temp_egg_moves[i] != inheriterMoves[3]) {
-                        baby_egg_moves[numAvailableToInheritMoves] = temp_egg_moves[i];
+                    if (baby_egg_moves[i] != inheriterMoves[0] && baby_egg_moves[i] != inheriterMoves[1] && baby_egg_moves[i] != inheriterMoves[2] && baby_egg_moves[i] != inheriterMoves[3]) {
+                        baby_egg_moves[numAvailableToInheritMoves] = baby_egg_moves[i];
 
                         // sprintf(buf, "baby_egg_moves %d: %d.\n", numAvailableToInheritMoves, baby_egg_moves[numAvailableToInheritMoves]);
                         // debugsyscall(buf);
@@ -297,9 +302,13 @@ BOOL ScrCmd_DaycareSanitizeMon(SCRIPTCONTEXT *ctx) {
                     for (u8 j = 0; j < numAvailableToInheritMoves; j++) {
                         if (donorMoves[i] == baby_egg_moves[j]) {
                             newMove = baby_egg_moves[j];
-                            SetBoxMonData(daycareMon, MON_DATA_MOVE1 + potentialOverrideMoveSlot, &newMove);
-                            pp = GetBoxMonData(daycareMon, MON_DATA_MOVE1MAXPP + potentialOverrideMoveSlot, NULL);
-                            SetBoxMonData(daycareMon, MON_DATA_MOVE1PP + potentialOverrideMoveSlot, &pp);
+                            pp = GetMoveMaxPP((u16)newMove, 0);
+                            PokemonMoveHistoryTask6_ScriptTeachMove(
+                                fieldSystem->savedata,
+                                daycareMon,
+                                (newMove << 8)
+                                    | potentialOverrideMoveSlot,
+                                pp);
                             potentialOverrideMoveSlot++;
                             if (potentialOverrideMoveSlot >= 4) {
                                 break;

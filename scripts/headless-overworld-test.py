@@ -1,9 +1,116 @@
 #!/usr/bin/env python3
+import sys
+
+
+def _native_bootstrap_gate():
+    if __name__ != "__main__":
+        return
+    import posix
+
+    environment = posix.environ
+    if environment.get(b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_PROTOCOL") != (
+        b"summary-move-relearn-native-bootstrap-v1"
+    ):
+        raise SystemExit("headless helper requires the native bootstrap")
+    try:
+        ready_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_READY_FD"].decode(
+                "ascii"
+            )
+        )
+        go_fd = int(
+            environment[b"SUMMARY_MOVE_RELEARN_BOOTSTRAP_GO_FD"].decode(
+                "ascii"
+            )
+        )
+    except (KeyError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("native bootstrap handshake is malformed") from error
+    ready = b"SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
+    expected = b"SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
+    if ready_fd < 3 or go_fd < 3 or ready_fd == go_fd:
+        raise SystemExit("native bootstrap handshake descriptors are invalid")
+    if posix.write(ready_fd, ready) != len(ready):
+        raise SystemExit("native bootstrap readiness write was incomplete")
+    received = b""
+    while len(received) < len(expected):
+        chunk = posix.read(go_fd, len(expected) - len(received))
+        if not chunk:
+            break
+        received += chunk
+    posix.close(ready_fd)
+    posix.close(go_fd)
+    if received != expected:
+        raise SystemExit("native bootstrap did not release helper execution")
+
+
+_native_bootstrap_gate()
+
+
+def _isolated_helper_path():
+    version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    base = sys.base_prefix + "/lib/" + version
+    paths = (base, base + "/lib-dynload")
+    if globals().get("AUTHENTICATED_LIBDESMUME_PATH") is None:
+        venv = sys.executable.rsplit("/bin/", 1)[0]
+        paths += (venv + "/lib/" + version + "/site-packages",)
+    return paths
+
+
+def _normalize_isolated_helper_path():
+    expected = _isolated_helper_path()
+    startup = (
+        sys.base_prefix
+        + "/lib/python"
+        + str(sys.version_info.major)
+        + str(sys.version_info.minor)
+        + ".zip",
+        expected[0],
+        expected[1],
+    )
+    if (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and tuple(sys.path) == startup
+    ):
+        sys.path[:] = expected
+        external = sys.modules["_frozen_importlib_external"]
+        sys.path_hooks[:] = [
+            external.FileFinder.path_hook(
+                (external.SourceFileLoader, external.SOURCE_SUFFIXES),
+                (external.ExtensionFileLoader, external.EXTENSION_SUFFIXES),
+            )
+        ]
+        sys.path_importer_cache.clear()
+
+
+_normalize_isolated_helper_path()
+
+
+def _isolated_helper_startup():
+    expected = _isolated_helper_path()
+    return (
+        sys.flags.isolated == 1
+        and sys.flags.ignore_environment == 1
+        and sys.flags.no_site == 1
+        and sys.dont_write_bytecode
+        and sys.pycache_prefix == "/dev/null"
+        and "site" not in sys.modules
+        and tuple(sys.path) == expected
+    )
+
+
+if __name__ == "__main__" and not _isolated_helper_startup():
+    raise SystemExit(
+        "headless helper requires exact isolated Python from the native bootstrap"
+    )
+
 import argparse
 import ctypes
 import json
 import os
-import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -20,17 +127,26 @@ DSV_FOOTER_MARKER = (
 def ensure_repo_venv() -> None:
     venv = REPO_ROOT / ".venv"
     venv_python = venv / "bin/python3"
-    if Path(sys.prefix).resolve() == venv.resolve():
-        return
-    if not venv_python.is_file():
-        return
-    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+    if (
+        Path(os.path.abspath(sys.executable))
+        != Path(os.path.abspath(venv_python))
+        or not _isolated_helper_startup()
+    ):
+        raise RuntimeError(
+            "headless helper requires exact repository Python with "
+            "-I -S -B -X pycache_prefix=/dev/null"
+        )
 
 
 ensure_repo_venv()
 
 from desmume.controls import Keys, keymask
 from desmume.emulator import DeSmuME
+
+
+def create_desmume() -> DeSmuME:
+    authenticated = globals().get("AUTHENTICATED_LIBDESMUME_PATH")
+    return DeSmuME(authenticated) if authenticated is not None else DeSmuME()
 
 KEYS = {
     "A": Keys.KEY_A,
@@ -608,7 +724,7 @@ def main() -> int:
     started_at = time.monotonic()
 
     with silence_native_output(not args.show_emulator_log):
-        emu = DeSmuME()
+        emu = create_desmume()
         emu.volume_set(0)
         emu.open(str(rom))
         with tempfile.NamedTemporaryFile(suffix=".sav") as raw_file:
