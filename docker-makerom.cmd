@@ -17,8 +17,8 @@ if [ "$build_status" -eq 0 ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
     exit 1
   fi
-  native_bootstrap_expected_sha256="306261c018307d16848b8c9ed4ad123791cc52bc8d1482bc39a71c2abcbe3289"
-  native_bootstrap_expected_cdhash="157089f002c7dc85c676d0e2f14a4c69af04e63d"
+  native_bootstrap_expected_sha256="0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
+  native_bootstrap_expected_cdhash="166e69db3bfae0beb5f024fe98cf354cc1e533f7"
   native_record=$(./scripts/build_summary_move_relearn_native_bootstrap.sh \
     "$native_bootstrap_expected_sha256" \
     "$native_bootstrap_expected_cdhash") || exit $?

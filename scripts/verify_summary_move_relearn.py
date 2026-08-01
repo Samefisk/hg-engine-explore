@@ -41,10 +41,10 @@ OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
 MAX_CANDIDATES = 65
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
-    "306261c018307d16848b8c9ed4ad123791cc52bc8d1482bc39a71c2abcbe3289"
+    "0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
 )
 NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
-    "157089f002c7dc85c676d0e2f14a4c69af04e63d"
+    "166e69db3bfae0beb5f024fe98cf354cc1e533f7"
 )
 
 
@@ -1848,9 +1848,12 @@ def bootstrap_host_contracts(root: Path) -> None:
 
             def communicate(self, *, input, timeout):
                 failed_clear_target.mkdir()
+                later_clear_target.write_text('{"status":"recreated"}\n')
                 return "", "rejected"
 
         failed_clear_target = temp / "protected-failed-clear"
+        later_clear_target = temp / "protected-later-clear.json"
+        later_clear_target.write_text('{"status":"stale"}\n')
         protected_module.subprocess = types.SimpleNamespace(
             PIPE=original_subprocess.PIPE,
             CompletedProcess=original_subprocess.CompletedProcess,
@@ -1863,6 +1866,8 @@ def bootstrap_host_contracts(root: Path) -> None:
                     str(native_bootstrap),
                     "--invalidate-result",
                     str(failed_clear_target),
+                    "--invalidate-result",
+                    str(later_clear_target),
                     "--print-self-record",
                 ],
                 expected_cdhash=native_cdhash,
@@ -1871,13 +1876,18 @@ def bootstrap_host_contracts(root: Path) -> None:
                 text=True,
                 timeout=1,
             )
-        except IsADirectoryError:
-            failed_clear_propagated = True
+        except protected_module.ResultInvalidationError as error:
+            failed_clear_propagated = (
+                len(error.failures) == 1
+                and error.failures[0][0] == str(failed_clear_target)
+                and isinstance(error.failures[0][1], IsADirectoryError)
+            )
         finally:
             protected_module.subprocess = original_subprocess
         require(
-            failed_clear_propagated,
-            "nonzero protected controller suppressed result-clear failure",
+            failed_clear_propagated and not later_clear_target.exists(),
+            "nonzero protected controller did not aggregate a clear failure "
+            "after removing later stale evidence",
         )
 
         class UnreapedController:

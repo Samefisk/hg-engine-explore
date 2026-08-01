@@ -258,6 +258,16 @@ exit(128 + (terminalStatus & 0x7f))
 '''
 
 
+class ResultInvalidationError(RuntimeError):
+    def __init__(self, failures: Sequence[tuple[str, Exception]]) -> None:
+        self.failures = tuple(failures)
+        details = "; ".join(
+            f"{target}: {type(error).__name__}: {error}"
+            for target, error in self.failures
+        )
+        super().__init__("result invalidation failures: " + details)
+
+
 def _invalidate_explicit_results(arguments: Sequence[str]) -> None:
     targets: list[str] = []
     index = 0
@@ -274,16 +284,29 @@ def _invalidate_explicit_results(arguments: Sequence[str]) -> None:
         if argument.startswith("--invalidate-result="):
             targets.append(argument.partition("=")[2])
         index += 1
+    failures: list[tuple[str, Exception]] = []
     for target in targets:
         if not target:
-            raise ValueError("result invalidation target is empty")
+            failures.append((target, ValueError("target is empty")))
+            continue
         try:
             metadata = os.lstat(target)
         except FileNotFoundError:
             continue
+        except Exception as error:
+            failures.append((target, error))
+            continue
         if stat.S_ISDIR(metadata.st_mode):
-            raise IsADirectoryError(target)
-        os.unlink(target)
+            failures.append((target, IsADirectoryError(target)))
+            continue
+        try:
+            os.unlink(target)
+        except FileNotFoundError:
+            continue
+        except Exception as error:
+            failures.append((target, error))
+    if failures:
+        raise ResultInvalidationError(failures)
 
 
 def run_native_bootstrap(
