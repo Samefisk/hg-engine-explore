@@ -39,7 +39,7 @@ OVERLAY129_BASE = 0x023D8000
 OVERLAY129_END = 0x023E0000
 OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
-MAX_CANDIDATES = 65
+MAX_CANDIDATES = 458
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
     "0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
 )
@@ -330,10 +330,17 @@ def source_contracts(root: Path) -> None:
         "Summary arguments do not name the retail PC ownership tail",
     )
     enter = body(ui, "SummaryMoveRelearn_Enter")
+    build_mode = body(ui, "SummaryMoveRelearn_BuildCandidatesForMode")
+    build_all = body(
+        ui,
+        "SummaryMoveRelearn_BuildAllCompatibleCandidates",
+    )
+    toggle_mode = body(ui, "SummaryMoveRelearn_ToggleCandidateMode")
+    show_mode = body(ui, "SummaryMoveRelearn_ShowCandidateMode")
     require(
-        "PokemonMoveRelearn_BuildCandidates(" in enter
-        and "POKEMON_MOVE_RELEARN_MAX_CANDIDATES" in enter
-        and "&options" in enter,
+        "PokemonMoveRelearn_BuildCandidates(" in build_mode
+        and "POKEMON_MOVE_RELEARN_MAX_CANDIDATES" in build_mode
+        and "&options" in build_mode,
         "entry does not use the task-2 bounded candidate builder",
     )
     form_policy = body(ui, "SummaryMoveRelearn_AllowPersistentFormMove")
@@ -358,8 +365,58 @@ def source_contracts(root: Path) -> None:
             f"persistent form policy lost: {fragment}",
         )
     require(
-        "if (count > POKEMON_MOVE_RELEARN_MAX_CANDIDATES)" in enter,
+        "if (count > POKEMON_MOVE_RELEARN_MAX_CANDIDATES)" in build_mode,
         "candidate count is not clamped before UI indexing",
+    )
+    for fragment in (
+        "PokemonMoveHistoryTask6_IsCanonical(pokemon)",
+        "PokeOtherFormMonsNoGet(species, form)",
+        "LoadLevelUpLearnset_HandleAlternateForm(",
+        "CODE_ADDON_MACHINE_LEARNSETS",
+        "sMachineMoves[i]",
+        "ARC_EGG_MOVES",
+        "CODE_ADDON_TUTOR_LEARNSETS",
+        "TUTOR_MOVE_IDS_OFFSET",
+        "tutorMoves[i]",
+        "SPECIES_PICHU",
+        "SPECIES_ROTOM",
+        "SPECIES_KYUREM",
+    ):
+        require(fragment in build_all, f"Task-7 compatibility source lost: {fragment}")
+    append_all = body(ui, "SummaryMoveRelearn_AppendAllCandidate")
+    require(
+        "PokemonMoveHistoryTask6_AppendCandidateCall(" in append_all
+        and "POKEMON_MOVE_RELEARN_ALL_MAX_CANDIDATES" in append_all,
+        "Task-7 canonical bounded append gate differs",
+    )
+    require(
+        "PokemonMoveRelearn_GetParent" not in build_all
+        and "CODE_ADDON_MOVE_RELEARN_PARENTS" not in build_all
+        and build_all.index("PokemonMoveHistoryTask6_IsCanonical(pokemon)")
+        < build_all.index("PokeOtherFormMonsNoGet(species, form)"),
+        "Task-7 exact-form compatibility walks lineage or resolves before validation",
+    )
+    require(
+        build_all.index("LoadLevelUpLearnset_HandleAlternateForm(")
+        < build_all.index("CODE_ADDON_MACHINE_LEARNSETS")
+        < build_all.index("ARC_EGG_MOVES")
+        < build_all.index("TUTOR_MOVE_IDS_OFFSET")
+        < build_all.index("if (species == SPECIES_PICHU)"),
+        "Task-7 source-native ordering differs",
+    )
+    require(
+        "state->allCompatible = !state->allCompatible;" in toggle_mode
+        and "SummaryMoveRelearn_ShowCandidateMode(" in toggle_mode
+        and "if (!preserveCandidateMode)" in enter
+        and "state->allCompatible = FALSE;" in enter,
+        "Task-7 toggle default/preservation contract differs",
+    )
+    require(
+        "History SEL:All" in messages
+        and "AllCompat SEL:Hist" in messages
+        and "History None SEL:All" in messages
+        and "AllCompat None SEL:Hist" in messages,
+        "Task-7 mode labels are not discoverable and unambiguous",
     )
     move_cursor = body(ui, "SummaryMoveRelearn_MoveListCursor")
     require(
@@ -370,6 +427,10 @@ def source_contracts(root: Path) -> None:
     )
 
     slot = body(ui, "SummaryMoveRelearn_HandleSlot")
+    pulse_border = body(ui, "SummaryMoveRelearn_DrawRowBorder")
+    pulse_phase = body(ui, "SummaryMoveRelearn_DrawSlotPhase")
+    pulse_tick = body(ui, "SummaryMoveRelearn_TickPulse")
+    pulse_stop = body(ui, "SummaryMoveRelearn_StopPulse")
     commit = body(ui, "SummaryMoveRelearn_Commit")
     end = body(ui, "SummaryMoveRelearn_End")
     finish_close = body(ui, "SummaryMoveRelearn_FinishClose")
@@ -385,6 +446,18 @@ def source_contracts(root: Path) -> None:
     require(
         "oldMove == state->pendingMove" in slot,
         "slot selection does not reject a same-move no-op",
+    )
+    require(
+        "SUMMARY_PULSE_FRAMES" in pulse_tick
+        and "state->pulseIncoming = !state->pulseIncoming;" in pulse_tick
+        and "SUMMARY_BORDER_GREEN" in pulse_phase
+        and "SUMMARY_BORDER_RED" in pulse_phase
+        and pulse_border.count("FillWindowPixelRect(") == 4
+        and "state->pulseActive = FALSE;" in pulse_stop
+        and slot.count("SummaryMoveRelearn_StopPulse(") >= 3
+        and "NEW-GRN A:Pick" in messages
+        and "OLD-RED A:Pick" in messages,
+        "replacement pulse phase, outline, labels, or cleanup differs",
     )
     require(
         ui.count("PokemonMoveHistory_ReplaceMove(") == 1
@@ -436,9 +509,16 @@ def source_contracts(root: Path) -> None:
         and "SEQ_SE_DP_DECIDE" in ui
         and "SEQ_SE_GS_GEARCANCEL" in ui
         and "SEQ_SE_DP_CUSTOM06" in ui
-        and commit.count("PlaySE(SEQ_SE_DP_KON);") == 1
+        and commit.count("PlaySE(SEQ_SE_DP_PIRORIRO2);") == 1
         and "PlaySE(SEQ_SE_DP_DECIDE)" not in commit,
-        "Summary relearn sound mapping or singleton success cue differs",
+        "Summary relearn sound mapping or fast success cue differs",
+    )
+    require(
+        "SummaryMoveRelearn_End(summary, state);" in commit
+        and "state->mode = SUMMARY_RELEARN_SUCCESS;" not in commit
+        and "SummaryMoveRelearn_PrintStatus(summary, SUMMARY_MSG_SUCCESS);"
+        not in commit,
+        "confirmed learning does not exit the relearn modal immediately",
     )
 
     main = body(ui, "SummaryMoveRelearn_MainState")
@@ -475,7 +555,7 @@ def source_contracts(root: Path) -> None:
         r"\s*return 2;\s*\}\s*"
         r"(?:SummaryMoveRelearn_PlayMenuSE\(state, "
         r"SEQ_SE_DP_DECIDE\);\s*)?"
-        r"SummaryMoveRelearn_Enter\(summary, state, pokemon\);",
+        r"SummaryMoveRelearn_Enter\(summary, state, pokemon, FALSE\);",
         main,
     )
     require(
@@ -485,9 +565,13 @@ def source_contracts(root: Path) -> None:
         )
         == 2
         and main.count(
-            "SummaryMoveRelearn_Enter(summary, state, pokemon);"
+            "SummaryMoveRelearn_Enter(summary, state, pokemon, FALSE);"
         )
-        == 4,
+        == 2
+        and main.count(
+            "SummaryMoveRelearn_Enter(summary, state, pokemon, TRUE);"
+        )
+        == 2,
         "both resume and key/touch entry paths must revalidate immediately",
     )
     success_handler = main[main.index(
@@ -552,12 +636,12 @@ def source_contracts(root: Path) -> None:
         and "Summary_GetTouchAction(summary)" in main
         and "Summary_GetPokemonSwitchTouch()" in main
         and "touchAction >= 4 && touchAction <= 9" in main
-        and "repeatKeys & (PAD_KEY_LEFT | PAD_KEY_RIGHT)" in main
+        and "repeatKeys & (PAD_KEY_LEFT | PAD_KEY_RIGHT)" not in main
         and "return Summary_VanillaMainState(summary);" in main
         and "SummaryMoveRelearn_GetTouch(sMoveRowTouchRects)" in owns_touch
         and "SummaryMoveRelearn_GetTouch(sConfirmTouchRects)" in owns_touch
         and "SummaryMoveRelearn_GetTouch(sSuccessTouchRects)" in owns_touch,
-        "modal switching/page gestures do not preserve retail delegation",
+        "modal touch switching or disabled left/right contract differs",
     )
     success_dispatch = main[main.index(
         "state->mode == SUMMARY_RELEARN_SUCCESS"
@@ -569,7 +653,7 @@ def source_contracts(root: Path) -> None:
         and "repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)"
         not in success_dispatch
         and success_dispatch.count(
-            "SummaryMoveRelearn_Enter(summary, state, pokemon);"
+            "SummaryMoveRelearn_Enter(summary, state, pokemon, TRUE);"
         )
         == 2
         and "SummaryMoveRelearn_End(summary, state);" in success_dispatch,
@@ -577,12 +661,21 @@ def source_contracts(root: Path) -> None:
     )
     require(
         "if (state->resumeAfterSwitch)" in main
-        and "SummaryMoveRelearn_Enter(summary, state, pokemon);" in main
+        and "SummaryMoveRelearn_Enter(summary, state, pokemon, FALSE);" in main
         and "state->ownerPokemon = pokemon;" in enter
         and "state->candidateCursor = 0;" in enter
         and "state->candidateTop = 0;" in enter
         and "state->pendingMove = 0;" in enter,
         "new identity does not receive a fresh candidate transaction",
+    )
+    require(
+        "newKeys & PAD_BUTTON_SELECT" in list_handler
+        and "repeatKeys & PAD_BUTTON_SELECT" not in list_handler
+        and main.count("newKeys & PAD_BUTTON_SELECT") == 1
+        and "state->allCompatible = FALSE;" in end
+        and "state->allCompatible = FALSE;" in navigation_cancel
+        and main.count("state->allCompatible = FALSE;") >= 2,
+        "Task-7 new-press isolation or reset boundaries differ",
     )
     for runtime_contract in (
         '"count_negative_one"',
@@ -1056,7 +1149,7 @@ def source_contracts(root: Path) -> None:
         "state-2 interception is not an exact four-byte Thumb BL",
     )
     require(
-        "arm9 02088414 98 08 00 00" in patches
+        "arm9 02088414 D8 0B 00 00" in patches
         and "arm9 02103A28 9A 00 00 00" in patches,
         "Summary state/template ownership patches differ",
     )
@@ -1141,20 +1234,22 @@ def source_contracts(root: Path) -> None:
         "entry/list/slot/confirmation touch controls are incomplete",
     )
     render_slot = body(ui, "SummaryMoveRelearn_RenderSlot")
+    render_phase = body(ui, "SummaryMoveRelearn_DrawSlotPhase")
     require(
         "summary->pokemonData.moves[state->selectedSlot] ="
-        " state->pendingMove;" in render_slot
-        and "GetMoveMaxPP(state->pendingMove, 0)" in render_slot
+        "\n            state->pendingMove;" in render_phase
+        and "GetMoveMaxPP(state->pendingMove, 0)" in render_phase
         and "summary->pokemonData.curPP[state->selectedSlot] = pp;"
-        in render_slot
+        in render_phase
         and "summary->pokemonData.maxPP[state->selectedSlot] = pp;"
-        in render_slot
-        and render_slot.index("Summary_UpdateMoveSelection(summary);")
-        < render_slot.rindex("Summary_DrawMoveRows(summary);"),
+        in render_phase
+        and render_phase.index("Summary_UpdateMoveSelection(summary);")
+        < render_phase.rindex("Summary_DrawMoveRows(summary);"),
         "slot preview is not an authoritative inline full-PP move row",
     )
     require(
-        "SUMMARY_MSG_PICK_BACK" in render_slot,
+        "SUMMARY_MSG_PULSE_NEW" in render_phase
+        and "SUMMARY_MSG_PULSE_OLD" in render_phase,
         "slot selection does not render explicit Pick/Back controls",
     )
     require(
@@ -1200,7 +1295,7 @@ def source_contracts(root: Path) -> None:
     require(
         "ScheduleSetBgPosText(summary->bgl, 5, 0, visible ? 0x80 : 0)"
         in move_pane
-        and "SummaryMoveRelearn_SetMovePane(summary, TRUE)" in enter
+        and "SummaryMoveRelearn_SetMovePane(summary, TRUE)" in show_mode
         and "Summary_CloseMovePane(summary)" in end
         and "Summary_CloseMovePane(summary)" in finish_close
         and "SummaryMoveRelearn_SetMovePane(summary, FALSE)" in main,
@@ -4541,6 +4636,28 @@ def host_state_contracts() -> None:
             f"host transition mutates outside explicit confirmation: {state}/{key}",
         )
 
+    task7_modes = {
+        ("inactive", "X", "history"): ("list", "history"),
+        ("list", "fresh-SELECT", "history"): ("list", "all"),
+        ("list", "fresh-SELECT", "all"): ("list", "history"),
+        ("empty", "fresh-SELECT", "history"): ("list", "all"),
+        ("list", "held-SELECT", "all"): ("list", "all"),
+        ("success", "A-More", "all"): ("list", "all"),
+        ("list", "B-exit", "all"): ("inactive", "history"),
+        ("list", "switch", "all"): ("list", "history"),
+        ("list", "page-change", "all"): ("inactive", "history"),
+        ("list", "identity-change", "all"): ("inactive", "history"),
+    }
+    require(
+        all(result[1] == "history" for key, result in task7_modes.items()
+            if key[1] in ("B-exit", "switch", "page-change", "identity-change"))
+        and task7_modes[("list", "held-SELECT", "all")]
+        == ("list", "all")
+        and task7_modes[("success", "A-More", "all")]
+        == ("list", "all"),
+        "Task-7 host default/preserve/reset/held-input model differs",
+    )
+
 
 def parse_y9(path: Path) -> list[tuple[int, ...]]:
     data = path.read_bytes()
@@ -4592,8 +4709,8 @@ def binary_contracts(args: argparse.Namespace) -> None:
         struct.unpack_from(
             "<I", arm9, SUMMARY_STATE_SIZE_LITERAL - ARM9_BASE
         )[0]
-        == 0x898,
-        "packaged Summary state size is not 0x898",
+        == 0xBD8,
+        "packaged Summary state size is not 0xBD8",
     )
     require(
         struct.unpack_from(
@@ -4737,6 +4854,10 @@ def binary_contracts(args: argparse.Namespace) -> None:
         "PokemonMoveRelearn_BuildCandidates",
         "PokemonMoveHistory_ReplaceMove",
         "PokemonMoveHistoryTask6_IsCanonical",
+        "PokemonMoveHistoryTask6_AppendCandidateCall",
+        "ArchiveDataLoadOfs",
+        "LoadLevelUpLearnset_HandleAlternateForm",
+        "PokeOtherFormMonsNoGet",
         "Party_GetCount",
         "Summary_GetPokemonData",
         "Summary_GetTouchAction",
@@ -4764,10 +4885,18 @@ def main() -> None:
     parser.add_argument("--summary-linked", type=Path)
     parser.add_argument("--summary-object", type=Path)
     parser.add_argument("--core-linked", type=Path)
+    parser.add_argument("--task7-focused", action="store_true")
     args = parser.parse_args()
 
     root = args.root.resolve()
     source_contracts(root)
+    if args.task7_focused:
+        host_state_contracts()
+        print(
+            "Summary move relearn Task 7 verification passed: source, "
+            "toggle/reset state, compatibility order, and bounds"
+        )
+        return
     bootstrap_host_contracts(root)
     artifact_publication_host_contracts(root)
     host_state_contracts()

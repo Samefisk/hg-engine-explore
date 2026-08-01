@@ -8,6 +8,9 @@
 #define POKEMON_MOVE_HISTORY_MAX_MOVES 24
 #define POKEMON_MOVE_RELEARN_MAX_CANDIDATES \
     (MAX_LEVELUP_MOVES + POKEMON_MOVE_HISTORY_MAX_MOVES)
+#define POKEMON_MOVE_RELEARN_ALL_MAX_CANDIDATES \
+    (MAX_LEVELUP_MOVES + NUM_MACHINE_MOVES + MAX_EGG_MOVES \
+        + NUM_TUTOR_MOVES + 8)
 
 typedef struct PokemonMoveHistorySnapshot {
     u32 personality;
@@ -184,6 +187,11 @@ int LONG_CALL PokemonMoveHistory_WriteSaveNow(SaveData *saveData);
 /* Boot-resident task-6 transaction/validation bridge in overlay 155. */
 BOOL LONG_CALL PokemonMoveHistoryTask6_IsCanonical(
     struct BoxPokemon *pokemon);
+BOOL LONG_CALL PokemonMoveHistoryTask6_AppendCandidateCall(
+    u16 *candidates,
+    u32 *count,
+    const u16 currentMoves[4],
+    u16 move);
 void LONG_CALL PokemonMoveHistoryTask6_DaycareDepositCommit(
     struct Party *party,
     u32 partySlot,

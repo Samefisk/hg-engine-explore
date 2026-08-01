@@ -501,7 +501,8 @@ arm9 02000E54 24 00 00 00 04 5C 1E 02
 # nop out rock smash table limiter compare
 0001 02204D1A C0 46 C0 46 C0 46 C0 46 C0 46 C0 46 C0 46 C0 46
 
-# Summary task 4: enlarge the zeroed state by 0xC0 and let the application
-# manager own overlay 154 for the complete Summary lifecycle.
-arm9 02088414 98 08 00 00
+# Summary tasks 4/7: enlarge the zeroed state for the bounded transient
+# candidate cache and let the application manager own overlay 154 for the
+# complete Summary lifecycle. Nothing in the extension is serialized.
+arm9 02088414 D8 0B 00 00
 arm9 02103A28 9A 00 00 00

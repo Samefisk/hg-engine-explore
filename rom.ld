@@ -703,6 +703,7 @@ SwapPartyPokemonMove = 0x023BD430 | 1;
 PokemonMoveHistoryTask6_CorrectBattleFormMoves = 0x023BD448;
 PokemonMoveHistoryTask6_MarkHistoryMove = 0x023BD450;
 PokemonMoveHistoryTask6_AppendCandidate = 0x023BD458;
+PokemonMoveHistoryTask6_AppendCandidateCall = 0x023BD458 | 1;
 partyMenuSignal = 0x023BD460;
 PokemonMoveHistoryTask6_ScriptTeachMove = 0x023BD464 | 1;
 PokemonMoveHistoryTask6_GTSPlaceAndSeed = 0x023BD468 | 1;

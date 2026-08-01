@@ -212,3 +212,9 @@ None. B:Back
 Pick a slot.
 A:OK B:Back
 Done! A:More B:Done
+History SEL:All
+AllCompat SEL:Hist
+History None SEL:All
+AllCompat None SEL:Hist
+NEW-GRN A:Pick
+OLD-RED A:Pick
