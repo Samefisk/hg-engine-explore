@@ -12,16 +12,19 @@
  *
  * Inventory format (UTF-8/ASCII paths; tabs/newlines are forbidden in paths):
  *
- *   summary-move-relearn-native-bootstrap-inventory-v1\n
+ *   summary-move-relearn-native-bootstrap-inventory-v2\n
  *   F\t<size>\t<lowercase-sha256>\t<absolute-canonical-path>\n
  *   E\t<size>\t<lowercase-sha256>\t<absolute-canonical-python-path>\n
  *   A\t<size>\t<lowercase-sha256>\t<absolute-exec-alias-symlink>\n
  *   L\t<size>\t<lowercase-sha256>\t<absolute-symlink-hop>\n
- *   D\t0\t<sha256-of-empty-input>\t<absolute-canonical-parent-dir>\n
+ *   D\t0\t<sha256-of-empty-input>\t<retained-identity-directory>\n
+ *   M\t<payload-size>\t<directory-membership-sha256>\t<sealed-directory>\n
  *   N\t0\t<sha256-of-empty-input>\t<absolute-required-absent-path>\n
  *
  * There must be exactly one E and one A record.  A/L hashes cover the exact
- * readlink bytes, every A/L/N parent must have a retained D record, and the
+ * readlink bytes. M hashes cover the exact sorted immediate entry names and
+ * regular/directory/symlink types; unsupported member types fail closed.
+ * Every A/L/N parent must have a retained D record, and the
  * ordered A/L chain must resolve to E.  This preserves
  * the repository .venv argv/executable path so CPython applies pyvenv.cfg
  * while authenticating every symlink hop.  Every record is retained and
@@ -43,6 +46,7 @@
 #include <sys/wait.h>
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -69,13 +73,15 @@
 #endif
 
 #define INVENTORY_HEADER \
-    "summary-move-relearn-native-bootstrap-inventory-v1\n"
+    "summary-move-relearn-native-bootstrap-inventory-v2\n"
 #define READY_MESSAGE "SUMMARY_MOVE_RELEARN_PYTHON_READY_V1\n"
 #define GO_MESSAGE "SUMMARY_MOVE_RELEARN_NATIVE_GO_V1\n"
 #define PROTOCOL_VERSION "summary-move-relearn-native-bootstrap-v1"
 #define MAX_INVENTORY_BYTES (16U * 1024U * 1024U)
 #define MAX_RECORDS 8192U
 #define MAX_RESULT_PATHS 64U
+#define MAX_DRAIN_EVENTS 65536U
+#define EVENT_BACKLOG_SELF_TEST_FILES 130U
 #define DEFAULT_READY_TIMEOUT_SECONDS 300U
 
 #ifndef SMR_EXPECTED_INVENTORY_SHA256
@@ -149,6 +155,15 @@ static const unsigned char sha256_empty[32] = {
     0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
     0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 };
+
+static const unsigned char directory_digest_domain[] =
+    "summary-move-relearn-directory-membership-v1\0";
+
+typedef struct {
+    unsigned char kind;
+    char *name;
+    size_t name_size;
+} DirectoryMember;
 
 static uint32_t rotate_right(uint32_t value, unsigned shift) {
     return (value >> shift) | (value << (32U - shift));
@@ -408,6 +423,105 @@ static int digest_symlink(const char *path, uint64_t *size,
     return 0;
 }
 
+static int compare_directory_members(const void *left, const void *right) {
+    const DirectoryMember *a = left;
+    const DirectoryMember *b = right;
+    size_t common = a->name_size < b->name_size ? a->name_size : b->name_size;
+    int compared = memcmp(a->name, b->name, common);
+    if (compared != 0)
+        return compared;
+    return a->name_size < b->name_size ? -1 : a->name_size > b->name_size;
+}
+
+static void sha256_u64_big_endian(Sha256 *context, uint64_t value) {
+    unsigned char encoded[8];
+    size_t index;
+    for (index = 0; index < sizeof(encoded); index++)
+        encoded[sizeof(encoded) - index - 1] = (unsigned char)(value >> (index * 8));
+    sha256_update(context, encoded, sizeof(encoded));
+}
+
+static int digest_directory(int fd, uint64_t *size,
+    unsigned char digest[32]) {
+    DirectoryMember *members = NULL;
+    size_t count = 0, capacity = 0, index;
+    DIR *stream = NULL;
+    struct dirent *entry;
+    Sha256 context;
+    int duplicate = openat(fd, ".",
+        O_RDONLY | O_DIRECTORY | O_CLOEXEC | BOOTSTRAP_NOFOLLOW);
+    int result = -1;
+    if (duplicate < 0)
+        return -1;
+    stream = fdopendir(duplicate);
+    if (stream == NULL) {
+        close(duplicate);
+        return -1;
+    }
+    errno = 0;
+    while ((entry = readdir(stream)) != NULL) {
+        struct stat metadata;
+        DirectoryMember member;
+        size_t name_size;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+        if (fstatat(fd, entry->d_name, &metadata, AT_SYMLINK_NOFOLLOW) != 0)
+            goto cleanup;
+        if (S_ISREG(metadata.st_mode))
+            member.kind = 'F';
+        else if (S_ISDIR(metadata.st_mode))
+            member.kind = 'D';
+        else if (S_ISLNK(metadata.st_mode))
+            member.kind = 'L';
+        else {
+            errno = EAUTH;
+            goto cleanup;
+        }
+        name_size = strlen(entry->d_name);
+        member.name = malloc(name_size + 1);
+        if (member.name == NULL)
+            goto cleanup;
+        memcpy(member.name, entry->d_name, name_size + 1);
+        member.name_size = name_size;
+        if (count == capacity) {
+            size_t next = capacity == 0 ? 32 : capacity * 2;
+            DirectoryMember *resized = realloc(members, next * sizeof(*resized));
+            if (resized == NULL) {
+                free(member.name);
+                goto cleanup;
+            }
+            members = resized;
+            capacity = next;
+        }
+        members[count++] = member;
+        errno = 0;
+    }
+    if (errno != 0)
+        goto cleanup;
+    qsort(members, count, sizeof(*members), compare_directory_members);
+    sha256_init(&context);
+    sha256_update(&context, directory_digest_domain,
+        sizeof(directory_digest_domain) - 1);
+    for (index = 0; index < count; index++) {
+        sha256_update(&context, &members[index].kind, 1);
+        sha256_u64_big_endian(&context, (uint64_t)members[index].name_size);
+        sha256_update(&context, members[index].name, members[index].name_size);
+    }
+    sha256_final(&context, digest);
+    *size = (uint64_t)(sizeof(directory_digest_domain) - 1);
+    for (index = 0; index < count; index++)
+        *size += 1U + 8U + (uint64_t)members[index].name_size;
+    result = 0;
+
+cleanup:
+    if (stream != NULL)
+        closedir(stream);
+    for (index = 0; index < count; index++)
+        free(members[index].name);
+    free(members);
+    return result;
+}
+
 static int normalize_absolute_lexical(const char *input, char output[PATH_MAX]) {
     char copy[PATH_MAX], *component, *save = NULL;
     const char *parts[PATH_MAX / 2];
@@ -608,7 +722,8 @@ static int parse_inventory(unsigned char *data, size_t size, Inventory *result) 
             || strchr(third + 1, '\t') != NULL || first != cursor + 1
             || (cursor[0] != 'F' && cursor[0] != 'E'
                 && cursor[0] != 'A' && cursor[0] != 'L'
-                && cursor[0] != 'D' && cursor[0] != 'N'))
+                && cursor[0] != 'D' && cursor[0] != 'M'
+                && cursor[0] != 'N'))
             return -1;
         *first = '\0'; *second = '\0'; *third = '\0';
         record.kind = cursor[0];
@@ -668,15 +783,18 @@ static int authenticate_record(InventoryRecord *record) {
     }
     fd = record->kind == 'A' || record->kind == 'L'
         ? symlink_open(record->path, &metadata)
-        : (record->kind == 'D' ? directory_open(record->path, &metadata)
+        : ((record->kind == 'D' || record->kind == 'M')
+            ? directory_open(record->path, &metadata)
                                : canonical_regular_open(record->path, &metadata));
     if (fd < 0)
         return -1;
     if ((record->kind == 'D'
             ? (size = 0, memcpy(digest, sha256_empty, 32), 0)
+            : (record->kind == 'M'
+            ? digest_directory(fd, &size, digest)
             : (record->kind == 'A' || record->kind == 'L'
             ? digest_symlink(record->path, &size, digest, NULL, 0)
-            : digest_fd(fd, &size, digest))) != 0
+            : digest_fd(fd, &size, digest)))) != 0
         || size != record->size
         || memcmp(digest, record->digest, 32) != 0) {
         char actual_hex[65], expected_hex[65];
@@ -703,7 +821,8 @@ static int reauthenticate_record(InventoryRecord *record) {
     unsigned char digest[32];
     uint64_t size;
     int symlink = record->kind == 'A' || record->kind == 'L';
-    int directory = record->kind == 'D';
+    int directory = record->kind == 'D' || record->kind == 'M';
+    int membership = record->kind == 'M';
     if (record->kind == 'N') {
         if (lstat(record->path, &path_metadata) == 0 || errno != ENOENT) {
             errno = EAUTH;
@@ -722,10 +841,13 @@ static int reauthenticate_record(InventoryRecord *record) {
         || path_metadata.st_ino != record->inode
         || descriptor_metadata.st_dev != record->device
         || descriptor_metadata.st_ino != record->inode
+        || (membership && digest_directory(record->fd, &size, digest) != 0)
         || (!directory && (symlink
             ? digest_symlink(record->path, &size, digest, NULL, 0)
             : digest_fd(record->fd, &size, digest)) != 0)
         || (!directory && (size != record->size
+            || memcmp(digest, record->digest, 32) != 0))
+        || (membership && (size != record->size
             || memcmp(digest, record->digest, 32) != 0))) {
         errno = ESTALE;
         return -1;
@@ -815,7 +937,8 @@ static int validate_parent_records(Inventory *inventory) {
         else
             *slash = '\0';
         parent_record = inventory_find(inventory, parent);
-        if (parent_record == NULL || parent_record->kind != 'D')
+        if (parent_record == NULL
+            || (parent_record->kind != 'D' && parent_record->kind != 'M'))
             return -1;
     }
     return 0;
@@ -847,23 +970,143 @@ static int register_monitors(int queue, Inventory *inventory) {
 }
 
 static int monitor_clean(int queue) {
-    struct kevent event;
+    struct kevent events[64];
     struct timespec immediate = {0, 0};
-    int count = kevent(queue, NULL, 0, &event, 1, &immediate);
-    if (count < 0 && errno == EINTR)
-        return 1;
-    if (count > 0) {
-        InventoryRecord *record = event.udata;
-        /* execve updates access metadata on Darwin.  Attribute-only events
-         * cannot change executable/source bytes; reauthenticate immediately
-         * and continue.  Every data/topology event remains fatal. */
-        if (event.fflags == NOTE_ATTRIB && record != NULL
-            && reauthenticate_record(record) == 0)
-            return 1;
-        fprintf(stderr, "native bootstrap: vnode event 0x%x: %s\n",
-            event.fflags, record != NULL ? record->path : "<unknown>");
+    int clean = 1;
+    size_t drained = 0;
+    for (;;) {
+        int count = kevent(queue, NULL, 0, events,
+            (int)(sizeof(events) / sizeof(events[0])), &immediate);
+        int index;
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count < 0)
+            return 0;
+        if (count == 0)
+            return clean;
+        drained += (size_t)count;
+        if (drained > MAX_DRAIN_EVENTS) {
+            fprintf(stderr, "native bootstrap: vnode event backlog exceeds limit\n");
+            return 0;
+        }
+        for (index = 0; index < count; index++) {
+            InventoryRecord *record = events[index].udata;
+            /* execve updates access metadata on Darwin. Attribute-only events
+             * are accepted only after exact descriptor/path/content or
+             * directory-membership reauthentication. Every topology/data
+             * event is fatal. The loop drains the complete ready backlog. */
+            if (events[index].fflags == NOTE_ATTRIB && record != NULL
+                && reauthenticate_record(record) == 0)
+                continue;
+            fprintf(stderr, "native bootstrap: vnode event 0x%x: %s\n",
+                events[index].fflags,
+                record != NULL ? record->path : "<unknown>");
+            clean = 0;
+        }
     }
-    return count == 0;
+}
+
+static int event_backlog_self_test(void) {
+    char directory[] = "/private/tmp/summary-relearn-event-backlog.XXXXXX";
+    char paths[EVENT_BACKLOG_SELF_TEST_FILES][PATH_MAX];
+    int descriptors[EVENT_BACKLOG_SELF_TEST_FILES];
+    InventoryRecord records[EVENT_BACKLOG_SELF_TEST_FILES];
+    int queue = -1, calibration_queue = -1;
+    struct kevent calibration[EVENT_BACKLOG_SELF_TEST_FILES * 2U];
+    struct timespec timeout = {1, 0};
+    size_t index, created = 0;
+    int count, saw_attribute = 0, saw_write = 0;
+    int write_event_index = -1, result = -1, stage = 0;
+    memset(descriptors, -1, sizeof(descriptors));
+    memset(records, 0, sizeof(records));
+    if (mkdtemp(directory) == NULL)
+        return -1;
+    stage = 1;
+    queue = kqueue();
+    calibration_queue = kqueue();
+    if (queue < 0 || calibration_queue < 0)
+        goto cleanup;
+    stage = 2;
+    for (index = 0; index < EVENT_BACKLOG_SELF_TEST_FILES; index++) {
+        struct kevent changes[2];
+        struct stat metadata;
+        int written = snprintf(paths[index], sizeof(paths[index]),
+            "%s/event-%03zu", directory, index);
+        if (written < 0 || (size_t)written >= sizeof(paths[index]))
+            goto cleanup;
+        descriptors[index] = open(paths[index],
+            O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC | BOOTSTRAP_NOFOLLOW, 0600);
+        if (descriptors[index] < 0)
+            goto cleanup;
+        created++;
+        records[index].kind = 'F';
+        records[index].path = paths[index];
+        records[index].fd = descriptors[index];
+        if (fstat(descriptors[index], &metadata) != 0
+            || digest_fd(descriptors[index], &records[index].size,
+                records[index].digest) != 0)
+            goto cleanup;
+        records[index].device = metadata.st_dev;
+        records[index].inode = metadata.st_ino;
+        EV_SET(&changes[0], (uintptr_t)descriptors[index], EVFILT_VNODE,
+            EV_ADD | EV_CLEAR, NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB, 0,
+            &records[index]);
+        changes[1] = changes[0];
+        if (kevent(queue, &changes[0], 1, NULL, 0, NULL) != 0
+            || kevent(calibration_queue, &changes[1], 1, NULL, 0, NULL) != 0)
+            goto cleanup;
+    }
+    stage = 3;
+    for (index = 0; index + 1 < EVENT_BACKLOG_SELF_TEST_FILES; index++)
+        if (fchmod(descriptors[index], 0640) != 0)
+            goto cleanup;
+    if (write(descriptors[EVENT_BACKLOG_SELF_TEST_FILES - 1], "x", 1) != 1)
+        goto cleanup;
+    stage = 4;
+    count = kevent(calibration_queue, NULL, 0, calibration,
+        (int)(sizeof(calibration) / sizeof(calibration[0])), &timeout);
+    if (count <= 64) {
+        fprintf(stderr, "native bootstrap: backlog calibration count=%d\n", count);
+        goto cleanup;
+    }
+    for (int event = 0; event < count; event++) {
+        if ((calibration[event].fflags & NOTE_ATTRIB) != 0)
+            saw_attribute = 1;
+        if ((calibration[event].fflags & (NOTE_WRITE | NOTE_EXTEND)) != 0) {
+            saw_write = 1;
+            if (calibration[event].udata
+                    == &records[EVENT_BACKLOG_SELF_TEST_FILES - 1])
+                write_event_index = event;
+        }
+    }
+    if (!saw_attribute || !saw_write || write_event_index < 64) {
+        fprintf(stderr,
+            "native bootstrap: backlog calibration flags attrib=%d write=%d "
+            "write-index=%d\n",
+            saw_attribute, saw_write, write_event_index);
+        goto cleanup;
+    }
+    if (monitor_clean(queue) != 0) {
+        fprintf(stderr, "native bootstrap: backlog drain accepted mutation\n");
+        goto cleanup;
+    }
+    result = 0;
+
+cleanup:
+    if (queue >= 0)
+        close(queue);
+    if (calibration_queue >= 0)
+        close(calibration_queue);
+    for (index = 0; index < created; index++) {
+        if (descriptors[index] >= 0)
+            close(descriptors[index]);
+        (void)unlink(paths[index]);
+    }
+    (void)rmdir(directory);
+    if (result != 0)
+        fprintf(stderr, "native bootstrap: backlog self-test failed stage=%d errno=%d\n",
+            stage, errno);
+    return result;
 }
 
 static int exact_read(int fd, const char *expected, unsigned timeout_seconds,
@@ -1096,12 +1339,24 @@ static int supervise_child(Inventory *inventory, Options *options,
         failed = 1;
     close(ready_pipe[0]);
     close(go_pipe[1]);
-    while (waitpid(child, &status, WNOHANG) == 0) {
+    for (;;) {
+        pid_t waited = waitpid(child, &status, WNOHANG);
+        if (waited == child)
+            break;
+        if (waited < 0) {
+            if (errno == EINTR)
+                continue;
+            failed = 1;
+            (void)kill(child, SIGKILL);
+            while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+                ;
+            break;
+        }
         if (!monitor_clean(queue)) {
             failed = 1;
-            kill(child, SIGKILL);
+            (void)kill(child, SIGKILL);
         }
-        nanosleep(&delay, NULL);
+        (void)nanosleep(&delay, NULL);
     }
     if (!monitor_clean(queue) || reauthenticate_inventory(inventory) != 0
         || !monitor_clean(queue))
@@ -1133,6 +1388,8 @@ int main(int argc, char **argv) {
     size_t index;
     int success = 0;
 
+    if (argc == 2 && strcmp(argv[1], "--self-test-event-backlog") == 0)
+        return event_backlog_self_test() == 0 ? 0 : 1;
     if (parse_options(argc, argv, &options) != 0) {
         fprintf(stderr, "native bootstrap: invalid arguments\n");
         return 2;

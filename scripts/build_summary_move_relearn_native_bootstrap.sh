@@ -4,7 +4,7 @@ set -eu
 # This digest is deliberately duplicated in the compiled bootstrap. The
 # committed inventory is publication input; production builds verify it before
 # launching any host Python process.
-inventory_sha256="efc8c257eea170b742590c74f14e12cee34a816eab7828f655219d4159eafea1"
+inventory_sha256="3d13fa7df3e3962baa5481205714f4e2f9b7c3f3ee15d46d4036281f9c8dd3f4"
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 source_path="$repo_root/scripts/summary_move_relearn_native_bootstrap.c"
 inventory_path="$repo_root/scripts/summary_move_relearn_native_inventory.txt"
@@ -35,9 +35,19 @@ trap cleanup EXIT HUP INT TERM
     "-DSMR_EXPECTED_INVENTORY_SHA256=\"$inventory_sha256\"" \
     "$source_path" -o "$temporary_path"
 /usr/bin/codesign --force --sign - --timestamp=none \
+    --options runtime,restrict,library,hard,kill \
     --identifier com.samefisk.hgengine.summary-relearn-bootstrap \
     "$temporary_path"
 /usr/bin/codesign --verify --strict "$temporary_path"
+signature=$(/usr/bin/codesign -d --verbose=4 "$temporary_path" 2>&1)
+printf '%s\n' "$signature" | /usr/bin/grep -q \
+    'CodeDirectory .*flags=0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)'
+entitlements=$(/usr/bin/codesign -d --entitlements :- "$temporary_path" 2>&1)
+if printf '%s\n' "$entitlements" | /usr/bin/grep -Eq \
+    'allow-dyld-environment-variables|disable-library-validation'; then
+    echo "native bootstrap has forbidden dyld entitlements" >&2
+    exit 1
+fi
 
 dependencies=$(/usr/bin/otool -L "$temporary_path")
 dependency_count=$(printf '%s\n' "$dependencies" | /usr/bin/awk 'NR > 1 && NF {count++} END {print count+0}')

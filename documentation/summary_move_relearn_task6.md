@@ -121,7 +121,9 @@ hooks call task-3 history APIs; there is no second history store.
 - The container build publishes the ROM/build pair with an explicit unbound
   runtime slot. After that managed build succeeds, and before Delta receives a
   copy, the managed wrapper compiles the sealed native trust anchor without a
-  random Mach-O UUID (`-Wl,-no_uuid`) and ad-hoc signs it without a timestamp,
+  random Mach-O UUID (`-Wl,-no_uuid`) and ad-hoc signs it without a timestamp
+  with the exact hardened-runtime, restrict, library-validation, hard, and kill
+  CodeDirectory policy,
   then invokes the host runtime binder through that anchor. This makes repeated
   verifier and Workshop compilations byte-reproducible instead of replacing a
   published bootstrap with a semantically equivalent, differently hashed
@@ -141,6 +143,19 @@ hooks call task-3 history APIs; there is no second history store.
   Regular leaves are opened without following symlinks. Symlink hops and their
   parent directories are retained separately, and the exact alias chain must
   resolve to the canonical executable.
+- The inventory also seals the exact canonical directory graph for every
+  importable standard-library, DeSmuME, Pillow, retained-source, and mutable
+  native closure directory. Each membership record hashes a domain-separated,
+  raw-byte-sorted sequence of length-prefixed entry names and regular,
+  directory, or symlink types from a retained `O_NOFOLLOW` directory
+  descriptor. Unsupported filesystem types and all tree symlinks except the
+  two reviewed framework `libpython3.10` links fail inventory generation.
+  `__pycache__` and framework `site-packages` descendants are named by their
+  sealed parent membership but deliberately not traversed: exact `-S`, `-B`,
+  `/dev/null` pycache, normalized `sys.path`, and the source/extension-only
+  loader make them non-importable. Any new package shadow, direct bytecode,
+  extension, archive, link, rename, or entry-type substitution changes a
+  monitored membership digest before Python can run.
 - Every retained descriptor is hashed before fork and watched with
   `EVFILT_VNODE` for write, extension, delete, rename, link, revoke, and
   topology changes. The bootstrap sanitizes the entire child environment and
@@ -151,7 +166,12 @@ hooks call task-3 history APIs; there is no second history store.
   closed before CPython. Python must publish the exact READY
   message; the native parent then rehashes every descriptor and canonical path
   before returning GO. Monitoring continues until child exit, followed by one
-  final complete descriptor/path reauthentication. Native stale-result
+  final complete descriptor/path reauthentication. The event queue is drained
+  in 64-event batches to empty, retries interruption, and fails closed on any
+  data/topology event or a bounded continuous backlog; attribute-only events
+  require immediate exact record reauthentication. A sealed native self-test
+  calibrates more than one batch of attribute events followed by a write and
+  proves the write cannot remain queued across the boundary. Native stale-result
   invalidation occurs before closure authentication, so a blocked startup
   cannot preserve a prior passing result.
 - The dropped-`-S` regression uses a real temporary `.pth` in the canonical
@@ -170,12 +190,24 @@ hooks call task-3 history APIs; there is no second history store.
   prove stale-result removal. Existing calibrated `PYTHONPATH`, `.whl`,
   arbitrary archive, direct `.pyc`, `.pth`, `sitecustomize`, `__pycache__`,
   flag-drop, environment-drop, and child-propagation fixtures remain.
+- A deterministic package-before-module fixture adds
+  `hashlib/__init__.py` beside sealed `hashlib.py`, proves direct exact-flag
+  Python executes the package first and self-removes it, then proves the native
+  directory closure rejects the same membership before fork with no marker or
+  stale result. Separate direct-`.pyc` and new-symlink negatives cover entry
+  names/types, and the authoring generator is required to reject the symlink.
 - The root of trust is stated narrowly. The external acceptance caller pins
   the published native-bootstrap SHA-256 before invocation; Darwin AMFI enforces
-  the ad-hoc code-directory page hashes, and the bootstrap verifies that same
+  the ad-hoc code-directory page hashes plus hardened/restricted/library
+  validation before `main`, and the bootstrap verifies that same
   external digest from its own retained canonical descriptor. Pre-main trust is
   limited to the kernel, dyld shared cache, and Apple-protected `libSystem`.
-  Ad-hoc signing by itself is explicitly not claimed as an identity root, and
+  Dyld-enabling entitlements are forbidden. A real constructor fixture first
+  calibrates `DYLD_INSERT_LIBRARIES` and `DYLD_PRINT_TO_FILE` against an
+  intentionally unprotected copy, then proves the exact published bootstrap
+  creates neither constructor marker nor dyld log while still invalidating
+  stale evidence. Ad-hoc identity by itself is explicitly not claimed as an
+  identity root, and
   macOS has no usable unprivileged `fexecve`/`execveat` equivalent. The retained
   alias/canonical descriptors, vnode monitoring, READY/GO barrier, and repeated
   identity/hash checks bracket that unavoidable path-based `execve` handoff.

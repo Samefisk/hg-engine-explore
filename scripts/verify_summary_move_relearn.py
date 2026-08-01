@@ -12,6 +12,8 @@ import json
 import marshal
 import os
 import re
+import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -979,8 +981,12 @@ def bootstrap_host_contracts(root: Path) -> None:
     native_inventory_path = (
         root / "scripts/summary_move_relearn_native_inventory.txt"
     )
+    native_generator_path = (
+        root / "scripts/generate_summary_move_relearn_native_inventory.py"
+    )
     native_source = native_source_path.read_text()
     native_build = native_build_path.read_text()
+    native_generator = native_generator_path.read_text()
     require(
         all(
             token in native_source
@@ -1002,21 +1008,45 @@ def bootstrap_host_contracts(root: Path) -> None:
                 '"/scripts/launch_summary_move_relearn_runtime.py"',
                 '"/scripts/pokemon_move_history_build_manifest.py"',
                 "require_descriptor_capacity",
+                "digest_directory",
+                "AT_SYMLINK_NOFOLLOW",
+                "MAX_DRAIN_EVENTS",
+                "--self-test-event-backlog",
                 "reauthenticate_inventory",
                 "execve(inventory->alias->path",
             )
         )
         and "-Werror -pedantic" in native_build
         and "-Wl,-no_uuid" in native_build
+        and "--options runtime,restrict,library,hard,kill" in native_build
+        and "flags=0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
+        in native_build
         and "/usr/bin/codesign --verify --strict" in native_build
         and "/usr/lib/libSystem" in native_build,
         "native pre-Python trust-anchor source/build contract differs",
+    )
+    require(
+        "summary-move-relearn-native-bootstrap-inventory-v2" in native_generator
+        and "DIRECTORY_DIGEST_DOMAIN" in native_generator
+        and "add_directory_graph" in native_generator
+        and "unsupported inventory graph symlink" in native_generator
+        and "follow_symlinks=False" in native_generator,
+        "native directory-membership inventory generator differs",
     )
     if sys.platform != "darwin":
         return
     require(
         native_inventory_path.is_file(),
         "native bootstrap inventory is absent",
+    )
+    runtime_python = root / ".venv/bin/python3"
+    require(runtime_python.is_file(), "repository runtime Python is absent")
+    prebuild_sha256 = (
+        hashlib.sha256(
+            (root / "build/summary_move_relearn_native_bootstrap").read_bytes()
+        ).hexdigest()
+        if (root / "build/summary_move_relearn_native_bootstrap").is_file()
+        else None
     )
     native_build_result = subprocess.run(
         [str(native_build_path)],
@@ -1049,6 +1079,165 @@ def bootstrap_host_contracts(root: Path) -> None:
         == native_inventory_sha256,
         "native bootstrap publication digest differs",
     )
+    repeated_build = subprocess.run(
+        [str(native_build_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    repeated_fields = repeated_build.stdout.strip().split()
+    require(
+        repeated_build.returncode == 0
+        and repeated_fields == native_fields
+        and (prebuild_sha256 is None or prebuild_sha256 == native_self_sha256)
+        and hashlib.sha256(native_bootstrap.read_bytes()).hexdigest()
+        == native_self_sha256,
+        "native bootstrap compilation is not reproducible",
+    )
+    uuid_probe = subprocess.run(
+        ["/usr/bin/otool", "-l", str(native_bootstrap)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    require(
+        uuid_probe.returncode == 0 and "LC_UUID" not in uuid_probe.stdout,
+        "native bootstrap contains a non-reproducible Mach-O UUID",
+    )
+    inventory_lines = native_inventory_path.read_text().splitlines()
+    membership_paths = {
+        line.split("\t", 3)[3]
+        for line in inventory_lines[1:]
+        if line.startswith("M\t") and len(line.split("\t", 3)) == 4
+    }
+    def graph_directories(graph_root: Path, prune: set[str]) -> set[str]:
+        pending = [graph_root.resolve()]
+        discovered: set[str] = set()
+        while pending:
+            directory = pending.pop()
+            require(str(directory) not in discovered, "directory graph cycles")
+            discovered.add(str(directory))
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    metadata = entry.stat(follow_symlinks=False)
+                    if stat.S_ISDIR(metadata.st_mode) and entry.name not in prune:
+                        pending.append(directory / entry.name)
+                    else:
+                        require(
+                            stat.S_ISREG(metadata.st_mode)
+                            or stat.S_ISLNK(metadata.st_mode)
+                            or (
+                                stat.S_ISDIR(metadata.st_mode)
+                                and entry.name in prune
+                            ),
+                            f"unsupported directory graph member: {entry.path}",
+                        )
+        return discovered
+
+    base = Path(sys.base_prefix).resolve()
+    stdlib = base / "lib/python3.10"
+    site_packages = root / ".venv/lib/python3.10/site-packages"
+    expected_membership_paths = {
+        str(root / ".venv"),
+        str(root / "scripts"),
+        str(base),
+        str(base / "lib"),
+    }
+    expected_membership_paths.update(
+        graph_directories(stdlib, {"__pycache__", "site-packages"})
+    )
+    expected_membership_paths.update(
+        graph_directories(site_packages / "desmume", {"__pycache__"})
+    )
+    expected_membership_paths.update(
+        graph_directories(site_packages / "PIL", {"__pycache__"})
+    )
+    with tempfile.TemporaryDirectory(prefix="summary-relearn-inventory-") as generated_dir:
+        generated_inventory = Path(generated_dir) / "inventory.txt"
+        generated = subprocess.run(
+            [
+                str(runtime_python),
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
+                str(native_generator_path),
+                "--output",
+                str(generated_inventory),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            generated.returncode == 0
+            and generated_inventory.read_bytes() == native_inventory_path.read_bytes(),
+            "committed native inventory differs from exact clean regeneration",
+        )
+    require(
+        inventory_lines[0]
+        == "summary-move-relearn-native-bootstrap-inventory-v2"
+        and len(membership_paths) == 148
+        and membership_paths == expected_membership_paths,
+        "native directory-membership inventory coverage differs",
+    )
+    backlog_probe = subprocess.run(
+        [str(native_bootstrap), "--self-test-event-backlog"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    require(
+        backlog_probe.returncode == 0
+        and "vnode event" in backlog_probe.stderr,
+        "native event-backlog drain self-test failed",
+    )
+    signature_probe = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--verbose=4", str(native_bootstrap)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    signature_text = signature_probe.stdout + signature_probe.stderr
+    entitlement_probe = subprocess.run(
+        [
+            "/usr/bin/codesign",
+            "-d",
+            "--entitlements",
+            ":-",
+            str(native_bootstrap),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    entitlement_text = entitlement_probe.stdout + entitlement_probe.stderr
+    require(
+        signature_probe.returncode == 0
+        and "flags=0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
+        in signature_text
+        and "Runtime Version=" in signature_text,
+        "native bootstrap pre-main restricted signature differs",
+    )
+    require(
+        entitlement_probe.returncode == 0
+        and "allow-dyld-environment-variables" not in entitlement_text
+        and "disable-library-validation" not in entitlement_text,
+        "native bootstrap entitlement policy differs",
+    )
     native_prefix = [
         str(native_bootstrap),
         "--inventory",
@@ -1077,18 +1266,6 @@ def bootstrap_host_contracts(root: Path) -> None:
         ),
         launcher.__dict__,
     )
-    runtime_python = root / ".venv/bin/python3"
-    if not runtime_python.is_file():
-        managed_venv = os.environ.get("VENV")
-        require(
-            root == Path("/hg-engine")
-            and managed_venv == "/tmp/hg-engine-venv",
-            "repository runtime Python is absent outside the exact managed "
-            "build environment",
-        )
-        runtime_python = Path(managed_venv) / "bin/python3"
-    require(runtime_python.is_file(), "repository runtime Python is absent")
-
     def colocated_cache_path(source: Path) -> Path:
         return (
             source.parent
@@ -1621,6 +1798,358 @@ def bootstrap_host_contracts(root: Path) -> None:
         require(
             all(not sentinel.exists() for _, _, sentinel in attack_environments),
             "hostile startup code executed during authenticated fixture",
+        )
+
+        # CPython's FileFinder resolves a package directory before a same-name
+        # source module. Calibrate that exact rule with a self-removing
+        # hashlib package, then prove sealed directory membership stops it
+        # before the child is forked even though hashlib.py remains exact.
+        canonical_stdlib = (
+            Path(sys.base_prefix)
+            / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        ).resolve()
+        canonical_hashlib = canonical_stdlib / "hashlib.py"
+        hashlib_original = canonical_hashlib.read_text()
+        hashlib_package = canonical_stdlib / "hashlib"
+        hashlib_init = hashlib_package / "__init__.py"
+        package_sentinel = temp / "package-before-module-executed"
+        package_payload = (
+            "import posix as _task6_posix\n"
+            f"_task6_fd = _task6_posix.open({str(package_sentinel)!r}, "
+            "_task6_posix.O_WRONLY | _task6_posix.O_CREAT | "
+            "_task6_posix.O_TRUNC, 0o600)\n"
+            "_task6_posix.write(_task6_fd, b'executed')\n"
+            "_task6_posix.close(_task6_fd)\n"
+            "_task6_posix.unlink(__file__)\n"
+            f"_task6_posix.rmdir({str(hashlib_package)!r})\n"
+            f"exec(compile({hashlib_original!r}, {str(canonical_hashlib)!r}, "
+            "'exec'), globals(), globals())\n"
+        )
+
+        def install_package_shadow() -> None:
+            require(
+                canonical_hashlib.is_file()
+                and not hashlib_package.exists(),
+                "canonical hashlib membership was not sealed before fixture",
+            )
+            hashlib_package.mkdir()
+            hashlib_init.write_text(package_payload)
+
+        try:
+            install_package_shadow()
+            package_calibration = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    "-c",
+                    "import hashlib; print(hashlib.sha256(b'x').hexdigest())",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                package_calibration.returncode == 0
+                and package_sentinel.is_file()
+                and not hashlib_package.exists()
+                and canonical_hashlib.read_text() == hashlib_original,
+                "package-before-module fixture did not calibrate direct execution",
+            )
+            package_sentinel.unlink()
+            install_package_shadow()
+            package_stale = temp / "package-before-module-result.json"
+            package_stale.write_text('{"status":"stale"}\n')
+            package_blocked = subprocess.run(
+                [
+                    *native_prefix,
+                    "--invalidate-result",
+                    str(package_stale),
+                    "--",
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    str(launcher_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=source_only_environment,
+            )
+            require(
+                package_blocked.returncode != 0
+                and "closure differs" in package_blocked.stderr
+                and not package_sentinel.exists()
+                and not package_stale.exists(),
+                "native bootstrap accepted package-before-module membership",
+            )
+        finally:
+            hashlib_init.unlink(missing_ok=True)
+            if hashlib_package.exists():
+                hashlib_package.rmdir()
+            package_sentinel.unlink(missing_ok=True)
+        require(
+            canonical_hashlib.read_text() == hashlib_original,
+            "package-before-module fixture changed hashlib.py",
+        )
+
+        def membership_negative(candidate: Path, create: object, label: str) -> None:
+            stale = temp / f"{label}-result.json"
+            sentinel = temp / f"{label}-executed"
+            require(not candidate.exists() and not candidate.is_symlink(), label)
+            create()
+            stale.write_text('{"status":"stale"}\n')
+            try:
+                blocked = subprocess.run(
+                    [
+                        *native_prefix,
+                        "--invalidate-result",
+                        str(stale),
+                        "--",
+                        str(runtime_python),
+                        "-I",
+                        "-S",
+                        "-B",
+                        "-X",
+                        "pycache_prefix=/dev/null",
+                        str(launcher_path),
+                        "--result-json",
+                        str(sentinel),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=source_only_environment,
+                )
+                require(
+                    blocked.returncode != 0
+                    and "closure differs" in blocked.stderr
+                    and not stale.exists()
+                    and not sentinel.exists(),
+                    f"native bootstrap accepted {label} membership",
+                )
+            finally:
+                candidate.unlink(missing_ok=True)
+
+        direct_pyc = canonical_stdlib / "task6_uninventoried.pyc"
+        membership_negative(
+            direct_pyc,
+            lambda: direct_pyc.write_bytes(b"hostile-direct-bytecode"),
+            "direct-pyc",
+        )
+        unsupported_link = canonical_stdlib / "task6_uninventoried_link"
+        membership_negative(
+            unsupported_link,
+            lambda: unsupported_link.symlink_to(canonical_hashlib),
+            "new-symlink",
+        )
+        unsupported_link.symlink_to(canonical_hashlib)
+        try:
+            generated = temp / "unsupported-symlink-inventory.txt"
+            generator_blocked = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    str(native_generator_path),
+                    "--output",
+                    str(generated),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=source_only_environment,
+            )
+            require(
+                generator_blocked.returncode != 0
+                and "unsupported inventory graph symlink"
+                in generator_blocked.stderr
+                and not generated.exists(),
+                "inventory generator accepted an unsupported symlink member",
+            )
+        finally:
+            unsupported_link.unlink(missing_ok=True)
+
+        unsupported_fifo = canonical_stdlib / "task6_uninventoried_fifo"
+        membership_negative(
+            unsupported_fifo,
+            lambda: os.mkfifo(unsupported_fifo, 0o600),
+            "new-fifo",
+        )
+        os.mkfifo(unsupported_fifo, 0o600)
+        try:
+            generated = temp / "unsupported-fifo-inventory.txt"
+            generator_blocked = subprocess.run(
+                [
+                    str(runtime_python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-X",
+                    "pycache_prefix=/dev/null",
+                    str(native_generator_path),
+                    "--output",
+                    str(generated),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=source_only_environment,
+            )
+            require(
+                generator_blocked.returncode != 0
+                and "unsupported inventory directory member"
+                in generator_blocked.stderr
+                and not generated.exists(),
+                "inventory generator accepted an unsupported entry type",
+            )
+        finally:
+            unsupported_fifo.unlink(missing_ok=True)
+
+        # Calibrate a constructor before native main against an intentionally
+        # unprotected copy, then apply the identical DYLD environment to the
+        # exact published hardened/restricted bootstrap. In-main environment
+        # clearing cannot satisfy this fixture; only the CodeDirectory launch
+        # policy can prevent the marker and dyld log.
+        dyld_sentinel = temp / "dyld-pre-main-constructor-executed"
+        dyld_log = temp / "dyld-pre-main.log"
+        dyld_source = temp / "dyld_pre_main_probe.c"
+        dyld_library = temp / "dyld_pre_main_probe.dylib"
+        dyld_source.write_text(
+            "#include <fcntl.h>\n#include <unistd.h>\n"
+            "__attribute__((constructor)) static void task6_probe(void) {\n"
+            f"  int fd = open({json.dumps(str(dyld_sentinel))}, "
+            "O_WRONLY | O_CREAT | O_TRUNC, 0600);\n"
+            "  if (fd >= 0) { (void)write(fd, \"executed\", 8); close(fd); }\n"
+            "}\n"
+        )
+        dyld_compile = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "--sdk",
+                "macosx",
+                "clang",
+                "-dynamiclib",
+                str(dyld_source),
+                "-o",
+                str(dyld_library),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(
+            dyld_compile.returncode == 0,
+            "pre-main dyld constructor fixture did not compile: "
+            + dyld_compile.stderr[-1000:],
+        )
+        dyld_sign = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                str(dyld_library),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(dyld_sign.returncode == 0, "pre-main dyld fixture signing failed")
+        unprotected_bootstrap = temp / "unprotected-native-bootstrap"
+        shutil.copy2(native_bootstrap, unprotected_bootstrap)
+        strip_policy = subprocess.run(
+            [
+                "/usr/bin/codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--timestamp=none",
+                str(unprotected_bootstrap),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+        require(strip_policy.returncode == 0, "dyld calibration signing failed")
+        dyld_environment = {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "C",
+            "DYLD_INSERT_LIBRARIES": str(dyld_library),
+            "DYLD_PRINT_LIBRARIES": "1",
+            "DYLD_PRINT_TO_FILE": str(dyld_log),
+            "DYLD_LIBRARY_PATH": str(temp),
+            "DYLD_FRAMEWORK_PATH": str(temp),
+            "DYLD_FALLBACK_LIBRARY_PATH": str(temp),
+        }
+        dyld_calibration = subprocess.run(
+            [str(unprotected_bootstrap), "--print-self-record"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=dyld_environment,
+        )
+        require(
+            dyld_calibration.returncode == 0
+            and dyld_sentinel.is_file()
+            and dyld_log.is_file(),
+            "pre-main dyld constructor fixture did not calibrate",
+        )
+        dyld_sentinel.unlink()
+        dyld_log.unlink()
+        dyld_stale = temp / "dyld-protected-result.json"
+        dyld_stale.write_text('{"status":"stale"}\n')
+        dyld_protected = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result",
+                str(dyld_stale),
+                "--",
+                str(runtime_python),
+                "-I",
+                "-S",
+                "-B",
+                "-X",
+                "pycache_prefix=/dev/null",
+                str(launcher_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=dyld_environment,
+        )
+        require(
+            dyld_protected.returncode != 0
+            and not dyld_sentinel.exists()
+            and not dyld_log.exists()
+            and not dyld_stale.exists()
+            and "authenticated child failed" in dyld_protected.stderr,
+            "restricted native bootstrap accepted pre-main dyld influence",
         )
 
         # Exercise the exact canonical CPython startup path.  The payload

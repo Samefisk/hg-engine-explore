@@ -966,9 +966,13 @@ def _primitive_runtime_authentication(document):
         )
         and isinstance(bootstrap["codesign"], dict)
         and bootstrap["codesign"].get("CDHash")
+        and bootstrap["codesign"].get("CodeDirectoryFlags")
+        == "0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
+        and bootstrap["codesign"].get("RuntimeVersion")
         and isinstance(bootstrap["compile"], dict)
         and bootstrap["compile"].get("compiler_codesign", {}).get("CDHash")
-        and "external acceptance caller pins" in bootstrap["root_of_trust"],
+        and "external acceptance caller pins" in bootstrap["root_of_trust"]
+        and "enforced by dyld/AMFI before main" in bootstrap["root_of_trust"],
         "native bootstrap trust boundary differs",
     )
     platform_record = runtime["platform"]

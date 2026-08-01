@@ -135,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "ead740f63b8395b86c957617813faa7bd98cdcc89f6b58e01b4a61047ac175c0"
+    "cd3426c14f3c790f3154c8b5369e49e8e04057192adc504d8a250ba88c8ca239"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -701,6 +701,11 @@ def _codesign_metadata(path: Path, label: str) -> dict[str, str]:
         raise ManifestError(f"{label} code signature is invalid")
     fields: dict[str, str] = {}
     for line in output.splitlines():
+        code_directory = re.search(r"\bflags=(0x[0-9a-f]+\([^)]*\))", line)
+        if line.startswith("CodeDirectory ") and code_directory is not None:
+            fields["CodeDirectoryFlags"] = code_directory.group(1)
+        if line.startswith("Runtime Version="):
+            fields["RuntimeVersion"] = line.split("=", 1)[1]
         if "=" in line:
             key, value = line.split("=", 1)
             if key in {
@@ -710,7 +715,11 @@ def _codesign_metadata(path: Path, label: str) -> dict[str, str]:
                 "TeamIdentifier",
             }:
                 fields[key] = value
-    if not fields.get("Identifier") or not fields.get("CDHash"):
+    if (
+        not fields.get("Identifier")
+        or not fields.get("CDHash")
+        or not fields.get("CodeDirectoryFlags")
+    ):
         raise ManifestError(f"{label} code-sign identity is incomplete")
     return fields
 
@@ -769,6 +778,35 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
     )
     if compiler_version.returncode != 0 or not compiler_version.stdout:
         raise ManifestError("native bootstrap compiler provenance is absent")
+    bootstrap_codesign = _codesign_metadata(
+        bootstrap_path, "native bootstrap binary"
+    )
+    expected_flags = (
+        "0x12b02(adhoc,hard,kill,restrict,library-validation,runtime)"
+    )
+    if (
+        bootstrap_codesign.get("CodeDirectoryFlags") != expected_flags
+        or not bootstrap_codesign.get("RuntimeVersion")
+    ):
+        raise ManifestError(
+            "native bootstrap lacks the exact hardened/restricted launch policy"
+        )
+    entitlements = subprocess.run(
+        ["/usr/bin/codesign", "-d", "--entitlements", ":-", str(bootstrap_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+    )
+    entitlement_text = entitlements.stdout + entitlements.stderr
+    if (
+        entitlements.returncode != 0
+        or "allow-dyld-environment-variables" in entitlement_text
+        or "disable-library-validation" in entitlement_text
+    ):
+        raise ManifestError(
+            "native bootstrap entitlement policy could not be authenticated"
+        )
     return {
         "schema": "summary-move-relearn-native-bootstrap-v1",
         "binary": bootstrap_record,
@@ -796,20 +834,22 @@ def _native_bootstrap_runtime_record() -> dict[str, Any]:
             ),
             "codesign_command": (
                 "/usr/bin/codesign --force --sign - --timestamp=none "
+                "--options runtime,restrict,library,hard,kill "
                 "--identifier com.samefisk.hgengine.summary-relearn-bootstrap "
                 "build/summary_move_relearn_native_bootstrap"
             ),
         },
-        "codesign": _codesign_metadata(
-            bootstrap_path, "native bootstrap binary"
-        ),
+        "codesign": bootstrap_codesign,
         "linked_images": dependency_lines,
         "root_of_trust": (
             "The external acceptance caller pins the reported bootstrap "
             "SHA-256 before launch. Darwin AMFI validates the ad-hoc code "
             "directory/pages; the binary then self-checks that external "
             "digest. Pre-main trust is limited to the kernel, dyld shared "
-            "cache, and Apple-protected libSystem. The bootstrap retains "
+            "cache, and Apple-protected libSystem. Hardened runtime, restrict, "
+            "library validation, hard, and kill CodeDirectory flags are "
+            "enforced by dyld/AMFI before main, with no dyld-enabling "
+            "entitlements. The bootstrap retains "
             "and monitors the complete mutable Python/native closure until "
             "the child exits. Ad-hoc signing alone is not claimed as an "
             "identity root."

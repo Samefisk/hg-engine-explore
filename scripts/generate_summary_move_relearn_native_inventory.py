@@ -18,8 +18,9 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-HEADER = "summary-move-relearn-native-bootstrap-inventory-v1\n"
+HEADER = "summary-move-relearn-native-bootstrap-inventory-v2\n"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+DIRECTORY_DIGEST_DOMAIN = b"summary-move-relearn-directory-membership-v1\0"
 RUNTIME_SOURCES = (
     "scripts/pokemon_move_history_build_manifest.py",
     "scripts/launch_summary_move_relearn_runtime.py",
@@ -36,6 +37,10 @@ EXTRA_NATIVE = (
     BASE / "lib/libcrypto.1.1.dylib",
     BASE / "lib/libssl.1.1.dylib",
 )
+REVIEWED_TREE_SYMLINKS = {
+    STDLIB / "config-3.10-darwin/libpython3.10.a",
+    STDLIB / "config-3.10-darwin/libpython3.10.dylib",
+}
 
 
 class InventoryError(RuntimeError):
@@ -53,6 +58,32 @@ def ensure_absolute_clean(path: Path) -> Path:
     return absolute
 
 
+def directory_membership(path: Path) -> tuple[int, str]:
+    members: list[tuple[bytes, bytes]] = []
+    with os.scandir(path) as entries:
+        for entry in entries:
+            name = os.fsencode(entry.name)
+            metadata = entry.stat(follow_symlinks=False)
+            if stat.S_ISREG(metadata.st_mode):
+                kind = b"F"
+            elif stat.S_ISDIR(metadata.st_mode):
+                kind = b"D"
+            elif stat.S_ISLNK(metadata.st_mode):
+                kind = b"L"
+            else:
+                raise InventoryError(
+                    f"unsupported inventory directory member: {path / entry.name}"
+                )
+            members.append((name, kind))
+    members.sort(key=lambda item: item[0])
+    payload = bytearray(DIRECTORY_DIGEST_DOMAIN)
+    for name, kind in members:
+        payload.extend(kind)
+        payload.extend(len(name).to_bytes(8, "big"))
+        payload.extend(name)
+    return len(payload), digest(bytes(payload))
+
+
 def add_directory(records: dict[Path, tuple[str, int, str]], path: Path) -> None:
     path = ensure_absolute_clean(path)
     metadata = path.lstat()
@@ -60,9 +91,71 @@ def add_directory(records: dict[Path, tuple[str, int, str]], path: Path) -> None
         raise InventoryError(f"inventory directory is not canonical: {path}")
     prior = records.get(path)
     value = ("D", 0, EMPTY_SHA256)
+    if prior is not None and prior[0] == "M":
+        return
     if prior is not None and prior != value:
         raise InventoryError(f"conflicting inventory directory: {path}")
     records[path] = value
+
+
+def add_membership_directory(
+    records: dict[Path, tuple[str, int, str]], path: Path
+) -> None:
+    path = ensure_absolute_clean(path)
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or path.resolve() != path:
+        raise InventoryError(f"inventory membership directory is not canonical: {path}")
+    payload_size, membership_digest = directory_membership(path)
+    value = ("M", payload_size, membership_digest)
+    prior = records.get(path)
+    if prior is not None and prior != value:
+        if prior[0] == "D":
+            records[path] = value
+            return
+        raise InventoryError(f"conflicting inventory membership directory: {path}")
+    records[path] = value
+
+
+def add_directory_graph(
+    records: dict[Path, tuple[str, int, str]], root: Path, *,
+    prune: tuple[str, ...] = ("__pycache__",),
+) -> None:
+    root = ensure_absolute_clean(root)
+    metadata = root.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or root.resolve() != root:
+        raise InventoryError(f"inventory graph root is not canonical: {root}")
+    pending = [root]
+    visited: set[Path] = set()
+    while pending:
+        directory = pending.pop()
+        if directory in visited:
+            raise InventoryError(f"inventory directory graph cycle: {directory}")
+        visited.add(directory)
+        add_membership_directory(records, directory)
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                candidate = ensure_absolute_clean(directory / entry.name)
+                member = entry.stat(follow_symlinks=False)
+                if stat.S_ISDIR(member.st_mode):
+                    if entry.name not in prune:
+                        pending.append(candidate)
+                elif stat.S_ISLNK(member.st_mode):
+                    if candidate not in REVIEWED_TREE_SYMLINKS:
+                        raise InventoryError(
+                            f"unsupported inventory graph symlink: {candidate}"
+                        )
+                    resolved = add_symlink_chain(records, candidate)
+                    terminal = resolved.lstat()
+                    if not stat.S_ISREG(terminal.st_mode):
+                        raise InventoryError(
+                            "inventory directory graph symlink does not end "
+                            f"at a regular file: {candidate}"
+                        )
+                    add_regular(records, resolved)
+                elif not stat.S_ISREG(member.st_mode):
+                    raise InventoryError(
+                        f"unsupported inventory graph member: {candidate}"
+                    )
 
 
 def add_regular(
@@ -97,7 +190,8 @@ def add_symlink_chain(
             raise InventoryError(f"inventory symlink cycle: {current}")
         visited.add(current)
         target = os.readlink(current).encode("utf-8")
-        add_directory(records, current.parent)
+        if current.parent not in records:
+            add_directory(records, current.parent)
         value = (kind, len(target), digest(target))
         prior = records.get(current)
         if prior is not None and prior != value:
@@ -153,8 +247,13 @@ def build_inventory() -> str:
         )
     add_regular(records, PYTHON, kind="E")
     add_regular(records, REPO / ".venv/pyvenv.cfg")
+    add_membership_directory(records, REPO / ".venv")
+    add_membership_directory(records, REPO / "scripts")
+    add_membership_directory(records, BASE)
+    add_membership_directory(records, BASE / "lib")
     for relative in RUNTIME_SOURCES:
         add_regular(records, REPO / relative)
+    add_directory_graph(records, STDLIB, prune=("__pycache__", "site-packages"))
     add_tree(
         records,
         STDLIB,
@@ -166,6 +265,8 @@ def build_inventory() -> str:
     add_directory(records, version_zip.parent)
     records[version_zip] = ("N", 0, EMPTY_SHA256)
     site_packages = REPO / ".venv/lib/python3.10/site-packages"
+    add_directory_graph(records, site_packages / "desmume")
+    add_directory_graph(records, site_packages / "PIL")
     add_tree(records, site_packages / "desmume")
     add_tree(records, site_packages / "PIL")
     for path in EXTRA_NATIVE:
