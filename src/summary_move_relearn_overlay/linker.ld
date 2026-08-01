@@ -23,6 +23,8 @@ SECTIONS {
                 *(.rodata)
                 *(.fini)
                 *(COMMON)
+                /* Preserve the authenticated task-4 overlay size contract. */
+                . = . + 4;
                 __text_end = . ;
         } >rom = 0xff
 

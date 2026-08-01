@@ -565,7 +565,9 @@ def source_contracts(root: Path) -> None:
     require(
         "newKeys & PAD_BUTTON_B" in success_dispatch
         and "newKeys & (PAD_BUTTON_A | PAD_BUTTON_X)" in success_dispatch
-        and "repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)" in success_dispatch
+        and "newKeys & (PAD_KEY_UP | PAD_KEY_DOWN)" in success_dispatch
+        and "repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)"
+        not in success_dispatch
         and success_dispatch.count(
             "SummaryMoveRelearn_Enter(summary, state, pokemon);"
         )
@@ -4517,7 +4519,8 @@ def host_state_contracts() -> None:
         ("success", "B"): ("inactive", False),
         ("success", "A"): ("list", False),
         ("success", "X"): ("list", False),
-        ("success", "Down"): ("list", False),
+        ("success", "held-Down"): ("success", False),
+        ("success", "fresh-Down"): ("list", False),
         ("success", "touch-more"): ("list", False),
         ("success", "touch-done"): ("inactive", False),
         ("list", "party-touch-switch"): ("list", False),

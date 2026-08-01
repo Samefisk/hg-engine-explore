@@ -1071,8 +1071,8 @@ u32 SummaryMoveRelearn_MainState(
         if (newKeys & (PAD_BUTTON_A | PAD_BUTTON_X)) {
             SummaryMoveRelearn_PlayMoreSE(state);
             SummaryMoveRelearn_Enter(summary, state, pokemon);
-        } else if (repeatKeys & (PAD_KEY_UP | PAD_KEY_DOWN)) {
-            BOOL down = (repeatKeys & PAD_KEY_DOWN) != 0;
+        } else if (newKeys & (PAD_KEY_UP | PAD_KEY_DOWN)) {
+            BOOL down = (newKeys & PAD_KEY_DOWN) != 0;
 
             SummaryMoveRelearn_Enter(summary, state, pokemon);
             if (state->mode == SUMMARY_RELEARN_LIST) {

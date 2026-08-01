@@ -122,8 +122,8 @@ Retail Summary code and state dispatch are ARM9-resident. Its application
 template at `0x02103A1C` now owns dynamic overlay 154 for the complete Summary
 lifetime. Overlay 154 occupies `0x023C0400..0x023C22A0`, ending exactly before
 stock overlay 133. A fixed `SRM4`/version-4 header and odd Thumb entry live at
-the overlay base. The task-4 image uses `0xB4C` bytes through `0x023C0F4C`,
-leaving `0x1354` bytes inside that reserved envelope for later Summary work.
+the overlay base. The task-4 image uses `0xFA4` bytes through `0x023C13A4`,
+leaving `0xEFC` bytes inside that reserved envelope for later Summary work.
 
 The state-2 call at `0x02088494` directly targets overlay 154's fixed `+0x08`
 entry. This is safe under the application-manager ownership invariant:
