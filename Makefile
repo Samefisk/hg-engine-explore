@@ -140,6 +140,9 @@ MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/party_menu.o \
 	$(BUILD)/save.o \
 	$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o \
+	$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o \
+	$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o \
+	$(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o \
 	$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o \
 	$(BUILD)/overworld_wild_helper_overlay/thumb_help.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
@@ -362,7 +365,8 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--core-linked $(LINK)
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
 		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
-	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py \
+		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
 	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
 		scripts/pokemon_move_history_build_manifest.py \
 		--publish-pair \
@@ -370,6 +374,8 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--candidate-rom $(BUILDROM).tmp \
 		--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) \
 		--final-rom $(BUILDROM)
+	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py \
+		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) --rom $(BUILDROM)
 	@echo "Done.  See output $(BUILDROM)."
 
 

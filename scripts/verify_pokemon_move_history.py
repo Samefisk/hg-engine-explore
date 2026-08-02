@@ -3,6 +3,7 @@
 import argparse
 import ast
 from collections import defaultdict
+import hashlib
 import json
 import re
 import struct
@@ -18,6 +19,13 @@ OVERLAY_GUARD = 0x1000
 TASK6_OVERLAY_ID = 155
 TASK6_OVERLAY_BASE = 0x023BD400
 TASK6_OVERLAY_LIMIT = 0x023BE400
+RUNTIME_OVERLAY_ID = 157
+RUNTIME_OVERLAY_BASE = 0x023BB400
+RUNTIME_OVERLAY_USABLE_END = 0x023BD380
+RUNTIME_OVERLAY_LIMIT = 0x023BD400
+EXPECTED_ARCHIVE_END = 0x023BA268
+EXPECTED_ARCHIVE_MARGIN = 0x1198
+EXPECTED_FREE_MARGIN = 0x198
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
 DTCM_START = 0x027E0000
@@ -70,6 +78,120 @@ def read_u32(data: bytes, offset: int, description: str) -> int:
     require(offset >= 0 and offset + 4 <= len(data),
             f"{description} is outside its binary")
     return struct.unpack_from("<I", data, offset)[0]
+
+
+def read_u16(data: bytes, offset: int, description: str) -> int:
+    require(offset >= 0 and offset + 2 <= len(data),
+            f"{description} is outside its binary")
+    return struct.unpack_from("<H", data, offset)[0]
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def verify_boot_decoder_freshness(
+    manifest_path: Path,
+    rom: bytes,
+    arm9: bytes,
+    runtime_overlay: bytes,
+    patched_arm9: bytes,
+) -> None:
+    require(manifest_path.is_file(),
+            "packaged boot decoder requires the captured build manifest")
+    manifest = json.loads(manifest_path.read_text())
+    require(manifest.get("schema") == "pokemon-move-history-capture-build-v1",
+            "packaged boot decoder build manifest schema differs")
+    inputs = manifest.get("inputs", {})
+    for path_text in (
+        "armips/asm/syntheticoverlay.s",
+        "src/overworld_wild_runtime_overlay/linker.ld",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+    ):
+        data = (REPO / path_text).read_bytes()
+        record = inputs.get(path_text)
+        require(
+            isinstance(record, dict)
+            and record.get("size") == len(data)
+            and record.get("sha256") == sha256(data),
+            f"packaged boot decoder source is newer than capture: {path_text}",
+        )
+    outputs = manifest.get("outputs", {})
+    for name, data in (
+        ("patched_arm9", patched_arm9),
+        ("overworld_wild_runtime_binary", runtime_overlay),
+        ("packaged_rom", rom),
+    ):
+        record = outputs.get(name)
+        require(
+            isinstance(record, dict)
+            and record.get("size") == len(data)
+            and record.get("sha256") == sha256(data),
+            f"packaged boot decoder artifact is outside its capture: {name}",
+        )
+    require(
+        patched_arm9.startswith(arm9)
+        and len(patched_arm9) - len(arm9) <= 12,
+        "packaged ARM9 differs from the captured patched ARM9 span",
+    )
+
+
+def thumb_bl_target(
+    image: bytes,
+    image_base: int,
+    address: int,
+    description: str,
+) -> int:
+    offset = address - image_base
+    first = read_u16(image, offset, description + " first halfword")
+    second = read_u16(image, offset + 2, description + " second halfword")
+    require(
+        first & 0xF800 == 0xF000 and second & 0xF800 == 0xF800,
+        f"{description} is not a Thumb-1 BL",
+    )
+    displacement = ((first & 0x7FF) << 12) | ((second & 0x7FF) << 1)
+    if displacement & (1 << 22):
+        displacement -= 1 << 23
+    return address + 4 + displacement
+
+
+def measure_boot_archive_layout(
+    stock_overlay_end: int,
+    full_save_size: int,
+    heap3_size: int,
+    fnt_size: int,
+    fat_size: int,
+) -> dict[str, int]:
+    """Reproduce the SDK boot allocations that precede resident overlays."""
+    cursor = align4(stock_overlay_end + 0x100)
+    usable_heaps = 4 + 24
+    total_heap_ids = 166
+    heap_metadata_size = (
+        (usable_heaps + 1) * 4
+        + usable_heaps * 4
+        + usable_heaps * 4
+        + total_heap_ids * 2
+        + total_heap_ids
+    )
+    cursor = align4(cursor + heap_metadata_size)
+    for heap_size in (0xD200, full_save_size, 0x10, heap3_size):
+        cursor = align4(cursor + heap_size)
+    for task_count in (160, 32, 32, 4):
+        cursor = align4(cursor + task_count * (28 + 4) + 52)
+    archive_start = cursor
+    archive_size = (fnt_size + fat_size + 0x3F) & ~0x1F
+    archive_end = archive_start + archive_size
+    return {
+        "archive_start": archive_start,
+        "archive_end": archive_end,
+        "archive_size": archive_size,
+        "heap_metadata_size": heap_metadata_size,
+        "archive_margin": RUNTIME_OVERLAY_BASE - archive_end,
+        "free_margin": (
+            RUNTIME_OVERLAY_BASE - archive_end - OVERLAY_GUARD
+        ),
+    }
 
 
 def final_overlay(
@@ -998,8 +1120,15 @@ def main() -> None:
         type=Path,
         help="completed, repacked Nintendo DS ROM",
     )
+    parser.add_argument(
+        "--manifest",
+        required=True,
+        type=Path,
+        help="capture manifest sealed for exactly this packaged ROM",
+    )
     args = parser.parse_args()
     rom_path = args.rom.resolve()
+    manifest_path = args.manifest.resolve()
     rom = rom_path.read_bytes()
 
     arm9_offset = read_u32(rom, 0x20, "ARM9 ROM offset")
@@ -1155,6 +1284,46 @@ def main() -> None:
         TASK6_OVERLAY_ID < len(rows),
         "final y9 has no overlay 155 row",
     )
+    require(
+        RUNTIME_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 157 row",
+    )
+
+    runtime_row = rows[RUNTIME_OVERLAY_ID]
+    runtime_overlay = final_overlay(rom, fat, runtime_row)
+    runtime_built = (
+        REPO / "build/output_overworld_wild_runtime_overlay.bin"
+    ).read_bytes()
+    require(
+        runtime_overlay == runtime_built,
+        "final ROM overlay 157 differs from linked output",
+    )
+    verify_boot_decoder_freshness(
+        manifest_path,
+        rom,
+        arm9,
+        runtime_overlay,
+        (REPO / "base/arm9.bin").read_bytes(),
+    )
+    require(
+        runtime_row == (
+            RUNTIME_OVERLAY_ID,
+            RUNTIME_OVERLAY_BASE,
+            len(runtime_overlay),
+            0,
+            0,
+            0,
+            RUNTIME_OVERLAY_ID,
+            0,
+        ),
+        "final overlay 157 row has unexpected metadata",
+    )
+    require(
+        0 < len(runtime_overlay)
+        and RUNTIME_OVERLAY_BASE + len(runtime_overlay)
+            <= RUNTIME_OVERLAY_USABLE_END,
+        "overlay 157 exceeds its fixed image/headroom gate",
+    )
 
     task6_row = rows[TASK6_OVERLAY_ID]
     task6_overlay = final_overlay(rom, fat, task6_row)
@@ -1210,6 +1379,47 @@ def main() -> None:
         and OVERLAY_BASE + len(overlay) + OVERLAY_GUARD <= OVERLAY_LIMIT,
         "overlay 153 exceeds its reservation or upper growth guard",
     )
+    resident_ranges = (
+        (
+            RUNTIME_OVERLAY_ID,
+            runtime_row[1],
+            runtime_row[1] + runtime_row[2] + runtime_row[3],
+            RUNTIME_OVERLAY_BASE,
+            RUNTIME_OVERLAY_LIMIT,
+        ),
+        (
+            TASK6_OVERLAY_ID,
+            task6_row[1],
+            task6_row[1] + task6_row[2] + task6_row[3],
+            TASK6_OVERLAY_BASE,
+            TASK6_OVERLAY_LIMIT,
+        ),
+        (
+            OVERLAY_ID,
+            row[1],
+            row[1] + row[2] + row[3],
+            OVERLAY_BASE,
+            OVERLAY_LIMIT - OVERLAY_GUARD,
+        ),
+    )
+    require(
+        RUNTIME_OVERLAY_LIMIT == TASK6_OVERLAY_BASE
+        and TASK6_OVERLAY_LIMIT == OVERLAY_BASE
+        and OVERLAY_BASE < OVERLAY_LIMIT - OVERLAY_GUARD,
+        "resident overlay windows are not the audited contiguous layout",
+    )
+    for resident_id, resident_start, resident_end, window_start, window_end \
+            in resident_ranges:
+        require(
+            window_start == resident_start < resident_end <= window_end,
+            f"resident overlay {resident_id} escapes its owned window",
+        )
+    for index, first in enumerate(resident_ranges):
+        for second in resident_ranges[index + 1:]:
+            require(
+                not ranges_overlap(first[1], first[2], second[1], second[2]),
+                f"resident overlays {first[0]} and {second[0]} overlap",
+            )
 
     linked_symbols = subprocess.check_output(
         [
@@ -1263,7 +1473,9 @@ def main() -> None:
 
     for other in rows:
         other_size = other[2] + other[3]
-        if other[0] in (OVERLAY_ID, TASK6_OVERLAY_ID) or other_size == 0:
+        if other[0] in (
+                OVERLAY_ID, TASK6_OVERLAY_ID, RUNTIME_OVERLAY_ID
+        ) or other_size == 0:
             continue
         other_start = other[1]
         other_end = other_start + other_size
@@ -1275,19 +1487,19 @@ def main() -> None:
             not ranges_overlap(
                 other_start,
                 other_end,
-                OVERLAY_BASE,
+                RUNTIME_OVERLAY_BASE,
                 OVERLAY_LIMIT,
             ),
-            f"overlay {other[0]} overlaps overlay 153's reservation",
+            f"overlay {other[0]} overlaps the complete resident reservation",
         )
 
     save_constants = (REPO / "include/constants/save.h").read_text()
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x10D000
-        and 0x110000 - heap3_size == 0x3000,
-        "heap 3 does not explicitly reserve 0x3000 for overlays 155/153",
+        heap3_size == 0x10B000
+        and 0x110000 - heap3_size == 0x5000,
+        "heap 3 does not explicitly reserve 0x5000 for overlays 157/155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1322,25 +1534,15 @@ def main() -> None:
     )
     require(stock_overlay_end == 0x0226EC40,
             "stock overlay arena endpoint changed")
-    archive_start = align4(stock_overlay_end + 0x100)
-    usable_heaps = 4 + 24
-    total_heap_ids = 166
-    heap_metadata_size = (
-        (usable_heaps + 1) * 4
-        + usable_heaps * 4
-        + usable_heaps * 4
-        + total_heap_ids * 2
-        + total_heap_ids
+    boot_layout = measure_boot_archive_layout(
+        stock_overlay_end,
+        full_save_size,
+        heap3_size,
+        fnt_size,
+        fat_size,
     )
-    archive_start = align4(archive_start + heap_metadata_size)
-    for heap_size in (0xD200, full_save_size, 0x10, heap3_size):
-        archive_start = align4(archive_start + heap_size)
-    for task_count in (160, 32, 32, 4):
-        archive_start = align4(
-            archive_start + task_count * (28 + 4) + 52)
-
-    archive_size = (fnt_size + fat_size + 0x3F) & ~0x1F
-    archive_end = archive_start + archive_size
+    archive_start = boot_layout["archive_start"]
+    archive_end = boot_layout["archive_end"]
     cached_fnt_start = (archive_start + 0x1F) & ~0x1F
     cached_fnt_end = cached_fnt_start + fnt_size
     cached_fat_start = cached_fnt_end
@@ -1350,8 +1552,14 @@ def main() -> None:
         "FNT/FAT caches exceed the SDK archive allocation",
     )
     require(
-        archive_end + OVERLAY_GUARD <= TASK6_OVERLAY_BASE,
-        f"boot FNT+FAT allocation reaches 0x{archive_end:08X}",
+        archive_end == EXPECTED_ARCHIVE_END
+        and boot_layout["archive_margin"] == EXPECTED_ARCHIVE_MARGIN
+        and boot_layout["free_margin"] == EXPECTED_FREE_MARGIN,
+        "reproduced heap/archive free-margin measurement changed",
+    )
+    require(
+        boot_layout["free_margin"] >= 0,
+        f"boot FNT+FAT allocation plus guard reaches 0x{archive_end:08X}",
     )
 
     arm9_end = arm9_ram + arm9_size
@@ -1359,20 +1567,20 @@ def main() -> None:
         not ranges_overlap(
             arm9_ram,
             arm9_end,
-            TASK6_OVERLAY_BASE,
+            RUNTIME_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "final ARM9 load image overlaps resident overlays 155/153",
+        "final ARM9 load image overlaps resident overlays 157/155/153",
     )
     require(
         OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
-            TASK6_OVERLAY_BASE,
+            RUNTIME_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "resident overlays 155/153 cross the main arena or DTCM stack boundary",
+        "resident overlays 157/155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")
@@ -1410,16 +1618,96 @@ def main() -> None:
         "resident overlay 129 exceeds the ARM9 main arena",
     )
 
-    startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
+    startup_entry = 0x02110334
+    overlay129_loader = 0x021102C4
+    resident_loader = 0x021102D4
     require(
-        "mov r1, #155" in startup
-        and "mov r1, #153" in startup
-        and startup.index("mov r1, #155")
-        < startup.index("mov r1, #153"),
-        "startup does not load overlay 155 before overlay 153",
+        thumb_bl_target(
+            arm9,
+            arm9_ram,
+            0x02000CD0,
+            "packaged Main startup hook",
+        ) == startup_entry,
+        "packaged Main startup hook does not reach resident overlay loader",
     )
-    require("0x02007188|1" in startup,
-            "startup does not use the untracked no-init loader")
+    startup_halfwords = tuple(
+        read_u16(
+            arm9,
+            address - arm9_ram,
+            f"packaged startup instruction 0x{address:08X}",
+        )
+        for address in (
+            0x02110334,
+            0x02110336,
+            0x02110338,
+            0x0211033E,
+            0x02110344,
+            0x0211034A,
+            0x02110350,
+            0x02110352,
+            0x02110354,
+        )
+    )
+    require(
+        startup_halfwords == (
+            0xB504,
+            0x2081,
+            0x2102,
+            0x219B,
+            0x219D,
+            0x2199,
+            0x2000,
+            0x2103,
+            0xBD04,
+        ),
+        "packaged startup setup/order differs from 129, 155, 157, 153",
+    )
+    require(
+        thumb_bl_target(
+            arm9, arm9_ram, 0x0211033A, "packaged overlay-129 load"
+        ) == overlay129_loader
+        and all(
+            thumb_bl_target(
+                arm9,
+                arm9_ram,
+                address,
+                f"packaged resident load at 0x{address:08X}",
+            ) == resident_loader
+            for address in (0x02110340, 0x02110346, 0x0211034C)
+        ),
+        "packaged startup call targets differ from the audited loaders",
+    )
+    resident_mov = read_u16(
+        arm9,
+        resident_loader - arm9_ram,
+        "packaged resident-loader region setup",
+    )
+    resident_literal_load = read_u16(
+        arm9,
+        resident_loader + 2 - arm9_ram,
+        "packaged resident-loader target load",
+    )
+    require(
+        resident_mov == 0x2000
+        and resident_literal_load & 0xFF00 == 0x4A00
+        and read_u16(
+            arm9,
+            resident_loader + 4 - arm9_ram,
+            "packaged resident-loader tail call",
+        ) == 0x4710,
+        "packaged resident loader is not mov-r0-zero/ldr-r2/bx-r2",
+    )
+    resident_literal_address = (
+        ((resident_loader + 2 + 4) & ~3)
+        + (resident_literal_load & 0xFF) * 4
+    )
+    require(
+        arm9_word(
+            resident_literal_address,
+            "packaged LoadOverlayNoInit Thumb pointer",
+        ) == 0x02007189,
+        "packaged resident loader does not tail-call LoadOverlayNoInit",
+    )
 
     rom_ld = (REPO / "rom.ld").read_text()
     for name, api_offset in (
@@ -1703,6 +1991,8 @@ def main() -> None:
         f"0x{cached_fnt_end:08X} "
         f"fat-cache=0x{cached_fat_start:08X}.."
         f"0x{cached_fat_end:08X} "
+        f"resident-margin=0x{boot_layout['archive_margin']:X}/"
+        f"guard=0x{OVERLAY_GUARD:X}/free=0x{boot_layout['free_margin']:X} "
         f"learnsets={learnset_dimensions['species']}x"
         f"{learnset_dimensions['level_width']}/"
         f"{learnset_dimensions['egg_width']}/"
@@ -1711,6 +2001,8 @@ def main() -> None:
         f"parents={parent_mappings}/{parent_rows}/depth{parent_depth} "
         f"overlay153=0x{OVERLAY_BASE:08X}.."
         f"0x{OVERLAY_BASE + len(overlay):08X} "
+        f"overlay157=0x{RUNTIME_OVERLAY_BASE:08X}.."
+        f"0x{RUNTIME_OVERLAY_BASE + len(runtime_overlay):08X} "
         f"overlay129=0x{len(overlay129):X}/0x8000"
     )
 

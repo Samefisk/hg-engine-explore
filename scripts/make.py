@@ -249,6 +249,37 @@ def VerifyOverworldWildBehaviorValidatorOverlay(
     print(f'overlay 156 packaged validator gate: size={len(overlay)} sha256={hashlib.sha256(overlay).hexdigest()}')
 
 
+def VerifyOverworldWildRuntimeOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    subprocess.check_call([
+        sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
+        '--binary', output_path, '--overlay', '157',
+    ])
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 157 differs from its linked binary')
+    symbols = {}
+    for line in subprocess.check_output([OBJDUMP, '-t', linked_path]).decode().splitlines():
+        parts = line.split()
+        if len(parts) >= 6:
+            symbols[parts[-1]] = int(parts[0], 16)
+    loader = symbols.get('OverworldWildBehavior_LoadValidatedBundle')
+    if loader != 0x023BB400:
+        raise RuntimeError(
+            'overlay 157 retained-bundle loader moved: '
+            f'{loader!r} != 0x023BB400'
+        )
+    print(
+        f'overlay 157 packaged runtime gate: size={len(overlay)} '
+        f'sha256={hashlib.sha256(overlay).hexdigest()}'
+    )
+
+
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldFieldServiceEntry'
     selector_hook_name = 'OverworldFollowerSelector_TaskPoll'
@@ -785,6 +816,12 @@ def writeall():
             )
         if newOverlay == 156:
             VerifyOverworldWildBehaviorValidatorOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 157:
+            VerifyOverworldWildRuntimeOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,

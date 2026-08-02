@@ -109,6 +109,7 @@ if __name__ == "__main__" and not _isolated_helper_startup():
 
 import argparse
 import ctypes
+import importlib.util
 import json
 import os
 import tempfile
@@ -122,6 +123,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DSV_FOOTER_MARKER = (
     b"|<--Snip above here to create a raw sav by excluding this DeSmuME savedata footer:"
 )
+
+
+def load_heap_probe_class():
+    authenticated = globals().get("AUTHENTICATED_HEAP_PROBE_CLASS")
+    if authenticated is not None:
+        return authenticated
+    path = Path(__file__).with_name("overworld_wild_heap_probe.py")
+    spec = importlib.util.spec_from_file_location("overworld_wild_heap_probe", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Task-8 heap probe cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.HeapMarginProbe
+
+
+ACTIVE_HEAP_PROBE = None
 
 
 def ensure_repo_venv() -> None:
@@ -254,6 +272,8 @@ def cycle(emu: DeSmuME, frames: int, key_mask: int | None = None) -> None:
             # synthetic held key must be republished before each cycle.
             set_key_mask(emu, key_mask)
         emu.cycle(False)
+        if ACTIVE_HEAP_PROBE is not None:
+            ACTIVE_HEAP_PROBE.frame_complete()
 
 
 def key_constant(name: str) -> int:
@@ -480,6 +500,15 @@ def run_action(
     parts = spec.split(":")
     command = parts[0].lower()
 
+    if command == "heap_phase":
+        if len(parts) != 2 or ACTIVE_HEAP_PROBE is None:
+            raise ValueError(
+                "heap_phase action requires an active --heap-margin-report probe"
+            )
+        ACTIVE_HEAP_PROBE.set_phase(parts[1])
+        ACTIVE_HEAP_PROBE.sample("phase")
+        return {"action": "heap_phase", "phase": parts[1]}
+
     if command == "tap":
         if len(parts) not in (2, 3, 4):
             raise ValueError("tap action format: tap:KEY[:hold_frames[:release_frames]]")
@@ -636,7 +665,7 @@ def check_expectations(reads: list[dict[str, Any]], specs: list[str]) -> list[di
     return results
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Boot test.nds with test.dsv to the overworld, run key-only actions, "
@@ -683,6 +712,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Key-only action: tap:KEY[:hold[:gap]], hold:KEY:frames[:gap], "
             "combo:KEY+KEY:frames[:gap], wait:frames, sample:frames[:interval], "
+            "heap_phase:lowercase_name, "
             "combo_sample:KEY+KEY:hold_frames:sample_frames[:interval], "
             "combo_screenshot:KEY+KEY:hold_frames:path[:release_frames], screenshot:path."
         ),
@@ -693,15 +723,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tap-gap-frames", type=int, default=36)
     parser.add_argument("--load-frames", type=int, default=300)
     parser.add_argument(
+        "--heap-margin-report",
+        help="Write the Task-8 read-only heap 3/11 margin report as JSON.",
+    )
+    parser.add_argument(
+        "--heap-info-address", type=parse_int, default=0x021D1584,
+        help="Post-build sHeapInfo address. Re-resolve after every ROM build.",
+    )
+    parser.add_argument(
+        "--heap-mutation-point", action="append", type=parse_int,
+        help="Post-build allocator mutation/return address; repeat to override defaults.",
+    )
+    parser.add_argument(
+        "--heap-active-mask-address", type=parse_int,
+        help="Optional read-only u16 ten-slot fixture mask address.",
+    )
+    parser.add_argument(
         "--show-emulator-log",
         action="store_true",
         help="Let native DeSmuME stdout/stderr logs pass through.",
     )
-    return parser.parse_args()
+    return parser.parse_args(arguments)
 
 
-def main() -> int:
-    args = parse_args()
+def run_namespace(
+    args: argparse.Namespace,
+    *,
+    publish_heap_report: bool = True,
+) -> dict[str, Any]:
+    global ACTIVE_HEAP_PROBE
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
     rom = repo_path(args.rom)
@@ -727,6 +777,19 @@ def main() -> int:
         emu = create_desmume()
         emu.volume_set(0)
         emu.open(str(rom))
+        heap_probe = None
+        if args.heap_margin_report:
+            HeapMarginProbe = load_heap_probe_class()
+            probe_options = {
+                "heap_info_address": args.heap_info_address,
+                "active_mask_address": args.heap_active_mask_address,
+            }
+            if args.heap_mutation_point:
+                probe_options["mutation_points"] = tuple(args.heap_mutation_point)
+            heap_probe = HeapMarginProbe(emu, **probe_options)
+            heap_probe.install_callbacks()
+            ACTIVE_HEAP_PROBE = heap_probe
+            heap_probe.sample("rom_open")
         with tempfile.NamedTemporaryFile(suffix=".sav") as raw_file:
             raw_file.write(raw_save)
             raw_file.flush()
@@ -740,6 +803,8 @@ def main() -> int:
             screenshot = None
             if not args.no_screenshot:
                 screenshot = save_screenshot(emu, args.screenshot)
+            heap_report = heap_probe.report() if heap_probe is not None else None
+            ACTIVE_HEAP_PROBE = None
             emu.destroy()
 
     expectations = check_expectations(reads, args.expect)
@@ -756,7 +821,20 @@ def main() -> int:
         "expectations": expectations,
         "passed": all(expectation["passed"] for expectation in expectations),
         "screenshot": screenshot,
+        "heap_margin": heap_report,
     }
+    if args.heap_margin_report and publish_heap_report:
+        report_path = repo_path(args.heap_margin_report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(heap_report, indent=2, sort_keys=True) + "\n")
+        result["heap_margin_report"] = str(report_path)
+    if heap_report is not None and not heap_report["passed"]:
+        result["passed"] = False
+    return result
+
+
+def main() -> int:
+    result = run_namespace(parse_args())
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["passed"] else 1
 

@@ -497,23 +497,100 @@ def _stage_zero_result_targets(arguments):
     index = 0
     while index < len(arguments):
         argument = arguments[index]
-        if argument == "--result-json":
+        if argument in ("--result-json", "--heap-margin-report"):
             if index + 1 < len(arguments):
                 yield arguments[index + 1]
                 index += 2
                 continue
-        elif argument.startswith("--result-json="):
+        elif argument.startswith(("--result-json=", "--heap-margin-report=")):
             yield argument.split("=", 1)[1]
         index += 1
 
 
-def _stage_zero_invalidate_results(arguments):
+def _stage_zero_protected_inputs(arguments):
+    index = 0
+    names = ("--rom", "--publication-manifest", "--dsv")
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in names:
+            if index + 1 < len(arguments):
+                yield arguments[index + 1]
+                index += 2
+                continue
+        elif argument.startswith(tuple(name + "=" for name in names)):
+            yield argument.split("=", 1)[1]
+        index += 1
+
+
+def _stage_zero_canonical_path(path):
     import posix
 
-    failures = []
-    for target in _stage_zero_result_targets(arguments):
-        if not target:
+    if not path:
+        return None
+    absolute = path if path.startswith("/") else posix.getcwd() + "/" + path
+    components = []
+    for component in absolute.split("/"):
+        if not component or component == ".":
             continue
+        if component == "..":
+            if components:
+                components.pop()
+            continue
+        components.append(component)
+    return "/" + "/".join(components)
+
+
+def _stage_zero_same_file(left, right):
+    import posix
+
+    if left == right:
+        return True
+    try:
+        left_info = posix.stat(left)
+        right_info = posix.stat(right)
+    except OSError:
+        return False
+    return (
+        left_info.st_dev == right_info.st_dev
+        and left_info.st_ino == right_info.st_ino
+    )
+
+
+def _stage_zero_classify_result_targets(arguments):
+    targets = []
+    seen = set()
+    failures = []
+    rejected = set()
+    for target in _stage_zero_result_targets(arguments):
+        canonical = _stage_zero_canonical_path(target)
+        if canonical is not None and canonical not in seen:
+            targets.append(canonical)
+            seen.add(canonical)
+        if ".." in target.split("/"):
+            failures.append(f"{target}: output path is not lexical-canonical")
+            if canonical is not None:
+                rejected.add(canonical)
+    protected = tuple(
+        canonical
+        for source in _stage_zero_protected_inputs(arguments)
+        if (canonical := _stage_zero_canonical_path(source)) is not None
+    )
+    safe = []
+    for target in targets:
+        if target in rejected:
+            continue
+        if any(_stage_zero_same_file(target, source) for source in protected):
+            failures.append(f"{target}: output aliases protected input")
+        else:
+            safe.append(target)
+    return tuple(targets), tuple(safe), failures
+
+
+def _stage_zero_invalidate_classified(safe, failures):
+    import posix
+
+    failures = list(failures)
+    for target in safe:
         try:
             posix.unlink(target)
         except FileNotFoundError:
@@ -521,6 +598,11 @@ def _stage_zero_invalidate_results(arguments):
         except OSError as error:
             failures.append(f"{target}: {error}")
     return failures
+
+
+def _stage_zero_invalidate_results(arguments):
+    _, safe, failures = _stage_zero_classify_result_targets(arguments)
+    return _stage_zero_invalidate_classified(safe, failures)
 
 
 if __name__ == "__main__" and not _stage_zero_policy_ok():
@@ -563,39 +645,26 @@ def _early_result_targets(arguments):
     index = 0
     while index < len(arguments):
         argument = arguments[index]
-        if argument == "--result-json":
+        if argument in ("--result-json", "--heap-margin-report"):
             if index + 1 < len(arguments):
                 targets.append(arguments[index + 1])
                 index += 2
                 continue
-        elif argument.startswith("--result-json="):
+        elif argument.startswith(("--result-json=", "--heap-margin-report=")):
             targets.append(argument.split("=", 1)[1])
         index += 1
     return targets
 
 
 def _invalidate_results(arguments):
-    failures = []
-    resolved = []
-    for target in _early_result_targets(arguments):
-        if not target:
-            continue
-        path = os.path.realpath(os.path.abspath(target))
-        if path in resolved:
-            continue
-        resolved.append(path)
-        try:
-            os.unlink(path)
-        except FileNotFoundError:
-            pass
-        except OSError as error:
-            failures.append(f"{path}: {error}")
+    targets, safe, failures = _stage_zero_classify_result_targets(arguments)
+    failures = _stage_zero_invalidate_classified(safe, failures)
     if failures:
         raise RuntimeError(
             "could not invalidate stale runtime result: "
             + "; ".join(failures)
         )
-    return tuple(resolved)
+    return tuple(os.path.realpath(path) for path in targets)
 
 
 def _ensure_repo_venv(repo):
@@ -657,6 +726,7 @@ MANIFEST_HELPER_RELATIVE = (
     "scripts/pokemon_move_history_build_manifest.py"
 )
 HEADLESS_RELATIVE = "scripts/headless-overworld-test.py"
+HEAP_PROBE_RELATIVE = "scripts/overworld_wild_heap_probe.py"
 PARTY_RELATIVE = (
     "scripts/verify_pokemon_move_history_party_integrity.py"
 )
@@ -674,6 +744,7 @@ AUTHENTICATED_SOURCES = (
     VERIFIER_RELATIVE,
     MANIFEST_HELPER_RELATIVE,
     HEADLESS_RELATIVE,
+    HEAP_PROBE_RELATIVE,
     PARTY_RELATIVE,
     PROTECTED_SPAWN_RELATIVE,
 )
@@ -1654,6 +1725,7 @@ def _authentication_record(
         "manifest_helper": dict(records[MANIFEST_HELPER_RELATIVE]),
         "runtime_helpers": {
             HEADLESS_RELATIVE: dict(records[HEADLESS_RELATIVE]),
+            HEAP_PROBE_RELATIVE: dict(records[HEAP_PROBE_RELATIVE]),
             PARTY_RELATIVE: dict(records[PARTY_RELATIVE]),
         },
         "runtime_environment": json.loads(
@@ -1773,11 +1845,21 @@ def _late_main():
         "--expected-self-sha256",
         native_bootstrap["binary"]["sha256"],
     ]
+    heap_probe_module = _execute_module(
+        "summary_relearn_heap_probe",
+        paths[HEAP_PROBE_RELATIVE],
+        compiled[HEAP_PROBE_RELATIVE],
+    )
     headless_module = _execute_module(
         "summary_relearn_headless",
         paths[HEADLESS_RELATIVE],
         compiled[HEADLESS_RELATIVE],
-        {"AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path},
+        {
+            "AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path,
+            "AUTHENTICATED_HEAP_PROBE_CLASS": (
+                heap_probe_module.HeapMarginProbe
+            ),
+        },
     )
     protected_spawn_module = _execute_module(
         "summary_relearn_protected_spawn",

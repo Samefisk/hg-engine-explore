@@ -158,6 +158,7 @@ class EvidenceArtifactRegistry:
         "capture",
         "party_exit_screenshot",
         "exported_raw_save",
+        "heap_margin_report",
     }
     _MULTI_CLAIM_KEYS = {"captures", "screenshots"}
 
@@ -7519,8 +7520,85 @@ def run(args: argparse.Namespace) -> dict:
     }
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
+def parse_runtime_address(value: str) -> int:
+    try:
+        parsed = int(value, 0)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("address must be an integer") from error
+    if parsed <= 0 or parsed > 0xFFFFFFFF:
+        raise argparse.ArgumentTypeError("address is outside u32 range")
+    return parsed
+
+
+def validate_runtime_option_tokens(arguments: list[str]) -> None:
+    singleton = {
+        "--rom",
+        "--publication-manifest",
+        "--expected-publication-manifest-sha256",
+        "--expected-runtime-launcher-sha256",
+        "--expected-runtime-verifier-sha256",
+        "--dsv",
+        "--expected-dsv-sha256",
+        "--result-json",
+        "--heap-diagnostic",
+        "--heap-margin-report",
+        "--heap-info-address",
+        "--heap-active-mask-address",
+        "--no-screenshot",
+        "--probe-raw",
+        "--expected-probe-raw-sha256",
+        "--scenario",
+        "--probe-screenshot",
+        "--screenshot-dir",
+        "--export-raw",
+        "--controlled-raw",
+        "--daycare-raw",
+    }
+    counts = {name: 0 for name in singleton}
+    for argument in arguments:
+        name = argument.split("=", 1)[0]
+        if name in singleton:
+            counts[name] += 1
+    duplicates = sorted(name for name, count in counts.items() if count > 1)
+    require(not duplicates, "duplicate singleton option: " + ", ".join(duplicates))
+
+
+def validate_runtime_mode_tokens(
+    arguments: list[str], heap_diagnostic: bool
+) -> None:
+    present = {argument.split("=", 1)[0] for argument in arguments}
+    heap_only = {
+        "--heap-margin-report",
+        "--heap-info-address",
+        "--heap-mutation-point",
+        "--heap-active-mask-address",
+        "--heap-action",
+        "--no-screenshot",
+    }
+    ordinary_only = {
+        "--probe-raw",
+        "--expected-probe-raw-sha256",
+        "--scenario",
+        "--probe-screenshot",
+        "--screenshot-dir",
+        "--export-raw",
+        "--controlled-raw",
+        "--daycare-raw",
+    }
+    forbidden = ordinary_only if heap_diagnostic else heap_only
+    conflicts = sorted(present & forbidden)
+    require(
+        not conflicts,
+        ("ordinary-only options in heap mode: " if heap_diagnostic else
+         "heap-only options without --heap-diagnostic: ")
+        + ", ".join(conflicts),
+    )
+
+
+def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
+    supplied = list(sys.argv[1:] if arguments is None else arguments)
+    validate_runtime_option_tokens(supplied)
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--rom", type=Path, default=REPO / "test.nds")
     parser.add_argument(
         "--publication-manifest",
@@ -7533,6 +7611,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dsv", type=Path)
     parser.add_argument("--expected-dsv-sha256")
     parser.add_argument("--result-json", type=Path)
+    parser.add_argument("--heap-diagnostic", action="store_true")
+    parser.add_argument("--heap-margin-report", type=Path)
+    parser.add_argument(
+        "--heap-info-address",
+        type=parse_runtime_address,
+        default=0x021D1584,
+    )
+    parser.add_argument(
+        "--heap-mutation-point",
+        action="append",
+        type=parse_runtime_address,
+        default=[],
+    )
+    parser.add_argument(
+        "--heap-active-mask-address",
+        type=parse_runtime_address,
+    )
+    parser.add_argument("--heap-action", action="append", default=[])
+    parser.add_argument("--no-screenshot", action="store_true")
     parser.add_argument("--probe-raw", type=Path)
     parser.add_argument("--expected-probe-raw-sha256")
     parser.add_argument(
@@ -7588,11 +7685,86 @@ def parse_args() -> argparse.Namespace:
         / "build/diagnostics/task4_summary_relearn/"
         "task6-daycare-baseline.sav",
     )
-    return parser.parse_args()
+    parsed = parser.parse_args(supplied)
+    validate_runtime_mode_tokens(supplied, parsed.heap_diagnostic)
+    require(
+        len(parsed.heap_mutation_point)
+        == len(set(parsed.heap_mutation_point)),
+        "duplicate --heap-mutation-point",
+    )
+    return parsed
+
+
+def run_heap_diagnostic(
+    arguments: argparse.Namespace,
+    resolved_rom: Path,
+    resolved_dsv: Path,
+) -> dict[str, object]:
+    require(arguments.heap_diagnostic, "heap diagnostic mode is not selected")
+    require(
+        arguments.heap_margin_report is not None,
+        "--heap-margin-report is required for --heap-diagnostic",
+    )
+    require(arguments.no_screenshot, "--no-screenshot is required")
+    require(arguments.scenario is None, "--scenario is incompatible with heap mode")
+    require(arguments.probe_raw is None, "--probe-raw is incompatible with heap mode")
+    require(resolved_rom.is_file(), f"ROM not found: {resolved_rom}")
+    require(resolved_dsv.is_file(), f"DSV not found: {resolved_dsv}")
+    rom_before = hashlib.sha256(resolved_rom.read_bytes()).hexdigest()
+    dsv_before = resolved_dsv.read_bytes()
+    if arguments.expected_dsv_sha256 is not None:
+        require(
+            hashlib.sha256(dsv_before).hexdigest()
+            == arguments.expected_dsv_sha256.lower(),
+            "preserved DSV hash differs",
+        )
+    headless_arguments = [
+        "--rom", str(resolved_rom),
+        "--dsv", str(resolved_dsv),
+        "--no-screenshot",
+        "--heap-margin-report", str(arguments.heap_margin_report.resolve()),
+        "--heap-info-address", hex(arguments.heap_info_address),
+    ]
+    for point in arguments.heap_mutation_point:
+        headless_arguments.extend(("--heap-mutation-point", hex(point)))
+    if arguments.heap_active_mask_address is not None:
+        headless_arguments.extend(
+            ("--heap-active-mask-address", hex(arguments.heap_active_mask_address))
+        )
+    for action in arguments.heap_action:
+        headless_arguments.extend(("--action", action))
+    namespace = HEADLESS.parse_args(headless_arguments)
+    result = HEADLESS.run_namespace(namespace, publish_heap_report=False)
+    require(isinstance(result, dict), "headless heap result is malformed")
+    heap_report = result.get("heap_margin")
+    require(isinstance(heap_report, dict), "headless heap report is absent")
+    require(
+        resolved_dsv.read_bytes() == dsv_before,
+        "source DSV changed during heap diagnostic",
+    )
+    require(
+        hashlib.sha256(resolved_rom.read_bytes()).hexdigest() == rom_before,
+        "source ROM changed during heap diagnostic",
+    )
+    report_record = _atomic_artifact_path(
+        arguments.heap_margin_report.resolve(),
+        lambda temporary: temporary.write_text(
+            json.dumps(heap_report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        ),
+    )
+    result["heap_margin_report"] = report_record
+    result["source_dsv_sha256"] = hashlib.sha256(dsv_before).hexdigest()
+    result["source_rom_sha256"] = rom_before
+    result["passed"] = bool(result.get("passed")) and bool(
+        heap_report.get("passed")
+    )
+    return result
 
 
 if __name__ == "__main__":
     resolved_result: Path | None = None
+    resolved_heap_report: Path | None = None
     try:
         arguments = parse_args()
         resolved_result = (
@@ -7606,13 +7778,26 @@ if __name__ == "__main__":
                 in BOOTSTRAP_INVALIDATED_RESULTS,
                 "result target was not invalidated by runtime launcher",
             )
+        resolved_heap_report = (
+            arguments.heap_margin_report.resolve()
+            if arguments.heap_margin_report is not None
+            else None
+        )
+        if arguments.heap_margin_report is not None:
+            require(
+                str(resolved_heap_report) in BOOTSTRAP_INVALIDATED_RESULTS,
+                "heap report target was not invalidated by runtime launcher",
+            )
         resolved_rom = arguments.rom.resolve()
         resolved_manifest = arguments.publication_manifest.resolve()
+        resolved_dsv = (
+            arguments.dsv.resolve() if arguments.dsv is not None else None
+        )
         EVIDENCE_ARTIFACTS.protect(
             resolved_rom,
             resolved_manifest,
             resolved_result,
-            arguments.dsv.resolve() if arguments.dsv is not None else None,
+            resolved_dsv,
             (
                 arguments.probe_raw.resolve()
                 if arguments.probe_raw is not None
@@ -7621,6 +7806,8 @@ if __name__ == "__main__":
             arguments.controlled_raw.resolve(),
             arguments.daycare_raw.resolve(),
         )
+        if resolved_heap_report is not None:
+            EVIDENCE_ARTIFACTS.prepare_target(resolved_heap_report)
         authentication = artifact_authentication(
             resolved_rom,
             resolved_manifest,
@@ -7649,7 +7836,12 @@ if __name__ == "__main__":
                 str(authentication["runtime_verifier"]["sha256"]),
             )
         )
-        if arguments.scenario is not None:
+        if arguments.heap_diagnostic:
+            require(resolved_dsv is not None, "--dsv is required for heap mode")
+            result = run_heap_diagnostic(arguments, resolved_rom, resolved_dsv)
+        elif arguments.heap_margin_report is not None:
+            raise RuntimeError("--heap-margin-report requires --heap-diagnostic")
+        elif arguments.scenario is not None:
             require(arguments.probe_raw is not None, "--probe-raw is required")
             require(
                 arguments.expected_probe_raw_sha256 is not None,
@@ -7699,9 +7891,14 @@ if __name__ == "__main__":
             BOOTSTRAP_REAUTHENTICATE() == BOOTSTRAP_AUTHENTICATION,
             "runtime closure changed after stdout publication",
         )
+        if not bool(result.get("passed", True)):
+            raise SystemExit(1)
     except Exception as error:
         if resolved_result is not None and resolved_result.exists():
             resolved_result.unlink()
             _fsync_directory(resolved_result.parent)
+        if resolved_heap_report is not None and resolved_heap_report.exists():
+            resolved_heap_report.unlink()
+            _fsync_directory(resolved_heap_report.parent)
         print(f"Summary relearn runtime verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Identity and fixed-window gate for overworld-wild overlays 149 and 156."""
+"""Identity and fixed-window gate for overworld-wild overlays 149, 156, and 157."""
 
 from __future__ import annotations
 
@@ -13,6 +13,9 @@ CONFIG = {
     # The shared physical window is 0x1E00; 0xA0 is reserved for selector-152,
     # and the validator keeps another 0x60 of post-link growth margin.
     156: (0x023C0400, 0x1D60, "gOverworldWildBehaviorValidatorOverlayEntry", 0x60),
+    # Boot-resident Task-8 service. The final 0x80 and all but 0x140 of BSS
+    # remain unavailable even though the linker owns the complete 0x2000 window.
+    157: (0x023BB400, 0x2000, "OverworldWildBehavior_LoadValidatedBundle", 0x80),
 }
 
 
@@ -36,6 +39,25 @@ def main() -> int:
     required = {"__text_start", "__text_end", "_end", "__end__", entry_name}
     if args.overlay == 156:
         required.add("OverworldWildBehaviorValidator_LoadProjection")
+    if args.overlay == 157:
+        required.update((
+            "__bss_start__",
+            "__bss_end__",
+            "OverworldWildBehavior_ReleaseValidatedBundle",
+            "OverworldWildBehavior_FreeValidatedBundle",
+            "OverworldWildRuntime_CopyInstalledDefinition",
+            "OverworldWildRuntime_HandleSlotGenerationWrap",
+            "OverworldWildRuntime_BindPrivateIdentity",
+            "OverworldWildRuntime_ApplyStackDelta",
+            "OverworldWildRuntime_Apply",
+            "OverworldWildRuntime_Replace",
+            "OverworldWildRuntime_Remove",
+            "OverworldWildRuntime_RemoveOwner",
+            "OverworldWildRuntime_ClearAllForSlot",
+            "OverworldWildRuntime_GetLayerCount",
+            "OverworldWildRuntime_GetLayerByIndex",
+            "OverworldWildRuntime_FindLayer",
+        ))
     missing = sorted(required - symbols.keys())
     if missing: raise SystemExit(f"overlay {args.overlay}: missing identity symbols: {', '.join(missing)}")
     if symbols["__text_start"] != origin or symbols[entry_name] != origin:
@@ -111,10 +133,38 @@ def main() -> int:
         )
         if "R_ARM_" in relocations:
             raise SystemExit("overlay 156: unresolved relocation remains after resident link")
+    if args.overlay == 157:
+        bss_size = symbols["__bss_end__"] - symbols["__bss_start__"]
+        if bss_size < 0 or bss_size > 0x140:
+            raise SystemExit(
+                f"overlay 157: BSS 0x{bss_size:X} exceeds fixed 0x140 budget"
+            )
+        if symbols["__bss_end__"] > 0x023BD380:
+            raise SystemExit("overlay 157: complete image exceeds 0x023BD380")
+        veneers = {
+            name for name in symbols
+            if "_from_thumb" in name or "veneer" in name.lower()
+        }
+        if veneers != {"__memcpy_from_thumb", "__memset_from_thumb"}:
+            raise SystemExit(
+                "overlay 157: interworking veneer inventory changed: "
+                + ", ".join(sorted(veneers))
+            )
+        for name in veneers:
+            if not origin <= symbols[name] < symbols["__text_end"]:
+                raise SystemExit(f"overlay 157: {name} escaped the fixed image")
+        relocations = subprocess.check_output(
+            ["arm-none-eabi-objdump", "-r", args.elf], text=True
+        )
+        if "R_ARM_" in relocations:
+            raise SystemExit("overlay 157: unresolved relocation remains after resident link")
     headroom = origin + length - end
     if headroom < minimum:
         raise SystemExit(f"overlay {args.overlay}: headroom {headroom} below required {minimum}")
-    print(f"overlay {args.overlay}: origin=0x{origin:08X} end=0x{end:08X} raw={raw_size} headroom={headroom}")
+    extra = ""
+    if args.overlay == 157:
+        extra = f" bss={symbols['__bss_end__'] - symbols['__bss_start__']}"
+    print(f"overlay {args.overlay}: origin=0x{origin:08X} end=0x{end:08X} raw={raw_size} headroom={headroom}{extra}")
     return 0
 
 

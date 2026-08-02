@@ -18,6 +18,44 @@ typedef int BOOL;
 #define OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
 #include "../src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
 
+void OverworldWildRuntime_HandleSlotGenerationWrap(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int targetSlot)
+{
+    int slot;
+    int layer;
+    if (runtime->handleEpoch == 0xFFFFFFFFu) {
+        for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+            u32 generation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->slots[slot].slotGeneration);
+            OverworldWildRuntime_InitSlot(&runtime->slots[slot]);
+            runtime->slots[slot].slotGeneration = generation;
+            runtime->slots[slot].lifecycleTransitions = 1;
+            runtime->slots[slot].lifecycleState =
+                OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED;
+        }
+        runtime->handleEpoch = 1;
+        return;
+    }
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        if (slot == targetSlot) continue;
+        for (layer = 0; layer < runtime->slots[slot].activeLayerCount; layer++)
+            runtime->slots[slot].layerBank.entryGenerations[layer] = layer + 1;
+        runtime->slots[slot].nextEntryGeneration =
+            runtime->slots[slot].activeLayerCount + 1;
+        if (runtime->slots[slot].activeLayerCount)
+            runtime->slots[slot].layerGeneration =
+                OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    runtime->slots[slot].layerGeneration);
+    }
+    runtime->handleEpoch++;
+    OverworldWildRuntime_InitSlot(&runtime->slots[targetSlot]);
+    runtime->slots[targetSlot].slotGeneration = 1;
+    runtime->slots[targetSlot].lifecycleTransitions = 1;
+    runtime->slots[targetSlot].lifecycleState =
+        OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED;
+}
+
 _Static_assert(OW_WILD_MAX_SPAWNS == 10, "spawn capacity changed");
 _Static_assert(OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT == 8, "layer capacity changed");
 _Static_assert(sizeof(OverworldWildRuntimeLayer) == 16, "layer layout changed");

@@ -41,7 +41,7 @@ static BOOL OwbdValidateNarcMember(void *narc, u32 size, void *workspace, u32 wo
 OverworldWildBehaviorLoadResult OverworldWildBehaviorValidator_LoadProjection(
     void **projectionOut)
 {
-    return OverworldWildBehavior_LoadValidatedProjection(
+    return OverworldWildBehavior_LoadValidatedBundle(
         OwbdValidateNarcMember, projectionOut);
 }
 

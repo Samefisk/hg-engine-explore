@@ -41,10 +41,10 @@ OVERLAY153_ID = 153
 OVERLAY153_LIMIT = 0xFB4
 MAX_CANDIDATES = 458
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
-    "07f77f1773b9f89ef4f495f6d9ed4b22b87bd01afc2266925f693eaa500d32bc"
+    "5bf664f2cfb3a0295f924b9b9b10858cda59ab6948e891207a1896c3866d950d"
 )
 NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
-    "5ae41135ff6408160f84717e28f339fbbc00e838"
+    "2730100ca3c57a3144e9d358ebd74fde06caa6d9"
 )
 
 
@@ -1349,6 +1349,7 @@ def bootstrap_host_contracts(root: Path) -> None:
                 "reauthenticate_inventory",
                 "execve(inventory->alias->path",
                 "collect_result_targets",
+                "lexical_canonical_path",
                 "invalidate_result_path",
                 "terminate_and_reap",
                 "WNOHANG | WUNTRACED",
@@ -1364,6 +1365,10 @@ def bootstrap_host_contracts(root: Path) -> None:
         and "/usr/bin/codesign --verify --strict" in native_build
         and "/usr/lib/libSystem" in native_build,
         "native pre-Python trust-anchor source/build contract differs",
+    )
+    require(
+        '"/scripts/headless-overworld-test.py"' not in native_source,
+        "native bootstrap directly permits the headless child",
     )
     require(
         native_source.index("append_anchor(&inventory, options.inventory_path")
@@ -2991,6 +2996,193 @@ def bootstrap_host_contracts(root: Path) -> None:
             "runtime launcher accepted an unsealed startup or retained stale "
             "evidence",
         )
+
+        direct_headless_stale = temp / "direct-headless-stale.json"
+        direct_headless_stale.write_text('{"status":"stale"}\n')
+        direct_headless = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result", str(direct_headless_stale),
+                "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                "pycache_prefix=/dev/null",
+                str(root / "scripts/headless-overworld-test.py"),
+                "--rom", str(root / "test.nds"),
+                "--dsv", str(root / "test.dsv"),
+                "--no-screenshot",
+            ],
+            check=False, capture_output=True, text=True, timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            direct_headless.returncode != 0
+            and "native bootstrap: Python invocation policy differs"
+            in direct_headless.stderr
+            and not direct_headless_stale.exists(),
+            "native bootstrap accepted direct headless execution",
+        )
+
+        routed_heap_stale = temp / "routed-heap-stale.json"
+        routed_heap_stale.write_text('{"status":"stale"}\n')
+        routed_heap = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result", str(routed_heap_stale),
+                "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                "pycache_prefix=/dev/null", str(launcher_path),
+                "--rom", str(root / "test.nds"),
+                "--dsv", str(root / "test.dsv"),
+                "--publication-manifest", str(temp / "absent-manifest.json"),
+                "--heap-diagnostic",
+                "--heap-margin-report", str(routed_heap_stale),
+                "--no-screenshot",
+            ],
+            check=False, capture_output=True, text=True, timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            routed_heap.returncode != 0
+            and "native bootstrap: Python invocation policy differs"
+            not in routed_heap.stderr
+            and not routed_heap_stale.exists(),
+            "native bootstrap rejected launcher-routed heap mode",
+        )
+
+        alias_input = temp / "heap-alias-input.nds"
+        alias_input.write_bytes(b"preserved-rom")
+        aliased_report = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result", str(alias_input),
+                "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                "pycache_prefix=/dev/null", str(launcher_path),
+                "--rom", str(alias_input),
+                "--publication-manifest", str(temp / "absent-manifest.json"),
+                "--heap-diagnostic",
+                "--heap-margin-report", str(alias_input),
+                "--dsv", str(root / "test.dsv"),
+                "--no-screenshot",
+            ],
+            check=False, capture_output=True, text=True, timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            aliased_report.returncode != 0
+            and "result aliases protected input" in aliased_report.stderr
+            and alias_input.read_bytes() == b"preserved-rom",
+            "native stale-output invalidation accepted a protected input alias",
+        )
+
+        malformed_alias_input = temp / "malformed-alias-input.nds"
+        malformed_alias_input.write_bytes(b"preserved-malformed-rom")
+        malformed_safe_stale = temp / "malformed-safe-stale.json"
+        malformed_safe_stale.write_text('{"status":"stale"}\n')
+        malformed_alias = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result", str(malformed_alias_input),
+                "--invalidate-result", str(malformed_safe_stale),
+                "--ready-timeout-seconds",
+                "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                "pycache_prefix=/dev/null", str(launcher_path),
+                "--rom", str(malformed_alias_input),
+                "--publication-manifest", str(temp / "absent-manifest.json"),
+            ],
+            check=False, capture_output=True, text=True, timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            malformed_alias.returncode != 0
+            and "result aliases protected input" in malformed_alias.stderr
+            and malformed_alias_input.read_bytes() == b"preserved-malformed-rom"
+            and not malformed_safe_stale.exists(),
+            "malformed native arguments removed an input or retained a safe result",
+        )
+
+        reverse_alias_input = temp / "reverse-alias-input.nds"
+        reverse_alias_input.write_bytes(b"preserved-reverse-rom")
+        reverse_safe_stale = temp / "reverse-safe-stale.json"
+        reverse_safe_stale.write_text('{"status":"stale"}\n')
+        reverse_alias = subprocess.run(
+            [
+                *native_prefix,
+                "--invalidate-result", str(reverse_safe_stale),
+                "--invalidate-result", str(reverse_alias_input),
+                "--ready-timeout-seconds",
+                "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                "pycache_prefix=/dev/null", str(launcher_path),
+                f"--rom={reverse_alias_input}",
+                "--publication-manifest", str(temp / "absent-manifest.json"),
+            ],
+            check=False, capture_output=True, text=True, timeout=30,
+            env=source_only_environment,
+        )
+        require(
+            reverse_alias.returncode != 0
+            and "result aliases protected input" in reverse_alias.stderr
+            and reverse_alias_input.read_bytes() == b"preserved-reverse-rom"
+            and not reverse_safe_stale.exists(),
+            "native aggregate invalidation depends on target order/equal form",
+        )
+
+        for protected_option, suffix in (
+            ("--rom", "nds"),
+            ("--dsv", "dsv"),
+            ("--publication-manifest", "json"),
+        ):
+            for safe_first in (False, True):
+                label = protected_option.removeprefix("--").replace("-", "_")
+                order = "safe_first" if safe_first else "protected_first"
+                protected_path = temp / f"native-{label}-{order}.{suffix}"
+                protected_payload = f"preserved-{label}-{order}".encode()
+                protected_path.write_bytes(protected_payload)
+                safe_path = temp / f"native-{label}-{order}-stale.json"
+                safe_path.write_text('{"status":"stale"}\n')
+                protected_spelling = (
+                    temp / "missing-native-component" / ".." /
+                    protected_path.name
+                )
+                invalidations = [
+                    "--invalidate-result", str(protected_path),
+                    "--invalidate-result", str(safe_path),
+                ]
+                if safe_first:
+                    invalidations = [
+                        "--invalidate-result", str(safe_path),
+                        "--invalidate-result", str(protected_path),
+                    ]
+                child_options = [
+                    "--rom", str(root / "test.nds"),
+                    "--publication-manifest",
+                    str(temp / "absent-manifest.json"),
+                ]
+                if protected_option == "--rom":
+                    child_options[1] = str(protected_spelling)
+                elif protected_option == "--publication-manifest":
+                    child_options[3] = str(protected_spelling)
+                else:
+                    child_options.extend(
+                        ("--dsv", str(protected_spelling))
+                    )
+                noncanonical_protected = subprocess.run(
+                    [
+                        *native_prefix, *invalidations,
+                        "--ready-timeout-seconds",
+                        "--", str(runtime_python), "-I", "-S", "-B", "-X",
+                        "pycache_prefix=/dev/null", str(launcher_path),
+                        *child_options,
+                    ],
+                    check=False, capture_output=True, text=True, timeout=30,
+                    env=source_only_environment,
+                )
+                require(
+                    noncanonical_protected.returncode != 0
+                    and "result aliases protected input"
+                    in noncanonical_protected.stderr
+                    and protected_path.read_bytes() == protected_payload
+                    and not safe_path.exists(),
+                    "native protected-side lexical alias handling differs: "
+                    f"{protected_option} {order}",
+                )
 
         hostile_root = temp / "hostile-python-startup"
         hostile_root.mkdir()

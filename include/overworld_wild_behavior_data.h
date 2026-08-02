@@ -980,6 +980,11 @@ typedef BOOL (*OverworldWildBehaviorSemanticValidator)(
 OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedProjection(
     OverworldWildBehaviorSemanticValidator validator,
     void **projectionOut);
+OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedBundle(
+    OverworldWildBehaviorSemanticValidator validator,
+    void **projectionOut);
+void OverworldWildBehavior_ReleaseValidatedBundle(void *projection);
+void OverworldWildBehavior_FreeValidatedBundle(void *projection);
 
 typedef OverworldWildBehaviorLoadResult (*OverworldWildLoadValidatedProjectionFunc)(
     void **projection);

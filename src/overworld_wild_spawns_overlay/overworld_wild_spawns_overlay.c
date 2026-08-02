@@ -911,7 +911,7 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
     }
     sOverworldWildLastState = NULL;
 
-    sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
+    OverworldWildBehavior_FreeValidatedBundle(sOverworldWildBehaviorDataBlob);
     sOverworldWildBehaviorDataBlob = NULL;
 
     sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
@@ -1050,19 +1050,19 @@ static const OverworldWildBehaviorDataBlob *OverworldWildSpawns_GetBehaviorDataB
         }
         if (!OverworldWildSpawns_UnloadBehaviorValidator()) {
             if (result == OWBD_LOAD_PERMANENT_INVALID) sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_QUARANTINED;
-            sys_FreeMemoryEz(projection);
+            OverworldWildBehavior_FreeValidatedBundle(projection);
             sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
             return NULL;
         }
         if (!OverworldWildSpawns_RestoreFollowerSelector()) {
-            sys_FreeMemoryEz(projection);
+            OverworldWildBehavior_FreeValidatedBundle(projection);
             sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
             return NULL;
         }
         if (result == OWBD_LOAD_SUCCESS) {
             sOverworldWildBehaviorDataBlob = projection;
         } else {
-            sys_FreeMemoryEz(projection);
+            OverworldWildBehavior_FreeValidatedBundle(projection);
             if (result == OWBD_LOAD_TRANSIENT_FAILURE)
                 sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
         }
@@ -1697,9 +1697,15 @@ static OverworldWildOverlayRuntimeState *OverworldWildSpawns_EnsureRuntimeState(
         if (runtime != NULL) {
             memset(runtime, 0, sizeof(*runtime));
             OverworldWildRuntime_Init(&runtime->behaviorStackRuntime);
+            (void)OverworldWildRuntime_BindPrivateIdentity(
+                &runtime->behaviorStackRuntime);
         }
     } else {
-        OverworldWildRuntime_Activate(&runtime->behaviorStackRuntime);
+        if (runtime->behaviorStackRuntime.lifetimeState
+                == OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD) {
+            (void)OverworldWildRuntime_BindPrivateIdentity(
+                &runtime->behaviorStackRuntime);
+        }
     }
 
     return runtime;

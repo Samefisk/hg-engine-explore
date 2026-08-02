@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -53,10 +55,10 @@ OVERLAY155_CALL_INVENTORY_SHA256 = (
     "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
 OVERLAY155_RUNTIME_CALL_INVENTORY_SHA256 = (
-    "b0bcd1635155d30e7f6bb9d01eb2c9882fafa7e47e56f37f0e4328878fc54044"
+    "4fd739649efbb4da97924e9e226053859a499f3b78cb019d182c909217aa73d4"
 )
 OVERLAY149_BASE = 0x023CD000
-OVERLAY149_END = 0x023D7F38
+OVERLAY149_END = 0x023D7F3C
 OVERLAY149_RESERVE_START = 0x023D7F80
 OVERLAY149_LIMIT = 0x023D8000
 OVERLAY151_BASE = 0x023C4000
@@ -64,10 +66,10 @@ OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
     "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "857daa2875dc2f5a5b8562c6c841bdadf190a746077d92ddf925a5220353b75b"
+    "9a2d84d52238812841bb9ea4ce7bd94ddeb6acf6bfb051e861e631db975f7a6e"
 )
-EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "5f8286c7ac5aff3cd17e0bef6926a5d091981ceeeb6af7116cfb5a298796eb5f"
+EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256 = (
+    "0a3063658de225df67e82770965b3c01b6a075d7ee73fa4f1ccbb404e7120a77"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -81,7 +83,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "91d3c7f287b677941b4072086b673b6fdbf8f46249fb8ee25fecaf7cbf6e112b",
+        "296bcea645a4bf37ddb7e7fa8f00ff1829655b816f44b6794d27acbec3139515",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -454,6 +456,78 @@ def generated_dependency_inputs_are_safe(root: Path = REPO) -> bool:
     return True
 
 
+def normalized_build_wrapper_sha256(wrapper: bytes) -> str | None:
+    replacements = (
+        (
+            re.compile(
+                rb'(?m)^  native_bootstrap_expected_sha256="[0-9a-f]{64}"$'
+            ),
+            b'  native_bootstrap_expected_sha256="<EXTERNAL-SHA256>"',
+        ),
+        (
+            re.compile(
+                rb'(?m)^  native_bootstrap_expected_cdhash="[0-9a-f]{40}"$'
+            ),
+            b'  native_bootstrap_expected_cdhash="<EXTERNAL-CDHASH>"',
+        ),
+    )
+    normalized = wrapper
+    for pattern, replacement in replacements:
+        normalized, count = pattern.subn(replacement, normalized)
+        if count != 1:
+            return None
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def build_wrapper_native_pin_normalization_fixtures(wrapper: str) -> None:
+    encoded = wrapper.encode()
+    require(
+        normalized_build_wrapper_sha256(encoded)
+        == EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256,
+        "build wrapper normalized trust record differs",
+    )
+    alternate_pins = re.sub(
+        r'(?m)^(  native_bootstrap_expected_sha256=")[0-9a-f]{64}("$)',
+        r'\g<1>' + "1" * 64 + r'\g<2>',
+        wrapper,
+    )
+    alternate_pins = re.sub(
+        r'(?m)^(  native_bootstrap_expected_cdhash=")[0-9a-f]{40}("$)',
+        r'\g<1>' + "2" * 40 + r'\g<2>',
+        alternate_pins,
+    )
+    require(
+        alternate_pins != wrapper
+        and normalized_build_wrapper_sha256(alternate_pins.encode())
+        == EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256,
+        "external native publication pins are not isolated from wrapper code",
+    )
+    malformed_pin = wrapper.replace(
+        'native_bootstrap_expected_cdhash="',
+        'native_bootstrap_expected_cdhash="z',
+        1,
+    )
+    require(
+        normalized_build_wrapper_sha256(malformed_pin.encode()) is None,
+        "malformed external native publication pin passes wrapper trust",
+    )
+    duplicate_pin = wrapper + re.search(
+        r'(?m)^  native_bootstrap_expected_sha256="[0-9a-f]{64}"$',
+        wrapper,
+    ).group(0) + "\n"
+    require(
+        normalized_build_wrapper_sha256(duplicate_pin.encode()) is None,
+        "duplicate external native publication pin passes wrapper trust",
+    )
+    executable_edit = wrapper.replace("docker run -it", "docker run -i", 1)
+    require(
+        executable_edit != wrapper
+        and normalized_build_wrapper_sha256(executable_edit.encode())
+        != EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256,
+        "non-pin build wrapper edit passes normalized trust",
+    )
+
+
 def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
     if (
         hashlib.sha256(makefile.encode()).hexdigest()
@@ -464,8 +538,8 @@ def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
     if (
         not wrapper.is_file()
         or wrapper.is_symlink()
-        or hashlib.sha256(wrapper.read_bytes()).hexdigest()
-        != EXPECTED_BUILD_WRAPPER_SHA256
+        or normalized_build_wrapper_sha256(wrapper.read_bytes())
+        != EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256
     ):
         return False
     for relative_path, expected_sha256 in (
@@ -1741,6 +1815,7 @@ def source_matcher_mutation_fixtures(
 
 
 def source_contracts() -> None:
+    packaged_metadata_memory_shape_fixtures()
     header = (REPO / "include/pokemon_move_history.h").read_text()
     history = (
         REPO / "src/pokemon_move_history_overlay/pokemon_move_history.c"
@@ -1774,6 +1849,7 @@ def source_contracts() -> None:
     hooks = (REPO / "hooks").read_text()
     makefile = (REPO / "Makefile").read_text()
     build_wrapper = (REPO / "docker-makerom.cmd").read_text()
+    build_wrapper_native_pin_normalization_fixtures(build_wrapper)
     config = (REPO / "include/config.h").read_text()
     evolution = (
         REPO / "src/individual/GetMonEvolutionInternal.c"
@@ -2034,6 +2110,12 @@ def source_contracts() -> None:
         and "build/field/script_commands.d" in DEPENDENCY_FILES
         and "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d"
         in DEPENDENCY_FILES
+        and "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.d"
+        in DEPENDENCY_FILES
+        and "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d"
+        in DEPENDENCY_FILES
+        and "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.d"
+        in DEPENDENCY_FILES
         and "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d"
         in DEPENDENCY_FILES
         and "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.d" in DEPENDENCY_FILES
@@ -2045,11 +2127,25 @@ def source_contracts() -> None:
         and "src/overworld_wild_spawns_overlay/linker.ld" in FIXED_INPUTS
         and "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
         in FIXED_INPUTS
+        and "src/overworld_wild_runtime_overlay/linker.ld" in FIXED_INPUTS
+        and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
+        in FIXED_INPUTS
+        and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h"
+        in FIXED_INPUTS
+        and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+        in FIXED_INPUTS
+        and "src/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.c"
+        in FIXED_INPUTS
         and "scripts/overworld_wild_behavior_v40_validation_shared.h" in FIXED_INPUTS
         and "scripts/overworld_wild_runtime_sidecars_fixture.c" in FIXED_INPUTS
+        and "scripts/overworld_wild_runtime_catalog_fixture.c" in FIXED_INPUTS
+        and "scripts/overworld_wild_runtime_layers_fixture.c" in FIXED_INPUTS
+        and "scripts/overworld_wild_heap_probe.py" in FIXED_INPUTS
         and "scripts/verify_overworld_wild_overlay_size.py" in FIXED_INPUTS
         and "scripts/verify_overworld_learnset_cache.py" in FIXED_INPUTS
         and "scripts/verify_overworld_wild_runtime_sidecars.py" in FIXED_INPUTS
+        and "scripts/verify_overworld_wild_runtime_layers.py" in FIXED_INPUTS
+        and "scripts/verify_overworld_wild_heap_probe.py" in FIXED_INPUTS
         and "scripts/generate_armips_symbols.py" in FIXED_INPUTS
         and "src/field/linker.ld" in FIXED_INPUTS
         and OUTPUTS.get("task6_support_object")
@@ -2062,6 +2158,16 @@ def source_contracts() -> None:
         == "build/output_overworld_wild_spawns_overlay.bin"
         and OUTPUTS.get("overworld_wild_runtime_symbols")
         == "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o"
+        and OUTPUTS.get("overworld_wild_runtime_layers_object")
+        == "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o"
+        and OUTPUTS.get("overworld_wild_runtime_overlay_object")
+        == "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o"
+        and OUTPUTS.get("overworld_wild_runtime_linked")
+        == "build/overworld_wild_runtime_overlay_linked.o"
+        and OUTPUTS.get("overworld_wild_runtime_binary")
+        == "build/output_overworld_wild_runtime_overlay.bin"
+        and OUTPUTS.get("overworld_wild_task8_symbols")
+        == "build/overworld_wild_runtime_overlay_task8_symbols.o"
         and OUTPUTS.get("overworld_wild_helper_object")
         == "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o"
         and OUTPUTS.get("overworld_wild_helper_thumb_help_object")
@@ -2091,6 +2197,7 @@ def source_contracts() -> None:
         "scripts/verify_summary_move_relearn_runtime.py",
         "scripts/pokemon_move_history_build_manifest.py",
         "scripts/headless-overworld-test.py",
+        "scripts/overworld_wild_heap_probe.py",
         "scripts/verify_pokemon_move_history_party_integrity.py",
         "scripts/build_summary_move_relearn_native_bootstrap.sh",
         "scripts/generate_summary_move_relearn_native_inventory.py",
@@ -3076,8 +3183,15 @@ def source_contracts() -> None:
         "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \\\n"
         "\t\t--core-linked $(LINK)"
     )
+    candidate_verifier_command = (
+        "scripts/verify_pokemon_move_history.py \\\n"
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--rom $(BUILDROM).tmp"
+    )
     final_verifier_command = (
-        "scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp"
+        "scripts/verify_pokemon_move_history.py \\\n"
+        "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "--rom $(BUILDROM)"
     )
     publish_command = (
         "scripts/pokemon_move_history_build_manifest.py \\\n"
@@ -3129,6 +3243,7 @@ def source_contracts() -> None:
         "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp",
         "$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py "
+        "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp",
         "$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null "
         "scripts/pokemon_move_history_build_manifest.py --publish-pair "
@@ -3136,6 +3251,9 @@ def source_contracts() -> None:
         "--candidate-rom $(BUILDROM).tmp "
         "--final-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
         "--final-rom $(BUILDROM)",
+        "$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py "
+        "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST) "
+        "--rom $(BUILDROM)",
     ]
     expected_publication_tail = [
         "rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)",
@@ -3183,7 +3301,7 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "5f3399c008db1e36705abe7c65bf6fbc5ede5eb8a3e8e032749c5c5b83daab4c"
+        "f8bc34dc0554f2e04bbf61427ba694078112f7be1d86f1a0cb1ead156370506e"
     )
     require(
         make_publication_contract_matches(
@@ -3207,18 +3325,38 @@ def source_contracts() -> None:
         "effective GNU Make all rule, prerequisites, recipe, or critical "
         "variables differ",
     )
-    exact_command_positions = [
-        recipe_commands.index(command)
-        if recipe_commands.count(command) == 1
-        else -1
-        for command in exact_package_commands
-    ]
+    def package_commands_are_exact(commands: list[str]) -> bool:
+        positions = [
+            commands.index(command) if commands.count(command) == 1 else -1
+            for command in exact_package_commands
+        ]
+        return -1 not in positions and positions == sorted(positions)
+
     require(
-        -1 not in exact_command_positions
-        and exact_command_positions == sorted(exact_command_positions),
+        package_commands_are_exact(recipe_commands),
         "complete package/seal/verify/publish recipes differ or can ignore "
         "command failures",
     )
+    candidate_index = recipe_commands.index(exact_package_commands[4])
+    publish_index = recipe_commands.index(exact_package_commands[5])
+    final_index = recipe_commands.index(exact_package_commands[6])
+    swapped_verifiers = list(recipe_commands)
+    swapped_verifiers[candidate_index], swapped_verifiers[final_index] = (
+        swapped_verifiers[final_index], swapped_verifiers[candidate_index])
+    final_before_publish = list(recipe_commands)
+    final_command = final_before_publish.pop(final_index)
+    final_before_publish.insert(publish_index, final_command)
+    ordering_mutations = (
+        ("missing candidate verifier",
+         recipe_commands[:candidate_index] + recipe_commands[candidate_index + 1:]),
+        ("missing final verifier",
+         recipe_commands[:final_index] + recipe_commands[final_index + 1:]),
+        ("swapped candidate/final verifiers", swapped_verifiers),
+        ("final verifier before publication", final_before_publish),
+    )
+    for label, mutated_commands in ordering_mutations:
+        require(not package_commands_are_exact(mutated_commands),
+                f"{label} passed exact package ordering fixture")
     ignored_prefix_makefile = makefile.replace(
         "\t$(PYTHON_NO_VENV) "
         "scripts/verify_pokemon_move_history_capture.py",
@@ -3765,6 +3903,7 @@ def source_contracts() -> None:
         and makefile.count(
             "scripts/pokemon_move_history_build_manifest.py"
         ) == 2
+        and makefile.count(candidate_verifier_command) == 1
         and makefile.count(final_verifier_command) == 1
         and package_command in makefile
         and seal_command in makefile
@@ -3772,6 +3911,7 @@ def source_contracts() -> None:
         and "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp" in seal_block
         and verifier_command in makefile
+        and candidate_verifier_command in makefile
         and final_verifier_command in makefile
         and publish_command in makefile
         and "--candidate-manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)"
@@ -3783,8 +3923,10 @@ def source_contracts() -> None:
         and makefile.index(package_command) < makefile.index(seal_command)
         < summary_verifier_start
         < makefile.index(verifier_command)
+        < makefile.index(candidate_verifier_command)
+        < makefile.index(publish_command)
         < makefile.index(final_verifier_command)
-        < makefile.index(publish_command),
+        < makefile.index(done_line),
         "capture manifest/verifiers are not wired once in fail-closed "
         "post-package/publish order",
     )
@@ -3821,6 +3963,9 @@ def source_contracts() -> None:
             "$(BUILD)/party_menu.o",
             "$(BUILD)/save.o",
             "$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o",
+            "$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o",
+            "$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o",
+            "$(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o",
             "$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o",
             "$(BUILD)/overworld_wild_helper_overlay/thumb_help.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
@@ -3838,11 +3983,19 @@ def source_contracts() -> None:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the twenty capture objects",
+        "move-history provenance does not force exactly the twenty-three capture objects",
     )
     require(
         "scripts/verify_overworld_wild_runtime_sidecars.py" not in makefile,
         "runtime sidecar verifier is redundantly invoked directly by Make",
+    )
+    require(
+        "scripts/verify_overworld_wild_runtime_layers.py" not in makefile,
+        "runtime layer verifier is redundantly invoked directly by Make",
+    )
+    require(
+        "scripts/verify_overworld_wild_heap_probe.py" not in makefile,
+        "runtime heap verifier is redundantly invoked directly by Make",
     )
 
 
@@ -5518,18 +5671,18 @@ def verify_overworld_wild_runtime_link_contracts(
         "packaged overlay 149 differs from its exact linked output",
     )
     require(
-        len(raw) == OVERLAY149_END - OVERLAY149_BASE == 0xAF38
-        and OVERLAY149_RESERVE_START - OVERLAY149_END == 0x48
+        len(raw) == OVERLAY149_END - OVERLAY149_BASE == 0xAF3C
+        and OVERLAY149_RESERVE_START - OVERLAY149_END == 0x44
         and OVERLAY149_LIMIT - OVERLAY149_RESERVE_START == 0x80
-        and OVERLAY149_LIMIT - OVERLAY149_END == 0xC8,
+        and OVERLAY149_LIMIT - OVERLAY149_END == 0xC4,
         "overlay 149 end, frozen reserve, or remaining allowance differs",
     )
     require(
         linked_symbols.get("gOverworldWildSpawnsOverlayEntry")
         == OVERLAY149_BASE
         and linked_symbols.get("__text_start") == OVERLAY149_BASE
-        and linked_symbols.get("__text_end") == 0x023D7EC0
-        and linked_symbols.get("__bss_start__") == 0x023D7EC0
+        and linked_symbols.get("__text_end") == 0x023D7EC4
+        and linked_symbols.get("__bss_start__") == 0x023D7EC4
         and linked_symbols.get("__bss_end__") == OVERLAY149_END
         and linked_symbols.get("_end") == OVERLAY149_END
         and linked_symbols.get("__end__") == OVERLAY149_END,
@@ -5538,7 +5691,7 @@ def verify_overworld_wild_runtime_link_contracts(
     expected_imports = {
         "OverworldWildRuntime_Init": (0x023BDDB5, 32),
         "OverworldWildRuntime_DestructivelyInvalidateSlot":
-            (0x023BDDD5, 116),
+            (0x023BDDD5, 48),
     }
     for name, (raw_value, size) in expected_imports.items():
         require(
@@ -5577,28 +5730,61 @@ def verify_overworld_wild_runtime_link_contracts(
         and "OverworldWildRuntime_InitSlot" not in nm_output,
         "overlay 149 defines or mistypes a resident lifecycle helper",
     )
-    calls = packaged_thumb_calls(raw, OVERLAY149_BASE, OVERLAY149_BASE, len(raw))
-    imported_calls = [
-        call
-        for call in calls
-        if call[2] in (0x023BDDB4, 0x023BDDD4)
+    expected_imported_calls = [
+        (0x023CE0BE, "bl", 0x023BDDB4),
+        (0x023D383A, "bl", 0x023BDDD4),
     ]
-    require(
-        imported_calls
-        == [
-            (0x023CE0BA, "bl", 0x023BDDB4),
-            (0x023D3836, "bl", 0x023BDDD4),
+
+    def lifecycle_call_inventory_matches(image: bytes) -> bool:
+        calls = packaged_thumb_calls(
+            image, OVERLAY149_BASE, OVERLAY149_BASE, len(image))
+        imported_calls = [
+            call
+            for call in calls
+            if call[2] in (0x023BDDB4, 0x023BDDD4)
         ]
-        and linked_symbols.get("OverworldWildSpawns_EnsureRuntimeState")
-        <= imported_calls[0][0]
-        < linked_symbols["OverworldWildSpawns_EnsureRuntimeState"]
-        + linked_sizes["OverworldWildSpawns_EnsureRuntimeState"]
-        and linked_symbols.get("OverworldWildSpawns_ResetSlotState")
-        <= imported_calls[1][0]
-        < linked_symbols["OverworldWildSpawns_ResetSlotState"]
-        + linked_sizes["OverworldWildSpawns_ResetSlotState"],
+        return (
+            imported_calls == expected_imported_calls
+            and linked_symbols.get("OverworldWildSpawns_EnsureRuntimeState")
+            <= imported_calls[0][0]
+            < linked_symbols["OverworldWildSpawns_EnsureRuntimeState"]
+            + linked_sizes["OverworldWildSpawns_EnsureRuntimeState"]
+            and linked_symbols.get("OverworldWildSpawns_ResetSlotState")
+            <= imported_calls[1][0]
+            < linked_symbols["OverworldWildSpawns_ResetSlotState"]
+            + linked_sizes["OverworldWildSpawns_ResetSlotState"]
+        )
+
+    require(
+        lifecycle_call_inventory_matches(raw),
         "overlay 149 resident lifecycle direct-call inventory differs",
     )
+    call_mutations: list[tuple[str, bytearray]] = []
+    first_missing_call = bytearray(raw)
+    first_offset = expected_imported_calls[0][0] - OVERLAY149_BASE
+    first_missing_call[first_offset:first_offset + 4] = b"\0\0\0\0"
+    call_mutations.append(("missing first lifecycle call", first_missing_call))
+    first_retargeted_call = bytearray(raw)
+    first_retargeted_call[first_offset:first_offset + 4] = encode_thumb_bl(
+        expected_imported_calls[0][0], expected_imported_calls[1][2])
+    call_mutations.append(("retargeted first lifecycle call", first_retargeted_call))
+    second_missing_call = bytearray(raw)
+    second_offset = expected_imported_calls[1][0] - OVERLAY149_BASE
+    second_missing_call[second_offset:second_offset + 4] = b"\0\0\0\0"
+    call_mutations.append(("missing second lifecycle call", second_missing_call))
+    second_retargeted_call = bytearray(raw)
+    second_retargeted_call[second_offset:second_offset + 4] = encode_thumb_bl(
+        expected_imported_calls[1][0], expected_imported_calls[0][2])
+    call_mutations.append(("retargeted second lifecycle call", second_retargeted_call))
+    extra_call = bytearray(raw)
+    extra_address = expected_imported_calls[0][0] - 4
+    extra_offset = extra_address - OVERLAY149_BASE
+    extra_call[extra_offset:extra_offset + 4] = encode_thumb_bl(
+        extra_address, expected_imported_calls[0][2])
+    call_mutations.append(("extra lifecycle call", extra_call))
+    for label, mutation in call_mutations:
+        require(not lifecycle_call_inventory_matches(bytes(mutation)),
+                f"overlay 149 {label} passed exact call inventory")
     for raw_value, _size in expected_imports.values():
         require(
             struct.pack("<I", raw_value) not in raw,
@@ -5699,6 +5885,18 @@ def encode_thumb_blx(address: int, target: int) -> bytes:
     )
     first = 0xF000 | ((delta >> 12) & 0x7FF)
     second = 0xE800 | ((delta >> 1) & 0x7FF)
+    return struct.pack("<HH", first, second)
+
+
+def encode_thumb_bl(address: int, target: int) -> bytes:
+    delta = target - (address + 4)
+    require(
+        -(1 << 22) <= delta < (1 << 22)
+        and delta % 2 == 0,
+        f"Thumb BL 0x{address:08X}->0x{target:08X} is out of range/alignment",
+    )
+    first = 0xF000 | ((delta >> 12) & 0x7FF)
+    second = 0xF800 | ((delta >> 1) & 0x7FF)
     return struct.pack("<HH", first, second)
 
 
@@ -5900,6 +6098,17 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         0x3F3400,
         0x3F83D2,
+    ),
+    149: (
+        OVERLAY149_BASE,
+        OVERLAY149_END - OVERLAY149_BASE,
+        0,
+        0,
+        0,
+        149,
+        0,
+        0x40F600,
+        0x41A53C,
     ),
     151: (
         OVERLAY151_BASE,
@@ -6114,117 +6323,298 @@ def overlay129_thunks_match(image: bytes, base: int) -> bool:
     )
 
 
+def packaged_metadata_mutation_helper_is_safe(source: str) -> bool:
+    try:
+        source_tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    fixture_nodes = [
+        node
+        for node in source_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "packaged_metadata_mutation_fixtures"
+    ]
+    if len(fixture_nodes) != 1:
+        return False
+    helper_nodes = [
+        node
+        for node in fixture_nodes[0].body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "reject_mutation"
+    ]
+    if len(helper_nodes) != 1:
+        return False
+    helper = helper_nodes[0]
+    parents = {
+        child: parent
+        for parent in ast.walk(helper)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+    direct_allocations = [
+        statement
+        for statement in helper.body
+        if isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance(statement.targets[0], ast.Name)
+        and statement.targets[0].id == "mutation"
+        and isinstance(statement.value, ast.Call)
+        and isinstance(statement.value.func, ast.Name)
+        and statement.value.func.id == "bytearray"
+        and len(statement.value.args) == 1
+        and isinstance(statement.value.args[0], ast.Name)
+        and statement.value.args[0].id == "rom"
+        and not statement.value.keywords
+    ]
+    if len(direct_allocations) != 1:
+        return False
+    allocation = direct_allocations[0]
+
+    pack_calls = [
+        node
+        for node in ast.walk(helper)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "struct"
+        and node.func.attr == "pack_into"
+        and len(node.args) == 4
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == "format_string"
+        and isinstance(node.args[1], ast.Name)
+        and node.args[1].id == "mutation"
+        and isinstance(node.args[2], ast.Name)
+        and node.args[2].id == "offset"
+        and isinstance(node.args[3], ast.Starred)
+        and isinstance(node.args[3].value, ast.Name)
+        and node.args[3].value.id == "values"
+        and not node.keywords
+    ]
+    if len(pack_calls) != 1:
+        return False
+    packaged_calls = [
+        node
+        for node in ast.walk(helper)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "packaged_components_from_bytes"
+    ]
+    if not (
+        len(packaged_calls) == 1
+        and len(packaged_calls[0].args) == 1
+        and isinstance(packaged_calls[0].args[0], ast.Name)
+        and packaged_calls[0].args[0].id == "mutation"
+        and not packaged_calls[0].keywords
+    ):
+        return False
+    handoff = packaged_calls[0]
+
+    allowed_uses = {
+        allocation.targets[0]: (allocation, ast.Store),
+        allocation.value.args[0]: (allocation.value, ast.Load),
+        pack_calls[0].args[1]: (pack_calls[0], ast.Load),
+        handoff.args[0]: (handoff, ast.Load),
+    }
+    value_uses = [
+        node
+        for node in ast.walk(helper)
+        if isinstance(node, ast.Name) and node.id in {"rom", "mutation"}
+    ]
+    if len(value_uses) != len(allowed_uses):
+        return False
+    for value_use in value_uses:
+        expected = allowed_uses.get(value_use)
+        if expected is None:
+            return False
+        expected_parent, expected_context = expected
+        if (
+            parents.get(value_use) is not expected_parent
+            or not isinstance(value_use.ctx, expected_context)
+        ):
+            return False
+    for node in ast.walk(helper):
+        if (
+            isinstance(node, ast.arg)
+            and node.arg in {"rom", "mutation"}
+        ) or (
+            isinstance(node, (ast.Global, ast.Nonlocal))
+            and ({"rom", "mutation"} & set(node.names))
+        ):
+            return False
+    return True
+
+
+def packaged_metadata_memory_shape_fixtures() -> None:
+    source = Path(__file__).read_text()
+    fixture_marker = "def packaged_metadata_mutation_fixtures(rom: bytes) -> None:\n"
+    fixture_offset = source.find(fixture_marker)
+    require(fixture_offset >= 0, "packaged metadata mutation fixture is absent")
+
+    def mutate_fixture(needle: str, replacement: str) -> str:
+        prefix = source[:fixture_offset]
+        fixture = source[fixture_offset:]
+        mutated_fixture = fixture.replace(needle, replacement, 1)
+        require(mutated_fixture != fixture, "memory-shape mutation is inert")
+        return prefix + mutated_fixture
+
+    def after_allocation(*statements: str) -> str:
+        insertion = "".join(f"        {statement}\n" for statement in statements)
+        return mutate_fixture(
+            "mutation = bytearray(rom)\n",
+            "mutation = bytearray(rom)\n" + insertion,
+        )
+
+    require(
+        packaged_metadata_mutation_helper_is_safe(source),
+        "current packaged metadata mutation helper retains a full-ROM copy",
+    )
+    redundant_copy = mutate_fixture(
+        "packaged_components_from_bytes(mutation)",
+        "packaged_components_from_bytes(bytes(mutation))",
+    )
+    require(
+        not packaged_metadata_mutation_helper_is_safe(redundant_copy),
+        "redundant full-ROM bytes-copy shape passes the memory guard",
+    )
+    arbitrary_escape = after_allocation("retain(mutation)")
+    require(
+        not packaged_metadata_mutation_helper_is_safe(arbitrary_escape),
+        "arbitrary mutation call escape passes the memory guard",
+    )
+    global_escape = after_allocation(
+        "global escaped_mutation",
+        "escaped_mutation = mutation",
+    )
+    require(
+        not packaged_metadata_mutation_helper_is_safe(global_escape),
+        "global mutation assignment escape passes the memory guard",
+    )
+    slice_copy = after_allocation("mutation_copy = mutation[:]")
+    require(
+        not packaged_metadata_mutation_helper_is_safe(slice_copy),
+        "mutation slice/copy passes the memory guard",
+    )
+    retained_copy = after_allocation(
+        "retained = []",
+        "retained.append(mutation)",
+    )
+    require(
+        not packaged_metadata_mutation_helper_is_safe(retained_copy),
+        "container-retained full-ROM shape passes the memory guard",
+    )
+    rom_derived_copy = after_allocation(
+        "rom_copy = memoryview(rom).tobytes()")
+    require(
+        not packaged_metadata_mutation_helper_is_safe(rom_derived_copy),
+        "ROM-derived full-buffer copy passes the memory guard",
+    )
+    unrelated_method = mutate_fixture(
+        fixture_marker,
+        fixture_marker + "    labels = []\n"
+        "    labels.append('unrelated outer-fixture method')\n",
+    )
+    require(
+        packaged_metadata_mutation_helper_is_safe(unrelated_method),
+        "unrelated outer-fixture method call is rejected by the memory guard",
+    )
+    print(
+        "packaged metadata memory-shape fixture: 8 checks; "
+        "strict nested-helper value allowlist"
+    )
+
+
 def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
-    y9_offset = struct.unpack_from("<I", rom, 0x50)[0]
-    mutations: list[tuple[str, bytearray]] = []
-    duplicate = bytearray(rom)
-    struct.pack_into("<I", duplicate, y9_offset + 153 * 32, 152)
-    mutations.append(("duplicate overlay ID", duplicate))
-    wrong_size = bytearray(rom)
-    struct.pack_into("<I", wrong_size, y9_offset + 153 * 32 + 8, 0xFA8)
-    mutations.append(("overlay 153 RAM size", wrong_size))
-    wrong_flags = bytearray(rom)
-    struct.pack_into("<I", wrong_flags, y9_offset + 129 * 32 + 28, 1)
-    mutations.append(("overlay 129 flags", wrong_flags))
-    for field, label in enumerate(
-        (
-            "ID",
-            "base",
-            "RAM size",
-            "BSS size",
-            "init start",
-            "init end",
-            "file ID",
-            "flags",
-        )
-    ):
-        wrong_overlay131 = bytearray(rom)
-        value = struct.unpack_from(
-            "<I", wrong_overlay131, y9_offset + 131 * 32 + field * 4
-        )[0]
-        struct.pack_into(
-            "<I",
-            wrong_overlay131,
-            y9_offset + 131 * 32 + field * 4,
-            value ^ 1,
-        )
-        mutations.append((f"overlay 131 {label}", wrong_overlay131))
-    for field, label in enumerate(
-        (
-            "ID",
-            "base",
-            "RAM size",
-            "BSS size",
-            "init start",
-            "init end",
-            "file ID",
-            "flags",
-        )
-    ):
-        wrong_overlay151 = bytearray(rom)
-        value = struct.unpack_from(
-            "<I", wrong_overlay151, y9_offset + 151 * 32 + field * 4
-        )[0]
-        struct.pack_into(
-            "<I",
-            wrong_overlay151,
-            y9_offset + 151 * 32 + field * 4,
-            value ^ 1,
-        )
-        mutations.append((f"overlay 151 {label}", wrong_overlay151))
-    for field, label in enumerate(
-        (
-            "ID",
-            "base",
-            "RAM size",
-            "BSS size",
-            "init start",
-            "init end",
-            "file ID",
-            "flags",
-        )
-    ):
-        wrong_overlay154 = bytearray(rom)
-        value = struct.unpack_from(
-            "<I", wrong_overlay154, y9_offset + 154 * 32 + field * 4
-        )[0]
-        struct.pack_into(
-            "<I",
-            wrong_overlay154,
-            y9_offset + 154 * 32 + field * 4,
-            value ^ 1,
-        )
-        mutations.append((f"overlay 154 {label}", wrong_overlay154))
-    for field, label in enumerate(
-        (
-            "ID",
-            "base",
-            "RAM size",
-            "BSS size",
-            "init start",
-            "init end",
-            "file ID",
-            "flags",
-        )
-    ):
-        wrong_overlay155 = bytearray(rom)
-        value = struct.unpack_from(
-            "<I", wrong_overlay155, y9_offset + 155 * 32 + field * 4
-        )[0]
-        struct.pack_into(
-            "<I",
-            wrong_overlay155,
-            y9_offset + 155 * 32 + field * 4,
-            value ^ 1,
-        )
-        mutations.append((f"overlay 155 {label}", wrong_overlay155))
-    for label, mutation in mutations:
+    require(
+        packaged_metadata_mutation_helper_is_safe(Path(__file__).read_text()),
+        "packaged metadata mutation helper retains a full-ROM copy",
+    )
+
+    def reject_mutation(
+        label: str,
+        format_string: str,
+        offset: int,
+        *values: int,
+    ) -> None:
+        mutation = bytearray(rom)
+        struct.pack_into(format_string, mutation, offset, *values)
         try:
-            packaged_components_from_bytes(bytes(mutation))
+            packaged_components_from_bytes(mutation)
         except SystemExit:
-            pass
-        else:
-            require(False, f"mutated {label} passes packaged metadata checks")
+            return
+        require(False, f"mutated {label} passes packaged metadata checks")
+
+    y9_offset = struct.unpack_from("<I", rom, 0x50)[0]
+    reject_mutation("duplicate overlay ID", "<I", y9_offset + 153 * 32, 152)
+    reject_mutation(
+        "overlay 153 RAM size", "<I", y9_offset + 153 * 32 + 8, 0xFA8)
+    reject_mutation(
+        "overlay 129 flags", "<I", y9_offset + 129 * 32 + 28, 1)
+    for field, label in enumerate(
+        (
+            "ID",
+            "base",
+            "RAM size",
+            "BSS size",
+            "init start",
+            "init end",
+            "file ID",
+            "flags",
+        )
+    ):
+        field_offset = y9_offset + 149 * 32 + field * 4
+        value = struct.unpack_from(
+            "<I", rom, field_offset)[0]
+        reject_mutation(
+            f"overlay 149 {label}", "<I", field_offset, value ^ 1)
+    fat_offset = struct.unpack_from("<I", rom, 0x48)[0]
+    overlay149_file_id = struct.unpack_from(
+        "<I", rom, y9_offset + 149 * 32 + 24)[0]
+    overlay149_fat_start_offset = fat_offset + overlay149_file_id * 8
+    overlay149_fat_end_offset = fat_offset + overlay149_file_id * 8 + 4
+    overlay149_fat_start = struct.unpack_from(
+        "<I", rom, overlay149_fat_start_offset)[0]
+    overlay149_fat_end = struct.unpack_from(
+        "<I", rom, overlay149_fat_end_offset)[0]
+    reject_mutation(
+        "overlay 149 FAT start",
+        "<I",
+        overlay149_fat_start_offset,
+        overlay149_fat_start + 4,
+    )
+    reject_mutation(
+        "overlay 149 FAT end",
+        "<I",
+        overlay149_fat_end_offset,
+        overlay149_fat_end - 4,
+    )
+    reject_mutation(
+        "overlay 149 length-preserving FAT extent shift",
+        "<2I",
+        overlay149_fat_start_offset,
+        overlay149_fat_start + 4,
+        overlay149_fat_end + 4,
+    )
+    for overlay_id in (131, 151, 154, 155):
+        for field, label in enumerate(
+            (
+                "ID",
+                "base",
+                "RAM size",
+                "BSS size",
+                "init start",
+                "init end",
+                "file ID",
+                "flags",
+            )
+        ):
+            field_offset = y9_offset + overlay_id * 32 + field * 4
+            value = struct.unpack_from("<I", rom, field_offset)[0]
+            reject_mutation(
+                f"overlay {overlay_id} {label}",
+                "<I",
+                field_offset,
+                value ^ 1,
+            )
 
 
 def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
@@ -6570,9 +6960,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
     require(
         ov149_base == OVERLAY149_BASE
-        and ov149_component.ram_size == 0xAF38
+        and ov149_component.ram_size
+        == OVERLAY149_END - OVERLAY149_BASE
         and ov149_component.bss_size == 0
-        and len(packaged_ov149) == 0xAF38,
+        and len(packaged_ov149)
+        == OVERLAY149_END - OVERLAY149_BASE,
         "packaged overlay 149 metadata or sealed span differs",
     )
     verify_overworld_wild_runtime_link_contracts(
@@ -6838,7 +7230,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == (0x023BDDB5, 32, "FUNC", "GLOBAL", "1")
         and task6_records.get(
             "OverworldWildRuntime_DestructivelyInvalidateSlot"
-        ) == (0x023BDDD5, 116, "FUNC", "GLOBAL", "1")
+        ) == (0x023BDDD5, 48, "FUNC", "GLOBAL", "1")
         and task6_records.get("__wrap_memset")
         == (0x023BDE49, 8, "FUNC", "GLOBAL", "1"),
         "overlay-155 resident lifecycle typed symbol inventory differs",
@@ -6948,8 +7340,8 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == [
             (0x023BDD9C, "bl", 0x023BDE48),
             (0x023BDDCA, "bl", 0x023BDD94),
-            (0x023BDE12, "bl", 0x023BDD94),
-            (0x023BDE30, "bl", 0x023BDD94),
+            (0x023BDDE8, "bl", 0x023BCA2C),
+            (0x023BDDF2, "bl", 0x023BDD94),
             (0x023BDE4A, "blx", 0x020E5B44),
         ]
         and call_inventory_sha256(task6_runtime_calls)
@@ -8479,6 +8871,113 @@ def run_runtime_sidecar_verifier() -> None:
         print(result.stdout, end="")
 
 
+def run_runtime_layer_verifier() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts/verify_overworld_wild_runtime_layers.py"),
+        ],
+        cwd=REPO,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    require(
+        result.returncode == 0,
+        "runtime layer verifier failed: " + result.stderr.strip(),
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+
+
+def run_heap_probe_verifier() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts/verify_overworld_wild_heap_probe.py"),
+        ],
+        cwd=REPO,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    require(
+        result.returncode == 0,
+        "runtime heap probe verifier failed: " + result.stderr.strip(),
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+
+
+def run_boot_decoder_freshness_fixtures() -> None:
+    verifier_path = REPO / "scripts/verify_pokemon_move_history.py"
+    spec = importlib.util.spec_from_file_location(
+        "task8_packaged_verifier_fixture", verifier_path)
+    require(spec is not None and spec.loader is not None,
+            "packaged verifier fixture could not load its module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    candidate_rom = b"task8-candidate-rom"
+    candidate_arm9 = b"task8-candidate-arm9"
+    captured_arm9 = candidate_arm9 + b"\x21\x06\xC0\xDE\xA0\x0B" + bytes(6)
+    candidate_overlay = b"task8-candidate-overlay157"
+
+    def record(data: bytes) -> dict[str, object]:
+        return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+    inputs = {}
+    for path_text in (
+        "armips/asm/syntheticoverlay.s",
+        "src/overworld_wild_runtime_overlay/linker.ld",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+    ):
+        inputs[path_text] = record((REPO / path_text).read_bytes())
+    document = {
+        "schema": "pokemon-move-history-capture-build-v1",
+        "inputs": inputs,
+        "outputs": {
+            "patched_arm9": record(captured_arm9),
+            "overworld_wild_runtime_binary": record(candidate_overlay),
+            "packaged_rom": record(candidate_rom),
+        },
+    }
+    with tempfile.TemporaryDirectory(prefix="task8-boot-freshness-") as raw:
+        root = Path(raw)
+        candidate_manifest = root / "candidate.json"
+        absent_final_manifest = root / "final.json"
+        candidate_manifest.write_text(json.dumps(document))
+        module.verify_boot_decoder_freshness(
+            candidate_manifest,
+            candidate_rom,
+            candidate_arm9,
+            candidate_overlay,
+            captured_arm9,
+        )
+        require(not absent_final_manifest.exists(),
+                "candidate freshness fixture unexpectedly required final manifest")
+
+        prior = copy.deepcopy(document)
+        prior["outputs"]["packaged_rom"] = record(b"prior-generation-rom")
+        prior_manifest = root / "prior.json"
+        prior_manifest.write_text(json.dumps(prior))
+        try:
+            module.verify_boot_decoder_freshness(
+                prior_manifest,
+                candidate_rom,
+                candidate_arm9,
+                candidate_overlay,
+                captured_arm9,
+            )
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError(
+                "prior-generation manifest authenticated candidate ROM")
+    print("packaged boot freshness fixture: candidate manifest explicit; prior generation rejected")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -8574,6 +9073,9 @@ def main() -> None:
         return
     source_contracts()
     run_runtime_sidecar_verifier()
+    run_runtime_layer_verifier()
+    run_heap_probe_verifier()
+    run_boot_decoder_freshness_fixtures()
     host_fixtures(args.manifest, args.rom)
     if args.source_only:
         print("move-history capture: source and host fixtures verified")

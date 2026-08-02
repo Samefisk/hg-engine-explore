@@ -135,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "e8626576a6b204808b93aca1a3bb8bc86622c158fc37adeb4d3dc36d2e591e94"
+    "df1f77143f8797cac92748dc9d09eaee4f584248e0fb383d17411258f2353f16"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -291,6 +291,7 @@ RUNTIME_RETAINED_SOURCE_INPUTS = (
     RUNTIME_LAUNCHER_INPUT,
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",
+    "scripts/overworld_wild_heap_probe.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
     "scripts/summary_move_relearn_protected_spawn.py",
 )
@@ -316,6 +317,9 @@ DEPENDENCY_FILES = (
     "build/party_menu.d",
     "build/overworld_wild_spawns.d",
     "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d",
+    "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.d",
+    "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d",
+    "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.d",
     "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d",
     "build/save.d",
     "build/overlay.d",
@@ -338,6 +342,7 @@ FIXED_INPUTS = (
     "armips/global.s",
     "armips/include/macros.s",
     "armips/asm/pokemon_move_history_capture.s",
+    "armips/asm/syntheticoverlay.s",
     "asm/other_hook.s",
     "asm/pokemon_move_history_overlay/entry.s",
     "asm/pokemon_move_history_overlay/thumb_help.s",
@@ -351,6 +356,12 @@ FIXED_INPUTS = (
     "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c",
     "src/overworld_wild_spawns_overlay/linker.ld",
     "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h",
+    "src/overworld_wild_runtime_overlay/linker.ld",
+    "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
+    "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h",
+    "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+    "src/overworld_wild_behavior_validator_overlay/linker.ld",
+    "src/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.c",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/field/linker.ld",
     "scripts/generate_armips_symbols.py",
@@ -359,9 +370,13 @@ FIXED_INPUTS = (
     "scripts/make.py",
     "scripts/overworld_wild_behavior_v40_validation_shared.h",
     "scripts/overworld_wild_runtime_sidecars_fixture.c",
+    "scripts/overworld_wild_runtime_catalog_fixture.c",
+    "scripts/overworld_wild_runtime_layers_fixture.c",
     "scripts/verify_overworld_wild_overlay_size.py",
     "scripts/verify_overworld_learnset_cache.py",
     "scripts/verify_overworld_wild_runtime_sidecars.py",
+    "scripts/verify_overworld_wild_runtime_layers.py",
+    "scripts/verify_overworld_wild_heap_probe.py",
     "scripts/verify_pokemon_move_history_capture.py",
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
@@ -413,6 +428,22 @@ OUTPUTS = {
         "build/output_overworld_wild_spawns_overlay.bin",
     "overworld_wild_runtime_symbols":
         "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o",
+    "overworld_wild_runtime_layers_object":
+        "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o",
+    "overworld_wild_runtime_overlay_object":
+        "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o",
+    "overworld_wild_runtime_linked":
+        "build/overworld_wild_runtime_overlay_linked.o",
+    "overworld_wild_runtime_binary":
+        "build/output_overworld_wild_runtime_overlay.bin",
+    "overworld_wild_task8_symbols":
+        "build/overworld_wild_runtime_overlay_task8_symbols.o",
+    "overworld_wild_behavior_validator_object":
+        "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o",
+    "overworld_wild_behavior_validator_linked":
+        "build/overworld_wild_behavior_validator_overlay_linked.o",
+    "overworld_wild_behavior_validator_binary":
+        "build/output_overworld_wild_behavior_validator_overlay.bin",
     "overworld_wild_helper_object":
         "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o",
     "overworld_wild_helper_thumb_help_object":
@@ -442,6 +473,8 @@ OUTPUTS = {
     "patched_overlay153": "base/overlay/overlay_0153.bin",
     "patched_overlay154": "base/overlay/overlay_0154.bin",
     "patched_overlay155": "base/overlay/overlay_0155.bin",
+    "patched_overlay156": "base/overlay/overlay_0156.bin",
+    "patched_overlay157": "base/overlay/overlay_0157.bin",
 }
 
 

@@ -23,6 +23,13 @@ EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 DIRECTORY_DIGEST_DOMAIN = b"summary-move-relearn-directory-membership-v1\0"
 RUNTIME_SOURCES = (
     "scripts/pokemon_move_history_build_manifest.py",
+    "scripts/verify_pokemon_move_history_capture.py",
+    "scripts/verify_overworld_wild_runtime_sidecars.py",
+    "scripts/verify_overworld_wild_runtime_layers.py",
+    "scripts/verify_overworld_wild_heap_probe.py",
+    "scripts/overworld_wild_heap_probe.py",
+    "scripts/overworld_behavior_stack_model.py",
+    "scripts/verify_pokemon_move_history.py",
     "scripts/launch_summary_move_relearn_runtime.py",
     "scripts/verify_summary_move_relearn_runtime.py",
     "scripts/headless-overworld-test.py",

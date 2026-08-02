@@ -7,10 +7,11 @@ OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -fmerge-all-constants -frename-registers
 OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-expensive-optimizations
 OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS := -fmerge-all-constants -fno-tree-dce -fno-tree-sink -fno-cse-follow-jumps
 OVERWORLD_WILD_RUNTIME_SYMBOLS := $(BUILD)/pokemon_move_history_task6_overlay_task7_runtime_symbols.o
-OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
+OVERWORLD_WILD_TASK8_SYMBOLS := $(BUILD)/overworld_wild_runtime_overlay_task8_symbols.o
+OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
 OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS := --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi
-OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS := --just-symbols=$(BUILD)/pokemon_move_history_task6_overlay_linked.o
-POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --wrap=memset
+OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS := --just-symbols=$(BUILD)/pokemon_move_history_task6_overlay_linked.o --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS)
+POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memset
 
 INDIVIDUAL := individual
 OVERLAYS := $(filter-out $(INDIVIDUAL) $(shell cd $(C_SUBDIR); ls *.*),$(shell cd $(C_SUBDIR); ls))
@@ -35,25 +36,50 @@ $1_C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*
 $1_ASM_SRCS := $(wildcard $(ASM_SUBDIR)/$1/*.s)
 ALL_ASM_SRCS += $(wildcard $(ASM_SUBDIR)/$1/*.s)
 $1_ASM_OBJS := $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s))
-$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
+$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
 
-$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld $(C_SUBDIR)/$1/linker.ld
-	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_behavior_validator_overlay,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS),$(if $(filter pokemon_move_history_task6_overlay,$1),$(POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS),)))) -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
+$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld $(C_SUBDIR)/$1/linker.ld
+	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_behavior_validator_overlay,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS),$(if $(filter pokemon_move_history_task6_overlay,$1),$(POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS),)))) -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
-$(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o $(if $(filter overworld_wild_spawns_overlay overworld_wild_behavior_validator_overlay,$1),scripts/verify_overworld_wild_overlay_size.py,)
+$(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o $(if $(filter overworld_wild_spawns_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay,$1),scripts/verify_overworld_wild_overlay_size.py,)
 	$(OBJCOPY) -O binary $(BUILD)/$1_linked.o $(BUILD)/output_$1.bin
 	$(if $(filter overworld_wild_spawns_overlay,$1),$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $(BUILD)/$1_linked.o --binary $(BUILD)/output_$1.bin --overlay 149,)
 	$(if $(filter overworld_wild_behavior_validator_overlay,$1),$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $(BUILD)/$1_linked.o --binary $(BUILD)/output_$1.bin --overlay 156,)
+	$(if $(filter overworld_wild_runtime_overlay,$1),$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $(BUILD)/$1_linked.o --binary $(BUILD)/output_$1.bin --overlay 157,)
 
 endef
 $(foreach overlay, $(OVERLAYS), $(eval $(call OVERLAY_DEFINE,$(overlay))))
 
 $(BUILD)/overworld_wild_behavior_validator_overlay_linked.o: \
-    $(BUILD)/pokemon_move_history_task6_overlay_linked.o
+    $(BUILD)/pokemon_move_history_task6_overlay_linked.o \
+    $(OVERWORLD_WILD_TASK8_SYMBOLS)
+
+$(BUILD)/pokemon_move_history_task6_overlay_linked.o: \
+    $(OVERWORLD_WILD_TASK8_SYMBOLS)
 
 $(BUILD)/overworld_wild_spawns_overlay_linked.o: \
-    $(OVERWORLD_WILD_RUNTIME_SYMBOLS)
+    $(OVERWORLD_WILD_RUNTIME_SYMBOLS) \
+    $(OVERWORLD_WILD_TASK8_SYMBOLS)
+
+$(OVERWORLD_WILD_TASK8_SYMBOLS): \
+    $(BUILD)/overworld_wild_runtime_overlay_linked.o
+	$(OBJCOPY) --strip-all \
+		--keep-symbol=OverworldWildBehavior_LoadValidatedBundle \
+		--keep-symbol=OverworldWildBehavior_ReleaseValidatedBundle \
+		--keep-symbol=OverworldWildBehavior_FreeValidatedBundle \
+		--keep-symbol=OverworldWildRuntime_HandleSlotGenerationWrap \
+		--keep-symbol=OverworldWildRuntime_BindPrivateIdentity \
+		--keep-symbol=OverworldWildRuntime_ApplyStackDelta \
+		--keep-symbol=OverworldWildRuntime_Apply \
+		--keep-symbol=OverworldWildRuntime_Replace \
+		--keep-symbol=OverworldWildRuntime_Remove \
+		--keep-symbol=OverworldWildRuntime_RemoveOwner \
+		--keep-symbol=OverworldWildRuntime_ClearAllForSlot \
+		--keep-symbol=OverworldWildRuntime_GetLayerCount \
+		--keep-symbol=OverworldWildRuntime_GetLayerByIndex \
+		--keep-symbol=OverworldWildRuntime_FindLayer \
+		$< $@
 
 $(OVERWORLD_WILD_RUNTIME_SYMBOLS): \
     $(BUILD)/pokemon_move_history_task6_overlay_linked.o

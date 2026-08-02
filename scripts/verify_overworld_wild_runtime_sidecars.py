@@ -187,6 +187,7 @@ def verify_private_layout(
     require_tokens(task6_linker, "overlay-155 lifecycle placement", (
         "__ow_wild_runtime_sidecars_start",
         "KEEP(*(.ow_wild_runtime_sidecars))",
+        "KEEP(*(.ow_wild_runtime_sidecar_wrapper))",
         "__ow_wild_runtime_sidecars_end",
         "__ow_wild_runtime_sidecars_start == ORIGIN(rom) + 0x994",
         "OverworldWildRuntime_Init == ORIGIN(rom) + 0x9B4",
@@ -206,10 +207,10 @@ def verify_private_layout(
         "$(BUILD)/pokemon_move_history_task6_overlay_linked.o",
         "--keep-symbol=OverworldWildRuntime_Init",
         "--keep-symbol=OverworldWildRuntime_DestructivelyInvalidateSlot",
-        "POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --wrap=memset",
+        "POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memset",
     ))
     require_tokens(support, "resident memset wrapper", (
-        "section(\".ow_wild_runtime_sidecars\")",
+        "section(\".ow_wild_runtime_sidecar_wrapper\")",
         "__wrap_memset(void)",
         "blx 0x020E5B44",
     ))
@@ -220,20 +221,10 @@ def verify_private_layout(
     )
     destructive = function_body(
         header, "OverworldWildRuntime_DestructivelyInvalidateSlot")
-    require_tokens(destructive, "terminal runtime-epoch restart", (
-        "if (runtime->handleEpoch == 0xFFFFFFFFu)",
-        "globalSlot < OW_WILD_MAX_SPAWNS",
-        "OverworldWildRuntime_AdvanceNonzeroGeneration(",
-        "OverworldWildRuntime_InitSlot(slot);",
-        "slot->lifecycleTransitions = 1;",
-        "OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED",
-        "runtime->handleEpoch = 1;",
+    require_tokens(destructive, "delegated slot-generation wrap", (
+        "OverworldWildRuntime_HandleSlotGenerationWrap(runtime, slotIndex);",
+        "return;",
     ))
-    require(
-        destructive.index("globalSlot < OW_WILD_MAX_SPAWNS")
-        < destructive.index("runtime->handleEpoch = 1;"),
-        "terminal runtime epoch publishes before the global clear",
-    )
 
     cleanup = function_body(source, "OverworldWildSpawns_CleanupResidentData")
     require_tokens(cleanup, "resident cleanup lifetime", (
@@ -246,8 +237,11 @@ def verify_private_layout(
     require_tokens(ensure, "resident activation lifetime", (
         "memset(runtime, 0, sizeof(*runtime));",
         "OverworldWildRuntime_Init(&runtime->behaviorStackRuntime);",
-        "OverworldWildRuntime_Activate(&runtime->behaviorStackRuntime);",
+        "OverworldWildRuntime_BindPrivateIdentity(",
+        "== OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD",
     ))
+    require(ensure.count("OverworldWildRuntime_BindPrivateIdentity(") == 2,
+            "private runtime identity is not bound on init and cold restart")
 
 
 def verify_lifecycle_topology(source: str, helper: str) -> None:

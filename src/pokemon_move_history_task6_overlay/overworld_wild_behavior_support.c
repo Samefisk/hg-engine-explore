@@ -7,7 +7,8 @@
 
 /* Keep resident lifecycle memset calls direct; a linker-generated Thumb
  * interworking veneer would consume the sealed private-support tail. */
-void __attribute__((naked, noinline, used, section(".ow_wild_runtime_sidecars")))
+void __attribute__((naked, noinline, used, aligned(4),
+    section(".ow_wild_runtime_sidecar_wrapper")))
 __wrap_memset(void)
 {
     asm volatile(

@@ -1248,19 +1248,6 @@ static int invalidate_result_path(const char *path) {
     return -1;
 }
 
-static int invalidate_results(const ResultTargets *targets) {
-    size_t index;
-    int result = 0;
-    for (index = 0; index < targets->count; index++) {
-        if (invalidate_result_path(targets->paths[index]) != 0) {
-            fprintf(stderr, "native bootstrap: result invalidation failed: %s\n",
-                targets->paths[index]);
-            result = -1;
-        }
-    }
-    return result;
-}
-
 static int collect_result_targets(int argc, char **argv,
     ResultTargets *targets) {
     int index, malformed = 0;
@@ -1296,6 +1283,135 @@ static int collect_result_targets(int argc, char **argv,
         }
     }
     return malformed ? -1 : 0;
+}
+
+static int lexical_canonical_path(const char *path, char output[PATH_MAX]) {
+    char absolute[PATH_MAX];
+    const char *source;
+    size_t output_size = 1;
+    if (path == NULL || path[0] == '\0')
+        return -1;
+    if (path[0] == '/') {
+        if (strlen(path) >= sizeof(absolute))
+            return -1;
+        memcpy(absolute, path, strlen(path) + 1);
+    } else {
+        size_t cwd_size;
+        if (getcwd(absolute, sizeof(absolute)) == NULL)
+            return -1;
+        cwd_size = strlen(absolute);
+        if (cwd_size + 1 + strlen(path) >= sizeof(absolute))
+            return -1;
+        absolute[cwd_size++] = '/';
+        memcpy(absolute + cwd_size, path, strlen(path) + 1);
+    }
+    output[0] = '/';
+    source = absolute;
+    while (*source != '\0') {
+        const char *component;
+        size_t component_size;
+        while (*source == '/')
+            source++;
+        if (*source == '\0')
+            break;
+        component = source;
+        while (*source != '\0' && *source != '/')
+            source++;
+        component_size = (size_t)(source - component);
+        if (component_size == 1 && component[0] == '.')
+            continue;
+        if (component_size == 2 && component[0] == '.'
+            && component[1] == '.') {
+            while (output_size > 1 && output[output_size - 1] != '/')
+                output_size--;
+            if (output_size > 1)
+                output_size--;
+            continue;
+        }
+        if (output_size > 1) {
+            if (output_size + 1 >= PATH_MAX)
+                return -1;
+            output[output_size++] = '/';
+        }
+        if (component_size >= PATH_MAX - output_size)
+            return -1;
+        memcpy(output + output_size, component, component_size);
+        output_size += component_size;
+    }
+    output[output_size] = '\0';
+    return 0;
+}
+
+static int paths_are_same_input(const char *left, const char *right) {
+    char canonical_left[PATH_MAX], canonical_right[PATH_MAX];
+    struct stat left_info, right_info;
+    if (lexical_canonical_path(left, canonical_left) != 0
+        || lexical_canonical_path(right, canonical_right) != 0)
+        return 0;
+    if (strcmp(canonical_left, canonical_right) == 0)
+        return 1;
+    if (stat(canonical_left, &left_info) != 0
+        || stat(canonical_right, &right_info) != 0)
+        return 0;
+    return left_info.st_dev == right_info.st_dev
+        && left_info.st_ino == right_info.st_ino;
+}
+
+static int result_target_aliases_child_input(int argc, char **argv,
+    const char *target) {
+    static const char *protected_options[] = {
+        "--rom", "--publication-manifest", "--dsv",
+    };
+    int index, command_index = -1;
+    size_t option_index;
+    for (index = 1; index < argc; index++) {
+        if (strcmp(argv[index], "--") == 0) {
+            command_index = index + 1;
+            break;
+        }
+    }
+    if (command_index < 0)
+        return 0;
+    for (index = command_index; index < argc; index++) {
+        for (option_index = 0;
+             option_index < sizeof(protected_options) / sizeof(protected_options[0]);
+             option_index++) {
+            const char *name = protected_options[option_index];
+            size_t name_size = strlen(name);
+            const char *value = NULL;
+            if (strcmp(argv[index], name) == 0 && index + 1 < argc)
+                value = argv[index + 1];
+            else if (strncmp(argv[index], name, name_size) == 0
+                && argv[index][name_size] == '=')
+                value = argv[index] + name_size + 1;
+            if (value == NULL)
+                continue;
+            if (paths_are_same_input(target, value))
+                return 1;
+        }
+    }
+    return 0;
+}
+
+static int invalidate_results(int argc, char **argv,
+    const ResultTargets *targets) {
+    size_t index;
+    int result = 0;
+    for (index = 0; index < targets->count; index++) {
+        if (result_target_aliases_child_input(
+                argc, argv, targets->paths[index])) {
+            fprintf(stderr, "native bootstrap: result aliases protected input: %s\n",
+                targets->paths[index]);
+            result = -1;
+            continue;
+        }
+        if (invalidate_result_path(targets->paths[index]) != 0) {
+            fprintf(stderr, "native bootstrap: result invalidation failed: %s\n",
+                targets->paths[index]);
+            result = -1;
+        }
+    }
+    return result;
 }
 
 static int parse_options(int argc, char **argv, Options *options) {
@@ -1542,7 +1658,7 @@ int main(int argc, char **argv) {
     int targets_valid;
 
     targets_valid = collect_result_targets(argc, argv, &result_targets) == 0;
-    if (invalidate_results(&result_targets) != 0) {
+    if (invalidate_results(argc, argv, &result_targets) != 0) {
         free(result_targets.paths);
         return 1;
     }
@@ -1633,7 +1749,7 @@ int main(int argc, char **argv) {
     success = 1;
 
 cleanup:
-    if (!success && invalidate_results(&result_targets) != 0)
+    if (!success && invalidate_results(argc, argv, &result_targets) != 0)
         success = 0;
     if (queue >= 0)
         close(queue);
