@@ -1,5 +1,6 @@
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/overworld_wild_behavior_data.h"
+#include "overworld_wild_runtime_sidecars.h"
 
 #include "../../include/config.h"
 
@@ -636,7 +637,15 @@ typedef struct OverworldWildOverlayRuntimeState {
     u16 movementNativeHeldMask;
     u8 movementIdleAiCursor;
     u8 movementNativeShadowRestorePending;
+    OverworldWildBehaviorStackRuntime behaviorStackRuntime;
 } OverworldWildOverlayRuntimeState;
+
+typedef char OverworldWildBehaviorStackRuntimeMustRemainResidentSuffix[
+    offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)
+            + sizeof(OverworldWildBehaviorStackRuntime)
+        == sizeof(OverworldWildOverlayRuntimeState)
+        ? 1
+        : -1];
 
 #define OW_WILD_RUNTIME(state) ((OverworldWildOverlayRuntimeState *)((state)->movementRuntimeState))
 
@@ -893,8 +902,12 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
 
         sys_FreeMemoryEz(runtime->movementBehaviorSlotCaches);
         runtime->movementBehaviorSlotCaches = NULL;
-        sys_FreeMemoryEz(runtime);
-        state->movementRuntimeState = NULL;
+        memset(
+            runtime,
+            0,
+            offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime));
+        OverworldWildRuntime_MarkResidentCold(
+            &runtime->behaviorStackRuntime);
     }
     sOverworldWildLastState = NULL;
 
@@ -1683,7 +1696,10 @@ static OverworldWildOverlayRuntimeState *OverworldWildSpawns_EnsureRuntimeState(
         state->movementRuntimeState = runtime;
         if (runtime != NULL) {
             memset(runtime, 0, sizeof(*runtime));
+            OverworldWildRuntime_Init(&runtime->behaviorStackRuntime);
         }
+    } else {
+        OverworldWildRuntime_Activate(&runtime->behaviorStackRuntime);
     }
 
     return runtime;
@@ -11464,6 +11480,12 @@ static void OverworldWildSpawns_ResetSlotState(
     int slot,
     BOOL deleteAuxiliaryObjects)
 {
+    BOOL wasLive = state->spawns[slot].active;
+
+    OverworldWildRuntime_DestructivelyInvalidateSlot(
+        &OW_WILD_RUNTIME(state)->behaviorStackRuntime,
+        slot,
+        wasLive);
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
     OverworldWildSpawns_ResetSlotMovementCommand(state, slot, deleteAuxiliaryObjects);
 #endif
@@ -11541,8 +11563,8 @@ static void OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state)
         return;
     }
 
-    if (state->movementRuntimeState != NULL
-        && OW_WILD_RUNTIME(state)->residentData != NULL) {
+    if (state->movementRuntimeState != NULL) {
+        OW_WILD_RUNTIME(state)->residentData = &gOverworldWildResidentData;
         for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
             if (state->spawns[i].active) {
                 OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, FALSE);
@@ -16408,6 +16430,10 @@ static void OverworldWildSpawns_InitSpawnSlotState(
         0,
         0
     };
+
+    OverworldWildRuntime_MarkSlotAssigned(
+        &OW_WILD_RUNTIME(state)->behaviorStackRuntime,
+        slot);
 
     if (encounterGeneration == 0) {
         encounterGeneration = 1;

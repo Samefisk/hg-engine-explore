@@ -1,6 +1,23 @@
 #include "../../include/overworld_wild_behavior_data.h"
 #include "../../include/constants/file.h"
 
+/* Overlay 155 is boot-resident, so overlay 149 imports these private helpers. */
+#define OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
+#include "../overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
+
+/* Keep resident lifecycle memset calls direct; a linker-generated Thumb
+ * interworking veneer would consume the sealed private-support tail. */
+void __attribute__((naked, noinline, used, section(".ow_wild_runtime_sidecars")))
+__wrap_memset(void)
+{
+    asm volatile(
+        ".arch armv5t\n"
+        "push {lr}\n"
+        "blx 0x020E5B44\n"
+        "pop {pc}\n"
+        ".arch armv4t\n");
+}
+
 /* Overlay 155 is boot-resident.  Production validation imports these helpers
  * by symbol from its fixed private window; host validators keep local copies. */
 #define OWBD_VALIDATION_DEFINE_RESIDENT_HELPERS

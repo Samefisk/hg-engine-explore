@@ -315,6 +315,8 @@ DEPENDENCY_FILES = (
     "build/field/script_commands.d",
     "build/party_menu.d",
     "build/overworld_wild_spawns.d",
+    "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d",
+    "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d",
     "build/save.d",
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
@@ -341,9 +343,14 @@ FIXED_INPUTS = (
     "asm/pokemon_move_history_overlay/thumb_help.s",
     "asm/pokemon_move_history_task6_overlay/entry.s",
     "asm/summary_move_relearn_overlay/entry.s",
+    "asm/overworld_wild_helper_overlay/thumb_help.s",
     "src/pokemon_move_history_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c",
+    "src/overworld_wild_helper_overlay/linker.ld",
+    "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c",
+    "src/overworld_wild_spawns_overlay/linker.ld",
+    "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/field/linker.ld",
     "scripts/generate_armips_symbols.py",
@@ -351,6 +358,10 @@ FIXED_INPUTS = (
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/overworld_wild_behavior_v40_validation_shared.h",
+    "scripts/overworld_wild_runtime_sidecars_fixture.c",
+    "scripts/verify_overworld_wild_overlay_size.py",
+    "scripts/verify_overworld_learnset_cache.py",
+    "scripts/verify_overworld_wild_runtime_sidecars.py",
     "scripts/verify_pokemon_move_history_capture.py",
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
@@ -394,6 +405,22 @@ OUTPUTS = {
         "build/pokemon_move_history_task6_overlay_linked.o",
     "task6_binary":
         "build/output_pokemon_move_history_task6_overlay.bin",
+    "overworld_wild_spawns_object":
+        "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o",
+    "overworld_wild_spawns_linked":
+        "build/overworld_wild_spawns_overlay_linked.o",
+    "overworld_wild_spawns_binary":
+        "build/output_overworld_wild_spawns_overlay.bin",
+    "overworld_wild_runtime_symbols":
+        "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o",
+    "overworld_wild_helper_object":
+        "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o",
+    "overworld_wild_helper_thumb_help_object":
+        "build/overworld_wild_helper_overlay/thumb_help.o",
+    "overworld_wild_helper_linked":
+        "build/overworld_wild_helper_overlay_linked.o",
+    "overworld_wild_helper_binary":
+        "build/output_overworld_wild_helper_overlay.bin",
     "summary_object":
         "build/summary_move_relearn_overlay/summary_move_relearn.o",
     "summary_entry_object":
@@ -410,6 +437,8 @@ OUTPUTS = {
     "patched_overlay112": "base/overlay/overlay_0112.bin",
     "patched_overlay129": "base/overlay/overlay_0129.bin",
     "patched_overlay131": "base/overlay/overlay_0131.bin",
+    "patched_overlay149": "base/overlay/overlay_0149.bin",
+    "patched_overlay151": "base/overlay/overlay_0151.bin",
     "patched_overlay153": "base/overlay/overlay_0153.bin",
     "patched_overlay154": "base/overlay/overlay_0154.bin",
     "patched_overlay155": "base/overlay/overlay_0155.bin",

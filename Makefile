@@ -139,6 +139,9 @@ MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/field/script_commands.o \
 	$(BUILD)/party_menu.o \
 	$(BUILD)/save.o \
+	$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o \
+	$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o \
+	$(BUILD)/overworld_wild_helper_overlay/thumb_help.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
 	$(BUILD)/pokemon_move_history_overlay/entry.o \
@@ -273,7 +276,7 @@ $(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_valid
 .PHONY: overworld_wild_behavior_resident_support_flags_force
 OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP := $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support_flags.stamp
 $(OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP): overworld_wild_behavior_resident_support_flags_force | $(BUILD)/pokemon_move_history_task6_overlay
-	@echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld' | cmp -s - $@ || echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld' > $@
+	@echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld $(POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS)' | cmp -s - $@ || echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld $(POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS)' > $@
 $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o: $(OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP)
 
 .PHONY: overworld_wild_spawns_flags_force

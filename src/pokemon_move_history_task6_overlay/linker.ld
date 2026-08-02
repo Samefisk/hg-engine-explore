@@ -101,12 +101,42 @@ SECTIONS {
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
+
+                /* Boot-resident Task-7 helpers occupy only the audited gap. */
+                __task6_historical_end = . ;
+                . = ALIGN(2);
+                __ow_wild_runtime_sidecars_start = . ;
+                KEEP(*(.ow_wild_runtime_sidecars))
+                __ow_wild_runtime_sidecars_end = . ;
+                ASSERT(__ow_wild_runtime_sidecars_start == ORIGIN(rom) + 0x994,
+                    "runtime sidecar helper start moved");
+                ASSERT(OverworldWildRuntime_Init == ORIGIN(rom) + 0x9B4,
+                    "runtime sidecar init moved");
+                ASSERT(OverworldWildRuntime_DestructivelyInvalidateSlot
+                        == ORIGIN(rom) + 0x9D4,
+                    "runtime sidecar destructive reset moved");
+                ASSERT(__wrap_memset == ORIGIN(rom) + 0xA48,
+                    "runtime sidecar resident memset wrapper moved");
+                ASSERT(__ow_wild_runtime_sidecars_end == ORIGIN(rom) + 0xA50,
+                    "runtime sidecar helper end moved");
+                ASSERT(__ow_wild_runtime_sidecars_start >= __task6_historical_end,
+                    "runtime sidecars overlap task-6 historical code");
+                ASSERT(__ow_wild_runtime_sidecars_end
+                        - __ow_wild_runtime_sidecars_start <= 0xEC,
+                    "runtime sidecar helpers exceed audited pre-private gap");
+                ASSERT(__ow_wild_runtime_sidecars_end <= ORIGIN(rom) + 0xA80,
+                    "runtime sidecar helpers entered private support window");
                 __task6_pre_private_end = . ;
                 ASSERT(__task6_pre_private_end <= ORIGIN(rom) + 0xA80,
                     "task-6 historical region entered private support window");
 
                 . = ORIGIN(rom) + 0xA80;
                 __owbd_resident_private_start = . ;
+                ASSERT(__owbd_resident_private_start == ORIGIN(rom) + 0xA80,
+                    "behavior support private start moved");
+                ASSERT(__ow_wild_runtime_sidecars_end
+                        <= __owbd_resident_private_start,
+                    "runtime sidecar helpers overlap private support");
                 KEEP(*(.owbd_resident_tables))
                 . = ALIGN(4);
                 KEEP(*(.owbd_resident_helpers))

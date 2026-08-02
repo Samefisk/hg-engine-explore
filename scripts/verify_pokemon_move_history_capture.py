@@ -46,18 +46,28 @@ OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_DIAGNOSTIC_SCRATCH = 0x023BE200
 OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE = 0x134
+OVERLAY155_HISTORICAL_END = 0x023BDD94
+OVERLAY155_RUNTIME_END = 0x023BDE50
 OVERLAY155_PRIVATE_START = 0x023BDE80
 OVERLAY155_CALL_INVENTORY_SHA256 = (
     "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
+OVERLAY155_RUNTIME_CALL_INVENTORY_SHA256 = (
+    "b0bcd1635155d30e7f6bb9d01eb2c9882fafa7e47e56f37f0e4328878fc54044"
+)
+OVERLAY149_BASE = 0x023CD000
+OVERLAY149_END = 0x023D7F38
+OVERLAY149_RESERVE_START = 0x023D7F80
+OVERLAY149_LIMIT = 0x023D8000
+OVERLAY151_BASE = 0x023C4000
 OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
     "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "7a0d949b55cade0d38692708443789de96cf1f4e255f0f61f53e21a77dd04ddd"
+    "857daa2875dc2f5a5b8562c6c841bdadf190a746077d92ddf925a5220353b75b"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "fe9b742fe90017b16967a8e2f75aa6003b4dddfd451ea061cb246fea06f5076e"
+    "5f8286c7ac5aff3cd17e0bef6926a5d091981ceeeb6af7116cfb5a298796eb5f"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -71,7 +81,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "e823635e458fcf40c6a3d780df979f7239e41982d7b98d13d20b678865d40300",
+        "91d3c7f287b677941b4072086b673b6fdbf8f46249fb8ee25fecaf7cbf6e112b",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2022,13 +2032,48 @@ def source_contracts() -> None:
     require(
         "build/save.d" in DEPENDENCY_FILES
         and "build/field/script_commands.d" in DEPENDENCY_FILES
+        and "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d"
+        in DEPENDENCY_FILES
+        and "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d"
+        in DEPENDENCY_FILES
         and "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.d" in DEPENDENCY_FILES
         and "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c" in FIXED_INPUTS
+        and "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
+        in FIXED_INPUTS
+        and "src/overworld_wild_helper_overlay/linker.ld" in FIXED_INPUTS
+        and "asm/overworld_wild_helper_overlay/thumb_help.s" in FIXED_INPUTS
+        and "src/overworld_wild_spawns_overlay/linker.ld" in FIXED_INPUTS
+        and "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
+        in FIXED_INPUTS
         and "scripts/overworld_wild_behavior_v40_validation_shared.h" in FIXED_INPUTS
+        and "scripts/overworld_wild_runtime_sidecars_fixture.c" in FIXED_INPUTS
+        and "scripts/verify_overworld_wild_overlay_size.py" in FIXED_INPUTS
+        and "scripts/verify_overworld_learnset_cache.py" in FIXED_INPUTS
+        and "scripts/verify_overworld_wild_runtime_sidecars.py" in FIXED_INPUTS
         and "scripts/generate_armips_symbols.py" in FIXED_INPUTS
         and "src/field/linker.ld" in FIXED_INPUTS
         and OUTPUTS.get("task6_support_object")
         == "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o"
+        and OUTPUTS.get("overworld_wild_spawns_object")
+        == "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o"
+        and OUTPUTS.get("overworld_wild_spawns_linked")
+        == "build/overworld_wild_spawns_overlay_linked.o"
+        and OUTPUTS.get("overworld_wild_spawns_binary")
+        == "build/output_overworld_wild_spawns_overlay.bin"
+        and OUTPUTS.get("overworld_wild_runtime_symbols")
+        == "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o"
+        and OUTPUTS.get("overworld_wild_helper_object")
+        == "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o"
+        and OUTPUTS.get("overworld_wild_helper_thumb_help_object")
+        == "build/overworld_wild_helper_overlay/thumb_help.o"
+        and OUTPUTS.get("overworld_wild_helper_linked")
+        == "build/overworld_wild_helper_overlay_linked.o"
+        and OUTPUTS.get("overworld_wild_helper_binary")
+        == "build/output_overworld_wild_helper_overlay.bin"
+        and OUTPUTS.get("patched_overlay149")
+        == "base/overlay/overlay_0149.bin"
+        and OUTPUTS.get("patched_overlay151")
+        == "base/overlay/overlay_0151.bin"
         and OUTPUTS.get("save_object") == "build/save.o",
         "save/field lifecycle and generator provenance inputs are not sealed",
     )
@@ -3775,6 +3820,9 @@ def source_contracts() -> None:
             "$(BUILD)/field/script_commands.o",
             "$(BUILD)/party_menu.o",
             "$(BUILD)/save.o",
+            "$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o",
+            "$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o",
+            "$(BUILD)/overworld_wild_helper_overlay/thumb_help.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
             "$(BUILD)/pokemon_move_history_overlay/entry.o",
@@ -3790,7 +3838,11 @@ def source_contracts() -> None:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the seventeen capture objects",
+        "move-history provenance does not force exactly the twenty capture objects",
+    )
+    require(
+        "scripts/verify_overworld_wild_runtime_sidecars.py" not in makefile,
+        "runtime sidecar verifier is redundantly invoked directly by Make",
     )
 
 
@@ -5380,6 +5432,202 @@ def symbol_sizes(path: Path) -> dict[str, int]:
     return sizes
 
 
+def elf_symbol_records(
+    path: Path,
+) -> dict[str, tuple[int, int, str, str, str]]:
+    output = subprocess.check_output(
+        ["arm-none-eabi-readelf", "-sW", str(path)],
+        text=True,
+    )
+    records: dict[str, tuple[int, int, str, str, str]] = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 8 and parts[0].endswith(":"):
+            try:
+                value = int(parts[1], 16)
+                size = int(parts[2], 10)
+            except ValueError:
+                continue
+            records[parts[7]] = (
+                value,
+                size,
+                parts[3],
+                parts[4],
+                parts[6],
+            )
+    return records
+
+
+def elf_section_names(path: Path) -> set[str]:
+    output = subprocess.check_output(
+        ["arm-none-eabi-readelf", "-SW", str(path)],
+        text=True,
+    )
+    return set(re.findall(r"\[\s*\d+\]\s+(\S+)", output))
+
+
+def require_fully_linked_without_veneer(path: Path, label: str) -> None:
+    relocations = subprocess.check_output(
+        ["arm-none-eabi-readelf", "-rW", str(path)],
+        text=True,
+    )
+    symbols = symbol_table(path)
+    sections = elf_section_names(path)
+    require(
+        "There are no relocations in this file." in relocations,
+        f"{label} retains unresolved relocations",
+    )
+    require(
+        not any(
+            token in name.lower()
+            for name in symbols
+            for token in ("_from_thumb", "veneer")
+        ),
+        f"{label} contains an interworking veneer symbol",
+    )
+    require(
+        not any(
+            token in name.lower()
+            for name in sections
+            for token in ("glue", "veneer", "stub")
+        ),
+        f"{label} contains a glue, veneer, or stub section",
+    )
+
+
+def verify_overworld_wild_runtime_link_contracts(
+    spawns_object: Path,
+    spawns_linked: Path,
+    spawns_overlay: Path,
+    runtime_symbols: Path,
+    packaged_ov149: bytes,
+    ov149_path: Path,
+) -> None:
+    linked_symbols = symbol_table(spawns_linked)
+    linked_sizes = symbol_sizes(spawns_linked)
+    linked_records = elf_symbol_records(spawns_linked)
+    carrier_records = elf_symbol_records(runtime_symbols)
+    linked_bytes = elf_bytes_at(
+        spawns_linked,
+        OVERLAY149_BASE,
+        OVERLAY149_END - OVERLAY149_BASE,
+    )
+    raw = spawns_overlay.read_bytes()
+    require(
+        packaged_ov149 == ov149_path.read_bytes() == raw == linked_bytes,
+        "packaged overlay 149 differs from its exact linked output",
+    )
+    require(
+        len(raw) == OVERLAY149_END - OVERLAY149_BASE == 0xAF38
+        and OVERLAY149_RESERVE_START - OVERLAY149_END == 0x48
+        and OVERLAY149_LIMIT - OVERLAY149_RESERVE_START == 0x80
+        and OVERLAY149_LIMIT - OVERLAY149_END == 0xC8,
+        "overlay 149 end, frozen reserve, or remaining allowance differs",
+    )
+    require(
+        linked_symbols.get("gOverworldWildSpawnsOverlayEntry")
+        == OVERLAY149_BASE
+        and linked_symbols.get("__text_start") == OVERLAY149_BASE
+        and linked_symbols.get("__text_end") == 0x023D7EC0
+        and linked_symbols.get("__bss_start__") == 0x023D7EC0
+        and linked_symbols.get("__bss_end__") == OVERLAY149_END
+        and linked_symbols.get("_end") == OVERLAY149_END
+        and linked_symbols.get("__end__") == OVERLAY149_END,
+        "overlay 149 fixed entry or sealed end symbols differ",
+    )
+    expected_imports = {
+        "OverworldWildRuntime_Init": (0x023BDDB5, 32),
+        "OverworldWildRuntime_DestructivelyInvalidateSlot":
+            (0x023BDDD5, 116),
+    }
+    for name, (raw_value, size) in expected_imports.items():
+        require(
+            linked_records.get(name)
+            == (raw_value, size, "FUNC", "GLOBAL", "ABS"),
+            f"overlay 149 typed resident import differs: {name}",
+        )
+    carrier_global_funcs = {
+        name: record
+        for name, record in carrier_records.items()
+        if record[2] == "FUNC" and record[3] == "GLOBAL"
+    }
+    require(
+        carrier_global_funcs
+        == {
+            name: (raw_value, size, "FUNC", "GLOBAL", "1")
+            for name, (raw_value, size) in expected_imports.items()
+        },
+        "Task-7 resident symbol carrier is not exactly the two typed imports",
+    )
+    nm_output = subprocess.check_output(
+        ["arm-none-eabi-nm", "-n", str(spawns_linked)],
+        text=True,
+    )
+    require(
+        re.search(
+            r"^023bddb4 A OverworldWildRuntime_Init$",
+            nm_output,
+            re.MULTILINE,
+        ) is not None
+        and re.search(
+            r"^023bddd4 A OverworldWildRuntime_DestructivelyInvalidateSlot$",
+            nm_output,
+            re.MULTILINE,
+        ) is not None
+        and "OverworldWildRuntime_InitSlot" not in nm_output,
+        "overlay 149 defines or mistypes a resident lifecycle helper",
+    )
+    calls = packaged_thumb_calls(raw, OVERLAY149_BASE, OVERLAY149_BASE, len(raw))
+    imported_calls = [
+        call
+        for call in calls
+        if call[2] in (0x023BDDB4, 0x023BDDD4)
+    ]
+    require(
+        imported_calls
+        == [
+            (0x023CE0BA, "bl", 0x023BDDB4),
+            (0x023D3836, "bl", 0x023BDDD4),
+        ]
+        and linked_symbols.get("OverworldWildSpawns_EnsureRuntimeState")
+        <= imported_calls[0][0]
+        < linked_symbols["OverworldWildSpawns_EnsureRuntimeState"]
+        + linked_sizes["OverworldWildSpawns_EnsureRuntimeState"]
+        and linked_symbols.get("OverworldWildSpawns_ResetSlotState")
+        <= imported_calls[1][0]
+        < linked_symbols["OverworldWildSpawns_ResetSlotState"]
+        + linked_sizes["OverworldWildSpawns_ResetSlotState"],
+        "overlay 149 resident lifecycle direct-call inventory differs",
+    )
+    for raw_value, _size in expected_imports.values():
+        require(
+            struct.pack("<I", raw_value) not in raw,
+            "overlay 149 retained an indirect/literal lifecycle helper target",
+        )
+    object_relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", str(spawns_object)],
+        text=True,
+    )
+    require(
+        len(re.findall(
+            r"R_ARM_THM_CALL\s+OverworldWildRuntime_Init$",
+            object_relocations,
+            re.MULTILINE,
+        )) == 1
+        and len(re.findall(
+            r"R_ARM_THM_CALL\s+OverworldWildRuntime_DestructivelyInvalidateSlot$",
+            object_relocations,
+            re.MULTILINE,
+        )) == 1,
+        "overlay 149 object lifecycle relocation inventory differs",
+    )
+    require(
+        ".ow_wild_runtime_sidecars" not in elf_section_names(spawns_linked),
+        "overlay 149 still owns resident lifecycle code",
+    )
+    require_fully_linked_without_veneer(spawns_linked, "overlay 149")
+
+
 def thumb_bl_target(image: bytes, base: int, address: int) -> int:
     offset = address - base
     first, second = struct.unpack_from("<HH", image, offset)
@@ -5653,6 +5901,17 @@ EXPECTED_OVERLAY_METADATA = {
         0x3F3400,
         0x3F83D2,
     ),
+    151: (
+        OVERLAY151_BASE,
+        0x3FF8,
+        0,
+        0,
+        0,
+        151,
+        0,
+        0x41B600,
+        0x41F5F8,
+    ),
     153: (
         OVERLAY_BASE,
         0xF6C,
@@ -5902,6 +6161,29 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
             "flags",
         )
     ):
+        wrong_overlay151 = bytearray(rom)
+        value = struct.unpack_from(
+            "<I", wrong_overlay151, y9_offset + 151 * 32 + field * 4
+        )[0]
+        struct.pack_into(
+            "<I",
+            wrong_overlay151,
+            y9_offset + 151 * 32 + field * 4,
+            value ^ 1,
+        )
+        mutations.append((f"overlay 151 {label}", wrong_overlay151))
+    for field, label in enumerate(
+        (
+            "ID",
+            "base",
+            "RAM size",
+            "BSS size",
+            "init start",
+            "init end",
+            "file ID",
+            "flags",
+        )
+    ):
         wrong_overlay154 = bytearray(rom)
         value = struct.unpack_from(
             "<I", wrong_overlay154, y9_offset + 154 * 32 + field * 4
@@ -5954,6 +6236,8 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov112_path = REPO / "base/overlay/overlay_0112.bin"
     ov129_path = REPO / "base/overlay/overlay_0129.bin"
     ov131_path = REPO / "base/overlay/overlay_0131.bin"
+    ov149_path = REPO / "base/overlay/overlay_0149.bin"
+    ov151_path = REPO / "base/overlay/overlay_0151.bin"
     ov153_path = REPO / "base/overlay/overlay_0153.bin"
     ov154_path = REPO / "base/overlay/overlay_0154.bin"
     ov155_path = REPO / "base/overlay/overlay_0155.bin"
@@ -5976,6 +6260,27 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     task6_entry_object = (
         REPO / "build/pokemon_move_history_task6_overlay/entry.o"
     )
+    spawns_object = (
+        REPO
+        / "build/overworld_wild_spawns_overlay/"
+        "overworld_wild_spawns_overlay.o"
+    )
+    spawns_linked = REPO / "build/overworld_wild_spawns_overlay_linked.o"
+    spawns_overlay = REPO / "build/output_overworld_wild_spawns_overlay.bin"
+    runtime_symbols = (
+        REPO
+        / "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o"
+    )
+    helper_object = (
+        REPO
+        / "build/overworld_wild_helper_overlay/"
+        "overworld_wild_helper_overlay.o"
+    )
+    helper_thumb_help_object = (
+        REPO / "build/overworld_wild_helper_overlay/thumb_help.o"
+    )
+    helper_linked = REPO / "build/overworld_wild_helper_overlay_linked.o"
+    helper_overlay = REPO / "build/output_overworld_wild_helper_overlay.bin"
     pokemon_object = REPO / "build/pokemon.o"
     party_menu_object = REPO / "build/party_menu.o"
     save_object = REPO / "build/save.o"
@@ -6010,6 +6315,8 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov112_path,
         ov129_path,
         ov131_path,
+        ov149_path,
+        ov151_path,
         ov153_path,
         ov154_path,
         ov155_path,
@@ -6018,6 +6325,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         task6_object,
         task6_support_object,
         task6_entry_object,
+        spawns_object,
+        spawns_linked,
+        spawns_overlay,
+        runtime_symbols,
+        helper_object,
+        helper_thumb_help_object,
+        helper_linked,
+        helper_overlay,
         pokemon_object,
         party_menu_object,
         save_object,
@@ -6199,6 +6514,8 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     ov112_component = packaged_overlays[112]
     ov129_component = packaged_overlays[129]
     ov131_component = packaged_overlays[131]
+    ov149_component = packaged_overlays[149]
+    ov151_component = packaged_overlays[151]
     ov153_component = packaged_overlays[153]
     ov154_component = packaged_overlays[154]
     ov155_component = packaged_overlays[155]
@@ -6230,6 +6547,14 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov131_component.ram_address,
         ov131_component.data,
     )
+    ov149_base, packaged_ov149 = (
+        ov149_component.ram_address,
+        ov149_component.data,
+    )
+    ov151_base, packaged_ov151 = (
+        ov151_component.ram_address,
+        ov151_component.data,
+    )
     ov153_base, packaged_ov153 = (
         ov153_component.ram_address,
         ov153_component.data,
@@ -6243,6 +6568,56 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ov155_component.data,
     )
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
+    require(
+        ov149_base == OVERLAY149_BASE
+        and ov149_component.ram_size == 0xAF38
+        and ov149_component.bss_size == 0
+        and len(packaged_ov149) == 0xAF38,
+        "packaged overlay 149 metadata or sealed span differs",
+    )
+    verify_overworld_wild_runtime_link_contracts(
+        spawns_object,
+        spawns_linked,
+        spawns_overlay,
+        runtime_symbols,
+        packaged_ov149,
+        ov149_path,
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="overworld-wild-helper-binary-"
+    ) as helper_binary_directory:
+        reproduced_helper_binary = (
+            Path(helper_binary_directory)
+            / "output_overworld_wild_helper_overlay.bin"
+        )
+        subprocess.run(
+            [
+                "arm-none-eabi-objcopy",
+                "-O",
+                "binary",
+                str(helper_linked),
+                str(reproduced_helper_binary),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        linked_helper_bytes = reproduced_helper_binary.read_bytes()
+    require(
+        ov151_base == OVERLAY151_BASE
+        and ov151_component.ram_size == 0x3FF8
+        and ov151_component.bss_size == 0
+        and ov151_component.static_init_start == 0
+        and ov151_component.static_init_end == 0
+        and ov151_component.file_id == 151
+        and ov151_component.flags == 0
+        and packaged_ov151
+        == ov151_path.read_bytes()
+        == helper_overlay.read_bytes()
+        == linked_helper_bytes,
+        "packaged overlay 151 differs from its sealed helper source build",
+    )
     require(
         ov65_base == 0x0221BE20
         and len(packaged_ov65) == 0x4380
@@ -6437,15 +6812,36 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "packaged overlay 155 overlaps the sealed diagnostic scratch",
     )
     task6_symbols = symbol_table(task6_linked)
+    task6_records = elf_symbol_records(task6_linked)
     require(
-        task6_symbols.get("__owbd_resident_private_start")
+        task6_symbols.get("__task6_historical_end")
+        == OVERLAY155_HISTORICAL_END
+        and task6_symbols.get("__ow_wild_runtime_sidecars_start")
+        == OVERLAY155_HISTORICAL_END
+        and task6_symbols.get("__ow_wild_runtime_sidecars_end")
+        == OVERLAY155_RUNTIME_END
+        and task6_symbols.get("__wrap_memset") == OVERLAY155_RUNTIME_END - 8
+        and task6_symbols.get("__owbd_resident_private_start")
         == OVERLAY155_PRIVATE_START
         and task6_symbols.get("__task6_pre_private_end", 0)
         <= OVERLAY155_PRIVATE_START
         and OVERLAY155_PRIVATE_START
         < task6_symbols.get("__owbd_resident_private_end", 0)
-        <= OVERLAY155_DIAGNOSTIC_SCRATCH,
+        == 0x023BE1E0
+        and len(packaged_ov155) == 0xDE0,
         "overlay-155 private support window or historical boundary differs",
+    )
+    require(
+        task6_records.get("OverworldWildRuntime_InitSlot")
+        == (0x023BDD95, 32, "FUNC", "GLOBAL", "1")
+        and task6_records.get("OverworldWildRuntime_Init")
+        == (0x023BDDB5, 32, "FUNC", "GLOBAL", "1")
+        and task6_records.get(
+            "OverworldWildRuntime_DestructivelyInvalidateSlot"
+        ) == (0x023BDDD5, 116, "FUNC", "GLOBAL", "1")
+        and task6_records.get("__wrap_memset")
+        == (0x023BDE49, 8, "FUNC", "GLOBAL", "1"),
+        "overlay-155 resident lifecycle typed symbol inventory differs",
     )
     private_end = task6_symbols["__owbd_resident_private_end"]
     for name in (
@@ -6527,7 +6923,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         packaged_ov155,
         ov155_base,
         ov155_base,
-        OVERLAY155_PRIVATE_START - ov155_base,
+        OVERLAY155_HISTORICAL_END - ov155_base,
     )
     require(
         len(task6_calls) == 75
@@ -6540,6 +6936,34 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         and call_inventory_sha256(task6_calls)
         == OVERLAY155_CALL_INVENTORY_SHA256,
         "historical overlay-155 call-site inventory differs",
+    )
+    task6_runtime_calls = packaged_thumb_calls(
+        packaged_ov155,
+        ov155_base,
+        OVERLAY155_HISTORICAL_END,
+        OVERLAY155_RUNTIME_END - OVERLAY155_HISTORICAL_END,
+    )
+    require(
+        task6_runtime_calls
+        == [
+            (0x023BDD9C, "bl", 0x023BDE48),
+            (0x023BDDCA, "bl", 0x023BDD94),
+            (0x023BDE12, "bl", 0x023BDD94),
+            (0x023BDE30, "bl", 0x023BDD94),
+            (0x023BDE4A, "blx", 0x020E5B44),
+        ]
+        and call_inventory_sha256(task6_runtime_calls)
+        == OVERLAY155_RUNTIME_CALL_INVENTORY_SHA256,
+        "overlay-155 resident lifecycle call-site inventory differs",
+    )
+    require(
+        not packaged_thumb_calls(
+            packaged_ov155,
+            ov155_base,
+            OVERLAY155_RUNTIME_END,
+            OVERLAY155_PRIVATE_START - OVERLAY155_RUNTIME_END,
+        ),
+        "overlay-155 pre-private linker fill contains executable calls",
     )
     task6_private_calls = packaged_thumb_calls(
         packaged_ov155,
@@ -6557,10 +6981,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         == OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256,
         "overlay-155 private support call-site inventory differs",
     )
-    require(
-        not any("_from_thumb" in name for name in task6_symbols),
-        "overlay 155 unexpectedly linked an ARM interworking veneer",
-    )
+    require_fully_linked_without_veneer(task6_linked, "overlay 155")
     summary_symbols = symbol_table(summary_linked)
     require(
         struct.unpack_from("<II", packaged_ov154, 0)
@@ -8039,6 +8460,25 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     )
 
 
+def run_runtime_sidecar_verifier() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts/verify_overworld_wild_runtime_sidecars.py"),
+        ],
+        cwd=REPO,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    require(
+        result.returncode == 0,
+        "runtime sidecar verifier failed: " + result.stderr.strip(),
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -8133,6 +8573,7 @@ def main() -> None:
         print("move-history capture: pre-Make trust gate verified")
         return
     source_contracts()
+    run_runtime_sidecar_verifier()
     host_fixtures(args.manifest, args.rom)
     if args.source_only:
         print("move-history capture: source and host fixtures verified")
