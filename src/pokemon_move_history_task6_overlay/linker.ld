@@ -101,9 +101,22 @@ SECTIONS {
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
-                    "task-6 resident helper exceeds 0x1000 reservation");
-                _end = __bss_end__ ;
-                __end__ = __bss_end__ ;
+                __task6_pre_private_end = . ;
+                ASSERT(__task6_pre_private_end <= ORIGIN(rom) + 0xA80,
+                    "task-6 historical region entered private support window");
+
+                . = ORIGIN(rom) + 0xA80;
+                __owbd_resident_private_start = . ;
+                KEEP(*(.owbd_resident_tables))
+                . = ALIGN(4);
+                KEEP(*(.owbd_resident_helpers))
+                . = ALIGN(4);
+                KEEP(*(.owbd_resident_loader))
+                . = ALIGN(4);
+                __owbd_resident_private_end = . ;
+                ASSERT(__owbd_resident_private_end <= ORIGIN(rom) + 0xE00,
+                    "behavior support library overlaps sealed task-6 scratch");
+                _end = __owbd_resident_private_end ;
+                __end__ = __owbd_resident_private_end ;
         } >rom = 0xff
 }

@@ -29,6 +29,7 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import wave
@@ -38,7 +39,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from PIL import Image
+try:
+    from PIL import Image
+except ModuleNotFoundError:
+    Image = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25935,6 +25939,20 @@ def serve(host: str, port: int) -> None:
 
 def validate_override_profile_source() -> None:
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
+    if "OverworldWildBehaviorDataV40.generated.inc" in raw_behavior_data:
+        from overworld_wild_behavior_v40_validator import validate_v40_owbd
+
+        with tempfile.TemporaryDirectory() as temp_name:
+            blob = Path(temp_name) / "OverworldWildBehaviorDataV40.bin"
+            subprocess.run([
+                sys.executable,
+                str(ROOT / "scripts" / "generate_overworld_wild_behavior_v40.py"),
+                "--check",
+                "--raw-output",
+                str(blob),
+            ], check=True)
+            validate_v40_owbd(blob, BEHAVIOR_DATA_HEADER)
+        return
     expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
@@ -25956,6 +25974,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1", help="host for --serve")
     parser.add_argument("--port", type=int, default=8765, help="port for --serve; use 0 for any free port")
     args = parser.parse_args(argv)
+
+    if Image is None and (args.json or args.serve):
+        raise SystemExit("Pillow is required for viewer JSON/server modes")
 
     if args.json:
         json.dump(build_data(), sys.stdout, indent=2)

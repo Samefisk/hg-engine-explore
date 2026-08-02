@@ -320,6 +320,7 @@ DEPENDENCY_FILES = (
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
     "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.d",
+    "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.d",
     "build/summary_move_relearn_overlay/summary_move_relearn.d",
 )
 FIXED_INPUTS = (
@@ -342,12 +343,14 @@ FIXED_INPUTS = (
     "asm/summary_move_relearn_overlay/entry.s",
     "src/pokemon_move_history_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/linker.ld",
+    "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/field/linker.ld",
     "scripts/generate_armips_symbols.py",
     "scripts/build_move_relearn_parents.py",
     "scripts/generate_ld.py",
     "scripts/make.py",
+    "scripts/overworld_wild_behavior_v40_validation_shared.h",
     "scripts/verify_pokemon_move_history_capture.py",
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
@@ -379,6 +382,8 @@ OUTPUTS = {
     "thumb_help_object": "build/pokemon_move_history_overlay/thumb_help.o",
     "task6_object":
         "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o",
+    "task6_support_object":
+        "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
     "task6_entry_object":
         "build/pokemon_move_history_task6_overlay/entry.o",
     "overlay_object": "build/overlay.o",

@@ -823,8 +823,14 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfi
 }
 
 static void *sOverworldWildBehaviorDataBlob;
-static BOOL sOverworldWildBehaviorDataLoadAttempted;
+static u8 sOverworldWildBehaviorOverlapState;
 static u8 sOverworldWildHelperOverlayReady;
+
+#define OWBD_OVERLAP_SELECTOR      (1u << 0)
+#define OWBD_OVERLAP_VALIDATOR     (1u << 1)
+#define OWBD_OVERLAP_QUARANTINED   (1u << 2)
+#define OWBD_OVERLAP_MUST_RESTORE  (1u << 3)
+#define OWBD_OVERLAP_LOAD_ATTEMPTED (1u << 4)
 
 static OverworldWildSpawnState *sOverworldWildLastState;
 static void OverworldWildSpawns_CleanupPresentationBeforeUnload(OverworldWildSpawnState *state);
@@ -832,7 +838,6 @@ static void OverworldWildSpawns_CleanupResidentTasks(void);
 static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverlayEntry(void);
 
 typedef struct OverworldWildBehaviorDataBlob {
-    OverworldWildBehaviorDataBlobHeader header;
     OverworldWildBehaviorProfile classProfiles[OWBD_CLASS_PROFILE_COUNT];
     OverworldWildBehaviorClassRule classRules[OWBD_CLASS_RULE_COUNT];
     OverworldWildBehaviorSpeciesClassRule speciesClassRules[OWBD_SPECIES_CLASS_RULE_COUNT];
@@ -840,10 +845,16 @@ typedef struct OverworldWildBehaviorDataBlob {
     u16 overrideMembers[OWBD_OVERRIDE_MEMBER_COUNT];
 } OverworldWildBehaviorDataBlob;
 
+typedef char OverworldWildBehaviorRuntimeProjectionHasExactSize[
+    sizeof(OverworldWildBehaviorDataBlob) == OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE ? 1 : -1];
+
 static BOOL OverworldWildSpawns_CleanupResidentData(void)
 {
     OverworldWildSpawnState *state = sOverworldWildLastState;
     BOOL helperLoaded = IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER);
+
+    if (sOverworldWildBehaviorOverlapState
+        & (OWBD_OVERLAP_VALIDATOR | OWBD_OVERLAP_MUST_RESTORE)) return FALSE;
 
     if (!helperLoaded && sOverworldWildHelperOverlayReady) {
         return FALSE;
@@ -890,13 +901,14 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
     sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
     sOverworldWildBehaviorDataBlob = NULL;
 
-    sOverworldWildBehaviorDataLoadAttempted = FALSE;
+    sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
 
     sOverworldWildHelperOverlayReady = 0;
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_HELPER);
     return TRUE;
 }
 
+#if 0 /* v39 blob validation moved to the streamed v40 validator. */
 static BOOL OverworldWildSpawns_AreOverrideOperatorMasksValid(
     const OverworldWildBehaviorOverrideProfile *profile);
 
@@ -941,86 +953,105 @@ static BOOL OverworldWildSpawns_AreExactOverrideMovementSpeedsValid(
     }
     return TRUE;
 }
+#endif
 
-static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob, u32 *loadedSize)
+static BOOL OverworldWildSpawns_RestoreFollowerSelector(void)
 {
-    void *narc;
-    u32 size;
-    void *loadedBlob;
-
-    narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
-    if (narc == NULL) {
+    if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_MUST_RESTORE)) return TRUE;
+    if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_SELECTOR)) {
+        if (!LoadOverlayNoInitAsync(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) return FALSE;
+        sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_SELECTOR;
+        OverworldFollowerSelector_SetDirectLoaded();
+    }
+    if (!OverworldFollowerSelector_Validate()) {
+        sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_QUARANTINED;
         return FALSE;
     }
-    if (NARC_GetFileCount(narc) <= memberId) {
-        NARC_dtor(narc);
-        return FALSE;
-    }
-
-    size = NARC_GetMemberSize(narc, memberId);
-    if (size == 0 || (expectedSize != 0 && size != expectedSize)) {
-        NARC_dtor(narc);
-        return FALSE;
-    }
-
-    loadedBlob = sys_AllocMemory(HEAPID_WORLD, size);
-    if (loadedBlob == NULL) {
-        NARC_dtor(narc);
-        return FALSE;
-    }
-
-    NARC_ReadWholeMember(narc, memberId, loadedBlob);
-    NARC_dtor(narc);
-    *blob = loadedBlob;
-    if (loadedSize != NULL) {
-        *loadedSize = size;
-    }
+    OverworldFollowerSelector_SetDirectLoaded();
+    sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_MUST_RESTORE;
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_DecodeBehaviorDataBlob(void)
+static BOOL OverworldWildSpawns_UnloadBehaviorValidator(void)
 {
-    const OverworldWildBehaviorDataBlob *blob;
-    const OverworldWildBehaviorDataBlobHeader *header;
-    int i;
-
-    blob = (const OverworldWildBehaviorDataBlob *)sOverworldWildBehaviorDataBlob;
-    header = &blob->header;
-    if (header->magic != OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
-        || header->version != OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
-        || header->headerSize != sizeof(OverworldWildBehaviorDataBlobHeader)
-        || header->blobSize != sizeof(OverworldWildBehaviorDataBlob)) {
-        return FALSE;
-    }
-
-    for (i = 0; i < OWBD_CLASS_PROFILE_COUNT; i++) {
-        if (!OverworldWildSpawns_AreProfileMovementSpeedsValid(&blob->classProfiles[i])) {
-            return FALSE;
-        }
-    }
-    for (i = 0; i < OWBD_OVERRIDE_PROFILE_COUNT; i++) {
-        const OverworldWildBehaviorOverrideProfile *profile = &blob->overrideProfiles[i];
-        if (!OverworldWildSpawns_AreOverrideOperatorMasksValid(profile)
-            || !OverworldWildSpawns_AreExactOverrideMovementSpeedsValid(profile)) {
-            return FALSE;
-        }
-    }
-
+    if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_VALIDATOR)) return TRUE;
+    if (!FS_UnloadOverlay(0, OVERLAY_OVERWORLD_WILD_BEHAVIOR_VALIDATOR)) return FALSE;
+    sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_VALIDATOR;
+    *(u32 *)OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR = 0;
     return TRUE;
 }
 
 static const OverworldWildBehaviorDataBlob *OverworldWildSpawns_GetBehaviorDataBlob(void)
 {
-    if (!sOverworldWildBehaviorDataLoadAttempted) {
-        sOverworldWildBehaviorDataLoadAttempted = TRUE;
-        if (!OverworldWildSpawns_LoadCodeAddonBlob(
-                CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA,
-                sizeof(OverworldWildBehaviorDataBlob),
-                &sOverworldWildBehaviorDataBlob,
-                NULL)
-            || !OverworldWildSpawns_DecodeBehaviorDataBlob()) {
-            sys_FreeMemoryEz(sOverworldWildBehaviorDataBlob);
-            sOverworldWildBehaviorDataBlob = NULL;
+    if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_LOAD_ATTEMPTED)) {
+        const OverworldWildBehaviorValidatorOverlayEntry *entry;
+        void *projection = NULL;
+        OverworldWildBehaviorLoadResult result = OWBD_LOAD_TRANSIENT_FAILURE;
+
+        sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_LOAD_ATTEMPTED;
+        if (!OverworldWildSpawns_UnloadBehaviorValidator()
+            || !OverworldWildSpawns_RestoreFollowerSelector()) {
+            sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
+            return NULL;
+        }
+        if (sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_QUARANTINED) return NULL;
+        if (OverworldFollowerSelector_IsDirectLoaded()) {
+            sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_SELECTOR | OWBD_OVERLAP_MUST_RESTORE;
+            if (!OverworldFollowerSelector_Validate()) {
+                sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_QUARANTINED;
+                return NULL;
+            }
+            if (!OverworldFollowerSelector_CanCallInputCancel()
+                || !OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputCancel(NULL)
+                || !FS_UnloadOverlay(0, OVERLAY_OVERWORLD_FOLLOWER_SELECTOR)) {
+                sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
+                return NULL;
+            }
+            sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_SELECTOR;
+            *(u32 *)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR = 0;
+            OverworldFollowerSelector_ClearDirectLoaded();
+        }
+        if (CanOverlayBeLoaded(OVERLAY_OVERWORLD_WILD_BEHAVIOR_VALIDATOR)
+            && LoadOverlayNoInitAsync(0, OVERLAY_OVERWORLD_WILD_BEHAVIOR_VALIDATOR)) {
+            u32 rawCallback, callback;
+
+            sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_VALIDATOR;
+            entry = OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY;
+            rawCallback = (u32)entry->loadValidatedProjection;
+            callback = rawCallback & ~1u;
+            if (entry->magic == OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_MAGIC
+                && entry->version == OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_VERSION
+                && entry->size == sizeof(*entry)
+                && (rawCallback & 1u)
+                && callback >= OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR
+                && callback < OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_END_ADDR) {
+                result = entry->loadValidatedProjection(&projection);
+            } else {
+                result = OWBD_LOAD_PERMANENT_INVALID;
+            }
+        }
+        if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_VALIDATOR)) {
+            (void)OverworldWildSpawns_RestoreFollowerSelector();
+            sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
+            return NULL;
+        }
+        if (!OverworldWildSpawns_UnloadBehaviorValidator()) {
+            if (result == OWBD_LOAD_PERMANENT_INVALID) sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_QUARANTINED;
+            sys_FreeMemoryEz(projection);
+            sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
+            return NULL;
+        }
+        if (!OverworldWildSpawns_RestoreFollowerSelector()) {
+            sys_FreeMemoryEz(projection);
+            sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
+            return NULL;
+        }
+        if (result == OWBD_LOAD_SUCCESS) {
+            sOverworldWildBehaviorDataBlob = projection;
+        } else {
+            sys_FreeMemoryEz(projection);
+            if (result == OWBD_LOAD_TRANSIENT_FAILURE)
+                sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
         }
     }
 
@@ -2824,6 +2855,7 @@ static BOOL OverworldWildSpawns_IsMovementSpeedField(u8 fieldIndex)
     return fieldIndex == 8 || fieldIndex == 9 || fieldIndex == 16;
 }
 
+#if 0 /* v39 operator validation is retained only in the compatibility tools. */
 static BOOL OverworldWildSpawns_IsOverrideOperatorMaskValid(
     u32 activeMask,
     u32 operatorMask,
@@ -2913,6 +2945,7 @@ static BOOL OverworldWildSpawns_AreOverrideOperatorMasksValid(
             profile->atMostMask3,
             TRUE);
 }
+#endif
 
 #undef OW_WILD_PROFILE_OFFSET
 

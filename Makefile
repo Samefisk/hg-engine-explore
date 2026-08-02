@@ -143,6 +143,7 @@ MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
 	$(BUILD)/pokemon_move_history_overlay/entry.o \
 	$(BUILD)/pokemon_move_history_overlay/thumb_help.o \
+	$(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o \
 	$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o \
 	$(BUILD)/pokemon_move_history_task6_overlay/entry.o \
 	$(BUILD)/overlay.o \
@@ -263,11 +264,29 @@ $1: ; mkdir -p $1
 endef
 $(foreach folder, $(CODE_BUILD_DIRS), $(eval $(call FOLDER_CREATE_DEFINE,$(folder))))
 
+.PHONY: overworld_wild_behavior_validator_flags_force
+OVERWORLD_WILD_BEHAVIOR_VALIDATOR_FLAG_STAMP := $(BUILD)/overworld_wild_behavior_validator_overlay/compile_flags.stamp
+$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_FLAG_STAMP): overworld_wild_behavior_validator_flags_force | $(BUILD)/overworld_wild_behavior_validator_overlay
+	@echo 'CC=$(CC) CFLAGS=$(CFLAGS) $(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/overworld_wild_behavior_validator_overlay/linker.ld $(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS)' | cmp -s - $@ || echo 'CC=$(CC) CFLAGS=$(CFLAGS) $(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/overworld_wild_behavior_validator_overlay/linker.ld $(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS)' > $@
+$(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o: $(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_FLAG_STAMP)
+
+.PHONY: overworld_wild_behavior_resident_support_flags_force
+OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP := $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support_flags.stamp
+$(OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP): overworld_wild_behavior_resident_support_flags_force | $(BUILD)/pokemon_move_history_task6_overlay
+	@echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld' | cmp -s - $@ || echo 'CC=$(CC) CFLAGS=$(CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/pokemon_move_history_task6_overlay/linker.ld' > $@
+$(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o: $(OVERWORLD_WILD_BEHAVIOR_RESIDENT_SUPPORT_FLAG_STAMP)
+
+.PHONY: overworld_wild_spawns_flags_force
+OVERWORLD_WILD_SPAWNS_FLAG_STAMP := $(BUILD)/overworld_wild_spawns_overlay/compile_flags.stamp
+$(OVERWORLD_WILD_SPAWNS_FLAG_STAMP): overworld_wild_spawns_flags_force | $(BUILD)/overworld_wild_spawns_overlay
+	@echo 'CC=$(CC) CFLAGS=$(CFLAGS) $(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/overworld_wild_spawns_overlay/linker.ld $(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS)' | cmp -s - $@ || echo 'CC=$(CC) CFLAGS=$(CFLAGS) $(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS) LD=$(LD) LDFLAGS=rom_gen.ld -T $(C_SUBDIR)/overworld_wild_spawns_overlay/linker.ld $(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS)' > $@
+$(BUILD)/overworld_wild_spawns_overlay/%.o: $(OVERWORLD_WILD_SPAWNS_FLAG_STAMP)
+
 # generate .d dependency files that are included as part of compiling if it does not exist
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
 $1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/%.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS)))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d
@@ -536,6 +555,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "overworld wild behavior data:"
 	cp $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN) $(OVERWORLD_WILD_BEHAVIOR_DATA_TARGET)
+
+	@echo "overworld wild behavior compatibility projection:"
+	cp $(OVERWORLD_WILD_BEHAVIOR_PROJECTION_BIN) $(OVERWORLD_WILD_BEHAVIOR_PROJECTION_TARGET)
 
 	@echo "overworld wild encounter lookup:"
 	cp $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET)

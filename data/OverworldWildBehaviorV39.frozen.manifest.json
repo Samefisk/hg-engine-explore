@@ -1,0 +1,27 @@
+{
+  "artifact": "OverworldWildBehaviorV39.frozen.json.gz",
+  "canonicalSha256": "ed72301bc5eff46b34e51f3e6771b107dba716e571da2c8db438335938f12335",
+  "counts": {
+    "classAssignments": 115,
+    "contexts": 22272,
+    "contextualFollowerProbes": 126,
+    "dormantForcedAsleepProbes": 1,
+    "isolatedOverrideProbes": 44,
+    "orderedOverrides": 11
+  },
+  "sourceRevision": "sha256:7e42691a0c0f92482d21ce79532c10f1f277124633f28c53c31691e8a979244e",
+  "sources": {
+    "armips/data/mondata.s": "f9964d17cef8e8d4d3cf87f02428b3e789a8a835889cdb56940e85e2fd645d23",
+    "armips/include/config.s": "e4d2e15eb2127597bbc80025f550d619708141f61c5e24a5871acee9c174d417",
+    "armips/include/constants.s": "6972483f803f4ca3c8f406936752dc6cdd83565669d20a4c5bf40ca7600f1c83",
+    "data/OverworldWildBehaviorData.c": "24a2ad4f56fafb801264f51ff0fd0ae638a820d9bbaa214554f3913416e4cc19",
+    "include/constants/maps.h": "ee7959df5720d50f3a69043acf8c282ffa744592f16ebae29b5a04447475ab51",
+    "include/constants/species.h": "150b03afcd300719f5660a9259c6d45de33d906a52a6039bf048041ab679e308",
+    "include/overworld_wild_behavior_data.h": "c75deb1a0fab3152f793f922dbc47ac4dbbf27154c737a87bdaa75d268e57f71",
+    "include/overworld_wild_spawns.h": "66095393bc4eb82e8d8ce3840dc76b7a75ee8d0f1c3f0123b7354fd4c2673a4c",
+    "include/overworld_wild_spawns_internal.h": "b1330e8b4bef5ea7fd53f6af3ebcad6837481cc9af6c1532c44d7c5cea1b1f51",
+    "src/field/enemy_party.c": "591592291e1f344dbe2b93ecd4f02512e524c41647a89e779a14a6e177546da8",
+    "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c": "aa9d24d5d9bd44c8b9db9d5bb85c8de44d3591140298a2a497793bf2b8e0599a",
+    "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c": "cc0a24aa13a5bf7e6cc32a831feb5ad3c365c3f8b3c030b4bd0282c650a07090"
+  }
+}

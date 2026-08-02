@@ -3,6 +3,10 @@
   goto :WINDOWS
 fi
 
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+
 docker run -it --rm \
   --workdir /hg-engine \
   --mount type=bind,source="$(pwd)",destination=/hg-engine \
@@ -17,8 +21,8 @@ if [ "$build_status" -eq 0 ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
     exit 1
   fi
-  native_bootstrap_expected_sha256="0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
-  native_bootstrap_expected_cdhash="166e69db3bfae0beb5f024fe98cf354cc1e533f7"
+  native_bootstrap_expected_sha256="c3d09b94362f3663e877362d1abe8e66abc8033fe5384e559dd42acabbfc0004"
+  native_bootstrap_expected_cdhash="47084232c5842f94bca699db99b99f28ebe79c73"
   native_record=$(./scripts/build_summary_move_relearn_native_bootstrap.sh \
     "$native_bootstrap_expected_sha256" \
     "$native_bootstrap_expected_cdhash") || exit $?
@@ -38,7 +42,7 @@ if [ "$build_status" -eq 0 ]; then
   fi
   native_inventory="$PWD/scripts/summary_move_relearn_native_inventory.txt"
   protected_spawn_source="$PWD/scripts/summary_move_relearn_protected_spawn.swift"
-  protected_spawn_source_sha256="e6e9c6e8540ed4439cc463f4ca9826467b772ce8cdf96bec5839c5dbece5ca5e"
+  protected_spawn_source_sha256="87a2891706046f4ebf074240428312e1b434229921be8ec1c1e6c2773c51d941"
   protected_spawn_swift_cdhash="100b213164b4fd6521129ccd725d35cb674cef15"
   authenticate_native_bootstrap() {
     actual_sha256=$(/usr/bin/shasum -a 256 "$native_bootstrap" | /usr/bin/awk '{print $1}') || return 1

@@ -46,18 +46,22 @@ OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_DIAGNOSTIC_SCRATCH = 0x023BE200
 OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE = 0x134
+OVERLAY155_PRIVATE_START = 0x023BDE80
 OVERLAY155_CALL_INVENTORY_SHA256 = (
     "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
+OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
+    "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
+)
 EXPECTED_MAKEFILE_SHA256 = (
-    "f47a9465293925c3a5427218c869195c2448992aabb85c805581298b1f6124f8"
+    "7a0d949b55cade0d38692708443789de96cf1f4e255f0f61f53e21a77dd04ddd"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "b54204c156f2f8dce508ceea182c47233324bb5d3ac352c53a224c3a5ec5c026"
+    "fe9b742fe90017b16967a8e2f75aa6003b4dddfd451ea061cb246fea06f5076e"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
-        "d0fe26e89f80a5101339650e69ba205fe8a352b7dd8a09a13f1394583b84f5bd",
+        "cb2a802725304c06da76e718ffe29099d3642439a913ae74a0c20af487753093",
     "data/graphics/itemgra.mk":
         "3e90342beaa98774e2e1bb62fd0c0b32673edee65d69b1ce85603c81a8aad444",
     "data/graphics/pokegra.mk":
@@ -67,7 +71,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "d850825fa9a0e9c183f41d55c16c268d43ffe32faa9e54fe7259aa4dc7458c97",
+        "e823635e458fcf40c6a3d780df979f7239e41982d7b98d13d20b678865d40300",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2018,8 +2022,13 @@ def source_contracts() -> None:
     require(
         "build/save.d" in DEPENDENCY_FILES
         and "build/field/script_commands.d" in DEPENDENCY_FILES
+        and "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.d" in DEPENDENCY_FILES
+        and "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c" in FIXED_INPUTS
+        and "scripts/overworld_wild_behavior_v40_validation_shared.h" in FIXED_INPUTS
         and "scripts/generate_armips_symbols.py" in FIXED_INPUTS
         and "src/field/linker.ld" in FIXED_INPUTS
+        and OUTPUTS.get("task6_support_object")
+        == "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o"
         and OUTPUTS.get("save_object") == "build/save.o",
         "save/field lifecycle and generator provenance inputs are not sealed",
     )
@@ -3129,7 +3138,7 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "e8ac941be193804f733059805bc2acfe28dae0c2a0612102339e0d0fc9861628"
+        "5f3399c008db1e36705abe7c65bf6fbc5ede5eb8a3e8e032749c5c5b83daab4c"
     )
     require(
         make_publication_contract_matches(
@@ -3770,6 +3779,7 @@ def source_contracts() -> None:
             "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
             "$(BUILD)/pokemon_move_history_overlay/entry.o",
             "$(BUILD)/pokemon_move_history_overlay/thumb_help.o",
+            "$(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
             "$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o",
             "$(BUILD)/pokemon_move_history_task6_overlay/entry.o",
             "$(BUILD)/overlay.o",
@@ -3780,7 +3790,7 @@ def source_contracts() -> None:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the sixteen capture objects",
+        "move-history provenance does not force exactly the seventeen capture objects",
     )
 
 
@@ -5667,14 +5677,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     155: (
         OVERLAY155_BASE,
-        0x994,
+        0xDE0,
         0,
         0,
         0,
         155,
         0,
         0x423C00,
-        0x424594,
+        0x4249E0,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -5958,6 +5968,11 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         / "build/pokemon_move_history_task6_overlay/"
         "pokemon_move_history_task6.o"
     )
+    task6_support_object = (
+        REPO
+        / "build/pokemon_move_history_task6_overlay/"
+        "overworld_wild_behavior_support.o"
+    )
     task6_entry_object = (
         REPO / "build/pokemon_move_history_task6_overlay/entry.o"
     )
@@ -6001,6 +6016,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         task6_linked,
         task6_overlay,
         task6_object,
+        task6_support_object,
         task6_entry_object,
         pokemon_object,
         party_menu_object,
@@ -6421,6 +6437,41 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "packaged overlay 155 overlaps the sealed diagnostic scratch",
     )
     task6_symbols = symbol_table(task6_linked)
+    require(
+        task6_symbols.get("__owbd_resident_private_start")
+        == OVERLAY155_PRIVATE_START
+        and task6_symbols.get("__task6_pre_private_end", 0)
+        <= OVERLAY155_PRIVATE_START
+        and OVERLAY155_PRIVATE_START
+        < task6_symbols.get("__owbd_resident_private_end", 0)
+        <= OVERLAY155_DIAGNOSTIC_SCRATCH,
+        "overlay-155 private support window or historical boundary differs",
+    )
+    private_end = task6_symbols["__owbd_resident_private_end"]
+    for name in (
+        "sOwbdSpecs",
+        "sOwbdStateValueMax",
+        "sOwbdNumericFieldMasks",
+        "OwbdCrcByte",
+        "OwbdBoundedRead",
+        "OwbdHasId",
+        "sOwbdGroupOrdinals",
+        "sOwbdImportExpectedOwner",
+        "sOwbdImportExpectedRecovery",
+        "sOwbdImportExpectedSource",
+        "sOwbdImportExpectedRole",
+        "sOwbdImportExpectedLifetime",
+        "sOwbdOverrideProvenance",
+        "OwbdStaticValueValid",
+        "OwbdModifierPayloadValid",
+        "OverworldWildBehavior_LoadValidatedProjection",
+    ):
+        require(
+            OVERLAY155_PRIVATE_START
+            <= task6_symbols.get(name, 0)
+            < private_end,
+            f"overlay-155 private support symbol escaped its window: {name}",
+        )
     for name, offset in (
         ("MoveHistoryTask6Entry_IsCanonical", 0x00),
         ("MoveHistoryTask6Entry_DaycareDepositCommit", 0x08),
@@ -6476,7 +6527,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         packaged_ov155,
         ov155_base,
         ov155_base,
-        len(packaged_ov155),
+        OVERLAY155_PRIVATE_START - ov155_base,
     )
     require(
         len(task6_calls) == 75
@@ -6488,7 +6539,23 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         ) == 7
         and call_inventory_sha256(task6_calls)
         == OVERLAY155_CALL_INVENTORY_SHA256,
-        "complete overlay-155 call-site inventory differs",
+        "historical overlay-155 call-site inventory differs",
+    )
+    task6_private_calls = packaged_thumb_calls(
+        packaged_ov155,
+        ov155_base,
+        OVERLAY155_PRIVATE_START,
+        private_end - OVERLAY155_PRIVATE_START,
+    )
+    require(
+        len(task6_private_calls) == 17
+        and all(
+            kind == "bl"
+            for _address, kind, _target in task6_private_calls
+        )
+        and call_inventory_sha256(task6_private_calls)
+        == OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256,
+        "overlay-155 private support call-site inventory differs",
     )
     require(
         not any("_from_thumb" in name for name in task6_symbols),

@@ -16,7 +16,19 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 39
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11220u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE 0x3000u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x6E9B5D94u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0xC88892BEu
+#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE 3416u
+#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_MAX_SIZE 0x0D8Cu
+#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_CHECKSUM 0xE0B4A194u
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR 0x023C0400u
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_END_ADDR 0x023C2160u
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_MAGIC 0x5642574Fu
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_VERSION 1u
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -43,6 +55,26 @@ struct OverworldWildBehaviorPrimitives;
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 10
 #define OWBD_OVERRIDE_MEMBER_COUNT 155
 #define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
+#define OWBD_STATE_BODY_COUNT 58
+#define OWBD_PROFILE_IDENTITY_COUNT 58
+#define OWBD_CONTROLLER_COUNT 3
+#define OWBD_CONTROLLER_NODE_COUNT 21
+#define OWBD_TRANSITION_COUNT 26
+#define OWBD_SPAWN_POLICY_COUNT 3
+#define OWBD_POPULATION_POLICY_COUNT 6
+#define OWBD_HOOK_SET_COUNT 3
+#define OWBD_OVERRIDE_DEFINITION_COUNT 19
+#define OWBD_OVERRIDE_SOURCE_COUNT 11
+#define OWBD_OVERRIDE_ACTION_COUNT 207
+#define OWBD_OWNER_COUNT 10
+#define OWBD_RECOVERY_ACTION_COUNT 15
+#define OWBD_TRANSITION_GUARD_COUNT 26
+#define OWBD_TRANSITION_OPERATION_COUNT 35
+#define OWBD_TRANSITION_ACTION_COUNT 32
+#define OWBD_IMPORT_RECIPE_COUNT 12
+#define OWBD_APPLICABILITY_COUNT 19
+#define OWBD_TIRED_TRANSLATION_COUNT 18
+#define OWBD_SEMANTIC_ID_COUNT 16
 #define OWED_ENCOUNTER_AREA_COUNT 150
 #define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
 
@@ -316,6 +348,614 @@ typedef struct OverworldWildBehaviorOverrideProfile {
 #define OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
 #define OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED
 
+/*
+ * Version-40 serialized model.  These are wire records, not live runtime
+ * objects: every relationship is a stable nonzero u16 ID and no record owns a
+ * pointer.  The old three-state records above are only the explicitly bounded
+ * runtime compatibility projection API; they are not an authoritative v40
+ * serialized section.
+ */
+#if defined(__GNUC__)
+#define OWBD_PACKED __attribute__((packed))
+#else
+#define OWBD_PACKED
+#endif
+
+#define OWBD_BLOB_FLAG_LEGACY_PROJECTION  (1u << 0)
+#define OWBD_BLOB_FLAG_NAMES_ARE_HASHES   (1u << 1)
+#define OWBD_BLOB_FLAG_AUTHORED_SOURCE     (1u << 2)
+#define OWBD_BLOB_KNOWN_FLAGS \
+    (OWBD_BLOB_FLAG_LEGACY_PROJECTION | OWBD_BLOB_FLAG_NAMES_ARE_HASHES \
+        | OWBD_BLOB_FLAG_AUTHORED_SOURCE)
+#define OWBD_NO_ID 0
+#define OWBD_ANY_ID 0
+#define OWBD_STATIC_PRIORITY_CLASS_BASE 0x0000
+#define OWBD_STATIC_PRIORITY_OVERRIDE_BASE 0x4000
+#define OWBD_GENERATED_PRIORITY_MATERIALIZED 0x8000
+
+typedef enum OverworldWildSemanticRole {
+    OWBD_ROLE_CALM = 1,
+    OWBD_ROLE_ATTENTIVE,
+    OWBD_ROLE_TIRED,
+    OWBD_ROLE_ASLEEP,
+    OWBD_ROLE_CARRIED,
+    OWBD_ROLE_FOLLOWER,
+    OWBD_ROLE_CUSTOM,
+} OverworldWildSemanticRole;
+
+#define OWBD_ROLE_MASK(role) (1u << ((role) - 1))
+#define OWBD_ROLE_MASK_ORDINARY \
+    (OWBD_ROLE_MASK(OWBD_ROLE_CALM) \
+        | OWBD_ROLE_MASK(OWBD_ROLE_ATTENTIVE) \
+        | OWBD_ROLE_MASK(OWBD_ROLE_TIRED))
+
+typedef enum OverworldWildSelectorKind {
+    OWBD_SELECTOR_EXACT = 1,
+    OWBD_SELECTOR_SEMANTIC_ROLE,
+} OverworldWildSelectorKind;
+
+typedef enum OverworldWildOverrideKind {
+    OWBD_OVERRIDE_KIND_STATE_CANDIDATE = 1,
+    OWBD_OVERRIDE_KIND_MODIFIER,
+} OverworldWildOverrideKind;
+
+typedef enum OverworldWildOverrideChannel {
+    OWBD_CHANNEL_STATIC_CONTEXT = 0,
+    OWBD_CHANNEL_CONTROLLER_STATE = 1,
+    OWBD_CHANNEL_TEMPORARY_EFFECT = 2,
+    OWBD_CHANNEL_SCRIPTED_FORCE = 3,
+    OWBD_CHANNEL_POSSESSION = 4,
+    OWBD_CHANNEL_SYSTEM_SAFETY = 5,
+} OverworldWildOverrideChannel;
+
+/* The serialized numeric value is also the fixed composition rank. */
+#define OWBD_CHANNEL_RANK_STATIC_CONTEXT    OWBD_CHANNEL_STATIC_CONTEXT
+#define OWBD_CHANNEL_RANK_CONTROLLER_STATE  OWBD_CHANNEL_CONTROLLER_STATE
+#define OWBD_CHANNEL_RANK_TEMPORARY_EFFECT  OWBD_CHANNEL_TEMPORARY_EFFECT
+#define OWBD_CHANNEL_RANK_SCRIPTED_FORCE    OWBD_CHANNEL_SCRIPTED_FORCE
+#define OWBD_CHANNEL_RANK_POSSESSION        OWBD_CHANNEL_POSSESSION
+#define OWBD_CHANNEL_RANK_SYSTEM_SAFETY     OWBD_CHANNEL_SYSTEM_SAFETY
+
+typedef enum OverworldWildModifierTargetKind {
+    OWBD_MODIFIER_TARGET_STATE = 1,
+    OWBD_MODIFIER_TARGET_CONTROLLER,
+    OWBD_MODIFIER_TARGET_SPAWN_POLICY,
+    OWBD_MODIFIER_TARGET_POPULATION_POLICY,
+    OWBD_MODIFIER_TARGET_NODE_BINDING,
+    OWBD_MODIFIER_TARGET_HOOK_SET,
+    OWBD_MODIFIER_TARGET_CANDIDATE_TIMER,
+} OverworldWildModifierTargetKind;
+
+typedef enum OverworldWildModifierOperator {
+    OWBD_OPERATOR_SET = 1,
+    OWBD_OPERATOR_ADD,
+    OWBD_OPERATOR_AT_LEAST,
+    OWBD_OPERATOR_AT_MOST,
+    OWBD_OPERATOR_ADD_AT_LEAST,
+    OWBD_OPERATOR_ADD_AT_MOST,
+} OverworldWildModifierOperator;
+
+typedef enum OverworldWildStateField {
+    OWBD_STATE_FIELD_LOCOMOTION = 1,
+    OWBD_STATE_FIELD_TARGET,
+    OWBD_STATE_FIELD_SPEED,
+    OWBD_STATE_FIELD_RANGE,
+    OWBD_STATE_FIELD_JUMP_LEVEL,
+    OWBD_STATE_FIELD_ALLOWED_TILE,
+    OWBD_STATE_FIELD_ALLOWED_TILE_2,
+    OWBD_STATE_FIELD_HOP_ALLOW_NON_CARDINAL,
+    OWBD_STATE_FIELD_HOP_MIN_DISTANCE,
+    OWBD_STATE_FIELD_HOP_MAX_DISTANCE,
+    OWBD_STATE_FIELD_HOP_PAUSE,
+    OWBD_STATE_FIELD_HOP_TIME,
+    OWBD_STATE_FIELD_HOP_SPIN_SPEED,
+    OWBD_STATE_FIELD_TELEPORT_TIME,
+    OWBD_STATE_FIELD_TELEPORT_PAUSE,
+    OWBD_STATE_FIELD_RAM_ACCELERATION_STEPS,
+    OWBD_STATE_FIELD_RAM_MAX_SPEED,
+    OWBD_STATE_FIELD_CHASE_BOOST_DISTANCE,
+    OWBD_STATE_FIELD_CHASE_BOOST_SPEED,
+    OWBD_STATE_FIELD_CIRCLE_RADIUS,
+    OWBD_STATE_FIELD_CONTINUE_WHEN_ARRIVED,
+    OWBD_STATE_FIELD_AVOID_PREVIOUS_TILE,
+    OWBD_STATE_FIELD_CHAIN_PAUSE_ACTION,
+    OWBD_STATE_FIELD_CHAIN_MOVEMENT_VARIANCE,
+    OWBD_STATE_FIELD_CHAIN_PAUSE_VARIANCE,
+    OWBD_STATE_FIELD_BATTLE_TRIGGER,
+    OWBD_STATE_FIELD_PLAYER_ADJACENT_MASK,
+    OWBD_STATE_FIELD_BEHAVIOR_KIND,
+} OverworldWildStateField;
+
+typedef enum OverworldWildControllerField {
+    OWBD_CONTROLLER_FIELD_ALERT_STATE = 1,
+    OWBD_CONTROLLER_FIELD_ALERT_EMOTE,
+    OWBD_CONTROLLER_FIELD_ALERT_TIME,
+    OWBD_CONTROLLER_FIELD_ALERTNESS,
+    OWBD_CONTROLLER_FIELD_ALERT_RANGE,
+    OWBD_CONTROLLER_FIELD_ALERT_CHANCE,
+    OWBD_CONTROLLER_FIELD_STAMINA,
+    OWBD_CONTROLLER_FIELD_ALERT_SPECIAL_ACTION,
+    OWBD_CONTROLLER_FIELD_SOURCE_PROFILE_ID,
+} OverworldWildControllerField;
+
+typedef enum OverworldWildSpawnPolicyField {
+    OWBD_SPAWN_FIELD_STATE = 1,
+    OWBD_SPAWN_FIELD_DESTINATION,
+    OWBD_SPAWN_FIELD_MIN_DISTANCE,
+    OWBD_SPAWN_FIELD_MAX_DISTANCE,
+    OWBD_SPAWN_FIELD_HOP_TIME,
+} OverworldWildSpawnPolicyField;
+
+typedef enum OverworldWildPopulationPolicyField {
+    OWBD_POPULATION_FIELD_LIMIT = 1,
+} OverworldWildPopulationPolicyField;
+
+typedef enum OverworldWildNodeBindingField {
+    OWBD_NODE_BINDING_FIELD_STATE_KIND = 1,
+} OverworldWildNodeBindingField;
+
+typedef enum OverworldWildHookField {
+    OWBD_HOOK_FIELD_HELP_CALL_INVOCATION = 1,
+    OWBD_HOOK_FIELD_PICKUP_THROW_ENTRY,
+    OWBD_HOOK_FIELD_PICKUP_THROW_ACTIVE_LOOP,
+} OverworldWildHookField;
+
+typedef enum OverworldWildCandidateTimerField {
+    OWBD_CANDIDATE_TIMER_FIELD_REST_TIME = 1,
+} OverworldWildCandidateTimerField;
+
+typedef enum OverworldWildLifetimePolicy {
+    OWBD_LIFETIME_CLEAR = 1,
+    OWBD_LIFETIME_PRESERVE_LOGICAL = 2,
+    OWBD_LIFETIME_SYSTEM = 3,
+} OverworldWildLifetimePolicy;
+
+#define OWBD_MAP_LIFETIME_CLEAR OWBD_LIFETIME_CLEAR
+#define OWBD_MAP_LIFETIME_PRESERVE_LOGICAL OWBD_LIFETIME_PRESERVE_LOGICAL
+#define OWBD_MAP_LIFETIME_SYSTEM OWBD_LIFETIME_SYSTEM
+#define OWBD_BATTLE_LIFETIME_CLEAR OWBD_LIFETIME_CLEAR
+#define OWBD_BATTLE_LIFETIME_PRESERVE_LOGICAL OWBD_LIFETIME_PRESERVE_LOGICAL
+#define OWBD_BATTLE_LIFETIME_SYSTEM OWBD_LIFETIME_SYSTEM
+
+typedef enum OverworldWildTimerClock {
+    OWBD_TIMER_CLOCK_NONE = 0,
+    OWBD_TIMER_CLOCK_FRAME,
+    OWBD_TIMER_CLOCK_COMPLETED_MOVEMENT,
+} OverworldWildTimerClock;
+
+#define OWBD_TIMER_CLOCK_FIELD_FRAME OWBD_TIMER_CLOCK_FRAME
+#define OWBD_TIMER_CLOCK_MOVEMENT_STEP OWBD_TIMER_CLOCK_COMPLETED_MOVEMENT
+
+typedef enum OverworldWildTimerSource {
+    OWBD_TIMER_SOURCE_NONE = 0,
+    OWBD_TIMER_SOURCE_FIXED,
+    OWBD_TIMER_SOURCE_CONTROLLER_STAMINA,
+    OWBD_TIMER_SOURCE_CANDIDATE_FOLD,
+} OverworldWildTimerSource;
+
+typedef enum OverworldWildHiddenTimerPolicy {
+    OWBD_HIDDEN_TIMER_NONE = 0,
+    OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN,
+    OWBD_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN,
+    OWBD_HIDDEN_TIMER_EXPIRE_ON_HIDE,
+} OverworldWildHiddenTimerPolicy;
+
+typedef enum OverworldWildRecoveryPolicy {
+    OWBD_RECOVERY_NONE = 0,
+    OWBD_RECOVERY_ROUTE_TRANSITION,
+} OverworldWildRecoveryPolicy;
+
+typedef enum OverworldWildTiredOriginKind {
+    OWBD_TIRED_ORIGIN_FLED = 1,
+    OWBD_TIRED_ORIGIN_RAM_CRASH,
+    OWBD_TIRED_ORIGIN_THROW_RECOVERY,
+} OverworldWildTiredOriginKind;
+
+typedef enum OverworldWildStaticActionKind {
+    OWBD_STATIC_ACTION_ASSIGN_CONTROLLER = 1,
+    OWBD_STATIC_ACTION_BIND_NODE,
+    OWBD_STATIC_ACTION_UNBIND_NODE,
+    OWBD_STATIC_ACTION_APPLY_STATE_MODIFIER,
+    OWBD_STATIC_ACTION_APPLY_CONTROLLER_MODIFIER,
+    OWBD_STATIC_ACTION_BIND_SPAWN_POLICY,
+    OWBD_STATIC_ACTION_APPLY_SPAWN_POLICY_PATCH,
+    OWBD_STATIC_ACTION_BIND_POPULATION_POLICY,
+    OWBD_STATIC_ACTION_APPLY_POPULATION_POLICY_PATCH,
+    OWBD_STATIC_ACTION_BIND_HOOK_SET,
+    OWBD_STATIC_ACTION_APPLY_CANDIDATE_TIMER_OPERATOR,
+} OverworldWildStaticActionKind;
+
+typedef enum OverworldWildTransitionTrigger {
+    OWBD_TRIGGER_ALERT_COMPLETE = 1,
+    OWBD_TRIGGER_STAMINA_EXHAUSTED,
+    OWBD_TRIGGER_TIRED_EXPIRED,
+    OWBD_TRIGGER_POSSESSION_APPLY,
+    OWBD_TRIGGER_POSSESSION_REMOVE,
+    OWBD_TRIGGER_FLED,
+    OWBD_TRIGGER_RAM_CRASH,
+    OWBD_TRIGGER_THROW_RECOVERY,
+    OWBD_TRIGGER_AGGRO_APPLY,
+    OWBD_TRIGGER_HELP_CALL_APPLY,
+    OWBD_TRIGGER_FORCED_SLEEP_APPLY,
+    OWBD_TRIGGER_FOLLOWER_APPLY,
+    OWBD_TRIGGER_FOLLOWER_REMOVE,
+} OverworldWildTransitionTrigger;
+
+typedef enum OverworldWildTransitionGuardKind {
+    OWBD_GUARD_ALWAYS = 1,
+    OWBD_GUARD_EFFECTIVE_ROLE,
+    OWBD_GUARD_EFFECTIVE_NODE,
+    OWBD_GUARD_OWNER_PRESENT,
+    OWBD_GUARD_OWNER_ABSENT,
+    OWBD_GUARD_CANDIDATE_TIMER_EXPIRED,
+    OWBD_GUARD_ALERT_CHANCE_ROLL,
+    OWBD_GUARD_SYSTEM_ROUTE,
+} OverworldWildTransitionGuardKind;
+
+typedef enum OverworldWildTransitionOperationKind {
+    OWBD_TRANSITION_APPLY = 1,
+    OWBD_TRANSITION_REPLACE,
+    OWBD_TRANSITION_REMOVE_REQUIRED,
+    OWBD_TRANSITION_REMOVE_IF_PRESENT,
+    OWBD_TRANSITION_REMOVE_OWNER_IF_PRESENT,
+    OWBD_TRANSITION_APPLY_POLICY,
+} OverworldWildTransitionOperationKind;
+
+typedef enum OverworldWildTransitionBusyPolicy {
+    OWBD_BUSY_REJECT = 1,
+    OWBD_BUSY_QUEUE_EXACT,
+} OverworldWildTransitionBusyPolicy;
+
+typedef enum OverworldWildTypedActionPhase {
+    OWBD_ACTION_PHASE_ENTRY = 1,
+    OWBD_ACTION_PHASE_EXIT,
+    OWBD_ACTION_PHASE_PRESENTATION,
+    OWBD_ACTION_PHASE_INVOCATION,
+} OverworldWildTypedActionPhase;
+
+typedef enum OverworldWildTypedActionKind {
+    OWBD_ACTION_NONE = 0,
+    OWBD_ACTION_RESET_ACTIVE_STEPS = 1,
+    OWBD_ACTION_RESET_TIRED_COUNTER,
+    OWBD_ACTION_CLEAR_MOVEMENT_CHAIN,
+    OWBD_ACTION_START_POST_TIRED_COOLDOWN,
+    OWBD_ACTION_START_ALERT_PRESENTATION,
+    OWBD_ACTION_ACTIVE_ENTRY_TRY_PICKUP_THROW,
+    OWBD_ACTION_ALERT_COMPLETE,
+    OWBD_ACTION_CANOPY_PICKUP_THROW_HOOK,
+} OverworldWildTypedActionKind;
+
+typedef enum OverworldWildApplicabilityFlags {
+    OWBD_APPLICABILITY_IMMUTABLE_CONTEXT = 1u << 0,
+    OWBD_APPLICABILITY_CONTROLLER = 1u << 1,
+    OWBD_APPLICABILITY_EFFECTIVE_PROFILE = 1u << 2,
+    OWBD_APPLICABILITY_SEMANTIC_ROLE = 1u << 3,
+} OverworldWildApplicabilityFlags;
+
+typedef enum OverworldWildRecoveryActionKind {
+    OWBD_RECOVERY_ACTION_REMOVE_SELF = 1,
+    OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT,
+    OWBD_RECOVERY_ACTION_RESET_TIRED_COUNTER,
+    OWBD_RECOVERY_ACTION_START_FLEE_COOLDOWN,
+} OverworldWildRecoveryActionKind;
+
+typedef enum OverworldWildCandidateTimerOperator {
+    OWBD_CANDIDATE_TIMER_SET = OWBD_OPERATOR_SET,
+    OWBD_CANDIDATE_TIMER_ADD = OWBD_OPERATOR_ADD,
+} OverworldWildCandidateTimerOperator;
+
+#define OWBD_CANDIDATE_TIMER_SET_MAX 255
+#define OWBD_CANDIDATE_TIMER_ADD_MIN (-32)
+#define OWBD_CANDIDATE_TIMER_ADD_MAX 32
+#define OWBD_CANDIDATE_TIMER_ADD_CLAMP_MAX 64
+
+typedef struct OWBD_PACKED OverworldWildBlobSection {
+    u32 offset;
+    u16 count;
+    u16 entrySize;
+} OverworldWildBlobSection;
+
+/* Compact authored-source v40 records. Small indices are limited to interned
+ * bodies; every semantic relationship uses a registry-owned nonzero u16 ID. */
+typedef struct OWBD_PACKED OverworldWildStateBodyRecord {
+    u16 stableId;
+    u8 provenanceKind;
+    u8 valueCount;
+    u8 values[28];
+} OverworldWildStateBodyRecord;
+
+typedef struct OWBD_PACKED OverworldWildProfileIdentityRecord {
+    u16 stableId;
+    u16 bodyId;
+    u16 provenanceRecipeId;
+    u8 tagA;
+    u8 tagB;
+} OverworldWildProfileIdentityRecord;
+
+typedef struct OWBD_PACKED OverworldWildControllerRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 nodeStart;
+    u16 nodeCount;
+    u16 spawnPolicyId;
+    u16 populationPolicyId;
+    u16 hookSetId;
+    u8 alertState;
+    u8 alertEmote;
+    u8 alertTime;
+    u8 alertness;
+    u8 alertRange;
+    u8 alertChance;
+    u8 stamina;
+    u8 restTime;
+    u8 flags;
+    u8 reserved;
+} OverworldWildControllerRecord;
+
+typedef struct OWBD_PACKED OverworldWildControllerNodeRecord {
+    u16 stableId;
+    u16 controllerId;
+    u16 profileIdentityId;
+    u16 customRoleId;
+    u8 semanticRole;
+    u8 flags;
+    u16 reserved;
+} OverworldWildControllerNodeRecord;
+
+#define OWBD_NODE_FLAG_BASE     (1u << 0)
+#define OWBD_NODE_FLAG_OPTIONAL (1u << 1)
+#define OWBD_NODE_FLAG_HIDDEN   (1u << 2)
+#define OWBD_NODE_KNOWN_FLAGS \
+    (OWBD_NODE_FLAG_BASE | OWBD_NODE_FLAG_OPTIONAL | OWBD_NODE_FLAG_HIDDEN)
+
+typedef struct OWBD_PACKED OverworldWildOverrideSourceRecord {
+    u16 stableId;
+    u16 nameId;
+    OverworldWildBehaviorMatch match;
+    u16 memberStart;
+    u16 memberCount;
+    u16 actionStart;
+    u16 actionCount;
+    u8 targetMode;
+    u8 order;
+    u16 priority;
+} OverworldWildOverrideSourceRecord;
+
+typedef struct OWBD_PACKED OverworldWildGenericAssignmentRecord {
+    u16 stableId;
+    OverworldWildBehaviorMatch match;
+    u16 assignmentActionIndex;
+    u16 priority;
+    u16 reserved;
+} OverworldWildGenericAssignmentRecord;
+
+typedef struct OWBD_PACKED OverworldWildSpeciesAssignmentRecord {
+    u16 stableId;
+    u16 species;
+    u16 assignmentActionIndex;
+    u16 priority;
+} OverworldWildSpeciesAssignmentRecord;
+
+typedef union OWBD_PACKED OverworldWildStaticActionPayload {
+    struct OWBD_PACKED { u16 controllerId; u16 reserved0; u16 reserved1; u16 reserved2; } assignController;
+    struct OWBD_PACKED { u16 controllerId; u16 nodeId; u16 profileIdentityId; u16 reserved; } bindNode;
+    struct OWBD_PACKED { u16 controllerId; u16 nodeId; u16 reserved0; u16 reserved1; } unbindNode;
+    /* ADD_AT_* applies delta first, then clamps to bound.  Other operators require bound == 0. */
+    struct OWBD_PACKED {
+        u8 fieldId;
+        u8 operatorKind;
+        s8 delta;
+        u8 bound;
+        u8 semanticRoleMask;
+        u8 reserved;
+        u16 controllerId;
+    } modifier;
+    struct OWBD_PACKED { u16 policyId; u16 reserved0; u16 reserved1; u16 reserved2; } bindPolicy;
+    /* SET decodes operand as u8 (0..255). ADD decodes it as s8
+     * (-32..32) and clamps each intermediate result to 0..64. */
+    struct OWBD_PACKED { u16 controllerId; u16 nodeId; u8 operatorKind; u8 operand; u16 reserved; } timer;
+    u8 raw[8];
+} OverworldWildStaticActionPayload;
+
+typedef struct OWBD_PACKED OverworldWildStaticActionRecord {
+    u16 stableId;
+    u8 kind;
+    u8 flags;
+    OverworldWildStaticActionPayload payload;
+} OverworldWildStaticActionRecord;
+
+typedef OverworldWildStaticActionRecord OverworldWildOverrideActionRecord;
+
+#define OWBD_OVERRIDE_ACTION_FLAG_DIAGNOSTIC_ONLY (1u << 0)
+
+typedef struct OWBD_PACKED OverworldWildTransitionRecord {
+    u16 stableId;
+    u16 candidateDefinitionId;
+    u16 ownerId;
+    u16 guardStart;
+    u16 guardCount;
+    u16 operationStart;
+    u16 operationCount;
+    u16 actionStart;
+    u16 actionCount;
+    u8 trigger;
+    u8 fromRoleMask;
+    u8 recoveryStart;
+    u8 recoveryCount;
+    u16 dispatchPriority;
+} OverworldWildTransitionRecord;
+
+typedef struct OWBD_PACKED OverworldWildTransitionGuardRecord {
+    u16 stableId;
+    u16 transitionId;
+    u8 kind;
+    u8 negate;
+    u8 payload;
+    u8 reserved0;
+    u16 referenceId;
+    u16 reserved;
+} OverworldWildTransitionGuardRecord;
+
+typedef struct OWBD_PACKED OverworldWildTransitionOperationRecord {
+    u16 stableId;
+    u16 transitionId;
+    u16 definitionId;
+    u16 ownerId;
+    u16 replacementDefinitionId;
+    u16 policyId;
+    u16 instanceKey;
+    u8 kind;
+    u8 busyPolicy;
+    u8 required;
+    u8 reserved;
+} OverworldWildTransitionOperationRecord;
+
+typedef struct OWBD_PACKED OverworldWildTransitionActionRecord {
+    u16 stableId;
+    u16 transitionId;
+    u8 phase;
+    u8 kind;
+    u16 referenceId;
+    u16 payload;
+} OverworldWildTransitionActionRecord;
+
+typedef struct OWBD_PACKED OverworldWildSpawnPolicyRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 provenanceId;
+    u8 spawnState;
+    u8 destination;
+    u8 minimumDistance;
+    u8 maximumDistance;
+    u8 spawnHopTime;
+    u8 flags;
+} OverworldWildSpawnPolicyRecord;
+
+typedef struct OWBD_PACKED OverworldWildPopulationPolicyRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 populationGroupId;
+    u16 provenanceId;
+    u8 limit;
+    u8 flags;
+} OverworldWildPopulationPolicyRecord;
+
+typedef struct OWBD_PACKED OverworldWildHookSetRecord {
+    u16 stableId;
+    u16 nameId;
+    u8 helpCallInvocation;
+    u8 pickupThrowEntry;
+    u8 pickupThrowActiveLoop;
+    u8 flags;
+} OverworldWildHookSetRecord;
+
+typedef struct OWBD_PACKED OverworldWildOverrideDefinitionRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 controllerId;
+    u16 nodeId;
+    u16 requiredOwnerId;
+    u16 recoveryTransitionId;
+    u16 applicabilityId;
+    u16 priority;
+    u8 kind;
+    u8 channel;
+    u8 selectorKind;
+    u8 semanticRole;
+    u8 mapLifetime;
+    u8 battleLifetime;
+    u8 timerClock;
+    u8 timerSource;
+    u8 hiddenTimerPolicy;
+    u8 recoveryPolicy;
+    u8 timerValue;
+    u8 hasTiredOriginKind;
+    u8 tiredOriginKind;
+    u8 hasRequiredOwnerId;
+    u8 allowMultipleOwners;
+    u8 allowMultipleInstancesPerOwner;
+    u8 authoredTiredBound;
+    u8 flags;
+    u8 reserved0;
+    u8 reserved1;
+} OverworldWildOverrideDefinitionRecord;
+
+typedef struct OWBD_PACKED OverworldWildOwnerRecord {
+    u16 stableId;
+    u16 nameId;
+    u8 systemOwned;
+    u8 flags;
+} OverworldWildOwnerRecord;
+
+typedef struct OWBD_PACKED OverworldWildRecoveryActionRecord {
+    u16 stableId;
+    u16 transitionId;
+    u16 ownerId;
+    u8 kind;
+    u8 required;
+} OverworldWildRecoveryActionRecord;
+
+typedef struct OWBD_PACKED OverworldWildImportRecipeRecord {
+    u16 stableId;
+    u16 ownerId;
+    u16 controllerId;
+    u16 nodeId;
+    u16 profileIdentityId;
+    u16 recoveryTransitionId;
+    u16 semanticSourceId;
+    u16 actionStart;
+    u16 actionCount;
+    /* 0xFFFF means replay the complete ordered matcher truth vector. */
+    u16 truthVector;
+    u8 semanticRole;
+    u8 lifetime;
+    u8 flags;
+    u8 reserved;
+} OverworldWildImportRecipeRecord;
+
+typedef struct OWBD_PACKED OverworldWildApplicabilityRecord {
+    u16 stableId;
+    u16 flags;
+    u32 immutableContextMask;
+    u16 controllerId;
+    u16 effectiveProfileId;
+    u8 semanticRole;
+    u8 reserved0;
+    u16 reserved;
+} OverworldWildApplicabilityRecord;
+
+typedef struct OWBD_PACKED OverworldWildTiredTranslationRecord {
+    u16 stableId;
+    u8 tiredOriginKind;
+    u8 authoredTiredBound;
+    u16 destinationControllerId;
+    u16 authoredProfileId;
+    u16 candidateDefinitionId;
+    u16 recoveryTransitionId;
+    u16 exactFallbackControllerId;
+    u16 exactFallbackNodeId;
+    u8 timerOperator;
+    u8 timerSource;
+    u8 mapLifetime;
+    u8 battleLifetime;
+    u16 flags;
+    u16 reserved;
+} OverworldWildTiredTranslationRecord;
+
+typedef enum OverworldWildSemanticIdKind {
+    OWBD_SEMANTIC_ID_PROVENANCE = 1,
+    OWBD_SEMANTIC_ID_CUSTOM_ROLE,
+    OWBD_SEMANTIC_ID_POPULATION_GROUP,
+} OverworldWildSemanticIdKind;
+
+typedef struct OWBD_PACKED OverworldWildSemanticIdRecord {
+    u16 stableId;
+    u8 kind;
+    u8 ordinal;
+    u16 reserved;
+    u16 reserved2;
+} OverworldWildSemanticIdRecord;
+
 typedef struct OverworldWildBehaviorDataOverlayEntry {
     const OverworldWildBehaviorProfile *classProfiles;
     u16 classProfileCount;
@@ -329,28 +969,115 @@ typedef struct OverworldWildBehaviorDataOverlayEntry {
     u16 overrideMemberCount;
 } OverworldWildBehaviorDataOverlayEntry;
 
-typedef struct OverworldWildBehaviorDataBlobHeader {
+typedef enum OverworldWildBehaviorLoadResult {
+    OWBD_LOAD_PERMANENT_INVALID = 0,
+    OWBD_LOAD_SUCCESS = 1,
+    OWBD_LOAD_TRANSIENT_FAILURE = 2,
+} OverworldWildBehaviorLoadResult;
+
+typedef BOOL (*OverworldWildBehaviorSemanticValidator)(
+    void *narc, u32 memberSize, void *workspace, u32 workspaceSize);
+OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedProjection(
+    OverworldWildBehaviorSemanticValidator validator,
+    void **projectionOut);
+
+typedef OverworldWildBehaviorLoadResult (*OverworldWildLoadValidatedProjectionFunc)(
+    void **projection);
+
+typedef struct OverworldWildBehaviorValidatorOverlayEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+    OverworldWildLoadValidatedProjectionFunc loadValidatedProjection;
+} OverworldWildBehaviorValidatorOverlayEntry;
+
+typedef char OverworldWildBehaviorValidatorOverlayEntrySizeMustRemain12Bytes[
+    sizeof(OverworldWildBehaviorValidatorOverlayEntry) == 8 + sizeof(void *) ? 1 : -1];
+
+typedef struct OWBD_PACKED OverworldWildBehaviorDataBlobHeader {
     u32 magic;
     u16 version;
     u16 headerSize;
     u32 blobSize;
-    u32 classProfilesOffset;
-    u16 classProfileCount;
-    u16 classProfileSize;
-    u32 classRulesOffset;
-    u16 classRuleCount;
-    u16 classRuleSize;
-    u32 speciesClassRulesOffset;
-    u16 speciesClassRuleCount;
-    u16 speciesClassRuleSize;
-    u32 overrideProfilesOffset;
-    u16 overrideProfileCount;
-    u16 overrideProfileSize;
-    u32 overrideMembersOffset;
-    u16 overrideMemberCount;
-    u16 overrideMemberSize;
+    u32 flags;
+    u32 checksum;
+    u32 schemaFingerprint;
+    OverworldWildBlobSection stateBodies;
+    OverworldWildBlobSection profileIdentities;
+    OverworldWildBlobSection controllers;
+    OverworldWildBlobSection controllerNodes;
+    OverworldWildBlobSection sourceClassProfiles;
+    OverworldWildBlobSection genericAssignments;
+    OverworldWildBlobSection speciesAssignments;
+    OverworldWildBlobSection overrideSources;
+    OverworldWildBlobSection overrideMembers;
+    OverworldWildBlobSection overrideActions;
+    OverworldWildBlobSection spawnPolicies;
+    OverworldWildBlobSection populationPolicies;
+    OverworldWildBlobSection hookSets;
+    OverworldWildBlobSection owners;
+    OverworldWildBlobSection overrideDefinitions;
+    OverworldWildBlobSection transitions;
+    OverworldWildBlobSection transitionGuards;
+    OverworldWildBlobSection transitionOperations;
+    OverworldWildBlobSection transitionActions;
+    OverworldWildBlobSection recoveryActions;
+    OverworldWildBlobSection importRecipes;
+    OverworldWildBlobSection applicability;
+    OverworldWildBlobSection tiredTranslations;
+    OverworldWildBlobSection semanticIds;
 } OverworldWildBehaviorDataBlobHeader;
 
+typedef char OverworldWildBlobSectionSizeMustRemain8Bytes[
+    sizeof(OverworldWildBlobSection) == 8 ? 1 : -1];
+typedef char OverworldWildStateBodyRecordSizeMustRemain32Bytes[
+    sizeof(OverworldWildStateBodyRecord) == 32 ? 1 : -1];
+typedef char OverworldWildProfileIdentityRecordSizeMustRemain8Bytes[
+    sizeof(OverworldWildProfileIdentityRecord) == 8 ? 1 : -1];
+typedef char OverworldWildControllerRecordSizeMustRemain24Bytes[
+    sizeof(OverworldWildControllerRecord) == 24 ? 1 : -1];
+typedef char OverworldWildControllerNodeRecordSizeMustRemain12Bytes[
+    sizeof(OverworldWildControllerNodeRecord) == 12 ? 1 : -1];
+typedef char OverworldWildOverrideSourceRecordSizeMustRemain28Bytes[
+    sizeof(OverworldWildOverrideSourceRecord) == 28 ? 1 : -1];
+typedef char OverworldWildGenericAssignmentRecordSizeMustRemain20Bytes[
+    sizeof(OverworldWildGenericAssignmentRecord) == 20 ? 1 : -1];
+typedef char OverworldWildSpeciesAssignmentRecordSizeMustRemain8Bytes[
+    sizeof(OverworldWildSpeciesAssignmentRecord) == 8 ? 1 : -1];
+typedef char OverworldWildOverrideActionRecordSizeMustRemain12Bytes[
+    sizeof(OverworldWildOverrideActionRecord) == 12 ? 1 : -1];
+typedef char OverworldWildStaticActionPayloadSizeMustRemain8Bytes[
+    sizeof(OverworldWildStaticActionPayload) == 8 ? 1 : -1];
+typedef char OverworldWildSpawnPolicyRecordSizeMustRemain12Bytes[
+    sizeof(OverworldWildSpawnPolicyRecord) == 12 ? 1 : -1];
+typedef char OverworldWildPopulationPolicyRecordSizeMustRemain10Bytes[
+    sizeof(OverworldWildPopulationPolicyRecord) == 10 ? 1 : -1];
+typedef char OverworldWildHookSetRecordSizeMustRemain8Bytes[
+    sizeof(OverworldWildHookSetRecord) == 8 ? 1 : -1];
+typedef char OverworldWildOverrideDefinitionRecordSizeMustRemain36Bytes[
+    sizeof(OverworldWildOverrideDefinitionRecord) == 36 ? 1 : -1];
+typedef char OverworldWildTransitionRecordSizeMustRemain24Bytes[
+    sizeof(OverworldWildTransitionRecord) == 24 ? 1 : -1];
+typedef char OverworldWildTransitionGuardRecordSizeMustRemain12Bytes[
+    sizeof(OverworldWildTransitionGuardRecord) == 12 ? 1 : -1];
+typedef char OverworldWildTransitionOperationRecordSizeMustRemain18Bytes[
+    sizeof(OverworldWildTransitionOperationRecord) == 18 ? 1 : -1];
+typedef char OverworldWildTransitionActionRecordSizeMustRemain10Bytes[
+    sizeof(OverworldWildTransitionActionRecord) == 10 ? 1 : -1];
+typedef char OverworldWildOwnerRecordSizeMustRemain6Bytes[
+    sizeof(OverworldWildOwnerRecord) == 6 ? 1 : -1];
+typedef char OverworldWildRecoveryActionRecordSizeMustRemain8Bytes[
+    sizeof(OverworldWildRecoveryActionRecord) == 8 ? 1 : -1];
+typedef char OverworldWildImportRecipeRecordSizeMustRemain24Bytes[
+    sizeof(OverworldWildImportRecipeRecord) == 24 ? 1 : -1];
+typedef char OverworldWildApplicabilityRecordSizeMustRemain16Bytes[
+    sizeof(OverworldWildApplicabilityRecord) == 16 ? 1 : -1];
+typedef char OverworldWildTiredTranslationRecordSizeMustRemain24Bytes[
+    sizeof(OverworldWildTiredTranslationRecord) == 24 ? 1 : -1];
+typedef char OverworldWildSemanticIdRecordSizeMustRemain8Bytes[
+    sizeof(OverworldWildSemanticIdRecord) == 8 ? 1 : -1];
+typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain216Bytes[
+    sizeof(OverworldWildBehaviorDataBlobHeader) == 216 ? 1 : -1];
 typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
     u16 version;
@@ -528,6 +1255,9 @@ typedef struct OverworldWildPersonalCacheOverlayEntry {
 
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_ENTRY \
     ((const OverworldWildBehaviorOverlayEntry *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR)
+#define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY \
+    ((const OverworldWildBehaviorValidatorOverlayEntry *) \
+        OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR)
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE \
     ((OverworldWildValidateBehaviorOverlayFunc)OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE_ADDR)
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP \

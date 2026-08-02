@@ -154,6 +154,10 @@ def GetSectionSize(section_file: str, section_name: str) -> int:
 
 
 def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
+    subprocess.check_call([
+        sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
+        '--binary', output_path, '--overlay', '149',
+    ])
     entry_name = 'gOverworldWildSpawnsOverlayEntry'
     callback_names = [
         'OverworldWildSpawns_OverlayOnPlayerStep',
@@ -207,6 +211,42 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         f'overlay 149 ABI gate: entry=0x{entry_address:08X} '
         f'size={entry_size} sha256={digest}'
     )
+
+
+def VerifyOverworldWildBehaviorValidatorOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    callback_name = 'OverworldWildBehaviorValidator_LoadProjection'
+    subprocess.check_call([
+        sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
+        '--binary', output_path, '--overlay', '156',
+    ])
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 156 differs from its linked binary')
+    if len(overlay) < 12:
+        raise RuntimeError('overlay 156 is shorter than its validator entry')
+    magic, version, size, callback = struct.unpack_from('<IHHI', overlay)
+    symbols = {}
+    for line in subprocess.check_output([OBJDUMP, '-t', linked_path]).decode().splitlines():
+        parts = line.split()
+        if len(parts) >= 6 and parts[-1] == callback_name:
+            symbols[callback_name] = int(parts[0], 16)
+    if callback_name not in symbols:
+        raise RuntimeError('overlay 156 packaged gate is missing its linked callback symbol')
+    expected_callback = symbols[callback_name] | 1
+    if (magic != 0x5642574F or version != 1 or size != 12
+            or callback != expected_callback):
+        raise RuntimeError(
+            'overlay 156 validator entry identity/callback is invalid: '
+            f'magic=0x{magic:08X} version={version} size={size} '
+            f'callback=0x{callback:08X} expected=0x{expected_callback:08X}'
+        )
+    print(f'overlay 156 packaged validator gate: size={len(overlay)} sha256={hashlib.sha256(overlay).hexdigest()}')
 
 
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
@@ -739,6 +779,12 @@ def writeall():
             y9Table.write(struct.pack('<I', 0)) # uncompressed
         if newOverlay == 149:
             VerifyOverworldWildSpawnsOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 156:
+            VerifyOverworldWildBehaviorValidatorOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,
