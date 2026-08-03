@@ -69,7 +69,8 @@ require_order(tick, (
     ("alert completion dispatch", "OWBD_TRIGGER_ALERT_COMPLETE"),
     ("busy presentation retry", "return TRUE;"),
     ("single completion cleanup", "OverworldWildSpawns_CancelSpotEmotePresentation"),
-    ("presentation token clear", "OW_WILD_SPAWNER_PRESENTATION_NONE"),
+    ("typed presentation token clear",
+     "OverworldWildSpawns_SetMovementPresentationState"),
 ))
 
 print("runtime dispatch bridge: same-node actions and alert retry ownership verified")

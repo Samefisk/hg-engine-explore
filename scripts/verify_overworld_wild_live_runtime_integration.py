@@ -22,6 +22,9 @@ DEFAULT_SPAWNS = (
     ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 )
 DEFAULT_STATE = ROOT / "include/overworld_wild_spawns_internal.h"
+DEFAULT_HELPER = (
+    ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
+)
 DEFAULT_SIDECARS = (
     ROOT
     / "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
@@ -170,6 +173,7 @@ def block_with_condition(body: str, fragment: str) -> tuple[str, str, int, int] 
 class Sources:
     spawns: str
     state: str
+    helper: str
     sidecars: str
 
 
@@ -260,7 +264,11 @@ class IntegrationVerifier:
             compact = normalized(current)
             if "behaviorStackRuntime.slots[slot].slotGeneration" not in compact:
                 self.issue(category, "effective-cache lookup is not bound to slot generation")
-            if "movementSpotStates" in current or "movementBehaviorClasses" in current:
+            if (
+                "movementPresentationStates" in current
+                or "OverworldWildSpawns_GetMovementPresentationState" in current
+                or "movementBehaviorClasses" in current
+            ):
                 self.issue(category, "effective lookup reads a presentation/legacy mirror")
 
         for name in (
@@ -327,8 +335,69 @@ class IntegrationVerifier:
             for field in ("beforeNodeId", "after->nodeId", "actionFlags", "semanticRole"):
                 if field not in reconcile:
                     self.issue(category, f"reconciliation is missing {field}")
-            if "movementSpotStates" in reconcile:
+            if (
+                "movementPresentationStates" in reconcile
+                or "OverworldWildSpawns_GetMovementPresentationState" in reconcile
+            ):
                 self.issue(category, "reconciliation treats presentation mirror as behavior state")
+
+    def verify_presentation_authority(self) -> None:
+        category = "typed-presentation-authority"
+        state = self.structure(
+            self.sources.state, "OverworldWildSpawnState", category
+        )
+        if state is not None and re.search(
+            r"\bu8\s+movementPresentationStates\s*\[\s*OW_WILD_MAX_SPAWNS\s*\]",
+            state,
+        ) is None:
+            self.issue(category, "spawn state lacks the byte-sized presentation field")
+
+        for name, enum_name in (
+            (
+                "OverworldWildSpawns_GetMovementPresentationState",
+                "OverworldWildMovementPresentationState",
+            ),
+            (
+                "OverworldWildSpawns_SetMovementPresentationState",
+                "OverworldWildMovementPresentationState",
+            ),
+        ):
+            try:
+                body = function_body(self.sources.state, name)
+            except SourceShapeError as error:
+                self.issue(category, str(error))
+                continue
+            if enum_name not in self.sources.state or "movementPresentationStates" not in body:
+                self.issue(category, f"{name} is not the typed field boundary")
+
+        for enum_name in (
+            "OW_WILD_MOVEMENT_PRESENTATION_NONE",
+            "OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE",
+        ):
+            if enum_name not in self.sources.state:
+                self.issue(category, f"missing explicit presentation enum {enum_name}")
+
+        if self.sources.state.count("movementPresentationStates") != 3:
+            self.issue(category, "presentation field is accessed outside its declaration/get/set boundary")
+        for label, source in (
+            ("spawn overlay", self.sources.spawns),
+            ("helper overlay", self.sources.helper),
+        ):
+            if "movementPresentationStates" in source:
+                self.issue(category, f"{label} bypasses the typed presentation API")
+            if re.search(
+                r"OverworldWildSpawns_GetMovementPresentationState\s*\([^()]*\)\s*"
+                r"(?:==|!=)\s*[01]\b",
+                mask_non_code(source),
+            ):
+                self.issue(category, f"{label} compares presentation state numerically")
+
+        if "OverworldWildSpawns_SetMovementPresentationState" not in self.sources.spawns:
+            self.issue(category, "spawn overlay does not publish presentation state through the typed API")
+        if "OverworldWildSpawns_GetMovementPresentationState" not in self.sources.spawns:
+            self.issue(category, "spawn overlay does not gate presentation through the typed API")
+        if "OverworldWildSpawns_GetMovementPresentationState" not in self.sources.helper:
+            self.issue(category, "helper overlay does not gate presentation through the typed API")
 
     def verify_pending_work(self) -> None:
         category = "authenticated-pending-work"
@@ -657,20 +726,22 @@ class IntegrationVerifier:
         self.verify_layout()
         self.verify_effective_authority()
         self.verify_reconciliation()
+        self.verify_presentation_authority()
         self.verify_pending_work()
         self.verify_lifecycle()
         self.verify_possession()
         return self.issues
 
 
-def verify_sources(spawns: str, state: str, sidecars: str) -> list[str]:
-    return IntegrationVerifier(Sources(spawns, state, sidecars)).verify()
+def verify_sources(spawns: str, state: str, helper: str, sidecars: str) -> list[str]:
+    return IntegrationVerifier(Sources(spawns, state, helper, sidecars)).verify()
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=DEFAULT_SPAWNS)
     parser.add_argument("--state-header", type=Path, default=DEFAULT_STATE)
+    parser.add_argument("--helper-source", type=Path, default=DEFAULT_HELPER)
     parser.add_argument("--sidecars-header", type=Path, default=DEFAULT_SIDECARS)
     return parser.parse_args(arguments)
 
@@ -680,7 +751,12 @@ def main(arguments: list[str] | None = None) -> int:
     try:
         sources = tuple(
             path.read_text(encoding="utf-8")
-            for path in (args.source, args.state_header, args.sidecars_header)
+            for path in (
+                args.source,
+                args.state_header,
+                args.helper_source,
+                args.sidecars_header,
+            )
         )
     except OSError as error:
         print(f"live runtime integration verifier: {error}", file=sys.stderr)

@@ -4070,7 +4070,8 @@ static BOOL OverworldWildHelper_IsStablePickupThrowTarget(
             throwState,
             carrierSlot,
             targetSlot)
-        || state->movementSpotStates[targetSlot] == 1
+        || OverworldWildSpawns_GetMovementPresentationState(state, targetSlot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         || (unstableMask & (1u << targetSlot)) != 0
         || state->movementSpawnRunActive[targetSlot]
         || state->movementStagedHopPending[targetSlot]

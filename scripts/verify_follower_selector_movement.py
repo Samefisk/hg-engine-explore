@@ -111,7 +111,8 @@ def verify_aggro_intent_bridge_source() -> dict[str, Any]:
         if re.search(pattern, code) is None
     ]
     forbidden = {
-        "legacy behavior-controller state": "movementSpotStates",
+        "presentation state as behavior authority":
+            "OverworldWildSpawns_GetMovementPresentationState",
         "pre-commit active-step reset": "movementActiveSteps",
         "pending-intent clear": "&=",
     }

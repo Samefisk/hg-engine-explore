@@ -396,8 +396,6 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE
 #endif
 #define OW_WILD_SPAWNER_BUBBLE_ID_NONE 0xFF
-#define OW_WILD_SPAWNER_PRESENTATION_NONE 0
-#define OW_WILD_SPAWNER_PRESENTATION_ACTIVE 1
 #define OW_WILD_SPAWNER_THROW_TARGET_NONE 0
 #define OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG 0x80
 #define OW_WILD_SPAWNER_THROW_TARGET_WINDUP_FLAG 0x40
@@ -1185,7 +1183,7 @@ static void OverworldWildSpawns_SetObjectLandingTile(
     int x,
     int y);
 static s32 OverworldWildSpawns_GetObjectGroundBaseYAt(LocalMapObject *object, int x, int y);
-static void OverworldWildSpawns_ResetSlotSpotState(OverworldWildSpawnState *state, int slot);
+static void OverworldWildSpawns_ResetSlotSpotPresentation(OverworldWildSpawnState *state, int slot);
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
 static void OverworldWildSpawns_FinishActivePresentationCommand(LocalMapObject *object);
 static void OverworldWildSpawns_CancelSpotEmotePresentation(
@@ -2436,7 +2434,8 @@ static u32 OverworldWildSpawns_GetFrameMovementWorkForSlot(
         return slotMask | ((u32)slotMask << OW_WILD_SPAWNER_FRAME_WORK_HEAVY_SHIFT);
     }
 
-    if (state->movementSpotStates[slot] == OW_WILD_SPAWNER_PRESENTATION_ACTIVE) {
+    if (OverworldWildSpawns_GetMovementPresentationState(state, slot)
+        == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE) {
         return slotMask | ((u32)slotMask << OW_WILD_SPAWNER_FRAME_WORK_HEAVY_SHIFT);
     }
     if (state->movementCooldowns[slot] != 0) {
@@ -4998,14 +4997,15 @@ static void OverworldWildSpawns_TickRamCrashShake(OverworldWildSpawnState *state
     }
 }
 
-static void OverworldWildSpawns_ResetSlotSpotState(OverworldWildSpawnState *state, int slot)
+static void OverworldWildSpawns_ResetSlotSpotPresentation(OverworldWildSpawnState *state, int slot)
 {
     if (state == NULL || slot < 0 || slot >= OW_WILD_MAX_SPAWNS) {
         return;
     }
 
     OverworldWildSpawns_ClearThrowStateForSlot(state, slot);
-    state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_NONE;
+    OverworldWildSpawns_SetMovementPresentationState(
+        state, slot, OW_WILD_MOVEMENT_PRESENTATION_NONE);
     state->movementCooldowns[slot] = 0;
     state->movementEmoteTimers[slot] = 0;
     state->movementEmoteSteps[slot] = OW_WILD_SPAWNER_SPOT_EMOTE_STEP_DONE;
@@ -5222,7 +5222,7 @@ static void OverworldWildSpawns_ResetSlotMovementCommand(OverworldWildSpawnState
     OW_WILD_RUNTIME(state)->movementNativeHeldMask &=
         ~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
     OverworldWildSpawns_ClearMovementSlotInProgress(state, slot);
-    OverworldWildSpawns_ResetSlotSpotState(state, slot);
+    OverworldWildSpawns_ResetSlotSpotPresentation(state, slot);
 }
 
 static void OverworldWildSpawns_ResetSlotMovementCommandForMapHeaderChange(
@@ -5238,8 +5238,8 @@ static void OverworldWildSpawns_ResetSlotMovementCommandForMapHeaderChange(
         return;
     }
 
-    if (state->movementSpotStates[slot]
-            == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+    if (OverworldWildSpawns_GetMovementPresentationState(state, slot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         && state->movementEmoteEndStates[slot]
         && OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot]
             == OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot]
@@ -8292,7 +8292,8 @@ static BOOL OverworldWildSpawns_TickSpotEmote(OverworldWildSpawnState *state, in
 {
     BOOL commandFinished = FALSE;
 
-    if (state->movementSpotStates[slot] != OW_WILD_SPAWNER_PRESENTATION_ACTIVE) {
+    if (OverworldWildSpawns_GetMovementPresentationState(state, slot)
+        != OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE) {
         return FALSE;
     }
 
@@ -8386,7 +8387,8 @@ static BOOL OverworldWildSpawns_TickSpotEmote(OverworldWildSpawnState *state, in
         state->movementEmoteTimers[slot] = 0;
         state->movementEmoteSteps[slot] = OW_WILD_SPAWNER_SPOT_EMOTE_STEP_DONE;
         state->movementEmoteJumpsRemaining[slot] = 0;
-        state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_NONE;
+        OverworldWildSpawns_SetMovementPresentationState(
+            state, slot, OW_WILD_MOVEMENT_PRESENTATION_NONE);
         OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot] = 0;
         state->movementEmoteEndStates[slot] = FALSE;
         state->movementEmoteBubbleIds[slot] = OW_WILD_SPAWNER_BUBBLE_ID_NONE;
@@ -8440,8 +8442,8 @@ static BOOL OverworldWildSpawns_TryStartSpotEmote(
         || slot >= OW_WILD_MAX_SPAWNS
         || current == NULL
         || current->semanticRole != OWBD_ROLE_CALM
-        || state->movementSpotStates[slot]
-            == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+        || OverworldWildSpawns_GetMovementPresentationState(state, slot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         || object == NULL
         || MapObject_IsSingleMovementActive(object)) {
         return FALSE;
@@ -8476,7 +8478,8 @@ static BOOL OverworldWildSpawns_TryStartSpotEmote(
         ? OW_WILD_SPAWNER_SPOT_EMOTE_JUMPS_DEFAULT
         : 0;
     if (jumpCount == 0) {
-        state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_ACTIVE;
+        OverworldWildSpawns_SetMovementPresentationState(
+            state, slot, OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE);
         OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot] =
             OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot]
                 .slotGeneration;
@@ -8505,7 +8508,8 @@ static BOOL OverworldWildSpawns_TryStartSpotEmote(
         return TRUE;
     }
 
-    state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_ACTIVE;
+    OverworldWildSpawns_SetMovementPresentationState(
+        state, slot, OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE);
     OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot] =
         OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot]
             .slotGeneration;
@@ -8548,8 +8552,8 @@ static BOOL OverworldWildSpawns_TryStartManualHopEmote(
         || slot >= OW_WILD_MAX_SPAWNS
         || !OverworldWildSpawns_EffectiveRoleIs(
             state, slot, requiredRole)
-        || state->movementSpotStates[slot]
-            == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+        || OverworldWildSpawns_GetMovementPresentationState(state, slot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         || object == NULL
         || MapObject_IsSingleMovementActive(object)
         || jumpCount == 0) {
@@ -8563,7 +8567,8 @@ static BOOL OverworldWildSpawns_TryStartManualHopEmote(
             : OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_DOWN;
     }
 
-    state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_ACTIVE;
+    OverworldWildSpawns_SetMovementPresentationState(
+        state, slot, OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE);
     OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot] =
         OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot]
             .slotGeneration;
@@ -8601,8 +8606,8 @@ static BOOL OverworldWildSpawns_TryStartChainPauseAction(
 
     object = state->spawns[slot].object;
     if (!OverworldWildSpawns_GetCurrentBehavior(state, slot, &current)
-        || state->movementSpotStates[slot]
-            == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+        || OverworldWildSpawns_GetMovementPresentationState(state, slot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         || object == NULL
         || MapObject_IsSingleMovementActive(object)) {
         return FALSE;
@@ -8636,7 +8641,8 @@ static BOOL OverworldWildSpawns_TryStartChainPauseAction(
         lookFrames = 3;
     }
 
-    state->movementSpotStates[slot] = OW_WILD_SPAWNER_PRESENTATION_ACTIVE;
+    OverworldWildSpawns_SetMovementPresentationState(
+        state, slot, OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE);
     OW_WILD_RUNTIME(state)->movementEmoteSlotGenerations[slot] =
         OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot]
             .slotGeneration;
@@ -8892,8 +8898,8 @@ static void OverworldWildSpawns_TickMovementParams(
             if ((state->spawns[i].active
                     & OW_WILD_SPAWN_AGGRO_PENDING_FLAG) != 0
                 && !OverworldWildSpawns_EffectiveRoleIsTired(state, i)
-                && state->movementSpotStates[i]
-                    != OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+                && OverworldWildSpawns_GetMovementPresentationState(state, i)
+                    != OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
                 && OverworldWildSpawns_TryDispatchRuntimeTransition(
                     state, i, OWBD_TRIGGER_AGGRO_APPLY, NULL)) {
                 state->spawns[i].active &=
@@ -10124,8 +10130,8 @@ static void OverworldWildSpawns_TickRuntimeFrameTimers(
         LocalMapObject *object = state->spawns[slot].object;
         if (!state->spawns[slot].active) continue;
         if (OverworldWildSpawns_IsMovementSlotInProgress(state, slot)
-            || state->movementSpotStates[slot]
-                == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+            || OverworldWildSpawns_GetMovementPresentationState(state, slot)
+                == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
             || state->movementRamCrashShakeTimers[slot] != 0
             || (object != NULL && MapObject_IsSingleMovementActive(object)))
             presentationGateMask |=
@@ -15464,7 +15470,7 @@ static BOOL OverworldWildSpawns_InitSpawnSlotState(
     runtime->spawnPresentations.managerRestoreMask &=
         (u16)~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
     runtime->spawnPresentations.farSamples[slot] = 0;
-    OverworldWildSpawns_ResetSlotSpotState(state, slot);
+    OverworldWildSpawns_ResetSlotSpotPresentation(state, slot);
     OverworldWildSpawns_ApplySpawnPassThroughFlag(state, slot, object);
 #if OW_WILD_SPAWNER_MANKEY_TREE_TOP_RENDER_OVERRIDE_SAVE_ENABLED
     sOverworldWildMankeyTreeTopPrioritySavedBits[slot] = 0;
@@ -16213,7 +16219,8 @@ static BOOL OverworldWildSpawns_IsSlotStableForBattle(OverworldWildSpawnState *s
         || state->movementSpawnRunActive[slot]
         || state->movementStagedHopPending[slot]
         || state->movementRamCrashShakeTimers[slot] != 0
-        || state->movementSpotStates[slot] == OW_WILD_SPAWNER_PRESENTATION_ACTIVE
+        || OverworldWildSpawns_GetMovementPresentationState(state, slot)
+            == OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE
         || OverworldWildSpawns_IsMovementSlotInProgress(state, slot)
         || MapObject_IsSingleMovementActive(object)) {
         return FALSE;

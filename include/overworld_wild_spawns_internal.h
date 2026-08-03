@@ -32,8 +32,6 @@
 #define OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING 0x04
 #define OW_WILD_SPAWN_AGGRO_FLAG 0x02
 #define OW_WILD_SPAWN_AGGRO_PENDING_FLAG 0x04
-#define OW_WILD_SPOT_STATE_TIRED 3
-
 #define OW_WILD_FOLLOWER_RELEASE_NONE 0
 #define OW_WILD_FOLLOWER_RELEASE_REQUESTED 1
 #define OW_WILD_FOLLOWER_RELEASE_FLYING 2
@@ -79,6 +77,11 @@ typedef enum OverworldWildDespawnAuthorization {
     OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY,
     OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT,
 } OverworldWildDespawnAuthorization;
+
+typedef enum OverworldWildMovementPresentationState {
+    OW_WILD_MOVEMENT_PRESENTATION_NONE = 0,
+    OW_WILD_MOVEMENT_PRESENTATION_SPOT_EMOTE,
+} OverworldWildMovementPresentationState;
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -175,7 +178,7 @@ typedef struct OverworldWildSpawnState {
     u8 savedShiniesLoaded;
     s8 pendingSlot;
     s8 movementQueuedBattleSlot;
-    u8 movementSpotStates[OW_WILD_MAX_SPAWNS];
+    u8 movementPresentationStates[OW_WILD_MAX_SPAWNS];
     u8 movementEmoteTimers[OW_WILD_MAX_SPAWNS];
     u8 movementEmoteSteps[OW_WILD_MAX_SPAWNS];
     u8 movementEmoteDirections[OW_WILD_MAX_SPAWNS];
@@ -238,6 +241,22 @@ typedef struct OverworldWildSpawnState {
     s16 followerReleaseY;
     u8 followerReleaseState;
 } OverworldWildSpawnState;
+
+static inline OverworldWildMovementPresentationState
+OverworldWildSpawns_GetMovementPresentationState(
+    const OverworldWildSpawnState *state,
+    int slot)
+{
+    return (OverworldWildMovementPresentationState)state->movementPresentationStates[slot];
+}
+
+static inline void OverworldWildSpawns_SetMovementPresentationState(
+    OverworldWildSpawnState *state,
+    int slot,
+    OverworldWildMovementPresentationState presentationState)
+{
+    state->movementPresentationStates[slot] = (u8)presentationState;
+}
 
 typedef void (*OverworldWildFollowerReleaseDispatchCallback)(
     FieldSystem *fieldSystem,
