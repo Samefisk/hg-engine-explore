@@ -6737,6 +6737,15 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
     reject_mutation("duplicate overlay ID", "<I", y9_offset + 153 * 32, 152)
     reject_mutation(
         "overlay 153 RAM size", "<I", y9_offset + 153 * 32 + 8, 0xFA8)
+    overlay129_ram_size_offset = y9_offset + 129 * 32 + 8
+    overlay129_ram_size = struct.unpack_from(
+        "<I", rom, overlay129_ram_size_offset)[0]
+    reject_mutation(
+        "overlay 129 RAM size",
+        "<I",
+        overlay129_ram_size_offset,
+        overlay129_ram_size - 4,
+    )
     reject_mutation(
         "overlay 129 flags", "<I", y9_offset + 129 * 32 + 28, 1)
     for field, label in enumerate(
@@ -6757,6 +6766,17 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
         reject_mutation(
             f"overlay 149 {label}", "<I", field_offset, value ^ 1)
     fat_offset = struct.unpack_from("<I", rom, 0x48)[0]
+    overlay129_file_id = struct.unpack_from(
+        "<I", rom, y9_offset + 129 * 32 + 24)[0]
+    overlay129_fat_end_offset = fat_offset + overlay129_file_id * 8 + 4
+    overlay129_fat_end = struct.unpack_from(
+        "<I", rom, overlay129_fat_end_offset)[0]
+    reject_mutation(
+        "overlay 129 FAT end",
+        "<I",
+        overlay129_fat_end_offset,
+        overlay129_fat_end - 4,
+    )
     overlay149_file_id = struct.unpack_from(
         "<I", rom, y9_offset + 149 * 32 + 24)[0]
     overlay149_fat_start_offset = fat_offset + overlay149_file_id * 8

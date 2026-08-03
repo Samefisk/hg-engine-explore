@@ -5016,7 +5016,7 @@ def binary_contracts(args: argparse.Namespace) -> None:
     )
     require(
         args.overlay129.stat().st_size <= 0x7FD4,
-        "task4 consumed overlay 129's current 0x2C-byte headroom",
+        "resident overlay 129 consumed its current 0x2C-byte headroom",
     )
 
     relocations = subprocess.check_output(
