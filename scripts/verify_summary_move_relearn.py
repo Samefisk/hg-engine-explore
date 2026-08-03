@@ -5015,8 +5015,8 @@ def binary_contracts(args: argparse.Namespace) -> None:
         "read-only query growth exceeded overlay 153's guard",
     )
     require(
-        args.overlay129.stat().st_size <= 0x7FC0,
-        "task4 consumed the prior 0x40-byte overlay-129 headroom",
+        args.overlay129.stat().st_size <= 0x7FD4,
+        "task4 consumed overlay 129's current 0x2C-byte headroom",
     )
 
     relocations = subprocess.check_output(

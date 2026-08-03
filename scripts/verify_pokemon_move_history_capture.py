@@ -6250,14 +6250,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     129: (
         0x023D8000,
-        0x7FC0,
+        0x7FD4,
         0,
         0,
         0,
         129,
         0,
         0x3DAA00,
-        0x3E29C0,
+        0x3E29D4,
     ),
     131: (
         0x023C8000,
