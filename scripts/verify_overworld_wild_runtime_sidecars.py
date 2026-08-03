@@ -350,8 +350,19 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     require_tokens(capture_finish, "capture completion", (
         "OW_WILD_HELPER_PLAYER_BALL_PHASE_CAUGHT",
         "OW_WILD_DESPAWN_REASON_BATTLE_CAUGHT",
-        "resetSlot(state, projectile->impactSlot, TRUE);",
     ))
+    capture_reset = (
+        r"if\s*\(\s*!resetSlot\s*\(\s*state\s*,\s*"
+        r"projectile->impactSlot\s*,\s*TRUE\s*\)\s*\)\s*"
+        r"\{\s*return TRUE;\s*\}"
+    )
+    require(re.search(capture_reset, capture_finish) is not None,
+            "capture completion does not stop when slot reset is quarantined")
+    require(re.search(
+                r"(?m)^\s*resetSlot\s*\(\s*state\s*,\s*"
+                r"projectile->impactSlot\s*,\s*TRUE\s*\)\s*;\s*$",
+                capture_finish) is None,
+            "capture completion deletes through an unchecked slot reset")
 
     distance_dispatch = function_body(source, "OverworldWildSpawns_DespawnFarMons")
     require_tokens(distance_dispatch, "distance-despawn callback dispatch", (
@@ -378,8 +389,17 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
         "resetSlot",
     ))
     remove = function_body(helper, "OverworldWildHelper_RemoveEncounter")
-    require(remove.count("resetSlot(state, slot, TRUE);") == 1,
-            "shared distance/battle removal does not reset exactly once")
+    remove_reset = (
+        r"if\s*\(\s*!resetSlot\s*\(\s*state\s*,\s*slot\s*,\s*"
+        r"TRUE\s*\)\s*\)\s*\{\s*return FALSE;\s*\}"
+    )
+    require(re.search(remove_reset, remove) is not None,
+            "shared distance/battle removal does not quarantine reset failure")
+    require(re.search(
+                r"(?m)^\s*resetSlot\s*\(\s*state\s*,\s*slot\s*,\s*"
+                r"TRUE\s*\)\s*;\s*$",
+                remove) is None,
+            "shared distance/battle removal uses an unchecked slot reset")
 
     follower = function_body(source, "OverworldWildSpawns_RemoveFollower")
     require(follower.count("OverworldWildSpawns_ResetSlotState(") == 1,

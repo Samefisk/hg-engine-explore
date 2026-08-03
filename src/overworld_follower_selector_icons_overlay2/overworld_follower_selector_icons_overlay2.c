@@ -287,9 +287,6 @@ OverworldWildSpawns_StartFollowerReleaseBounce(
         OW_WILD_SPAWN_AGGRO_FLAG | OW_WILD_SPAWN_AGGRO_PENDING_FLAG;
     state->followerReleaseState |=
         OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG;
-    if (state->movementSpotStates[slot] == OW_WILD_SPOT_STATE_TIRED) {
-        state->movementEmoteTimers[slot] = 0;
-    }
     if (!FollowerReleaseBounce_FindTile(
             fieldSystem,
             ballObject,

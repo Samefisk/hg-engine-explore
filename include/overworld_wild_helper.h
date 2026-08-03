@@ -209,7 +209,7 @@ typedef LocalMapObject *(*OverworldWildHelperRecreatePresentationFunc)(
     LocalMapObject *object,
     int x,
     int y);
-typedef void (*OverworldWildHelperResetSlotFunc)(
+typedef BOOL (*OverworldWildHelperResetSlotFunc)(
     OverworldWildSpawnState *state,
     int slot,
     BOOL deleteAuxiliaryObjects);

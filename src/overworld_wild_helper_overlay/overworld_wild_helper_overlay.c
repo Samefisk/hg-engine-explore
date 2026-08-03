@@ -3445,7 +3445,9 @@ static BOOL OverworldWildHelper_TickPlayerBallCapture(
             OW_WILD_DESPAWN_REASON_BATTLE_CAUGHT,
             OW_WILD_DESPAWN_ACTION_DELETE_OBJECT,
             0);
-        resetSlot(state, projectile->impactSlot, TRUE);
+        if (!resetSlot(state, projectile->impactSlot, TRUE)) {
+            return TRUE;
+        }
         DeleteMapObject(verifiedTarget);
         OverworldWildHelper_DeletePlayerBallObject(projectile->object);
         projectile->object = NULL;
@@ -4005,6 +4007,25 @@ static BOOL OverworldWildHelper_IsPickupThrowMovementContextCurrent(
         && OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state);
 }
 
+static BOOL OverworldWildHelper_IsCarriedPickupTarget(
+    const OverworldWildThrowState *throwState,
+    int targetSlot)
+{
+    int carrierSlot;
+
+    for (carrierSlot = 0;
+         carrierSlot < OW_WILD_MAX_SPAWNS;
+         carrierSlot++) {
+        u8 relation = throwState->targets[carrierSlot];
+
+        if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0
+            && OW_WILD_HELPER_THROW_TARGET_DECODE(relation) == targetSlot) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
@@ -4022,7 +4043,7 @@ static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
         || carrierSlot == targetSlot
         || !state->spawns[targetSlot].active
         || state->spawns[targetSlot].object == NULL
-        || state->movementBehaviorClasses[targetSlot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP
+        || OverworldWildHelper_IsCarriedPickupTarget(throwState, targetSlot)
         || state->movementQueuedBattleSlot == targetSlot
         || state->pendingSlot == targetSlot
         || throwState->targets[targetSlot] != OW_WILD_HELPER_THROW_TARGET_NONE) {
@@ -4080,8 +4101,7 @@ static BOOL OverworldWildHelper_IsReservedPickupTargetNearCarrier(
         || throwState == NULL
         || targetSlot < 0
         || targetSlot >= OW_WILD_MAX_SPAWNS
-        || (throwState->targetMask & (1u << targetSlot)) == 0
-        || state->movementBehaviorClasses[targetSlot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+        || (throwState->targetMask & (1u << targetSlot)) == 0) {
         return FALSE;
     }
 
@@ -4166,9 +4186,6 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
     throwState->targetMask &= ~(1u << slot);
     throwState->carrierMask &= ~(1u << slot);
     presentation->farSamples[slot] = 0;
-    if (state->movementBehaviorClasses[slot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
-        restoreMask |= 1u << slot;
-    }
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         u8 relation = throwState->targets[i];
         u8 target;
@@ -4186,9 +4203,7 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
         if (i == slot || target == slot) {
             throwState->targetMask &= ~(1u << target);
             presentation->farSamples[target] = 0;
-            if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0
-                && state->movementBehaviorClasses[target]
-                    == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+            if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0) {
                 restoreMask |= 1u << target;
             }
             throwState->targets[i] = OW_WILD_HELPER_THROW_TARGET_NONE;
@@ -4268,10 +4283,8 @@ static BOOL OverworldWildHelper_StartCarriedThrowTarget(
     }
 
     targetObject = state->spawns[targetSlot].object;
-    state->movementSpotStates[targetSlot] = 0;
     state->movementEmoteTimers[targetSlot] = 0;
     state->movementActiveSteps[targetSlot] = 0;
-    state->movementBehaviorClasses[targetSlot] = OW_WILD_BEHAVIOR_CLASS_PICKED_UP;
     MapObject_SetBits(targetObject, MAPOBJECTFLAG_UNK18);
     MapObject_ClearBits(targetObject, BIT_VANISH);
     throwState->targets[carrierSlot] =
@@ -4717,7 +4730,9 @@ static BOOL OverworldWildHelper_RemoveEncounter(
     if (authorization == OW_WILD_DESPAWN_DENIED || resetSlot == NULL) {
         return FALSE;
     }
-    resetSlot(state, slot, TRUE);
+    if (!resetSlot(state, slot, TRUE)) {
+        return FALSE;
+    }
     if (verifiedObject != NULL) {
         DeleteMapObject(verifiedObject);
     }
