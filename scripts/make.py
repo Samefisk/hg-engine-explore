@@ -268,6 +268,7 @@ def VerifyOverworldWildRuntimeOverlay(
         linked_path: str,
         output_path: str,
         packaged_path: str) -> None:
+    core_owner = 'build/linked.o'
     production_object = (
         'build/overworld_wild_runtime_overlay/'
         'overworld_wild_runtime_overlay.o'
@@ -280,6 +281,7 @@ def VerifyOverworldWildRuntimeOverlay(
         sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
         '--binary', output_path, '--overlay', '157',
         '--production-object', production_object,
+        '--core-owner', core_owner,
         '--scalar-shard', scalar_shard,
     ])
     with open(output_path, 'rb') as file:
@@ -309,6 +311,7 @@ def VerifyOverworldWildRuntimeLayersOverlay(
         linked_path: str,
         output_path: str,
         packaged_path: str) -> None:
+    core_owner = 'build/linked.o'
     task5_owner = 'build/pokemon_move_history_task6_overlay_linked.o'
     scalar_shard = (
         'build/overworld_wild_runtime_layers_overlay/'
@@ -339,6 +342,7 @@ def VerifyOverworldWildRuntimeLayersOverlay(
         '--lifecycle-consumer', task5_owner,
         '--lifecycle-object', lifecycle_object,
         '--scalar-shard', scalar_shard,
+        '--core-owner', core_owner,
         '--catalog-owner', catalog_owner,
         '--catalog-carrier', catalog_carrier,
         '--task8-carrier', task8_carrier,
@@ -363,6 +367,7 @@ def VerifyOverworldWildRuntimeTimersOverlay(
         output_path: str,
         packaged_path: str) -> None:
     layers_owner = 'build/overworld_wild_runtime_layers_overlay_linked.o'
+    core_owner = 'build/linked.o'
     catalog_owner = 'build/overworld_wild_runtime_overlay_linked.o'
     catalog_carrier = (
         'build/overworld_wild_runtime_overlay_catalog_symbols.o'
@@ -383,6 +388,7 @@ def VerifyOverworldWildRuntimeTimersOverlay(
         '--task8-carrier', task8_carrier,
         '--catalog-owner', catalog_owner,
         '--catalog-carrier', catalog_carrier,
+        '--core-owner', core_owner,
         '--timer-carrier', timer_carrier,
         '--timer-object', timer_object,
         '--production-object', timer_object,

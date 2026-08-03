@@ -86,23 +86,29 @@ ALL_ASM_SRCS += $(ASM_SUBDIR)/overworld_wild_runtime_layers_overlay/owbd_v40_sca
 $(overworld_wild_runtime_overlay_LINK): \
     $(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o \
     $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+    $(LINK) \
     rom_gen.ld src/overworld_wild_runtime_overlay/linker.ld
 	$(LD) rom_gen.ld -T src/overworld_wild_runtime_overlay/linker.ld \
-		--just-symbols=$(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) -o $@ $<
+		--just-symbols=$(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+		--just-symbols=$(LINK) -o $@ $<
 
-$(overworld_wild_runtime_overlay_OUTPUT): $(overworld_wild_runtime_overlay_LINK) scripts/verify_overworld_wild_overlay_size.py
+$(overworld_wild_runtime_overlay_OUTPUT): $(overworld_wild_runtime_overlay_LINK) \
+    $(LINK) scripts/verify_overworld_wild_overlay_size.py
 	$(OBJCOPY) -O binary $< $@
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< --binary $@ --overlay 157 \
 		--production-object $(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o \
+		--core-owner $(LINK) \
 		--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS)
 
 $(overworld_wild_runtime_layers_overlay_LINK): \
     $(OVERWORLD_WILD_LAYERS_OBJECT) $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
     $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+    $(LINK) \
     rom_gen.ld src/overworld_wild_runtime_layers_overlay/linker.ld
 	$(LD) rom_gen.ld -T src/overworld_wild_runtime_layers_overlay/linker.ld \
 		--just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
 		--just-symbols=$(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+		--just-symbols=$(LINK) \
 		-o $@ $(OVERWORLD_WILD_LAYERS_OBJECT)
 
 $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers_overlay_LINK) \
@@ -113,6 +119,7 @@ $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers
     $(OVERWORLD_WILD_RUNTIME_SYMBOLS) \
     $(BUILD)/overworld_wild_spawns_overlay_linked.o \
     $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+    $(LINK) \
     scripts/verify_overworld_wild_overlay_size.py
 	$(OBJCOPY) -O binary $< $@
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< \
@@ -121,6 +128,7 @@ $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers
 		--lifecycle-consumer $(BUILD)/pokemon_move_history_task6_overlay_linked.o \
 		--lifecycle-object $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o \
 		--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
+		--core-owner $(LINK) \
 		--catalog-owner $(overworld_wild_runtime_overlay_LINK) \
 		--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
 		--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS) \
@@ -131,10 +139,12 @@ $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers
 $(overworld_wild_runtime_timers_overlay_LINK): \
     $(OVERWORLD_WILD_TIMERS_OBJECT) $(OVERWORLD_WILD_TASK8_SYMBOLS) \
     $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
+    $(LINK) \
     rom_gen.ld src/overworld_wild_runtime_timers_overlay/linker.ld
 	$(LD) rom_gen.ld -T src/overworld_wild_runtime_timers_overlay/linker.ld \
 		--just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) \
 		--just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
+		--just-symbols=$(LINK) \
 		-o $@ $(OVERWORLD_WILD_TIMERS_OBJECT)
 
 $(overworld_wild_runtime_timers_overlay_OUTPUT): $(overworld_wild_runtime_timers_overlay_LINK) \
@@ -144,6 +154,7 @@ $(overworld_wild_runtime_timers_overlay_OUTPUT): $(overworld_wild_runtime_timers
     $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
     $(OVERWORLD_WILD_TIMER_SYMBOLS) \
     $(OVERWORLD_WILD_TIMERS_OBJECT) \
+    $(LINK) \
     scripts/verify_overworld_wild_overlay_size.py
 	$(OBJCOPY) -O binary $< $@
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< \
@@ -152,6 +163,7 @@ $(overworld_wild_runtime_timers_overlay_OUTPUT): $(overworld_wild_runtime_timers
 		--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS) \
 		--catalog-owner $(overworld_wild_runtime_overlay_LINK) \
 		--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
+		--core-owner $(LINK) \
 		--timer-carrier $(OVERWORLD_WILD_TIMER_SYMBOLS) \
 		--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT) \
 		--production-object $(OVERWORLD_WILD_TIMERS_OBJECT)

@@ -462,6 +462,50 @@ def verify_make_package_invocation() -> None:
                 for call in parser_calls)
             and "int(line.split(\" \")[2])" not in source,
             "writeall does not use the strict first-line overlay ID parser")
+    runtime_verifier_names = (
+        "VerifyOverworldWildRuntimeOverlay",
+        "VerifyOverworldWildRuntimeLayersOverlay",
+        "VerifyOverworldWildRuntimeTimersOverlay",
+    )
+    for verifier_name in runtime_verifier_names:
+        verifier = next((
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == verifier_name
+        ), None)
+        require(verifier is not None,
+                f"packaging {verifier_name} definition is missing")
+        assignments = {
+            statement.targets[0].id: statement.value.value
+            for statement in verifier.body
+            if isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        }
+        check_calls = [
+            node for node in ast.walk(verifier)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subprocess"
+            and node.func.attr == "check_call"
+        ]
+        require(assignments.get("core_owner") == "build/linked.o"
+                and len(check_calls) == 1 and len(check_calls[0].args) == 1
+                and isinstance(check_calls[0].args[0], ast.List),
+                f"packaging {verifier_name} lacks the same-build core owner")
+        command = check_calls[0].args[0].elts
+        core_flags = [
+            index for index, element in enumerate(command)
+            if isinstance(element, ast.Constant)
+            and element.value == "--core-owner"
+        ]
+        require(len(core_flags) == 1 and core_flags[0] + 1 < len(command)
+                and isinstance(command[core_flags[0] + 1], ast.Name)
+                and command[core_flags[0] + 1].id == "core_owner",
+                f"packaging {verifier_name} does not pass --core-owner")
+
     functions = [
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
@@ -542,6 +586,7 @@ def verify_make_package_invocation() -> None:
         "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
         "--scalar-shard",
         "build/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.o",
+        "--core-owner", "build/linked.o",
         "--catalog-owner", "build/overworld_wild_runtime_overlay_linked.o",
         "--catalog-carrier",
         "build/overworld_wild_runtime_overlay_catalog_symbols.o",
@@ -741,6 +786,7 @@ def verify_make_package_invocation() -> None:
         "--catalog-owner", "build/overworld_wild_runtime_overlay_linked.o",
         "--catalog-carrier",
         "build/overworld_wild_runtime_overlay_catalog_symbols.o",
+        "--core-owner", "build/linked.o",
         "--timer-carrier",
         "build/overworld_wild_runtime_timers_overlay_timer_symbols.o",
         "--timer-object",
@@ -1075,6 +1121,8 @@ def verify_source_contracts() -> None:
         "--lifecycle-consumer $(BUILD)/pokemon_move_history_task6_overlay_linked.o",
         "--lifecycle-object $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
         "--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS)",
+        "--core-owner $(LINK)",
+        "--just-symbols=$(LINK)",
         "--catalog-owner $(overworld_wild_runtime_overlay_LINK)",
         "--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)",
         "--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS)",
@@ -1089,6 +1137,9 @@ def verify_source_contracts() -> None:
         "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)",
     ):
         require(token in overlays_mk, f"resident build/link integration missing: {token}")
+    require(overlays_mk.count("--just-symbols=$(LINK)") == 3
+            and overlays_mk.count("--core-owner $(LINK)") == 3,
+            "resident core Thumb owner is not wired exactly once per overlay")
     task8_carrier = overlays_mk[
         overlays_mk.index("$(OVERWORLD_WILD_TASK8_SYMBOLS):"):
         overlays_mk.index("$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS):")]
@@ -1158,8 +1209,11 @@ def verify_source_contracts() -> None:
             and rule.count("$(overworld_wild_runtime_overlay_LINK)") == 2
             and rule.count("$(OVERWORLD_WILD_TASK8_SYMBOLS)") == 2
             and rule.count("$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)") == 2
+            and rule.count("$(LINK)") == 2
             and rule.count("$(OVERWORLD_WILD_TIMER_SYMBOLS)") == 2
             and prerequisites.count("$(OVERWORLD_WILD_TIMERS_OBJECT)") == 1
+            and recipe.count(
+                "--core-owner $(LINK)") == 1
             and recipe.count(
                 "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)") == 1
         )
@@ -1168,13 +1222,19 @@ def verify_source_contracts() -> None:
             "overlay159 package gate lacks exact same-build owner/carriers")
     missing_prerequisite = timers_output_rule.replace(
         "    $(OVERWORLD_WILD_TIMERS_OBJECT) \\\n", "", 1)
+    missing_core_prerequisite = timers_output_rule.replace(
+        "    $(LINK) \\\n", "", 1)
     missing_argument = timers_output_rule.replace(
         " \\\n\t\t--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)", "", 1)
+    missing_core_argument = timers_output_rule.replace(
+        " \\\n\t\t--core-owner $(LINK)", "", 1)
     wrong_argument = timers_output_rule.replace(
         "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)",
         "--timer-object $(OVERWORLD_WILD_RUNTIME_SYMBOLS)", 1)
     require(not timers_output_gate_matches(missing_prerequisite)
+            and not timers_output_gate_matches(missing_core_prerequisite)
             and not timers_output_gate_matches(missing_argument)
+            and not timers_output_gate_matches(missing_core_argument)
             and not timers_output_gate_matches(wrong_argument),
             "overlay159 timer-object Make wiring mutation was accepted")
     require(all(name + "(" in timers_source for name in timer_api_names),

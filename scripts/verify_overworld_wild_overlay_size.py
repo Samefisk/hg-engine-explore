@@ -29,6 +29,12 @@ TASK5_SCALAR_SYMBOLS = {
     "OwbdModifierPayloadValid": (0x023BE031, "FUNC"),
 }
 
+CORE_THUMB_HELPERS = (
+    "memset",
+    "memcpy",
+    "__gnu_thumb1_case_uqi",
+)
+
 RETAINED_STATIC_RESOLVER = (
     "OverworldWildRuntime_ResolveRetainedStaticCache"
 )
@@ -148,6 +154,10 @@ def verify_exact_production_link(args: argparse.Namespace) -> None:
         "-T",
         str(linker),
     ]
+    if args.core_owner is None:
+        raise SystemExit(
+            f"overlay {args.overlay}: same-build core owner is required"
+        )
     if args.overlay == 157:
         if args.scalar_shard is None:
             raise SystemExit("overlay 157: scalar shard is required for exact link")
@@ -170,6 +180,7 @@ def verify_exact_production_link(args: argparse.Namespace) -> None:
             f"--just-symbols={args.task8_carrier}",
             f"--just-symbols={args.catalog_carrier}",
         ))
+    command.append(f"--just-symbols={args.core_owner}")
     with tempfile.TemporaryDirectory(prefix="ow-exact-overlay-link-") as temp:
         relinked = Path(temp) / "linked.o"
         binary = Path(temp) / "linked.bin"
@@ -385,6 +396,96 @@ def read_symbol_rows(path: Path) -> dict[str, tuple[int, int, str, str, str]]:
                 int(parts[1], 16), int(parts[2]), parts[3], parts[4], parts[6]
             )
     return rows
+
+
+def core_thumb_import_identity_error(owner, consumer) -> str | None:
+    text_start = owner.get("__text_start")
+    text_end = owner.get("__text_end")
+    if (text_start is None or text_end is None
+            or text_end[0] <= text_start[0]):
+        return "core owner has a malformed text span"
+    for name in CORE_THUMB_HELPERS:
+        owner_row = owner.get(name)
+        consumer_row = consumer.get(name)
+        if (owner_row is None or owner_row[1] == 0
+                or owner_row[2] != "FUNC" or owner_row[3] != "GLOBAL"
+                or owner_row[4] in ("ABS", "UND") or owner_row[0] & 1 == 0):
+            return f"core owner lacks a sectioned Thumb FUNC helper: {name}"
+        address = owner_row[0] & ~1
+        if address < text_start[0] or address + owner_row[1] > text_end[0]:
+            return f"core Thumb helper escaped its owner text span: {name}"
+        if (consumer_row is None or consumer_row[:4] != owner_row[:4]
+                or consumer_row[4] != "ABS"):
+            return f"resident core helper import differs from same-build owner: {name}"
+    return None
+
+
+def verify_core_thumb_imports(owner_path: Path, consumer_path: Path,
+                              production_object_path: Path) -> None:
+    owner = read_symbol_rows(owner_path)
+    consumer = read_symbol_rows(consumer_path)
+    error = core_thumb_import_identity_error(owner, consumer)
+    if error is not None:
+        raise SystemExit(error)
+
+    production = read_symbol_rows(production_object_path)
+    undefined_helpers = {
+        name for name in CORE_THUMB_HELPERS
+        if name in production and production[name][4] == "UND"
+    }
+    relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", production_object_path], text=True
+    )
+    helper_relocations: dict[str, set[str]] = {}
+    for kind, name in re.findall(
+            r"(?m)^\s*[0-9A-Fa-f]+\s+(R_ARM_\S+)\s+(\S+)", relocations):
+        name = name.split("+")[0]
+        if name in CORE_THUMB_HELPERS:
+            helper_relocations.setdefault(name, set()).add(kind)
+    if set(helper_relocations) != undefined_helpers:
+        raise SystemExit(
+            "resident core-helper undefined/relocation inventory differs: "
+            f"undefined={sorted(undefined_helpers)}, "
+            f"relocated={sorted(helper_relocations)}"
+        )
+    for name, kinds in helper_relocations.items():
+        if kinds != {"R_ARM_THM_CALL"}:
+            raise SystemExit(
+                f"resident core helper {name} uses non-Thumb-call relocation(s): "
+                + ", ".join(sorted(kinds))
+            )
+
+    # Keep address, type, binding, section, and size rejection paths live.
+    representative = CORE_THUMB_HELPERS[0]
+    owner_row = owner[representative]
+    moved_consumer = dict(consumer)
+    moved_consumer[representative] = (
+        owner_row[0] + 2, *consumer[representative][1:]
+    )
+    mistyped_owner = dict(owner)
+    mistyped_owner[representative] = (
+        owner_row[0], owner_row[1], "NOTYPE", *owner_row[3:]
+    )
+    mistyped_consumer = dict(consumer)
+    mistyped_consumer[representative] = (
+        consumer[representative][0], consumer[representative][1], "NOTYPE",
+        *consumer[representative][3:]
+    )
+    resized_consumer = dict(consumer)
+    resized_consumer[representative] = (
+        consumer[representative][0], consumer[representative][1] + 2,
+        *consumer[representative][2:]
+    )
+    sectioned_consumer = dict(consumer)
+    sectioned_consumer[representative] = (
+        *consumer[representative][:4], owner_row[4]
+    )
+    if (core_thumb_import_identity_error(owner, moved_consumer) is None
+            or core_thumb_import_identity_error(mistyped_owner, consumer) is None
+            or core_thumb_import_identity_error(owner, mistyped_consumer) is None
+            or core_thumb_import_identity_error(owner, resized_consumer) is None
+            or core_thumb_import_identity_error(owner, sectioned_consumer) is None):
+        raise SystemExit("resident core-helper negative identity fixture was accepted")
 
 
 def scalar_identity_error(owner, shard, consumer) -> str | None:
@@ -923,6 +1024,7 @@ def main() -> int:
     parser.add_argument("--lifecycle-consumer", type=Path)
     parser.add_argument("--lifecycle-object", type=Path)
     parser.add_argument("--scalar-shard", type=Path)
+    parser.add_argument("--core-owner", type=Path)
     parser.add_argument("--catalog-owner", type=Path)
     parser.add_argument("--catalog-carrier", type=Path)
     parser.add_argument("--task8-carrier", type=Path)
@@ -1101,6 +1203,8 @@ def main() -> int:
         if "R_ARM_" in relocations:
             raise SystemExit("overlay 156: unresolved relocation remains after resident link")
     if args.overlay in (157, 158, 159):
+        verify_core_thumb_imports(
+            args.core_owner, args.elf, args.production_object)
         bss_size = symbols["__bss_end__"] - symbols["__bss_start__"]
         bss_limit = 0 if args.overlay == 159 else 0x140
         if bss_size < 0 or bss_size > bss_limit:
@@ -1126,21 +1230,11 @@ def main() -> int:
             name for name in symbols
             if "_from_thumb" in name or "veneer" in name.lower()
         }
-        expected_veneers = {"__memset_from_thumb"}
-        if args.overlay in (157, 158, 159):
-            expected_veneers.add("__memcpy_from_thumb")
-        if args.overlay == 157:
-            expected_veneers.add("____gnu_thumb1_case_uqi_from_thumb")
-        if args.overlay == 158:
-            expected_veneers.add("____gnu_thumb1_case_uqi_from_thumb")
-        if veneers != expected_veneers:
+        if veneers:
             raise SystemExit(
-                f"overlay {args.overlay}: interworking veneer inventory changed: "
+                f"overlay {args.overlay}: unexpected interworking veneer: "
                 + ", ".join(sorted(veneers))
             )
-        for name in veneers:
-            if not origin <= symbols[name] < symbols["__text_end"]:
-                raise SystemExit(f"overlay {args.overlay}: {name} escaped the fixed image")
         relocations = subprocess.check_output(
             ["arm-none-eabi-objdump", "-r", args.elf], text=True
         )
