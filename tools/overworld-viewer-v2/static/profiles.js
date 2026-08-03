@@ -1,6 +1,7 @@
 /* Overworld Viewer V2 — OWBD v40 state-profile editor foundation. */
 
 import { createStackPreviewController } from "./stack-preview.js";
+import { indexDiagnostics, validateBehaviorDraft, validateBehaviorModel } from "./model-validation.js";
 
 const GROUP_HELP = Object.freeze({
   behavior: "The single behavior represented by this complete state.",
@@ -296,6 +297,8 @@ export function createProfilesController({
   let mode = state.profileDeckMode === "controllers" ? "controllers" : "states";
   let destroyed = false;
   let stackPreviewController = null;
+  let graphDiagnostics = [];
+  let graphDiagnosticIndex = {};
   const updates = new Map();
   const created = [];
   const controllerUpdates = new Map();
@@ -407,6 +410,19 @@ export function createProfilesController({
     return errors;
   }
 
+  function recomputeGraphDiagnostics() {
+    if (loading || !dataset?.stateProfiles) return;
+    graphDiagnostics = state.v40BehaviorModelDraft
+      ? validateBehaviorDraft(dataset, state.v40BehaviorModelDraft)
+      : validateBehaviorModel(dataset);
+    graphDiagnosticIndex = indexDiagnostics(graphDiagnostics);
+    state.v40BehaviorModelDiagnostics = clone(graphDiagnostics);
+  }
+
+  function diagnosticsFor(type, entity) {
+    return graphDiagnosticIndex[`${type}:${String(entity?.draftId ?? entity?.stableId)}`] || [];
+  }
+
   function syncDirty() {
     state.selectedProfileKey = selectedId;
     state.selectedControllerKey = selectedControllerId;
@@ -432,6 +448,7 @@ export function createProfilesController({
     // Until then these drafts are deliberately local and must not enable the
     // shell's Global Save transaction.
     state.profileDirty = false;
+    recomputeGraphDiagnostics();
     stackPreviewController?.refresh();
   }
 
@@ -462,7 +479,7 @@ export function createProfilesController({
       <ul class="profile-list">${visible.map((profile) => `
         <li class="pv2-profile-row ${selectedId === idFor(profile) ? "is-active" : ""} ${isChanged(profile) ? "is-changed" : ""}">
           <button class="pv2-profile-select" type="button" data-profile-id="${escapeHtml(idFor(profile))}">
-            <strong>${escapeHtml(profile.name)}</strong>
+            <strong>${escapeHtml(profile.name)}${diagnosticsFor("stateProfile", profile).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("stateProfile", profile).length} validation issues">${diagnosticsFor("stateProfile", profile).length}</span>` : ""}</strong>
             <small>${profile.created ? "Local, unpersisted draft" : `ID ${profile.stableId} · Body ${profile.bodyId}`}</small>
           </button>
         </li>`).join("") || `<li class="empty-state empty-state--small"><p>No state profiles match this filter.</p></li>`}
@@ -491,7 +508,7 @@ export function createProfilesController({
       <ul class="profile-list">${visible.map((controller) => `
         <li class="pv2-profile-row ${selectedControllerId === controllerIdFor(controller) ? "is-active" : ""} ${controller.created || controllerUpdates.has(controller.stableId) ? "is-changed" : ""}">
           <button class="pv2-profile-select" type="button" data-controller-id="${escapeHtml(controllerIdFor(controller))}">
-            <strong>${escapeHtml(controller.name)}</strong>
+            <strong>${escapeHtml(controller.name)}${diagnosticsFor("controller", controller).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("controller", controller).length} validation issues">${diagnosticsFor("controller", controller).length}</span>` : ""}</strong>
             <small>${controller.created ? "Local, unpersisted draft" : `ID ${controller.stableId}`} · ${controller.nodes.length} nodes</small>
           </button>
         </li>`).join("") || `<li class="empty-state empty-state--small"><p>No controllers match this filter.</p></li>`}
@@ -524,6 +541,7 @@ export function createProfilesController({
       return;
     }
     const nameError = validationErrors().find((error) => error.profileId === idFor(profile) && error.path === "name");
+    const entityDiagnostics = diagnosticsFor("stateProfile", profile);
     const tagText = (profile.descriptiveTags || []).join(", ");
     const groups = dataset.groups.map((group, index) => {
       const fields = dataset.stateProfileFields.filter((field) => field.group === group.key);
@@ -546,6 +564,7 @@ export function createProfilesController({
         <label><span>Name</span><input type="text" value="${escapeHtml(profile.name)}" data-state-identity="name" aria-invalid="${nameError ? "true" : "false"}">${nameError ? `<small class="field-error">${escapeHtml(nameError.message)}</small>` : ""}</label>
         <label class="v40-state-tags"><span>Descriptive tags</span><input type="text" value="${escapeHtml(tagText)}" data-state-identity="descriptiveTags" placeholder="bird, air, relaxed"><small>Search and documentation only. Tags never select runtime behavior.</small></label>
       </section>
+      ${entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${entityDiagnostics.length} model issue${entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0].message)}</span></aside>` : ""}
       ${profile.backlinks?.length ? `<aside class="v40-backlinks"><strong>Used by ${profile.backlinks.length} controller node${profile.backlinks.length === 1 ? "" : "s"}</strong><span>${profile.backlinks.map((item) => `Controller ${item.controllerId} / Node ${item.nodeId}`).join(" · ")}</span></aside>` : ""}
       ${groups}
     </article>`;
@@ -573,6 +592,7 @@ export function createProfilesController({
     }
     const localTransitions = controllerTransitions(controller);
     const errors = validateControllerDraft(controller, { ...dataset, stateProfiles: profiles(), controllers: controllers() }, localTransitions);
+    const entityDiagnostics = diagnosticsFor("controller", controller);
     const profileOptions = profiles().map((profile) => ({
       value: profile.draftId || profile.stableId,
       label: `${profile.name} · ${profile.draftId ? "draft" : profile.stableId}`,
@@ -599,9 +619,10 @@ export function createProfilesController({
     const nodeRows = controller.nodes.map((node, index) => {
       const nodeId = localNodeId(node);
       const usageCount = localTransitions.filter((transition) => String(transition.candidateDefinition?.nodeId || "") === String(node.stableId || nodeId)).length;
+      const nodeDiagnostics = diagnosticsFor("controllerNode", node);
       return `<tr data-controller-node="${escapeHtml(nodeId)}">
         <td><input type="radio" name="controller-base-node" data-node-field="base" data-node-id="${escapeHtml(nodeId)}" ${node.base ? "checked" : ""} aria-label="Use node ${index + 1} as base"></td>
-        <td><strong>${node.draftId ? escapeHtml(node.draftId) : node.stableId}</strong><small>${usageCount} transition backlink${usageCount === 1 ? "" : "s"}</small></td>
+        <td><strong>${node.draftId ? escapeHtml(node.draftId) : node.stableId}${nodeDiagnostics.length ? `<span class="v40-diagnostic-badge" aria-label="${nodeDiagnostics.length} validation issues">${nodeDiagnostics.length}</span>` : ""}</strong><small>${usageCount} transition backlink${usageCount === 1 ? "" : "s"}</small></td>
         <td><select data-node-field="semanticRoleId" data-node-id="${escapeHtml(nodeId)}">${nodeRoleOptions(node, controller)}</select>${Number(node.semanticRoleId) === 7 ? `<select data-node-field="customRoleId" data-node-id="${escapeHtml(nodeId)}" aria-label="Custom role">${customRoleOptions(node, controller)}</select>` : ""}</td>
         <td><select data-node-field="profileRef" data-node-id="${escapeHtml(nodeId)}">${selectOptions(profileOptions, nodeProfileRef(node))}</select></td>
         <td class="v40-row-actions"><button type="button" data-node-action="up" data-node-id="${escapeHtml(nodeId)}" ${index === 0 ? "disabled" : ""} aria-label="Move node up">↑</button><button type="button" data-node-action="down" data-node-id="${escapeHtml(nodeId)}" ${index === controller.nodes.length - 1 ? "disabled" : ""} aria-label="Move node down">↓</button><button type="button" data-node-action="remove" data-node-id="${escapeHtml(nodeId)}" ${controller.nodes.length === 1 ? "disabled" : ""}>Remove</button></td>
@@ -609,8 +630,9 @@ export function createProfilesController({
     }).join("");
     const transitionRows = localTransitions.map((transition, index) => {
       const transitionId = localTransitionId(transition);
+      const transitionDiagnostics = diagnosticsFor("transition", transition);
       return `<tr data-controller-transition="${escapeHtml(transitionId)}">
-        <td><strong>${transition.draftId ? escapeHtml(transition.draftId) : transition.stableId}</strong></td>
+        <td><strong>${transition.draftId ? escapeHtml(transition.draftId) : transition.stableId}${transitionDiagnostics.length ? `<span class="v40-diagnostic-badge" aria-label="${transitionDiagnostics.length} validation issues">${transitionDiagnostics.length}</span>` : ""}</strong></td>
         <td><select data-transition-field="trigger" data-transition-id="${escapeHtml(transitionId)}">${selectOptions(dataset.transitionGraph.triggerOptions || [], transition.trigger)}</select></td>
         <td><fieldset class="v40-role-mask"><legend class="sr-only">Allowed source roles</legend>${(dataset.semanticRoles || []).map((role) => `<label title="${escapeHtml(role.label)}"><input type="checkbox" data-transition-role="${role.value}" data-transition-id="${escapeHtml(transitionId)}" ${Number(transition.fromRoleMask) & (1 << (Number(role.value) - 1)) ? "checked" : ""}><span>${escapeHtml(role.label.slice(0, 1))}</span></label>`).join("")}</fieldset></td>
         <td><select data-transition-field="candidateDefinitionId" data-transition-id="${escapeHtml(transitionId)}" aria-label="Candidate definition">${selectOptions(definitionOptions, transition.candidateDefinitionId)}</select></td>
@@ -621,7 +643,7 @@ export function createProfilesController({
     }).join("");
     inspector.innerHTML = `<article class="profile-field-editor v40-controller-editor" data-selected-controller="${escapeHtml(controllerIdFor(controller))}">
       <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed controller</span><h2>${escapeHtml(controller.name)}</h2><small>${controller.created ? escapeHtml(controller.draftId) : `Stable ID ${controller.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-controller-action="duplicate">Duplicate controller</button></div></header>
-      ${errors.length ? `<aside class="v40-validation" role="status"><strong>${errors.length} draft issue${errors.length === 1 ? "" : "s"}</strong><span>${escapeHtml(errors[0].message)}</span></aside>` : ""}
+      ${errors.length || entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${errors.length + entityDiagnostics.length} model issue${errors.length + entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0]?.message || errors[0]?.message)}</span></aside>` : ""}
       <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label><div><span>Identity</span><strong>${controller.created ? escapeHtml(controller.draftId) : controller.stableId}</strong><small>${controller.created ? "Local and unpersisted" : escapeHtml(controller.registryKey)}</small></div></section>
       <details class="pv2-field-section" open><summary><span><strong>Controller defaults</strong><small>Typed scalar defaults and stable policy references.</small></span></summary><div class="profile-fields">${scalarFields}${policyControls}</div></details>
       <section class="v40-controller-section"><header><div><span class="eyebrow">State roster</span><h3>Bound nodes</h3></div><button type="button" data-controller-action="add-node">Add node</button></header><div class="v40-table-scroll"><table class="v40-controller-table"><thead><tr><th>Base</th><th>Node ID</th><th>Semantic role</th><th>Bound profile</th><th>Order</th></tr></thead><tbody>${nodeRows}</tbody></table></div></section>
@@ -678,7 +700,11 @@ export function createProfilesController({
   }
 
   function addController(source = null) {
-    const sourceTransitions = source ? controllerTransitions(source) : [];
+    // Shared transitions remain shared and gain the new controller through
+    // membership. Only controller-scoped rows need an independent copy.
+    const sourceTransitions = source
+      ? controllerTransitions(source).filter((transition) => transition.candidateDefinition?.controllerId)
+      : [];
     const draft = createControllerDraft({
       source, profiles: profiles(), transitions: sourceTransitions,
       policyDefaults: dataset.controllers?.[0]?.policyIds,
@@ -687,9 +713,14 @@ export function createProfilesController({
     createdControllers.push(draft.controller);
     createdTransitions.push(...draft.transitions);
     const allControllerIds = controllers().map((controller) => controller.draftId || controller.stableId);
-    transitions().filter((transition) => !transition.candidateDefinition?.controllerId).forEach((transition) => {
+    const sharedTransitions = transitions().filter((transition) => !transition.candidateDefinition?.controllerId);
+    sharedTransitions.forEach((transition) => {
       editableTransition(transition).controllerIds = [...allControllerIds];
     });
+    draft.controller.transitionIds = [
+      ...draft.controller.transitionIds,
+      ...sharedTransitions.map((transition) => transition.draftId || transition.stableId),
+    ];
     selectedControllerId = draft.controller.draftId;
     syncDirty();
     render();
@@ -786,6 +817,7 @@ export function createProfilesController({
     transition.order = controllerTransitions(controller).length;
     const controllerId = controller.draftId || controller.stableId;
     const definition = clone(transition.candidateDefinition || {});
+    const sourceDefinitionId = transition.candidateDefinitionId ?? definition.stableId ?? definition.draftId;
     definition.stableId = null;
     definition.draftId = draftId();
     definition.controllerId = controllerId;
@@ -797,7 +829,12 @@ export function createProfilesController({
       ...guard, stableId: null, draftId: draftId(),
       referenceId: guard.kind === 3 ? controller.baseNodeId : guard.referenceId,
     }));
-    transition.operations = (transition.operations || []).map((operation) => ({ ...operation, stableId: null, draftId: draftId() }));
+    transition.operations = (transition.operations || []).map((operation) => ({
+      ...operation, stableId: null, draftId: draftId(),
+      definitionId: String(operation.definitionId) === String(sourceDefinitionId) ? definition.draftId : operation.definitionId,
+      replacementDefinitionId: String(operation.replacementDefinitionId) === String(sourceDefinitionId) ? definition.draftId : operation.replacementDefinitionId,
+      instanceKey: String(operation.instanceKey) === String(sourceDefinitionId) ? definition.draftId : operation.instanceKey,
+    }));
     transition.actions = (transition.actions || []).map((action) => ({ ...action, stableId: null, draftId: draftId() }));
     transition.recoveryActions = (transition.recoveryActions || []).map((action) => ({ ...action, stableId: null, draftId: draftId() }));
     transition.created = true;
@@ -815,6 +852,7 @@ export function createProfilesController({
   function updateTransition(id, key, raw) {
     const transition = editableTransition(findTransition(id));
     if (!transition) return;
+    const previousCandidateId = transition.candidateDefinitionId;
     transition[key] = key === "candidateDefinitionId" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
     if (key === "candidateDefinitionId") {
       const source = transitions().find((item) => String(item.candidateDefinitionId) === String(raw))
@@ -823,6 +861,24 @@ export function createProfilesController({
       transition.controllerIds = transition.candidateDefinition?.controllerId
         ? [transition.candidateDefinition.controllerId]
         : controllers().map((controller) => controller.draftId || controller.stableId);
+      transition.operations = (transition.operations || []).map((operation) => ({
+        ...operation,
+        definitionId: String(operation.definitionId) === String(previousCandidateId) ? transition.candidateDefinitionId : operation.definitionId,
+        replacementDefinitionId: String(operation.replacementDefinitionId) === String(previousCandidateId) ? transition.candidateDefinitionId : operation.replacementDefinitionId,
+        instanceKey: String(operation.instanceKey) === String(previousCandidateId) ? transition.candidateDefinitionId : operation.instanceKey,
+      }));
+      const transitionRef = transition.draftId || transition.stableId;
+      const scope = new Set((transition.controllerIds || []).map(String));
+      controllers().forEach((controller) => {
+        const controllerRef = controller.draftId || controller.stableId;
+        const references = (controller.transitionIds || []).map(String);
+        const contains = references.includes(String(transitionRef));
+        if (scope.has(String(controllerRef)) === contains) return;
+        const editableOwner = editableController(controller);
+        editableOwner.transitionIds = scope.has(String(controllerRef))
+          ? [...editableOwner.transitionIds, transitionRef]
+          : editableOwner.transitionIds.filter((value) => String(value) !== String(transitionRef));
+      });
     }
     syncDirty();
   }
@@ -943,6 +999,7 @@ export function createProfilesController({
       state.v40BehaviorModel = dataset;
       state.selectedProfileKey = selectedId;
       loading = false;
+      recomputeGraphDiagnostics();
       stackPreviewController?.destroy();
       stackPreviewController = createStackPreviewController({
         model: dataset,
@@ -1071,6 +1128,7 @@ export function createProfilesController({
       ? (setMode("controllers"), selectController(id, { report: false }))
       : (setMode("states"), selectProfile(id, { report: false })),
     behaviorModelDraft: () => clone(state.v40BehaviorModelDraft),
+    wholeGraphDiagnostics: () => clone(graphDiagnostics),
     localValidationErrors: () => clone([
       ...validationErrors(),
       ...controllers().flatMap((controller) => validateControllerDraft(controller, { ...dataset, stateProfiles: profiles(), controllers: controllers() }, controllerTransitions(controller))

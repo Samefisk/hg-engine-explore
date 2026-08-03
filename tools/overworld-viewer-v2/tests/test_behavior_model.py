@@ -136,6 +136,25 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
             ):
                 self.assertIn(key, definition)
 
+    def test_validation_metadata_matches_v40_wire_contract(self):
+        schema = self.data["validationSchema"]
+        self.assertEqual(schema["stateFieldCount"], 28)
+        self.assertEqual(schema["stackCapacity"], 8)
+        self.assertEqual(schema["unsigned"], {
+            "byte": 0xFF, "short": 0xFFFF, "word": 0xFFFFFFFF,
+        })
+        self.assertEqual(schema["childCountMaximums"], {
+            "guards": 0xFFFF, "operations": 0xFFFF,
+            "actions": 0xFFFF, "recoveryActions": 0xFF,
+        })
+        self.assertEqual(schema["domains"]["actionKind"], tuple(range(1, 9)))
+        self.assertEqual(
+            {(item["name"], item["stride"]) for item in schema["wireSections"]},
+            set(load_viewer().V40_SECTION_SPECS),
+        )
+        self.assertEqual(schema["crossReferences"]["transition.definition"],
+                         "overrideDefinitions")
+
     def test_controller_node_slices_reject_bounds_overlap_and_wrong_owner(self):
         module = load_viewer()
         byte_values = module.re.findall(

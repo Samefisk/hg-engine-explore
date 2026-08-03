@@ -1,5 +1,7 @@
 /* Deterministic, client-only OWBD V40 stack preview. */
 
+import { materializeDraftGraph, validateStackInput, VALIDATION_CODES } from "./model-validation.js";
+
 export const STACK_PREVIEW_CODES = Object.freeze({
   CAPACITY: "STACK_CAPACITY_EXCEEDED",
   OWNER: "OWNER_NOT_FOUND",
@@ -22,25 +24,8 @@ function issue(code, message, path = "") {
   return { code, message, path };
 }
 
-function mergedEntities(saved, delta = {}) {
-  const removed = new Set((delta.remove || []).map(String));
-  const updates = new Map((delta.update || []).map((item) => [String(item.stableId), clone(item)]));
-  return [
-    ...(saved || []).filter((item) => !removed.has(String(item.stableId)))
-      .map((item) => updates.get(String(item.stableId)) || clone(item)),
-    ...(delta.create || []).map(clone),
-  ];
-}
-
 export function materializePreviewModel(savedModel, draft = null) {
-  const model = clone(savedModel);
-  if (!draft) return model;
-  model.stateProfiles = mergedEntities(model.stateProfiles, draft.stateProfiles);
-  model.controllers = mergedEntities(model.controllers, draft.controllers);
-  model.overrideDefinitions = mergedEntities(model.overrideDefinitions, draft.overrideDefinitions);
-  model.owners = mergedEntities(model.owners, draft.owners);
-  model.applicability = mergedEntities(model.applicability, draft.applicability);
-  return model;
+  return materializeDraftGraph(savedModel, draft);
 }
 
 export function comparePrecedence(left, right) {
@@ -102,6 +87,18 @@ function timerStatus(definition, isWinner) {
 }
 
 function composeOne(model, { controllerRef, layers = [], immutableContextMask = 0xFFFFFFFF } = {}) {
+  const validationErrors = validateStackInput(model, { controllerRef, layers, immutableContextMask });
+  if (validationErrors.length) {
+    const mapped = validationErrors.map((error) => {
+      let code = error.code;
+      if (code === VALIDATION_CODES.DRAFT_REFERENCE) code = STACK_PREVIEW_CODES.DRAFT;
+      else if (code === VALIDATION_CODES.REFERENCE) code = error.path.endsWith("ownerId") ? STACK_PREVIEW_CODES.OWNER : STACK_PREVIEW_CODES.DANGLING;
+      else if (code === VALIDATION_CODES.SELECTOR_DUPLICATE) code = STACK_PREVIEW_CODES.AMBIGUOUS;
+      else if (code === VALIDATION_CODES.BASE_NODE || code === VALIDATION_CODES.PROFILE_FIELDS) code = STACK_PREVIEW_CODES.DRAFT;
+      return issue(code, error.message, error.path);
+    });
+    return { ok: false, errors: mapped, result: null };
+  }
   const errors = [];
   const capacity = Number(model.stackPreview?.capacity || 8);
   if (layers.length > capacity) {

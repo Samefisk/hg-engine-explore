@@ -162,6 +162,46 @@ V40_SECTION_SPECS = (
     ("transitionActions", 10), ("recoveryActions", 8), ("importRecipes", 24),
     ("applicability", 16), ("tiredTranslations", 24), ("semanticIds", 8),
 )
+V40_EDITOR_VALIDATION_SCHEMA = {
+    "stateFieldCount": 28,
+    "stackCapacity": 8,
+    "unsigned": {"byte": 0xFF, "short": 0xFFFF, "word": 0xFFFFFFFF},
+    # Count fields are serialized as H except recoveryCount, which is B.
+    "childCountMaximums": {
+        "guards": 0xFFFF, "operations": 0xFFFF,
+        "actions": 0xFFFF, "recoveryActions": 0xFF,
+    },
+    "domains": {
+        "semanticRole": tuple(range(1, 8)),
+        "definitionKind": tuple(V40_OVERRIDE_KIND_LABELS),
+        "selectorKind": tuple(V40_SELECTOR_KIND_LABELS),
+        "channel": tuple(V40_CHANNEL_LABELS),
+        "lifetime": tuple(V40_LIFETIME_LABELS),
+        "timerClock": tuple(V40_TIMER_CLOCK_LABELS),
+        "timerSource": tuple(V40_TIMER_SOURCE_LABELS),
+        "hiddenTimerPolicy": tuple(V40_HIDDEN_TIMER_LABELS),
+        "recoveryPolicy": tuple(V40_RECOVERY_POLICY_LABELS),
+        "guardKind": tuple(range(1, 9)),
+        "operationKind": tuple(range(1, 7)),
+        "busyPolicy": (1, 2),
+        "actionPhase": tuple(range(1, 5)),
+        "actionKind": tuple(range(1, 9)),
+        "recoveryActionKind": tuple(range(1, 5)),
+    },
+    "wireSections": [
+        {"name": name, "stride": stride}
+        for name, stride in V40_SECTION_SPECS
+    ],
+    "crossReferences": {
+        "controllerNode.profile": "stateProfiles",
+        "controllerNode.controller": "controllers",
+        "overrideDefinition.applicability": "applicability",
+        "overrideDefinition.requiredOwner": "owners",
+        "overrideDefinition.recoveryTransition": "transitions",
+        "transition.definition": "overrideDefinitions",
+        "transition.owner": "owners",
+    },
+}
 V40_STATE_FIELD_SCHEMA = (
     ("behaviorKind", "Behavior", "behavior", "enum", (0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11),
      ("None", "Idle", "Wander", "Chase", "Flee", "Playful", "RAM", "Canopy hop", "Asleep", "Tired emote", "No visual")),
@@ -590,6 +630,7 @@ def build_v40_state_profile_editor_data() -> dict:
                 for value, label in V40_TRANSITION_TRIGGER_LABELS.items()
             ],
         },
+        "validationSchema": V40_EDITOR_VALIDATION_SCHEMA,
         "groups": [
             {"key": key, "label": label}
             for key, label in (

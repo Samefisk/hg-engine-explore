@@ -7,7 +7,9 @@ import {
   preserveStackPreviewSelection,
 } from "../static/stack-preview.js";
 
-const fields = ["behaviorKind", "speed", "movementRange"].map((key) => ({ key }));
+const fields = ["behaviorKind", "speed", "movementRange"].map((key) => ({
+  key, label: key, type: "number", minimum: 0, maximum: 64,
+}));
 const profile = (stableId, value) => ({ stableId, name: `Profile ${stableId}`, values: Object.fromEntries(fields.map((field) => [field.key, value])) });
 const node = (stableId, profileStableId, semanticRoleId, base = false) => ({ stableId, profileStableId, semanticRoleId, base });
 const applicability = (stableId) => ({ stableId, immutableContextMask: 0xFFFFFFFF, controllerId: null, effectiveProfileId: null, semanticRoleId: null });
@@ -107,10 +109,21 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   assert.equal(invalid.errors[0].code, STACK_PREVIEW_CODES.DRAFT);
 }
 
+// Referenced profile domains are validated before composition and stale output is cleared.
+{
+  const model = fixture();
+  model.stateProfiles[0].values.speed = 999;
+  const invalid = compose(model, []);
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.result, null);
+  assert.equal(invalid.errors.some((error) => error.code === "FIELD_DOMAIN_INVALID"), true);
+}
+
 // Exact and semantic selectors both preserve the four-part runtime identity.
 {
   const model = fixture();
   model.overrideDefinitions[0].selectorKind = 2;
+  model.overrideDefinitions[0].nodeId = null;
   model.overrideDefinitions[0].semanticRoleId = 3;
   assert.deepEqual(compose(model, [layer(101)]).result.identity, { controllerId: 1, nodeId: 13, profileId: 22, semanticRoleId: 3 });
   model.controllers[0].nodes.push(node(15, 23, 3));
@@ -127,6 +140,7 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   model.overrideDefinitions[0].requiredOwnerId = 202;
   assert.equal(compose(model, [layer(101, 201)]).errors[0].code, STACK_PREVIEW_CODES.REQUIRED_OWNER);
   model.overrideDefinitions[0].hasRequiredOwnerId = 0;
+  model.overrideDefinitions[0].requiredOwnerId = null;
   model.overrideDefinitions[0].allowMultipleOwners = 0;
   assert.equal(compose(model, [layer(101, 201), layer(101, 202)]).errors[0].code, STACK_PREVIEW_CODES.MULTIPLE_OWNERS);
   model.overrideDefinitions[0].allowMultipleOwners = 1;
@@ -148,16 +162,21 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
 {
   const model = fixture();
   Object.assign(model.overrideDefinitions[0], { timerClock: 1, timerClockLabel: "Frame", timerSource: 1, timerSourceLabel: "Fixed", timerValue: 12, hiddenTimerPolicy: 1, recoveryPolicy: 1, recoveryPolicyLabel: "Route transition", recoveryTransitionId: 501 });
-  Object.assign(model.overrideDefinitions[1], { timerClock: 2, timerClockLabel: "Completed movement", timerSource: 2, timerSourceLabel: "Controller stamina", hiddenTimerPolicy: 2 });
+  Object.assign(model.overrideDefinitions[1], { timerClock: 2, timerClockLabel: "Completed movement", timerSource: 2, timerSourceLabel: "Controller stamina", timerValue: 12, hiddenTimerPolicy: 2 });
+  model.transitionGraph = { triggerOptions: [], transitions: [{
+    stableId: 501, candidateDefinitionId: 101, candidateDefinition: model.overrideDefinitions[0],
+    ownerId: 201, controllerIds: [1], operations: [{ stableId: 601, kind: 3, definitionId: 101, ownerId: 201 }],
+    guards: [], actions: [], recoveryActions: [],
+  }] };
   const result = compose(model, [layer(101), layer(102, 202)]).result;
   assert.equal(result.layers.find((item) => item.definitionId === 101).timer.status, "paused-while-hidden");
   assert.equal(result.layers.find((item) => item.definitionId === 102).timer.status, "running");
   assert.deepEqual(result.layers.find((item) => item.definitionId === 101).recovery, { policy: 1, label: "Route transition", transitionId: 501 });
   assert.deepEqual(result.layers.find((item) => item.definitionId === 101).lifetime, { map: { value: 1, label: "Clear" }, battle: { value: 2, label: "Preserve logical" } });
 
-  model.overrideDefinitions[0].controllerId = 999;
+  model.applicability.find((item) => item.stableId === model.overrideDefinitions[0].applicabilityId).immutableContextMask = 2;
   model.overrideDefinitions[0].hiddenTimerPolicy = 3;
-  const retained = compose(model, [layer(101)]).result.layers[0];
+  const retained = compose(model, [layer(101)], { immutableContextMask: 1 }).result.layers[0];
   assert.equal(retained.visibility, "not-applicable");
   assert.equal(retained.timer.status, "expires-on-hide");
 }

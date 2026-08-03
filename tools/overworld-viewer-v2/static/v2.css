@@ -2319,6 +2319,20 @@ button {
   background: color-mix(in srgb, var(--danger, #a82d2d) 7%, #fff);
 }
 
+.v40-diagnostic-badge {
+  display: inline-grid;
+  min-width: 1.15rem;
+  min-height: 1.15rem;
+  margin-left: .4rem;
+  padding: 0 .25rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--danger, #a82d2d);
+  color: #fff;
+  font: 800 .62rem/1 var(--mono);
+  vertical-align: text-bottom;
+}
+
 .v40-controller-section > header {
   display: flex;
   align-items: flex-start;
