@@ -12,7 +12,6 @@ import struct
 import tempfile
 from pathlib import Path
 
-from overworld_wild_behavior_v39_frozen import FROZEN, load_frozen
 from overworld_wild_behavior_v40_field_metadata import (
     SIGNED_DELTA_OPERATORS,
     numeric_bounds,
@@ -21,9 +20,10 @@ from overworld_wild_behavior_v40_field_metadata import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_MODEL = ROOT / "data" / "OverworldWildBehaviorModelV40.json"
 EXPECTED_TYPED_EVENT_DIGEST = "1f57fc0f2996f8c25d1838db27e895cda1ce63a15b24d080847f923041238701"
 
-# Deliberately duplicated frozen decode vocabulary.  The parity executor must
+# Deliberately duplicated wire decode vocabulary.  The replay executor must
 # not import generator mappings or the host validator it is cross-checking.
 PROFILE_FIELDS = (
     "chillState", "alertState", "alertEmote", "alertTime", "alertness",
@@ -54,7 +54,7 @@ DEAD_DIAGNOSTIC_FIELDS = {"profileId"}
 SECTION_SPECS = (
     ("stateBodies", 58, 32), ("profileIdentities", 58, 8),
     ("controllers", 3, 24), ("controllerNodes", 21, 12),
-    ("sourceClassProfiles", 4, 72), ("genericAssignments", 2, 20),
+    ("genericAssignments", 2, 20),
     ("speciesAssignments", 113, 8), ("overrideSources", 11, 28),
     ("overrideMembers", 155, 2), ("overrideActions", 207, 12),
     ("spawnPolicies", 3, 12), ("populationPolicies", 6, 10),
@@ -71,7 +71,7 @@ SECTION_SPECS = (
 class Graph:
     def __init__(self, blob, source, path):
         self.blob, self.path, self.sections = blob, path, {}
-        cursor = 216
+        cursor = 208
         for index, (name, expected_count, expected_stride) in enumerate(SECTION_SPECS):
             offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
             if (offset, count, stride) != (cursor, expected_count, expected_stride):
@@ -178,13 +178,13 @@ def validate_direct_cutover_records(graph):
 
 def validate_wire(path, source):
     blob = path.read_bytes()
-    if len(blob) != 11636: raise ValueError(f"{path}: independent exact size mismatch")
+    if len(blob) != 11340: raise ValueError(f"{path}: independent exact size mismatch")
     magic, version, header_size, size, flags, checksum, fingerprint = struct.unpack_from("<IHHIIII", blob)
     defines = {name: int(value, 0) for name, value in re.findall(
         r"^\s*#\s*define\s+(OVERWORLD_WILD_BEHAVIOR_DATA_(?:CHECKSUM|SCHEMA_FINGERPRINT))\s+(0[xX][0-9A-Fa-f]+|[0-9]+)(?:u)?\b",
         source.read_text(), re.MULTILINE)}
     scratch = bytearray(blob); scratch[16:20] = bytes(4)
-    if (magic, version, header_size, size, flags) != (0x4F574244, 40, 216, len(blob), 6) \
+    if (magic, version, header_size, size, flags) != (0x4F574244, 40, 208, len(blob), 6) \
             or checksum != defines["OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM"] \
             or fingerprint != defines["OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT"] \
             or checksum != binascii.crc32(scratch) & 0xFFFFFFFF:
@@ -192,7 +192,7 @@ def validate_wire(path, source):
     graph = Graph(blob, source, path)
     seen = set()
     for name, _, stride in SECTION_SPECS:
-        if name in ("sourceClassProfiles", "overrideMembers"): continue
+        if name == "overrideMembers": continue
         for record in graph.records(name, "<H" + "x" * (stride - 2)):
             if not record[0] or record[0] in seen: raise ValueError(f"{path}: independent stable-ID collision")
             seen.add(record[0])
@@ -676,88 +676,48 @@ class Resolver:
         return (profile if base == 3 and isolated is None else normalize(profile)), limit, steps
 
 
-def expected_profile(oracle, effective_id):
-    profile = {name: scalar(value) for name, value in oracle["effectiveProfiles"][effective_id]["legacyProfile"].items()}
-    profile["attentiveAvoidPreviousTile"] = int(
-        profile["attentiveState"] == 3 and profile["targetSelector"] != 1)
-    return profile
-
-
-def compare_profile(actual, expected, label):
-    for field in PROFILE_FIELDS:
-        if field in DEAD_DIAGNOSTIC_FIELDS: continue
-        if actual[field] != expected[field]:
-            raise ValueError(f"{label}: field {field}: v40={actual[field]} frozen={expected[field]}")
-
-
-def context_input(record):
-    return {"species": scalar(record["species"]), "groupFlags": record.get("groupFlags", 0),
-            "level": record.get("level", 1), "terrain": scalar(record.get("terrain", 0)),
-            "shiny": int(record.get("shiny", False))}
-
-
 def verify_snapshot_freshness(event_digest):
     if EXPECTED_TYPED_EVENT_DIGEST and event_digest != EXPECTED_TYPED_EVENT_DIGEST:
         raise ValueError(f"typed event snapshot changed: {event_digest}")
 
 
-def verify(blob, source, frozen=FROZEN, check_snapshot_digest=True, report=True):
+def verify(blob, source, model_path=CANONICAL_MODEL, check_snapshot_digest=True, report=True):
     graph = validate_wire(blob, source)
-    oracle = load_frozen(frozen)
-    if (len(oracle["classRules"]), len(oracle["effectiveProfiles"]), len(oracle["resolutionStacks"])) != (115, 67, 296):
-        raise ValueError("frozen assignment/effective-profile/resolution-stack counts changed")
+    model = json.loads(model_path.read_text())
+    if (model.get("schema") != "overworld-wild-behavior-model-v40"
+            or model.get("modelVersion") != 40):
+        raise ValueError("canonical authored model header is invalid")
     resolver = Resolver(graph)
-    source_profiles = graph.records("sourceClassProfiles", "<72B")
-    expected_sources = [tuple(scalar(item["sourceProfile"][field]) for field in PROFILE_FIELDS)
-                        for item in oracle["classProfiles"]]
-    if source_profiles != expected_sources:
-        raise ValueError("transitional source-profile projection differs from frozen authored source")
-    natural_by_id = {record["id"]: record for record in oracle["contexts"]}
-    checked = 0
-    for record in oracle["contexts"]:
-        context = context_input(record)
-        behavior, hits = resolver.classify(context)
-        if behavior != record["behaviorClass"]: raise ValueError(f"{record['id']}: class mismatch")
-        actual, limit, steps = resolver.resolve(context, behavior)
-        compare_profile(actual, expected_profile(oracle, record["effectiveProfileId"]), record["id"])
-        if limit != scalar(record["behaviorLimitKey"]): raise ValueError(f"{record['id']}: limit provenance mismatch")
-        expected_steps = oracle["resolutionStacks"][record["resolutionStackId"]]
-        expected_overrides = [step["overrideIndex"] for step in expected_steps if step["kind"] == "override"]
-        if [step[0] for step in steps] != expected_overrides or expected_steps[0]["classRuleOrders"] != hits:
-            raise ValueError(f"{record['id']}: ordered provenance mismatch")
-        checked += 1
-    for record in oracle["contextualForcedProbes"]:
-        natural = natural_by_id.get(record["naturalContextId"])
-        context = context_input(natural) if natural is not None else {
-            "species": 0, "groupFlags": 0, "level": 1, "terrain": 0, "shiny": 0,
-        }
-        actual, limit, _ = resolver.resolve(context, record["classIndex"], forced=record["forcedOverrideIndex"])
-        compare_profile(actual, expected_profile(oracle, record["effectiveProfileId"]),
-                        (record["naturalContextId"] or "picked-up") + "/follower")
-        if limit != scalar(record["behaviorLimitKey"]): raise ValueError("follower limit mismatch")
-        checked += 1
-    for record in oracle["isolatedOverrideProbes"]:
-        context = {"species": 0, "groupFlags": 0, "level": 1, "terrain": 0, "shiny": 0}
-        actual, limit, _ = resolver.resolve(context, record["classIndex"], isolated=record["overrideProfileOrder"] - 1)
-        compare_profile(actual, expected_profile(oracle, record["effectiveProfileId"]), "isolated")
-        if limit != scalar(record["behaviorLimitKey"]): raise ValueError("isolated limit mismatch")
-        checked += 1
-    record = oracle["dormantContextProbes"][0]
-    context = {"species": 0, "groupFlags": 0, "level": 1, "terrain": 0, "shiny": 0}
-    actual, limit, _ = resolver.resolve(context, record["incomingBehaviorClass"], forced=record["overrideOrder"] - 1)
-    compare_profile(actual, expected_profile(oracle, record["effectiveProfileId"]), "forced-asleep")
-    if limit != scalar(record["behaviorLimitKey"]): raise ValueError("forced-asleep limit mismatch")
-    checked += 1
-    if checked != 22443: raise ValueError(f"case count {checked} != 22443")
-    mankey = next(record for record in oracle["contexts"]
-                  if record["id"] == "SPECIES_MANKEY/L1/OW_WILD_SPAWN_TERRAIN_LAND/S0")
-    mankey_profile, _, _ = resolver.resolve(context_input(mankey), mankey["behaviorClass"])
+    first_body = graph.records("stateBodies", "<HBB28s")[0]
+    if first_body[3][3] != 1:
+        raise ValueError("canonical base state changed field chillSpeed")
+    first_state_modifier = next(
+        record for record in graph.records("overrideActions", "<HBB8s")
+        if record[0] == 0x6004
+    )
+    if first_state_modifier[3][4] != 2:
+        raise ValueError("canonical state modifier changed field chillSpeed")
+    if first_state_modifier[3][2] != 2:
+        raise ValueError("canonical state modifier changed field attentiveSpeed")
+    expected_population = [
+        (item["stableId"], item["nameId"], item["populationGroupId"],
+         item["provenanceId"], item["limit"], item["flags"])
+        for item in model["populationPolicies"]
+    ]
+    if graph.records("populationPolicies", "<4H2B") != expected_population:
+        raise ValueError("population policy differs from canonical authored model")
+
+    # Keep an independently observable end-to-end catalog fixture without
+    # retaining a second, legacy model of the complete graph.
+    context = {"species": 56, "groupFlags": 0, "level": 1,
+               "terrain": 0, "shiny": 0}
+    mankey_class, _ = resolver.classify(context)
+    mankey_profile, _, _ = resolver.resolve(context, mankey_class)
     fixture = {"attentiveState": 3, "movementStyle": 2, "targetSelector": 8,
                "spawnDestination": 1, "hopTime": 6, "overworldLimit": 1,
                "alertSpecialAction": 2, "specialAction": 1}
     if any(mankey_profile[name] != value for name, value in fixture.items()):
         raise ValueError("Mankey canopy hopper/throw fixture changed")
-    follower_effective = {record["effectiveProfileId"] for record in oracle["contextualForcedProbes"]}
     transitions = graph.records("transitions", "<9H4BH")
     definitions = graph.records("overrideDefinitions", "<8H20B")
     imports = graph.records("importRecipes", "<10H4B")
@@ -769,14 +729,14 @@ def verify(blob, source, frozen=FROZEN, check_snapshot_digest=True, report=True)
                          for record in imports if record[12] == 0}
     expected_imports = {(4, 0x810A, 0xA00F, 2, 0x500A),
                         (5, 0x8109, 0, 1, 0), (6, 0x810B, 0xA011, 3, 0x500B)}
-    if (len(follower_effective) != 17 or len(transitions) != 26 or len(definitions) != 19
+    if (len(resolver.contextual_imports) != 9 or len(transitions) != 26 or len(definitions) != 19
             or event_count < 80 or canonical_imports != expected_imports
             or any((row[2] and (row[7] or row[8] or resolver.definitions[row[5]][10] != 2))
                    or (not row[2] and resolver.definitions[row[5]][10] != 1) for row in translations)):
         raise ValueError("typed import/tired/transition execution fixture changed")
     if report:
-        print(f"independent authored-graph parity: {checked} frozen cases; 115 assignments; "
-              f"67 conclusions; 296 stacks; {event_count} typed events; digest={event_digest}")
+        print(f"independent canonical authored-graph replay: 115 assignments; "
+              f"{event_count} typed events; digest={event_digest}")
 
 
 def mutation_semantic_outcome(label, resolver):
@@ -814,7 +774,7 @@ def mutation_semantic_outcome(label, resolver):
     raise ValueError(f"missing semantic observer for {label}")
 
 
-def verify_mutation_detection(blob, source, frozen):
+def verify_mutation_detection(blob, source, model_path):
     original = blob.read_bytes()
     base_graph = Graph(original, source, blob)
     base_resolver = Resolver(base_graph)
@@ -855,9 +815,6 @@ def verify_mutation_detection(blob, source, frozen):
     struct.pack_into("<H", contextual, import_offset + import_stride + 8, replacement_profile)
     struct.pack_into("<H", contextual, node_offset + 4 * node_stride + 4, replacement_profile)
     fixtures.append(("contextual-import-profile", contextual))
-    source_offset, _, _ = base_graph.sections["sourceClassProfiles"]
-    source_profile = bytearray(original); source_profile[source_offset] ^= 1
-    fixtures.append(("transitional-source-profile", source_profile))
     channel = bytearray(original); channel[definition_offset + 17] = 2; fixtures.append(("definition-channel", channel))
     map_life = bytearray(original); map_life[definition_offset + 20] = 1; fixtures.append(("definition-map-lifetime", map_life))
     timer_source = bytearray(original); timer_source[definition_offset + 3 * definition_stride + 23] = 1
@@ -887,10 +844,9 @@ def verify_mutation_detection(blob, source, frozen):
         "transition-operation": "direct-cutover transition operation mismatch",
         "import-lifetime": "contextual import lifetime mismatch",
         "contextual-import-profile": "contextual node tag mismatch",
-        "transitional-source-profile": "source-profile projection differs",
         "carried-owner": "contextual import owner mismatch",
         "carried-recovery": "contextual import recovery mismatch",
-        "population-group-provenance": "limit provenance mismatch",
+        "population-group-provenance": "population policy differs from canonical authored model",
         "identity-provenance-role": "profile provenance/body-role mismatch",
     }
     expected_outcomes = {
@@ -922,7 +878,7 @@ def verify_mutation_detection(blob, source, frozen):
                 r"(#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM )0x[0-9A-Fa-f]+u",
                 rf"\g<1>0x{checksum:08X}u", source.read_text()))
             try:
-                verify(mutated, mutated_source, frozen, check_snapshot_digest=False, report=False)
+                verify(mutated, mutated_source, model_path, check_snapshot_digest=False, report=False)
             except ValueError as error:
                 expected = expected_errors.get(label)
                 if expected is None or expected not in str(error):
@@ -944,12 +900,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--blob", type=Path, required=True)
     parser.add_argument("--source", type=Path, default=ROOT / "include" / "overworld_wild_behavior_data.h")
-    parser.add_argument("--frozen", type=Path, default=FROZEN)
+    parser.add_argument("--model", type=Path, default=CANONICAL_MODEL)
     parser.add_argument("--mutation-self-test", action="store_true")
     args = parser.parse_args()
-    verify(args.blob, args.source, args.frozen)
+    verify(args.blob, args.source, args.model)
     if args.mutation_self_test:
-        verify_mutation_detection(args.blob, args.source, args.frozen)
+        verify_mutation_detection(args.blob, args.source, args.model)
 
 
 if __name__ == "__main__":

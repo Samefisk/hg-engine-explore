@@ -81,7 +81,6 @@ BLOB_BEHAVIOR_FIELD_INDEXES = {
     "sOverworldWildBehaviorOverrides": 4,
 }
 OWBD_COUNT_DEFINES = {
-    "OWBD_CLASS_PROFILE_COUNT": "sOverworldWildBehaviorClassProfiles",
     "OWBD_CLASS_RULE_COUNT": "sOverworldWildBehaviorClassRules",
     "OWBD_SPECIES_CLASS_RULE_COUNT": "sOverworldWildBehaviorSpeciesClassRules",
 }
@@ -94,7 +93,6 @@ ENCOUNTER_LOOKUP_SOURCE = ROOT / "data/OverworldWildEncounterLookupData.c"
 ENCOUNTER_OVERRIDES_SOURCE = ROOT / "data/OverworldWildEncounterOverrides.json"
 V40_BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorDataV40.generated.inc"
 V40_BEHAVIOR_MODEL_SOURCE = ROOT / "data/OverworldWildBehaviorModelV40.json"
-V40_STABLE_IDS_SOURCE = ROOT / "data/OverworldWildBehaviorV40StableIds.json"
 MONDATA_SOURCE = ROOT / "armips/data/mondata.s"
 BABYMONS_SOURCE = ROOT / "armips/data/babymons.s"
 EVODATA_SOURCE = ROOT / "armips/data/evodata.s"
@@ -154,7 +152,7 @@ V40_HIDDEN_TIMER_LABELS = {
 V40_RECOVERY_POLICY_LABELS = {0: "None", 1: "Route transition"}
 V40_SECTION_SPECS = (
     ("stateBodies", 32), ("profileIdentities", 8), ("controllers", 24),
-    ("controllerNodes", 12), ("sourceClassProfiles", 72),
+    ("controllerNodes", 12),
     ("genericAssignments", 20), ("speciesAssignments", 8),
     ("overrideSources", 28), ("overrideMembers", 2), ("overrideActions", 12),
     ("spawnPolicies", 12), ("populationPolicies", 10), ("hookSets", 8),
@@ -277,7 +275,7 @@ def _v40_section(blob: bytes, name: str) -> tuple[int, int, int]:
         raise ParseError(f"unknown V40 section: {name}") from exc
     offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
     expected_stride = V40_SECTION_SPECS[index][1]
-    if stride != expected_stride or offset < 216 or offset + count * stride > len(blob):
+    if stride != expected_stride or offset < 208 or offset + count * stride > len(blob):
         raise ParseError(f"V40 {name} section is invalid")
     return offset, count, stride
 
@@ -334,10 +332,10 @@ def build_v40_state_profile_editor_data() -> dict:
 
     byte_values = re.findall(r"\b0x([0-9A-Fa-f]{2})\b", V40_BEHAVIOR_DATA_SOURCE.read_text())
     blob = bytes(int(value, 16) for value in byte_values)
-    if len(blob) < 216:
+    if len(blob) < 208:
         raise ParseError("V40 behavior catalog is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
-    if (magic, version, header_size, blob_size) != (0x4F574244, 40, 216, len(blob)):
+    if (magic, version, header_size, blob_size) != (0x4F574244, 40, 208, len(blob)):
         raise ParseError("V40 behavior catalog header is invalid")
 
     authored_model = json.loads(V40_BEHAVIOR_MODEL_SOURCE.read_text())
@@ -354,7 +352,11 @@ def build_v40_state_profile_editor_data() -> dict:
     if body_stride != 32 or identity_stride != 8 or node_stride != 12:
         raise ParseError("V40 state-profile section layout is invalid")
 
-    registry = json.loads(V40_STABLE_IDS_SOURCE.read_text()).get("ids", {})
+    history = authored_model.get("stableIdHistory", {})
+    registry = dict(history.get("allocations", {}))
+    for event in history.get("extensions", []):
+        if event.get("kind") == "allocate":
+            registry[event["registryKey"]] = event["stableId"]
     registry_names = {
         value: key for key, value in registry.items()
         if key.startswith("authored-profile:")
@@ -726,7 +728,7 @@ DATA_SOURCE_FILES = (
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
     V40_BEHAVIOR_DATA_SOURCE,
-    V40_STABLE_IDS_SOURCE,
+    V40_BEHAVIOR_MODEL_SOURCE,
     SPECIES_HEADER,
     MAPS_HEADER,
     SPAWNS_PUBLIC_HEADER,

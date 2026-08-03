@@ -27,16 +27,16 @@ __wrap_memset(void)
 
 OverworldWildBehaviorLoadResult
     __attribute__((section(".owbd_resident_loader"), noinline, used))
-OverworldWildBehavior_LoadValidatedProjection(
+OverworldWildBehavior_LoadValidatedCatalog(
     OverworldWildBehaviorSemanticValidator validator,
-    void **projectionOut)
+    void **catalogOut)
 {
-    void *narc, *workspace, *projection;
+    void *narc, *workspace, *catalog;
     u32 size;
-    *projectionOut = NULL;
+    *catalogOut = NULL;
     narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
     if (narc == NULL) return OWBD_LOAD_TRANSIENT_FAILURE;
-    if (NARC_GetFileCount(narc) <= CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION) {
+    if (NARC_GetFileCount(narc) <= CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA) {
         NARC_dtor(narc); return OWBD_LOAD_PERMANENT_INVALID;
     }
     size = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA);
@@ -49,17 +49,10 @@ OverworldWildBehavior_LoadValidatedProjection(
         sys_FreeMemoryEz(workspace); NARC_dtor(narc); return OWBD_LOAD_PERMANENT_INVALID;
     }
     sys_FreeMemoryEz(workspace);
-    size = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION);
-    if (size != OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE) {
-        NARC_dtor(narc); return OWBD_LOAD_PERMANENT_INVALID;
-    }
-    projection = sys_AllocMemory(HEAPID_WORLD, size);
-    if (projection == NULL) { NARC_dtor(narc); return OWBD_LOAD_TRANSIENT_FAILURE; }
-    NARC_ReadWholeMember(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION, projection);
+    catalog = sys_AllocMemory(HEAPID_WORLD, size);
+    if (catalog == NULL) { NARC_dtor(narc); return OWBD_LOAD_TRANSIENT_FAILURE; }
+    NARC_ReadWholeMember(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA, catalog);
     NARC_dtor(narc);
-    if (!validator(NULL, size, projection, 0)) {
-        sys_FreeMemoryEz(projection); return OWBD_LOAD_PERMANENT_INVALID;
-    }
-    *projectionOut = projection;
+    *catalogOut = catalog;
     return OWBD_LOAD_SUCCESS;
 }

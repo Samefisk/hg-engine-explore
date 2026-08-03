@@ -25,24 +25,18 @@ static BOOL OwbdNarcRead(void *context, u32 offset, u32 size, void *dest)
 static BOOL OwbdValidateNarcMember(void *narc, u32 size, void *workspace, u32 workspaceSize)
 {
     OwbdNarcReader reader;
-    if (narc == NULL) {
-        u32 crc = ~0u, i;
-        const u8 *projection = workspace;
-        if (size != OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE) return FALSE;
-        for (i = 0; i < size; i++) crc = OwbdCrcByte(crc, projection[i]);
-        return ~crc == OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_CHECKSUM;
-    }
+    if (narc == NULL) return FALSE;
     reader.narc = narc;
     reader.member = CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA;
     reader.size = size;
     return OwbdValidateStream(OwbdNarcRead, &reader, size, workspace, workspaceSize);
 }
 
-OverworldWildBehaviorLoadResult OverworldWildBehaviorValidator_LoadProjection(
-    void **projectionOut)
+OverworldWildBehaviorLoadResult OverworldWildBehaviorValidator_LoadCatalog(
+    void **catalogOut)
 {
     return OverworldWildBehavior_LoadValidatedBundle(
-        OwbdValidateNarcMember, projectionOut);
+        OwbdValidateNarcMember, catalogOut);
 }
 
 const OverworldWildBehaviorValidatorOverlayEntry gOverworldWildBehaviorValidatorOverlayEntry
@@ -50,5 +44,5 @@ const OverworldWildBehaviorValidatorOverlayEntry gOverworldWildBehaviorValidator
         OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_MAGIC,
         OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_VERSION,
         sizeof(OverworldWildBehaviorValidatorOverlayEntry),
-        OverworldWildBehaviorValidator_LoadProjection,
+        OverworldWildBehaviorValidator_LoadCatalog,
     };

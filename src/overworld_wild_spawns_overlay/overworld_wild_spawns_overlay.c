@@ -431,7 +431,6 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_DOWNHILL 1
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH 2
 #define OW_WILD_BEHAVIOR_PROFILE_DEFAULT 0
-#define OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE OWBD_CLASS_PROFILE_COUNT
 #define OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR 0
 #define OW_WILD_BEHAVIOR_SPAWN_STATE_RUN_FROM_OFF_SCREEN 1
 #define OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN 2
@@ -909,7 +908,7 @@ static BOOL OverworldWildSpawns_EnsureBehaviorDataLoaded(void)
 {
     if (!(sOverworldWildBehaviorOverlapState & OWBD_OVERLAP_LOAD_ATTEMPTED)) {
         const OverworldWildBehaviorValidatorOverlayEntry *entry;
-        void *projection = NULL;
+        void *catalog = NULL;
         OverworldWildBehaviorLoadResult result = OWBD_LOAD_TRANSIENT_FAILURE;
 
         sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_LOAD_ATTEMPTED;
@@ -941,7 +940,7 @@ static BOOL OverworldWildSpawns_EnsureBehaviorDataLoaded(void)
 
             sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_VALIDATOR;
             entry = OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY;
-            rawCallback = (u32)entry->loadValidatedProjection;
+            rawCallback = (u32)entry->loadValidatedCatalog;
             callback = rawCallback & ~1u;
             if (entry->magic == OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_MAGIC
                 && entry->version == OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_VERSION
@@ -949,7 +948,7 @@ static BOOL OverworldWildSpawns_EnsureBehaviorDataLoaded(void)
                 && (rawCallback & 1u)
                 && callback >= OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR
                 && callback < OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_END_ADDR) {
-                result = entry->loadValidatedProjection(&projection);
+                result = entry->loadValidatedCatalog(&catalog);
             } else {
                 result = OWBD_LOAD_PERMANENT_INVALID;
             }
@@ -961,19 +960,19 @@ static BOOL OverworldWildSpawns_EnsureBehaviorDataLoaded(void)
         }
         if (!OverworldWildSpawns_UnloadBehaviorValidator()) {
             if (result == OWBD_LOAD_PERMANENT_INVALID) sOverworldWildBehaviorOverlapState |= OWBD_OVERLAP_QUARANTINED;
-            OverworldWildBehavior_FreeValidatedBundle(projection);
+            OverworldWildBehavior_FreeValidatedBundle(catalog);
             sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
             return FALSE;
         }
         if (!OverworldWildSpawns_RestoreFollowerSelector()) {
-            OverworldWildBehavior_FreeValidatedBundle(projection);
+            OverworldWildBehavior_FreeValidatedBundle(catalog);
             sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
             return FALSE;
         }
         if (result == OWBD_LOAD_SUCCESS) {
-            sOverworldWildBehaviorDataBundle = projection;
+            sOverworldWildBehaviorDataBundle = catalog;
         } else {
-            OverworldWildBehavior_FreeValidatedBundle(projection);
+            OverworldWildBehavior_FreeValidatedBundle(catalog);
             if (result == OWBD_LOAD_TRANSIENT_FAILURE)
                 sOverworldWildBehaviorOverlapState &= ~OWBD_OVERLAP_LOAD_ATTEMPTED;
         }

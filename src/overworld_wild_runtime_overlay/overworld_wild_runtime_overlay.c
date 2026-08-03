@@ -29,25 +29,20 @@ OverworldWildBehaviorLoadResult
     __attribute__((section(".overworld_wild_runtime_entry"), noinline, used))
 OverworldWildBehavior_LoadValidatedBundle(
     OverworldWildBehaviorSemanticValidator validator,
-    void **projectionOut)
+    void **catalogOut)
 {
     void *narc;
     void *workspace;
-    u8 *bundle;
-    u32 size;
+    u8 *catalog;
 
-    *projectionOut = NULL;
+    *catalogOut = NULL;
     if (sOverworldWildValidatedV40 != NULL)
         return OWBD_LOAD_PERMANENT_INVALID;
     narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
     if (narc == NULL) return OWBD_LOAD_TRANSIENT_FAILURE;
-    if (NARC_GetFileCount(narc)
-            <= CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION
+    if (NARC_GetFileCount(narc) <= CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA
         || NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA)
-            != OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE
-        || NARC_GetMemberSize(narc,
-                CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION)
-            != OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE) {
+            != OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE) {
         NARC_dtor(narc);
         return OWBD_LOAD_PERMANENT_INVALID;
     }
@@ -64,43 +59,31 @@ OverworldWildBehavior_LoadValidatedBundle(
         return OWBD_LOAD_PERMANENT_INVALID;
     }
     sys_FreeMemoryEz(workspace);
-    size = OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE
-        + OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE;
-    bundle = sys_AllocMemory(HEAPID_WORLD, size);
-    if (bundle == NULL) {
+    catalog = sys_AllocMemory(
+        HEAPID_WORLD, OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE);
+    if (catalog == NULL) {
         NARC_dtor(narc);
         return OWBD_LOAD_TRANSIENT_FAILURE;
     }
-    NARC_ReadWholeMember(narc,
-        CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_PROJECTION, bundle);
     NARC_ReadWholeMember(narc, CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA,
-        bundle + OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE);
+        catalog);
     NARC_dtor(narc);
-    if (!validator(NULL, OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE,
-            bundle, 0)) {
-        sys_FreeMemoryEz(bundle);
-        return OWBD_LOAD_PERMANENT_INVALID;
-    }
-    sOverworldWildValidatedV40 =
-        bundle + OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE;
-    *projectionOut = bundle;
+    sOverworldWildValidatedV40 = catalog;
+    *catalogOut = catalog;
     return OWBD_LOAD_SUCCESS;
 }
 
-void OverworldWildBehavior_ReleaseValidatedBundle(void *projection)
+void OverworldWildBehavior_ReleaseValidatedBundle(void *catalog)
 {
-    if (projection != NULL
-        && sOverworldWildValidatedV40
-            == (const u8 *)projection
-                + OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE) {
+    if (catalog != NULL && sOverworldWildValidatedV40 == catalog) {
         sOverworldWildValidatedV40 = NULL;
     }
 }
 
-void OverworldWildBehavior_FreeValidatedBundle(void *projection)
+void OverworldWildBehavior_FreeValidatedBundle(void *catalog)
 {
-    OverworldWildBehavior_ReleaseValidatedBundle(projection);
-    sys_FreeMemoryEz(projection);
+    OverworldWildBehavior_ReleaseValidatedBundle(catalog);
+    sys_FreeMemoryEz(catalog);
 }
 #endif
 

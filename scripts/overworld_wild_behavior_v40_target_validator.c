@@ -17,10 +17,6 @@ typedef int BOOL;
 
 typedef struct OwbdMemoryReader { const u8 *data; u32 size; } OwbdMemoryReader;
 
-static const u8 sFrozenRuntimeProjection[OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE] = {
-#include "../data/OverworldWildBehaviorProjectionV40.generated.inc"
-};
-
 static BOOL OwbdMemoryRead(void *context, u32 offset, u32 size, void *dest)
 {
     OwbdMemoryReader *reader = context;
@@ -78,7 +74,7 @@ static int OwbdApplyOperatorForConformance(
 int main(int argc, char **argv)
 {
     FILE *file;
-    u8 *data, *workspace, *projection = NULL;
+    u8 *data, *workspace;
     long size;
     BOOL valid;
     OwbdMemoryReader reader;
@@ -90,7 +86,7 @@ int main(int argc, char **argv)
         printf("%d\n", result);
         return 0;
     }
-    if ((argc != 2 && argc != 3) || (file = fopen(argv[1], "rb")) == NULL) return 2;
+    if (argc != 2 || (file = fopen(argv[1], "rb")) == NULL) return 2;
     fseek(file, 0, SEEK_END); size = ftell(file); rewind(file);
     data = malloc((size_t)size);
     workspace = malloc(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
@@ -98,20 +94,6 @@ int main(int argc, char **argv)
     fclose(file); reader.data = data; reader.size = (u32)size;
     valid = OwbdValidateStream(OwbdMemoryRead, &reader, (u32)size, workspace,
                                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
-    if (valid && argc == 3) {
-        projection = malloc(OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE);
-        valid = projection != NULL;
-        if (valid) {
-            u32 i;
-            for (i = 0; i < OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE; i++)
-                projection[i] = sFrozenRuntimeProjection[i];
-        }
-        file = valid ? fopen(argv[2], "wb") : NULL;
-        valid = file != NULL && fwrite(projection, 1, OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE, file)
-            == OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE;
-        if (file != NULL) fclose(file);
-    }
-    free(projection);
     free(workspace); free(data);
     return valid ? 0 : 1;
 }

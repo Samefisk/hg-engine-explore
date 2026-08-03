@@ -17,13 +17,10 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11636u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11340u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE 0x3000u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x191F4869u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0xE9C872AAu
-#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE 3416u
-#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_MAX_SIZE 0x0D8Cu
-#define OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_CHECKSUM 0xE0B4A194u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x64D0FC6Eu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x5C5FBF57u
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR 0x023C0400u
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_END_ADDR 0x023C2160u
@@ -48,11 +45,9 @@ struct OverworldWildBehaviorPrimitives;
 #define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 1
 #define OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM 2
 #define OW_WILD_BEHAVIOR_CLASS_PICKED_UP 3
-#define OWBD_CLASS_PROFILE_COUNT 4
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
 #define OWBD_OVERRIDE_PROFILE_COUNT 11
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 10
 #define OWBD_OVERRIDE_MEMBER_COUNT 155
 #define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
 #define OWBD_STATE_BODY_COUNT 58
@@ -133,90 +128,6 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE 1
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND 2
 
-typedef struct OverworldWildBehaviorProfile {
-    u8 chillState;
-    u8 alertState;
-    u8 alertEmote;
-    u8 alertTime;
-    u8 alertness;
-    u8 attentiveState;
-    u8 stamina;
-    u8 tiredState;
-    u8 restTime;
-    u8 chillSpeed;
-    u8 attentiveSpeed;
-    u8 tiredSpeed;
-    u8 range;
-    u8 jumpLevel;
-    u8 profileId;
-    u8 spawnState;
-    u8 chillAction;
-    u8 chillTarget;
-    u8 alertRange;
-    u8 playerAdjacentDirectionMasks; // Shared nonzero player-relative F/B/L/R mask for Next to player.
-    u8 targetSelector;
-    u8 movementStyle;
-    u8 alertChance;
-    u8 spawnDestination;
-    u8 attentiveBattle;
-    u8 specialAction;
-    u8 hopAllowNonCardinal;
-    u8 hopMinDistance;
-    u8 hopMaxDistance;
-    u8 hopPause;
-    u8 teleportTime;
-    u8 teleportPause;
-    u8 alertSpecialAction;
-    u8 overworldLimit;
-    u8 spawnDestinationMinDistance;
-    u8 spawnDestinationMaxDistance;
-    u8 ramAccelerationSteps;
-    u8 ramMaxSpeed;
-    u8 chainPauseAction;
-    u8 chillAllowedTile;
-    u8 attentiveAllowedTile;
-    u8 tiredAllowedTile;
-    u8 chillAllowedTile2;
-    u8 attentiveAllowedTile2;
-    u8 tiredAllowedTile2;
-    u8 attentiveHopAllowNonCardinal;
-    u8 attentiveHopMinDistance;
-    u8 attentiveHopMaxDistance;
-    u8 attentiveHopPause;
-    u8 attentiveTeleportTime;
-    u8 attentiveTeleportPause;
-    u8 attentiveRamAccelerationSteps;
-    u8 attentiveRamMaxSpeed;
-    u8 tiredHopAllowNonCardinal;
-    u8 tiredHopMinDistance;
-    u8 tiredHopMaxDistance;
-    u8 tiredHopPause;
-    u8 tiredTeleportTime;
-    u8 tiredTeleportPause;
-    u8 tiredRamAccelerationSteps;
-    u8 tiredRamMaxSpeed;
-    u8 hopTime;
-    u8 attentiveChaseBoostDistance;
-    u8 attentiveChaseBoostSpeed;
-    u8 hopSpinSpeed;
-    u8 spawnHopTime;
-    u8 attentiveHopSpinSpeed;
-    u8 attentiveCircleRadius;
-    u8 attentiveContinueWhenArrived;
-    u8 attentiveAvoidPreviousTile;
-    u8 chainMovementVariance;
-    u8 chainPauseVariance;
-} OverworldWildBehaviorProfile;
-
-typedef struct OverworldWildBehaviorContext {
-    u16 species;
-    u32 groupFlags;
-    u8 level;
-    u8 terrain;
-    u8 shiny;
-    u8 behaviorClass;
-} OverworldWildBehaviorContext;
-
 typedef struct OverworldWildBehaviorMatch {
     u32 groupMask;
     u16 species;
@@ -227,133 +138,12 @@ typedef struct OverworldWildBehaviorMatch {
     u8 behaviorClass;
 } OverworldWildBehaviorMatch;
 
-typedef struct OverworldWildBehaviorClassRule {
-    OverworldWildBehaviorMatch match;
-    u8 behaviorClass;
-} OverworldWildBehaviorClassRule;
-
-typedef struct OverworldWildBehaviorSpeciesClassRule {
-    u16 species;
-    u8 behaviorClass;
-} OverworldWildBehaviorSpeciesClassRule;
-
-typedef struct OverworldWildBehaviorOverrideProfile {
-    OverworldWildBehaviorMatch match;
-    u16 memberStart;
-    u16 memberCount;
-    u8 targetMode;
-    u32 mask;
-    u16 mask2;
-    u32 mask3;
-    OverworldWildBehaviorProfile profile;
-    u32 relativeMask;
-    u16 relativeMask2;
-    u32 relativeMask3;
-    u32 atLeastMask;
-    u16 atLeastMask2;
-    u32 atLeastMask3;
-    u32 atMostMask;
-    u16 atMostMask2;
-    u32 atMostMask3;
-    /* Used only when a relative adjustment is followed by a bound. */
-    OverworldWildBehaviorProfile compoundBoundProfile;
-} OverworldWildBehaviorOverrideProfile;
-
-#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
-#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
-#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
-#define OW_WILD_BEHAVIOR_RELATIVE(value) ((u8)(s8)(value))
-#define OW_WILD_BEHAVIOR_AT_LEAST(value) ((u8)(value))
-#define OW_WILD_BEHAVIOR_AT_MOST(value) ((u8)(value))
-
-#define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE (1u << 2)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS (1u << 3)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_STATE (1u << 4)
-#define OW_WILD_BEHAVIOR_OVERRIDE_STAMINA (1u << 5)
-#define OW_WILD_BEHAVIOR_OVERRIDE_TIRED_STATE (1u << 6)
-#define OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME (1u << 7)
-#define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED (1u << 8)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED (1u << 9)
-#define OW_WILD_BEHAVIOR_OVERRIDE_RANGE (1u << 10)
-#define OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL (1u << 11)
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID (1u << 12)
-#define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE (1u << 13)
-#define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION (1u << 14)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE (1u << 15)
-#define OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED (1u << 16)
-#define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR (1u << 17)
-#define OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE (1u << 18)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE (1u << 19)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME (1u << 20)
-#define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION (1u << 21)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE (1u << 22)
-#define OW_WILD_BEHAVIOR_OVERRIDE_SPECIAL_ACTION (1u << 23)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL (1u << 24)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE (1u << 25)
-#define OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE (1u << 26)
-
-#define OW_WILD_BEHAVIOR_OVERRIDE2_HOP_PAUSE (1u << 0)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_TIME (1u << 1)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_PAUSE (1u << 2)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_ALERT_SPECIAL_ACTION (1u << 3)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MIN_DISTANCE (1u << 4)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MAX_DISTANCE (1u << 5)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_RAM_ACCELERATION_STEPS (1u << 6)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_RAM_MAX_SPEED (1u << 7)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE (1u << 8)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE (1u << 9)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE (1u << 10)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE_2 (1u << 11)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE_2 (1u << 12)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE_2 (1u << 13)
-#define OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_TARGET (1u << 14)
-
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_ALLOW_NON_CARDINAL (1u << 0)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MIN_DISTANCE (1u << 1)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MAX_DISTANCE (1u << 2)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_PAUSE (1u << 3)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_TIME (1u << 4)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_PAUSE (1u << 5)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_ACCELERATION_STEPS (1u << 6)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_MAX_SPEED (1u << 7)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_ALLOW_NON_CARDINAL (1u << 8)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MIN_DISTANCE (1u << 9)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MAX_DISTANCE (1u << 10)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_PAUSE (1u << 11)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_TIME (1u << 12)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_PAUSE (1u << 13)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_ACCELERATION_STEPS (1u << 14)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_MAX_SPEED (1u << 15)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_OVERWORLD_LIMIT (1u << 16)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_TIME (1u << 17)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CHASE_BOOST_DISTANCE (1u << 18)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CHASE_BOOST_SPEED (1u << 19)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_SPIN_SPEED (1u << 20)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_TIME (1u << 21)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_SPIN_SPEED (1u << 22)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CIRCLE_RADIUS (1u << 23)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CONTINUE_WHEN_ARRIVED (1u << 24)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_AVOID_PREVIOUS_TILE (1u << 25)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION (1u << 26)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE (1u << 27)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE (1u << 28)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS (1u << 29)
-
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
-
-#define OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_ACTION 0u
-
-#define OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
-#define OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED
 
 /*
  * Version-40 serialized model.  These are wire records, not live runtime
  * objects: every relationship is a stable nonzero u16 ID and no record owns a
- * pointer.  The old three-state records above are only the explicitly bounded
- * runtime compatibility projection API; they are not an authoritative v40
- * serialized section.
+ * pointer.
  */
 #if defined(__GNUC__)
 #define OWBD_PACKED __attribute__((packed))
@@ -361,12 +151,10 @@ typedef struct OverworldWildBehaviorOverrideProfile {
 #define OWBD_PACKED
 #endif
 
-#define OWBD_BLOB_FLAG_LEGACY_PROJECTION  (1u << 0)
 #define OWBD_BLOB_FLAG_NAMES_ARE_HASHES   (1u << 1)
 #define OWBD_BLOB_FLAG_AUTHORED_SOURCE     (1u << 2)
 #define OWBD_BLOB_KNOWN_FLAGS \
-    (OWBD_BLOB_FLAG_LEGACY_PROJECTION | OWBD_BLOB_FLAG_NAMES_ARE_HASHES \
-        | OWBD_BLOB_FLAG_AUTHORED_SOURCE)
+    (OWBD_BLOB_FLAG_NAMES_ARE_HASHES | OWBD_BLOB_FLAG_AUTHORED_SOURCE)
 #define OWBD_NO_ID 0
 #define OWBD_ANY_ID 0
 #define OWBD_STATIC_PRIORITY_CLASS_BASE 0x0000
@@ -956,19 +744,6 @@ typedef struct OWBD_PACKED OverworldWildSemanticIdRecord {
     u16 reserved2;
 } OverworldWildSemanticIdRecord;
 
-typedef struct OverworldWildBehaviorDataOverlayEntry {
-    const OverworldWildBehaviorProfile *classProfiles;
-    u16 classProfileCount;
-    const OverworldWildBehaviorClassRule *classRules;
-    u16 classRuleCount;
-    const OverworldWildBehaviorSpeciesClassRule *speciesClassRules;
-    u16 speciesClassRuleCount;
-    const OverworldWildBehaviorOverrideProfile *overrideProfiles;
-    u16 overrideProfileCount;
-    const u16 *overrideMembers;
-    u16 overrideMemberCount;
-} OverworldWildBehaviorDataOverlayEntry;
-
 typedef enum OverworldWildBehaviorLoadResult {
     OWBD_LOAD_PERMANENT_INVALID = 0,
     OWBD_LOAD_SUCCESS = 1,
@@ -977,23 +752,23 @@ typedef enum OverworldWildBehaviorLoadResult {
 
 typedef BOOL (*OverworldWildBehaviorSemanticValidator)(
     void *narc, u32 memberSize, void *workspace, u32 workspaceSize);
-OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedProjection(
+OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedCatalog(
     OverworldWildBehaviorSemanticValidator validator,
-    void **projectionOut);
+    void **catalogOut);
 OverworldWildBehaviorLoadResult OverworldWildBehavior_LoadValidatedBundle(
     OverworldWildBehaviorSemanticValidator validator,
-    void **projectionOut);
-void OverworldWildBehavior_ReleaseValidatedBundle(void *projection);
-void OverworldWildBehavior_FreeValidatedBundle(void *projection);
+    void **catalogOut);
+void OverworldWildBehavior_ReleaseValidatedBundle(void *catalog);
+void OverworldWildBehavior_FreeValidatedBundle(void *catalog);
 
-typedef OverworldWildBehaviorLoadResult (*OverworldWildLoadValidatedProjectionFunc)(
-    void **projection);
+typedef OverworldWildBehaviorLoadResult (*OverworldWildLoadValidatedCatalogFunc)(
+    void **catalog);
 
 typedef struct OverworldWildBehaviorValidatorOverlayEntry {
     u32 magic;
     u16 version;
     u16 size;
-    OverworldWildLoadValidatedProjectionFunc loadValidatedProjection;
+    OverworldWildLoadValidatedCatalogFunc loadValidatedCatalog;
 } OverworldWildBehaviorValidatorOverlayEntry;
 
 typedef char OverworldWildBehaviorValidatorOverlayEntrySizeMustRemain12Bytes[
@@ -1011,7 +786,6 @@ typedef struct OWBD_PACKED OverworldWildBehaviorDataBlobHeader {
     OverworldWildBlobSection profileIdentities;
     OverworldWildBlobSection controllers;
     OverworldWildBlobSection controllerNodes;
-    OverworldWildBlobSection sourceClassProfiles;
     OverworldWildBlobSection genericAssignments;
     OverworldWildBlobSection speciesAssignments;
     OverworldWildBlobSection overrideSources;
@@ -1081,8 +855,8 @@ typedef char OverworldWildTiredTranslationRecordSizeMustRemain24Bytes[
     sizeof(OverworldWildTiredTranslationRecord) == 24 ? 1 : -1];
 typedef char OverworldWildSemanticIdRecordSizeMustRemain8Bytes[
     sizeof(OverworldWildSemanticIdRecord) == 8 ? 1 : -1];
-typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain216Bytes[
-    sizeof(OverworldWildBehaviorDataBlobHeader) == 216 ? 1 : -1];
+typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain208Bytes[
+    sizeof(OverworldWildBehaviorDataBlobHeader) == 208 ? 1 : -1];
 typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
     u16 version;

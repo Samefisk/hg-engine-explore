@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import struct
+import zlib
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -36,7 +37,7 @@ DEFAULT_HEADER = ROOT / "include" / "overworld_wild_behavior_data.h"
 
 MAGIC = 0x4F574244
 VERSION = 40
-HEADER_SIZE = 216
+HEADER_SIZE = 208
 CHECKSUM_OFFSET = 16
 HARD_CAP = 0x3000
 PINNED_STABLE_HISTORY_CHECKPOINT_SHA256 = (
@@ -58,36 +59,10 @@ STATE_FIELDS = (
     "chainPauseVariance", "battleTrigger", "playerAdjacentDirectionMask",
 )
 
-SOURCE_PROFILE_FIELDS = (
-    "chillState", "alertState", "alertEmote", "alertTime", "alertness",
-    "attentiveState", "stamina", "tiredState", "restTime", "chillSpeed",
-    "attentiveSpeed", "tiredSpeed", "range", "jumpLevel", "profileId",
-    "spawnState", "chillAction", "chillTarget", "alertRange",
-    "playerAdjacentDirectionMasks", "targetSelector", "movementStyle",
-    "alertChance", "spawnDestination", "attentiveBattle", "specialAction",
-    "hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance", "hopPause",
-    "teleportTime", "teleportPause", "alertSpecialAction", "overworldLimit",
-    "spawnDestinationMinDistance", "spawnDestinationMaxDistance",
-    "ramAccelerationSteps", "ramMaxSpeed", "chainPauseAction",
-    "chillAllowedTile", "attentiveAllowedTile", "tiredAllowedTile",
-    "chillAllowedTile2", "attentiveAllowedTile2", "tiredAllowedTile2",
-    "attentiveHopAllowNonCardinal", "attentiveHopMinDistance",
-    "attentiveHopMaxDistance", "attentiveHopPause", "attentiveTeleportTime",
-    "attentiveTeleportPause", "attentiveRamAccelerationSteps",
-    "attentiveRamMaxSpeed", "tiredHopAllowNonCardinal",
-    "tiredHopMinDistance", "tiredHopMaxDistance", "tiredHopPause",
-    "tiredTeleportTime", "tiredTeleportPause", "tiredRamAccelerationSteps",
-    "tiredRamMaxSpeed", "hopTime", "attentiveChaseBoostDistance",
-    "attentiveChaseBoostSpeed", "hopSpinSpeed", "spawnHopTime",
-    "attentiveHopSpinSpeed", "attentiveCircleRadius",
-    "attentiveContinueWhenArrived", "attentiveAvoidPreviousTile",
-    "chainMovementVariance", "chainPauseVariance",
-)
-
 SECTIONS = (
     ("stateBodies", 32), ("profileIdentities", 8),
     ("controllers", 24), ("controllerNodes", 12),
-    ("sourceClassProfiles", 72), ("genericAssignments", 20),
+    ("genericAssignments", 20),
     ("speciesAssignments", 8), ("overrideSources", 28),
     ("overrideMembers", 2), ("overrideActions", 12),
     ("spawnPolicies", 12), ("populationPolicies", 10),
@@ -98,6 +73,13 @@ SECTIONS = (
     ("applicability", 16), ("tiredTranslations", 24),
     ("semanticIds", 8),
 )
+
+
+def schema_fingerprint() -> int:
+    schema = b"OWBD40\0" + json.dumps(
+        SECTIONS, separators=(",", ":")
+    ).encode("ascii")
+    return zlib.crc32(schema) & 0xFFFFFFFF
 
 
 class ModelError(ValueError):
@@ -357,7 +339,8 @@ def validate_model(model: dict[str, Any]) -> None:
     if wire.get("magic") != MAGIC or wire.get("headerSize") != HEADER_SIZE:
         raise ModelError("wire magic/header contract mismatch")
     _integer(wire.get("flags"), "wire.flags", 0xFFFFFFFF)
-    _integer(wire.get("schemaFingerprint"), "wire.schemaFingerprint", 0xFFFFFFFF)
+    if wire.get("schemaFingerprint") != schema_fingerprint():
+        raise ModelError("wire schema fingerprint does not match the section contract")
 
     profiles = model.get("stateProfiles")
     controllers = model.get("controllers")
@@ -788,10 +771,6 @@ def decode_blob(blob: bytes, *, stable_id_history: dict[str, Any] | None = None)
     if not all(claimed_nodes):
         raise ModelError("controller node slices do not claim every node")
 
-    source_profiles = []
-    for raw in sections["sourceClassProfiles"]:
-        source_profiles.append(dict(zip(SOURCE_PROFILE_FIELDS, raw)))
-
     generic_assignments = []
     for raw in sections["genericAssignments"]:
         stable_id = struct.unpack_from("<H", raw)[0]
@@ -895,7 +874,6 @@ def decode_blob(blob: bytes, *, stable_id_history: dict[str, Any] | None = None)
                  "hardCap": HARD_CAP},
         "stableIdHistory": history,
         "stateProfiles": profiles, "controllers": controllers,
-        "sourceClassProfiles": source_profiles,
         "genericAssignments": generic_assignments,
         "speciesAssignments": species_assignments, "assignmentActions": assignment_actions,
         "overrides": overrides, "transitions": transitions,
@@ -960,11 +938,6 @@ def _flatten_model(model: dict[str, Any]) -> dict[str, list[bytes]]:
             output["controllerNodes"].append(_pack_named(node_wire, "controllerNodes", NODE_STRUCT, NODE_FIELDS))
             node_cursor += 1
 
-    for profile in model["sourceClassProfiles"]:
-        try:
-            output["sourceClassProfiles"].append(bytes(profile[name] for name in SOURCE_PROFILE_FIELDS))
-        except (KeyError, TypeError, ValueError) as error:
-            raise ModelError(f"sourceClassProfiles record is invalid: {error}") from error
     for record in _sorted(model["genericAssignments"]):
         output["genericAssignments"].append(struct.pack("<H", record["stableId"])
             + _encode_match(record["match"])
@@ -1099,7 +1072,6 @@ def render_inc(blob: bytes) -> str:
 
 
 HEADER_COUNT_DEFINES = {
-    "OWBD_CLASS_PROFILE_COUNT": "sourceClassProfiles",
     "OWBD_CLASS_RULE_COUNT": "genericAssignments",
     "OWBD_SPECIES_CLASS_RULE_COUNT": "speciesAssignments",
     "OWBD_OVERRIDE_PROFILE_COUNT": "overrideSources",

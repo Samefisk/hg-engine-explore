@@ -1226,7 +1226,7 @@ def verify_source_contracts() -> None:
         "OverworldWildBehavior_FreeValidatedBundle(",
         "OverworldWildRuntime_CopyInstalledDefinition(",
         "sOverworldWildValidatedV40",
-        "OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE",
+        "CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA",
         "OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE",
         "compositionOut->baseProfileId = base->profileId;",
         "compositionOut->baseSemanticRole = base->semanticRole;",
@@ -1496,7 +1496,7 @@ def run_catalog_fixture() -> str:
             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
     expected_summary = (
-        "runtime catalog host fixture: 191 checks; definitions=19 translations=18"
+        "runtime catalog host fixture: 193 checks; definitions=19 translations=18"
     )
     require(completed.stdout.strip() == expected_summary,
             "production catalog fixture summary changed: "

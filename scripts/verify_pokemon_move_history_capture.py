@@ -5958,7 +5958,7 @@ def verify_overworld_wild_runtime_link_contracts(
         "overlay 149 object lifecycle relocation inventory differs",
     )
     # The direct-state cutover removed the legacy signed-byte primitive
-    # resolver.  Keep that absence explicit so an old projection switch cannot
+    # resolver.  Keep that absence explicit so an old flat-profile switch cannot
     # silently return to the live spawn overlay.
     require(
         re.search(
@@ -7444,7 +7444,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "sOwbdOverrideProvenance",
         "OwbdStaticValueValid",
         "OwbdModifierPayloadValid",
-        "OverworldWildBehavior_LoadValidatedProjection",
+        "OverworldWildBehavior_LoadValidatedCatalog",
     ):
         require(
             OVERLAY155_PRIVATE_START

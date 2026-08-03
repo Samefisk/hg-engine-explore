@@ -16,14 +16,13 @@ from overworld_wild_behavior_v40_field_metadata import (
 )
 
 MAGIC = 0x4F574244
-HEADER_SIZE = 216
+HEADER_SIZE = 208
 CHECKSUM_OFFSET = 16
 SECTION_SPECS = (
     ("stateBodies", "OWBD_STATE_BODY_COUNT", 32),
     ("profileIdentities", "OWBD_PROFILE_IDENTITY_COUNT", 8),
     ("controllers", "OWBD_CONTROLLER_COUNT", 24),
     ("controllerNodes", "OWBD_CONTROLLER_NODE_COUNT", 12),
-    ("sourceClassProfiles", "OWBD_CLASS_PROFILE_COUNT", 72),
     ("genericAssignments", "OWBD_CLASS_RULE_COUNT", 20),
     ("speciesAssignments", "OWBD_SPECIES_CLASS_RULE_COUNT", 8),
     ("overrideSources", "OWBD_OVERRIDE_SOURCE_COUNT", 28),
@@ -44,9 +43,7 @@ SECTION_SPECS = (
     ("tiredTranslations", "OWBD_TIRED_TRANSLATION_COUNT", 24),
     ("semanticIds", "OWBD_SEMANTIC_ID_COUNT", 8),
 )
-STABLE_SECTIONS = {name for name, _, _ in SECTION_SPECS} - {
-    "sourceClassProfiles", "overrideMembers"
-}
+STABLE_SECTIONS = {name for name, _, _ in SECTION_SPECS} - {"overrideMembers"}
 DEFINE = re.compile(r"^\s*#\s*define\s+(\w+)\s+(0[xX][0-9A-Fa-f]+|[0-9]+)(?:u)?\b", re.MULTILINE)
 
 
@@ -565,10 +562,5 @@ def validate_v40_owbd(path: Path, source: Path) -> None:
     owner_references.update(record[1] for record in imports)
     require(owner_references == ids["owners"],
             f"{path}: owner records are orphaned or outside inbound-reference closure")
-
-    # Current-runtime adapter source is closed and stays below the proven v39 cap.
-    for profile in graph.records("sourceClassProfiles", "<72B"):
-        require(all(1 <= profile[index] <= 4 for index in (9, 10, 11)), f"{path}: source profile speed invalid")
-
 
 __all__ = ["validate_v40_owbd", "SECTION_SPECS"]

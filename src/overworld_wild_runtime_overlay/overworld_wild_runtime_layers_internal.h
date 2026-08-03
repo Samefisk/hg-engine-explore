@@ -208,8 +208,8 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     u16 *candidateDefinitionIdOut);
 #endif
 
-void OverworldWildBehavior_ReleaseValidatedBundle(void *projection);
-void OverworldWildBehavior_FreeValidatedBundle(void *projection);
+void OverworldWildBehavior_ReleaseValidatedBundle(void *catalog);
+void OverworldWildBehavior_FreeValidatedBundle(void *catalog);
 
 /* Overlay 155 delegates every live destructive reset through this typed
  * overlay-158 entry; it owns both the ordinary and generation-wrap routes. */

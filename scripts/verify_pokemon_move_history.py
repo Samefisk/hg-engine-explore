@@ -1256,22 +1256,21 @@ def main() -> None:
     )
     a028_entries = sorted(path.name for path in (REPO / "build/a028").iterdir())
     require(
-        len(a028_entries) == 22
+        len(a028_entries) == 21
         and all((REPO / "build/a028" / name).is_file() for name in a028_entries),
-        "build/a028 is not the exact 22-file sorted packaging source",
+        "build/a028 is not the exact 21-file sorted packaging source",
     )
-    for index, name in ((14, "9_14"), (15, "9_15"), (20, "9_20"), (21, "9_21")):
+    for index, name in ((14, "9_14"), (15, "9_15"), (20, "9_20")):
         require(
             a028_entries[index] == name,
             f"a028 sorted member {index} is {a028_entries[index]!r}, not {name!r}",
         )
     a028_members = narc_members(packaged_a028, "final ROM a/0/2/8")
-    require(len(a028_members) == 22, "final ROM a/0/2/8 does not have 22 members")
+    require(len(a028_members) == 21, "final ROM a/0/2/8 does not have 21 members")
     for index, staged_name, generated_path in (
         (14, "9_14", REPO / "build/MachineMoveLearnsets.bin"),
         (15, "9_15", REPO / "build/TutorMoveLearnsets.bin"),
         (20, "9_20", REPO / "build/move_relearn/MoveRelearnParents.bin"),
-        (21, "9_21", REPO / "build/OverworldWildBehaviorProjectionData.bin"),
     ):
         staged_member = (REPO / "build/a028" / staged_name).read_bytes()
         generated_member = generated_path.read_bytes()
@@ -2181,7 +2180,7 @@ def main() -> None:
         f"a011=file#{a011_id}/0x{len(packaged_a011):X}/"
         f"{learnset_dimensions['move_records']} "
         f"a033=file#{a033_id}/0x{len(packaged_a033):X}/1 "
-        f"a028=file#{a028_id}/0x{len(packaged_a028):X}/22 "
+        f"a028=file#{a028_id}/0x{len(packaged_a028):X}/21 "
         f"a229=file#{a229_id}/0x{len(packaged_a229):X}/1 "
         f"archive=0x{archive_start:08X}..0x{archive_end:08X} "
         f"fnt-cache=0x{cached_fnt_start:08X}.."

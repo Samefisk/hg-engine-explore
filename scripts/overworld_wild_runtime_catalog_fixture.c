@@ -276,7 +276,6 @@ typedef struct __attribute__((packed)) OverworldWildBehaviorDataBlobHeader {
     OverworldWildBlobSection profileIdentities;
     OverworldWildBlobSection controllers;
     OverworldWildBlobSection controllerNodes;
-    OverworldWildBlobSection sourceClassProfiles;
     OverworldWildBlobSection genericAssignments;
     OverworldWildBlobSection speciesAssignments;
     OverworldWildBlobSection overrideSources;
@@ -451,7 +450,7 @@ typedef struct OverworldWildRuntimeModifierOperation {
     u8 bound;
 } OverworldWildRuntimeModifierOperation;
 
-_Static_assert(sizeof(OverworldWildBehaviorDataBlobHeader) == 216,
+_Static_assert(sizeof(OverworldWildBehaviorDataBlobHeader) == 208,
     "v40 header ABI");
 _Static_assert(sizeof(OverworldWildOverrideDefinitionRecord) == 36,
     "v40 definition ABI");
@@ -477,7 +476,6 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 /* Compile the exact shared Task-5 resident scalar table/helpers into this host
  * accessor fixture; the production copy imports these same overlay-155
  * symbols. */
-#define OWBD_CLASS_PROFILE_COUNT 4
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
 #define OWBD_OVERRIDE_MEMBER_COUNT 155
@@ -495,8 +493,8 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_OWNER_COUNT 10
 #define OWBD_RECOVERY_ACTION_COUNT 15
 #define OWBD_TRANSITION_GUARD_COUNT 26
-#define OWBD_TRANSITION_OPERATION_COUNT 35
-#define OWBD_TRANSITION_ACTION_COUNT 32
+#define OWBD_TRANSITION_OPERATION_COUNT 53
+#define OWBD_TRANSITION_ACTION_COUNT 41
 #define OWBD_IMPORT_RECIPE_COUNT 12
 #define OWBD_APPLICABILITY_COUNT 19
 #define OWBD_TIRED_TRANSLATION_COUNT 18
@@ -516,15 +514,32 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_CANDIDATE_TIMER_ADD_MIN -32
 #define OWBD_CANDIDATE_TIMER_ADD_MAX 32
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11636u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11340u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
-#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x6E9B5D94u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0xC88892BEu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x64D0FC6Eu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x5C5FBF57u
 #define OWBD_BLOB_FLAG_NAMES_ARE_HASHES (1u << 1)
 #define OWBD_BLOB_FLAG_AUTHORED_SOURCE (1u << 2)
 #define OWBD_VALIDATION_NO_PROJECTION_BUILDER
 #include "overworld_wild_behavior_v40_validation_shared.h"
+
+typedef struct FixtureCatalogReader {
+    const u8 *data;
+    u32 size;
+} FixtureCatalogReader;
+
+static BOOL FixtureCatalogRead(
+    void *context, u32 offset, u32 size, void *destination)
+{
+    FixtureCatalogReader *reader = context;
+    if (reader == NULL || destination == NULL || offset > reader->size
+        || size > reader->size - offset) {
+        return FALSE;
+    }
+    memcpy(destination, reader->data + offset, size);
+    return TRUE;
+}
 
 BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     const OverworldWildRuntimeStaticCache *cache,
@@ -566,7 +581,8 @@ int main(int argc, char **argv)
     const OverworldWildTiredTranslationRecord *translations;
     OverworldWildRuntimeDefinition actual;
     FILE *file;
-    u8 *blob;
+    u8 *blob, *validationWorkspace;
+    FixtureCatalogReader catalogReader;
     long size;
     u16 index;
     BOOL sawAuthored = FALSE, sawFallback = FALSE;
@@ -576,13 +592,24 @@ int main(int argc, char **argv)
     require(file != NULL, "validated-v40 file did not open");
     require(fseek(file, 0, SEEK_END) == 0, "validated-v40 seek failed");
     size = ftell(file);
-    require(size == 11636, "validated-v40 size changed");
+    require(size == 11340, "validated-v40 size changed");
     require(fseek(file, 0, SEEK_SET) == 0, "validated-v40 rewind failed");
     blob = malloc((size_t)size);
     require(blob != NULL, "fixture allocation failed");
     require(fread(blob, 1, (size_t)size, file) == (size_t)size,
         "validated-v40 read failed");
     require(fclose(file) == 0, "validated-v40 close failed");
+
+    validationWorkspace = malloc(
+        OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
+    require(validationWorkspace != NULL,
+        "shared validator workspace allocation failed");
+    catalogReader.data = blob;
+    catalogReader.size = (u32)size;
+    require(OwbdValidateStream(FixtureCatalogRead, &catalogReader, (u32)size,
+            validationWorkspace,
+            OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+        "real catalog failed the shared production validation contract");
 
     header = (void *)blob;
     require(header->version == 40 && header->headerSize == sizeof(*header),
@@ -1274,6 +1301,7 @@ int main(int argc, char **argv)
         sChecks, header->overrideDefinitions.count,
         header->tiredTranslations.count);
     sOverworldWildValidatedV40 = NULL;
+    free(validationWorkspace);
     free(blob);
     return 0;
 }

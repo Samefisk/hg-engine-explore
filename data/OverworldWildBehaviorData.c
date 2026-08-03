@@ -11,6 +11,3 @@ typedef char OverworldWildBehaviorDataMustHaveExactGeneratedSize[
     sizeof(gOverworldWildBehaviorDataBlob) == OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE ? 1 : -1];
 typedef char OverworldWildBehaviorDataMustFitAuthoredMemberCap[
     sizeof(gOverworldWildBehaviorDataBlob) <= OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE ? 1 : -1];
-typedef char OverworldWildBehaviorRuntimeProjectionMustFitProvenV39Cap[
-    OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_SIZE
-        <= OVERWORLD_WILD_BEHAVIOR_RUNTIME_PROJECTION_MAX_SIZE ? 1 : -1];

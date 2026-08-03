@@ -23,7 +23,7 @@ typedef struct OwbdSectionSpec {
 
 enum {
     OWBD_S_BODY, OWBD_S_IDENTITY, OWBD_S_CONTROLLER, OWBD_S_NODE,
-    OWBD_S_CLASS_PROFILE, OWBD_S_GENERIC_ASSIGN, OWBD_S_SPECIES_ASSIGN,
+    OWBD_S_GENERIC_ASSIGN, OWBD_S_SPECIES_ASSIGN,
     OWBD_S_OVERRIDE, OWBD_S_MEMBER, OWBD_S_OVERRIDE_ACTION,
     OWBD_S_SPAWN, OWBD_S_POPULATION, OWBD_S_HOOK, OWBD_S_OWNER,
     OWBD_S_DEFINITION, OWBD_S_TRANSITION, OWBD_S_GUARD, OWBD_S_OPERATION,
@@ -38,7 +38,7 @@ extern const OwbdSectionSpec sOwbdSpecs[OWBD_S_COUNT];
 OWBD_RESIDENT_DATA const OwbdSectionSpec sOwbdSpecs[OWBD_S_COUNT] = {
     { 32, OWBD_STATE_BODY_COUNT }, { 8, OWBD_PROFILE_IDENTITY_COUNT },
     { 24, OWBD_CONTROLLER_COUNT }, { 12, OWBD_CONTROLLER_NODE_COUNT },
-    { 72, OWBD_CLASS_PROFILE_COUNT }, { 20, OWBD_CLASS_RULE_COUNT },
+    { 20, OWBD_CLASS_RULE_COUNT },
     { 8, OWBD_SPECIES_CLASS_RULE_COUNT }, { 28, OWBD_OVERRIDE_SOURCE_COUNT },
     { 2, OWBD_OVERRIDE_MEMBER_COUNT }, { 12, OWBD_OVERRIDE_ACTION_COUNT },
     { 12, OWBD_SPAWN_POLICY_COUNT }, { 10, OWBD_POPULATION_POLICY_COUNT },
@@ -58,7 +58,7 @@ typedef struct OwbdSharedContext {
     OwbdReadCallback read;
     void *readContext;
     u32 size;
-    u8 header[216];
+    u8 header[208];
     u16 *ids;
     u16 idBase[OWBD_S_COUNT];
 } OwbdSharedContext;
@@ -108,7 +108,7 @@ OWBD_RESIDENT_CODE BOOL OwbdHasId(const OwbdSharedContext *ctx, int section, u16
 {
     int i;
     if (!id || section < 0 || section >= OWBD_S_COUNT
-        || section == OWBD_S_CLASS_PROFILE || section == OWBD_S_MEMBER) return FALSE;
+        || section == OWBD_S_MEMBER) return FALSE;
     for (i = 0; i < sOwbdSpecs[section].count; i++)
         if (ctx->ids[ctx->idBase[section] + i] == id) return TRUE;
     return FALSE;
@@ -175,7 +175,7 @@ static BOOL OwbdLoadStableIds(OwbdSharedContext *ctx)
     for (section = 0; section < OWBD_S_COUNT; section++) {
         int i, prior;
         ctx->idBase[section] = cursor;
-        if (section == OWBD_S_CLASS_PROFILE || section == OWBD_S_MEMBER) continue;
+        if (section == OWBD_S_MEMBER) continue;
         for (i = 0; i < sOwbdSpecs[section].count; i++) {
             u8 record[72];
             u16 id;
@@ -403,11 +403,6 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
         cursor += count;
     }
     if (cursor != OWBD_CONTROLLER_NODE_COUNT) return FALSE;
-    for (i = 0; i < OWBD_CLASS_PROFILE_COUNT; i++) {
-        u8 r[72];
-        if (!OwbdReadRecord(ctx, OWBD_S_CLASS_PROFILE, i, r)
-            || r[9] < 1 || r[9] > 4 || r[10] < 1 || r[10] > 4 || r[11] < 1 || r[11] > 4) return FALSE;
-    }
     for (i = 0; i < OWBD_CLASS_RULE_COUNT; i++) {
         u8 r[20], a[12];
         if (!OwbdReadRecord(ctx, OWBD_S_GENERIC_ASSIGN, i, r) || !OwbdMatchValid(r + 2)

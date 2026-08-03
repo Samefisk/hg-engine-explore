@@ -14,7 +14,6 @@ from pathlib import Path
 
 from overworld_wild_behavior_v40_validator import SECTION_SPECS, validate_v40_owbd
 from resolve_overworld_wild_behavior_v40 import apply_typed_operator
-from validate_overworld_wild_behavior_v40_projection import expected_projection
 
 CHECKSUM_OFFSET = 16
 SECTION = {name: index for index, (name, _, _) in enumerate(SECTION_SPECS)}
@@ -339,7 +338,7 @@ def corpus(valid, count=5000):
     # compound defect is used, and every byte string is unique.
     stable_locations = []
     for name, _, stride in SECTION_SPECS:
-        if name in ("sourceClassProfiles", "overrideMembers"): continue
+        if name == "overrideMembers": continue
         offset, records, actual_stride = section(valid, name)
         if actual_stride != stride: raise ValueError(f"fixture stride mismatch for {name}")
         stable_locations.extend((name, index, offset + index * stride) for index in range(records))
@@ -411,15 +410,12 @@ def main():
             subprocess.run([compiler, "-std=c99", "-O2", "-DOWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM",
                             str(Path(__file__).with_name("overworld_wild_behavior_v40_target_validator.c")),
                             "-o", target], check=True)
-        valid_path, projection_path = tmp / "valid.bin", tmp / "projection.bin"
+        valid_path = tmp / "valid.bin"
         valid_path.write_bytes(valid)
         validate_v40_owbd(valid_path, args.source)
         if subprocess.run([target, valid_path], check=False).returncode != 0:
             raise SystemExit("production validator rejected valid blob")
         operator_conformance(target)
-        if (subprocess.run([target, valid_path, projection_path], check=False).returncode != 0
-                or projection_path.read_bytes() != expected_projection()):
-            raise SystemExit("production runtime projection differs from frozen v39 source")
         for name, blob in accepted_corpus(valid).items():
             path, source = tmp / f"accepted-{name}.bin", tmp / f"accepted-{name}.h"
             path.write_bytes(blob)
@@ -448,7 +444,7 @@ def main():
             target_valid = subprocess.run([target, path], check=False).returncode == 0
             if host_valid != target_valid or host_valid:
                 raise SystemExit(f"validator parity failure: {name}: host={host_valid} target={target_valid}")
-    print(f"validator parity: valid/projection + {len(accepted_corpus(valid))} structured variants accepted; "
+    print(f"validator parity: valid catalog + {len(accepted_corpus(valid))} structured variants accepted; "
           f"{args.count} deterministic malformed mutations rejected identically; "
           f"{len(OPERATOR_CASES)} typed operator executions cover all six operators")
 

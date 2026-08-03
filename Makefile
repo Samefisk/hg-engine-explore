@@ -566,9 +566,6 @@ move_narc: $(NARC_FILES)
 	@echo "overworld wild behavior data:"
 	cp $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN) $(OVERWORLD_WILD_BEHAVIOR_DATA_TARGET)
 
-	@echo "overworld wild behavior compatibility projection:"
-	cp $(OVERWORLD_WILD_BEHAVIOR_PROJECTION_BIN) $(OVERWORLD_WILD_BEHAVIOR_PROJECTION_TARGET)
-
 	@echo "overworld wild encounter lookup:"
 	cp $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET)
 

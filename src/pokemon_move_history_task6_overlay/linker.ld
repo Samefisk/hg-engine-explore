@@ -157,9 +157,9 @@ SECTIONS {
                     "behavior support loader exceeds frozen private ABI");
                 . = ORIGIN(rom) + 0xDE0;
                 __owbd_resident_private_end = . ;
-                ASSERT(OverworldWildBehavior_LoadValidatedProjection
+                ASSERT(OverworldWildBehavior_LoadValidatedCatalog
                         == ORIGIN(rom) + 0xCC0,
-                    "behavior projection loader ABI moved");
+                    "behavior catalog loader ABI moved");
                 ASSERT(__owbd_resident_private_end == ORIGIN(rom) + 0xDE0,
                     "behavior support private end moved");
                 ASSERT(__owbd_resident_private_end <= ORIGIN(rom) + 0xE00,
