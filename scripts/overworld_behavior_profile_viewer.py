@@ -93,6 +93,7 @@ HEADBUTT_SOURCE = ROOT / "armips/data/headbutt.s"
 ENCOUNTER_LOOKUP_SOURCE = ROOT / "data/OverworldWildEncounterLookupData.c"
 ENCOUNTER_OVERRIDES_SOURCE = ROOT / "data/OverworldWildEncounterOverrides.json"
 V40_BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorDataV40.generated.inc"
+V40_BEHAVIOR_MODEL_SOURCE = ROOT / "data/OverworldWildBehaviorModelV40.json"
 V40_STABLE_IDS_SOURCE = ROOT / "data/OverworldWildBehaviorV40StableIds.json"
 MONDATA_SOURCE = ROOT / "armips/data/mondata.s"
 BABYMONS_SOURCE = ROOT / "armips/data/babymons.s"
@@ -327,7 +328,7 @@ def _v40_display_metadata(registry_key: str, stable_id: int, role_label: str) ->
 def build_v40_state_profile_editor_data() -> dict:
     """Return the exact V40 state-profile library used by the runtime catalog.
 
-    Names and descriptive tags are editor metadata recovered from registry keys;
+    Names and descriptive tags are merged from the canonical authored model;
     runtime selection continues to use stable IDs and controller-node bindings.
     """
 
@@ -338,6 +339,14 @@ def build_v40_state_profile_editor_data() -> dict:
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
     if (magic, version, header_size, blob_size) != (0x4F574244, 40, 216, len(blob)):
         raise ParseError("V40 behavior catalog header is invalid")
+
+    authored_model = json.loads(V40_BEHAVIOR_MODEL_SOURCE.read_text())
+    if (authored_model.get("schema") != "overworld-wild-behavior-model-v40"
+            or authored_model.get("modelVersion") != 40):
+        raise ParseError("V40 canonical behavior model is invalid")
+    authored_profiles = {record["stableId"]: record for record in authored_model["stateProfiles"]}
+    authored_controllers = {record["stableId"]: record for record in authored_model["controllers"]}
+    authored_transitions = {record["stableId"]: record for record in authored_model["transitions"]}
 
     body_offset, body_count, body_stride = _v40_section(blob, "stateBodies")
     identity_offset, identity_count, identity_stride = _v40_section(blob, "profileIdentities")
@@ -387,7 +396,15 @@ def build_v40_state_profile_editor_data() -> dict:
         role, values = bodies[body_id]
         role_label = V40_STATE_ROLE_LABELS[role]
         registry_key = registry_names.get(stable_id, "")
-        name, tags = _v40_display_metadata(registry_key, stable_id, role_label)
+        authored = authored_profiles.get(stable_id)
+        if (authored is None or authored.get("bodyId") != body_id
+                or authored.get("provenanceId") != provenance_id):
+            raise ParseError(f"V40 profile identity #{index} differs from canonical metadata")
+        name = authored.get("name")
+        tags = authored.get("descriptiveTags")
+        if not isinstance(name, str) or not name.strip() or not isinstance(tags, list):
+            raise ParseError(f"V40 profile identity #{index} has invalid canonical metadata")
+        registry_key = authored.get("registryKey", registry_key)
         profiles.append({
             "stableId": stable_id,
             "bodyId": body_id,
@@ -510,9 +527,12 @@ def build_v40_state_profile_editor_data() -> dict:
         if definition is None:
             raise ParseError(f"V40 transition {stable_id} has an unknown candidate definition")
         controller_ids = [definition["controllerId"]] if definition["controllerId"] else list(all_controller_ids)
+        authored = authored_transitions.get(stable_id)
+        if authored is None or authored.get("definitionId") != definition_id:
+            raise ParseError(f"V40 transition {stable_id} differs from canonical metadata")
         transitions.append({
             "stableId": stable_id,
-            "name": registry_keys.get(stable_id, f"transition:{stable_id}"),
+            "name": authored.get("name", registry_keys.get(stable_id, f"transition:{stable_id}")),
             "order": len(transitions),
             "controllerIds": controller_ids,
             "candidateDefinitionId": definition_id,
@@ -558,11 +578,16 @@ def build_v40_state_profile_editor_data() -> dict:
         base_nodes = [node["stableId"] for node in local_nodes if node["base"]]
         if len(base_nodes) != 1:
             raise ParseError(f"V40 controller #{index} must have exactly one base node")
+        authored = authored_controllers.get(stable_id)
+        if (authored is None
+                or [node["stableId"] for node in authored.get("nodes", [])]
+                != [node["stableId"] for node in local_nodes]):
+            raise ParseError(f"V40 controller #{index} differs from canonical metadata")
         controllers.append({
             "stableId": stable_id,
             "nameId": name_id,
-            "name": f"Controller {index + 1}",
-            "registryKey": registry_keys.get(stable_id, ""),
+            "name": authored.get("name", f"Controller {index + 1}"),
+            "registryKey": authored.get("registryKey", registry_keys.get(stable_id, "")),
             "baseNodeId": base_nodes[0],
             "nodes": local_nodes,
             "scalarDefaults": dict(zip(scalar_keys, scalar_and_flags[:8])),

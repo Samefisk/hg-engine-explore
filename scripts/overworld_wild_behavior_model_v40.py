@@ -9,6 +9,7 @@ not consulted while encoding.
 from __future__ import annotations
 
 import binascii
+import copy
 import hashlib
 import json
 import re
@@ -211,6 +212,7 @@ def effective_stable_history(history: dict[str, Any]) -> tuple[dict[str, int], l
     effective_tombstones = list(tombstones)
     previous = checkpoint
     high_water = max(effective_allocations.values(), default=0)
+    accepted_head_seen = False
     for index, event in enumerate(extensions):
         if not isinstance(event, dict) or event.get("previousSha256") != previous:
             raise ModelError(f"stableIdHistory extension {index} breaks the append-only chain")
@@ -232,20 +234,71 @@ def effective_stable_history(history: dict[str, Any]) -> tuple[dict[str, int], l
                 raise ModelError(f"stableIdHistory extension {index} is not an append-only retirement")
             effective_tombstones.append(key)
         elif kind == "checkpoint":
-            if (event.get("version") != PINNED_STABLE_HISTORY_ACCEPTED_HEAD_VERSION
+            if (index != 0 or accepted_head_seen
+                    or event.get("version") != PINNED_STABLE_HISTORY_ACCEPTED_HEAD_VERSION
                     or set(event) != {"kind", "version", "previousSha256", "eventSha256"}):
                 raise ModelError(f"stableIdHistory extension {index} has an invalid checkpoint event")
+            if event["eventSha256"] != PINNED_STABLE_HISTORY_ACCEPTED_HEAD_SHA256:
+                raise ModelError("stableIdHistory accepted checkpoint differs from the independent pin")
+            accepted_head_seen = True
         else:
             raise ModelError(f"stableIdHistory extension {index} has an unknown kind")
         previous = event["eventSha256"]
     if history.get("historySha256") != previous:
         raise ModelError("stableIdHistory final extension seal is stale")
     if (history.get("acceptedHeadVersion") != PINNED_STABLE_HISTORY_ACCEPTED_HEAD_VERSION
-            or previous != PINNED_STABLE_HISTORY_ACCEPTED_HEAD_SHA256):
-        raise ModelError("stableIdHistory tail differs from the independently accepted head")
+            or not accepted_head_seen):
+        raise ModelError("stableIdHistory is missing the independently accepted head checkpoint")
     if history.get("nextUnallocatedId") != high_water + 1:
         raise ModelError("stableIdHistory.nextUnallocatedId does not follow its high-water mark")
     return effective_allocations, effective_tombstones
+
+
+def append_stable_history_events(
+    history: dict[str, Any], events: Iterable[tuple[str, str]]
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Append sealed allocation/retirement events without rewriting history.
+
+    Returns an independent history value plus the IDs allocated by this call.
+    The frozen checkpoint remains untouched; all new identities are strictly
+    above the authenticated high-water mark.
+    """
+    allocations, tombstones = effective_stable_history(history)
+    result = copy.deepcopy(history)
+    extensions = result["extensions"]
+    previous = result["historySha256"]
+    high_water = result["nextUnallocatedId"] - 1
+    allocated: dict[str, int] = {}
+    retired = set(tombstones)
+    for kind, key in events:
+        if not isinstance(key, str) or not key:
+            raise ModelError("stableIdHistory event has no registry key")
+        if kind == "allocate":
+            if key in allocations or key in allocated:
+                raise ModelError(f"stableIdHistory registry key is already allocated: {key}")
+            high_water += 1
+            if high_water > 0xFFFF:
+                raise ModelError("stableIdHistory exhausted the 16-bit stable ID space")
+            event = {
+                "kind": "allocate", "registryKey": key, "stableId": high_water,
+                "previousSha256": previous,
+            }
+            allocated[key] = high_water
+            allocations[key] = high_water
+        elif kind == "retire":
+            if key not in allocations or key in retired:
+                raise ModelError(f"stableIdHistory registry key cannot be retired: {key}")
+            event = {"kind": "retire", "registryKey": key, "previousSha256": previous}
+            retired.add(key)
+        else:
+            raise ModelError(f"stableIdHistory event kind is unsupported: {kind}")
+        event["eventSha256"] = _history_event_digest(previous, event)
+        extensions.append(event)
+        previous = event["eventSha256"]
+    result["historySha256"] = previous
+    result["nextUnallocatedId"] = high_water + 1
+    effective_stable_history(result)
+    return result, allocated
 
 
 def load_model(path: Path = DEFAULT_MODEL) -> dict[str, Any]:
@@ -1007,6 +1060,30 @@ def wire_projection(model: dict[str, Any]) -> dict[str, Any]:
     return decode_blob(encode_model(model), stable_id_history=model["stableIdHistory"])
 
 
+def merge_authored_metadata(
+    wire_model: dict[str, Any], authored_model: dict[str, Any]
+) -> dict[str, Any]:
+    """Restore canonical editor metadata that is intentionally absent on wire."""
+    result = copy.deepcopy(wire_model)
+    for section, fields in (
+        ("stateProfiles", ("name", "descriptiveTags")),
+        ("controllers", ("name",)),
+        ("transitions", ("name",)),
+    ):
+        authored = {record["stableId"]: record for record in authored_model[section]}
+        projected = {record["stableId"]: record for record in result[section]}
+        if set(authored) != set(projected):
+            raise ModelError(f"{section} canonical metadata identities differ from the wire projection")
+        for stable_id, target in projected.items():
+            for field in fields:
+                if field in authored[stable_id]:
+                    target[field] = copy.deepcopy(authored[stable_id][field])
+                else:
+                    target.pop(field, None)
+    validate_model(result)
+    return result
+
+
 def render_inc(blob: bytes) -> str:
     lines = ["/* Generated from OverworldWildBehaviorModelV40.json; do not edit. */"]
     for offset in range(0, len(blob), 16):
@@ -1080,7 +1157,8 @@ def read_inc(path: Path = DEFAULT_OUTPUT) -> bytes:
 
 __all__ = [
     "DEFAULT_HEADER", "DEFAULT_MODEL", "DEFAULT_OUTPUT", "HARD_CAP", "ModelError",
-    "canonical_json_bytes", "decode_blob", "encode_model", "load_model", "read_inc",
-    "render_header", "render_inc", "section_counts", "stable_history_digest",
+    "append_stable_history_events", "canonical_json_bytes", "decode_blob", "encode_model",
+    "load_model", "read_inc",
+    "merge_authored_metadata", "render_header", "render_inc", "section_counts", "stable_history_digest",
     "validate_model", "wire_projection",
 ]
