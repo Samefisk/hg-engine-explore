@@ -24,6 +24,9 @@ SECTIONS {
                 *(.fini)
                 *(COMMON)
                 . = ALIGN(4);
+                ASSERT(. <= ORIGIN(rom) + 0xAEC4,
+                    "overworld wild spawns overlay exceeds sealed text boundary");
+                . = ORIGIN(rom) + 0xAEC4;
                 __text_end  = . ;
 
                 __bss_start__ = . ;

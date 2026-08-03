@@ -18,26 +18,100 @@ typedef int BOOL;
 #define OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
 #include "../src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
 
+void OverworldWildRuntime_ClearSlotStorage(
+    OverworldWildRuntimeSlotSidecar *slot)
+{
+    memset(slot, 0, sizeof(*slot));
+}
+
+void OverworldWildRuntime_InitializeStorage(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    int slotIndex;
+    memset(runtime, 0, sizeof(*runtime));
+    runtime->handleEpoch = 1;
+    runtime->dataIncarnation = 1;
+    runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_ACTIVE;
+    for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS; slotIndex++) {
+        OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[slotIndex];
+        slot->slotGeneration = 1;
+        slot->staticContextGeneration = 1;
+        slot->nextEntryGeneration = 1;
+        slot->nextTimerGeneration = 1;
+        slot->layerGeneration = 1;
+        slot->effectiveGeneration = 1;
+        slot->cacheIncarnation = 1;
+        slot->lifecycleState = OW_WILD_RUNTIME_SLOT_LIFECYCLE_VIRGIN;
+    }
+}
+
+void OverworldWildRuntime_MarkResidentCold(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    int slot;
+    runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        runtime->dataIncarnation);
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        runtime->slots[slot].cacheIncarnation =
+            OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->slots[slot].cacheIncarnation);
+        memset(&runtime->slots[slot].staticCache, 0,
+            sizeof(runtime->slots[slot].staticCache));
+        memset(&runtime->slots[slot].effectiveCache, 0,
+            sizeof(runtime->slots[slot].effectiveCache));
+        memset(&runtime->slots[slot].provenance, 0,
+            sizeof(runtime->slots[slot].provenance));
+    }
+    runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
+}
+
+static int sLiveHelperCalls;
+
 void OverworldWildRuntime_HandleSlotGenerationWrap(
     OverworldWildBehaviorStackRuntime *runtime,
     int targetSlot)
 {
+    OverworldWildRuntimeSlotSidecar *target = &runtime->slots[targetSlot];
+    u32 slotGeneration = target->slotGeneration + 1;
+    u32 cacheIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        target->cacheIncarnation);
     int slot;
     int layer;
+
+    sLiveHelperCalls++;
+    if (slotGeneration != 0) {
+        OverworldWildRuntime_InitSlot(target);
+        target->slotGeneration = slotGeneration;
+        target->cacheIncarnation = cacheIncarnation;
+        target->lifecycleTransitions = 1;
+        target->lifecycleState =
+            OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED;
+        return;
+    }
     if (runtime->handleEpoch == 0xFFFFFFFFu) {
         for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
             u32 generation = OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].slotGeneration);
+            u32 incarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->slots[slot].cacheIncarnation);
             OverworldWildRuntime_InitSlot(&runtime->slots[slot]);
             runtime->slots[slot].slotGeneration = generation;
+            runtime->slots[slot].cacheIncarnation = incarnation;
             runtime->slots[slot].lifecycleTransitions = 1;
             runtime->slots[slot].lifecycleState =
                 OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED;
         }
         runtime->handleEpoch = 1;
+        runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+            runtime->dataIncarnation);
         return;
     }
+    runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        runtime->dataIncarnation);
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        runtime->slots[slot].cacheIncarnation =
+            OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->slots[slot].cacheIncarnation);
         if (slot == targetSlot) continue;
         for (layer = 0; layer < runtime->slots[slot].activeLayerCount; layer++)
             runtime->slots[slot].layerBank.entryGenerations[layer] = layer + 1;
@@ -49,7 +123,11 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
                     runtime->slots[slot].layerGeneration);
     }
     runtime->handleEpoch++;
+    {
+        u32 incarnation = runtime->slots[targetSlot].cacheIncarnation;
     OverworldWildRuntime_InitSlot(&runtime->slots[targetSlot]);
+        runtime->slots[targetSlot].cacheIncarnation = incarnation;
+    }
     runtime->slots[targetSlot].slotGeneration = 1;
     runtime->slots[targetSlot].lifecycleTransitions = 1;
     runtime->slots[targetSlot].lifecycleState =
@@ -60,21 +138,29 @@ _Static_assert(OW_WILD_MAX_SPAWNS == 10, "spawn capacity changed");
 _Static_assert(OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT == 8, "layer capacity changed");
 _Static_assert(sizeof(OverworldWildRuntimeLayer) == 16, "layer layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeLayerBank) == 112, "layer bank layout changed");
-_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 140, "slot layout changed");
-_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 1408, "runtime layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeStaticContext) == 12, "static context layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeStaticModifierContribution) == 18, "static contribution layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeResolvedNode) == 38, "resolved node layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 540, "static cache layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeEffectiveCache) == 104, "effective cache layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeProvenance) == 728, "provenance layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1516, "slot layout changed");
+_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 15172, "runtime layout changed");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, slotGeneration) == 0, "slot generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, staticContextGeneration) == 4, "static generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, nextEntryGeneration) == 8, "entry generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, nextTimerGeneration) == 12, "timer generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, layerGeneration) == 16, "layer generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, effectiveGeneration) == 20, "effective generation moved");
-_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleTransitions) == 24, "diagnostics moved");
-_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, activeLayerCount) == 26, "active count moved");
-_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleState) == 27, "lifecycle state moved");
-_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, layerBank) == 28, "layer bank moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, cacheIncarnation) == 24, "cache incarnation moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleTransitions) == 28, "diagnostics moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, activeLayerCount) == 30, "active count moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleState) == 31, "lifecycle state moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, layerBank) == 32, "layer bank moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, handleEpoch) == 0, "runtime epoch moved");
-_Static_assert(offsetof(OverworldWildBehaviorStackRuntime, lifetimeState) == 4, "runtime lifetime moved");
-_Static_assert(offsetof(OverworldWildBehaviorStackRuntime, slots) == 8, "runtime slots moved");
+_Static_assert(offsetof(OverworldWildBehaviorStackRuntime, dataIncarnation) == 4, "runtime incarnation moved");
+_Static_assert(offsetof(OverworldWildBehaviorStackRuntime, lifetimeState) == 8, "runtime lifetime moved");
+_Static_assert(offsetof(OverworldWildBehaviorStackRuntime, slots) == 12, "runtime slots moved");
 
 static int sChecks;
 
@@ -113,10 +199,14 @@ static void require_empty_slot(
     require(slot->nextTimerGeneration == 1, "next timer generation is not virgin");
     require(slot->layerGeneration == 1, "layer generation is not virgin");
     require(slot->effectiveGeneration == 1, "effective generation is not virgin");
+    require(slot->cacheIncarnation != 0, "cache incarnation is zero");
     require(slot->lifecycleTransitions == transitions, "lifecycle diagnostic differs");
     require(slot->activeLayerCount == 0, "empty slot has active layers");
     require(slot->lifecycleState == lifecycleState, "lifecycle state differs");
     require(bytes_are_zero(&slot->layerBank, sizeof(slot->layerBank)), "empty slot retained layer bytes");
+    require(bytes_are_zero(&slot->staticCache, sizeof(slot->staticCache)), "empty slot retained static cache bytes");
+    require(bytes_are_zero(&slot->effectiveCache, sizeof(slot->effectiveCache)), "empty slot retained effective cache bytes");
+    require(bytes_are_zero(&slot->provenance, sizeof(slot->provenance)), "empty slot retained provenance bytes");
 }
 
 static void fill_live_slot(OverworldWildBehaviorStackRuntime *runtime, int slotIndex)
@@ -141,6 +231,9 @@ static void fill_live_slot(OverworldWildBehaviorStackRuntime *runtime, int slotI
         slot->layerBank.tiredOriginKinds[i] = (u8)i;
         slot->layerBank.generatedFlags[i] = 0xA5;
     }
+    memset(&slot->staticCache, 0x5A, sizeof(slot->staticCache));
+    memset(&slot->effectiveCache, 0x6B, sizeof(slot->effectiveCache));
+    memset(&slot->provenance, 0x7C, sizeof(slot->provenance));
 }
 
 typedef struct FixtureColdSpawn {
@@ -205,12 +298,14 @@ int main(void)
     OverworldWildBehaviorStackRuntime before;
     FixtureColdContext cold;
     u32 assignedGeneration;
+    u32 cacheIncarnationBefore;
     u32 generationsBeforeRestart[OW_WILD_MAX_SPAWNS];
     int slot;
 
     memset(&runtime, 0xA5, sizeof(runtime));
     OverworldWildRuntime_Init(&runtime);
     require(runtime.handleEpoch == 1, "virgin handle epoch is not one");
+    require(runtime.dataIncarnation == 1, "virgin data incarnation is not one");
     require(runtime.lifetimeState == OW_WILD_RUNTIME_LIFETIME_ACTIVE,
         "virgin runtime is not active");
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
@@ -221,18 +316,45 @@ int main(void)
 
     fill_live_slot(&runtime, 3);
     before = runtime;
+    cacheIncarnationBefore = runtime.slots[3].cacheIncarnation;
     OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 3, TRUE);
+    require(sLiveHelperCalls == 1,
+        "ordinary live wrapper did not delegate exactly once");
     require(runtime.handleEpoch == 1, "ordinary invalidation changed handle epoch");
     require_empty_slot(
         &runtime.slots[3], 2, 1,
         OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED);
+    require(runtime.slots[3].cacheIncarnation
+            == OverworldWildRuntime_AdvanceNonzeroGeneration(
+                cacheIncarnationBefore),
+        "ordinary invalidation did not advance the prior cache incarnation");
     require(!memcmp(&runtime.slots[2], &before.slots[2], sizeof(runtime.slots[2])),
         "invalidation changed the previous slot");
     require(!memcmp(&runtime.slots[4], &before.slots[4], sizeof(runtime.slots[4])),
         "invalidation changed the next slot");
 
+    fill_live_slot(&runtime, 3);
+    before = runtime;
+    cacheIncarnationBefore = runtime.slots[3].cacheIncarnation;
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 3, TRUE);
+    require(sLiveHelperCalls == 2,
+        "repeated live wrapper did not delegate exactly once");
+    require_empty_slot(
+        &runtime.slots[3], 3, 1,
+        OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED);
+    require(runtime.slots[3].cacheIncarnation
+            == OverworldWildRuntime_AdvanceNonzeroGeneration(
+                cacheIncarnationBefore),
+        "repeated live invalidation did not advance the prior cache incarnation");
+    require(!memcmp(&runtime.slots[2], &before.slots[2], sizeof(runtime.slots[2]))
+            && !memcmp(&runtime.slots[4], &before.slots[4],
+                sizeof(runtime.slots[4])),
+        "repeated live invalidation changed bystander slots");
+
     before = runtime;
     OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 3, FALSE);
+    require(sLiveHelperCalls == 2,
+        "false destructive wrapper delegated to the live helper");
     require(!memcmp(&runtime, &before, sizeof(runtime)),
         "repeated empty invalidation was not idempotent");
 
@@ -359,6 +481,19 @@ int main(void)
     OverworldWildRuntime_MarkResidentCold(&runtime);
     require(runtime.lifetimeState == OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD,
         "resident cleanup did not publish cold lifetime");
+    before.dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        before.dataIncarnation);
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        before.slots[slot].cacheIncarnation =
+            OverworldWildRuntime_AdvanceNonzeroGeneration(
+                before.slots[slot].cacheIncarnation);
+        memset(&before.slots[slot].staticCache, 0,
+            sizeof(before.slots[slot].staticCache));
+        memset(&before.slots[slot].effectiveCache, 0,
+            sizeof(before.slots[slot].effectiveCache));
+        memset(&before.slots[slot].provenance, 0,
+            sizeof(before.slots[slot].provenance));
+    }
     before.lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
     require(!memcmp(&runtime, &before, sizeof(runtime)),
         "resident-cold transition changed logical sidecars");

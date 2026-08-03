@@ -349,6 +349,7 @@ FIXED_INPUTS = (
     "asm/pokemon_move_history_task6_overlay/entry.s",
     "asm/summary_move_relearn_overlay/entry.s",
     "asm/overworld_wild_helper_overlay/thumb_help.s",
+    "asm/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.s",
     "src/pokemon_move_history_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c",
@@ -357,6 +358,7 @@ FIXED_INPUTS = (
     "src/overworld_wild_spawns_overlay/linker.ld",
     "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h",
     "src/overworld_wild_runtime_overlay/linker.ld",
+    "src/overworld_wild_runtime_layers_overlay/linker.ld",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
@@ -436,8 +438,14 @@ OUTPUTS = {
         "build/overworld_wild_runtime_overlay_linked.o",
     "overworld_wild_runtime_binary":
         "build/output_overworld_wild_runtime_overlay.bin",
+    "overworld_wild_runtime_catalog_symbols":
+        "build/overworld_wild_runtime_overlay_catalog_symbols.o",
+    "overworld_wild_runtime_layers_linked":
+        "build/overworld_wild_runtime_layers_overlay_linked.o",
+    "overworld_wild_runtime_layers_binary":
+        "build/output_overworld_wild_runtime_layers_overlay.bin",
     "overworld_wild_task8_symbols":
-        "build/overworld_wild_runtime_overlay_task8_symbols.o",
+        "build/overworld_wild_runtime_layers_overlay_task8_symbols.o",
     "overworld_wild_behavior_validator_object":
         "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o",
     "overworld_wild_behavior_validator_linked":
@@ -475,6 +483,7 @@ OUTPUTS = {
     "patched_overlay155": "base/overlay/overlay_0155.bin",
     "patched_overlay156": "base/overlay/overlay_0156.bin",
     "patched_overlay157": "base/overlay/overlay_0157.bin",
+    "patched_overlay158": "base/overlay/overlay_0158.bin",
 }
 
 

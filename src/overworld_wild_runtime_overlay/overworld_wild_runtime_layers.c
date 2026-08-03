@@ -2,6 +2,12 @@
 
 #define OW_WILD_RUNTIME_ROLE_TIRED 3
 #define OW_WILD_RUNTIME_ROLE_MASK(role) (1u << ((role) - 1))
+#ifdef OW_WILD_RUNTIME_HOST_TEST
+#define OW_WILD_RUNTIME_COMPOSITION_CODE
+#else
+#define OW_WILD_RUNTIME_COMPOSITION_CODE \
+    __attribute__((section(".ow_wild_runtime_composition")))
+#endif
 
 typedef struct OverworldWildRuntimeDeltaScratch {
     OverworldWildRuntimeLayer finalLayers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
@@ -26,7 +32,55 @@ typedef struct OverworldWildRuntimeLayerService {
 
 static OverworldWildRuntimeLayerService sOverworldWildRuntimeLayerService;
 
+void OverworldWildRuntime_ClearSlotStorage(
+    OverworldWildRuntimeSlotSidecar *slot)
+{
+    memset(slot, 0, sizeof(*slot));
+}
+
+void OverworldWildRuntime_InitializeStorage(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    int slotIndex;
+
+    memset(runtime, 0, sizeof(*runtime));
+    runtime->handleEpoch = 1;
+    runtime->dataIncarnation = 1;
+    runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_ACTIVE;
+    for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS; slotIndex++) {
+        OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[slotIndex];
+        slot->slotGeneration = 1;
+        slot->staticContextGeneration = 1;
+        slot->nextEntryGeneration = 1;
+        slot->nextTimerGeneration = 1;
+        slot->layerGeneration = 1;
+        slot->effectiveGeneration = 1;
+        slot->cacheIncarnation = 1;
+        slot->lifecycleState = OW_WILD_RUNTIME_SLOT_LIFECYCLE_VIRGIN;
+    }
+}
+
 #ifdef OW_WILD_RUNTIME_HOST_TEST
+void OverworldWildRuntime_MarkResidentCold(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    int slot;
+    runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        runtime->dataIncarnation);
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        runtime->slots[slot].cacheIncarnation =
+            OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->slots[slot].cacheIncarnation);
+        memset(&runtime->slots[slot].staticCache, 0,
+            sizeof(runtime->slots[slot].staticCache));
+        memset(&runtime->slots[slot].effectiveCache, 0,
+            sizeof(runtime->slots[slot].effectiveCache));
+        memset(&runtime->slots[slot].provenance, 0,
+            sizeof(runtime->slots[slot].provenance));
+    }
+    runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
+}
+
 static BOOL sOverworldWildRuntimeForceZeroMix;
 #endif
 
@@ -42,6 +96,16 @@ static BOOL BytesAreZero(const void *data, u32 size)
     return TRUE;
 }
 
+static BOOL BytesEqual(const void *left, const void *right, u32 size)
+{
+    const u8 *leftBytes = left;
+    const u8 *rightBytes = right;
+    while (size-- != 0) {
+        if (*leftBytes++ != *rightBytes++) return FALSE;
+    }
+    return TRUE;
+}
+
 static u32 Mix(u32 value, u32 input)
 {
 #ifdef OW_WILD_RUNTIME_HOST_TEST
@@ -51,6 +115,104 @@ static u32 Mix(u32 value, u32 input)
     value ^= value >> 16;
     value *= 0x7FEB352Du;
     return value ^ (value >> 15);
+}
+
+static u32 HashBytes(u32 hash, const void *data, u32 size)
+{
+    const u8 *bytes = data;
+    while (size-- != 0) hash = Mix(hash, *bytes++);
+    return hash != 0 ? hash : 1;
+}
+
+static u32 EffectiveHash(const OverworldWildRuntimeEffectiveCache *cache)
+{
+    return HashBytes(0x4F574539u, &cache->capabilityMask,
+        sizeof(*cache) - offsetof(OverworldWildRuntimeEffectiveCache,
+            capabilityMask));
+}
+
+static u32 ProvenanceHash(const OverworldWildRuntimeProvenance *provenance)
+{
+    return HashBytes(0x4F575039u, &provenance->winningDefinitionId,
+        sizeof(*provenance) - offsetof(OverworldWildRuntimeProvenance,
+            winningDefinitionId));
+}
+
+static u32 CacheIdentity(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeSlotSidecar *slot,
+    const OverworldWildRuntimeEffectiveCache *effective,
+    const OverworldWildRuntimeProvenance *provenance,
+    u32 privateRuntimeIdentity)
+{
+    u32 identity = Mix(0x4F574339u,
+        privateRuntimeIdentity);
+    (void)runtime;
+    identity = Mix(identity, effective->dataIncarnation);
+    identity = Mix(identity, effective->cacheIncarnation);
+    identity = Mix(identity, effective->catalogIdentity);
+    identity = Mix(identity, effective->staticContextIdentity);
+    identity = Mix(identity, effective->staticSetHash);
+    identity = Mix(identity, effective->staticContextGeneration);
+    identity = Mix(identity, slot->slotGeneration);
+    identity = Mix(identity, effective->layerGeneration);
+    identity = Mix(identity, effective->effectiveGeneration);
+    identity = Mix(identity, effective->effectiveHash);
+    identity = Mix(identity, effective->provenanceHash);
+    identity = Mix(identity, provenance->freshnessGeneration);
+    return identity != 0 ? identity : 1;
+}
+
+static OverworldWildRuntimeStatus ValidateCacheKey(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeSlotSidecar *slot)
+{
+    const OverworldWildRuntimeStaticCache *staticCache = &slot->staticCache;
+    const OverworldWildRuntimeEffectiveCache *effective =
+        &slot->effectiveCache;
+    const OverworldWildRuntimeProvenance *provenance = &slot->provenance;
+    if (runtime == NULL || runtime->dataIncarnation == 0
+        || slot->cacheIncarnation == 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    {
+        OverworldWildRuntimeStatus status =
+            OverworldWildRuntime_ValidateStaticCache(staticCache,
+                slot->staticContextGeneration);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    if (!(effective->flags & OW_WILD_RUNTIME_CACHE_VALID)
+        || !(provenance->flags & OW_WILD_RUNTIME_PROVENANCE_VALID)
+        || effective->dataIncarnation != runtime->dataIncarnation
+        || effective->cacheIncarnation != slot->cacheIncarnation
+        || effective->catalogIdentity != staticCache->catalogIdentity
+        || effective->staticContextIdentity
+            != staticCache->staticContextIdentity
+        || effective->staticSetHash != staticCache->staticSetHash
+        || effective->staticContextGeneration
+            != slot->staticContextGeneration
+        || effective->layerGeneration != slot->layerGeneration
+        || effective->effectiveGeneration != slot->effectiveGeneration
+        || effective->effectiveHash != EffectiveHash(effective)
+        || provenance->dataIncarnation != effective->dataIncarnation
+        || provenance->cacheIncarnation != effective->cacheIncarnation
+        || provenance->catalogIdentity != effective->catalogIdentity
+        || provenance->staticContextIdentity
+            != effective->staticContextIdentity
+        || provenance->staticSetHash != effective->staticSetHash
+        || provenance->staticContextGeneration
+            != effective->staticContextGeneration
+        || provenance->layerGeneration != effective->layerGeneration
+        || provenance->effectiveGeneration != effective->effectiveGeneration
+        || provenance->effectiveHash != effective->effectiveHash
+        || provenance->freshnessGeneration == 0
+        || provenance->provenanceHash != ProvenanceHash(provenance)
+        || effective->provenanceHash != provenance->provenanceHash
+        || effective->cacheIdentity != provenance->cacheIdentity
+        || effective->cacheIdentity
+            != CacheIdentity(runtime, slot, effective, provenance,
+                sOverworldWildRuntimeLayerService.privateRuntimeIdentity))
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    return OW_WILD_RUNTIME_STATUS_OK;
 }
 
 static void RotatePrivateIdentity(
@@ -246,6 +408,15 @@ static OverworldWildRuntimeStatus ValidateBank(
             || slot->layerBank.tiredOriginKinds[i]
             || slot->layerBank.generatedFlags[i])
             return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    }
+    if (slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID) {
+        OverworldWildRuntimeStatus status = ValidateCacheKey(
+            sOverworldWildRuntimeLayerService.boundRuntime, slot);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    } else if (!BytesAreZero(&slot->effectiveCache,
+            sizeof(slot->effectiveCache))
+        || !BytesAreZero(&slot->provenance, sizeof(slot->provenance))) {
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
     }
     return OW_WILD_RUNTIME_STATUS_OK;
 }
@@ -700,17 +871,19 @@ static void RekeySlot(OverworldWildRuntimeSlotSidecar *slot, u8 count)
     slot->nextEntryGeneration = (u32)count + 1;
 }
 
-static void InitializeInvalidatedSlot(
+static void __attribute__((noinline)) InitializeInvalidatedSlot(
     OverworldWildRuntimeSlotSidecar *slot,
-    u32 slotGeneration)
+    u32 slotGeneration,
+    u32 cacheIncarnation)
 {
-    memset(slot, 0, sizeof(*slot));
+    OverworldWildRuntime_ClearSlotStorage(slot);
     slot->slotGeneration = slotGeneration;
     slot->staticContextGeneration = 1;
     slot->nextEntryGeneration = 1;
     slot->nextTimerGeneration = 1;
     slot->layerGeneration = 1;
     slot->effectiveGeneration = 1;
+    slot->cacheIncarnation = cacheIncarnation;
     slot->lifecycleTransitions = 1;
     slot->lifecycleState =
         OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED;
@@ -721,10 +894,14 @@ static void RestartRuntime(
     BOOL terminalEpoch)
 {
     u8 i;
+    runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        runtime->dataIncarnation);
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         u32 generation = OverworldWildRuntime_AdvanceNonzeroGeneration(
             runtime->slots[i].slotGeneration);
-        InitializeInvalidatedSlot(&runtime->slots[i], generation);
+        u32 incarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+            runtime->slots[i].cacheIncarnation);
+        InitializeInvalidatedSlot(&runtime->slots[i], generation, incarnation);
     }
     runtime->handleEpoch = terminalEpoch
         ? 1 : OverworldWildRuntime_AdvanceNonzeroGeneration(runtime->handleEpoch);
@@ -752,13 +929,743 @@ static BOOL StageSlotsForRekey(OverworldWildBehaviorStackRuntime *runtime)
     return TRUE;
 }
 
+enum {
+    OW_WILD_RUNTIME_SKIP_NONE = 0,
+    OW_WILD_RUNTIME_SKIP_NOT_APPLICABLE = 1,
+    OW_WILD_RUNTIME_SKIP_FILTER = 2,
+    OW_WILD_RUNTIME_NORMALIZE_HOP_MAX = 1,
+    OW_WILD_RUNTIME_NORMALIZE_SECONDARY_TILE = 2,
+    OW_WILD_RUNTIME_NORMALIZE_STAMINA = 3,
+};
+
+typedef struct OverworldWildRuntimeModifierWork {
+    OverworldWildRuntimeDefinition definition;
+    u16 ownerId;
+    u16 instanceKey;
+} OverworldWildRuntimeModifierWork;
+
+static int OW_WILD_RUNTIME_COMPOSITION_CODE CompareDefinitionKey(
+    const OverworldWildRuntimeDefinition *left,
+    u16 leftOwner,
+    u16 leftKey,
+    const OverworldWildRuntimeDefinition *right,
+    u16 rightOwner,
+    u16 rightKey)
+{
+    if (left->channel != right->channel)
+        return left->channel < right->channel ? -1 : 1;
+    if (left->priority != right->priority)
+        return left->priority < right->priority ? -1 : 1;
+    if (left->stableId != right->stableId)
+        return left->stableId < right->stableId ? -1 : 1;
+    if (leftOwner != rightOwner) return leftOwner < rightOwner ? -1 : 1;
+    if (leftKey != rightKey) return leftKey < rightKey ? -1 : 1;
+    return 0;
+}
+
+static void OW_WILD_RUNTIME_COMPOSITION_CODE RecordNormalization(
+    OverworldWildRuntimeProvenance *provenance,
+    u8 fieldNamespace,
+    u8 fieldId,
+    u8 rule,
+    u8 before,
+    u8 after)
+{
+    OverworldWildRuntimeNormalizationProvenance *record;
+    if (provenance->normalizationCount
+            >= OW_WILD_RUNTIME_MAX_PROVENANCE_NORMALIZATIONS) {
+        provenance->flags |=
+            OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_NORMALIZATIONS;
+        return;
+    }
+    record = &provenance->normalizations[provenance->normalizationCount++];
+    record->fieldNamespace = fieldNamespace;
+    record->fieldId = fieldId;
+    record->rule = rule;
+    record->before = before;
+    record->after = after;
+}
+
+static BOOL OW_WILD_RUNTIME_COMPOSITION_CODE FieldDomain(
+    u8 fieldNamespace,
+    u8 fieldId,
+    u8 *minimumOut,
+    u8 *maximumOut,
+    BOOL *numericOut)
+{
+    u8 kind;
+    u8 maximum = 0xFF;
+    int maskIndex;
+    if (fieldNamespace == OW_WILD_RUNTIME_FIELD_STATE) {
+        if (fieldId == 0 || fieldId > 27) return FALSE;
+        kind = 4;
+        maskIndex = 0;
+    } else if (fieldNamespace == OW_WILD_RUNTIME_FIELD_CONTROLLER) {
+        if (fieldId == 0 || fieldId > 7) return FALSE;
+        kind = 5;
+        maskIndex = 1;
+    } else return FALSE;
+    /* The shared resident Task-5 table/helper supplies maxima and exact enum
+     * gaps; Task 6 supplies the nonzero movement-speed lower bound. */
+    *minimumOut = fieldNamespace == OW_WILD_RUNTIME_FIELD_STATE
+        && fieldId == 3 ? 1 : 0;
+    *numericOut = (sOwbdNumericFieldMasks[maskIndex]
+        & (1u << fieldId)) != 0;
+    while (maximum != 0 && !OwbdStaticValueValid(kind, fieldId, maximum))
+        maximum--;
+    if (!OwbdStaticValueValid(kind, fieldId, maximum)) return FALSE;
+    *maximumOut = maximum;
+    return TRUE;
+}
+
+static OverworldWildRuntimeStatus OW_WILD_RUNTIME_COMPOSITION_CODE
+ApplyModifierOperation(
+    OverworldWildRuntimeEffectiveCache *cache,
+    OverworldWildRuntimeProvenance *provenance,
+    const OverworldWildRuntimeModifierWork *work,
+    const OverworldWildRuntimeModifierOperation *operation)
+{
+    OverworldWildRuntimeFieldContribution *record = NULL;
+    u8 minimum = 0, maximum = 0, before, after;
+    BOOL numeric;
+    signed long result;
+    u8 *target;
+    u8 fieldIndex;
+
+    if (!FieldDomain(operation->fieldNamespace, operation->fieldId,
+            &minimum, &maximum, &numeric))
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    if (operation->fieldNamespace == OW_WILD_RUNTIME_FIELD_STATE) {
+        target = cache->stateValues;
+        fieldIndex = operation->fieldId;
+    } else {
+        target = cache->controllerValues;
+        fieldIndex = operation->fieldId - 1;
+    }
+    before = target[fieldIndex];
+    if (operation->operatorKind < OW_WILD_RUNTIME_OPERATOR_SET
+        || operation->operatorKind > OW_WILD_RUNTIME_OPERATOR_ADD_AT_MOST)
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    if (operation->operatorKind != OW_WILD_RUNTIME_OPERATOR_ADD
+        && operation->operatorKind != OW_WILD_RUNTIME_OPERATOR_ADD_AT_LEAST
+        && operation->operatorKind != OW_WILD_RUNTIME_OPERATOR_ADD_AT_MOST
+        && (operation->operand < 0 || operation->operand > 255)) {
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    }
+    if (!numeric && operation->operatorKind != OW_WILD_RUNTIME_OPERATOR_SET)
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    /* Runtime relative operands are the frozen s16 ABI.  The shared Task-5
+     * helper still owns field/operator/bound applicability, but receives a
+     * neutral wire delta so its serialized s8/-32..32 limit cannot narrow a
+     * runtime operation. */
+    if (!OwbdModifierPayloadValid(
+            operation->fieldNamespace == OW_WILD_RUNTIME_FIELD_STATE ? 4 : 5,
+            operation->fieldId, operation->operatorKind,
+            operation->operatorKind == OW_WILD_RUNTIME_OPERATOR_ADD
+                    || operation->operatorKind
+                        >= OW_WILD_RUNTIME_OPERATOR_ADD_AT_LEAST
+                ? 0 : (signed char)operation->operand,
+            operation->bound))
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    /* The shared helper validates every maximum and enum gap.  Speed is the
+     * sole supported field whose Task-6 minimum is nonzero. */
+    if (operation->fieldNamespace == OW_WILD_RUNTIME_FIELD_STATE
+        && operation->fieldId == 3
+        && ((operation->operatorKind != OW_WILD_RUNTIME_OPERATOR_ADD
+                && operation->operatorKind
+                    < OW_WILD_RUNTIME_OPERATOR_ADD_AT_LEAST
+                && operation->operand == 0)
+            || (operation->operatorKind
+                    >= OW_WILD_RUNTIME_OPERATOR_ADD_AT_LEAST
+                && operation->bound == 0)))
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    switch (operation->operatorKind) {
+    case OW_WILD_RUNTIME_OPERATOR_SET: result = operation->operand; break;
+    case OW_WILD_RUNTIME_OPERATOR_ADD:
+        result = (signed long)before + operation->operand; break;
+    case OW_WILD_RUNTIME_OPERATOR_AT_LEAST:
+        result = before > operation->operand ? before : operation->operand;
+        break;
+    case OW_WILD_RUNTIME_OPERATOR_AT_MOST:
+        result = before < operation->operand ? before : operation->operand;
+        break;
+    case OW_WILD_RUNTIME_OPERATOR_ADD_AT_LEAST:
+        result = (signed long)before + operation->operand;
+        if (result < minimum) result = minimum;
+        if (result > maximum) result = maximum;
+        if (result < operation->bound) result = operation->bound;
+        break;
+    case OW_WILD_RUNTIME_OPERATOR_ADD_AT_MOST:
+        result = (signed long)before + operation->operand;
+        if (result < minimum) result = minimum;
+        if (result > maximum) result = maximum;
+        if (result > operation->bound) result = operation->bound;
+        break;
+    default: return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    }
+    if (result < minimum) result = minimum;
+    if (result > maximum) result = maximum;
+    after = (u8)result;
+    target[fieldIndex] = after;
+    if (provenance->contributionCount
+            < OW_WILD_RUNTIME_MAX_PROVENANCE_CONTRIBUTIONS) {
+        record = &provenance->contributions[provenance->contributionCount++];
+        record->definitionId = work->definition.stableId;
+        record->ownerId = work->ownerId;
+        record->instanceKey = work->instanceKey;
+        record->operand = operation->operand;
+        record->fieldNamespace = operation->fieldNamespace;
+        record->fieldId = operation->fieldId;
+        record->operatorKind = operation->operatorKind;
+        record->bound = operation->bound;
+        record->before = before;
+        record->after = after;
+    } else {
+        provenance->flags |=
+            OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CONTRIBUTIONS;
+    }
+    if (operation->operatorKind == OW_WILD_RUNTIME_OPERATOR_SET) {
+        u8 writerIndex = operation->fieldNamespace
+                == OW_WILD_RUNTIME_FIELD_STATE
+            ? operation->fieldId
+            : (u8)(28 + operation->fieldId - 1);
+        if (writerIndex < OW_WILD_RUNTIME_PROVENANCE_FIELD_COUNT)
+            provenance->lastWriterDefinitionIds[writerIndex] =
+                work->definition.stableId;
+    }
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+static BOOL OW_WILD_RUNTIME_COMPOSITION_CODE ModifierApplies(
+    const OverworldWildRuntimeDefinition *definition,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    const OverworldWildRuntimeEffectiveCache *effective);
+
+static OverworldWildRuntimeStatus OW_WILD_RUNTIME_COMPOSITION_CODE
+ApplyModifierWork(
+    OverworldWildRuntimeEffectiveCache *effective,
+    OverworldWildRuntimeProvenance *provenance,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    const OverworldWildRuntimeModifierWork *work,
+    const OverworldWildRuntimeStaticModifierContribution *staticContribution)
+{
+    OverworldWildRuntimeModifierOperation operations[16];
+    u8 operationCount = 0;
+    u8 operationIndex;
+    BOOL applies = ModifierApplies(&work->definition, staticCache, effective);
+
+    if (provenance->modifierCount < OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS) {
+        OverworldWildRuntimeModifierProvenance *record =
+            &provenance->modifiers[provenance->modifierCount++];
+        record->definitionId = work->definition.stableId;
+        record->ownerId = work->ownerId;
+        record->instanceKey = work->instanceKey;
+        record->channel = work->definition.channel;
+        record->priority = work->definition.priority;
+        record->applied = applies;
+        record->skipReason = applies ? OW_WILD_RUNTIME_SKIP_NONE
+                                     : OW_WILD_RUNTIME_SKIP_FILTER;
+        if (staticContribution != NULL) {
+            record->staticPriority = staticContribution->staticPriority;
+            record->ruleStableId = staticContribution->ruleStableId;
+            record->actionStableId = staticContribution->actionStableId;
+            record->channel = 0;
+        }
+    } else {
+        provenance->flags |= OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_MODIFIERS;
+    }
+    if (!OverworldWildRuntime_CopyInstalledModifierOperations(
+            work->definition.stableId, operations,
+            sizeof(operations) / sizeof(operations[0]), &operationCount))
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    for (operationIndex = 0; operationIndex < operationCount;
+            operationIndex++) {
+        u8 otherIndex;
+        for (otherIndex = (u8)(operationIndex + 1);
+                otherIndex < operationCount; otherIndex++) {
+            if (operations[operationIndex].fieldNamespace
+                    != operations[otherIndex].fieldNamespace
+                || operations[operationIndex].fieldId
+                    != operations[otherIndex].fieldId) continue;
+            if ((operations[operationIndex].operatorKind
+                        == OW_WILD_RUNTIME_OPERATOR_AT_LEAST
+                    && operations[otherIndex].operatorKind
+                        == OW_WILD_RUNTIME_OPERATOR_AT_MOST)
+                || (operations[operationIndex].operatorKind
+                        == OW_WILD_RUNTIME_OPERATOR_AT_MOST
+                    && operations[otherIndex].operatorKind
+                        == OW_WILD_RUNTIME_OPERATOR_AT_LEAST))
+                return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+        }
+    }
+    if (!applies) return OW_WILD_RUNTIME_STATUS_OK;
+    for (operationIndex = 0; operationIndex < operationCount;
+            operationIndex++) {
+        OverworldWildRuntimeStatus status = ApplyModifierOperation(
+            effective, provenance, work, &operations[operationIndex]);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+static OverworldWildRuntimeStatus OW_WILD_RUNTIME_COMPOSITION_CODE
+ValidateEffectiveScalarDomains(
+    const OverworldWildRuntimeEffectiveCache *cache)
+{
+    u8 fieldId;
+    if (cache->controllerId == 0 || cache->nodeId == 0
+        || cache->profileId == 0 || cache->semanticRole == 0
+        || cache->semanticRole > 7 || cache->stateValues[0] > 11
+        || cache->stateValues[0] == 9
+        || cache->stateValues[9] > cache->stateValues[10]
+        || cache->controllerValues[8] != 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    for (fieldId = 1; fieldId <= 27; fieldId++) {
+        if (!OwbdStaticValueValid(4, fieldId, cache->stateValues[fieldId]))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    }
+    for (fieldId = 1; fieldId <= 7; fieldId++) {
+        if (!OwbdStaticValueValid(5, fieldId,
+                cache->controllerValues[fieldId - 1]))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    }
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+static BOOL OW_WILD_RUNTIME_COMPOSITION_CODE ModifierApplies(
+    const OverworldWildRuntimeDefinition *definition,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    const OverworldWildRuntimeEffectiveCache *effective)
+{
+    if (definition->immutableContextMask != 0xFFFFFFFFu
+        && (staticCache->immutableContextMask & definition->immutableContextMask)
+            != definition->immutableContextMask) return FALSE;
+    if (definition->controllerId != 0
+        && definition->controllerId != effective->controllerId) return FALSE;
+    if (definition->effectiveProfileId != 0
+        && definition->effectiveProfileId != effective->profileId) return FALSE;
+    if (definition->applicabilitySemanticRole != 0
+        && definition->applicabilitySemanticRole != effective->semanticRole)
+        return FALSE;
+    return TRUE;
+}
+
+static void OW_WILD_RUNTIME_COMPOSITION_CODE AddCandidateProvenance(
+    OverworldWildRuntimeProvenance *provenance,
+    const OverworldWildRuntimeCandidateProvenance *candidate)
+{
+    if (provenance->candidateCount
+            < OW_WILD_RUNTIME_MAX_PROVENANCE_CANDIDATES) {
+        provenance->candidates[provenance->candidateCount++] = *candidate;
+    } else {
+        provenance->flags |=
+            OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CANDIDATES;
+    }
+}
+
+static int OW_WILD_RUNTIME_COMPOSITION_CODE CompareCandidateProvenance(
+    const OverworldWildRuntimeCandidateProvenance *left,
+    const OverworldWildRuntimeCandidateProvenance *right)
+{
+    if (left->channel != right->channel)
+        return left->channel < right->channel ? -1 : 1;
+    if (left->priority != right->priority)
+        return left->priority < right->priority ? -1 : 1;
+    if (left->definitionId != right->definitionId)
+        return left->definitionId < right->definitionId ? -1 : 1;
+    if (left->ownerId != right->ownerId)
+        return left->ownerId < right->ownerId ? -1 : 1;
+    if (left->instanceKey != right->instanceKey)
+        return left->instanceKey < right->instanceKey ? -1 : 1;
+    return 0;
+}
+
+static OverworldWildRuntimeStatus OW_WILD_RUNTIME_COMPOSITION_CODE
+ComposeProspective(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeSlotSidecar *slot,
+    const OverworldWildRuntimeApplicabilityInput *input,
+    const OverworldWildRuntimeStaticCache *resolvedStatic,
+    const OverworldWildRuntimeLayer *layers,
+    u8 layerCount,
+    u32 prospectiveLayerGeneration,
+    u32 prospectiveDataIncarnation,
+    u32 prospectiveCacheIncarnation,
+    OverworldWildRuntimeStaticCache *staticOut,
+    OverworldWildRuntimeEffectiveCache *effectiveOut,
+    OverworldWildRuntimeProvenance *provenanceOut,
+    BOOL *effectiveChangedOut)
+{
+    OverworldWildRuntimeDefinition winnerDefinition;
+    OverworldWildRuntimeResolvedNode winnerNode;
+    OverworldWildRuntimeModifierWork modifiers[
+        OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
+            + OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS];
+    u8 modifierCount = 0;
+    u8 i, j;
+    BOOL hasWinner = FALSE;
+
+    memset(effectiveOut, 0, sizeof(*effectiveOut));
+    memset(provenanceOut, 0, sizeof(*provenanceOut));
+    if (resolvedStatic != NULL) {
+        OverworldWildRuntimeStatus staticStatus =
+            OverworldWildRuntime_ValidateStaticCache(resolvedStatic,
+                slot->staticContextGeneration);
+        if (staticStatus != OW_WILD_RUNTIME_STATUS_OK) return staticStatus;
+        if (slot->staticCache.valid
+            && !BytesEqual(&slot->staticCache, resolvedStatic,
+                sizeof(*resolvedStatic)))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        if (staticOut != resolvedStatic) *staticOut = *resolvedStatic;
+    } else {
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    }
+    if ((input != NULL
+            && !OverworldWildRuntime_ApplicabilityMatchesStaticCache(
+                input, staticOut)))
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    effectiveOut->controllerId = staticOut->controllerId;
+    effectiveOut->nodeId = staticOut->baseNodeId;
+    effectiveOut->profileId = staticOut->baseProfileId;
+    effectiveOut->spawnPolicyId = staticOut->spawnPolicyId;
+    effectiveOut->populationPolicyId = staticOut->populationPolicyId;
+    effectiveOut->semanticRole = staticOut->baseSemanticRole;
+    effectiveOut->dataIncarnation = prospectiveDataIncarnation;
+    effectiveOut->cacheIncarnation = prospectiveCacheIncarnation;
+    effectiveOut->catalogIdentity = staticOut->catalogIdentity;
+    effectiveOut->staticContextIdentity = staticOut->staticContextIdentity;
+    effectiveOut->staticSetHash = staticOut->staticSetHash;
+    effectiveOut->staticContextGeneration =
+        staticOut->staticContextGeneration;
+    memcpy(effectiveOut->stateValues, staticOut->stateValues,
+        sizeof(effectiveOut->stateValues));
+    memcpy(effectiveOut->controllerValues, staticOut->controllerValues,
+        sizeof(effectiveOut->controllerValues));
+    {
+        OverworldWildRuntimeCandidateProvenance base;
+        memset(&base, 0, sizeof(base));
+        base.nodeId = staticOut->baseNodeId;
+        base.profileId = staticOut->baseProfileId;
+        base.semanticRole = staticOut->baseSemanticRole;
+        base.applicable = TRUE;
+        base.isWinner = TRUE;
+        AddCandidateProvenance(provenanceOut, &base);
+    }
+    memset(&winnerDefinition, 0, sizeof(winnerDefinition));
+    memset(&winnerNode, 0, sizeof(winnerNode));
+    for (i = 0; i < layerCount; i++) {
+        OverworldWildRuntimeDefinition definition;
+        OverworldWildRuntimeStatus status = CopyDefinition(
+            layers[i].definitionId, &definition);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+        if (definition.kind == OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE) {
+            OverworldWildRuntimeResolvedNode node;
+            OverworldWildRuntimeCandidateProvenance candidate;
+            BOOL applicable = definition.immutableContextMask == 0xFFFFFFFFu
+                || (staticOut->immutableContextMask
+                        & definition.immutableContextMask)
+                    == definition.immutableContextMask;
+            memset(&candidate, 0, sizeof(candidate));
+            candidate.entryGeneration = layers[i].entryGeneration;
+            candidate.definitionId = definition.stableId;
+            candidate.ownerId = layers[i].ownerId;
+            candidate.instanceKey = layers[i].instanceKey;
+            candidate.channel = definition.channel;
+            candidate.priority = definition.priority;
+            if (definition.controllerId != 0
+                && definition.controllerId != staticOut->controllerId)
+                applicable = FALSE;
+            if (applicable)
+                applicable = OverworldWildRuntime_CopyResolvedCachedNode(
+                    staticOut, &definition, &node);
+            candidate.applicable = applicable;
+            candidate.skipReason = applicable
+                ? OW_WILD_RUNTIME_SKIP_NONE
+                : OW_WILD_RUNTIME_SKIP_NOT_APPLICABLE;
+            if (applicable) {
+                candidate.nodeId = node.nodeId;
+                candidate.profileId = node.profileId;
+                candidate.semanticRole = node.semanticRole;
+                if (!hasWinner || CompareDefinitionKey(&winnerDefinition,
+                        provenanceOut->winningOwnerId,
+                        provenanceOut->winningInstanceKey,
+                        &definition, layers[i].ownerId,
+                        layers[i].instanceKey) < 0) {
+                    for (j = 0; j < provenanceOut->candidateCount; j++)
+                        provenanceOut->candidates[j].isWinner = FALSE;
+                    candidate.isWinner = TRUE;
+                    winnerDefinition = definition;
+                    winnerNode = node;
+                    provenanceOut->winningDefinitionId = definition.stableId;
+                    provenanceOut->winningOwnerId = layers[i].ownerId;
+                    provenanceOut->winningInstanceKey = layers[i].instanceKey;
+                    hasWinner = TRUE;
+                }
+            }
+            AddCandidateProvenance(provenanceOut, &candidate);
+        } else if (definition.kind == OW_WILD_RUNTIME_DEFINITION_MODIFIER) {
+            if (modifierCount >= sizeof(modifiers) / sizeof(modifiers[0]))
+                return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+            modifiers[modifierCount].definition = definition;
+            modifiers[modifierCount].ownerId = layers[i].ownerId;
+            modifiers[modifierCount].instanceKey = layers[i].instanceKey;
+            modifierCount++;
+        } else {
+            return OW_WILD_RUNTIME_STATUS_INVALID_DEFINITION;
+        }
+    }
+    if (hasWinner) {
+        effectiveOut->nodeId = winnerNode.nodeId;
+        effectiveOut->profileId = winnerNode.profileId;
+        effectiveOut->semanticRole = winnerNode.semanticRole;
+        memcpy(effectiveOut->stateValues, winnerNode.stateValues,
+            sizeof(effectiveOut->stateValues));
+    }
+    {
+        OverworldWildRuntimeStatus status =
+            ValidateEffectiveScalarDomains(effectiveOut);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    for (i = 0; i < provenanceOut->candidateCount; i++) {
+        if (provenanceOut->candidates[i].isWinner) {
+            if (i != 0) {
+                OverworldWildRuntimeCandidateProvenance value =
+                    provenanceOut->candidates[0];
+                provenanceOut->candidates[0] =
+                    provenanceOut->candidates[i];
+                provenanceOut->candidates[i] = value;
+            }
+            break;
+        }
+    }
+    if (i == provenanceOut->candidateCount)
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    for (i = 0; i < provenanceOut->candidateCount; i++)
+        provenanceOut->candidates[i].isWinner = i == 0;
+    for (i = 2; i < provenanceOut->candidateCount; i++) {
+        OverworldWildRuntimeCandidateProvenance value =
+            provenanceOut->candidates[i];
+        u8 cursor = i;
+        while (cursor > 1 && CompareCandidateProvenance(&value,
+                &provenanceOut->candidates[cursor - 1]) < 0) {
+            provenanceOut->candidates[cursor] =
+                provenanceOut->candidates[cursor - 1];
+            cursor--;
+        }
+        provenanceOut->candidates[cursor] = value;
+    }
+    for (i = 0; i < staticOut->staticModifierCount; i++) {
+        const OverworldWildRuntimeStaticModifierContribution *contribution =
+            &staticOut->staticModifiers[i];
+        OverworldWildRuntimeDefinition definition;
+        OverworldWildRuntimeModifierWork work;
+        OverworldWildRuntimeStatus status;
+        if (contribution->ruleStableId == 0
+            || contribution->actionStableId == 0)
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        if (i != 0) {
+            const OverworldWildRuntimeStaticModifierContribution *previous =
+                &staticOut->staticModifiers[i - 1];
+            if (contribution->staticPriority < previous->staticPriority
+                || (contribution->staticPriority == previous->staticPriority
+                    && (contribution->ruleStableId < previous->ruleStableId
+                        || (contribution->ruleStableId == previous->ruleStableId
+                            && (contribution->actionStableId
+                                    < previous->actionStableId
+                                || (contribution->actionStableId
+                                        == previous->actionStableId
+                                    && contribution->targetNodeId
+                                        <= previous->targetNodeId))))))
+                return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        }
+        if (contribution->targetNodeId != 0
+            && contribution->targetNodeId != effectiveOut->nodeId)
+            continue;
+        if (contribution->modifierDefinitionId == 0) {
+            OverworldWildRuntimeModifierProvenance *modifier;
+            OverworldWildRuntimeFieldContribution *field;
+            u8 writerIndex;
+            modifier = &provenanceOut->modifiers[
+                provenanceOut->modifierCount++];
+            memcpy(&modifier->staticPriority,
+                (void *)&contribution->staticPriority,
+                sizeof(contribution->staticPriority)
+                    + sizeof(contribution->ruleStableId)
+                    + sizeof(contribution->actionStableId));
+            modifier->applied = TRUE;
+            field = &provenanceOut->contributions[
+                provenanceOut->contributionCount++];
+            field->definitionId = contribution->actionStableId;
+            memcpy(&field->operand, (void *)&contribution->operand,
+                sizeof(contribution->operand)
+                    + sizeof(contribution->fieldNamespace)
+                    + sizeof(contribution->fieldId)
+                    + sizeof(contribution->operatorKind)
+                    + sizeof(contribution->bound)
+                    + sizeof(contribution->before)
+                    + sizeof(contribution->after));
+            if (contribution->operatorKind == OW_WILD_RUNTIME_OPERATOR_SET) {
+                writerIndex = (u8)(contribution->fieldId
+                    + 27 * (contribution->fieldNamespace - 1));
+                provenanceOut->lastWriterDefinitionIds[writerIndex] =
+                    contribution->actionStableId;
+            }
+            continue;
+        }
+        status = CopyDefinition(
+            contribution->modifierDefinitionId, &definition);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+        if (definition.kind != OW_WILD_RUNTIME_DEFINITION_MODIFIER)
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        work.definition = definition;
+        work.ownerId = 0;
+        work.instanceKey = 0;
+        status = ApplyModifierWork(effectiveOut, provenanceOut, staticOut,
+            &work, contribution);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    if (staticOut->reserved)
+        provenanceOut->flags |= OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_MODIFIERS
+            | OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CONTRIBUTIONS;
+    for (i = 1; i < modifierCount; i++) {
+        OverworldWildRuntimeModifierWork value = modifiers[i];
+        u8 cursor = i;
+        while (cursor != 0 && CompareDefinitionKey(&value.definition,
+                value.ownerId, value.instanceKey,
+                &modifiers[cursor - 1].definition,
+                modifiers[cursor - 1].ownerId,
+                modifiers[cursor - 1].instanceKey) < 0) {
+            modifiers[cursor] = modifiers[cursor - 1];
+            cursor--;
+        }
+        modifiers[cursor] = value;
+    }
+    for (i = 0; i < modifierCount; i++) {
+        OverworldWildRuntimeStatus status = ApplyModifierWork(
+            effectiveOut, provenanceOut, staticOut, &modifiers[i], NULL);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    if (effectiveOut->stateValues[10] < effectiveOut->stateValues[9]) {
+        u8 before = effectiveOut->stateValues[10];
+        effectiveOut->stateValues[10] = effectiveOut->stateValues[9];
+        RecordNormalization(provenanceOut, OW_WILD_RUNTIME_FIELD_STATE, 10,
+            OW_WILD_RUNTIME_NORMALIZE_HOP_MAX, before,
+            effectiveOut->stateValues[10]);
+    }
+    if (effectiveOut->stateValues[7] == effectiveOut->stateValues[6]
+        && effectiveOut->stateValues[7] != 15) {
+        u8 before = effectiveOut->stateValues[7];
+        effectiveOut->stateValues[7] = 15;
+        RecordNormalization(provenanceOut, OW_WILD_RUNTIME_FIELD_STATE, 7,
+            OW_WILD_RUNTIME_NORMALIZE_SECONDARY_TILE, before, 15);
+    }
+    if ((effectiveOut->controllerValues[8] & 1)
+        && effectiveOut->controllerValues[6] == 0) {
+        effectiveOut->controllerValues[6] = 1;
+        RecordNormalization(provenanceOut,
+            OW_WILD_RUNTIME_FIELD_CONTROLLER, 7,
+            OW_WILD_RUNTIME_NORMALIZE_STAMINA, 0, 1);
+    }
+    if (effectiveOut->semanticRole == OW_WILD_RUNTIME_ROLE_TIRED
+        && effectiveOut->controllerValues[7] == 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    if ((effectiveOut->stateValues[1] == 2
+            && effectiveOut->stateValues[12] == 0)
+        || (effectiveOut->stateValues[1] == 5
+            && (effectiveOut->stateValues[16] == 0
+                || effectiveOut->stateValues[17] == 0))
+        || (effectiveOut->stateValues[1] == 6
+            && effectiveOut->stateValues[14] == 0))
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    effectiveOut->primitives[0] = effectiveOut->stateValues[1];
+    effectiveOut->primitives[1] = effectiveOut->stateValues[2];
+    effectiveOut->primitives[2] = effectiveOut->semanticRole == 4
+        ? 2 : (effectiveOut->semanticRole == OW_WILD_RUNTIME_ROLE_TIRED
+            ? 1 : 0);
+    effectiveOut->primitives[3] = effectiveOut->stateValues[3];
+    effectiveOut->primitives[4] = effectiveOut->stateValues[4];
+    if (effectiveOut->stateValues[1] != 0
+        && effectiveOut->stateValues[0] != 9)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_CAN_MOVE;
+    if (effectiveOut->stateValues[26] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_BATTLE_ON_CONTACT;
+    if (effectiveOut->stateValues[12] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_HOP;
+    if (effectiveOut->stateValues[14] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_TELEPORT;
+    if (effectiveOut->stateValues[17] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_RAM;
+    if (effectiveOut->stateValues[5] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_JUMP_LEDGES;
+    if (effectiveOut->stateValues[1] != 0)
+        effectiveOut->capabilityMask |= OW_WILD_RUNTIME_CAP_FRAME_WORK;
+    effectiveOut->flags = OW_WILD_RUNTIME_CACHE_VALID;
+    effectiveOut->effectiveHash = EffectiveHash(effectiveOut);
+    *effectiveChangedOut = !(slot->effectiveCache.flags
+            & OW_WILD_RUNTIME_CACHE_VALID)
+        || slot->effectiveCache.effectiveHash != effectiveOut->effectiveHash
+        || slot->effectiveCache.capabilityMask != effectiveOut->capabilityMask
+        || !BytesEqual(&slot->effectiveCache.controllerId,
+            &effectiveOut->controllerId,
+            sizeof(*effectiveOut)
+                - offsetof(OverworldWildRuntimeEffectiveCache, controllerId));
+    effectiveOut->layerGeneration = prospectiveLayerGeneration;
+    effectiveOut->effectiveGeneration = *effectiveChangedOut
+        && (slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID)
+        ? OverworldWildRuntime_AdvanceNonzeroGeneration(
+            slot->effectiveGeneration)
+        : slot->effectiveGeneration;
+    if ((*effectiveChangedOut && slot->effectiveGeneration == 0xFFFFFFFFu)
+        || slot->provenance.freshnessGeneration == 0xFFFFFFFFu)
+        effectiveOut->cacheIncarnation =
+            OverworldWildRuntime_AdvanceNonzeroGeneration(
+                effectiveOut->cacheIncarnation);
+    provenanceOut->freshnessGeneration =
+        OverworldWildRuntime_AdvanceNonzeroGeneration(
+            slot->provenance.freshnessGeneration);
+    provenanceOut->dataIncarnation = effectiveOut->dataIncarnation;
+    provenanceOut->cacheIncarnation = effectiveOut->cacheIncarnation;
+    provenanceOut->catalogIdentity = effectiveOut->catalogIdentity;
+    provenanceOut->staticContextIdentity =
+        effectiveOut->staticContextIdentity;
+    provenanceOut->staticSetHash = effectiveOut->staticSetHash;
+    provenanceOut->staticContextGeneration =
+        effectiveOut->staticContextGeneration;
+    provenanceOut->layerGeneration = prospectiveLayerGeneration;
+    provenanceOut->effectiveGeneration = effectiveOut->effectiveGeneration;
+    provenanceOut->effectiveHash = effectiveOut->effectiveHash;
+    provenanceOut->flags |= OW_WILD_RUNTIME_PROVENANCE_VALID;
+    provenanceOut->provenanceHash = ProvenanceHash(provenanceOut);
+    effectiveOut->provenanceHash = provenanceOut->provenanceHash;
+    effectiveOut->cacheIdentity = CacheIdentity(
+        runtime, slot, effectiveOut, provenanceOut,
+        prospectiveDataIncarnation != runtime->dataIncarnation
+            ? OverworldWildRuntime_AdvanceNonzeroGeneration(
+                sOverworldWildRuntimeLayerService.privateRuntimeIdentity)
+            : sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
+    provenanceOut->cacheIdentity = effectiveOut->cacheIdentity;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
 void OverworldWildRuntime_HandleSlotGenerationWrap(
     OverworldWildBehaviorStackRuntime *runtime,
     int targetSlotIndex)
 {
+    OverworldWildRuntimeSlotSidecar *targetSlot;
+    u32 slotGeneration;
+    u32 cacheIncarnation;
     u8 slotIndex;
     if (runtime == NULL || targetSlotIndex < 0
         || targetSlotIndex >= OW_WILD_MAX_SPAWNS) return;
+    targetSlot = &runtime->slots[targetSlotIndex];
+    slotGeneration = targetSlot->slotGeneration + 1;
+    cacheIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        targetSlot->cacheIncarnation);
+    if (slotGeneration != 0) {
+        InitializeInvalidatedSlot(
+            targetSlot, slotGeneration, cacheIncarnation);
+        return;
+    }
     if (runtime->handleEpoch == 0xFFFFFFFFu) {
         RestartRuntime(runtime, TRUE);
         return;
@@ -768,17 +1675,26 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
         return;
     }
     runtime->handleEpoch++;
+    runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
+        runtime->dataIncarnation);
     RotatePrivateIdentity(runtime);
     for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS; slotIndex++) {
         OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[slotIndex];
         if (slotIndex == (u8)targetSlotIndex) {
-            InitializeInvalidatedSlot(slot, 1);
+            InitializeInvalidatedSlot(slot, 1,
+                OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    slot->cacheIncarnation));
         } else {
+            slot->cacheIncarnation =
+                OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    slot->cacheIncarnation);
             RekeySlot(slot,
                 sOverworldWildRuntimeLayerService.wrapLayerCounts[slotIndex]);
             slot->layerGeneration =
                 sOverworldWildRuntimeLayerService
                     .wrapLayerGenerations[slotIndex];
+            memset(&slot->effectiveCache, 0, sizeof(slot->effectiveCache));
+            memset(&slot->provenance, 0, sizeof(slot->provenance));
         }
     }
 }
@@ -813,7 +1729,12 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         &sOverworldWildRuntimeLayerService.scratch;
     OverworldWildRuntimeSlotSidecar *slot;
     OverworldWildRuntimeStatus status;
+    OverworldWildRuntimeStaticCache prospectiveStatic;
+    OverworldWildRuntimeEffectiveCache prospectiveEffective;
+    OverworldWildRuntimeProvenance prospectiveProvenance;
+    u32 nextEntryGenerationAfter;
     u8 i, j, survivors, mutated = FALSE, rekey = FALSE;
+    BOOL effectiveChanged = FALSE;
     BOOL needsApplicability = FALSE;
     if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     InitResult(runtime, slotIndex, result);
@@ -834,6 +1755,10 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     status = ValidateBank(slot);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     status = ValidateStoredSlotSemantics(slot);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
+    status = OverworldWildRuntime_ResolveRetainedStaticCache(
+        &slot->staticCache, &slot->staticCache.staticContext,
+        slot->staticContextGeneration, &prospectiveStatic);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     memset(scratch, 0, sizeof(*scratch));
     for (i = 0; i < operationCount; i++) scratch->operationOrder[i] = i;
@@ -1043,33 +1968,68 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         result->ok = result->mutated = TRUE;
         return OW_WILD_RUNTIME_STATUS_RUNTIME_EPOCH_RESTARTED;
     }
+    nextEntryGenerationAfter = slot->nextEntryGeneration;
     if (rekey) {
-        runtime->handleEpoch++;
-        RotatePrivateIdentity(runtime);
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            if (i == slotIndex) continue;
-            RekeySlot(&runtime->slots[i],
-                sOverworldWildRuntimeLayerService.wrapLayerCounts[i]);
-            runtime->slots[i].layerGeneration =
-                sOverworldWildRuntimeLayerService.wrapLayerGenerations[i];
-        }
         for (i = 0; i < scratch->finalCount; i++) {
             scratch->finalLayers[i].entryGeneration = (u32)i + 1;
             scratch->finalLayers[i].reserved = 0;
         }
-        slot->nextEntryGeneration = (u32)scratch->finalCount + 1;
+        nextEntryGenerationAfter = (u32)scratch->finalCount + 1;
     } else {
         for (i = 0; i < scratch->finalCount; i++) {
             if (scratch->finalLayers[i].reserved) {
                 scratch->finalLayers[i].entryGeneration =
-                    slot->nextEntryGeneration++;
+                    nextEntryGenerationAfter++;
                 scratch->finalLayers[i].reserved = 0;
             }
         }
     }
+    status = ComposeProspective(
+        runtime, slot, needsApplicability ? applicability : NULL,
+        &prospectiveStatic,
+        scratch->finalLayers,
+        scratch->finalCount,
+        OverworldWildRuntime_AdvanceNonzeroGeneration(slot->layerGeneration),
+        rekey
+            ? OverworldWildRuntime_AdvanceNonzeroGeneration(
+                runtime->dataIncarnation)
+            : runtime->dataIncarnation,
+        (rekey || slot->layerGeneration == 0xFFFFFFFFu)
+            ? OverworldWildRuntime_AdvanceNonzeroGeneration(
+                slot->cacheIncarnation)
+            : slot->cacheIncarnation,
+        &prospectiveStatic, &prospectiveEffective, &prospectiveProvenance,
+        &effectiveChanged);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
+    if (rekey) {
+        runtime->handleEpoch++;
+        runtime->dataIncarnation = prospectiveEffective.dataIncarnation;
+        RotatePrivateIdentity(runtime);
+        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+            if (i == slotIndex) continue;
+            runtime->slots[i].cacheIncarnation =
+                OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    runtime->slots[i].cacheIncarnation);
+            RekeySlot(&runtime->slots[i],
+                sOverworldWildRuntimeLayerService.wrapLayerCounts[i]);
+            runtime->slots[i].layerGeneration =
+                sOverworldWildRuntimeLayerService.wrapLayerGenerations[i];
+            memset(&runtime->slots[i].effectiveCache, 0,
+                sizeof(runtime->slots[i].effectiveCache));
+            memset(&runtime->slots[i].provenance, 0,
+                sizeof(runtime->slots[i].provenance));
+        }
+    }
+    slot->nextEntryGeneration = nextEntryGenerationAfter;
     WriteLayers(slot, scratch->finalLayers, scratch->finalCount);
     slot->layerGeneration = OverworldWildRuntime_AdvanceNonzeroGeneration(
         slot->layerGeneration);
+    slot->staticCache = prospectiveStatic;
+    slot->cacheIncarnation = prospectiveEffective.cacheIncarnation;
+    slot->effectiveCache = prospectiveEffective;
+    slot->provenance = prospectiveProvenance;
+    if (effectiveChanged)
+        slot->effectiveGeneration = prospectiveEffective.effectiveGeneration;
     for (i = 0; i < operationCount; i++) {
         if (result->operationResults[i].handle.ownerId) {
             int index = FindLayer(slot, result->operationResults[i].handle.ownerId,
@@ -1220,6 +2180,140 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ClearAllForSlot(
     operation.kind = OW_WILD_RUNTIME_DELTA_CLEAR;
     return OneOperation(runtime, slotIndex, expectedSlotGeneration,
         NULL, &operation, result);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeStaticContext *staticContext,
+    const OverworldWildRuntimeApplicabilityInput *applicability)
+{
+    OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeLayer layers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
+    OverworldWildRuntimeStaticCache staticCache;
+    OverworldWildRuntimeStaticCache resolvedStatic;
+    OverworldWildRuntimeEffectiveCache effectiveCache;
+    OverworldWildRuntimeProvenance provenance;
+    OverworldWildRuntimeStatus status;
+    BOOL changed;
+    u8 i;
+
+    if (runtime == NULL || applicability == NULL || staticContext == NULL
+        || runtime != sOverworldWildRuntimeLayerService.boundRuntime
+        || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
+        || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
+        || runtime->handleEpoch == 0
+        || runtime->reserved[0] || runtime->reserved[1] || runtime->reserved[2]
+        || slotIndex >= OW_WILD_MAX_SPAWNS || expectedSlotGeneration == 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    slot = &runtime->slots[slotIndex];
+    if (slot->lifecycleState != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED)
+        return OW_WILD_RUNTIME_STATUS_INACTIVE_SLOT;
+    if (slot->slotGeneration != expectedSlotGeneration)
+        return OW_WILD_RUNTIME_STATUS_SLOT_GENERATION_MISMATCH;
+    status = ValidateBank(slot);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    status = ValidateApplicabilityShape(applicability);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    if (!OverworldWildRuntime_CopyInstalledStaticCache(
+            staticContext, applicability, slot->staticContextGeneration,
+            &resolvedStatic))
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    if (slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID) {
+        status = ValidateCacheKey(runtime, slot);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+        if (!BytesEqual(&slot->staticCache, &resolvedStatic,
+                sizeof(resolvedStatic)))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        return OW_WILD_RUNTIME_STATUS_IDEMPOTENT;
+    }
+    for (i = 0; i < slot->activeLayerCount; i++) ReadLayer(slot, i, &layers[i]);
+    status = ComposeProspective(
+        runtime, slot, applicability, &resolvedStatic, layers,
+        slot->activeLayerCount, slot->layerGeneration,
+        runtime->dataIncarnation, slot->cacheIncarnation, &staticCache,
+        &effectiveCache, &provenance, &changed);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    slot->staticCache = staticCache;
+    slot->effectiveCache = effectiveCache;
+    slot->provenance = provenance;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+static OverworldWildRuntimeStatus ValidateCacheQuery(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    if (runtime == NULL
+        || runtime != sOverworldWildRuntimeLayerService.boundRuntime
+        || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
+        || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
+        || slotIndex >= OW_WILD_MAX_SPAWNS || expectedSlotGeneration == 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    slot = &runtime->slots[slotIndex];
+    if (slot->lifecycleState != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED)
+        return OW_WILD_RUNTIME_STATUS_INACTIVE_SLOT;
+    if (slot->slotGeneration != expectedSlotGeneration)
+        return OW_WILD_RUNTIME_STATUS_SLOT_GENERATION_MISMATCH;
+    if (!(slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID))
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    return ValidateCacheKey(runtime, slot);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_GetEffectiveCache(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    OverworldWildRuntimeEffectiveCache *cacheOut)
+{
+    OverworldWildRuntimeStatus status;
+    if (cacheOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    status = ValidateCacheQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) {
+        memset(cacheOut, 0, sizeof(*cacheOut));
+        return status;
+    }
+    *cacheOut = runtime->slots[slotIndex].effectiveCache;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_GetCapabilityMask(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u32 *capabilityMaskOut)
+{
+    OverworldWildRuntimeStatus status;
+    if (capabilityMaskOut == NULL)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    status = ValidateCacheQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) {
+        *capabilityMaskOut = 0;
+        return status;
+    }
+    *capabilityMaskOut =
+        runtime->slots[slotIndex].effectiveCache.capabilityMask;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    OverworldWildRuntimeProvenance *provenanceOut)
+{
+    OverworldWildRuntimeStatus status;
+    if (provenanceOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    status = ValidateCacheQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) {
+        memset(provenanceOut, 0, sizeof(*provenanceOut));
+        return status;
+    }
+    *provenanceOut = runtime->slots[slotIndex].provenance;
+    return OW_WILD_RUNTIME_STATUS_OK;
 }
 
 u8 OverworldWildRuntime_GetLayerCount(

@@ -28,9 +28,9 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #157
     bl LoadResidentOverlay
 
-// load overlay 153 as a second, untracked resident code segment
-    mov r1, #153
-    bl LoadResidentOverlay
+// load overlays 158 and 153 through the bounded padding helper
+    bl LoadRuntimeLayersAndHistory
+    nop
 
     mov r0, #0
     mov r1, #3
@@ -57,5 +57,19 @@ LoadResidentOverlay:
     bx r2
 
 .pool
+
+// Stock 0x021102E0..0x021102F7 is all 0xFF padding.  Keep this helper in the
+// bounded 0x021102E0..0x021102F3 area so the adjacent word at 0x021102F8
+// cannot be overwritten.
+.org 0x021102E0
+.area 0x14, 0xFF
+LoadRuntimeLayersAndHistory:
+    push {r3, lr}
+    mov r1, #158
+    bl LoadResidentOverlay
+    mov r1, #153
+    bl LoadResidentOverlay
+    pop {r3, pc}
+.endarea
 
 .close

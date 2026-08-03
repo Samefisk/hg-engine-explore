@@ -8,6 +8,7 @@ import json
 import re
 import struct
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -23,7 +24,11 @@ RUNTIME_OVERLAY_ID = 157
 RUNTIME_OVERLAY_BASE = 0x023BB400
 RUNTIME_OVERLAY_USABLE_END = 0x023BD380
 RUNTIME_OVERLAY_LIMIT = 0x023BD400
-EXPECTED_ARCHIVE_END = 0x023BA268
+RUNTIME_LAYERS_OVERLAY_ID = 158
+RUNTIME_LAYERS_OVERLAY_BASE = 0x023B8400
+RUNTIME_LAYERS_OVERLAY_USABLE_END = 0x023BB380
+RUNTIME_LAYERS_OVERLAY_LIMIT = 0x023BB400
+EXPECTED_ARCHIVE_END = 0x023B7268
 EXPECTED_ARCHIVE_MARGIN = 0x1198
 EXPECTED_FREE_MARGIN = 0x198
 MAIN_RAM_START = 0x02000000
@@ -95,6 +100,7 @@ def verify_boot_decoder_freshness(
     rom: bytes,
     arm9: bytes,
     runtime_overlay: bytes,
+    runtime_layers_overlay: bytes,
     patched_arm9: bytes,
 ) -> None:
     require(manifest_path.is_file(),
@@ -106,6 +112,7 @@ def verify_boot_decoder_freshness(
     for path_text in (
         "armips/asm/syntheticoverlay.s",
         "src/overworld_wild_runtime_overlay/linker.ld",
+        "src/overworld_wild_runtime_layers_overlay/linker.ld",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
     ):
@@ -121,6 +128,7 @@ def verify_boot_decoder_freshness(
     for name, data in (
         ("patched_arm9", patched_arm9),
         ("overworld_wild_runtime_binary", runtime_overlay),
+        ("overworld_wild_runtime_layers_binary", runtime_layers_overlay),
         ("packaged_rom", rom),
     ):
         record = outputs.get(name)
@@ -187,9 +195,9 @@ def measure_boot_archive_layout(
         "archive_end": archive_end,
         "archive_size": archive_size,
         "heap_metadata_size": heap_metadata_size,
-        "archive_margin": RUNTIME_OVERLAY_BASE - archive_end,
+        "archive_margin": RUNTIME_LAYERS_OVERLAY_BASE - archive_end,
         "free_margin": (
-            RUNTIME_OVERLAY_BASE - archive_end - OVERLAY_GUARD
+            RUNTIME_LAYERS_OVERLAY_BASE - archive_end - OVERLAY_GUARD
         ),
     }
 
@@ -1288,6 +1296,10 @@ def main() -> None:
         RUNTIME_OVERLAY_ID < len(rows),
         "final y9 has no overlay 157 row",
     )
+    require(
+        RUNTIME_LAYERS_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 158 row",
+    )
 
     runtime_row = rows[RUNTIME_OVERLAY_ID]
     runtime_overlay = final_overlay(rom, fat, runtime_row)
@@ -1297,13 +1309,6 @@ def main() -> None:
     require(
         runtime_overlay == runtime_built,
         "final ROM overlay 157 differs from linked output",
-    )
-    verify_boot_decoder_freshness(
-        manifest_path,
-        rom,
-        arm9,
-        runtime_overlay,
-        (REPO / "base/arm9.bin").read_bytes(),
     )
     require(
         runtime_row == (
@@ -1323,6 +1328,77 @@ def main() -> None:
         and RUNTIME_OVERLAY_BASE + len(runtime_overlay)
             <= RUNTIME_OVERLAY_USABLE_END,
         "overlay 157 exceeds its fixed image/headroom gate",
+    )
+
+    runtime_layers_row = rows[RUNTIME_LAYERS_OVERLAY_ID]
+    runtime_layers_overlay = final_overlay(rom, fat, runtime_layers_row)
+    runtime_layers_built = (
+        REPO / "build/output_overworld_wild_runtime_layers_overlay.bin"
+    ).read_bytes()
+    require(
+        runtime_layers_overlay == runtime_layers_built,
+        "final ROM overlay 158 differs from linked output",
+    )
+    require(
+        runtime_layers_row == (
+            RUNTIME_LAYERS_OVERLAY_ID,
+            RUNTIME_LAYERS_OVERLAY_BASE,
+            len(runtime_layers_overlay),
+            0,
+            0,
+            0,
+            RUNTIME_LAYERS_OVERLAY_ID,
+            0,
+        ),
+        "final overlay 158 row has unexpected metadata",
+    )
+    require(
+        0 < len(runtime_layers_overlay)
+        and RUNTIME_LAYERS_OVERLAY_BASE + len(runtime_layers_overlay)
+            <= RUNTIME_LAYERS_OVERLAY_USABLE_END,
+        "overlay 158 exceeds its fixed image/headroom gate",
+    )
+    scalar_gate = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts/verify_overworld_wild_overlay_size.py"),
+            str(REPO / "build/overworld_wild_runtime_layers_overlay_linked.o"),
+            "--binary",
+            str(REPO / "build/output_overworld_wild_runtime_layers_overlay.bin"),
+            "--overlay", "158",
+            "--task5-owner",
+            str(REPO / "build/pokemon_move_history_task6_overlay_linked.o"),
+            "--lifecycle-consumer",
+            str(REPO / "build/pokemon_move_history_task6_overlay_linked.o"),
+            "--lifecycle-object",
+            str(REPO / "build/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o"),
+            "--scalar-shard",
+            str(REPO / "build/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.o"),
+            "--catalog-owner",
+            str(REPO / "build/overworld_wild_runtime_overlay_linked.o"),
+            "--task8-carrier",
+            str(REPO / "build/overworld_wild_runtime_layers_overlay_task8_symbols.o"),
+            "--runtime-carrier",
+            str(REPO / "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o"),
+            "--spawns-consumer",
+            str(REPO / "build/overworld_wild_spawns_overlay_linked.o"),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    require(
+        scalar_gate.returncode == 0,
+        "overlay 155/157/158 complete typed-owner identity gate failed: "
+        + (scalar_gate.stderr.strip() or scalar_gate.stdout.strip()),
+    )
+    verify_boot_decoder_freshness(
+        manifest_path,
+        rom,
+        arm9,
+        runtime_overlay,
+        runtime_layers_overlay,
+        (REPO / "base/arm9.bin").read_bytes(),
     )
 
     task6_row = rows[TASK6_OVERLAY_ID]
@@ -1381,6 +1457,14 @@ def main() -> None:
     )
     resident_ranges = (
         (
+            RUNTIME_LAYERS_OVERLAY_ID,
+            runtime_layers_row[1],
+            runtime_layers_row[1] + runtime_layers_row[2]
+                + runtime_layers_row[3],
+            RUNTIME_LAYERS_OVERLAY_BASE,
+            RUNTIME_LAYERS_OVERLAY_LIMIT,
+        ),
+        (
             RUNTIME_OVERLAY_ID,
             runtime_row[1],
             runtime_row[1] + runtime_row[2] + runtime_row[3],
@@ -1403,7 +1487,8 @@ def main() -> None:
         ),
     )
     require(
-        RUNTIME_OVERLAY_LIMIT == TASK6_OVERLAY_BASE
+        RUNTIME_LAYERS_OVERLAY_LIMIT == RUNTIME_OVERLAY_BASE
+        and RUNTIME_OVERLAY_LIMIT == TASK6_OVERLAY_BASE
         and TASK6_OVERLAY_LIMIT == OVERLAY_BASE
         and OVERLAY_BASE < OVERLAY_LIMIT - OVERLAY_GUARD,
         "resident overlay windows are not the audited contiguous layout",
@@ -1474,7 +1559,8 @@ def main() -> None:
     for other in rows:
         other_size = other[2] + other[3]
         if other[0] in (
-                OVERLAY_ID, TASK6_OVERLAY_ID, RUNTIME_OVERLAY_ID
+                OVERLAY_ID, TASK6_OVERLAY_ID, RUNTIME_OVERLAY_ID,
+                RUNTIME_LAYERS_OVERLAY_ID
         ) or other_size == 0:
             continue
         other_start = other[1]
@@ -1487,7 +1573,7 @@ def main() -> None:
             not ranges_overlap(
                 other_start,
                 other_end,
-                RUNTIME_OVERLAY_BASE,
+                RUNTIME_LAYERS_OVERLAY_BASE,
                 OVERLAY_LIMIT,
             ),
             f"overlay {other[0]} overlaps the complete resident reservation",
@@ -1496,10 +1582,19 @@ def main() -> None:
     save_constants = (REPO / "include/constants/save.h").read_text()
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
+    field2_heap_size = parse_define(
+        save_constants, "NEW_FIELD2_HEAP_SIZE"
+    )
     require(
-        heap3_size == 0x10B000
-        and 0x110000 - heap3_size == 0x5000,
-        "heap 3 does not explicitly reserve 0x5000 for overlays 157/155/153",
+        heap3_size == 0x108000
+        and 0x110000 - heap3_size == 0x8000,
+        "heap 3 does not explicitly reserve 0x8000 for overlays 158/157/155/153",
+    )
+    require(
+        field2_heap_size == 0x19000
+        and 0x1C000 - field2_heap_size
+            == 0x10B000 - heap3_size == 0x3000,
+        "heap 3/field2 reservation reduction is not the exact paired 0x3000",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1513,6 +1608,19 @@ def main() -> None:
     require(
         arm9_word(0x020F62BC, "patched heap 3 size") == heap3_size,
         "patched heap 3 size differs from NEW_HEAP3_SIZE",
+    )
+    require(
+        read_u16(
+            arm9,
+            0x0203DFE2 - arm9_ram,
+            "patched FieldSystem_New FIELD2 size factor",
+        ) == 0x2219
+        and read_u16(
+            arm9,
+            0x0203DFEA - arm9_ram,
+            "patched FieldSystem_New FIELD2 size shift",
+        ) == 0x0312,
+        "FieldSystem_New does not construct NEW_FIELD2_HEAP_SIZE 0x19000",
     )
     require(
         arm9_word(0x020D2C5C, "main arena low literal") == 0x0226EC40,
@@ -1567,20 +1675,20 @@ def main() -> None:
         not ranges_overlap(
             arm9_ram,
             arm9_end,
-            RUNTIME_OVERLAY_BASE,
+            RUNTIME_LAYERS_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "final ARM9 load image overlaps resident overlays 157/155/153",
+        "final ARM9 load image overlaps resident overlays 158/157/155/153",
     )
     require(
         OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
-            RUNTIME_OVERLAY_BASE,
+            RUNTIME_LAYERS_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "resident overlays 157/155/153 cross the main arena or DTCM stack boundary",
+        "resident overlays 158/157/155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")
@@ -1621,6 +1729,7 @@ def main() -> None:
     startup_entry = 0x02110334
     overlay129_loader = 0x021102C4
     resident_loader = 0x021102D4
+    resident_pair_loader = 0x021102E0
     require(
         thumb_bl_target(
             arm9,
@@ -1642,7 +1751,6 @@ def main() -> None:
             0x02110338,
             0x0211033E,
             0x02110344,
-            0x0211034A,
             0x02110350,
             0x02110352,
             0x02110354,
@@ -1655,17 +1763,20 @@ def main() -> None:
             0x2102,
             0x219B,
             0x219D,
-            0x2199,
             0x2000,
             0x2103,
             0xBD04,
         ),
-        "packaged startup setup/order differs from 129, 155, 157, 153",
+        "packaged startup setup/order differs from 129, 155, 157, 158, 153",
     )
     require(
         thumb_bl_target(
             arm9, arm9_ram, 0x0211033A, "packaged overlay-129 load"
         ) == overlay129_loader
+        and thumb_bl_target(
+            arm9, arm9_ram, 0x0211034A,
+            "packaged overlay-158/153 pair load"
+        ) == resident_pair_loader
         and all(
             thumb_bl_target(
                 arm9,
@@ -1673,9 +1784,53 @@ def main() -> None:
                 address,
                 f"packaged resident load at 0x{address:08X}",
             ) == resident_loader
-            for address in (0x02110340, 0x02110346, 0x0211034C)
+            for address in (0x02110340, 0x02110346)
         ),
         "packaged startup call targets differ from the audited loaders",
+    )
+    startup_boundary = arm9[
+        0x02110356 - arm9_ram:0x0211035C - arm9_ram
+    ]
+    expected_startup_boundary = b"\x00\x00\x02\x00\x00\x00"
+
+    def startup_boundary_matches(candidate: bytes) -> bool:
+        return candidate == expected_startup_boundary
+
+    require(
+        not startup_boundary_matches(
+            b"\x01\x00" + expected_startup_boundary[2:]
+        )
+        and not startup_boundary_matches(
+            expected_startup_boundary[:2] + b"\x03\x00\x00\x00"
+        ),
+        "startup boundary mutation fixture accepted changed preserved bytes",
+    )
+    require(
+        tuple(
+            read_u16(
+                arm9,
+                address - arm9_ram,
+                f"packaged resident-pair helper 0x{address:08X}",
+            )
+            for address in (0x021102E0, 0x021102E2, 0x021102E8, 0x021102EE)
+        ) == (0xB508, 0x219E, 0x2199, 0xBD08)
+        and thumb_bl_target(
+            arm9, arm9_ram, 0x021102E4,
+            "packaged overlay-158 resident load"
+        ) == resident_loader
+        and thumb_bl_target(
+            arm9, arm9_ram, 0x021102EA,
+            "packaged overlay-153 resident load"
+        ) == resident_loader
+        and arm9[0x021102F0 - arm9_ram:0x021102F8 - arm9_ram]
+            == b"\xFF" * 8
+        and read_u32(
+            arm9,
+            0x021102F8 - arm9_ram,
+            "word after resident-pair padding",
+        ) == 2
+        and startup_boundary_matches(startup_boundary),
+        "bounded resident-pair helper or preserved bytes after startup differ",
     )
     resident_mov = read_u16(
         arm9,
@@ -2003,6 +2158,8 @@ def main() -> None:
         f"0x{OVERLAY_BASE + len(overlay):08X} "
         f"overlay157=0x{RUNTIME_OVERLAY_BASE:08X}.."
         f"0x{RUNTIME_OVERLAY_BASE + len(runtime_overlay):08X} "
+        f"overlay158=0x{RUNTIME_LAYERS_OVERLAY_BASE:08X}.."
+        f"0x{RUNTIME_LAYERS_OVERLAY_BASE + len(runtime_layers_overlay):08X} "
         f"overlay129=0x{len(overlay129):X}/0x8000"
     )
 

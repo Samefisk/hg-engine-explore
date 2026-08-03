@@ -66,7 +66,7 @@ OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
     "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "9a2d84d52238812841bb9ea4ce7bd94ddeb6acf6bfb051e861e631db975f7a6e"
+    "3fc67324c6c491934725a7abf4e63f3e0c02ce57f74519b0c26836779886dd58"
 )
 EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256 = (
     "0a3063658de225df67e82770965b3c01b6a075d7ee73fa4f1ccbb404e7120a77"
@@ -83,7 +83,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "296bcea645a4bf37ddb7e7fa8f00ff1829655b816f44b6794d27acbec3139515",
+        "c53588e70a416c59135f3d77ae48b2512f6ec65bb932ee1f02457a9cebcf86c6",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -1864,6 +1864,44 @@ def source_contracts() -> None:
     symbol_builder = (
         REPO / "scripts/generate_armips_symbols.py"
     ).read_text()
+    overlays_make = (REPO / "overlays.mk").read_text()
+    spawns_thumb_help = (
+        REPO / "asm/overworld_wild_spawns_overlay/thumb_help.s"
+    ).read_text()
+    signed_byte_switch_wrapper = """.global __wrap___gnu_thumb1_case_sqi
+.thumb_func
+.type __wrap___gnu_thumb1_case_sqi,function
+__wrap___gnu_thumb1_case_sqi:
+    push {r1}
+    mov r1, lr
+    lsrs r1, r1, #1
+    lsls r1, r1, #1
+    ldrsb r1, [r1, r0]
+    lsls r1, r1, #1
+    add lr, lr, r1
+    pop {r1}
+    bx lr
+.size __wrap___gnu_thumb1_case_sqi, . - __wrap___gnu_thumb1_case_sqi"""
+    spawns_ldflags = re.findall(
+        r"^OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := (.+)$",
+        overlays_make,
+        re.MULTILINE,
+    )
+    helper_ldflags = re.findall(
+        r"^OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS := (.+)$",
+        overlays_make,
+        re.MULTILINE,
+    )
+    require(
+        spawns_thumb_help.count(signed_byte_switch_wrapper) == 1
+        and len(spawns_ldflags) == 1
+        and spawns_ldflags[0].split().count(
+            "--wrap=__gnu_thumb1_case_sqi") == 1
+        and len(helper_ldflags) == 1
+        and "--wrap=__gnu_thumb1_case_sqi" not in helper_ldflags[0]
+        and overlays_make.count("--wrap=__gnu_thumb1_case_sqi") == 1,
+        "overlay 149 signed-byte switch wrapper source or link scope differs",
+    )
     require(
         outer_make_invocation_is_safe(),
         "outer Make invocation contains unsafe flags or command variables",
@@ -2124,10 +2162,13 @@ def source_contracts() -> None:
         in FIXED_INPUTS
         and "src/overworld_wild_helper_overlay/linker.ld" in FIXED_INPUTS
         and "asm/overworld_wild_helper_overlay/thumb_help.s" in FIXED_INPUTS
+        and "asm/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.s"
+        in FIXED_INPUTS
         and "src/overworld_wild_spawns_overlay/linker.ld" in FIXED_INPUTS
         and "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
         in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/linker.ld" in FIXED_INPUTS
+        and "src/overworld_wild_runtime_layers_overlay/linker.ld" in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
         in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h"
@@ -2166,8 +2207,14 @@ def source_contracts() -> None:
         == "build/overworld_wild_runtime_overlay_linked.o"
         and OUTPUTS.get("overworld_wild_runtime_binary")
         == "build/output_overworld_wild_runtime_overlay.bin"
+        and OUTPUTS.get("overworld_wild_runtime_catalog_symbols")
+        == "build/overworld_wild_runtime_overlay_catalog_symbols.o"
+        and OUTPUTS.get("overworld_wild_runtime_layers_linked")
+        == "build/overworld_wild_runtime_layers_overlay_linked.o"
+        and OUTPUTS.get("overworld_wild_runtime_layers_binary")
+        == "build/output_overworld_wild_runtime_layers_overlay.bin"
         and OUTPUTS.get("overworld_wild_task8_symbols")
-        == "build/overworld_wild_runtime_overlay_task8_symbols.o"
+        == "build/overworld_wild_runtime_layers_overlay_task8_symbols.o"
         and OUTPUTS.get("overworld_wild_helper_object")
         == "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o"
         and OUTPUTS.get("overworld_wild_helper_thumb_help_object")
@@ -3301,7 +3348,7 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "f8bc34dc0554f2e04bbf61427ba694078112f7be1d86f1a0cb1ead156370506e"
+        "65059fccd9e271ee8a69448b165bf2680ac732c4fecd63c59b39543dd1379176"
     )
     require(
         make_publication_contract_matches(
@@ -5652,6 +5699,7 @@ def verify_overworld_wild_runtime_link_contracts(
     spawns_object: Path,
     spawns_linked: Path,
     spawns_overlay: Path,
+    runtime_owner: Path,
     runtime_symbols: Path,
     packaged_ov149: bytes,
     ov149_path: Path,
@@ -5659,6 +5707,7 @@ def verify_overworld_wild_runtime_link_contracts(
     linked_symbols = symbol_table(spawns_linked)
     linked_sizes = symbol_sizes(spawns_linked)
     linked_records = elf_symbol_records(spawns_linked)
+    owner_records = elf_symbol_records(runtime_owner)
     carrier_records = elf_symbol_records(runtime_symbols)
     linked_bytes = elf_bytes_at(
         spawns_linked,
@@ -5695,9 +5744,13 @@ def verify_overworld_wild_runtime_link_contracts(
     }
     for name, (raw_value, size) in expected_imports.items():
         require(
-            linked_records.get(name)
-            == (raw_value, size, "FUNC", "GLOBAL", "ABS"),
-            f"overlay 149 typed resident import differs: {name}",
+            owner_records.get(name)
+                == (raw_value, size, "FUNC", "GLOBAL", "1")
+            and carrier_records.get(name)
+                == (raw_value, size, "FUNC", "GLOBAL", "1")
+            and linked_records.get(name)
+                == (raw_value, size, "FUNC", "GLOBAL", "ABS"),
+            f"resident owner/carrier/overlay149 identity differs: {name}",
         )
     carrier_global_funcs = {
         name: record
@@ -5730,29 +5783,62 @@ def verify_overworld_wild_runtime_link_contracts(
         and "OverworldWildRuntime_InitSlot" not in nm_output,
         "overlay 149 defines or mistypes a resident lifecycle helper",
     )
+    resident_targets = (0x023BDDB4, 0x023BDDD4)
+    containing_functions = (
+        "OverworldWildSpawns_EnsureRuntimeState",
+        "OverworldWildSpawns_ResetSlotState",
+    )
+    for name in containing_functions:
+        row = linked_records.get(name)
+        require(
+            row is not None
+            and row[1] == linked_sizes.get(name)
+            and row[1] > 0
+            and row[2:5] == ("FUNC", "LOCAL", "1")
+            and (row[0] & ~1) == linked_symbols.get(name),
+            f"overlay149 lifecycle call container is not a local function: {name}",
+        )
+
+    decoded_calls = packaged_thumb_calls(
+        raw, OVERLAY149_BASE, linked_symbols["__text_start"],
+        linked_symbols["__text_end"] - linked_symbols["__text_start"])
     expected_imported_calls = [
-        (0x023CE0BE, "bl", 0x023BDDB4),
-        (0x023D383A, "bl", 0x023BDDD4),
+        call for call in decoded_calls if call[2] in resident_targets
     ]
+
+    def call_is_within(call, function_name: str) -> bool:
+        start = linked_symbols[function_name]
+        return start <= call[0] and call[0] + 4 <= (
+            start + linked_sizes[function_name])
+
+    require(
+        len(expected_imported_calls) == 2
+        and [call[1] for call in expected_imported_calls] == ["bl", "bl"]
+        and [call[2] for call in expected_imported_calls]
+            == list(resident_targets)
+        and call_is_within(
+            expected_imported_calls[0], containing_functions[0])
+        and call_is_within(
+            expected_imported_calls[1], containing_functions[1]),
+        "overlay 149 resident lifecycle direct-call inventory differs",
+    )
 
     def lifecycle_call_inventory_matches(image: bytes) -> bool:
         calls = packaged_thumb_calls(
-            image, OVERLAY149_BASE, OVERLAY149_BASE, len(image))
+            image, OVERLAY149_BASE, linked_symbols["__text_start"],
+            linked_symbols["__text_end"] - linked_symbols["__text_start"])
         imported_calls = [
             call
             for call in calls
-            if call[2] in (0x023BDDB4, 0x023BDDD4)
+            if call[2] in resident_targets
         ]
         return (
-            imported_calls == expected_imported_calls
-            and linked_symbols.get("OverworldWildSpawns_EnsureRuntimeState")
-            <= imported_calls[0][0]
-            < linked_symbols["OverworldWildSpawns_EnsureRuntimeState"]
-            + linked_sizes["OverworldWildSpawns_EnsureRuntimeState"]
-            and linked_symbols.get("OverworldWildSpawns_ResetSlotState")
-            <= imported_calls[1][0]
-            < linked_symbols["OverworldWildSpawns_ResetSlotState"]
-            + linked_sizes["OverworldWildSpawns_ResetSlotState"]
+            len(imported_calls) == 2
+            and [call[1] for call in imported_calls] == ["bl", "bl"]
+            and [call[2] for call in imported_calls]
+                == list(resident_targets)
+            and call_is_within(imported_calls[0], containing_functions[0])
+            and call_is_within(imported_calls[1], containing_functions[1])
         )
 
     require(
@@ -5776,37 +5862,231 @@ def verify_overworld_wild_runtime_link_contracts(
     second_retargeted_call[second_offset:second_offset + 4] = encode_thumb_bl(
         expected_imported_calls[1][0], expected_imported_calls[0][2])
     call_mutations.append(("retargeted second lifecycle call", second_retargeted_call))
+    swapped_calls = bytearray(raw)
+    swapped_calls[first_offset:first_offset + 4] = encode_thumb_bl(
+        expected_imported_calls[0][0], expected_imported_calls[1][2])
+    swapped_calls[second_offset:second_offset + 4] = encode_thumb_bl(
+        expected_imported_calls[1][0], expected_imported_calls[0][2])
+    call_mutations.append(("swapped lifecycle calls", swapped_calls))
     extra_call = bytearray(raw)
-    extra_address = expected_imported_calls[0][0] - 4
+    extra_address = expected_imported_calls[0][0] + 4
     extra_offset = extra_address - OVERLAY149_BASE
     extra_call[extra_offset:extra_offset + 4] = encode_thumb_bl(
         extra_address, expected_imported_calls[0][2])
     call_mutations.append(("extra lifecycle call", extra_call))
+    relocated_init = bytearray(raw)
+    relocated_init[first_offset:first_offset + 4] = b"\0\0\0\0"
+    relocated_init_address = (
+        linked_symbols[containing_functions[0]]
+        + linked_sizes[containing_functions[0]]
+    )
+    relocated_init_offset = relocated_init_address - OVERLAY149_BASE
+    relocated_init[
+        relocated_init_offset:relocated_init_offset + 4
+    ] = encode_thumb_bl(relocated_init_address, resident_targets[0])
+    call_mutations.append((
+        "init call outside EnsureRuntimeState", relocated_init))
+    relocated_destructive = bytearray(raw)
+    relocated_destructive[second_offset:second_offset + 4] = b"\0\0\0\0"
+    relocated_destructive_address = (
+        linked_symbols[containing_functions[1]]
+        + linked_sizes[containing_functions[1]]
+    )
+    relocated_destructive_offset = (
+        relocated_destructive_address - OVERLAY149_BASE)
+    relocated_destructive[
+        relocated_destructive_offset:relocated_destructive_offset + 4
+    ] = encode_thumb_bl(
+        relocated_destructive_address, resident_targets[1])
+    call_mutations.append((
+        "destructive call outside ResetSlotState", relocated_destructive))
+    mutation_images = [bytes(mutation) for _label, mutation in call_mutations]
+    require(len(mutation_images) == len(set(mutation_images)),
+            "overlay 149 lifecycle mutation fixtures contain a duplicate")
     for label, mutation in call_mutations:
         require(not lifecycle_call_inventory_matches(bytes(mutation)),
                 f"overlay 149 {label} passed exact call inventory")
-    for raw_value, _size in expected_imports.values():
-        require(
-            struct.pack("<I", raw_value) not in raw,
-            "overlay 149 retained an indirect/literal lifecycle helper target",
-        )
+    for target in resident_targets:
+        require(struct.pack("<I", target) not in raw
+                and struct.pack("<I", target | 1) not in raw,
+                "overlay 149 retained an indirect/literal lifecycle helper target")
     object_relocations = subprocess.check_output(
         ["arm-none-eabi-objdump", "-r", str(spawns_object)],
         text=True,
     )
+    lifecycle_relocations = re.findall(
+        r"^\s*[0-9A-Fa-f]+\s+(R_ARM_\S+)\s+"
+        r"(OverworldWildRuntime_(?:Init|DestructivelyInvalidateSlot))$",
+        object_relocations,
+        re.MULTILINE,
+    )
     require(
-        len(re.findall(
-            r"R_ARM_THM_CALL\s+OverworldWildRuntime_Init$",
-            object_relocations,
-            re.MULTILINE,
-        )) == 1
-        and len(re.findall(
-            r"R_ARM_THM_CALL\s+OverworldWildRuntime_DestructivelyInvalidateSlot$",
-            object_relocations,
-            re.MULTILINE,
-        )) == 1,
+        lifecycle_relocations == [
+            ("R_ARM_THM_CALL", "OverworldWildRuntime_Init"),
+            ("R_ARM_THM_CALL",
+                "OverworldWildRuntime_DestructivelyInvalidateSlot"),
+        ],
         "overlay 149 object lifecycle relocation inventory differs",
     )
+    signed_switch_symbol = "__gnu_thumb1_case_sqi"
+    signed_switch_wrapper = "__wrap___gnu_thumb1_case_sqi"
+    signed_switch_wrapper_bytes = bytes.fromhex(
+        "02 b4 71 46 49 08 49 00 09 56 49 00 8e 44 02 bc 70 47"
+    )
+    signed_switch_wrapper_row = linked_records.get(signed_switch_wrapper)
+    require(
+        signed_switch_wrapper_row is not None
+        and signed_switch_wrapper_row[0] & 1 == 1
+        and signed_switch_wrapper_row[1:] == (18, "FUNC", "GLOBAL", "1"),
+        "overlay 149 signed-byte switch wrapper symbol row differs",
+    )
+    signed_switch_wrapper_address = signed_switch_wrapper_row[0] & ~1
+    require(
+        linked_symbols["__text_start"] <= signed_switch_wrapper_address
+        and signed_switch_wrapper_address + len(signed_switch_wrapper_bytes)
+            <= linked_symbols["__text_end"],
+        "overlay 149 signed-byte switch wrapper is outside sealed text",
+    )
+    signed_switch_wrapper_offset = (
+        signed_switch_wrapper_address - OVERLAY149_BASE)
+
+    def signed_switch_wrapper_matches(image: bytes) -> bool:
+        return image[
+            signed_switch_wrapper_offset:
+            signed_switch_wrapper_offset + len(signed_switch_wrapper_bytes)
+        ] == signed_switch_wrapper_bytes
+
+    require(
+        signed_switch_wrapper_matches(raw)
+        and elf_bytes_at(
+            spawns_linked,
+            signed_switch_wrapper_address,
+            len(signed_switch_wrapper_bytes),
+        ) == signed_switch_wrapper_bytes,
+        "overlay 149 signed-byte switch wrapper instructions differ",
+    )
+    signed_switch_relocations = re.findall(
+        r"^\s*[0-9A-Fa-f]+\s+(R_ARM_\S+)\s+"
+        r"__gnu_thumb1_case_sqi$",
+        object_relocations,
+        re.MULTILINE,
+    )
+    require(
+        signed_switch_relocations == ["R_ARM_THM_CALL"],
+        "overlay 149 source object signed-byte switch relocation differs",
+    )
+    signed_switch_raw_row = linked_records.get(signed_switch_symbol)
+    require(
+        signed_switch_raw_row is not None
+        and signed_switch_raw_row[2:] == ("NOTYPE", "GLOBAL", "ABS")
+        and signed_switch_raw_row[0] & 1 == 1,
+        "overlay 149 raw signed-byte switch helper symbol row differs",
+    )
+    signed_switch_raw_address = signed_switch_raw_row[0] & ~1
+    resolve_row = linked_records.get(
+        "OverworldWildSpawns_ResolveBehaviorPrimitives")
+    require(
+        resolve_row is not None
+        and resolve_row[0] & 1 == 1
+        and resolve_row[1] > 0
+        and resolve_row[2:] == ("FUNC", "LOCAL", "1"),
+        "overlay 149 signed-byte switch call container differs",
+    )
+    resolve_start = resolve_row[0] & ~1
+    resolve_end = resolve_start + resolve_row[1]
+
+    def signed_switch_call_inventory_matches(image: bytes) -> bool:
+        calls = packaged_thumb_calls(
+            image,
+            OVERLAY149_BASE,
+            linked_symbols["__text_start"],
+            linked_symbols["__text_end"] - linked_symbols["__text_start"],
+        )
+        wrapper_calls = [
+            call for call in calls
+            if call[2] == signed_switch_wrapper_address
+        ]
+        raw_calls = [
+            call for call in calls if call[2] == signed_switch_raw_address
+        ]
+        return (
+            len(wrapper_calls) == 1
+            and wrapper_calls[0][1] == "bl"
+            and resolve_start <= wrapper_calls[0][0]
+            and wrapper_calls[0][0] + 4 <= resolve_end
+            and not raw_calls
+        )
+
+    require(
+        signed_switch_call_inventory_matches(raw),
+        "overlay 149 signed-byte switch direct-call inventory differs",
+    )
+    signed_switch_calls = [
+        call for call in decoded_calls
+        if call[2] == signed_switch_wrapper_address
+    ]
+    require(
+        len(signed_switch_calls) == 1
+        and signed_switch_calls[0][1] == "bl",
+        "overlay 149 signed-byte switch call is not one direct BL",
+    )
+    signed_switch_call_address = signed_switch_calls[0][0]
+    signed_switch_call_offset = signed_switch_call_address - OVERLAY149_BASE
+    require(
+        struct.pack("<I", signed_switch_raw_address) not in raw
+        and struct.pack("<I", signed_switch_raw_row[0]) not in raw,
+        "overlay 149 retained a raw signed-byte switch target literal",
+    )
+    wrapper_mutations: list[tuple[str, bytearray]] = []
+    removed_wrapper = bytearray(raw)
+    removed_wrapper[
+        signed_switch_wrapper_offset:
+        signed_switch_wrapper_offset + len(signed_switch_wrapper_bytes)
+    ] = bytes(len(signed_switch_wrapper_bytes))
+    wrapper_mutations.append(("removed signed-byte wrapper", removed_wrapper))
+    unsigned_wrapper = bytearray(raw)
+    unsigned_load_offset = signed_switch_wrapper_offset + 8
+    unsigned_wrapper[unsigned_load_offset:unsigned_load_offset + 2] = b"\x09\x5c"
+    wrapper_mutations.append(("unsigned signed-byte wrapper load", unsigned_wrapper))
+    for label, mutation in wrapper_mutations:
+        require(
+            not signed_switch_wrapper_matches(bytes(mutation)),
+            f"overlay 149 {label} passed exact wrapper authentication",
+        )
+    signed_switch_call_mutations: list[tuple[str, bytearray]] = []
+    removed_call = bytearray(raw)
+    removed_call[
+        signed_switch_call_offset:signed_switch_call_offset + 4
+    ] = b"\0\0\0\0"
+    signed_switch_call_mutations.append((
+        "removed signed-byte wrapper call", removed_call))
+    retargeted_call = bytearray(raw)
+    retargeted_call[
+        signed_switch_call_offset:signed_switch_call_offset + 4
+    ] = encode_thumb_bl(
+        signed_switch_call_address, signed_switch_raw_address)
+    signed_switch_call_mutations.append((
+        "raw-target signed-byte switch call", retargeted_call))
+    extra_call = bytearray(raw)
+    extra_call_address = signed_switch_call_address + 4
+    extra_call_offset = extra_call_address - OVERLAY149_BASE
+    extra_call[extra_call_offset:extra_call_offset + 4] = encode_thumb_bl(
+        extra_call_address, signed_switch_wrapper_address)
+    signed_switch_call_mutations.append((
+        "extra signed-byte wrapper call", extra_call))
+    require(
+        len({
+            bytes(mutation)
+            for _label, mutation in (
+                wrapper_mutations + signed_switch_call_mutations)
+        }) == 5,
+        "overlay 149 signed-byte switch mutation fixtures contain a duplicate",
+    )
+    for label, mutation in signed_switch_call_mutations:
+        require(
+            not signed_switch_call_inventory_matches(bytes(mutation)),
+            f"overlay 149 {label} passed exact call authentication",
+        )
     require(
         ".ow_wild_runtime_sidecars" not in elf_section_names(spawns_linked),
         "overlay 149 still owns resident lifecycle code",
@@ -6718,6 +6998,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         spawns_object,
         spawns_linked,
         spawns_overlay,
+        task6_linked,
         runtime_symbols,
         helper_object,
         helper_thumb_help_object,
@@ -6971,6 +7252,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         spawns_object,
         spawns_linked,
         spawns_overlay,
+        task6_linked,
         runtime_symbols,
         packaged_ov149,
         ov149_path,
@@ -7338,14 +7620,15 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     require(
         task6_runtime_calls
         == [
-            (0x023BDD9C, "bl", 0x023BDE48),
-            (0x023BDDCA, "bl", 0x023BDD94),
-            (0x023BDDE8, "bl", 0x023BCA2C),
-            (0x023BDDF2, "bl", 0x023BDD94),
+            (0x023BDD98, "bl",
+                task6_symbols["OverworldWildRuntime_ClearSlotStorage"] & ~1),
+            (0x023BDDB6, "bl",
+                task6_symbols["OverworldWildRuntime_InitializeStorage"] & ~1),
+            (0x023BDDDA, "bl",
+                task6_symbols[
+                    "OverworldWildRuntime_HandleSlotGenerationWrap"] & ~1),
             (0x023BDE4A, "blx", 0x020E5B44),
-        ]
-        and call_inventory_sha256(task6_runtime_calls)
-        == OVERLAY155_RUNTIME_CALL_INVENTORY_SHA256,
+        ],
         "overlay-155 resident lifecycle call-site inventory differs",
     )
     require(
@@ -8922,6 +9205,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
     candidate_arm9 = b"task8-candidate-arm9"
     captured_arm9 = candidate_arm9 + b"\x21\x06\xC0\xDE\xA0\x0B" + bytes(6)
     candidate_overlay = b"task8-candidate-overlay157"
+    candidate_layers_overlay = b"task9-candidate-overlay158"
 
     def record(data: bytes) -> dict[str, object]:
         return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
@@ -8930,6 +9214,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
     for path_text in (
         "armips/asm/syntheticoverlay.s",
         "src/overworld_wild_runtime_overlay/linker.ld",
+        "src/overworld_wild_runtime_layers_overlay/linker.ld",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
     ):
@@ -8940,6 +9225,9 @@ def run_boot_decoder_freshness_fixtures() -> None:
         "outputs": {
             "patched_arm9": record(captured_arm9),
             "overworld_wild_runtime_binary": record(candidate_overlay),
+            "overworld_wild_runtime_layers_binary": record(
+                candidate_layers_overlay
+            ),
             "packaged_rom": record(candidate_rom),
         },
     }
@@ -8953,6 +9241,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
             candidate_rom,
             candidate_arm9,
             candidate_overlay,
+            candidate_layers_overlay,
             captured_arm9,
         )
         require(not absent_final_manifest.exists(),
@@ -8968,6 +9257,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
                 candidate_rom,
                 candidate_arm9,
                 candidate_overlay,
+                candidate_layers_overlay,
                 captured_arm9,
             )
         except SystemExit:

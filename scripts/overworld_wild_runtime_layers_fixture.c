@@ -9,17 +9,19 @@
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
+typedef int8_t s8;
 typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
-#define OWBD_ROLE_CALM 1
-#define OWBD_ROLE_ATTENTIVE 2
-#define OWBD_ROLE_TIRED 3
-#define OWBD_ROLE_FOLLOWER 6
-#define OWBD_ROLE_CUSTOM 7
 #define OWBD_ROLE_MASK(role) (1u << ((role) - 1))
 
+#define TYPES_H
+#include "../include/overworld_wild_behavior_data.h"
+#define OWBD_VALIDATION_NO_PROJECTION_BUILDER
+#include "overworld_wild_behavior_v40_validation_shared.h"
+
 #define OW_WILD_RUNTIME_SIDECAR_CODE __attribute__((noinline))
+#define OW_WILD_RUNTIME_HOST_TEST
 #define OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
 #include "../src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
 #undef OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
@@ -40,6 +42,22 @@ typedef struct FixtureDefinitionCatalog {
 } FixtureDefinitionCatalog;
 
 static FixtureDefinitionCatalog sFixtureCatalog;
+static u32 sFixtureCatalogIdentity = 0xC88892BEu;
+
+static u32 fixture_mix(u32 value, u32 input)
+{
+    value ^= input + 0x9E3779B9u + (value << 6) + (value >> 2);
+    value ^= value >> 16;
+    value *= 0x7FEB352Du;
+    return value ^ (value >> 15);
+}
+
+static u32 fixture_hash_bytes(u32 hash, const void *data, u32 size)
+{
+    const u8 *bytes = data;
+    while (size-- != 0) hash = fixture_mix(hash, *bytes++);
+    return hash != 0 ? hash : 1;
+}
 
 enum {
     DEF_SHARED = 0x7001,
@@ -54,6 +72,25 @@ enum {
     DEF_INELIGIBLE = 0x700A,
     DEF_CALM = 0x700B,
     DEF_CUSTOM = 0x700C,
+    DEF_HIGH_STATE = 0x700D,
+    DEF_LOW_STATE = 0x700E,
+    DEF_ALL_OPERATORS = 0x700F,
+    DEF_SET_SPEED_FOUR = 0x7010,
+    DEF_CLAMP_SPEED_FOUR = 0x7011,
+    DEF_BAD_OVERFLOW = 0x7012,
+    DEF_STATIC_ADD = 0x7013,
+    DEF_RUNTIME_ADD = 0x7014,
+    DEF_STATIC_SET_ORDER = 0x7015,
+    DEF_ORDER_A = 0x7016,
+    DEF_ORDER_B = 0x7017,
+    DEF_SPEED_ZERO = 0x7018,
+    DEF_AVOID_SET_ONE = 0x7019,
+    DEF_AVOID_SET_ZERO = 0x701A,
+    DEF_AVOID_SET_TWO = 0x701B,
+    DEF_AVOID_ADD = 0x701C,
+    DEF_CONFLICTING_BOUNDS = 0x701D,
+    DEF_RUNTIME_S16_MIN = 0x701E,
+    DEF_RUNTIME_S16_MAX = 0x701F,
 };
 
 static int sChecks;
@@ -90,6 +127,8 @@ static OverworldWildRuntimeDefinition make_definition(
     definition.flags = flags;
     definition.mapLifetime = 1;
     definition.battleLifetime = 1;
+    definition.channel = kind == 2 ? 2 : 1;
+    definition.priority = (u8)(id & 0xFF);
     return definition;
 }
 
@@ -100,7 +139,7 @@ static FixtureDefinitionCatalog fixture_catalog(void)
 
     memset(&catalog, 0, sizeof(catalog));
     catalog.schemaFingerprint = 0xC88892BEu;
-    catalog.definitionCount = 12;
+    catalog.definitionCount = 31;
     catalog.definitions[0] = make_definition(
         DEF_SHARED, 1, 2, 2, 0, 0,
         eligible | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS);
@@ -150,6 +189,70 @@ static FixtureDefinitionCatalog fixture_catalog(void)
         DEF_CALM, 1, 2, 1, 0, 0, eligible);
     catalog.definitions[11] = make_definition(
         DEF_CUSTOM, 1, 2, 7, 0, 0, eligible);
+    catalog.definitions[12] = make_definition(
+        DEF_HIGH_STATE, 1, 2, 1, 0, 0, eligible);
+    catalog.definitions[12].channel = 4;
+    catalog.definitions[12].priority = 240;
+    catalog.definitions[13] = make_definition(
+        DEF_LOW_STATE, 1, 2, 1, 0, 0, eligible);
+    catalog.definitions[13].channel = 1;
+    catalog.definitions[13].priority = 1;
+    catalog.definitions[14] = make_definition(
+        DEF_ALL_OPERATORS, 2, 0, 0, 0, 0,
+        eligible | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS
+            | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_INSTANCES);
+    catalog.definitions[14].channel = 2;
+    catalog.definitions[14].priority = 20;
+    catalog.definitions[15] = make_definition(
+        DEF_SET_SPEED_FOUR, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[15].channel = 2;
+    catalog.definitions[15].priority = 30;
+    catalog.definitions[16] = make_definition(
+        DEF_CLAMP_SPEED_FOUR, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[16].channel = 2;
+    catalog.definitions[16].priority = 30;
+    catalog.definitions[17] = make_definition(
+        DEF_BAD_OVERFLOW, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[17].channel = 2;
+    catalog.definitions[17].priority = 40;
+    catalog.definitions[18] = make_definition(
+        DEF_STATIC_ADD, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[18].channel = 0;
+    catalog.definitions[18].priority = 1;
+    catalog.definitions[19] = make_definition(
+        DEF_RUNTIME_ADD, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[19].channel = 2;
+    catalog.definitions[19].priority = 1;
+    catalog.definitions[20] = make_definition(
+        DEF_STATIC_SET_ORDER, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[20].channel = 5;
+    catalog.definitions[20].priority = 250;
+    catalog.definitions[21] = make_definition(
+        DEF_ORDER_A, 1, 2, 2, 0, 0,
+        eligible | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS);
+    catalog.definitions[21].channel = 3;
+    catalog.definitions[21].priority = 50;
+    catalog.definitions[22] = make_definition(
+        DEF_ORDER_B, 1, 2, 2, 0, 0,
+        eligible | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS);
+    catalog.definitions[22].channel = 3;
+    catalog.definitions[22].priority = 50;
+    catalog.definitions[23] = make_definition(
+        DEF_SPEED_ZERO, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[24] = make_definition(
+        DEF_AVOID_SET_ONE, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[25] = make_definition(
+        DEF_AVOID_SET_ZERO, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[26] = make_definition(
+        DEF_AVOID_SET_TWO, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[27] = make_definition(
+        DEF_AVOID_ADD, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[28] = make_definition(
+        DEF_CONFLICTING_BOUNDS, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[29] = make_definition(
+        DEF_RUNTIME_S16_MIN, 2, 0, 0, 0, 0, eligible);
+    catalog.definitions[30] = make_definition(
+        DEF_RUNTIME_S16_MAX, 2, 0, 0, 0, 0, eligible);
     return catalog;
 }
 
@@ -168,7 +271,6 @@ BOOL OverworldWildRuntime_CopyInstalledDefinition(
     return FALSE;
 }
 
-#define OW_WILD_RUNTIME_HOST_TEST
 u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     u8 tiredOriginKind,
     u16 destinationControllerId,
@@ -183,6 +285,401 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     return 1;
 }
 
+BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    const OverworldWildRuntimeApplicabilityInput *input,
+    OverworldWildRuntimeStaticComposition *compositionOut)
+{
+    memset(compositionOut, 0, sizeof(*compositionOut));
+    if (staticContext == NULL || staticContext->reserved != 0
+        || input == NULL || input->controllerId != 0x3001
+        || input->effectiveProfileId != 0x2201
+        || input->effectiveSemanticRole != OWBD_ROLE_ATTENTIVE
+        || input->immutableContextMask != staticContext->groupFlags
+        || input->boundNodeCount != 4
+        || input->boundNodeIds[0] != 0x4001
+        || input->boundNodeIds[1] != 0x4100
+        || input->boundNodeIds[2] != 0x4101
+        || input->boundNodeIds[3] != 0x4107
+        || input->semanticRoleMask != (OWBD_ROLE_MASK(1)
+            | OWBD_ROLE_MASK(2) | OWBD_ROLE_MASK(3) | OWBD_ROLE_MASK(7)))
+        return FALSE;
+    compositionOut->catalogIdentity = 0xC88892BEu;
+    compositionOut->staticContextIdentity =
+        0x61000000u ^ staticContext->groupFlags
+            ^ ((u32)staticContext->species << 8);
+    compositionOut->staticSetHash = 0x51000001u;
+    compositionOut->immutableContextMask = staticContext->groupFlags;
+    compositionOut->staticContext = *staticContext;
+    compositionOut->controllerId = input->controllerId;
+    compositionOut->baseNodeId = 0x4101;
+    compositionOut->baseProfileId = 0x2201;
+    compositionOut->spawnPolicyId = 0x4201;
+    compositionOut->populationPolicyId = 0x4301;
+    compositionOut->baseSemanticRole = OWBD_ROLE_ATTENTIVE;
+    compositionOut->valid = TRUE;
+    compositionOut->nodeCount = 4;
+    compositionOut->boundNodeCount = 4;
+    compositionOut->semanticRoleMask = input->semanticRoleMask;
+    compositionOut->stateValues[0] = 2;
+    compositionOut->stateValues[1] = 1;
+    compositionOut->stateValues[2] = 2;
+    compositionOut->stateValues[3] = 2;
+    compositionOut->stateValues[4] = 4;
+    compositionOut->stateValues[6] = 0;
+    compositionOut->stateValues[7] = 15;
+    compositionOut->stateValues[9] = 1;
+    compositionOut->stateValues[10] = 2;
+    compositionOut->stateValues[12] = 4;
+    compositionOut->stateValues[14] = 4;
+    compositionOut->controllerValues[6] = 4;
+    compositionOut->controllerValues[7] = 4;
+    {
+        static const u16 nodeIds[4] = {0x4001, 0x4100, 0x4101, 0x4107};
+        static const u8 roles[4] = {3, 1, 2, 7};
+        u8 nodeIndex;
+        for (nodeIndex = 0; nodeIndex < 4; nodeIndex++) {
+            OverworldWildRuntimeResolvedNode *node =
+                &compositionOut->resolvedNodes[nodeIndex];
+            node->nodeId = nodeIds[nodeIndex];
+            node->profileId = (u16)(0x2200 + roles[nodeIndex]);
+            node->semanticRole = roles[nodeIndex];
+            node->bound = TRUE;
+            node->stateValues[0] = roles[nodeIndex];
+            node->stateValues[1] = 1;
+            node->stateValues[2] = 2;
+            node->stateValues[3] = 2;
+            node->stateValues[4] = 4;
+            node->stateValues[7] = 15;
+            node->stateValues[9] = 1;
+            node->stateValues[10] = 2;
+            node->stateValues[12] = 4;
+            node->stateValues[14] = 4;
+        }
+        compositionOut->resolvedNodes[2].profileId = 0x2201;
+        memcpy(compositionOut->resolvedNodes[2].stateValues,
+            compositionOut->stateValues,
+            sizeof(compositionOut->stateValues));
+        compositionOut->resolvedNodes[1].profileId = 0x2301;
+        compositionOut->resolvedNodes[1].stateValues[3] = 3;
+    }
+    if (staticContext->groupFlags == 0x12345678u) {
+        compositionOut->staticModifierCount = 2;
+        compositionOut->staticModifiers[0].modifierDefinitionId =
+            DEF_STATIC_SET_ORDER;
+        compositionOut->staticModifiers[0].staticPriority = 1;
+        compositionOut->staticModifiers[0].ruleStableId = 0x5001;
+        compositionOut->staticModifiers[0].actionStableId = 0x6001;
+        compositionOut->staticModifiers[1].modifierDefinitionId =
+            DEF_STATIC_ADD;
+        compositionOut->staticModifiers[1].staticPriority = 1;
+        compositionOut->staticModifiers[1].ruleStableId = 0x5001;
+        compositionOut->staticModifiers[1].actionStableId = 0x6002;
+        compositionOut->staticSetHash = 0x51000002u;
+    }
+    return TRUE;
+}
+
+BOOL OverworldWildRuntime_CopyInstalledCatalogIdentity(u32 *identityOut)
+{
+    if (identityOut == NULL) return FALSE;
+    if (sFixtureCatalogIdentity == 0) {
+        *identityOut = 0;
+        return FALSE;
+    }
+    *identityOut = sFixtureCatalogIdentity;
+    return TRUE;
+}
+
+BOOL OverworldWildRuntime_CopyInstalledStaticCache(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    const OverworldWildRuntimeApplicabilityInput *input,
+    u32 staticContextGeneration,
+    OverworldWildRuntimeStaticCache *cacheOut)
+{
+    OverworldWildRuntimeStaticComposition composition;
+    if (!OverworldWildRuntime_CopyInstalledStaticComposition(
+            staticContext, input, &composition)) return FALSE;
+    memset(cacheOut, 0, sizeof(*cacheOut));
+    cacheOut->catalogIdentity = composition.catalogIdentity;
+    cacheOut->staticContextIdentity = composition.staticContextIdentity;
+    cacheOut->staticContextGeneration = staticContextGeneration;
+    memcpy(&cacheOut->immutableContextMask,
+        &composition.immutableContextMask,
+        sizeof(*cacheOut) - offsetof(OverworldWildRuntimeStaticCache,
+            immutableContextMask));
+    cacheOut->staticSetHash = fixture_mix(0x4F575339u,
+        cacheOut->catalogIdentity);
+    cacheOut->staticSetHash = fixture_mix(cacheOut->staticSetHash,
+        cacheOut->staticContextIdentity);
+    cacheOut->staticSetHash = fixture_hash_bytes(cacheOut->staticSetHash,
+        &cacheOut->immutableContextMask,
+        sizeof(*cacheOut) - offsetof(OverworldWildRuntimeStaticCache,
+            immutableContextMask));
+    return TRUE;
+}
+
+BOOL OverworldWildRuntime_ApplicabilityMatchesStaticCache(
+    const OverworldWildRuntimeApplicabilityInput *input,
+    const OverworldWildRuntimeStaticCache *cache)
+{
+    u8 nodeIndex, inputIndex = 0;
+    if (input == NULL
+        || input->immutableContextMask != cache->immutableContextMask
+        || input->controllerId != cache->controllerId
+        || input->effectiveProfileId != cache->baseProfileId
+        || input->effectiveSemanticRole != cache->baseSemanticRole
+        || input->boundNodeCount != cache->boundNodeCount
+        || input->semanticRoleMask != cache->semanticRoleMask) return FALSE;
+    for (nodeIndex = 0; nodeIndex < cache->nodeCount; nodeIndex++) {
+        if (!cache->resolvedNodes[nodeIndex].bound) continue;
+        if (inputIndex >= input->boundNodeCount
+            || input->boundNodeIds[inputIndex++]
+                != cache->resolvedNodes[nodeIndex].nodeId) return FALSE;
+    }
+    return inputIndex == input->boundNodeCount;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
+    const OverworldWildRuntimeStaticCache *cache,
+    u32 staticContextGeneration)
+{
+    u32 identity;
+    if (!OverworldWildRuntime_CopyInstalledCatalogIdentity(&identity)
+        || identity != cache->catalogIdentity || !cache->valid
+        || cache->staticContextGeneration != staticContextGeneration
+        || cache->nodeCount == 0 || cache->nodeCount > 8
+        || cache->boundNodeCount == 0
+        || cache->boundNodeCount > cache->nodeCount
+        || cache->staticModifierCount > 8)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(
+    const OverworldWildRuntimeStaticCache *retainedCache,
+    const OverworldWildRuntimeStaticContext *staticContext,
+    u32 staticContextGeneration,
+    OverworldWildRuntimeStaticCache *resolvedOut)
+{
+    OverworldWildRuntimeApplicabilityInput applicability;
+    OverworldWildRuntimeStatus status;
+    u8 nodeIndex;
+    u8 inputIndex = 0;
+    if (retainedCache == NULL || staticContext == NULL || resolvedOut == NULL
+        || retainedCache == resolvedOut)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    status = OverworldWildRuntime_ValidateStaticCache(
+        retainedCache, staticContextGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    if (memcmp(staticContext, &retainedCache->staticContext,
+            sizeof(*staticContext)) != 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    memset(&applicability, 0, sizeof(applicability));
+    applicability.immutableContextMask = retainedCache->immutableContextMask;
+    applicability.controllerId = retainedCache->controllerId;
+    applicability.effectiveProfileId = retainedCache->baseProfileId;
+    applicability.effectiveSemanticRole = retainedCache->baseSemanticRole;
+    applicability.semanticRoleMask = retainedCache->semanticRoleMask;
+    for (nodeIndex = 0; nodeIndex < retainedCache->nodeCount; nodeIndex++) {
+        if (!retainedCache->resolvedNodes[nodeIndex].bound) continue;
+        if (inputIndex >= sizeof(applicability.boundNodeIds)
+                / sizeof(applicability.boundNodeIds[0]))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        applicability.boundNodeIds[inputIndex++] =
+            retainedCache->resolvedNodes[nodeIndex].nodeId;
+    }
+    applicability.boundNodeCount = inputIndex;
+    if (inputIndex != retainedCache->boundNodeCount
+        || !OverworldWildRuntime_CopyInstalledStaticCache(
+            staticContext, &applicability, staticContextGeneration,
+            resolvedOut)
+        || memcmp(retainedCache, resolvedOut, sizeof(*resolvedOut)) != 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+BOOL OverworldWildRuntime_CopyResolvedCachedNode(
+    const OverworldWildRuntimeStaticCache *cache,
+    const OverworldWildRuntimeDefinition *definition,
+    OverworldWildRuntimeResolvedNode *nodeOut)
+{
+    u8 index;
+    const OverworldWildRuntimeResolvedNode *match = NULL;
+    memset(nodeOut, 0, sizeof(*nodeOut));
+    for (index = 0; index < cache->nodeCount; index++) {
+        const OverworldWildRuntimeResolvedNode *node =
+            &cache->resolvedNodes[index];
+        if (!node->bound) continue;
+        if ((definition->selectorKind == 1
+                && node->nodeId == definition->nodeId)
+            || (definition->selectorKind == 2
+                && node->semanticRole == definition->semanticRole)) {
+            if (match != NULL) return FALSE;
+            match = node;
+        }
+    }
+    if (match == NULL) return FALSE;
+    *nodeOut = *match;
+    return TRUE;
+}
+
+BOOL OverworldWildRuntime_CopyInstalledResolvedNode(
+    const OverworldWildRuntimeStaticComposition *composition,
+    const OverworldWildRuntimeDefinition *definition,
+    OverworldWildRuntimeResolvedNode *nodeOut)
+{
+    u8 index;
+    const OverworldWildRuntimeResolvedNode *match = NULL;
+    memset(nodeOut, 0, sizeof(*nodeOut));
+    if (composition == NULL || definition == NULL || definition->kind != 1)
+        return FALSE;
+    for (index = 0; index < composition->nodeCount; index++) {
+        const OverworldWildRuntimeResolvedNode *node =
+            &composition->resolvedNodes[index];
+        if (!node->bound) continue;
+        if ((definition->selectorKind == 1
+                && definition->nodeId == node->nodeId)
+            || (definition->selectorKind == 2
+                && definition->semanticRole == node->semanticRole)) {
+            if (match != NULL) return FALSE;
+            match = node;
+        }
+    }
+    if (match == NULL) return FALSE;
+    *nodeOut = *match;
+    return TRUE;
+}
+
+BOOL OverworldWildRuntime_CopyInstalledModifierOperations(
+    u16 definitionId,
+    OverworldWildRuntimeModifierOperation *operationsOut,
+    u8 capacity,
+    u8 *operationCountOut)
+{
+    *operationCountOut = 0;
+    if (capacity == 0) return FALSE;
+    memset(operationsOut, 0, (size_t)capacity * sizeof(*operationsOut));
+    if (definitionId == DEF_MULTI_INSTANCE
+        || definitionId == DEF_STATIC_ADD
+        || definitionId == DEF_RUNTIME_ADD) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_ADD;
+        operationsOut[0].operand = 1;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_SET_SPEED_FOUR) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[0].operand = 4;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_STATIC_SET_ORDER) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[0].operand = 1;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_CLAMP_SPEED_FOUR) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_ADD;
+        operationsOut[0].operand = 32;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_BAD_OVERFLOW) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_ADD;
+        operationsOut[0].operand = 33;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_RUNTIME_S16_MIN
+        || definitionId == DEF_RUNTIME_S16_MAX) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 4;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_ADD;
+        operationsOut[0].operand = definitionId == DEF_RUNTIME_S16_MIN
+            ? -32768 : 32767;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_CONFLICTING_BOUNDS && capacity >= 2) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 4;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_AT_LEAST;
+        operationsOut[0].operand = 8;
+        operationsOut[1].fieldNamespace = 1;
+        operationsOut[1].fieldId = 4;
+        operationsOut[1].operatorKind = OW_WILD_RUNTIME_OPERATOR_AT_MOST;
+        operationsOut[1].operand = 16;
+        *operationCountOut = 2;
+        return TRUE;
+    }
+    if (definitionId == DEF_SPEED_ZERO) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 3;
+        operationsOut[0].operatorKind = OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[0].operand = 0;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_AVOID_SET_ONE
+        || definitionId == DEF_AVOID_SET_ZERO
+        || definitionId == DEF_AVOID_SET_TWO
+        || definitionId == DEF_AVOID_ADD) {
+        operationsOut[0].fieldNamespace = 1;
+        operationsOut[0].fieldId = 22;
+        operationsOut[0].operatorKind = definitionId == DEF_AVOID_ADD
+            ? OW_WILD_RUNTIME_OPERATOR_ADD : OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[0].operand = definitionId == DEF_AVOID_SET_ONE ? 1
+            : definitionId == DEF_AVOID_SET_TWO ? 2
+            : definitionId == DEF_AVOID_ADD ? 1 : 0;
+        *operationCountOut = 1;
+        return TRUE;
+    }
+    if (definitionId == DEF_ALL_OPERATORS && capacity >= 8) {
+        u8 i;
+        for (i = 0; i < 6; i++) {
+            operationsOut[i].fieldNamespace = 1;
+            operationsOut[i].operatorKind = (u8)(i + 1);
+        }
+        operationsOut[0].fieldId = 3;
+        operationsOut[1].fieldId = 4;
+        operationsOut[2].fieldId = 11;
+        operationsOut[3].fieldId = 13;
+        operationsOut[4].fieldId = 14;
+        operationsOut[5].fieldId = 12;
+        operationsOut[0].operand = 2;
+        operationsOut[1].operand = 1;
+        operationsOut[2].operand = 4;
+        operationsOut[3].operand = 3;
+        operationsOut[4].operand = -2;
+        operationsOut[4].bound = 2;
+        operationsOut[5].operand = 2;
+        operationsOut[5].bound = 5;
+        operationsOut[6].fieldNamespace = 1;
+        operationsOut[6].fieldId = 9;
+        operationsOut[6].operatorKind = OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[6].operand = 12;
+        operationsOut[7].fieldNamespace = 1;
+        operationsOut[7].fieldId = 10;
+        operationsOut[7].operatorKind = OW_WILD_RUNTIME_OPERATOR_SET;
+        operationsOut[7].operand = 0;
+        *operationCountOut = 8;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 #include "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
 
 static OverworldWildRuntimeApplicabilityInput fixture_applicability(void)
@@ -193,15 +690,27 @@ static OverworldWildRuntimeApplicabilityInput fixture_applicability(void)
     input.immutableContextMask = 0xFFFFFFFFu;
     input.controllerId = 0x3001;
     input.boundNodeIds[0] = 0x4001;
-    input.boundNodeCount = 1;
-    input.semanticRoleMask = OWBD_ROLE_MASK(OWBD_ROLE_ATTENTIVE)
-        | OWBD_ROLE_MASK(OWBD_ROLE_TIRED);
+    input.boundNodeIds[1] = 0x4100;
+    input.boundNodeIds[2] = 0x4101;
+    input.boundNodeIds[3] = 0x4107;
+    input.boundNodeCount = 4;
+    input.semanticRoleMask = OWBD_ROLE_MASK(1) | OWBD_ROLE_MASK(2)
+        | OWBD_ROLE_MASK(3) | OWBD_ROLE_MASK(7);
     input.effectiveProfileId = 0x2201;
     input.effectiveSemanticRole = 2;
     return input;
 }
 
-static void prepare_runtime(
+static OverworldWildRuntimeStaticContext fixture_static_context(void)
+{
+    OverworldWildRuntimeStaticContext context;
+    memset(&context, 0, sizeof(context));
+    context.groupFlags = 0xFFFFFFFFu;
+    context.level = 1;
+    return context;
+}
+
+static void prepare_runtime_unprimed(
     OverworldWildBehaviorStackRuntime *runtime,
     int slotIndex)
 {
@@ -211,6 +720,44 @@ static void prepare_runtime(
         OverworldWildRuntime_BindPrivateIdentity(runtime)
             == OW_WILD_RUNTIME_STATUS_OK,
         "runtime identity bind failed");
+}
+
+static void prepare_runtime(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex)
+{
+    OverworldWildRuntimeApplicabilityInput input = fixture_applicability();
+    OverworldWildRuntimeStaticContext context = fixture_static_context();
+    prepare_runtime_unprimed(runtime, slotIndex);
+    require(OverworldWildRuntime_PrimeEffectiveCache(runtime, (u8)slotIndex,
+            runtime->slots[slotIndex].slotGeneration, &context, &input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "runtime static snapshot prime failed");
+}
+
+static void assign_and_prime(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex)
+{
+    OverworldWildRuntimeApplicabilityInput input = fixture_applicability();
+    OverworldWildRuntimeStaticContext context = fixture_static_context();
+    OverworldWildRuntime_MarkSlotAssigned(runtime, slotIndex);
+    require(OverworldWildRuntime_PrimeEffectiveCache(runtime, (u8)slotIndex,
+            runtime->slots[slotIndex].slotGeneration, &context, &input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "secondary slot static snapshot prime failed");
+}
+
+static void refresh_cache_identity(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex)
+{
+    OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[slotIndex];
+    if (!(slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID)) return;
+    slot->effectiveCache.cacheIdentity = CacheIdentity(
+        runtime, slot, &slot->effectiveCache, &slot->provenance,
+        sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
+    slot->provenance.cacheIdentity = slot->effectiveCache.cacheIdentity;
 }
 
 static OverworldWildRuntimeLayerHandle apply_one(
@@ -226,6 +773,9 @@ static OverworldWildRuntimeLayerHandle apply_one(
         runtime, slot, runtime->slots[slot].slotGeneration,
         input, definition, owner, key, &result);
 
+    if (status != OW_WILD_RUNTIME_STATUS_OK)
+        fprintf(stderr, "fixture apply definition=%04X status=%u\n",
+            definition, status);
     require(status == OW_WILD_RUNTIME_STATUS_OK, "fixture apply failed");
     require(result.ok && result.mutated, "fixture apply did not mutate");
     require(result.operationResultCount == 1, "fixture apply result count");
@@ -338,7 +888,7 @@ static void test_handles_and_atomicity(
     int editedIndex;
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     first = apply_one(&runtime, 0, input, DEF_SHARED, 0x9001, 0);
     second = apply_one(&runtime, 0, input, DEF_SHARED, 0x9002, 0);
     before = runtime;
@@ -674,8 +1224,8 @@ static void test_generated_applicability_and_generation(
         OverworldWildRuntime_Replace(
             &runtime, 0, runtime.slots[0].slotGeneration,
             &fallback, 0x8107, 0, DEF_FLED_EXACT, &result)
-            == OW_WILD_RUNTIME_STATUS_OK,
-        "fallback tired-translation branch replace failed");
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "fallback tired-translation branch bypassed canonical roster authentication");
     require(
         OverworldWildRuntime_Replace(
             &runtime, 0, runtime.slots[0].slotGeneration,
@@ -710,11 +1260,16 @@ static void test_generated_applicability_and_generation(
     require(runtime.slots[0].layerGeneration
             == before.slots[0].layerGeneration + 1,
         "entry wrap advanced target layer generation more than once");
-    require(
-        OverworldWildRuntime_Remove(
-            &runtime, 0, runtime.slots[0].slotGeneration,
-            &fled, &result) == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE,
+    {
+        OverworldWildRuntimeStatus staleStatus = OverworldWildRuntime_Remove(
+            &runtime, 0, runtime.slots[0].slotGeneration, &fled, &result);
+        if (staleStatus != OW_WILD_RUNTIME_STATUS_INVALID_HANDLE)
+            fprintf(stderr, "pre-rekey stale status=%u epoch=%lu handle=%lu\n",
+                staleStatus, (unsigned long)runtime.handleEpoch,
+                (unsigned long)fled.runtimeEpoch);
+        require(staleStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE,
         "pre-rekey handle remained usable");
+    }
 }
 
 static void test_role_mask_boundaries(
@@ -726,7 +1281,7 @@ static void test_role_mask_boundaries(
     OverworldWildRuntimeStackDeltaResult result;
 
     prepare_runtime(&runtime, 0);
-    boundary.semanticRoleMask = OWBD_ROLE_MASK(OWBD_ROLE_CALM);
+    boundary = *input;
     require(OverworldWildRuntime_Apply(
             &runtime, 0, runtime.slots[0].slotGeneration, &boundary,
             DEF_CALM, 0x9301, 0, &result) == OW_WILD_RUNTIME_STATUS_OK,
@@ -735,7 +1290,7 @@ static void test_role_mask_boundaries(
             &runtime, 0, runtime.slots[0].slotGeneration, &result)
             == OW_WILD_RUNTIME_STATUS_OK,
         "role boundary cleanup failed");
-    boundary.semanticRoleMask = OWBD_ROLE_MASK(OWBD_ROLE_CUSTOM);
+    boundary = *input;
     require(OverworldWildRuntime_Apply(
             &runtime, 0, runtime.slots[0].slotGeneration, &boundary,
             DEF_CUSTOM, 0x9302, 0, &result) == OW_WILD_RUNTIME_STATUS_OK,
@@ -790,8 +1345,8 @@ static void test_batch_policy_owner_and_lifecycle(
         "multi-apply batch failed");
     require(runtime.slots[0].layerGeneration == layerGeneration + 1,
         "changing batch did not advance layer generation exactly once");
-    require(runtime.slots[0].effectiveGeneration == effectiveGeneration,
-        "Task-8 batch changed deferred effective generation");
+    require(runtime.slots[0].effectiveGeneration == effectiveGeneration + 1,
+        "Task-9 visible batch did not advance effective generation once");
     require(
         OverworldWildRuntime_RemoveOwner(
             &runtime, 0, runtime.slots[0].slotGeneration,
@@ -895,12 +1450,18 @@ static void test_global_rekey_and_terminal_restart(
     OverworldWildRuntimeLayerHandle targetHandle;
     OverworldWildRuntimeLayerHandle otherHandle;
     u32 otherLayerGeneration;
+    u32 emptyBystanderIncarnation;
+    u32 dataIncarnation;
+    OverworldWildRuntimeStaticContext changedContext =
+        fixture_static_context();
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     targetHandle = apply_one(&runtime, 0, input, DEF_SHARED, 0x9001, 0);
     otherHandle = apply_one(&runtime, 1, input, DEF_SHARED, 0x9002, 0);
     otherLayerGeneration = runtime.slots[1].layerGeneration;
+    emptyBystanderIncarnation = runtime.slots[2].cacheIncarnation;
+    dataIncarnation = runtime.dataIncarnation;
     runtime.slots[0].nextEntryGeneration = 0xFFFFFFFFu;
     require(
         OverworldWildRuntime_Apply(
@@ -910,8 +1471,26 @@ static void test_global_rekey_and_terminal_restart(
         "global rekey trigger failed");
     require(runtime.slots[1].layerGeneration == otherLayerGeneration + 1,
         "global rekey did not advance surviving other slot once");
+    require(runtime.dataIncarnation != dataIncarnation
+            && runtime.slots[2].cacheIncarnation
+                != emptyBystanderIncarnation,
+        "global rekey reused data/empty-bystander cache incarnation");
     require(runtime.slots[1].layerBank.entryGenerations[0] == 1,
         "global rekey did not assign canonical nonzero other identity");
+    before = runtime;
+    changedContext.species = 1;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 1,
+            runtime.slots[1].slotGeneration, &changedContext, input)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "retained-static bystander rekey accepted a changed context");
+    changedContext = fixture_static_context();
+    changedContext.reserved = 1;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 1,
+            runtime.slots[1].slotGeneration, &changedContext, input)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "retained-static bystander rekey accepted reserved context bytes");
     require(
         OverworldWildRuntime_Remove(
             &runtime, 1, runtime.slots[1].slotGeneration,
@@ -955,11 +1534,12 @@ static void test_task7_destructive_wrap_rekey(
     u32 survivorLayerGeneration;
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     targetHandle = apply_one(&runtime, 0, input, DEF_SHARED, 0x9101, 0);
     survivorHandle = apply_one(&runtime, 1, input, DEF_SHARED, 0x9102, 0);
     survivorLayerGeneration = runtime.slots[1].layerGeneration;
     runtime.slots[0].slotGeneration = 0xFFFFFFFFu;
+    refresh_cache_identity(&runtime, 0);
     OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
     require(runtime.handleEpoch == targetHandle.runtimeEpoch + 1,
         "Task-7 slot wrap did not advance the runtime epoch");
@@ -976,18 +1556,19 @@ static void test_task7_destructive_wrap_rekey(
         "Task-7 slot wrap left a surviving-slot handle usable");
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     (void)apply_one(&runtime, 0, input, DEF_SHARED, 0x9151, 0);
     survivorHandle = apply_one(&runtime, 1, input, DEF_SHARED, 0x9152, 0);
     runtime.handleEpoch = 0xFFFFFFFEu;
     runtime.slots[0].slotGeneration = 0xFFFFFFFFu;
+    refresh_cache_identity(&runtime, 0);
     OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
     require(runtime.handleEpoch == 0xFFFFFFFFu
             && runtime.slots[1].activeLayerCount == 1,
         "Task-7 max-minus-one epoch wrap restarted one epoch too early");
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     targetHandle = apply_one(&runtime, 0, input, DEF_SHARED, 0x9201, 0);
     survivorHandle = apply_one(&runtime, 1, input, DEF_SHARED, 0x9202, 0);
     runtime.handleEpoch = 0xFFFFFFFFu;
@@ -997,7 +1578,7 @@ static void test_task7_destructive_wrap_rekey(
             && runtime.slots[0].activeLayerCount == 0
             && runtime.slots[1].activeLayerCount == 0,
         "Task-7 terminal epoch restart did not clear every slot");
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     require(OverworldWildRuntime_Remove(
             &runtime, 1, runtime.slots[1].slotGeneration,
             &survivorHandle, &result) == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE,
@@ -1011,7 +1592,7 @@ static void test_task7_corrupt_wrap_invalidation(
     u32 epoch;
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     runtime.slots[1].activeLayerCount =
         OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT + 1;
     runtime.slots[0].slotGeneration = 0xFFFFFFFFu;
@@ -1023,7 +1604,7 @@ static void test_task7_corrupt_wrap_invalidation(
         "out-of-range layer count was normalized during slot wrap");
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     (void)apply_one(&runtime, 1, input, DEF_SHARED, 0x9501, 0);
     runtime.slots[1].layerBank.entryGenerations[0] = 0;
     runtime.slots[0].slotGeneration = 0xFFFFFFFFu;
@@ -1032,7 +1613,7 @@ static void test_task7_corrupt_wrap_invalidation(
         "zero survivor entry generation was normalized during slot wrap");
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     (void)apply_one(&runtime, 1, input, DEF_MULTI_INSTANCE, 0x9502, 0);
     (void)apply_one(&runtime, 1, input, DEF_MULTI_INSTANCE, 0x9502, 1);
     runtime.slots[1].layerBank.entryGenerations[1] =
@@ -1043,7 +1624,7 @@ static void test_task7_corrupt_wrap_invalidation(
         "duplicate survivor entry generation was normalized during slot wrap");
 
     prepare_runtime(&runtime, 0);
-    OverworldWildRuntime_MarkSlotAssigned(&runtime, 1);
+    assign_and_prime(&runtime, 1);
     (void)apply_one(&runtime, 1, input, DEF_FLED, 0x8107, 0);
     runtime.slots[1].layerBank.ownerIds[0] = 0x9503;
     runtime.slots[0].slotGeneration = 0xFFFFFFFFu;
@@ -1068,6 +1649,7 @@ static void test_canonical_preflight_and_restart(
     OverworldWildRuntimeStackDeltaRequest request;
     OverworldWildRuntimeStackDeltaResult result;
     OverworldWildRuntimeApplicabilityInput changed;
+    OverworldWildRuntimeStaticContext staticContext = fixture_static_context();
     OverworldWildRuntimeLayerHandle handle;
     u8 savedFlags;
 
@@ -1093,21 +1675,17 @@ static void test_canonical_preflight_and_restart(
     require(OverworldWildRuntime_Apply(
             &runtime, 0, runtime.slots[0].slotGeneration, &changed,
             DEF_MULTI_INSTANCE, 0x9001, 1, &result)
-            == OW_WILD_RUNTIME_STATUS_OK,
-        "dormant modifier was rejected by the current effective profile");
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "caller-selected unrelated profile replaced authenticated binding");
     changed = *input;
     changed.effectiveSemanticRole++;
     require(OverworldWildRuntime_Apply(
             &runtime, 0, runtime.slots[0].slotGeneration, &changed,
             DEF_MULTI_INSTANCE, 0x9001, 2, &result)
-            == OW_WILD_RUNTIME_STATUS_OK,
-        "dormant modifier was rejected by the current effective role");
-    require(runtime.slots[0].activeLayerCount == 2,
-        "dormant modifiers were not stored independently of the winner");
-    require(OverworldWildRuntime_ClearAllForSlot(
-            &runtime, 0, runtime.slots[0].slotGeneration, &result)
-            == OW_WILD_RUNTIME_STATUS_OK,
-        "dormant modifier cleanup failed");
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "caller-selected unrelated role replaced authenticated binding");
+    require(runtime.slots[0].activeLayerCount == 0,
+        "rejected caller binding published a dormant modifier");
 
     memset(&request, 0, sizeof(request));
     request.slotIndex = 0;
@@ -1174,6 +1752,10 @@ static void test_canonical_preflight_and_restart(
             == OW_WILD_RUNTIME_STATUS_OK,
         "cold restart identity did not rotate");
     OverworldWildRuntime_Activate(&runtime);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "cold restart did not establish a fresh static snapshot");
     require(OverworldWildRuntime_Remove(
             &runtime, 0, runtime.slots[0].slotGeneration, &handle, &result)
             == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE,
@@ -1186,6 +1768,7 @@ static void test_forced_zero_identity_rotation(
     OverworldWildBehaviorStackRuntime runtime;
     OverworldWildRuntimeStackDeltaResult result;
     OverworldWildRuntimeLayerHandle betweenHandle;
+    OverworldWildRuntimeStaticContext staticContext = fixture_static_context();
     u32 firstIdentity;
 
     prepare_runtime(&runtime, 0);
@@ -1194,12 +1777,23 @@ static void test_forced_zero_identity_rotation(
     require(OverworldWildRuntime_BindPrivateIdentity(&runtime)
             == OW_WILD_RUNTIME_STATUS_OK,
         "first consecutive forced-zero private identity bind failed");
+    sOverworldWildRuntimeForceZeroMix = FALSE;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "first forced-zero static snapshot prime failed");
     firstIdentity = sOverworldWildRuntimeLayerService.privateRuntimeIdentity;
     betweenHandle = apply_one(&runtime, 0, input, DEF_SHARED, 0x9401, 0);
     OverworldWildRuntime_MarkResidentCold(&runtime);
+    sOverworldWildRuntimeForceZeroMix = TRUE;
     require(OverworldWildRuntime_BindPrivateIdentity(&runtime)
             == OW_WILD_RUNTIME_STATUS_OK,
         "second consecutive forced-zero private identity bind failed");
+    sOverworldWildRuntimeForceZeroMix = FALSE;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "second forced-zero static snapshot prime failed");
     require(sOverworldWildRuntimeLayerService.privateRuntimeIdentity != 0,
         "forced-zero Mix published a zero private identity");
     require(sOverworldWildRuntimeLayerService.privateRuntimeIdentity
@@ -1209,7 +1803,6 @@ static void test_forced_zero_identity_rotation(
             &runtime, 0, runtime.slots[0].slotGeneration,
             &betweenHandle, &result) == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE,
         "handle minted between forced-zero binds remained authenticated");
-    sOverworldWildRuntimeForceZeroMix = FALSE;
     (void)apply_one(&runtime, 0, input, DEF_SHARED, 0x9402, 0);
 }
 
@@ -1256,6 +1849,606 @@ static void run_task6_crosscheck_corpus(
         (unsigned long)runtime.slots[0].layerGeneration);
 }
 
+static void test_task5_v40_scalar_domains(void)
+{
+    static const u8 body1202[28] = {
+        3, 1, 9, 2, 32, 2, 0, 15, 1, 1, 2, 40, 4, 0,
+        9, 30, 3, 4, 0, 0, 2, 1, 1, 0, 0, 0, 0, 15,
+    };
+    static const u8 body1209[28] = {
+        11, 0, 0, 2, 32, 2, 0, 15, 1, 1, 2, 40, 4, 0,
+        9, 30, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15,
+    };
+    u8 values[28];
+
+    (void)OwbdValidateStream;
+
+    require(OwbdStateValuesValid(body1202)
+            && OwbdStateValuesValid(body1209),
+        "production bodies 0x1202/0x1209 failed shared Task-5 domains");
+    memcpy(values, body1202, sizeof(values));
+    values[0] = 8;
+    require(OwbdStateValuesValid(values), "behavior kind 8 was rejected");
+    values[0] = 9;
+    require(!OwbdStateValuesValid(values), "behavior kind gap 9 was accepted");
+    values[0] = 10;
+    require(OwbdStateValuesValid(values), "behavior kind 10 was rejected");
+    values[0] = 11;
+    require(OwbdStateValuesValid(values), "behavior kind 11 was rejected");
+    values[0] = 12;
+    require(!OwbdStateValuesValid(values), "behavior kind 12 was accepted");
+    require(OwbdStaticValueValid(4, 2, 6)
+            && !OwbdStaticValueValid(4, 2, 7)
+            && OwbdStaticValueValid(4, 2, 8)
+            && OwbdStaticValueValid(4, 2, 9)
+            && !OwbdStaticValueValid(4, 2, 10),
+        "target enum boundaries/gap diverged from Task 5");
+    require(OwbdStaticValueValid(4, 6, 5)
+            && !OwbdStaticValueValid(4, 6, 6)
+            && !OwbdStaticValueValid(4, 7, 14)
+            && OwbdStaticValueValid(4, 7, 15),
+        "tile enum gaps diverged from Task 5");
+    require(OwbdStaticValueValid(4, 3, 0)
+            && OwbdStaticValueValid(4, 3, 4)
+            && !OwbdStaticValueValid(4, 3, 5)
+            && OwbdStaticValueValid(4, 5, 2)
+            && !OwbdStaticValueValid(4, 5, 3)
+            && OwbdStaticValueValid(4, 23, 2)
+            && !OwbdStaticValueValid(4, 23, 3)
+            && OwbdStaticValueValid(4, 26, 2)
+            && !OwbdStaticValueValid(4, 26, 3),
+        "state scalar boundaries diverged from Task 5");
+    require(OwbdStaticValueValid(5, 1, 2)
+            && !OwbdStaticValueValid(5, 1, 3)
+            && OwbdStaticValueValid(5, 2, 10)
+            && !OwbdStaticValueValid(5, 2, 11)
+            && !OwbdStaticValueValid(5, 2, 254)
+            && OwbdStaticValueValid(5, 2, 255)
+            && OwbdStaticValueValid(5, 5, 5)
+            && !OwbdStaticValueValid(5, 5, 6),
+        "controller enum boundaries/gaps diverged from Task 5");
+}
+
+static void test_task9_composition_cache_and_provenance(
+    const OverworldWildRuntimeApplicabilityInput *input)
+{
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime before;
+    OverworldWildRuntimeStackDeltaResult result;
+    OverworldWildRuntimeEffectiveCache cache;
+    OverworldWildRuntimeEffectiveCache copied;
+    OverworldWildRuntimeProvenance provenance;
+    OverworldWildRuntimeSlotSidecar bystander;
+    OverworldWildRuntimeLayerHandle high;
+    OverworldWildRuntimeLayerHandle low;
+    OverworldWildRuntimeStatus status;
+    OverworldWildRuntimeApplicabilityInput staticInput = *input;
+    OverworldWildRuntimeApplicabilityInput wrongInput = *input;
+    OverworldWildRuntimeStaticContext staticContext = fixture_static_context();
+    OverworldWildRuntimeStaticContext changedContext = fixture_static_context();
+    u32 capabilities;
+    u32 visibleEffective;
+    u32 hiddenCapabilities;
+    u32 hiddenEffective;
+    u32 firstCacheIdentity;
+    u32 firstDataIncarnation;
+    u32 firstSlotIncarnation;
+    u32 priorSlotGeneration;
+    u8 speedZeroStatus;
+    u8 avoidSetTwoStatus;
+    u8 avoidAddStatus;
+    u8 wide33;
+    u8 wideMinimum;
+    u8 wideMaximum;
+    u8 conflictStatus;
+    u8 i;
+
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "static-only composition failed");
+    require(runtime.slots[0].layerGeneration == 1
+            && runtime.slots[0].effectiveGeneration == 1,
+        "static-only composition advanced a generation");
+    require(OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &cache)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && cache.profileId == input->effectiveProfileId
+            && cache.stateValues[3] == 2,
+        "static-only effective cache is not canonical");
+    copied = cache;
+    copied.stateValues[3] = 99;
+    require(OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &copied)
+            == OW_WILD_RUNTIME_STATUS_OK && copied.stateValues[3] == 2,
+        "effective query exposed mutable cache storage");
+    require(OverworldWildRuntime_GetCapabilityMask(&runtime, 0,
+            runtime.slots[0].slotGeneration, &capabilities)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && capabilities == cache.capabilityMask,
+        "O(1) capability query missed the validated cache");
+    firstCacheIdentity = cache.cacheIdentity;
+
+    runtime.slots[0].staticCache.stateValues[3] = 3;
+    for (i = 0; i < runtime.slots[0].staticCache.nodeCount; i++) {
+        if (runtime.slots[0].staticCache.resolvedNodes[i].nodeId
+                == runtime.slots[0].staticCache.baseNodeId)
+            runtime.slots[0].staticCache.resolvedNodes[i].stateValues[3] = 3;
+    }
+    runtime.slots[0].staticCache.staticSetHash = fixture_mix(0x4F575339u,
+        runtime.slots[0].staticCache.catalogIdentity);
+    runtime.slots[0].staticCache.staticSetHash = fixture_mix(
+        runtime.slots[0].staticCache.staticSetHash,
+        runtime.slots[0].staticCache.staticContextIdentity);
+    runtime.slots[0].staticCache.staticSetHash = fixture_hash_bytes(
+        runtime.slots[0].staticCache.staticSetHash,
+        &runtime.slots[0].staticCache.immutableContextMask,
+        sizeof(runtime.slots[0].staticCache)
+            - offsetof(OverworldWildRuntimeStaticCache,
+                immutableContextMask));
+    runtime.slots[0].effectiveCache.stateValues[3] = 3;
+    runtime.slots[0].effectiveCache.staticSetHash =
+        runtime.slots[0].staticCache.staticSetHash;
+    runtime.slots[0].provenance.staticSetHash =
+        runtime.slots[0].staticCache.staticSetHash;
+    runtime.slots[0].effectiveCache.effectiveHash =
+        EffectiveHash(&runtime.slots[0].effectiveCache);
+    runtime.slots[0].provenance.effectiveHash =
+        runtime.slots[0].effectiveCache.effectiveHash;
+    runtime.slots[0].provenance.provenanceHash =
+        ProvenanceHash(&runtime.slots[0].provenance);
+    runtime.slots[0].effectiveCache.provenanceHash =
+        runtime.slots[0].provenance.provenanceHash;
+    runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
+        &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
+        &runtime.slots[0].provenance,
+        sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
+    runtime.slots[0].provenance.cacheIdentity =
+        runtime.slots[0].effectiveCache.cacheIdentity;
+    require(ValidateCacheKey(&runtime, &runtime.slots[0])
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "hostile retained static fixture was not internally coherent");
+    before = runtime;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_HIGH_STATE,
+            0x94FE, 0, &result) == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "coherently altered retained static changed live mutation bytes");
+
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
+                runtime.slots[0].slotGeneration, &cache)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "retained-static hostile fixture could not restore clean state");
+    firstCacheIdentity = cache.cacheIdentity;
+    before = runtime;
+    wrongInput.effectiveProfileId++;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &wrongInput)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "prime returned IDEMPOTENT for a mismatched authenticated binding");
+    changedContext.species = 1;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &changedContext, input)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "effective-cache hit accepted changed immutable context bytes");
+    wrongInput = *input;
+    wrongInput.immutableContextMask ^= 1u;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &wrongInput)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "caller immutable mask authenticated itself");
+    wrongInput = *input;
+    wrongInput.boundNodeIds[1] = 0x4200;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &wrongInput)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "caller node roster authenticated itself");
+    wrongInput = *input;
+    wrongInput.semanticRoleMask ^= OWBD_ROLE_MASK(OWBD_ROLE_CUSTOM);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &wrongInput)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "caller role roster authenticated itself");
+    wrongInput = *input;
+    wrongInput.effectiveSemanticRole = OWBD_ROLE_CALM;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &wrongInput)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "caller base role authenticated itself or changed runtime bytes");
+
+    sFixtureCatalogIdentity = 0;
+    memset(&copied, 0xA5, sizeof(copied));
+    require(OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &copied)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && !memcmp(&copied, &(OverworldWildRuntimeEffectiveCache){0},
+                sizeof(copied))
+            && OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+                runtime.slots[0].slotGeneration, &staticContext, input)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "released catalog returned cached data or IDEMPOTENT prime");
+    sFixtureCatalogIdentity = 0xC88892BEu ^ 1u;
+    capabilities = 0xFFFFFFFFu;
+    require(OverworldWildRuntime_GetCapabilityMask(&runtime, 0,
+            runtime.slots[0].slotGeneration, &capabilities)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && capabilities == 0,
+        "replacement catalog returned a stale capability cache");
+    sFixtureCatalogIdentity = 0xC88892BEu;
+
+    runtime.slots[0].staticContextGeneration++;
+    memset(&copied, 0xA5, sizeof(copied));
+    memset(&provenance, 0xA5, sizeof(provenance));
+    capabilities = 0xFFFFFFFFu;
+    require(OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &copied)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && OverworldWildRuntime_GetCapabilityMask(&runtime, 0,
+                runtime.slots[0].slotGeneration, &capabilities)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && OverworldWildRuntime_GetProvenance(&runtime, 0,
+                runtime.slots[0].slotGeneration, &provenance)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && capabilities == 0
+            && !memcmp(&copied, &(OverworldWildRuntimeEffectiveCache){0},
+                sizeof(copied))
+            && !memcmp(&provenance, &(OverworldWildRuntimeProvenance){0},
+                sizeof(provenance))
+            && OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+                runtime.slots[0].slotGeneration, &staticContext, input)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "static-context generation change returned stale query/prime data");
+    runtime.slots[0].staticContextGeneration--;
+
+    before = runtime;
+    sFixtureCatalogIdentity ^= 1u;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_HIGH_STATE,
+            0x94FF, 0, &result) == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "catalog identity mismatch changed live bytes");
+    sFixtureCatalogIdentity ^= 1u;
+
+    high = apply_one(&runtime, 0, input, DEF_HIGH_STATE, 0x9501, 0);
+    require(runtime.slots[0].layerGeneration == 2
+            && runtime.slots[0].effectiveGeneration == 2
+            && runtime.slots[0].effectiveCache.nodeId == 0x4100
+            && runtime.slots[0].effectiveCache.profileId == 0x2301
+            && runtime.slots[0].effectiveCache.stateValues[3] == 3,
+        "runtime non-base winner bypassed the resolved roster body");
+    hiddenEffective = runtime.slots[0].effectiveGeneration;
+    hiddenCapabilities = runtime.slots[0].effectiveCache.capabilityMask;
+    low = apply_one(&runtime, 0, input, DEF_LOW_STATE, 0x9502, 0);
+    require(runtime.slots[0].layerGeneration == 3
+            && runtime.slots[0].effectiveGeneration == hiddenEffective
+            && runtime.slots[0].effectiveCache.capabilityMask
+                == hiddenCapabilities,
+        "hidden lower candidate changed effective generation/capabilities");
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && provenance.candidateCount == 3
+            && provenance.winningDefinitionId == DEF_HIGH_STATE
+            && provenance.candidates[0].definitionId == DEF_HIGH_STATE
+            && provenance.candidates[0].isWinner
+            && provenance.candidates[1].definitionId == 0
+            && !provenance.candidates[1].isWinner
+            && provenance.candidates[2].definitionId == DEF_LOW_STATE
+            && !provenance.candidates[2].isWinner,
+        "hidden candidate did not refresh winner/candidate provenance");
+    (void)apply_one(&runtime, 0, input, DEF_ORDER_A, 0x9600, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDER_B, 0x9400, 0);
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && provenance.candidateCount == 5
+            && provenance.candidates[0].definitionId == DEF_HIGH_STATE
+            && provenance.candidates[1].definitionId == 0
+            && provenance.candidates[2].definitionId == DEF_LOW_STATE
+            && provenance.candidates[3].definitionId == DEF_ORDER_A
+            && provenance.candidates[3].ownerId == 0x9600
+            && provenance.candidates[4].definitionId == DEF_ORDER_B
+            && provenance.candidates[4].ownerId == 0x9400,
+        "winner-first/global explained order ignored definition before owner");
+    for (i = 0; i < provenance.candidateCount; i++)
+        require(provenance.candidates[i].isWinner == (i == 0),
+            "candidate provenance published an incorrect isWinner flag");
+    require(OverworldWildRuntime_RemoveOwner(&runtime, 0,
+            runtime.slots[0].slotGeneration, 0x9600, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_RemoveOwner(&runtime, 0,
+                runtime.slots[0].slotGeneration, 0x9400, &result)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "adversarial candidate-order cleanup failed");
+    require(OverworldWildRuntime_Remove(&runtime, 0,
+            runtime.slots[0].slotGeneration, &low, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].layerGeneration == 8
+            && runtime.slots[0].effectiveGeneration == hiddenEffective,
+        "hidden lower removal changed effective output");
+    status = OverworldWildRuntime_Replace(&runtime, 0,
+        runtime.slots[0].slotGeneration, input, 0x9501, 0,
+        DEF_EXACT, &result);
+    if (status != OW_WILD_RUNTIME_STATUS_OK
+        || runtime.slots[0].effectiveCache.semanticRole != OWBD_ROLE_TIRED)
+        fprintf(stderr,
+            "visible replace status=%u role=%u effective=%lu before=%lu\n",
+            status, runtime.slots[0].effectiveCache.semanticRole,
+            (unsigned long)runtime.slots[0].effectiveGeneration,
+            (unsigned long)hiddenEffective);
+    require(status == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.semanticRole == OWBD_ROLE_TIRED
+            && runtime.slots[0].effectiveGeneration
+                == OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    hiddenEffective),
+        "visible state replacement did not publish one effective change");
+    hiddenEffective = runtime.slots[0].effectiveGeneration;
+    (void)apply_one(&runtime, 0, input, DEF_MULTI_INSTANCE, 0x9504, 1);
+    require(runtime.slots[0].provenance.modifierCount == 1
+            && !runtime.slots[0].provenance.modifiers[0].applied
+            && runtime.slots[0].provenance.modifiers[0].skipReason != 0,
+        "inapplicable active modifier lacked a concrete skip diagnostic");
+
+    (void)apply_one(&runtime, 0, input, DEF_SET_SPEED_FOUR, 0x9503, 0);
+    visibleEffective = runtime.slots[0].effectiveGeneration;
+    require(runtime.slots[0].effectiveCache.stateValues[3] == 4
+            && visibleEffective == hiddenEffective + 1,
+        "visible modifier did not advance effective generation");
+    require(OverworldWildRuntime_Replace(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, 0x9503, 0,
+            DEF_CLAMP_SPEED_FOUR, &result) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[3] == 4
+            && runtime.slots[0].effectiveGeneration == visibleEffective,
+        "raw contributor with identical saturated output advanced effective generation");
+    require(runtime.slots[0].provenance.contributionCount == 1
+            && runtime.slots[0].provenance.contributions[0].definitionId
+                == DEF_CLAMP_SPEED_FOUR,
+        "no-op-normalized replacement did not refresh provenance");
+
+    prepare_runtime_unprimed(&runtime, 0);
+    staticInput.immutableContextMask = 0x12345678u;
+    staticContext.groupFlags = 0x12345678u;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, &staticInput)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[3] == 2,
+        "static modifier was not folded through the common operator pipeline");
+    (void)apply_one(&runtime, 0, &staticInput, DEF_RUNTIME_ADD, 0x9510, 0);
+    require(runtime.slots[0].effectiveCache.stateValues[3] == 3
+            && runtime.slots[0].provenance.modifierCount == 3
+            && runtime.slots[0].provenance.modifiers[0].definitionId
+                == DEF_STATIC_SET_ORDER
+            && runtime.slots[0].provenance.modifiers[0].staticPriority == 1
+            && runtime.slots[0].provenance.modifiers[0].ruleStableId == 0x5001
+            && runtime.slots[0].provenance.modifiers[0].actionStableId == 0x6001
+            && runtime.slots[0].provenance.modifiers[1].definitionId
+                == DEF_STATIC_ADD
+            && runtime.slots[0].provenance.modifiers[1].actionStableId == 0x6002
+            && runtime.slots[0].provenance.modifiers[2].definitionId
+                == DEF_RUNTIME_ADD,
+        "static action order or static-before-runtime folding changed");
+
+    prepare_runtime_unprimed(&runtime, 0);
+    staticContext = fixture_static_context();
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "operator fixture prime failed");
+    (void)apply_one(&runtime, 0, input, DEF_ALL_OPERATORS, 0x9520, 0);
+    require(runtime.slots[0].effectiveCache.stateValues[3] == 2
+            && runtime.slots[0].effectiveCache.stateValues[4] == 5
+            && runtime.slots[0].effectiveCache.stateValues[11] == 4
+            && runtime.slots[0].effectiveCache.stateValues[13] == 0
+            && runtime.slots[0].effectiveCache.stateValues[14] == 2
+            && runtime.slots[0].effectiveCache.stateValues[12] == 5
+            && runtime.slots[0].effectiveCache.stateValues[10] == 12
+            && runtime.slots[0].provenance.contributionCount == 8
+            && runtime.slots[0].provenance.normalizationCount == 1
+            && runtime.slots[0].provenance.lastWriterDefinitionIds[3]
+                == DEF_ALL_OPERATORS,
+        "six operator families/normalization/provenance diverged from Task 6");
+
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_BAD_OVERFLOW,
+            0x9521, 0, &result) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[3] == 4,
+        "runtime s16 operand 33 was narrowed to the static wire domain");
+    wide33 = runtime.slots[0].effectiveCache.stateValues[3];
+    (void)apply_one(&runtime, 0, input, DEF_RUNTIME_S16_MIN, 0x9524, 0);
+    wideMinimum = runtime.slots[0].effectiveCache.stateValues[4];
+    require(runtime.slots[0].effectiveCache.stateValues[4] == 0,
+        "runtime s16 operand -32768 did not saturate deterministically");
+    require(OverworldWildRuntime_Replace(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, 0x9524, 0,
+            DEF_RUNTIME_S16_MAX, &result) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[4] == 64,
+        "runtime s16 operand 32767 did not saturate deterministically");
+    wideMaximum = runtime.slots[0].effectiveCache.stateValues[4];
+
+    before = runtime;
+    conflictStatus = (u8)OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_CONFLICTING_BOUNDS, 0x9525, 0, &result);
+    require(conflictStatus == OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "same-layer AT_LEAST/AT_MOST conflict changed live bytes");
+
+    prepare_runtime(&runtime, 0);
+    before = runtime;
+    speedZeroStatus = (u8)OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_SPEED_ZERO,
+            0x9522, 0, &result);
+    require(speedZeroStatus == OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "Task-6 speed SET zero was accepted or changed live bytes");
+    (void)apply_one(&runtime, 0, input, DEF_AVOID_SET_ONE, 0x9523, 0);
+    require(runtime.slots[0].effectiveCache.stateValues[22] == 1
+            && runtime.slots[0].provenance.contributions[
+                runtime.slots[0].provenance.contributionCount - 1].fieldId
+                == 22,
+        "Task-6 avoidPreviousTile SET one was not composed/provenanced");
+    require(OverworldWildRuntime_Replace(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, 0x9523, 0,
+            DEF_AVOID_SET_ZERO, &result) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[22] == 0,
+        "Task-6 avoidPreviousTile SET zero was not composed");
+    before = runtime;
+    avoidSetTwoStatus = (u8)OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_AVOID_SET_TWO,
+            0x9524, 0, &result);
+    require(avoidSetTwoStatus == OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "invalid avoidPreviousTile boolean changed live bytes");
+    avoidAddStatus = (u8)OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, DEF_AVOID_ADD,
+            0x9525, 0, &result);
+    require(avoidAddStatus == OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "non-SET avoidPreviousTile operator changed live bytes");
+    printf("TASK6_DOMAINS speedSet0=%d avoidSet1=%u avoidSet0=%u "
+           "avoidSet2=%d avoidAdd=%d\n",
+        speedZeroStatus, 1u, 0u, avoidSetTwoStatus, avoidAddStatus);
+    printf("TASK6_RUNTIME_S16 add33=%u min=%u max=%u conflict=%u\n",
+        wide33, wideMinimum, wideMaximum, conflictStatus);
+
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "provenance truncation prime failed");
+    for (i = 0; i < 3; i++)
+        (void)apply_one(&runtime, 0, input, DEF_ALL_OPERATORS,
+            (u16)(0x9530 + i), i);
+    require((runtime.slots[0].provenance.flags
+                & OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CONTRIBUTIONS)
+            && runtime.slots[0].provenance.contributionCount
+                == OW_WILD_RUNTIME_MAX_PROVENANCE_CONTRIBUTIONS,
+        "bounded provenance did not report deterministic truncation");
+
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "generation wrap prime failed");
+    (void)apply_one(&runtime, 0, input, DEF_HIGH_STATE, 0x953F, 0);
+    hiddenEffective = runtime.slots[0].effectiveGeneration;
+    firstCacheIdentity = runtime.slots[0].effectiveCache.cacheIdentity;
+    firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    runtime.slots[0].layerGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].effectiveCache.layerGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].provenance.layerGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
+        &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
+        &runtime.slots[0].provenance,
+        sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
+    runtime.slots[0].provenance.cacheIdentity =
+        runtime.slots[0].effectiveCache.cacheIdentity;
+    low = apply_one(&runtime, 0, input, DEF_LOW_STATE, 0x9540, 0);
+    require(runtime.slots[0].layerGeneration == 1
+            && runtime.slots[0].effectiveGeneration == hiddenEffective
+            && runtime.slots[0].cacheIncarnation != firstSlotIncarnation
+            && runtime.slots[0].effectiveCache.cacheIdentity != 0
+            && runtime.slots[0].effectiveCache.cacheIdentity
+                != firstCacheIdentity,
+        "layer generation wrap published zero/stale cache identity");
+    require(OverworldWildRuntime_Remove(&runtime, 0,
+            runtime.slots[0].slotGeneration, &low, &result)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "post-wrap layer handle was not usable");
+    runtime.slots[0].effectiveGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].effectiveCache.effectiveGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].provenance.effectiveGeneration = 0xFFFFFFFFu;
+    firstCacheIdentity = runtime.slots[0].effectiveCache.cacheIdentity;
+    firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
+        &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
+        &runtime.slots[0].provenance,
+        sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
+    runtime.slots[0].provenance.cacheIdentity =
+        runtime.slots[0].effectiveCache.cacheIdentity;
+    (void)apply_one(&runtime, 0, input, DEF_SET_SPEED_FOUR, 0x9541, 0);
+    require(runtime.slots[0].effectiveGeneration == 1
+            && runtime.slots[0].effectiveCache.effectiveGeneration == 1
+            && runtime.slots[0].cacheIncarnation != firstSlotIncarnation
+            && runtime.slots[0].effectiveCache.cacheIdentity
+                != firstCacheIdentity,
+        "effective generation wrap did not invalidate/restart at one");
+
+    firstCacheIdentity = runtime.slots[0].effectiveCache.cacheIdentity;
+    firstDataIncarnation = runtime.dataIncarnation;
+    firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    OverworldWildRuntime_MarkResidentCold(&runtime);
+    require(!runtime.slots[0].staticCache.valid
+            && !(runtime.slots[0].effectiveCache.flags
+                & OW_WILD_RUNTIME_CACHE_VALID)
+            && runtime.slots[0].provenance.flags == 0
+            && runtime.dataIncarnation != firstDataIncarnation
+            && runtime.slots[0].cacheIncarnation != firstSlotIncarnation,
+        "cold restart retained copied catalog/cache/provenance bytes");
+    before = runtime;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "resident-cold prime published or changed runtime/cache bytes");
+    require(OverworldWildRuntime_BindPrivateIdentity(&runtime)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+                runtime.slots[0].slotGeneration, &staticContext, input)
+                == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.cacheIdentity
+                != firstCacheIdentity,
+        "cold reload reused the prior authenticated cache identity");
+    before = runtime;
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, FALSE);
+    require(memcmp(&runtime, &before, sizeof(runtime)) == 0,
+        "false destructive wrapper changed runtime bytes");
+    priorSlotGeneration = runtime.slots[0].slotGeneration;
+    firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    bystander = runtime.slots[1];
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
+    require(runtime.slots[0].slotGeneration == priorSlotGeneration + 1
+            && runtime.slots[0].cacheIncarnation
+                == OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    firstSlotIncarnation)
+            && !runtime.slots[0].staticCache.valid
+            && runtime.slots[0].effectiveCache.cacheIdentity == 0
+            && runtime.slots[0].provenance.freshnessGeneration == 0,
+        "ordinary live invalidation did not advance identity and clear Task-9 caches");
+    require(memcmp(&runtime.slots[1], &bystander, sizeof(bystander)) == 0,
+        "ordinary live invalidation changed a bystander slot");
+    OverworldWildRuntime_MarkSlotAssigned(&runtime, 0);
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].staticCache.valid
+            && runtime.slots[0].effectiveCache.cacheIdentity != 0,
+        "repeated live-cycle setup did not repopulate Task-9 caches");
+    priorSlotGeneration = runtime.slots[0].slotGeneration;
+    firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    bystander = runtime.slots[1];
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
+    require(runtime.slots[0].slotGeneration == priorSlotGeneration + 1
+            && runtime.slots[0].cacheIncarnation
+                == OverworldWildRuntime_AdvanceNonzeroGeneration(
+                    firstSlotIncarnation)
+            && !runtime.slots[0].staticCache.valid
+            && runtime.slots[0].effectiveCache.cacheIdentity == 0
+            && runtime.slots[0].provenance.freshnessGeneration == 0,
+        "repeated live invalidation retained prior identity or Task-9 caches");
+    require(memcmp(&runtime.slots[1], &bystander, sizeof(bystander)) == 0,
+        "repeated live invalidation changed a bystander slot");
+    (void)high;
+}
+
 int main(void)
 {
     OverworldWildRuntimeApplicabilityInput input = fixture_applicability();
@@ -1278,6 +2471,8 @@ int main(void)
     test_task7_corrupt_wrap_invalidation(&input);
     test_canonical_preflight_and_restart(&input);
     test_forced_zero_identity_rotation(&input);
+    test_task5_v40_scalar_domains();
+    test_task9_composition_cache_and_provenance(&input);
     run_task6_crosscheck_corpus(&input);
     printf(
         "runtime layers host fixture: %d checks; handle=%lu op=%lu request=%lu result=%lu; maxOps=%d capacity=%d\n",

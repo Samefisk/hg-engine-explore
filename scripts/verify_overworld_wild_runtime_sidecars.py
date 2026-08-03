@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
 SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 SUPPORT = ROOT / "src/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.c"
+LAYERS_SOURCE = ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
 SPAWNS_LINKER = ROOT / "src/overworld_wild_spawns_overlay/linker.ld"
 TASK6_LINKER = ROOT / "src/pokemon_move_history_task6_overlay/linker.ld"
 OVERLAYS_MK = ROOT / "overlays.mk"
@@ -126,21 +127,30 @@ def verify_private_layout(
     task6_linker: str,
     overlays_mk: str,
     makefile: str,
+    layers_source: str,
 ) -> None:
     require_tokens(header, "private runtime header", (
         "#define OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT 8",
         "OW_WILD_MAX_SPAWNS == 10",
         "sizeof(OverworldWildRuntimeLayer) == 16",
         "sizeof(OverworldWildRuntimeLayerBank) == 112",
-        "sizeof(OverworldWildRuntimeSlotSidecar) == 140",
-        "sizeof(OverworldWildBehaviorStackRuntime) == 1408",
+        "sizeof(OverworldWildRuntimeStaticContext) == 12",
+        "sizeof(OverworldWildRuntimeStaticModifierContribution) == 18",
+        "sizeof(OverworldWildRuntimeResolvedNode) == 38",
+        "sizeof(OverworldWildRuntimeStaticCache) == 540",
+        "sizeof(OverworldWildRuntimeEffectiveCache) == 104",
+        "sizeof(OverworldWildRuntimeProvenance) == 728",
+        "sizeof(OverworldWildRuntimeSlotSidecar) == 1516",
+        "sizeof(OverworldWildBehaviorStackRuntime) == 15172",
         "u32 handleEpoch;",
+        "u32 dataIncarnation;",
         "u32 slotGeneration;",
         "u32 staticContextGeneration;",
         "u32 nextEntryGeneration;",
         "u32 nextTimerGeneration;",
         "u32 layerGeneration;",
         "u32 effectiveGeneration;",
+        "u32 cacheIncarnation;",
         "u16 lifecycleTransitions;",
         "u8 lifecycleState;",
         "u8 activeLayerCount;",
@@ -149,6 +159,9 @@ def verify_private_layout(
         "u16 ownerIds[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];",
         "u16 instanceKeys[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];",
         "OverworldWildRuntimeLayerBank layerBank;",
+        "OverworldWildRuntimeStaticCache staticCache;",
+        "OverworldWildRuntimeEffectiveCache effectiveCache;",
+        "OverworldWildRuntimeProvenance provenance;",
         "OverworldWildRuntimeSlotSidecar slots[OW_WILD_MAX_SPAWNS];",
     ))
     for name in (
@@ -207,6 +220,7 @@ def verify_private_layout(
         "$(BUILD)/pokemon_move_history_task6_overlay_linked.o",
         "--keep-symbol=OverworldWildRuntime_Init",
         "--keep-symbol=OverworldWildRuntime_DestructivelyInvalidateSlot",
+        "--keep-symbol=OverworldWildRuntime_HandleSlotGenerationWrap",
         "POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memset",
     ))
     require_tokens(support, "resident memset wrapper", (
@@ -221,10 +235,37 @@ def verify_private_layout(
     )
     destructive = function_body(
         header, "OverworldWildRuntime_DestructivelyInvalidateSlot")
-    require_tokens(destructive, "delegated slot-generation wrap", (
+    require_tokens(destructive, "frozen destructive wrapper", (
+        "if (!wasLive) return;",
         "OverworldWildRuntime_HandleSlotGenerationWrap(runtime, slotIndex);",
-        "return;",
+        "Freeze this public overlay-155 entry at its intentional 0x30-byte ABI.",
     ))
+    require(destructive.count(
+                "OverworldWildRuntime_HandleSlotGenerationWrap(") == 1
+            and destructive.count("nop") == 18,
+            "overlay-155 destructive wrapper is not one call plus exact padding")
+    for forbidden in (
+        "OverworldWildRuntime_InitSlot",
+        "slotGeneration",
+        "cacheIncarnation",
+        "lifecycleTransitions",
+        "lifecycleState",
+    ):
+        require(forbidden not in destructive,
+                f"overlay-155 destructive wrapper retained inline write path: {forbidden}")
+    live_destructive = function_body(
+        layers_source, "OverworldWildRuntime_HandleSlotGenerationWrap")
+    require_tokens(live_destructive, "overlay-158 live invalidation", (
+        "OverworldWildRuntimeSlotSidecar *targetSlot;",
+        "targetSlot = &runtime->slots[targetSlotIndex];",
+        "slotGeneration = targetSlot->slotGeneration + 1;",
+        "targetSlot->cacheIncarnation",
+        "InitializeInvalidatedSlot(\n            targetSlot, slotGeneration, cacheIncarnation);",
+    ))
+    require(live_destructive.count("InitializeInvalidatedSlot(") == 2
+            and "static void __attribute__((noinline)) InitializeInvalidatedSlot("
+                in layers_source,
+            "overlay-158 live invalidation is not outlined through existing primitives")
 
     cleanup = function_body(source, "OverworldWildSpawns_CleanupResidentData")
     require_tokens(cleanup, "resident cleanup lifetime", (
@@ -394,11 +435,12 @@ def main() -> int:
     task6_linker = TASK6_LINKER.read_text()
     overlays_mk = OVERLAYS_MK.read_text()
     makefile = MAKEFILE.read_text()
+    layers_source = LAYERS_SOURCE.read_text()
     capture_verifier = CAPTURE_VERIFIER.read_text()
     helper = HELPER.read_text()
     verify_private_layout(
         header, source, support, spawns_linker, task6_linker, overlays_mk,
-        makefile)
+        makefile, layers_source)
     verify_lifecycle_topology(source, helper)
     require(
         capture_verifier.count(

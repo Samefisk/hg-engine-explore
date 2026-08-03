@@ -280,6 +280,51 @@ def VerifyOverworldWildRuntimeOverlay(
     )
 
 
+def VerifyOverworldWildRuntimeLayersOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    task5_owner = 'build/pokemon_move_history_task6_overlay_linked.o'
+    scalar_shard = (
+        'build/overworld_wild_runtime_layers_overlay/'
+        'owbd_v40_scalar_symbols.o'
+    )
+    catalog_owner = 'build/overworld_wild_runtime_overlay_linked.o'
+    task8_carrier = (
+        'build/overworld_wild_runtime_layers_overlay_task8_symbols.o'
+    )
+    runtime_carrier = (
+        'build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o'
+    )
+    spawns_consumer = 'build/overworld_wild_spawns_overlay_linked.o'
+    lifecycle_object = (
+        'build/pokemon_move_history_task6_overlay/'
+        'overworld_wild_behavior_support.o'
+    )
+    subprocess.check_call([
+        sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
+        '--binary', output_path, '--overlay', '158',
+        '--task5-owner', task5_owner,
+        '--lifecycle-consumer', task5_owner,
+        '--lifecycle-object', lifecycle_object,
+        '--scalar-shard', scalar_shard,
+        '--catalog-owner', catalog_owner,
+        '--task8-carrier', task8_carrier,
+        '--runtime-carrier', runtime_carrier,
+        '--spawns-consumer', spawns_consumer,
+    ])
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 158 differs from its linked binary')
+    print(
+        f'overlay 158 packaged runtime-layers gate: size={len(overlay)} '
+        f'sha256={hashlib.sha256(overlay).hexdigest()}'
+    )
+
+
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldFieldServiceEntry'
     selector_hook_name = 'OverworldFollowerSelector_TaskPoll'
@@ -822,6 +867,12 @@ def writeall():
             )
         if newOverlay == 157:
             VerifyOverworldWildRuntimeOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 158:
+            VerifyOverworldWildRuntimeLayersOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,
