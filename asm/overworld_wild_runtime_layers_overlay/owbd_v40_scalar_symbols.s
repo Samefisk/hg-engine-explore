@@ -8,7 +8,7 @@
 
     .global sOwbdStateValueMax
     .type sOwbdStateValueMax, %object
-    .set sOwbdStateValueMax, 0x023BDEB0
+    .set sOwbdStateValueMax, 0x023BDEAE
 
     .global sOwbdNumericFieldMasks
     .type sOwbdNumericFieldMasks, %object
@@ -16,8 +16,8 @@
 
     .global OwbdStaticValueValid
     .type OwbdStaticValueValid, %function
-    .thumb_set OwbdStaticValueValid, 0x023BDF91
+    .thumb_set OwbdStaticValueValid, 0x023BDF8D
 
     .global OwbdModifierPayloadValid
     .type OwbdModifierPayloadValid, %function
-    .thumb_set OwbdModifierPayloadValid, 0x023BE035
+    .thumb_set OwbdModifierPayloadValid, 0x023BE031

@@ -23,10 +23,10 @@ CONFIG = {
 }
 
 TASK5_SCALAR_SYMBOLS = {
-    "sOwbdStateValueMax": (0x023BDEB0, "OBJECT"),
+    "sOwbdStateValueMax": (0x023BDEAE, "OBJECT"),
     "sOwbdNumericFieldMasks": (0x023BDECC, "OBJECT"),
-    "OwbdStaticValueValid": (0x023BDF91, "FUNC"),
-    "OwbdModifierPayloadValid": (0x023BE035, "FUNC"),
+    "OwbdStaticValueValid": (0x023BDF8D, "FUNC"),
+    "OwbdModifierPayloadValid": (0x023BE031, "FUNC"),
 }
 
 RETAINED_STATIC_RESOLVER = (
