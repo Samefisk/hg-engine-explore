@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -135,6 +137,97 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
                 "recoveryPolicy", "allowMultipleOwners", "allowMultipleInstancesPerOwner",
             ):
                 self.assertIn(key, definition)
+
+    def test_stack_preview_resolves_species_priority_from_endpoint_payload(self):
+        self.assertEqual(len(self.data["genericAssignments"]), 2)
+        self.assertEqual(len(self.data["speciesAssignments"]), 113)
+        selected = next(item for item in self.data["speciesAssignments"]
+                        if item["controllerIndex"] == 1)
+        module_url = (ROOT / "tools" / "overworld-viewer-v2" / "static"
+                      / "stack-preview.js").as_uri()
+        script = f"""
+import fs from "node:fs";
+const {{ resolveStackPreviewContext }} = await import({json.dumps(module_url)});
+const model = JSON.parse(fs.readFileSync(0, "utf8"));
+const resolved = resolveStackPreviewContext(model, {{
+  species: {selected['species']}, groupMask: 1, behaviorClass: 0,
+}});
+process.stdout.write(JSON.stringify(resolved));
+"""
+        process = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            input=json.dumps(self.data),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        resolved = json.loads(process.stdout)
+        self.assertEqual(resolved["controllerRef"],
+                         self.data["controllers"][selected["controllerIndex"]]["stableId"])
+        self.assertEqual(resolved["dispatch"], {
+            "kind": "species",
+            "assignmentId": selected["stableId"],
+            "priority": selected["dispatchPriority"],
+        })
+
+    def test_stack_preview_replays_real_tired_recovery_contract(self):
+        module_url = (ROOT / "tools" / "overworld-viewer-v2" / "static"
+                      / "stack-preview.js").as_uri()
+        script = f"""
+import fs from "node:fs";
+const {{ runStackEventSequence }} = await import({json.dumps(module_url)});
+const model = JSON.parse(fs.readFileSync(0, "utf8"));
+const sequence = runStackEventSequence({{
+  model,
+  context: {{ controllerRef: model.controllers[0].stableId, systemRoute: 2 }},
+  steps: [
+    {{ kind: "event", trigger: 2 }},
+    {{ kind: "tick", clock: 1, ticks: 4 }},
+  ],
+}});
+const tired = sequence.history?.[1]?.snapshot?.layers?.find(
+  (layer) => layer.definitionId === 0x7004 && layer.ownerId === 0x8105
+);
+const recovery = sequence.history?.[2]?.report?.recoveries?.[0];
+process.stdout.write(JSON.stringify({{
+  ok: sequence.ok,
+  tired: tired ? {{ definitionId: tired.definitionId, ownerId: tired.ownerId }} : null,
+  recovery,
+  remainingLayers: sequence.result?.layers?.length,
+}}));
+"""
+        process = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            input=json.dumps(self.data),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        replay = json.loads(process.stdout)
+        self.assertTrue(replay["ok"])
+        self.assertEqual(replay["tired"], {
+            "definitionId": 0x7004,
+            "ownerId": 0x8105,
+        })
+        recovery = replay["recovery"]
+        self.assertEqual(recovery["transitionId"], 0xA003)
+        self.assertEqual(recovery["operations"][0], {
+            "operationId": 0xC003,
+            "kind": 3,
+            "status": "removed",
+            "definitionId": 0x7004,
+            "ownerId": 0x8105,
+            "instanceKey": 0,
+        })
+        self.assertEqual(
+            [item["ownerId"] for item in recovery["operations"][1:]],
+            [0x8102, 0x8103, 0x8104],
+        )
+        self.assertTrue(all(item["kind"] == 5
+                            for item in recovery["operations"][1:]))
+        self.assertEqual(replay["remainingLayers"], 0)
 
     def test_validation_metadata_matches_v40_wire_contract(self):
         schema = self.data["validationSchema"]

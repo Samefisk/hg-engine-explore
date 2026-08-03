@@ -5,6 +5,9 @@ import {
   composeStackPreview,
   materializePreviewModel,
   preserveStackPreviewSelection,
+  resolveStackPreviewContext,
+  runStackEventSequence,
+  STACK_SEQUENCE_LIMITS,
 } from "../static/stack-preview.js";
 
 const fields = ["behaviorKind", "speed", "movementRange"].map((key) => ({
@@ -17,6 +20,7 @@ const definition = (stableId, nodeId, overrides = {}) => ({
   stableId, applicabilityId: stableId + 1000, kind: 1, channel: 2, priority: 10,
   selectorKind: 1, nodeId, semanticRoleId: 0, controllerId: null,
   hasRequiredOwnerId: 0, requiredOwnerId: null,
+  hasTiredOriginKind: 0, tiredOriginKind: 0, flags: 1,
   allowMultipleOwners: 1, allowMultipleInstancesPerOwner: 1,
   mapLifetime: 1, mapLifetimeLabel: "Clear", battleLifetime: 2, battleLifetimeLabel: "Preserve logical",
   timerClock: 0, timerClockLabel: "None", timerSource: 0, timerSourceLabel: "None",
@@ -40,6 +44,40 @@ function fixture() {
     overrideDefinitions: definitions,
     stackPreview: { capacity: 8 },
   };
+}
+
+const guard = (stableId, kind, overrides = {}) => ({ stableId, kind, negate: false, payload: 0, referenceId: null, ...overrides });
+const operation = (stableId, kind, definitionId, ownerId, overrides = {}) => ({
+  stableId, kind, definitionId, ownerId, replacementDefinitionId: null,
+  policyId: null, instanceKey: definitionId, busyPolicy: 1, required: kind === 3,
+  ...overrides,
+});
+const transition = (stableId, trigger, definitionId, ownerId, operations, guards = [], overrides = {}) => ({
+  stableId, order: stableId - 500, controllerIds: [1], candidateDefinitionId: definitionId,
+  ownerId, trigger, fromRoleMask: 0x7F, dispatchPriority: 1000 + stableId,
+  guards, operations, actions: [], recoveryActions: [], ...overrides,
+});
+
+function sequenceFixture() {
+  const model = fixture();
+  Object.assign(model.overrideDefinitions[2], {
+    timerClock: 1, timerClockLabel: "Frame", timerSource: 1, timerSourceLabel: "Fixed",
+    timerValue: 2, hiddenTimerPolicy: 2, recoveryPolicy: 1,
+    recoveryPolicyLabel: "Route transition", recoveryTransitionId: 504,
+  });
+  model.transitionGraph = {
+    triggerOptions: Array.from({ length: 13 }, (_, index) => ({ value: index + 1, label: `Event ${index + 1}` })),
+    transitions: [
+      transition(501, 10, 101, 201, [operation(601, 1, 101, 201)], [
+        guard(701, 2, { payload: 1 }), guard(702, 8, { payload: 2 }),
+      ]),
+      transition(502, 9, 102, 202, [operation(602, 1, 102, 202)]),
+      transition(503, 11, 103, 203, [operation(603, 1, 103, 203)]),
+      transition(504, 3, 103, 203, [operation(604, 3, 103, 203, { instanceKey: null })], [guard(703, 6, { payload: 3 })]),
+      transition(505, 13, 101, 201, [operation(605, 3, 101, 201, { instanceKey: null })]),
+    ],
+  };
+  return model;
 }
 
 const layer = (definitionId, ownerId = 201, instanceKey = 0) => ({ definitionId, ownerId, instanceKey });
@@ -123,6 +161,7 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
 {
   const model = fixture();
   model.overrideDefinitions[0].selectorKind = 2;
+  model.overrideDefinitions[0].flags = 0;
   model.overrideDefinitions[0].nodeId = null;
   model.overrideDefinitions[0].semanticRoleId = 3;
   assert.deepEqual(compose(model, [layer(101)]).result.identity, { controllerId: 1, nodeId: 13, profileId: 22, semanticRoleId: 3 });
@@ -220,6 +259,228 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   const result = materializePreviewModel(model, { stateProfiles: { update: [profile(20, 7)] } });
   result.stateProfiles[0].values.speed = 99;
   assert.equal(model.stateProfiles[0].values.speed, 1);
+}
+
+// Entity context dispatch follows runtime priority/stable-ID ordering and supports explicit override.
+{
+  const model = sequenceFixture();
+  model.controllers.push({
+    ...model.controllers[0], stableId: 2, name: "Species controller",
+    nodes: model.controllers[0].nodes.map((item) => ({ ...item, stableId: item.stableId + 100 })),
+  });
+  model.genericAssignments = [{ stableId: 800, dispatchPriority: 10, controllerIndex: 0, match: { groupMask: 1, terrain: 0xFF, shiny: 0xFF, behaviorClass: 0xFF } }];
+  model.speciesAssignments = [{ stableId: 801, dispatchPriority: 20, controllerIndex: 1, species: 25 }];
+  assert.equal(resolveStackPreviewContext(model, { species: 25, groupMask: 1 }).controllerRef, 2);
+  assert.equal(resolveStackPreviewContext(model, { species: 1, groupMask: 1 }).controllerRef, 1);
+  assert.equal(resolveStackPreviewContext(model, { species: 25, controllerRef: 1 }).dispatch.kind, "explicit");
+  assert.equal(resolveStackPreviewContext(model, { species: 25, behaviorClass: 99 }).dispatch.kind, "invalid-behavior-class");
+}
+
+// Guards run in authored order, stop on failure, and a passing event applies its layer.
+{
+  const model = sequenceFixture();
+  const failed = runStackEventSequence({ model, context: { controllerRef: 1, systemRoute: 1 }, steps: [{ kind: "event", trigger: 10 }] });
+  assert.equal(failed.ok, true);
+  assert.equal(failed.history[1].report.status, "guard-failed");
+  assert.deepEqual(failed.history[1].report.guards.map((item) => item.passed), [true, false]);
+  assert.equal(failed.result.layers.length, 0);
+  const passed = runStackEventSequence({ model, context: { controllerRef: 1, systemRoute: 2 }, steps: [{ kind: "event", trigger: 10 }] });
+  assert.equal(passed.history[1].report.status, "dispatched");
+  assert.deepEqual(passed.result.winningLayer, { definitionId: 101, ownerId: 201, instanceKey: 0 });
+}
+
+// Multiple event-owned overrides stack deterministically; removal reveals the remaining winner.
+{
+  const model = sequenceFixture();
+  const result = runStackEventSequence({
+    model, context: { controllerRef: 1, systemRoute: 2 },
+    steps: [
+      { kind: "event", trigger: 10 },
+      { kind: "event", trigger: 9 },
+      { kind: "event", trigger: 13 },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.history[2].snapshot.layers.length, 2);
+  assert.deepEqual(result.history[2].snapshot.canonicalOrder, [
+    { definitionId: 101, ownerId: 201, instanceKey: 0 },
+    { definitionId: 102, ownerId: 202, instanceKey: 0 },
+  ]);
+  assert.deepEqual(result.result.winningLayer, { definitionId: 102, ownerId: 202, instanceKey: 0 });
+  assert.equal(result.result.layers.some((item) => item.definitionId === 101), false);
+}
+
+// Native delta preflight sorts by operation stable ID and rejects duplicate/colliding addresses atomically.
+{
+  let model = sequenceFixture();
+  model.transitionGraph.transitions[0].guards = [];
+  model.transitionGraph.transitions[0].operations = [
+    operation(610, 1, 101, 201),
+    operation(609, 1, 102, 202),
+  ];
+  let result = runStackEventSequence({ model, context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: 10 }] });
+  assert.deepEqual(result.history[1].report.operations.map((item) => item.operationId), [609, 610]);
+
+  model = sequenceFixture();
+  model.transitionGraph.transitions[0].guards = [];
+  model.transitionGraph.transitions[0].operations = [
+    operation(611, 1, 101, 201), operation(612, 1, 102, 201),
+  ];
+  result = runStackEventSequence({ model, context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: 10 }] });
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, STACK_PREVIEW_CODES.OPERATION);
+  assert.equal(result.history[0].snapshot.layers.length, 0);
+
+  model.transitionGraph.transitions[0].operations = [
+    operation(611, 1, 101, 201), operation(611, 1, 102, 202),
+  ];
+  assert.equal(runStackEventSequence({ model, context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: 10 }] }).errors[0].code, STACK_PREVIEW_CODES.OPERATION);
+}
+
+// Replace targets the occupied owner/key identity, independent of its current definition, but preserves wrapper family.
+{
+  const model = sequenceFixture();
+  model.transitionGraph.transitions[0].guards = [];
+  model.transitionGraph.transitions[0].operations = [operation(620, 2, 101, 201, { replacementDefinitionId: 102 })];
+  let result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [layer(103, 201)],
+    steps: [{ kind: "event", trigger: 10 }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.result.layers[0].definitionId, 102);
+  model.overrideDefinitions[0].hasRequiredOwnerId = 1;
+  model.overrideDefinitions[0].requiredOwnerId = 201;
+  result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [layer(101, 201)],
+    steps: [{ kind: "event", trigger: 10 }],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, STACK_PREVIEW_CODES.OPERATION);
+}
+
+// Operation kind 6 removes the exact authored map-lifetime policy and rejects missing policy data.
+{
+  const model = sequenceFixture();
+  model.overrideDefinitions[0].mapLifetime = 1;
+  model.overrideDefinitions[1].mapLifetime = 2;
+  model.transitionGraph.transitions[0].guards = [];
+  model.transitionGraph.transitions[0].operations = [{
+    stableId: 630, kind: 6, definitionId: null, ownerId: null,
+    replacementDefinitionId: null, policyId: 2, instanceKey: null,
+  }];
+  let result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [layer(101, 201), layer(102, 202)],
+    steps: [{ kind: "event", trigger: 10 }],
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.result.layers.map((item) => item.definitionId), [101]);
+  assert.equal(result.history[1].report.operations[0].status, "removed-policy");
+  model.transitionGraph.transitions[0].operations[0].policyId = null;
+  result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [layer(101, 201), layer(102, 202)],
+    steps: [{ kind: "event", trigger: 10 }],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, STACK_PREVIEW_CODES.OPERATION);
+}
+
+// Frame timers count down, expose the intermediate value, and replay exact recovery at zero.
+{
+  const model = sequenceFixture();
+  const result = runStackEventSequence({
+    model, context: { controllerRef: 1 },
+    steps: [
+      { kind: "event", trigger: 11 },
+      { kind: "tick", clock: 1, ticks: 1 },
+      { kind: "tick", clock: 1, ticks: 1 },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.history[1].snapshot.layers[0].timer.remainingTicks, 2);
+  assert.equal(result.history[2].snapshot.layers[0].timer.remainingTicks, 1);
+  assert.equal(result.history[3].report.recoveries[0].transitionId, 504);
+  assert.equal(result.result.layers.length, 0);
+}
+
+// Hidden timer policy distinguishes pause, continue, and expire-on-hide under another winner.
+{
+  const model = sequenceFixture();
+  model.overrideDefinitions[2].priority = 1;
+  const hiddenLayer = layer(103, 203, 9);
+  const winnerLayer = layer(102, 202, 0);
+  let result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [hiddenLayer, winnerLayer],
+    steps: [{ kind: "tick", clock: 1, ticks: 1 }],
+  });
+  assert.equal(result.history[1].snapshot.layers.find((item) => item.definitionId === 103).timer.remainingTicks, 1);
+  model.overrideDefinitions[2].hiddenTimerPolicy = 1;
+  result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [hiddenLayer, winnerLayer],
+    steps: [{ kind: "tick", clock: 1, ticks: 1 }],
+  });
+  assert.equal(result.history[1].snapshot.layers.find((item) => item.definitionId === 103).timer.remainingTicks, 2);
+  model.overrideDefinitions[2].hiddenTimerPolicy = 3;
+  result = runStackEventSequence({
+    model, context: { controllerRef: 1 }, initialLayers: [hiddenLayer, winnerLayer],
+    steps: [{ kind: "tick", clock: 1, ticks: 1 }],
+  });
+  assert.equal(result.result.layers.some((item) => item.definitionId === 103), false);
+}
+
+// One persisted presentation gate protects initial/event-hidden timers until an explicit boolean resume tick.
+{
+  const model = sequenceFixture();
+  model.overrideDefinitions[2].priority = 1;
+  model.overrideDefinitions[2].hiddenTimerPolicy = 3;
+  const result = runStackEventSequence({
+    model,
+    context: { controllerRef: 1, presentationGate: true },
+    initialLayers: [layer(102, 202)],
+    steps: [
+      { kind: "event", trigger: 11 },
+      { kind: "tick", clock: 1, ticks: 1 },
+      { kind: "tick", clock: 1, ticks: 1, presentationGate: false },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.history[1].presentationGate, true);
+  assert.equal(result.history[1].snapshot.layers.find((item) => item.definitionId === 103).timer.remainingTicks, 2);
+  assert.equal(result.history[2].snapshot.layers.find((item) => item.definitionId === 103).timer.remainingTicks, 2);
+  assert.equal(result.history[3].presentationGate, false);
+  assert.equal(result.history[3].snapshot.layers.some((item) => item.definitionId === 103), false);
+  assert.equal(runStackEventSequence({ model, context: { controllerRef: 1, presentationGate: "yes" } }).errors[0].code, STACK_PREVIEW_CODES.STEP);
+  assert.equal(runStackEventSequence({
+    model, context: { controllerRef: 1 }, steps: [{ kind: "tick", clock: 1, ticks: 1, presentationGate: 1 }],
+  }).errors[0].code, STACK_PREVIEW_CODES.STEP);
+}
+
+// Empty steps are a pure reset, while compare mode retains saved/draft provenance at every step.
+{
+  const model = sequenceFixture();
+  const reset = runStackEventSequence({ model, context: { controllerRef: 1 }, steps: [] });
+  assert.equal(reset.history.length, 1);
+  assert.equal(reset.result.layers.length, 0);
+  const draft = { stateProfiles: { update: [{ ...profile(21, 9) }] } };
+  const compared = runStackEventSequence({
+    model, draft, mode: "compare", context: { controllerRef: 1, systemRoute: 2 },
+    steps: [{ kind: "event", trigger: 10 }],
+  });
+  assert.equal(compared.ok, true);
+  assert.equal(compared.comparison.changed, true);
+  assert.equal(compared.comparison.saved.result.fields.speed.value, 2);
+  assert.equal(compared.comparison.draft.result.fields.speed.value, 9);
+  assert.equal(model.stateProfiles[1].values.speed, 2);
+}
+
+// Invalid graphs and unbounded input are diagnosed before replay.
+{
+  const model = sequenceFixture();
+  model.transitionGraph.transitions[0].operations[0].kind = 99;
+  assert.equal(runStackEventSequence({ model, context: { controllerRef: 1 } }).errors[0].code, STACK_PREVIEW_CODES.GRAPH);
+  assert.equal(runStackEventSequence({
+    model: sequenceFixture(), context: { controllerRef: 1 },
+    steps: Array.from({ length: STACK_SEQUENCE_LIMITS.steps + 1 }, () => ({ kind: "event", trigger: 1 })),
+  }).errors[0].code, STACK_PREVIEW_CODES.LIMIT);
 }
 
 console.log("stack preview tests passed");

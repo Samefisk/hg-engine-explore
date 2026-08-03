@@ -604,6 +604,49 @@ def build_v40_state_profile_editor_data() -> dict:
             ],
         })
 
+    generic_assignments = []
+    for index, record in enumerate(_v40_records(blob, "genericAssignments", "<HIH5BxHH2x")):
+        (stable_id, group_mask, species, terrain, minimum_level, maximum_level,
+         shiny, behavior_class, controller_index, dispatch_priority) = record
+        if controller_index >= len(controllers):
+            raise ParseError(f"V40 generic assignment #{index} has an unknown controller index")
+        generic_assignments.append({
+            "stableId": stable_id,
+            "controllerIndex": controller_index,
+            "dispatchPriority": dispatch_priority,
+            "match": {
+                "groupMask": group_mask,
+                "species": species,
+                "terrain": terrain,
+                "minimumLevel": minimum_level,
+                "maximumLevel": maximum_level,
+                "shiny": shiny,
+                "behaviorClass": behavior_class,
+            },
+        })
+    species_assignments = []
+    for index, (stable_id, species, controller_index, dispatch_priority) in enumerate(
+        _v40_records(blob, "speciesAssignments", "<4H")
+    ):
+        if controller_index >= len(controllers):
+            raise ParseError(f"V40 species assignment #{index} has an unknown controller index")
+        species_assignments.append({
+            "stableId": stable_id,
+            "species": species,
+            "controllerIndex": controller_index,
+            "dispatchPriority": dispatch_priority,
+        })
+    canonical_generic = [
+        {key: record[key] for key in ("stableId", "controllerIndex", "dispatchPriority", "match")}
+        for record in authored_model.get("genericAssignments", [])
+    ]
+    canonical_species = [
+        {key: record[key] for key in ("stableId", "species", "controllerIndex", "dispatchPriority")}
+        for record in authored_model.get("speciesAssignments", [])
+    ]
+    if generic_assignments != canonical_generic or species_assignments != canonical_species:
+        raise ParseError("V40 context assignments differ from canonical metadata")
+
     policy_catalog = {
         "spawnPolicies": [
             {"stableId": record[0], "name": registry_keys.get(record[0], f"Spawn policy {record[0]}"),
@@ -632,6 +675,8 @@ def build_v40_state_profile_editor_data() -> dict:
         "stateProfiles": sorted(profiles, key=lambda profile: profile["stableId"]),
         "stateProfileFields": _v40_state_field_metadata(),
         "controllers": controllers,
+        "genericAssignments": generic_assignments,
+        "speciesAssignments": species_assignments,
         "controllerScalarFields": _v40_typed_field_metadata(V40_CONTROLLER_SCALAR_SCHEMA),
         "semanticRoles": [
             {"value": role, "label": V40_NODE_ROLE_LABELS[role], "custom": role == 7}
