@@ -323,6 +323,27 @@ const CHILD_FIELDS = Object.freeze({
   recoveryActions: ["ownerId", "kind", "required"],
 });
 
+const AUTHORING_OPTIONS = Object.freeze({
+  definitionKind: [[1, "State candidate"], [2, "Modifier"]],
+  channel: [[0, "Static context"], [1, "Controller state"], [2, "Temporary effect"], [3, "Scripted force"], [4, "Possession"], [5, "System safety"]],
+  selectorKind: [[1, "Exact node"], [2, "Semantic role"]],
+  lifetime: [[1, "Clear"], [2, "Preserve logical"], [3, "System"]],
+  timerClock: [[0, "None"], [1, "Frame"], [2, "Completed movement"]],
+  timerSource: [[0, "None"], [1, "Fixed"], [2, "Controller stamina"], [3, "Candidate fold"]],
+  hiddenTimerPolicy: [[0, "None"], [1, "Pause while hidden"], [2, "Continue while hidden"], [3, "Expire on hide"]],
+  recoveryPolicy: [[0, "None"], [1, "Route transition"]],
+  guardKind: [[1, "Always"], [2, "Effective role"], [3, "Effective node"], [4, "Owner present"], [5, "Owner absent"], [6, "Candidate timer expired"], [7, "Alert chance roll"], [8, "System route"]],
+  operationKind: [[1, "Apply"], [2, "Replace"], [3, "Remove required"], [4, "Remove if present"], [5, "Remove owner if present"], [6, "Apply lifetime policy"]],
+  busyPolicy: [[1, "Reject while busy"], [2, "Queue exact"]],
+  actionPhase: [[1, "Entry"], [2, "Exit"], [3, "Presentation"], [4, "Invocation"]],
+  actionKind: [[1, "Reset active steps"], [2, "Reset tired counter"], [3, "Clear movement chain"], [4, "Start post-tired cooldown"], [5, "Start alert presentation"], [6, "Try pickup/throw"], [7, "Alert complete"], [8, "Canopy pickup/throw hook"]],
+  recoveryActionKind: [[1, "Remove self"], [2, "Remove owner if present"], [3, "Reset tired counter"], [4, "Start flee cooldown"]],
+});
+
+function optionRecords(key) {
+  return (AUTHORING_OPTIONS[key] || []).map(([value, label]) => ({ value, label }));
+}
+
 function authoredIdentity(entity) {
   return entity?.draftId
     ? { draftId: entity.draftId }
@@ -475,12 +496,14 @@ export function createProfilesController({
   let writerValidationError = "";
   const updates = new Map();
   const created = [];
+  const removedProfileIds = new Set();
   const controllerUpdates = new Map();
   const createdControllers = [];
   const transitionUpdates = new Map();
   const createdTransitions = [];
   const removedTransitionIds = new Set();
   let selectedControllerId = String(state.selectedControllerKey || "");
+  let selectedTransitionId = String(state.selectedTransitionKey || "");
 
   elements.profileKindFilter.innerHTML = `
     <option value="all">All states</option>
@@ -500,7 +523,8 @@ export function createProfilesController({
   }
 
   function editedSaved() {
-    return saved.map((profile) => updates.get(profile.stableId) || profile);
+    return saved.filter((profile) => !removedProfileIds.has(profile.stableId))
+      .map((profile) => updates.get(profile.stableId) || profile);
   }
 
   function profiles() {
@@ -624,6 +648,7 @@ export function createProfilesController({
   function syncDirty({ notify = true } = {}) {
     state.selectedProfileKey = selectedId;
     state.selectedControllerKey = selectedControllerId;
+    state.selectedTransitionKey = selectedTransitionId;
     state.profileDeckMode = mode;
     state.v40BehaviorModelDraft = {
       ...(state.v40BehaviorModelDraft || {}),
@@ -631,6 +656,7 @@ export function createProfilesController({
       stateProfiles: {
         create: created.map(clone),
         update: [...updates.values()].map(clone),
+        remove: [...removedProfileIds],
       },
       controllers: {
         create: createdControllers.map(clone),
@@ -746,13 +772,14 @@ export function createProfilesController({
         <div class="profile-fields">${fields.map((field) => fieldHtml(profile, field)).join("")}</div>
       </details>`;
     }).join("");
-    const hasLocalDrafts = created.length > 0 || updates.size > 0;
+    const hasLocalDrafts = created.length > 0 || updates.size > 0 || removedProfileIds.size > 0;
     inspector.innerHTML = `<article class="profile-field-editor v40-state-editor" data-selected-profile="${escapeHtml(idFor(profile))}">
       <header class="v40-state-editor__heading">
         <div><span class="eyebrow">One complete state</span><h2>${escapeHtml(profile.name)}</h2></div>
         <div class="v40-state-editor__actions">
           ${hasLocalDrafts ? `<button class="button" type="button" data-profile-action="reset-local">Discard local drafts</button>` : ""}
           <button class="button" type="button" data-profile-action="duplicate">Duplicate state</button>
+          <button class="button button--danger" type="button" data-profile-action="delete">Delete state</button>
         </div>
       </header>
       <section class="v40-state-identity" aria-labelledby="stateIdentityTitle">
@@ -780,6 +807,125 @@ export function createProfilesController({
     return (dataset.customRoles || []).map((option) => `<option value="${option.stableId}" ${Number(option.stableId) === Number(node.customRoleId) ? "selected" : ""} ${used.has(Number(option.stableId)) ? "disabled" : ""}>${escapeHtml(option.name)}</option>`).join("");
   }
 
+  function nullableOptions(options, current, label = "None", valueKey = "value", labelKey = "label") {
+    return `<option value="0" ${current === null || current === undefined || Number(current) === 0 ? "selected" : ""}>${escapeHtml(label)}</option>${selectOptions(options, current, valueKey, labelKey)}`;
+  }
+
+  function referenceOptions(items, current, label, name = "name") {
+    const options = items.map((item) => ({
+      value: item.draftId || item.stableId,
+      label: item[name] || `${label} ${item.draftId || item.stableId}`,
+    }));
+    return nullableOptions(options, current, `No ${label.toLowerCase()}`);
+  }
+
+  function authoredApplicabilityFor(definition) {
+    if (definition?.applicability?.kind !== undefined) return definition.applicability;
+    const stableId = definition?.applicability?.stableId ?? definition?.applicabilityId;
+    const authored = (dataset.behaviorModelAuthoring?.applicability || [])
+      .find((item) => String(item.stableId) === String(stableId));
+    return authored ? { ...clone(authored), name: definition?.applicability?.name || authored.name } : (definition?.applicability || {});
+  }
+
+  function transitionAuthoringDiagnostics(transition) {
+    const identities = new Set([
+      ["transition", transition], ["overrideDefinition", transition?.candidateDefinition],
+      ["applicability", transition?.candidateDefinition?.applicability],
+      ...(transition?.guards || []).map((item) => ["guards", item]),
+      ...(transition?.operations || []).map((item) => ["operations", item]),
+      ...(transition?.actions || []).map((item) => ["actions", item]),
+      ...(transition?.recoveryActions || []).map((item) => ["recoveryActions", item]),
+    ].map(([kind, item]) => `${kind}:${String(item?.draftId ?? item?.stableId)}`));
+    return graphDiagnostics.filter((item) => identities.has(`${item.entityType}:${item.entityId}`));
+  }
+
+  function childRows(transition, kind, controller) {
+    const definitionItems = [...new Map(transitions().map((item) => [String(item.candidateDefinitionId), item.candidateDefinition])).values()];
+    const ownerHtml = (value) => referenceOptions(dataset.owners || [], value, "Owner");
+    const definitionHtml = (value, nullable = true) => {
+      const options = definitionItems.map((item) => ({ value: item.draftId || item.stableId, label: item.name || `Definition ${item.draftId || item.stableId}` }));
+      return nullable ? nullableOptions(options, value, "No definition") : selectOptions(options, value);
+    };
+    const rows = (transition[kind] || []).map((child) => {
+      const childId = entityId(child, kind.slice(0, -1));
+      const common = `data-transition-id="${escapeHtml(localTransitionId(transition))}" data-child-kind="${kind}" data-child-id="${escapeHtml(childId)}"`;
+      if (kind === "guards") {
+        const reference = [4, 5].includes(Number(child.kind))
+          ? `<select data-child-field="referenceId" ${common}>${ownerHtml(child.referenceId)}</select>`
+          : Number(child.kind) === 3
+            ? `<select data-child-field="referenceId" ${common}>${referenceOptions(controller.nodes || [], child.referenceId, "Node", "semanticRole")}</select>`
+            : `<input type="number" min="0" max="65535" value="${Number(child.referenceId) || 0}" data-child-field="referenceId" ${common}>`;
+        return `<div class="v40-author-row"><select data-child-field="kind" ${common}>${selectOptions(optionRecords("guardKind"), child.kind)}</select><label>Negate <input type="checkbox" data-child-field="negate" ${common} ${child.negate ? "checked" : ""}></label><label>Payload <input type="number" min="0" max="255" value="${child.payload}" data-child-field="payload" ${common}></label><label>Reference ${reference}</label><button type="button" data-child-action="remove" ${common}>Remove</button></div>`;
+      }
+      if (kind === "operations") {
+        return `<div class="v40-author-row v40-author-row--wide"><select data-child-field="kind" ${common}>${selectOptions(optionRecords("operationKind"), child.kind)}</select><label>Definition <select data-child-field="definitionId" ${common}>${definitionHtml(child.definitionId)}</select></label><label>Owner <select data-child-field="ownerId" ${common}>${ownerHtml(child.ownerId)}</select></label><label>Replacement <select data-child-field="replacementDefinitionId" ${common}>${definitionHtml(child.replacementDefinitionId)}</select></label><label>Lifetime policy <select data-child-field="policyId" ${common}>${nullableOptions(optionRecords("lifetime"), child.policyId, "None")}</select></label><label>Instance <select data-child-field="instanceKey" ${common}>${definitionHtml(child.instanceKey)}</select></label><label>Busy <select data-child-field="busyPolicy" ${common}>${selectOptions(optionRecords("busyPolicy"), child.busyPolicy)}</select></label><label>Required <input type="checkbox" data-child-field="required" ${common} ${child.required ? "checked" : ""}></label><button type="button" data-child-action="remove" ${common}>Remove</button></div>`;
+      }
+      if (kind === "actions") {
+        return `<div class="v40-author-row"><select data-child-field="phase" ${common}>${selectOptions(optionRecords("actionPhase"), child.phase)}</select><select data-child-field="kind" ${common}>${selectOptions(optionRecords("actionKind"), child.kind)}</select><small>Typed action payload and reference are reserved.</small><button type="button" data-child-action="remove" ${common}>Remove</button></div>`;
+      }
+      return `<div class="v40-author-row"><select data-child-field="kind" ${common}>${selectOptions(optionRecords("recoveryActionKind"), child.kind)}</select><label>Owner <select data-child-field="ownerId" ${common}>${ownerHtml(child.ownerId)}</select></label><label>Required <input type="checkbox" data-child-field="required" ${common} ${child.required ? "checked" : ""}></label><button type="button" data-child-action="remove" ${common}>Remove</button></div>`;
+    }).join("");
+    return rows || `<p class="v40-author-empty">No ${escapeHtml(kind.replace(/([A-Z])/g, " $1").toLowerCase())}.</p>`;
+  }
+
+  function renderTransitionAuthoring(transition, controller) {
+    if (!transition) return "";
+    const id = localTransitionId(transition);
+    const definition = transition.candidateDefinition || {};
+    const applicability = authoredApplicabilityFor(definition);
+    const diagnostics = transitionAuthoringDiagnostics(transition);
+    const controllerOptions = controllers().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
+    const allNodes = controllers().flatMap((item) => (item.nodes || []).map((node) => ({
+      value: node.draftId || node.stableId,
+      label: `${item.name} · ${node.semanticRole || `role ${node.semanticRoleId}`}`,
+    })));
+    const transitionOptions = transitions().map((item) => ({ value: item.draftId || item.stableId, label: item.name || `Transition ${item.draftId || item.stableId}` }));
+    const profileOptions = profiles().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
+    const field = (label, control) => `<label class="v40-author-field"><span>${escapeHtml(label)}</span>${control}</label>`;
+    const definitionField = (label, key, control) => field(label, control.replace(/^(<[^ >]+)/, `$1 data-definition-field="${key}" data-transition-id="${escapeHtml(id)}"`));
+    const applicabilityField = (label, key, control) => field(label, control.replace(/^(<[^ >]+)/, `$1 data-applicability-field="${key}" data-transition-id="${escapeHtml(id)}"`));
+    return `<details class="v40-transition-author" open data-transition-author="${escapeHtml(id)}"><summary><span><strong>Author transition and candidate</strong><small>${escapeHtml(transition.name || id)}</small></span></summary>
+      ${diagnostics.length ? `<aside class="v40-validation"><strong>${diagnostics.length} authoring issue${diagnostics.length === 1 ? "" : "s"}</strong><ul>${diagnostics.slice(0, 8).map((item) => `<li>${escapeHtml(item.message)}</li>`).join("")}</ul></aside>` : ""}
+      <div class="v40-author-grid">
+        ${field("Transition name", `<input type="text" value="${escapeHtml(transition.name)}" data-transition-field="name" data-transition-id="${escapeHtml(id)}">`)}
+        ${field("Transition owner", `<select data-transition-field="ownerId" data-transition-id="${escapeHtml(id)}">${referenceOptions(dataset.owners || [], transition.ownerId, "Owner")}</select>`)}
+        ${definitionField("Definition name", "name", `<input type="text" value="${escapeHtml(definition.name || "New definition")}">`)}
+        ${definitionField("Kind", "kind", `<select>${selectOptions(optionRecords("definitionKind"), definition.kind)}</select>`)}
+        ${definitionField("Channel", "channel", `<select>${selectOptions(optionRecords("channel"), definition.channel)}</select>`)}
+        ${definitionField("Priority", "priority", `<input type="number" min="0" max="65535" value="${definition.priority}">`)}
+        ${definitionField("Controller scope", "controllerId", `<select>${nullableOptions(controllerOptions, definition.controllerId, "All controllers")}</select>`)}
+        ${definitionField("Selector", "selectorKind", `<select>${selectOptions(optionRecords("selectorKind"), definition.selectorKind)}</select>`)}
+        ${Number(definition.selectorKind) === 1
+          ? definitionField("Exact node", "nodeId", `<select>${nullableOptions(allNodes, definition.nodeId, "Select node")}</select>`)
+          : definitionField("Semantic role", "semanticRoleId", `<select>${selectOptions(dataset.semanticRoles || [], definition.semanticRoleId)}</select>`)}
+        ${definitionField("Required owner", "requiredOwnerId", `<select>${referenceOptions(dataset.owners || [], definition.requiredOwnerId, "Owner")}</select>`)}
+        ${definitionField("Map lifetime", "mapLifetime", `<select>${selectOptions(optionRecords("lifetime"), definition.mapLifetime)}</select>`)}
+        ${definitionField("Battle lifetime", "battleLifetime", `<select>${selectOptions(optionRecords("lifetime"), definition.battleLifetime)}</select>`)}
+        ${definitionField("Timer clock", "timerClock", `<select>${selectOptions(optionRecords("timerClock"), definition.timerClock)}</select>`)}
+        ${definitionField("Timer source", "timerSource", `<select>${selectOptions(optionRecords("timerSource"), definition.timerSource)}</select>`)}
+        ${definitionField("Timer value", "timerValue", `<input type="number" min="0" max="255" value="${definition.timerValue}">`)}
+        ${definitionField("Hidden timer", "hiddenTimerPolicy", `<select>${selectOptions(optionRecords("hiddenTimerPolicy"), definition.hiddenTimerPolicy)}</select>`)}
+        ${definitionField("Recovery policy", "recoveryPolicy", `<select>${selectOptions(optionRecords("recoveryPolicy"), definition.recoveryPolicy)}</select>`)}
+        ${definitionField("Recovery transition", "recoveryTransitionId", `<select>${nullableOptions(transitionOptions, definition.recoveryTransitionId, "No recovery route")}</select>`)}
+        ${definitionField("Tired origin", "tiredOriginKind", `<input type="number" min="0" max="3" value="${definition.tiredOriginKind}">`)}
+      </div>
+      <fieldset class="v40-author-checks"><legend>Ownership and lifecycle flags</legend>
+        ${[["allowMultipleOwners", "Allow multiple owners"], ["allowMultipleInstancesPerOwner", "Allow multiple instances per owner"], ["authoredTiredBound", "Authored tired bound"], ["hasTiredOriginKind", "Use tired origin"]].map(([key, label]) => `<label><input type="checkbox" data-definition-field="${key}" data-transition-id="${escapeHtml(id)}" ${Number(definition[key]) ? "checked" : ""}> ${label}</label>`).join("")}
+      </fieldset>
+      <details class="v40-author-subsection" open><summary><strong>Applicability</strong></summary><div class="v40-author-grid">
+        ${applicabilityField("Name", "name", `<input type="text" value="${escapeHtml(applicability.name || "New applicability")}">`)}
+        ${applicabilityField("Kind", "kind", `<input type="number" min="0" max="65535" value="${applicability.kind}">`)}
+        ${applicabilityField("Group mask", "groupMask", `<input type="number" min="0" max="4294967295" value="${applicability.groupMask}">`)}
+        ${applicabilityField("Controller", "controllerId", `<select>${nullableOptions(controllerOptions, applicability.controllerId, "Any controller")}</select>`)}
+        ${applicabilityField("Profile", "profileId", `<select>${nullableOptions(profileOptions, applicability.profileId, "Any profile")}</select>`)}
+        ${applicabilityField("Minimum", "minimum", `<input type="number" min="0" max="255" value="${applicability.minimum}">`)}
+        ${applicabilityField("Maximum", "maximum", `<input type="number" min="0" max="255" value="${applicability.maximum}">`)}
+        ${applicabilityField("Flags", "flags", `<input type="number" min="0" max="65535" value="${applicability.flags}">`)}
+      </div></details>
+      ${[["guards", "Guards"], ["operations", "Operations"], ["actions", "Transition actions"], ["recoveryActions", "Recovery actions"]].map(([kind, label]) => `<details class="v40-author-subsection" open><summary><span><strong>${label}</strong><small>${(transition[kind] || []).length} rows</small></span></summary><div class="v40-author-rows">${childRows(transition, kind, controller)}</div><button type="button" data-child-action="add" data-child-kind="${kind}" data-transition-id="${escapeHtml(id)}">Add ${label.toLowerCase().replace(/s$/, "")}</button></details>`).join("")}
+    </details>`;
+  }
+
   function renderControllerInspector() {
     const controller = selectedController();
     if (!controller) {
@@ -787,21 +933,16 @@ export function createProfilesController({
       return;
     }
     const localTransitions = controllerTransitions(controller);
+    if (!localTransitions.some((transition) => localTransitionId(transition) === selectedTransitionId)) {
+      selectedTransitionId = localTransitions[0] ? localTransitionId(localTransitions[0]) : "";
+    }
     const errors = validateControllerDraft(controller, { ...dataset, stateProfiles: profiles(), controllers: controllers() }, localTransitions);
     const entityDiagnostics = diagnosticsFor("controller", controller);
     const profileOptions = profiles().map((profile) => ({
       value: profile.draftId || profile.stableId,
       label: `${profile.name} · ${profile.draftId ? "draft" : profile.stableId}`,
     }));
-    const definitionOptions = [...new Map((dataset.transitionGraph?.transitions || []).map((transition) => [
-      transition.candidateDefinitionId,
-      { value: transition.candidateDefinitionId, label: `Definition ${transition.candidateDefinitionId} · role ${transition.candidateDefinition?.semanticRoleId || "exact"}` },
-    ]).concat(localTransitions.map((transition) => [
-      transition.candidateDefinitionId,
-      { value: transition.candidateDefinitionId, label: `${String(transition.candidateDefinitionId).startsWith("draft:") ? "Draft" : "Definition"} ${transition.candidateDefinitionId}` },
-    ]))).values()];
-    const ownerOptions = [...new Set((dataset.transitionGraph?.transitions || []).map((transition) => transition.ownerId))]
-      .map((ownerId) => ({ value: ownerId, label: `Owner ${ownerId}` }));
+    const ownerOptions = (dataset.owners || []).map((owner) => ({ value: owner.stableId, label: owner.name || `Owner ${owner.stableId}` }));
     const scalarFields = (dataset.controllerScalarFields || []).map((field) => {
       const value = controller.scalarDefaults[field.key];
       const control = field.type === "number"
@@ -831,7 +972,7 @@ export function createProfilesController({
         <td><strong>${transition.draftId ? escapeHtml(transition.draftId) : transition.stableId}${transitionDiagnostics.length ? `<span class="v40-diagnostic-badge" aria-label="${transitionDiagnostics.length} validation issues">${transitionDiagnostics.length}</span>` : ""}</strong></td>
         <td><select data-transition-field="trigger" data-transition-id="${escapeHtml(transitionId)}">${selectOptions(dataset.transitionGraph.triggerOptions || [], transition.trigger)}</select></td>
         <td><fieldset class="v40-role-mask"><legend class="sr-only">Allowed source roles</legend>${(dataset.semanticRoles || []).map((role) => `<label title="${escapeHtml(role.label)}"><input type="checkbox" data-transition-role="${role.value}" data-transition-id="${escapeHtml(transitionId)}" ${Number(transition.fromRoleMask) & (1 << (Number(role.value) - 1)) ? "checked" : ""}><span>${escapeHtml(role.label.slice(0, 1))}</span></label>`).join("")}</fieldset></td>
-        <td><select data-transition-field="candidateDefinitionId" data-transition-id="${escapeHtml(transitionId)}" aria-label="Candidate definition">${selectOptions(definitionOptions, transition.candidateDefinitionId)}</select></td>
+        <td><button type="button" data-transition-action="author" data-transition-id="${escapeHtml(transitionId)}" aria-pressed="${transitionId === selectedTransitionId}">${escapeHtml(String(transition.candidateDefinitionId))}</button></td>
         <td><select data-transition-field="ownerId" data-transition-id="${escapeHtml(transitionId)}" aria-label="Owner">${selectOptions(ownerOptions, transition.ownerId)}</select></td>
         <td><input type="number" min="1" max="65535" value="${transition.dispatchPriority}" data-transition-field="dispatchPriority" data-transition-id="${escapeHtml(transitionId)}"></td>
         <td class="v40-row-actions"><button type="button" data-transition-action="up" data-transition-id="${escapeHtml(transitionId)}" ${index === 0 ? "disabled" : ""} aria-label="Move transition up">↑</button><button type="button" data-transition-action="down" data-transition-id="${escapeHtml(transitionId)}" ${index === localTransitions.length - 1 ? "disabled" : ""} aria-label="Move transition down">↓</button><button type="button" data-transition-action="remove" data-transition-id="${escapeHtml(transitionId)}">Remove</button></td>
@@ -844,6 +985,7 @@ export function createProfilesController({
       <details class="pv2-field-section" open><summary><span><strong>Controller defaults</strong><small>Typed scalar defaults and stable policy references.</small></span></summary><div class="profile-fields">${scalarFields}${policyControls}</div></details>
       <section class="v40-controller-section"><header><div><span class="eyebrow">State roster</span><h3>Bound nodes</h3></div><button type="button" data-controller-action="add-node">Add node</button></header><div class="v40-table-scroll"><table class="v40-controller-table"><thead><tr><th>Base</th><th>Node ID</th><th>Semantic role</th><th>Bound profile</th><th>Order</th></tr></thead><tbody>${nodeRows}</tbody></table></div></section>
       <section class="v40-controller-section"><header><div><span class="eyebrow">Authoritative graph</span><h3>Transitions</h3></div><button type="button" data-controller-action="add-transition">Add transition</button></header><div class="v40-table-scroll"><table class="v40-controller-table v40-transition-table"><thead><tr><th>Row ID</th><th>Event</th><th>From roles</th><th>Definition</th><th>Owner</th><th>Priority</th><th>Order</th></tr></thead><tbody>${transitionRows || `<tr><td colspan="7">No transitions.</td></tr>`}</tbody></table></div></section>
+      ${renderTransitionAuthoring(localTransitions.find((transition) => localTransitionId(transition) === selectedTransitionId), controller)}
     </article>`;
   }
 
@@ -881,6 +1023,32 @@ export function createProfilesController({
     syncDirty();
     render();
     requestAnimationFrame(() => inspector.querySelector("[data-state-identity='name']")?.select());
+  }
+
+  function deleteSelectedProfile() {
+    const profile = selected();
+    if (!profile) return;
+    if (!profile.created) {
+      const blockerIndex = dataset.behaviorModelAuthoring?.profileDeleteBlockers;
+      if (!blockerIndex || typeof blockerIndex !== "object") {
+        setStatus("State deletion is unavailable because authoritative backlink data is missing.", "error");
+        return;
+      }
+      const blockers = blockerIndex[String(profile.stableId)] || [];
+      if (blockers.length) {
+        const domains = [...new Set(blockers.map((item) => item.domain))].join(" and ");
+        setStatus(`Cannot delete ${profile.name}: it is referenced by ${domains}.`, "error");
+        return;
+      }
+    }
+    if (profile.created) created.splice(created.indexOf(profile), 1);
+    else {
+      updates.delete(profile.stableId);
+      removedProfileIds.add(profile.stableId);
+    }
+    selectedId = profiles()[0] ? idFor(profiles()[0]) : "";
+    syncDirty();
+    render();
   }
 
   function selectController(id, { report = true } = {}) {
@@ -1039,7 +1207,24 @@ export function createProfilesController({
     definition.stableId = null;
     definition.draftId = draftId();
     definition.controllerId = controllerId;
-    if (definition.nodeId) definition.nodeId = controller.baseNodeId;
+    definition.selectorKind = 1;
+    definition.nodeId = controller.baseNodeId || localNodeId(controller.nodes?.[0]);
+    definition.semanticRoleId = 0;
+    definition.flags = 1;
+    if (!Number(definition.hasTiredOriginKind)) definition.tiredOriginKind = 0;
+    const sourceApplicabilityId = definition.applicabilityId ?? definition.applicability?.stableId;
+    const authoredApplicability = (dataset.behaviorModelAuthoring?.applicability || [])
+      .find((item) => String(item.stableId) === String(sourceApplicabilityId));
+    const applicability = clone(authoredApplicability || {
+      name: "New applicability", kind: 1, groupMask: 0xFFFFFFFF,
+      controllerId, profileId: 0, minimum: 0, maximum: 0, flags: 0,
+    });
+    applicability.stableId = null;
+    applicability.draftId = draftId();
+    applicability.controllerId = controllerId;
+    applicability.kind = Number(applicability.kind || 1) | 2;
+    definition.applicability = applicability;
+    definition.applicabilityId = applicability.draftId;
     transition.candidateDefinition = definition;
     transition.candidateDefinitionId = definition.draftId;
     transition.controllerIds = [controllerId];
@@ -1057,6 +1242,7 @@ export function createProfilesController({
     transition.recoveryActions = (transition.recoveryActions || []).map((action) => ({ ...action, stableId: null, draftId: draftId() }));
     transition.created = true;
     createdTransitions.push(transition);
+    selectedTransitionId = transition.draftId;
     const editable = editableController(controller);
     editable.transitionIds = [...(editable.transitionIds || []), transition.draftId];
     syncDirty();
@@ -1069,7 +1255,9 @@ export function createProfilesController({
 
   function updateTransition(id, key, raw) {
     const found = findTransition(id);
-    const value = key === "candidateDefinitionId" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+    const value = key === "name" ? String(raw)
+      : key === "candidateDefinitionId" && String(raw).startsWith("draft:") ? String(raw)
+        : Number(raw);
     if (!found || found[key] === value) return;
     const transition = editableTransition(found);
     if (!transition) return;
@@ -1100,8 +1288,160 @@ export function createProfilesController({
           ? [...editableOwner.transitionIds, transitionRef]
           : editableOwner.transitionIds.filter((value) => String(value) !== String(transitionRef));
       });
+    } else if (key === "ownerId") {
+      if (Number(transition.candidateDefinition?.hasRequiredOwnerId)) transition.candidateDefinition.requiredOwnerId = value;
+      transition.operations = (transition.operations || []).map((operation) => [1, 2, 3, 4].includes(Number(operation.kind))
+        ? { ...operation, ownerId: value } : operation);
     }
     syncDirty();
+  }
+
+  function updateTransitionMembership(transition) {
+    const scope = transition.candidateDefinition?.controllerId
+      ? [transition.candidateDefinition.controllerId]
+      : controllers().map((item) => item.draftId || item.stableId);
+    transition.controllerIds = scope;
+    const transitionRef = transition.draftId || transition.stableId;
+    const wanted = new Set(scope.map(String));
+    controllers().forEach((controller) => {
+      const controllerRef = controller.draftId || controller.stableId;
+      const contains = (controller.transitionIds || []).some((item) => String(item) === String(transitionRef));
+      if (wanted.has(String(controllerRef)) === contains) return;
+      const owner = editableController(controller);
+      owner.transitionIds = wanted.has(String(controllerRef))
+        ? [...owner.transitionIds, transitionRef]
+        : owner.transitionIds.filter((item) => String(item) !== String(transitionRef));
+    });
+  }
+
+  function definitionValue(key, raw, checked) {
+    const booleanFields = new Set(["allowMultipleOwners", "allowMultipleInstancesPerOwner", "authoredTiredBound", "hasTiredOriginKind"]);
+    const referenceFields = new Set(["controllerId", "nodeId", "requiredOwnerId", "recoveryTransitionId"]);
+    if (key === "name") return String(raw);
+    if (booleanFields.has(key)) return checked ? 1 : 0;
+    if (referenceFields.has(key) && (String(raw) === "0" || raw === "")) return null;
+    if ((referenceFields.has(key) || key === "semanticRoleId") && String(raw).startsWith("draft:")) return String(raw);
+    return Number(raw);
+  }
+
+  function updateDefinition(id, key, raw, checked = false) {
+    const source = findTransition(id);
+    if (!source?.candidateDefinition) return;
+    const definitionId = String(source.candidateDefinitionId);
+    const value = definitionValue(key, raw, checked);
+    const affected = transitions().filter((item) => String(item.candidateDefinitionId) === definitionId);
+    affected.forEach((item) => {
+      const transition = editableTransition(item);
+      const definition = transition.candidateDefinition;
+      definition.applicability = clone(authoredApplicabilityFor(definition));
+      definition[key] = value;
+      if (key === "requiredOwnerId") definition.hasRequiredOwnerId = value ? 1 : 0;
+      if (key === "selectorKind") {
+        if (value === 1) {
+          definition.nodeId = selectedController()?.baseNodeId || localNodeId(selectedController()?.nodes?.[0]);
+          definition.semanticRoleId = 0;
+          definition.flags = 1;
+        } else {
+          definition.nodeId = null;
+          definition.semanticRoleId = Number(selectedController()?.nodes?.[0]?.semanticRoleId) || 1;
+          definition.flags = 0;
+        }
+      }
+      if (key === "hasTiredOriginKind" && !value) definition.tiredOriginKind = 0;
+      if (key === "tiredOriginKind") definition.hasTiredOriginKind = value ? 1 : 0;
+      if (key === "timerClock") {
+        if (value === 0) Object.assign(definition, { timerSource: 0, timerValue: 0, hiddenTimerPolicy: 0 });
+        else {
+          if (!Number(definition.timerSource)) definition.timerSource = 1;
+          if (!Number(definition.timerValue)) definition.timerValue = 1;
+          if (!Number(definition.hiddenTimerPolicy)) definition.hiddenTimerPolicy = 1;
+        }
+      }
+      if (key === "recoveryPolicy" && value === 0) definition.recoveryTransitionId = null;
+      if (key === "controllerId") updateTransitionMembership(transition);
+    });
+    syncDirty();
+  }
+
+  function updateApplicability(id, key, raw) {
+    const source = findTransition(id);
+    const sourceRule = authoredApplicabilityFor(source?.candidateDefinition);
+    if (!source || !sourceRule) return;
+    const applicabilityId = String(sourceRule.draftId ?? sourceRule.stableId);
+    const referenceFields = new Set(["controllerId", "profileId"]);
+    const value = key === "name" ? String(raw)
+      : referenceFields.has(key) && (String(raw) === "0" || raw === "") ? null
+        : referenceFields.has(key) && String(raw).startsWith("draft:") ? String(raw)
+          : Number(raw);
+    transitions().filter((item) => String(authoredApplicabilityFor(item.candidateDefinition)?.draftId
+      ?? authoredApplicabilityFor(item.candidateDefinition)?.stableId) === applicabilityId).forEach((item) => {
+      const transition = editableTransition(item);
+      transition.candidateDefinition.applicability = clone(authoredApplicabilityFor(transition.candidateDefinition));
+      transition.candidateDefinition.applicability[key] = value;
+      if (["controllerId", "profileId", "minimum"].includes(key)) {
+        const rule = transition.candidateDefinition.applicability;
+        rule.kind = (Number(rule.kind) | 1) & ~14;
+        if (rule.controllerId) rule.kind |= 2;
+        if (rule.profileId) rule.kind |= 4;
+        if (rule.minimum) rule.kind |= 8;
+      }
+      transition.candidateDefinition.applicabilityId = transition.candidateDefinition.applicability.draftId
+        || transition.candidateDefinition.applicability.stableId;
+    });
+    syncDirty();
+  }
+
+  function normalizeOperation(operation, transition) {
+    const definitionId = transition.candidateDefinitionId;
+    const ownerId = transition.ownerId;
+    const kind = Number(operation.kind);
+    Object.assign(operation, { busyPolicy: Number(operation.busyPolicy) || 1, required: kind === 3 });
+    if (kind === 1) Object.assign(operation, { definitionId, ownerId, replacementDefinitionId: null, policyId: null, instanceKey: definitionId });
+    else if (kind === 2) Object.assign(operation, { definitionId, ownerId, replacementDefinitionId: operation.replacementDefinitionId || definitionId, policyId: null, instanceKey: definitionId });
+    else if ([3, 4].includes(kind)) Object.assign(operation, { definitionId, ownerId, replacementDefinitionId: null, policyId: null, instanceKey: null });
+    else if (kind === 5) Object.assign(operation, { definitionId: null, ownerId, replacementDefinitionId: null, policyId: null, instanceKey: null, required: false });
+    else Object.assign(operation, { definitionId: null, ownerId: null, replacementDefinitionId: null, policyId: Number(operation.policyId) || 1, instanceKey: null, required: false });
+  }
+
+  function findChild(transition, kind, childId) {
+    return (transition?.[kind] || []).find((item) => entityId(item, kind.slice(0, -1)) === childId);
+  }
+
+  function updateChild(transitionId, kind, childId, key, raw, checked = false) {
+    const source = findTransition(transitionId);
+    if (!source || !CHILD_FIELDS[kind]) return;
+    const transition = editableTransition(source);
+    const child = findChild(transition, kind, childId);
+    if (!child) return;
+    const booleanFields = new Set(["negate", "required"]);
+    const optionalRefs = new Set(["referenceId", "definitionId", "ownerId", "replacementDefinitionId", "policyId", "instanceKey"]);
+    child[key] = booleanFields.has(key) ? Boolean(checked)
+      : optionalRefs.has(key) && (String(raw) === "0" || raw === "") ? null
+        : optionalRefs.has(key) && String(raw).startsWith("draft:") ? String(raw)
+          : Number(raw);
+    if (kind === "operations" && key === "kind") normalizeOperation(child, transition);
+    syncDirty();
+  }
+
+  function childAction(transitionId, kind, childId, action) {
+    const source = findTransition(transitionId || selectedTransitionId);
+    if (!source || !CHILD_FIELDS[kind]) return;
+    const transition = editableTransition(source);
+    if (action === "remove") {
+      const index = transition[kind].findIndex((item) => entityId(item, kind.slice(0, -1)) === childId);
+      if (index >= 0) transition[kind].splice(index, 1);
+    } else if (action === "add") {
+      const identity = { stableId: null, draftId: draftId() };
+      if (kind === "guards") transition.guards.push({ ...identity, kind: 1, negate: false, payload: 0, referenceId: null });
+      else if (kind === "operations") {
+        const operation = { ...identity, definitionId: transition.candidateDefinitionId, ownerId: transition.ownerId, replacementDefinitionId: null, policyId: null, instanceKey: transition.candidateDefinitionId, kind: 1, busyPolicy: 1, required: false };
+        normalizeOperation(operation, transition);
+        transition.operations.push(operation);
+      } else if (kind === "actions") transition.actions.push({ ...identity, phase: 1, kind: 1, referenceId: null, payload: 0 });
+      else transition.recoveryActions.push({ ...identity, ownerId: transition.ownerId, kind: 1, required: true });
+    }
+    syncDirty();
+    renderInspector();
   }
 
   function updateTransitionRole(id, role, checked) {
@@ -1122,6 +1462,12 @@ export function createProfilesController({
     const index = local.findIndex((transition) => localTransitionId(transition) === id);
     if (!controller || index < 0) return;
     const transition = local[index];
+    if (action === "author") {
+      selectedTransitionId = id;
+      state.selectedTransitionKey = id;
+      renderInspector();
+      return;
+    }
     if (action === "remove") {
       const removedOrder = Number(transition.order);
       if (transition.draftId) createdTransitions.splice(createdTransitions.indexOf(transition), 1);
@@ -1137,6 +1483,7 @@ export function createProfilesController({
       transitions().filter((item) => Number(item.order) > removedOrder).forEach((item) => {
         editableTransition(item).order = Number(item.order) - 1;
       });
+      if (selectedTransitionId === id) selectedTransitionId = "";
     } else {
       const otherIndex = action === "up" ? index - 1 : index + 1;
       if (otherIndex < 0 || otherIndex >= local.length) return;
@@ -1195,6 +1542,7 @@ export function createProfilesController({
     const previousStableId = previous?.stableId;
     updates.clear();
     created.splice(0);
+    removedProfileIds.clear();
     controllerUpdates.clear();
     createdControllers.splice(0);
     transitionUpdates.clear();
@@ -1204,6 +1552,7 @@ export function createProfilesController({
       ? `state:${previousStableId}`
       : (saved[0] ? `state:${saved[0].stableId}` : "");
     selectedControllerId = savedControllers[0] ? `controller:${savedControllers[0].stableId}` : "";
+    selectedTransitionId = "";
     syncDirty({ notify: hadChanges });
     render();
     setStatus("Local state-profile drafts discarded.", "info");
@@ -1261,6 +1610,7 @@ export function createProfilesController({
     if (action === "retry") return void load();
     if (action === "reset-local") return void resetLocalDrafts();
     if (action === "duplicate") return void addProfile(selected());
+    if (action === "delete") return void deleteSelectedProfile();
     const controllerActionName = event.target.closest("[data-controller-action]")?.dataset.controllerAction;
     if (controllerActionName === "duplicate") return void addController(selectedController());
     if (controllerActionName === "add-node") return void addNode();
@@ -1269,6 +1619,8 @@ export function createProfilesController({
     if (nodeButton) return void nodeAction(nodeButton.dataset.nodeId, nodeButton.dataset.nodeAction);
     const transitionButton = event.target.closest("[data-transition-action]");
     if (transitionButton) return void transitionAction(transitionButton.dataset.transitionId, transitionButton.dataset.transitionAction);
+    const childButton = event.target.closest("[data-child-action]");
+    if (childButton) return void childAction(childButton.dataset.transitionId, childButton.dataset.childKind, childButton.dataset.childId, childButton.dataset.childAction);
     if (event.target.closest("[data-action='new-profile']")) return void (mode === "controllers" ? addController() : addProfile());
   }
 
@@ -1283,6 +1635,9 @@ export function createProfilesController({
     else if (event.target.matches("[data-controller-policy]")) updateControllerValue("policyIds", event.target.dataset.controllerPolicy, event.target.value);
     else if (event.target.matches("[data-node-field]") && event.target.dataset.nodeField !== "base") updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
     else if (event.target.matches("[data-transition-field]")) updateTransition(event.target.dataset.transitionId, event.target.dataset.transitionField, event.target.value);
+    else if (event.target.matches("[data-definition-field]")) updateDefinition(event.target.dataset.transitionId, event.target.dataset.definitionField, event.target.value, event.target.checked);
+    else if (event.target.matches("[data-applicability-field]")) updateApplicability(event.target.dataset.transitionId, event.target.dataset.applicabilityField, event.target.value);
+    else if (event.target.matches("[data-child-field]")) updateChild(event.target.dataset.transitionId || selectedTransitionId, event.target.dataset.childKind, event.target.dataset.childId, event.target.dataset.childField, event.target.value, event.target.checked);
     else if (event.target.matches("[data-state-identity]")) updateIdentity(event.target.dataset.stateIdentity, event.target.value);
     else if (event.target.matches("[data-state-field]")) updateField(event.target.dataset.stateField, event.target.value);
   }
@@ -1323,6 +1678,21 @@ export function createProfilesController({
       renderInspector();
       return;
     }
+    if (event.target.matches("[data-definition-field]")) {
+      updateDefinition(event.target.dataset.transitionId, event.target.dataset.definitionField, event.target.value, event.target.checked);
+      renderInspector();
+      return;
+    }
+    if (event.target.matches("[data-applicability-field]")) {
+      updateApplicability(event.target.dataset.transitionId, event.target.dataset.applicabilityField, event.target.value);
+      renderInspector();
+      return;
+    }
+    if (event.target.matches("[data-child-field]")) {
+      updateChild(event.target.dataset.transitionId || selectedTransitionId, event.target.dataset.childKind, event.target.dataset.childId, event.target.dataset.childField, event.target.value, event.target.checked);
+      renderInspector();
+      return;
+    }
     if (event.target.matches("[data-state-identity]")) {
       updateIdentity(event.target.dataset.stateIdentity, event.target.value);
       renderInspector();
@@ -1352,7 +1722,8 @@ export function createProfilesController({
       const mapping = result?.domains?.behaviorModel?.draftIdMap || result?.draftIdMap || {};
       if (mapping[selectedId]) selectedId = `state:${mapping[selectedId]}`;
       if (mapping[selectedControllerId]) selectedControllerId = `controller:${mapping[selectedControllerId]}`;
-      updates.clear(); created.splice(0);
+      if (mapping[selectedTransitionId]) selectedTransitionId = `transition:${mapping[selectedTransitionId]}`;
+      updates.clear(); created.splice(0); removedProfileIds.clear();
       controllerUpdates.clear(); createdControllers.splice(0);
       transitionUpdates.clear(); createdTransitions.splice(0); removedTransitionIds.clear();
       state.selectedProfileKey = selectedId;

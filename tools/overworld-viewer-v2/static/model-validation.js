@@ -120,6 +120,36 @@ export function materializeDraftGraph(savedModel, draft = null) {
   if (draft.transitions) {
     model.transitionGraph ||= {};
     model.transitionGraph.transitions = mergedEntities(model.transitionGraph.transitions, draft.transitions);
+    // Definitions and applicability are authored through their owning transition.
+    // Materialize those embedded records into the canonical validation domains so
+    // edits to saved identities and newly-created draft identities are validated
+    // by the same whole-graph contracts as persisted records.
+    const definitions = new Map(asArray(model.overrideDefinitions).map((item) => [String(ref(item)), item]));
+    const applicability = new Map(asArray(model.applicability).map((item) => [String(ref(item)), item]));
+    // Only authored rows may override the canonical definition tables. Untouched
+    // saved transitions can share those identities and still carry the old
+    // embedded display copy.
+    const authoredTransitions = [
+      ...asArray(draft.transitions.update),
+      ...asArray(draft.transitions.create),
+    ];
+    authoredTransitions.forEach((transition) => {
+      const definition = transition?.candidateDefinition;
+      if (!definition || !present(ref(definition))) return;
+      definitions.set(String(ref(definition)), clone(definition));
+      const authored = definition.applicability;
+      if (!authored || !present(ref(authored))) return;
+      const validationShape = "kind" in authored ? {
+        ...clone(authored),
+        flags: Number(authored.kind),
+        immutableContextMask: Number(authored.groupMask),
+        effectiveProfileId: authored.profileId || null,
+        semanticRoleId: authored.minimum || null,
+      } : clone(authored);
+      applicability.set(String(ref(authored)), validationShape);
+    });
+    model.overrideDefinitions = [...definitions.values()];
+    model.applicability = [...applicability.values()];
   }
   if (draft.policyCatalog && typeof draft.policyCatalog === "object") {
     model.policyCatalog ||= {};
@@ -185,6 +215,29 @@ function validateDelta(savedModel, draft) {
         touched.add(identity);
       });
     }
+  }
+  const authoredDefinitions = new Map();
+  const authoredApplicability = new Map();
+  for (const operation of ["create", "update"]) {
+    asArray(draft?.transitions?.[operation]).forEach((transition, index) => {
+      const definition = transition?.candidateDefinition;
+      const definitionId = ref(definition);
+      const path = `draft.transitions.${operation}.${index}.candidateDefinition`;
+      if (present(definitionId)) {
+        const serialized = JSON.stringify(definition);
+        if (authoredDefinitions.has(String(definitionId)) && authoredDefinitions.get(String(definitionId)) !== serialized) {
+          errors.push(diagnostic(VALIDATION_CODES.DRAFT_TRANSACTION, path, "Shared candidate definition has conflicting authored values.", "overrideDefinition", definitionId));
+        } else authoredDefinitions.set(String(definitionId), serialized);
+      }
+      const rule = definition?.applicability;
+      const ruleId = ref(rule);
+      if (present(ruleId)) {
+        const serialized = JSON.stringify(rule);
+        if (authoredApplicability.has(String(ruleId)) && authoredApplicability.get(String(ruleId)) !== serialized) {
+          errors.push(diagnostic(VALIDATION_CODES.DRAFT_TRANSACTION, `${path}.applicability`, "Shared applicability has conflicting authored values.", "applicability", ruleId));
+        } else authoredApplicability.set(String(ruleId), serialized);
+      }
+    });
   }
   return errors;
 }
@@ -397,6 +450,13 @@ function modelDiagnostics(model) {
     } else if (Number(definition?.selectorKind) === 2) {
       if (present(definition?.nodeId)) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.nodeId`, "Semantic selectors cannot also select an exact node.", "overrideDefinition", id));
       domain(definition?.semanticRoleId, semanticRoles.size ? [...semanticRoles] : schema.domains.semanticRole, `${path}.semanticRoleId`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
+    }
+    const expectedSelectorFlags = Number(definition?.selectorKind) === 1 ? 1 : 0;
+    if (Number(definition?.flags) !== expectedSelectorFlags) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.flags`, `Definition flags must be ${expectedSelectorFlags} for this selector kind.`, "overrideDefinition", id));
+    if (![0, 1].includes(Number(definition?.hasTiredOriginKind))
+        || (!Number(definition?.hasTiredOriginKind) && Number(definition?.tiredOriginKind) !== 0)
+        || (Number(definition?.hasTiredOriginKind) && ![1, 2, 3].includes(Number(definition?.tiredOriginKind)))) {
+      errors.push(diagnostic(VALIDATION_CODES.DEFINITION_DOMAIN, `${path}.tiredOriginKind`, "Tired-origin presence and kind must agree; enabled kinds are 1–3.", "overrideDefinition", id));
     }
     if (present(definition?.controllerId)) requireRef(definition.controllerId, controllerIds, `${path}.controllerId`, "overrideDefinition", id, "Controller");
     domain(definition?.mapLifetime, schema.domains.lifetime, `${path}.mapLifetime`, "overrideDefinition", id, VALIDATION_CODES.LIFETIME);

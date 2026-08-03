@@ -482,7 +482,7 @@ class BehaviorModelWriterTest(unittest.TestCase):
 
     def test_hard_cap_and_invalid_payload_leave_all_files_unchanged(self):
         source = self.model()["stateProfiles"][0]
-        creates = [profile_payload(source, draft_id=f"draft:overflow-{index}") for index in range(20)]
+        creates = [profile_payload(source, draft_id=f"draft:overflow-{index}") for index in range(30)]
         before = self.bytes()
         with self.assertRaises(self.writer.v40.ModelError):
             self.writer.apply_behavior_model_changes(self.workspace, {

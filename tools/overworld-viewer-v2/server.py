@@ -80,7 +80,21 @@ def build_behavior_model_editor_payload() -> dict[str, object]:
         {key: row[key] for key in applicability_keys if key in row}
         for row in authored.get("applicability", [])
     ]
-    payload["behaviorModelAuthoring"] = {"applicability": applicability_rows}
+    profile_delete_blockers: dict[str, list[dict[str, object]]] = {}
+    for domain in ("importRecipes", "tiredTranslations"):
+        for row in authored.get(domain, []):
+            profile_id = row.get("profileId")
+            if not profile_id:
+                continue
+            profile_delete_blockers.setdefault(str(profile_id), []).append({
+                "domain": domain,
+                "stableId": row.get("stableId"),
+                "registryKey": row.get("registryKey", ""),
+            })
+    payload["behaviorModelAuthoring"] = {
+        "applicability": applicability_rows,
+        "profileDeleteBlockers": profile_delete_blockers,
+    }
     return payload
 
 

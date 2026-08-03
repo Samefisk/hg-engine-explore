@@ -104,7 +104,7 @@ const secondScopedTransitionSource = {
 controllerModel.transitionGraph.transitions = [transitionSource, sharedTransitionSource];
 controllerModel.behaviorModelAuthoring = { applicability: [
   { stableId: 61697, kind: 1, groupMask: 0xFFFFFFFF, controllerId: 12289, profileId: 0, minimum: 0, maximum: 0, flags: 2 },
-] };
+], profileDeleteBlockers: { 8705: [{ domain: "importRecipes", stableId: 60001 }] } };
 const reordered = [structuredClone(transitionSource), structuredClone(sharedTransitionSource)];
 [reordered[0].order, reordered[1].order] = [reordered[1].order, reordered[0].order];
 const reorderPayload = compactBehaviorModelDraft({ transitions: { update: reordered } }, {
@@ -215,6 +215,7 @@ const profileKindFilter = new FakeElement();
 const inspector = new FakeElement();
 const state = {};
 let shellMarkDirtyCalls = 0;
+const statuses = [];
 const controller = createProfilesController({
   state,
   api: {
@@ -226,6 +227,16 @@ const controller = createProfilesController({
         name: "Bird calm",
         descriptiveTags: ["bird"],
         registryKey: "authored-profile:class-0:chill",
+        provenanceId: 36865,
+        bodyProvenance: { kind: 1, label: "Calm" },
+        values: { behaviorKind: 1, hopMinDistance: 0, hopMaxDistance: 0 },
+        backlinks: [],
+      }, {
+        stableId: 8706,
+        bodyId: 4610,
+        name: "Unused state",
+        descriptiveTags: [],
+        registryKey: "authored-profile:unused",
         provenanceId: 36865,
         bodyProvenance: { kind: 1, label: "Calm" },
         values: { behaviorKind: 1, hopMinDistance: 0, hopMaxDistance: 0 },
@@ -252,6 +263,7 @@ const controller = createProfilesController({
       behaviorModelAuthoring: controllerModel.behaviorModelAuthoring,
     }),
   },
+  setStatus: (message, kind) => { statuses.push({ message, kind }); },
   elements: {
     profilesView: root,
     profileLibrary: new FakeElement(),
@@ -265,7 +277,7 @@ const controller = createProfilesController({
 });
 
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(state.v40BehaviorModel.stateProfiles.length, 1);
+assert.equal(state.v40BehaviorModel.stateProfiles.length, 2);
 
 const actionTarget = (action) => ({
   closest(selector) {
@@ -289,11 +301,29 @@ assert.equal(state.profileDirty, true);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 1);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create[0].name, "Bird relaxed");
 
+root.dispatch("click", actionTarget("delete"));
+assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 0);
+assert.deepEqual(controller.commitPayload(), {});
+root.dispatch("click", actionTarget("new"));
+
 root.dispatch("click", actionTarget("reset-local"));
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 0);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.update.length, 0);
-assert.equal(shellMarkDirtyCalls, 3);
+assert.equal(shellMarkDirtyCalls, 5);
 assert.deepEqual(controller.commitPayload(), {});
+
+root.dispatch("click", actionTarget("delete"));
+assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, []);
+assert.match(statuses.at(-1).message, /importRecipes/);
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-profile-id]" ? { dataset: { profileId: "state:8706" } } : null;
+  },
+});
+root.dispatch("click", actionTarget("delete"));
+assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, [8706]);
+root.dispatch("click", actionTarget("reset-local"));
+assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, []);
 
 root.dispatch("click", {
   closest(selector) {
@@ -348,21 +378,120 @@ root.dispatch("click", controllerActionTarget("add-transition"));
 assert.equal(state.v40BehaviorModelDraft.transitions.create.length, 1);
 assert.match(state.v40BehaviorModelDraft.transitions.create[0].draftId, /^draft:/);
 const createdTransitionId = state.v40BehaviorModelDraft.transitions.create[0].draftId;
-root.dispatch("input", {
-  value: "28673",
-  dataset: { transitionId: createdTransitionId, transitionField: "candidateDefinitionId" },
-  matches: (selector) => selector === "[data-transition-field]",
+assert.deepEqual([
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.selectorKind,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.flags,
+], [1, 1]);
+const definitionInput = (field, value, checked = false) => root.dispatch("input", {
+  value, checked,
+  dataset: { transitionId: createdTransitionId, definitionField: field },
+  matches: (selector) => selector === "[data-definition-field]",
 });
-assert.equal(state.v40BehaviorModelDraft.transitions.create[0].candidateDefinitionId, 28673);
-assert.equal(state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.stableId, 28673);
-assert.deepEqual(state.v40BehaviorModelDraft.transitions.create[0].controllerIds, [12289]);
+const applicabilityInput = (field, value) => root.dispatch("input", {
+  value,
+  dataset: { transitionId: createdTransitionId, applicabilityField: field },
+  matches: (selector) => selector === "[data-applicability-field]",
+});
+for (const [field, value, checked] of [
+  ["name", "Authored candidate"], ["kind", "2"], ["kind", "1"],
+  ["channel", "3"], ["priority", "321"], ["controllerId", firstControllerDraftId],
+  ["selectorKind", "2"], ["semanticRoleId", "2"], ["selectorKind", "1"],
+  ["nodeId", state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId],
+  ["requiredOwnerId", "33026"], ["mapLifetime", "1"], ["battleLifetime", "2"],
+  ["timerClock", "1"], ["timerSource", "2"], ["timerValue", "5"],
+  ["hiddenTimerPolicy", "2"], ["recoveryPolicy", "1"],
+  ["recoveryTransitionId", createdTransitionId], ["recoveryPolicy", "0"],
+  ["tiredOriginKind", "2"], ["hasTiredOriginKind", "on", false],
+  ["allowMultipleOwners", "on", true], ["allowMultipleInstancesPerOwner", "on", true],
+  ["authoredTiredBound", "on", true],
+]) definitionInput(field, value, checked);
+definitionInput("selectorKind", "2");
+assert.deepEqual([
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.nodeId,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.flags,
+], [null, 0]);
+definitionInput("selectorKind", "1");
+assert.deepEqual([
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.semanticRoleId,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.flags,
+], [0, 1]);
+for (const [field, value] of [
+  ["name", "Authored applicability"], ["kind", "3"], ["groupMask", "255"],
+  ["controllerId", firstControllerDraftId], ["profileId", "8705"],
+  ["minimum", "0"], ["maximum", "8"], ["flags", "9"],
+]) applicabilityInput(field, value);
+const childActionTarget = (kind) => ({
+  closest(selector) {
+    return selector === "[data-child-action]" ? {
+      dataset: { childAction: "add", childKind: kind, transitionId: createdTransitionId },
+    } : null;
+  },
+});
+for (const kind of ["guards", "operations", "actions", "recoveryActions"]) root.dispatch("click", childActionTarget(kind));
+const authoredTransition = state.v40BehaviorModelDraft.transitions.create[0];
+const childInput = (kind, child, field, value, checked = false) => root.dispatch("input", {
+  value, checked,
+  dataset: {
+    transitionId: createdTransitionId, childKind: kind,
+    childId: child.draftId, childField: field,
+  },
+  matches: (selector) => selector === "[data-child-field]",
+});
+const authoredGuard = authoredTransition.guards.at(-1);
+for (const [field, value, checked] of [
+  ["kind", "3"], ["negate", "on", true], ["payload", "2"],
+  ["referenceId", state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId],
+]) childInput("guards", authoredGuard, field, value, checked);
+const authoredOperation = authoredTransition.operations.at(-1);
+for (const [field, value, checked] of [
+  ["kind", "2"], ["definitionId", authoredTransition.candidateDefinitionId],
+  ["ownerId", "33026"], ["replacementDefinitionId", "28673"],
+  ["policyId", "1"], ["instanceKey", authoredTransition.candidateDefinitionId],
+  ["busyPolicy", "2"], ["required", "on", true], ["required", "on", false],
+  ["kind", "1"],
+]) childInput("operations", authoredOperation, field, value, checked);
+const authoredAction = authoredTransition.actions.at(-1);
+childInput("actions", authoredAction, "phase", "2");
+childInput("actions", authoredAction, "kind", "4");
+const authoredRecovery = authoredTransition.recoveryActions.at(-1);
+childInput("recoveryActions", authoredRecovery, "ownerId", "33026");
+childInput("recoveryActions", authoredRecovery, "kind", "2");
+childInput("recoveryActions", authoredRecovery, "required", "on", false);
+childInput("recoveryActions", authoredRecovery, "required", "on", true);
+assert.equal(authoredTransition.candidateDefinition.channel, 3);
+assert.equal(authoredTransition.candidateDefinition.priority, 321);
+assert.deepEqual(
+  [authoredTransition.candidateDefinition.timerClock, authoredTransition.candidateDefinition.timerSource,
+    authoredTransition.candidateDefinition.timerValue, authoredTransition.candidateDefinition.hiddenTimerPolicy],
+  [1, 2, 5, 2],
+);
+assert.equal(authoredTransition.candidateDefinition.allowMultipleOwners, 1);
+assert.equal(authoredTransition.candidateDefinition.flags, 1);
+assert.deepEqual([authoredTransition.candidateDefinition.hasTiredOriginKind, authoredTransition.candidateDefinition.tiredOriginKind], [0, 0]);
+assert.equal(authoredTransition.candidateDefinition.applicability.groupMask, 255);
+assert.deepEqual(["guards", "operations", "actions", "recoveryActions"].map((kind) => authoredTransition[kind].at(-1).draftId.startsWith("draft:")), [true, true, true, true]);
+const authoredIds = [authoredTransition.draftId, authoredTransition.candidateDefinition.draftId,
+  authoredTransition.candidateDefinition.applicability.draftId,
+  ...["guards", "operations", "actions", "recoveryActions"].flatMap((kind) => authoredTransition[kind].map((item) => item.draftId))];
+assert.equal(new Set(authoredIds).size, authoredIds.length);
+assert.equal(authoredIds.every((id) => id?.startsWith("draft:")), true);
+const authoredPayload = controller.commitPayload().behaviorModel.transitions.create
+  .find((item) => item.draftId === createdTransitionId);
+assert.equal(authoredPayload.candidateDefinition.channel, 3);
+assert.equal(authoredPayload.candidateDefinition.applicability.groupMask, 255);
+assert.equal(authoredPayload.recoveryActions.at(-1).kind, 2);
+definitionInput("selectorKind", "2");
+definitionInput("nodeId", state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId);
+assert.equal(controller.wholeGraphDiagnostics().some((item) => item.code === "DEFINITION_SELECTOR_INVALID"), true);
+assert.equal(controller.hasInvalid(), true);
+definitionInput("selectorKind", "1");
 root.dispatch("click", controllerActionTarget("duplicate"));
 assert.equal(state.v40BehaviorModelDraft.controllers.create.length, 2);
 assert.notEqual(
   state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId,
   state.v40BehaviorModelDraft.controllers.create[1].nodes[0].draftId,
 );
-assert.equal(shellMarkDirtyCalls, 13);
+const callsBeforeRefresh = shellMarkDirtyCalls;
 assert.equal(controller.hasInvalid(), true);
 assert.ok(controller.commitPayload().behaviorModel);
 
@@ -374,7 +503,7 @@ assert.deepEqual(controller.commitPayload(), preservedPayload);
 await controller.refreshPreservingDrafts();
 assert.equal(state.v40BehaviorModelDraft.controllers.create.some((item) => item.draftId === preservedControllerDraftId), true);
 assert.deepEqual(controller.commitPayload(), preservedPayload);
-assert.equal(shellMarkDirtyCalls, 13);
+assert.equal(shellMarkDirtyCalls, callsBeforeRefresh);
 
 controller.clearCommitted({
   domains: { behaviorModel: { draftIdMap: { [preservedControllerDraftId]: 62001 } } },
@@ -382,7 +511,7 @@ controller.clearCommitted({
 assert.equal(controller.hasChanges(), false);
 assert.deepEqual(controller.commitPayload(), {});
 assert.equal(controller.navigationContext().selection, "controller:62001");
-assert.equal(shellMarkDirtyCalls, 14);
+assert.equal(shellMarkDirtyCalls, callsBeforeRefresh + 1);
 
 controller.destroy();
 console.log("V40 local-draft shell integration checks passed");

@@ -195,10 +195,23 @@ process.stdout.write(JSON.stringify({sourceControllerId: source.stableId,
             input=json.dumps(editor_model), text=True, capture_output=True, check=True,
         )
         authored = json.loads(completed.stdout)
+        blocker_index = editor_model["behaviorModelAuthoring"]["profileDeleteBlockers"]
+        self.assertTrue(blocker_index)
+        canonical = self.model()
+        expected_blocked = {
+            str(row["profileId"])
+            for domain in ("importRecipes", "tiredTranslations")
+            for row in canonical[domain]
+        }
+        self.assertEqual(set(blocker_index), expected_blocked)
         for transition in authored["transaction"]["transitions"]["create"]:
             rule = transition["candidateDefinition"]["applicability"]
             self.assertTrue({"kind", "groupMask", "profileId", "minimum", "maximum"} <= set(rule))
             self.assertTrue(str(rule["draftId"]).startswith("draft:"))
+        self.assertTrue(all(
+            any(transition[child_key] for transition in authored["transaction"]["transitions"]["create"])
+            for child_key in writer.CHILD_FIELDS
+        ))
         before = self.model()
         source_controller = next(row for row in before["controllers"] if row["stableId"] == authored["sourceControllerId"])
         source_definition_ids = {
@@ -216,6 +229,57 @@ process.stdout.write(JSON.stringify({sourceControllerId: source.stableId,
             self.assertEqual((definition["controllerId"], definition["applicabilityId"]),
                              (new_controller_id, rule["stableId"]))
             self.assertEqual(rule["controllerId"], new_controller_id)
+        draft_ids = []
+        for transition in authored["transaction"]["transitions"]["create"]:
+            draft_ids.extend([
+                transition["draftId"], transition["candidateDefinition"]["draftId"],
+                transition["candidateDefinition"]["applicability"]["draftId"],
+            ])
+            for child_key in writer.CHILD_FIELDS:
+                draft_ids.extend(child["draftId"] for child in transition[child_key])
+        self.assertEqual(len(draft_ids), len(set(draft_ids)))
+        self.assertTrue(all(draft in mapping for draft in draft_ids))
+
+        def resolved(value):
+            if value is None:
+                return 0
+            return mapping.get(value, value)
+
+        transitions_by_id = {row["stableId"]: row for row in saved["transitions"]}
+        definitions_by_id = {row["stableId"]: row for row in saved["overrideDefinitions"]}
+        applicability_by_id = {row["stableId"]: row for row in saved["applicability"]}
+        reference_fields = {
+            "controllerId", "nodeId", "requiredOwnerId", "recoveryTransitionId",
+            "applicabilityId",
+        }
+        applicability_references = {"controllerId", "profileId"}
+        child_references = {
+            "guards": {"referenceId"},
+            "operations": {"definitionId", "ownerId", "replacementDefinitionId", "policyId", "instanceKey"},
+            "actions": {"referenceId"},
+            "recoveryActions": {"ownerId"},
+        }
+        for submitted in authored["transaction"]["transitions"]["create"]:
+            persisted = transitions_by_id[mapping[submitted["draftId"]]]
+            definition = definitions_by_id[mapping[submitted["candidateDefinition"]["draftId"]]]
+            rule = applicability_by_id[mapping[submitted["candidateDefinition"]["applicability"]["draftId"]]]
+            self.assertEqual(persisted["definitionId"], definition["stableId"])
+            for key in ("ownerId", "trigger", "fromRoleMask", "dispatchPriority", "order"):
+                self.assertEqual(persisted[key], resolved(submitted[key]))
+            for key in writer.DEFINITION_AUTHORED_FIELDS:
+                expected = resolved(submitted["candidateDefinition"][key]) if key in reference_fields else submitted["candidateDefinition"][key]
+                self.assertEqual(definition[key], expected, f"definition field {key}")
+            submitted_rule = submitted["candidateDefinition"]["applicability"]
+            for key in writer.APPLICABILITY_AUTHORED_FIELDS:
+                expected = resolved(submitted_rule[key]) if key in applicability_references else submitted_rule[key]
+                self.assertEqual(rule[key], expected, f"applicability field {key}")
+            for child_key, authored_fields in writer.CHILD_FIELDS.items():
+                persisted_children = {row["stableId"]: row for row in persisted[child_key]}
+                for child in submitted[child_key]:
+                    actual = persisted_children[mapping[child["draftId"]]]
+                    for key in authored_fields - {"draftId", "stableId"}:
+                        expected = resolved(child[key]) if key in child_references[child_key] else child[key]
+                        self.assertEqual(actual[key], expected, f"{child_key} field {key}")
         self.assertEqual({row["stableId"]: row for row in saved["overrideDefinitions"] if row["stableId"] in source_definition_ids}, source_definitions)
         self.assertEqual({row["stableId"]: row for row in saved["applicability"] if row["stableId"] in source_applicability}, source_applicability)
 

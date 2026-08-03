@@ -97,6 +97,9 @@ expectCode((model) => { model.controllers[0].policyIds.spawnPolicyId = 999; }, V
 
 // Definition, selector, owner, lifetime, timer, recovery, and cross-reference families.
 expectCode((model) => { model.overrideDefinitions[0].selectorKind = 1; }, VALIDATION_CODES.DEFINITION_SELECTOR);
+expectCode((model) => { model.overrideDefinitions[0].flags = 1; }, VALIDATION_CODES.DEFINITION_SELECTOR);
+expectCode((model) => { model.overrideDefinitions[0].hasTiredOriginKind = 0; model.overrideDefinitions[0].tiredOriginKind = 2; }, VALIDATION_CODES.DEFINITION_DOMAIN);
+expectCode((model) => { model.overrideDefinitions[0].hasTiredOriginKind = 1; model.overrideDefinitions[0].tiredOriginKind = 0; }, VALIDATION_CODES.DEFINITION_DOMAIN);
 expectCode((model) => { model.overrideDefinitions[0].applicabilityId = 999; }, VALIDATION_CODES.REFERENCE);
 expectCode((model) => { model.overrideDefinitions[0].requiredOwnerId = 999; }, VALIDATION_CODES.REFERENCE);
 expectCode((model) => { model.overrideDefinitions[0].mapLifetime = 9; }, VALIDATION_CODES.LIFETIME);
@@ -158,6 +161,55 @@ expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; },
   const invalid = { stateProfiles: { create: [{ stableId: 90, name: "Bad", values: copy(values) }] } };
   assert.equal(codes(validateBehaviorDraft(saved, invalid)).has(VALIDATION_CODES.DRAFT_TRANSACTION), true);
   assert.equal(codes(validateBehaviorDraft(saved, { owners: { create: [] } })).has(VALIDATION_CODES.REPRESENTATION), true);
+}
+
+// Transition-owned definition and applicability edits replace their canonical
+// validation records, so the exact graph submitted to the writer is checked.
+{
+  const saved = fixture();
+  const transition = copy(saved.transitionGraph.transitions[0]);
+  transition.candidateDefinition.priority = 321;
+  transition.candidateDefinition.applicability = {
+    stableId: 61, name: "Everywhere", kind: 1, groupMask: 0xFFFFFFFF,
+    controllerId: null, profileId: null, minimum: 0, maximum: 0, flags: 0,
+  };
+  const valid = { modelVersion: 40, transitions: { update: [transition] } };
+  assert.deepEqual(validateBehaviorDraft(saved, valid), []);
+  transition.candidateDefinition.requiredOwnerId = 999;
+  assert.equal(codes(validateBehaviorDraft(saved, valid)).has(VALIDATION_CODES.REFERENCE), true);
+  const conflict = copy(transition);
+  conflict.stableId = null;
+  conflict.draftId = "draft:conflicting-transition";
+  conflict.candidateDefinition.requiredOwnerId = 60;
+  assert.equal(codes(validateBehaviorDraft(saved, {
+    transitions: { update: [transition], create: [conflict] },
+  })).has(VALIDATION_CODES.DRAFT_TRANSACTION), true);
+}
+
+// An authored shared definition/applicability update wins over every untouched
+// saved transition that still embeds the prior display record.
+{
+  const saved = fixture();
+  const sibling = copy(saved.transitionGraph.transitions[0]);
+  sibling.stableId = 75;
+  sibling.name = "Shared sibling";
+  sibling.order = 1;
+  sibling.guards[0].stableId = 76;
+  sibling.operations[0].stableId = 77;
+  sibling.actions[0].stableId = 78;
+  sibling.recoveryActions[0].stableId = 79;
+  saved.transitionGraph.transitions.push(sibling);
+  saved.controllers[0].transitionIds.push(75);
+  const update = copy(saved.transitionGraph.transitions[0]);
+  update.candidateDefinition.priority = 654;
+  update.candidateDefinition.applicability = {
+    stableId: 61, name: "Edited shared rule", kind: 1, groupMask: 255,
+    controllerId: null, profileId: null, minimum: 0, maximum: 0, flags: 0,
+  };
+  const materialized = materializeDraftGraph(saved, { transitions: { update: [update] } });
+  assert.equal(materialized.overrideDefinitions.find((item) => item.stableId === 50).priority, 654);
+  assert.equal(materialized.applicability.find((item) => item.stableId === 61).immutableContextMask, 255);
+  assert.deepEqual(validateBehaviorDraft(saved, { transitions: { update: [update] } }), []);
 }
 
 // Stack keys, capacity, ownership, multiplicity, and selectors are deterministic.
