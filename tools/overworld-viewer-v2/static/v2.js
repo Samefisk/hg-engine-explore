@@ -1,4 +1,4 @@
-import { createProfilesController } from "/v2-assets/profiles.js";
+import { createProfilesController, v40ProfileDeckCapability } from "/v2-assets/profiles.js";
 import { createRoutesController } from "/v2-assets/routes.js";
 import { createSoundsController } from "/v2-assets/routes-sounds.js";
 import { createPokemonController } from "/v2-assets/pokemon.js";
@@ -103,6 +103,10 @@ function capabilitySource(data, name) {
 }
 
 function normalizedViewCapability(data, name) {
+  if (name === "profiles") {
+    const v40Capability = v40ProfileDeckCapability(data);
+    if (v40Capability) return v40Capability;
+  }
   const source = capabilitySource(data, name);
   const label = {
     pokemon: "Pokémon Editor",

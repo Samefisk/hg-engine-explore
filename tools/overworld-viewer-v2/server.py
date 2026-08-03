@@ -211,6 +211,20 @@ class V2ViewerHandler(legacy.ViewerHandler):
                         refresh_legacy_cache=True,
                     )
                     payload = json.loads(cached["body"])
+                    try:
+                        behavior_model = legacy.build_v40_state_profile_editor_data()
+                        payload["v40BehaviorModelCapability"] = {
+                            "available": True,
+                            "modelVersion": behavior_model["modelVersion"],
+                            "stateProfileCount": len(behavior_model["stateProfiles"]),
+                        }
+                    except Exception as exc:
+                        # V40 profile availability is independent from the
+                        # legacy V39 class-table parser used by other decks.
+                        payload["v40BehaviorModelCapability"] = {
+                            "available": False,
+                            "reason": str(exc),
+                        }
                     payload["sourceRevision"] = source_revision
                     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                     etag = f'"{hashlib.sha1(body).hexdigest()}"'
@@ -236,6 +250,25 @@ class V2ViewerHandler(legacy.ViewerHandler):
                         "legacyBackend": str(LEGACY_VIEWER_SOURCE.relative_to(ROOT)),
                         "capabilities": legacy.source_capabilities(),
                     }
+                )
+                return
+            if path == "/api/v2/behavior-model":
+                with reliability.workspace_guard(ROOT):
+                    payload = legacy.build_v40_state_profile_editor_data()
+                    payload["sourceRevision"] = reliability.current_revision(legacy, ROOT)
+                    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                    etag = f'"sha256:{hashlib.sha256(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+                self.send_bytes(
+                    gzip.compress(body, compresslevel=6) if accepts_gzip else body,
+                    "application/json; charset=utf-8",
+                    cache_control="no-cache",
+                    content_encoding="gzip" if accepts_gzip else None,
+                    etag=etag,
+                    vary="Accept-Encoding",
                 )
                 return
             staged_asset_match = re.fullmatch(

@@ -92,6 +92,8 @@ ENCOUNTERS_SOURCE = ROOT / "armips/data/encounters.s"
 HEADBUTT_SOURCE = ROOT / "armips/data/headbutt.s"
 ENCOUNTER_LOOKUP_SOURCE = ROOT / "data/OverworldWildEncounterLookupData.c"
 ENCOUNTER_OVERRIDES_SOURCE = ROOT / "data/OverworldWildEncounterOverrides.json"
+V40_BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorDataV40.generated.inc"
+V40_STABLE_IDS_SOURCE = ROOT / "data/OverworldWildBehaviorV40StableIds.json"
 MONDATA_SOURCE = ROOT / "armips/data/mondata.s"
 BABYMONS_SOURCE = ROOT / "armips/data/babymons.s"
 EVODATA_SOURCE = ROOT / "armips/data/evodata.s"
@@ -100,6 +102,179 @@ ARMIPS_CONFIG = ROOT / "armips/include/config.s"
 TEST_NDS = ROOT / "test.nds"
 DESMUME_TEST_DSV = Path.home() / "Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv"
 DELTA_TEST_DSV = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test.dsv"
+
+V40_STATE_ROLE_LABELS = {
+    1: "Calm",
+    2: "Active",
+    3: "Tired",
+    4: "Asleep",
+    5: "Carried",
+    6: "Follower",
+    7: "Fallback tired",
+}
+V40_STATE_FIELD_SCHEMA = (
+    ("behaviorKind", "Behavior", "behavior", "enum", (0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11),
+     ("None", "Idle", "Wander", "Chase", "Flee", "Playful", "RAM", "Canopy hop", "Asleep", "Tired emote", "No visual")),
+    ("locomotion", "Locomotion", "locomotion", "enum", tuple(range(8)),
+     ("None", "Walk", "Hop", "Run from off-screen", "Hop from off-screen", "RAM", "Phantom teleport", "Appear hop")),
+    ("target", "Target", "target", "enum", (0, 1, 2, 3, 4, 5, 6, 8, 9),
+     ("None", "Random nearby", "Toward player", "Away from player", "Tree top", "Playful orbit", "Next to player", "Player cardinal line", "Circle player")),
+    ("speed", "Speed", "speed-range", "number", (1, 4), ()),
+    ("movementRange", "Movement range", "speed-range", "number", (0, 64), ()),
+    ("jumpLevel", "Jump level", "tiles-surfaces", "enum", (0, 1, 2), ("None", "Downhill", "Both")),
+    ("allowedTile", "Allowed tile", "tiles-surfaces", "enum", (0, 1, 2, 3, 4, 5, 15),
+     ("Land", "Water", "Canopy", "Grass", "Player", "Player front", "None")),
+    ("allowedTile2", "Allowed tile 2", "tiles-surfaces", "enum", (0, 1, 2, 3, 4, 5, 15),
+     ("Land", "Water", "Canopy", "Grass", "Player", "Player front", "None")),
+    ("hopAllowNonCardinal", "Allow diagonal hops", "hop", "boolean", (0, 1), ("No", "Yes")),
+    ("hopMinDistance", "Minimum hop distance", "hop", "number", (0, 12), ()),
+    ("hopMaxDistance", "Maximum hop distance", "hop", "number", (0, 12), ()),
+    ("hopPause", "Hop pause", "hop", "number", (0, 255), ()),
+    ("hopTimePerTile", "Hop time per tile", "hop", "number", (0, 64), ()),
+    ("hopSpinSpeed", "Hop spin speed", "hop", "number", (0, 15), ()),
+    ("teleportTime", "Teleport time", "teleport", "number", (0, 64), ()),
+    ("teleportPause", "Teleport pause", "teleport", "number", (0, 255), ()),
+    ("ramAccelerationSteps", "RAM acceleration steps", "ram-chain", "number", (0, 32), ()),
+    ("ramMaxSpeed", "RAM max speed", "ram-chain", "number", (0, 255), ()),
+    ("chaseBoostDistance", "Chase boost distance", "speed-range", "number", (0, 32), ()),
+    ("chaseBoostSpeed", "Chase boost speed", "speed-range", "number", (0, 4), ()),
+    ("circleRadius", "Circle radius", "target", "number", (0, 8), ()),
+    ("continueWhenArrived", "Continue when arrived", "target", "boolean", (0, 1), ("No", "Yes")),
+    ("avoidPreviousTile", "Avoid previous tile", "advanced", "boolean", (0, 1), ("No", "Yes")),
+    ("chainPauseAction", "Chain pause action", "ram-chain", "enum", (0, 1, 2), ("None", "Hop in place", "Look around")),
+    ("chainMovementVariance", "Chain movement variance", "ram-chain", "number", (0, 32), ()),
+    ("chainPauseVariance", "Chain pause variance", "ram-chain", "number", (0, 255), ()),
+    ("battleTrigger", "Battle trigger", "battle", "enum", (0, 1, 2), ("None", "Contact", "RAM crash")),
+    ("playerAdjacentDirectionMask", "Player-adjacent directions", "battle", "mask", (0, 15), ()),
+)
+
+
+def _v40_state_field_metadata() -> list[dict]:
+    fields = []
+    for key, label, group, kind, domain, labels in V40_STATE_FIELD_SCHEMA:
+        item = {"key": key, "label": label, "group": group, "type": kind}
+        if kind in {"number", "mask"}:
+            item.update({"minimum": domain[0], "maximum": domain[1]})
+        else:
+            item["options"] = [
+                {"value": value, "label": option_label}
+                for value, option_label in zip(domain, labels)
+            ]
+        fields.append(item)
+    return fields
+
+
+def _v40_display_metadata(registry_key: str, stable_id: int, role_label: str) -> tuple[str, list[str]]:
+    source = registry_key.removeprefix("authored-profile:")
+    parts = [part for part in source.split(":") if part]
+    tags = [part.replace("-", " ") for part in parts]
+    if parts and parts[0].startswith("class-") and len(parts) >= 2:
+        name = f"Class {int(parts[0].removeprefix('class-')) + 1} · {role_label}"
+    elif parts and parts[0].startswith("override-") and len(parts) >= 3:
+        name = f"Override {int(parts[0].removeprefix('override-')) + 1} · Controller {int(parts[1].removeprefix('controller-')) + 1} · {role_label}"
+    elif parts[:1] == ["system"]:
+        name = " · ".join(part.replace("-", " ").title() for part in parts)
+    elif parts[:1] == ["fallback"]:
+        name = f"Controller {int(parts[1]) + 1} · Fallback tired"
+    else:
+        name = f"State profile {stable_id}"
+    return name, tags
+
+
+def build_v40_state_profile_editor_data() -> dict:
+    """Return the exact V40 state-profile library used by the runtime catalog.
+
+    Names and descriptive tags are editor metadata recovered from registry keys;
+    runtime selection continues to use stable IDs and controller-node bindings.
+    """
+
+    byte_values = re.findall(r"\b0x([0-9A-Fa-f]{2})\b", V40_BEHAVIOR_DATA_SOURCE.read_text())
+    blob = bytes(int(value, 16) for value in byte_values)
+    if len(blob) < 216:
+        raise ParseError("V40 behavior catalog is truncated")
+    magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
+    if (magic, version, header_size, blob_size) != (0x4F574244, 40, 216, len(blob)):
+        raise ParseError("V40 behavior catalog header is invalid")
+
+    body_offset, body_count, body_stride = struct.unpack_from("<IHH", blob, 24)
+    identity_offset, identity_count, identity_stride = struct.unpack_from("<IHH", blob, 32)
+    node_offset, node_count, node_stride = struct.unpack_from("<IHH", blob, 48)
+    if body_stride != 32 or identity_stride != 8 or node_stride != 12:
+        raise ParseError("V40 state-profile section layout is invalid")
+
+    registry = json.loads(V40_STABLE_IDS_SOURCE.read_text()).get("ids", {})
+    registry_names = {
+        value: key for key, value in registry.items()
+        if key.startswith("authored-profile:")
+    }
+    bodies = {}
+    for index in range(body_count):
+        stable_id, role, value_count, values = struct.unpack_from(
+            "<HBB28s", blob, body_offset + index * body_stride
+        )
+        if not stable_id or value_count != len(V40_STATE_FIELD_SCHEMA) or role not in V40_STATE_ROLE_LABELS:
+            raise ParseError(f"V40 state body #{index} is invalid")
+        bodies[stable_id] = (role, list(values))
+
+    usages: dict[int, list[dict]] = {}
+    for index in range(node_count):
+        node_id, controller_id, profile_id, _custom_role, role, flags, reserved = struct.unpack_from(
+            "<4HBBH", blob, node_offset + index * node_stride
+        )
+        if reserved:
+            raise ParseError(f"V40 controller node #{index} has reserved data")
+        usages.setdefault(profile_id, []).append({
+            "controllerId": controller_id,
+            "nodeId": node_id,
+            "semanticRole": V40_STATE_ROLE_LABELS.get(role, f"Role {role}"),
+            "base": bool(flags & 1),
+        })
+
+    profiles = []
+    seen_ids = set()
+    for index in range(identity_count):
+        stable_id, body_id, provenance_id, tag_a, tag_b = struct.unpack_from(
+            "<HHHBB", blob, identity_offset + index * identity_stride
+        )
+        if stable_id in seen_ids or body_id not in bodies:
+            raise ParseError(f"V40 profile identity #{index} is invalid")
+        seen_ids.add(stable_id)
+        role, values = bodies[body_id]
+        role_label = V40_STATE_ROLE_LABELS[role]
+        registry_key = registry_names.get(stable_id, "")
+        name, tags = _v40_display_metadata(registry_key, stable_id, role_label)
+        profiles.append({
+            "stableId": stable_id,
+            "bodyId": body_id,
+            "name": name,
+            "bodyProvenance": {"kind": role, "label": role_label},
+            "descriptiveTags": tags,
+            "registryKey": registry_key,
+            "provenanceId": provenance_id,
+            "sourceTags": {"tagA": tag_a, "tagB": tag_b},
+            "values": {
+                schema[0]: values[field_index]
+                for field_index, schema in enumerate(V40_STATE_FIELD_SCHEMA)
+            },
+            "backlinks": usages.get(stable_id, []),
+        })
+
+    return {
+        "modelVersion": 40,
+        "entityType": "stateProfile",
+        "stateProfiles": sorted(profiles, key=lambda profile: profile["stableId"]),
+        "stateProfileFields": _v40_state_field_metadata(),
+        "groups": [
+            {"key": key, "label": label}
+            for key, label in (
+                ("behavior", "Behavior"), ("locomotion", "Locomotion"),
+                ("target", "Target"), ("tiles-surfaces", "Tiles & surfaces"),
+                ("speed-range", "Speed & range"), ("hop", "Hop"),
+                ("teleport", "Teleport"), ("ram-chain", "RAM & movement chain"),
+                ("battle", "Battle"), ("advanced", "Advanced capabilities"),
+            )
+        ],
+    }
 
 
 def default_test_dsv_path() -> Path:
@@ -158,6 +333,8 @@ DATA_SOURCE_FILES = (
     HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
+    V40_BEHAVIOR_DATA_SOURCE,
+    V40_STABLE_IDS_SOURCE,
     SPECIES_HEADER,
     MAPS_HEADER,
     SPAWNS_PUBLIC_HEADER,

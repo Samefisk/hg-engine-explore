@@ -2238,6 +2238,110 @@ button {
   padding: 10px;
 }
 
+/* OWBD v40 complete-state editor. These classes intentionally describe
+ * entity structure rather than the former base/ordered-override projection. */
+.v40-state-profiles .profile-workbench {
+  grid-template-columns: minmax(17rem, 23rem) minmax(32rem, 1fr);
+}
+
+.v40-state-editor {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.v40-state-editor__heading,
+.v40-state-identity,
+.v40-backlinks {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.v40-state-editor__heading h2 {
+  margin: .15rem 0 0;
+}
+
+.v40-state-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.v40-state-identity {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.1fr) minmax(12rem, 1fr);
+  padding: 1rem;
+  border: 1px solid var(--line, #d8d6cf);
+  border-radius: .8rem;
+  background: var(--surface-raised, #fff);
+}
+
+.v40-state-identity > div,
+.v40-state-identity label {
+  display: grid;
+  align-content: start;
+  gap: .35rem;
+}
+
+.v40-state-identity input,
+.v40-state-identity select,
+.v40-state-field input,
+.v40-state-field select {
+  width: 100%;
+}
+
+.v40-state-tags {
+  grid-column: 1 / -1;
+}
+
+.v40-state-tags small,
+.v40-state-identity > div small,
+.v40-field-group summary small {
+  color: var(--muted, #69675f);
+}
+
+.v40-field-group > summary > span {
+  display: grid;
+  gap: .15rem;
+}
+
+.v40-state-field {
+  min-height: 4.5rem;
+}
+
+.v40-state-field > span {
+  display: grid;
+  gap: .15rem;
+}
+
+.v40-backlinks {
+  padding: .75rem 1rem;
+  border-radius: .65rem;
+  background: color-mix(in srgb, var(--accent, #4868cf) 8%, transparent);
+  font-size: .86rem;
+}
+
+.field-error {
+  color: var(--danger, #a82d2d);
+}
+
+@media (max-width: 900px) {
+  .v40-state-profiles .profile-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .v40-state-identity {
+    grid-template-columns: 1fr;
+  }
+
+  .v40-state-tags {
+    grid-column: auto;
+  }
+}
+
 .profile-workbench.is-resolver-open {
   grid-template-columns: minmax(235px, 270px) minmax(480px, 1fr) minmax(270px, 315px);
 }

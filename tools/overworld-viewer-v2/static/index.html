@@ -158,9 +158,9 @@
         <div id="profileWorkbench" class="profile-workbench">
           <aside class="panel library-panel" aria-labelledby="profileLibraryTitle">
             <header class="panel-heading">
-              <span><small>Library</small><strong id="profileLibraryTitle">Profile deck</strong></span>
+              <span><small>OWBD V40</small><strong id="profileLibraryTitle">State profiles</strong></span>
               <div class="panel-heading-actions">
-                <details class="profile-tool-menu">
+                <details class="profile-tool-menu" hidden>
                   <summary class="icon-button" aria-label="More profile tools">•••</summary>
                   <div>
                     <button id="openProfileResolver" type="button" data-action="open-context-resolver" aria-controls="profileResolverDrawer" aria-expanded="false">Resolve context…</button>
@@ -176,42 +176,22 @@
               </label>
               <label class="sr-only" for="profileKindFilter">Profile kind</label>
               <select id="profileKindFilter" class="kind-filter">
-                <option value="all">All profiles</option>
-                <option value="base">Base only</option>
-                <option value="override">Overrides only</option>
+                <option value="all">All states</option>
+                <option value="saved">Saved states</option>
+                <option value="draft">New drafts</option>
               </select>
             </div>
 
             <div id="profileLibrary" class="profile-library">
-              <section class="profile-group profile-group--base" data-profile-group="base" aria-labelledby="baseProfilesTitle">
-                <header>
-                  <span><i aria-hidden="true">B</i><strong id="baseProfilesTitle">Base profiles</strong></span>
-                  <small data-count="base">0</small>
-                </header>
-                <ul class="profile-list" data-profile-list="base">
-                  <li class="loading-row"><span></span><span>Loading base profiles…</span></li>
-                </ul>
-              </section>
-
-              <section class="profile-group profile-group--overrides" data-profile-group="overrides" aria-labelledby="overrideProfilesTitle">
-                <header>
-                  <span><i aria-hidden="true">O</i><strong id="overrideProfilesTitle">Ordered overrides</strong></span>
-                  <small data-count="overrides">0</small>
-                </header>
-                <p id="overrideOrderHelp" class="order-help">Drag the numbered grip or use its arrow keys. Applied top to bottom; later matches apply last.</p>
-                <ol class="profile-list override-deck" data-profile-list="overrides" aria-describedby="overrideOrderHelp">
-                  <li class="loading-row"><span></span><span>Loading override order…</span></li>
-                </ol>
-              </section>
+              <div class="loading-card"><span></span><p>Loading V40 state profiles…</p></div>
             </div>
           </aside>
 
           <section id="profileInspector" class="panel inspector-panel" aria-label="Profile inspector">
             <div class="empty-state">
               <span class="empty-state__glyph" aria-hidden="true">◇</span>
-              <h2>Select a profile</h2>
-              <p>Choose a base profile or ordered override to inspect its fields and affected Pokémon.</p>
-              <p class="field-legend"><b>(Base value)</b><i aria-hidden="true">→</i>Override<i aria-hidden="true">→</i>Effective</p>
+              <h2>Select a complete state</h2>
+              <p>Each state profile is one runnable behavior record with no chill, active, or tired tabs.</p>
             </div>
           </section>
 
