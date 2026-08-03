@@ -1778,15 +1778,14 @@ static BOOL OverworldWildHelper_IsExactObject(
         || slot >= OW_WILD_MAX_SPAWNS
         || !OverworldWildHelper_IsContextCurrent(fieldSystem, state)
         || !state->spawns[slot].active
-        || state->spawns[slot].mapId != fieldSystem->location->mapId
-        || state->spawns[slot].objectId != OW_WILD_OBJECT_ID_START + slot) {
+        || state->spawns[slot].mapId != fieldSystem->location->mapId) {
         return FALSE;
     }
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
     object = state->spawns[slot].object;
     return OverworldWildHelper_IsObjectInManager(manager, object)
         && (object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-        && object->id == state->spawns[slot].objectId
+        && object->id == OW_WILD_OBJECT_ID_START + slot
         && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
 }
 
@@ -4498,7 +4497,7 @@ static void OverworldWildHelper_RecordDespawnEvent(
     record->slot = (u8)slot;
     record->distance = distance;
     record->contextFlags = flags;
-    record->expectedObjectId = spawn->objectId;
+    record->expectedObjectId = OW_WILD_OBJECT_ID_START + slot;
     if (reason < 4) {
         telemetry->reasonCounts[reason]++;
     }
@@ -4528,8 +4527,7 @@ static u8 OverworldWildHelper_ClassifyBattleResult(
         || state->pendingMapGeneration == 0
         || state->pendingMapGeneration != state->mapGeneration
         || state->pendingEncounterGeneration == 0
-        || state->pendingEncounterGeneration != state->spawns[slot].encounterGeneration
-        || state->spawns[slot].objectId != OW_WILD_OBJECT_ID_START + slot) {
+        || state->pendingEncounterGeneration != state->spawns[slot].encounterGeneration) {
         return OW_WILD_BATTLE_DISPOSITION_RETAIN;
     }
     (void)fieldSystem;
@@ -4607,7 +4605,6 @@ static int OverworldWildHelper_ReconcilePresentations(
         }
         if (candidateCount == 1) {
             state->spawns[i].object = candidate;
-            state->spawns[i].objectId = OW_WILD_OBJECT_ID_START + i;
             if (recreatePresentation(
                     state,
                     fieldSystem,

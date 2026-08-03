@@ -404,11 +404,10 @@ static BOOL OverworldFollowerRecall_FollowerIsCurrent(FieldSystem *fieldSystem)
         && spawn->mapId == sFollowerRecall.mapId
         && spawn->encounterGeneration == sFollowerRecall.encounterGeneration
         && spawn->object == sFollowerRecall.follower
-        && spawn->objectId == OW_WILD_OBJECT_ID_START + OW_WILD_FOLLOWER_SLOT
         && OverworldFollowerRecall_ObjectIsCurrent(
             fieldSystem,
             sFollowerRecall.follower,
-            spawn->objectId)
+            OW_WILD_OBJECT_ID_START + OW_WILD_FOLLOWER_SLOT)
         && sFollowerRecall.follower->scriptId
             == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
 }
@@ -783,9 +782,7 @@ OverworldFollowerRecall_Begin(FieldSystem *fieldSystem)
         || fieldSystem->mapObjectMan == NULL
         || !spawn->active
         || spawn->mapId != fieldSystem->location->mapId
-        || spawn->object == NULL
-        || spawn->objectId
-            != OW_WILD_OBJECT_ID_START + OW_WILD_FOLLOWER_SLOT) {
+        || spawn->object == NULL) {
         return FALSE;
     }
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
@@ -796,7 +793,8 @@ OverworldFollowerRecall_Begin(FieldSystem *fieldSystem)
     if (follower < manager->objects
         || follower >= manager->objects + manager->object_count
         || (follower->flags & MAPOBJECTFLAG_ACTIVE) == 0
-        || follower->id != spawn->objectId
+        || follower->id
+            != OW_WILD_OBJECT_ID_START + OW_WILD_FOLLOWER_SLOT
         || follower->scriptId != OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
         return FALSE;
     }

@@ -20,7 +20,7 @@ OVERWORLD_WILD_TIMER_SYMBOLS := $(BUILD)/overworld_wild_runtime_timers_overlay_t
 OVERWORLD_WILD_LAYERS_OBJECT := $(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o
 OVERWORLD_WILD_TIMERS_OBJECT := $(BUILD)/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o
 OVERWORLD_WILD_V40_SCALAR_SYMBOLS := $(BUILD)/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.o
-OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TIMER_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_sqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
+OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TIMER_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
 OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS := --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi
 OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS := --just-symbols=$(BUILD)/pokemon_move_history_task6_overlay_linked.o --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)
 POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memset
@@ -191,6 +191,7 @@ $(OVERWORLD_WILD_TASK8_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_PreflightTimerExpiryInternal \
 		--keep-symbol=OverworldWildRuntime_MakeTimerRemovalHandleInternal \
 		--keep-symbol=OverworldWildRuntime_ApplyStackDeltaCompact \
+		--keep-symbol=OverworldWildRuntime_RemoveBoundaryPolicySlotPhase \
 		--keep-symbol=OverworldWildRuntime_GetLayerCount \
 		--keep-symbol=OverworldWildRuntime_GetLayerByIndex \
 		--keep-symbol=OverworldWildRuntime_FindLayer \

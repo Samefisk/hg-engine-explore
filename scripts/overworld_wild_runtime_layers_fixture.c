@@ -1926,6 +1926,62 @@ static void test_handles_and_atomicity(
         "transplanted handle changed destination runtime");
 }
 
+static void test_boundary_phase_late_slot_atomicity(
+    const OverworldWildRuntimeApplicabilityInput *input)
+{
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime before;
+    OverworldWildRuntimeStatus status = OW_WILD_RUNTIME_STATUS_OK;
+    u8 lastSlot = OW_WILD_MAX_SPAWNS - 1;
+    u8 phase;
+    u8 slotIndex;
+
+    prepare_runtime(&runtime, 0);
+    assign_and_prime(&runtime, lastSlot);
+    (void)apply_one(&runtime, 0, input, DEF_EXCLUSIVE, 0x9001, 0);
+    (void)apply_one(&runtime, lastSlot, input, DEF_EXCLUSIVE, 0x9002, 0);
+
+    runtime.slots[lastSlot].staticCache.valid = FALSE;
+    before = runtime;
+    for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS; slotIndex++) {
+        OverworldWildRuntimeSlotSidecar *slot = &runtime.slots[slotIndex];
+        if (slot->lifecycleState != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED)
+            continue;
+        status = OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
+            &runtime, slotIndex, slot->slotGeneration,
+            OW_WILD_RUNTIME_POLICY_BOUNDARY_MAP, TRUE);
+        if (status != OW_WILD_RUNTIME_STATUS_OK
+            && status != OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
+            break;
+        }
+    }
+    require(status == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "late-slot boundary preflight did not propagate failure");
+    require(!memcmp(&runtime, &before, sizeof(runtime)),
+        "late-slot boundary preflight changed runtime bytes");
+
+    runtime.slots[lastSlot].staticCache.valid = TRUE;
+    for (phase = 0; phase < 2; phase++) {
+        for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS; slotIndex++) {
+            OverworldWildRuntimeSlotSidecar *slot =
+                &runtime.slots[slotIndex];
+            if (slot->lifecycleState
+                != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED) {
+                continue;
+            }
+            status = OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
+                &runtime, slotIndex, slot->slotGeneration,
+                OW_WILD_RUNTIME_POLICY_BOUNDARY_MAP, phase == 0);
+            require(status == OW_WILD_RUNTIME_STATUS_OK
+                    || status == OW_WILD_RUNTIME_STATUS_IDEMPOTENT,
+                "boundary phase rejected repaired runtime");
+        }
+    }
+    require(runtime.slots[0].activeLayerCount == 0
+            && runtime.slots[lastSlot].activeLayerCount == 0,
+        "boundary commit retained clear-lifetime layers");
+}
+
 static void test_ambiguity_and_order(
     const OverworldWildRuntimeApplicabilityInput *input)
 {
@@ -5521,6 +5577,7 @@ int main(void)
         "validated definition copy-out failed");
     test_apply_replace_remove(&input);
     test_handles_and_atomicity(&input);
+    test_boundary_phase_late_slot_atomicity(&input);
     test_ambiguity_and_order(&input);
     test_multiplicity_capacity_and_clear(&input);
     test_generated_applicability_and_generation(&input);

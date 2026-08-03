@@ -157,7 +157,8 @@ typedef union OverworldWildRuntimeDeltaOperationPayload {
     } owner;
     struct {
         u8 mapLifetime;
-        u8 reserved[23];
+        u8 boundary;
+        u8 reserved[22];
     } policy;
     u8 raw[24];
 } OverworldWildRuntimeDeltaOperationPayload;
@@ -303,6 +304,9 @@ typedef enum OverworldWildRuntimeLifetimeState {
     OW_WILD_RUNTIME_LIFETIME_ACTIVE,
     OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD,
 } OverworldWildRuntimeLifetimeState;
+
+#define OW_WILD_RUNTIME_POLICY_BOUNDARY_MAP 0
+#define OW_WILD_RUNTIME_POLICY_BOUNDARY_BATTLE 1
 
 typedef enum OverworldWildRuntimeSlotLifecycleState {
     OW_WILD_RUNTIME_SLOT_LIFECYCLE_VIRGIN = 0,
@@ -757,6 +761,12 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDelta(
     OverworldWildBehaviorStackRuntime *runtime,
     const OverworldWildRuntimeStackDeltaRequest *request,
     OverworldWildRuntimeStackDeltaResult *result);
+OverworldWildRuntimeStatus OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u8 boundary,
+    BOOL preflightOnly);
 OverworldWildRuntimeStatus OverworldWildRuntime_Apply(
     OverworldWildBehaviorStackRuntime *runtime,
     u8 slotIndex,

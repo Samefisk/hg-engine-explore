@@ -90,7 +90,7 @@ typedef struct OverworldWildSpawn {
     u8 terrain;
     u8 shiny;
     u8 active;
-    u8 objectId;
+    u8 behaviorClass;
     u16 encounterGeneration;
 } OverworldWildSpawn;
 
@@ -186,7 +186,6 @@ typedef struct OverworldWildSpawnState {
     u8 movementEmotePlayCryOnHop[OW_WILD_MAX_SPAWNS];
     u8 movementActiveSteps[OW_WILD_MAX_SPAWNS];
     u8 movementSpotCooldowns[OW_WILD_MAX_SPAWNS];
-    u8 movementBehaviorClasses[OW_WILD_MAX_SPAWNS];
     s16 movementPreviousTileX[OW_WILD_MAX_SPAWNS];
     s16 movementPreviousTileY[OW_WILD_MAX_SPAWNS];
     u8 movementPreviousTileLocked[OW_WILD_MAX_SPAWNS];
@@ -268,6 +267,7 @@ typedef enum OverworldWildMapHeaderChangeMode {
     OW_WILD_MAP_HEADER_CHANGE_PRESERVE = 0,
     OW_WILD_MAP_HEADER_CHANGE_DISCARD,
     OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE,
+    OW_WILD_LIFECYCLE_BATTLE_START,
 } OverworldWildMapHeaderChangeMode;
 
 typedef struct OverworldWildSpawnsOverlayEntry {
@@ -286,7 +286,7 @@ typedef struct OverworldWildSpawnsOverlayEntry {
         FieldSystem *fieldSystem,
         OverworldWildSpawnState *state,
         OverworldWildResidentData *residentData);
-    void (*prepareMapHeaderChange)(
+    BOOL (*prepareMapHeaderChange)(
         OverworldWildSpawnState *state,
         OverworldWildMapHeaderChangeMode mode);
 } OverworldWildSpawnsOverlayEntry;

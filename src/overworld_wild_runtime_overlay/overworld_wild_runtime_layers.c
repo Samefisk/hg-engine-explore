@@ -27,7 +27,8 @@ typedef struct OverworldWildRuntimeLayerService {
     OverworldWildRuntimeDeltaScratch scratch;
     u32 wrapLayerGenerations[OW_WILD_MAX_SPAWNS];
     u8 wrapLayerCounts[OW_WILD_MAX_SPAWNS];
-    u8 wrapReserved[2];
+    u8 preflightOnly;
+    u8 wrapReserved;
 } OverworldWildRuntimeLayerService;
 
 static OverworldWildRuntimeLayerService sOverworldWildRuntimeLayerService;
@@ -76,8 +77,6 @@ void OverworldWildRuntime_MarkResidentCold(
         runtime->slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
-        memset(&runtime->slots[slot].staticCache, 0,
-            sizeof(runtime->slots[slot].staticCache));
         memset(&runtime->slots[slot].effectiveCache, 0,
             sizeof(runtime->slots[slot].effectiveCache));
         memset(&runtime->slots[slot].provenance, 0,
@@ -683,9 +682,13 @@ static OverworldWildRuntimeStatus ValidateOperation(
             || !BytesAreZero(operation->payload.owner.reserved, 22))
             return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     } else if (operation->kind == OW_WILD_RUNTIME_DELTA_REMOVE_POLICY) {
-        if (operation->payload.policy.mapLifetime < 1
-            || operation->payload.policy.mapLifetime > 3
-            || !BytesAreZero(operation->payload.policy.reserved, 23))
+        if (operation->payload.policy.mapLifetime > 3
+            || (operation->payload.policy.mapLifetime == 0
+                && operation
+                    != &sOverworldWildRuntimeLayerService.oneOperation)
+            || operation->payload.policy.boundary
+                > OW_WILD_RUNTIME_POLICY_BOUNDARY_BATTLE
+            || !BytesAreZero(operation->payload.policy.reserved, 22))
             return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     } else if (!BytesAreZero(operation->payload.raw, 24)) {
         return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
@@ -707,9 +710,15 @@ static BOOL OperationAddressesLayer(
     if (operation->kind == OW_WILD_RUNTIME_DELTA_REMOVE_OWNER_IF_PRESENT)
         return operation->payload.owner.ownerId == layer->ownerId;
     if (operation->kind == OW_WILD_RUNTIME_DELTA_REMOVE_POLICY) {
+        u8 lifetime;
         if (CopyDefinition(layer->definitionId, &definition)
                 != OW_WILD_RUNTIME_STATUS_OK) return FALSE;
-        return operation->payload.policy.mapLifetime == definition.mapLifetime;
+        lifetime = operation->payload.policy.boundary
+                == OW_WILD_RUNTIME_POLICY_BOUNDARY_BATTLE
+            ? definition.battleLifetime : definition.mapLifetime;
+        return operation->payload.policy.mapLifetime == lifetime
+            || (operation->payload.policy.mapLifetime == 0
+                && (lifetime & 1));
     }
     return operation->kind == OW_WILD_RUNTIME_DELTA_CLEAR;
 }
@@ -739,7 +748,9 @@ static OverworldWildRuntimeStatus RejectAmbiguity(
             if (left->kind == OW_WILD_RUNTIME_DELTA_REMOVE_POLICY
                 && right->kind == OW_WILD_RUNTIME_DELTA_REMOVE_POLICY
                 && left->payload.policy.mapLifetime
-                    == right->payload.policy.mapLifetime)
+                    == right->payload.policy.mapLifetime
+                && left->payload.policy.boundary
+                    == right->payload.policy.boundary)
                 return OW_WILD_RUNTIME_STATUS_AMBIGUOUS_DELTA;
             memset(&synthetic, 0, sizeof(synthetic));
             if (left->kind <= OW_WILD_RUNTIME_DELTA_REPLACE) {
@@ -2224,6 +2235,8 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     if (!slot->presentationGate)
         ExpireHiddenTimers(prospectiveTimers, scratch->finalCount,
             &prospectiveProvenance);
+    if (sOverworldWildRuntimeLayerService.preflightOnly)
+        return OW_WILD_RUNTIME_STATUS_OK;
     if (rekey) {
         runtime->handleEpoch++;
         runtime->dataIncarnation = prospectiveEffective.dataIncarnation;
@@ -2333,6 +2346,28 @@ static OverworldWildRuntimeStatus OneOperation(
     return ApplyDeltaCore(runtime, slotIndex, expectedSlotGeneration,
         &sOverworldWildRuntimeLayerService.oneApplicability,
         &sOverworldWildRuntimeLayerService.oneOperation, 1, result);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u8 boundary,
+    BOOL preflightOnly)
+{
+    OverworldWildRuntimeDeltaOperation operation;
+    OverworldWildRuntimeStackDeltaResult result;
+    OverworldWildRuntimeStatus status;
+
+    memset(&operation, 0, sizeof(operation));
+    operation.operationId = 1;
+    operation.kind = OW_WILD_RUNTIME_DELTA_REMOVE_POLICY;
+    operation.payload.policy.boundary = boundary;
+    sOverworldWildRuntimeLayerService.preflightOnly = preflightOnly;
+    status = OneOperation(runtime, slotIndex, expectedSlotGeneration,
+        NULL, &operation, &result);
+    sOverworldWildRuntimeLayerService.preflightOnly = FALSE;
+    return status;
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_Apply(
@@ -2481,6 +2516,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     slot->provenance = provenance;
     return OW_WILD_RUNTIME_STATUS_OK;
 }
+
 
 static OverworldWildRuntimeStatus ValidateCacheQuery(
     const OverworldWildBehaviorStackRuntime *runtime,

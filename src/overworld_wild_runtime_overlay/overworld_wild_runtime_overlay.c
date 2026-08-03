@@ -17,8 +17,6 @@ void OverworldWildRuntime_MarkResidentCold(
         runtime->slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
-        memset(&runtime->slots[slot].staticCache, 0,
-            sizeof(runtime->slots[slot].staticCache));
         memset(&runtime->slots[slot].effectiveCache, 0,
             sizeof(runtime->slots[slot].effectiveCache));
         memset(&runtime->slots[slot].provenance, 0,

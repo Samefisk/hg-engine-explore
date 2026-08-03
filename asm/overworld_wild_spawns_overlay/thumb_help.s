@@ -46,21 +46,6 @@ __wrap___gnu_thumb1_case_uqi:
     bx lr
 .size __wrap___gnu_thumb1_case_uqi, . - __wrap___gnu_thumb1_case_uqi
 
-.global __wrap___gnu_thumb1_case_sqi
-.thumb_func
-.type __wrap___gnu_thumb1_case_sqi,function
-__wrap___gnu_thumb1_case_sqi:
-    push {r1}
-    mov r1, lr
-    lsrs r1, r1, #1
-    lsls r1, r1, #1
-    ldrsb r1, [r1, r0]
-    lsls r1, r1, #1
-    add lr, lr, r1
-    pop {r1}
-    bx lr
-.size __wrap___gnu_thumb1_case_sqi, . - __wrap___gnu_thumb1_case_sqi
-
 .global __wrap___gnu_thumb1_case_uhi
 .thumb_func
 .type __wrap___gnu_thumb1_case_uhi,function

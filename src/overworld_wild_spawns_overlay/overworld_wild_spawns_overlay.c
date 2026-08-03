@@ -857,10 +857,13 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
     }
     if (state != NULL && state->movementRuntimeState != NULL) {
         OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
-        memset(
-            runtime,
-            0,
-            offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime));
+        memset(runtime, 0,
+            offsetof(OverworldWildOverlayRuntimeState,
+                playerBallCatchValues));
+        memset(&runtime->movementHelpSpawnParentSlotPlusOne, 0,
+            offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)
+                - offsetof(OverworldWildOverlayRuntimeState,
+                    movementHelpSpawnParentSlotPlusOne));
         OverworldWildRuntime_MarkResidentCold(
             &runtime->behaviorStackRuntime);
     }
@@ -1117,7 +1120,7 @@ static BOOL OverworldWildSpawns_QueueBattleForSlot(OverworldWildSpawnState *stat
 static BOOL OverworldWildSpawns_TryStartBattleForSlotOrQueue(OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot);
 static void OverworldWildSpawns_ResetPendingBattle(OverworldWildSpawnState *state);
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
-static void OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state);
+static BOOL OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state);
 #endif
 static BOOL OverworldWildSpawns_HasPendingBattle(OverworldWildSpawnState *state);
 static BOOL OverworldWildSpawns_HasQueuedBattle(OverworldWildSpawnState *state);
@@ -1201,9 +1204,17 @@ static void OverworldWildSpawns_ResetAllMovementStateOnly(
 static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(
     OverworldWildSpawnState *state,
     BOOL preserveMapHeaderState);
-static void OverworldWildSpawns_PrepareMapHeaderChange(
+static BOOL OverworldWildSpawns_PrepareMapHeaderChange(
     OverworldWildSpawnState *state,
     OverworldWildMapHeaderChangeMode mode);
+static BOOL OverworldWildSpawns_RebuildColdRuntime(
+    OverworldWildSpawnState *state);
+static BOOL OverworldWildSpawns_BuildSpawnStaticContext(
+    const OverworldWildRolledEncounter *encounter,
+    OverworldWildSpawnTerrain terrain,
+    BOOL shiny,
+    OverworldWildRuntimeStaticContext *staticContext,
+    u8 *playerBallCatchValue);
 static void OverworldWildSpawns_PresentRuntimeTiredState(
     OverworldWildSpawnState *state,
     int slot,
@@ -1662,6 +1673,12 @@ static OverworldWildOverlayRuntimeState *OverworldWildSpawns_EnsureRuntimeState(
             (void)OverworldWildRuntime_BindPrivateIdentity(
                 &runtime->behaviorStackRuntime);
             OverworldWildSpawns_InvalidateAllMovementCommandOrigins(state);
+            if (!OverworldWildSpawns_EnsureBehaviorDataLoaded()
+                || !OverworldWildSpawns_RebuildColdRuntime(state)) {
+                OverworldWildRuntime_MarkResidentCold(
+                    &runtime->behaviorStackRuntime);
+                return NULL;
+            }
         }
     }
 
@@ -2009,6 +2026,8 @@ static void OverworldWildSpawns_ClearMankeyTreeTopProxyObject(
 
 static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, const OverworldWildSpawn *spawn)
 {
+    int slot;
+
     if (fieldSystem == NULL
         || fieldSystem->location == NULL
         || !spawn->active
@@ -2017,8 +2036,12 @@ static BOOL OverworldWildSpawns_IsCurrentSpawnObject(FieldSystem *fieldSystem, c
         return FALSE;
     }
 
-    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-        && spawn->object->id == spawn->objectId
+    slot = spawn->object->id - OW_WILD_OBJECT_ID_START;
+    return slot >= 0
+        && slot < OW_WILD_MAX_SPAWNS
+        && sOverworldWildLastState != NULL
+        && spawn == &sOverworldWildLastState->spawns[slot]
+        && (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
         && spawn->object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
 }
 
@@ -2153,10 +2176,10 @@ static void OverworldWildSpawns_LoadSavedShinyEncounter(OverworldWildSpawnState 
     encounter->level = state->savedShinies[slot].level;
 }
 
-static void OverworldWildSpawns_ClearSlotAndSaveShiny(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
+static BOOL OverworldWildSpawns_ClearSlotAndSaveShiny(OverworldWildSpawnState *state, int slot, BOOL deleteObject)
 {
     OverworldWildSpawns_TrySaveShinyReservation(state, &state->spawns[slot]);
-    OverworldWildSpawns_ResetSlotState(state, slot, deleteObject);
+    return OverworldWildSpawns_ResetSlotState(state, slot, deleteObject);
 }
 
 static BOOL OverworldWildSpawns_QuarantinePoisonedPresentation(
@@ -2225,7 +2248,10 @@ static BOOL OverworldWildSpawns_ReconcileSpawnPresentations(
         (void)OverworldWildSpawns_QuarantinePoisonedPresentation(
             fieldSystem,
             slot);
-        OverworldWildSpawns_ClearSlotAndSaveShiny(state, slot, TRUE);
+        if (!OverworldWildSpawns_ClearSlotAndSaveShiny(
+                state, slot, TRUE)) {
+            return FALSE;
+        }
     }
 }
 
@@ -3007,7 +3033,9 @@ static BOOL OverworldWildSpawns_RemovePickupPossession(
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_ClearThrowStateForSlot(OverworldWildSpawnState *state, int slot)
+static BOOL OverworldWildSpawns_ClearThrowStateForSlot(
+    OverworldWildSpawnState *state,
+    int slot)
 {
     const OverworldWildHelperOverlayEntry *helperEntry;
     OverworldWildOverlayRuntimeState *runtime;
@@ -3032,34 +3060,30 @@ static BOOL OverworldWildSpawns_ClearThrowStateForSlot(OverworldWildSpawnState *
             runtime->throwState.targets[slot])
         : OW_WILD_MAX_SPAWNS;
     if ((runtime->pickupRelations[slot].carrierSlotPlusOne != 0
-            && !OverworldWildSpawns_RemovePickupPossession(state, slot))
-        || (carrierTarget < OW_WILD_MAX_SPAWNS
-            && runtime->pickupRelations[carrierTarget].carrierSlotPlusOne
-                == slot + 1
-            && !OverworldWildSpawns_RemovePickupPossession(
-                state, carrierTarget))) {
+                && !OverworldWildSpawns_RemovePickupPossession(state, slot))
+            || (carrierTarget < OW_WILD_MAX_SPAWNS
+                && runtime->pickupRelations[carrierTarget].carrierSlotPlusOne
+                    == slot + 1
+                && !OverworldWildSpawns_RemovePickupPossession(
+                    state, carrierTarget))) {
         OverworldWildSpawns_EnsureFrameMovementTask(
             state, state->movementFieldSystem);
         return FALSE;
     }
     restoreMask = helperEntry->clearPickupThrowState(
-        state,
-        &runtime->throwState,
-        &runtime->spawnPresentations,
-        slot);
+        state, &runtime->throwState, &runtime->spawnPresentations, slot);
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        if ((restoreMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) != 0) {
-            OverworldWildSpawns_ClearMovementChainState(state, i);
-            helperEntry->normalizeThrowPresentation(
-                state->movementFieldSystem, state, i);
-            OverworldWildSpawns_ReconcileNativeShadow(
-                state->movementFieldSystem, state->spawns[i].object);
-        }
+        if ((restoreMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) == 0)
+            continue;
+        OverworldWildSpawns_ClearMovementChainState(state, i);
+        helperEntry->normalizeThrowPresentation(
+            state->movementFieldSystem, state, i);
+        OverworldWildSpawns_ReconcileNativeShadow(
+            state->movementFieldSystem, state->spawns[i].object);
     }
     OverworldWildSpawns_ForgetPickupRelation(runtime, slot);
-    if (carrierTarget < OW_WILD_MAX_SPAWNS) {
+    if (carrierTarget < OW_WILD_MAX_SPAWNS)
         OverworldWildSpawns_ForgetPickupRelation(runtime, carrierTarget);
-    }
     return TRUE;
 }
 
@@ -5385,96 +5409,62 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(
     state->movementFieldSystem = NULL;
 }
 
-static void OverworldWildSpawns_PrepareMapHeaderChange(
+static BOOL OverworldWildSpawns_PrepareMapHeaderChange(
     OverworldWildSpawnState *state,
     OverworldWildMapHeaderChangeMode mode)
 {
-    int i;
+    OverworldWildBehaviorStackRuntime *runtime;
+    OverworldWildRuntimeStatus status;
+    u8 boundary;
+    u8 phase;
+    u8 slotIndex;
 
-    if (state == NULL) {
-        return;
+    if (state == NULL || state->movementRuntimeState == NULL) {
+        return FALSE;
+    }
+    if (mode == OW_WILD_LIFECYCLE_BATTLE_START
+        || mode == OW_WILD_MAP_HEADER_CHANGE_PRESERVE) {
+        runtime = &OW_WILD_RUNTIME(state)->behaviorStackRuntime;
+        boundary = mode == OW_WILD_LIFECYCLE_BATTLE_START
+            ? OW_WILD_RUNTIME_POLICY_BOUNDARY_BATTLE
+            : OW_WILD_RUNTIME_POLICY_BOUNDARY_MAP;
+        for (phase = 0; phase < 2; phase++) {
+            for (slotIndex = 0; slotIndex < OW_WILD_MAX_SPAWNS;
+                 slotIndex++) {
+                OverworldWildRuntimeSlotSidecar *slot =
+                    &runtime->slots[slotIndex];
+                if (slot->lifecycleState
+                    != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED) {
+                    continue;
+                }
+                status = OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
+                    runtime, slotIndex, slot->slotGeneration,
+                    boundary, phase == 0);
+                if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
+                    return FALSE;
+                }
+            }
+        }
+        if (mode == OW_WILD_LIFECYCLE_BATTLE_START) return TRUE;
+        OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, TRUE);
+        return TRUE;
     }
     if (mode == OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE) {
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            LocalMapObject *object = state->spawns[i].object;
-            BOOL restoreSpotPartner;
-
-            if (!state->spawns[i].active
-                || !OverworldWildSpawns_IsCurrentSpawnObject(gFieldSysPtr, &state->spawns[i])) {
-                continue;
-            }
-            restoreSpotPartner = state->movementRuntimeState != NULL
-                && OW_WILD_RUNTIME(state)->movementEmotePartnerPrepObjects[i]
-                    == object;
-            if (restoreSpotPartner) {
-                /* Complete any in-flight 0x4A before clearing held ownership. */
-                OverworldWildSpawns_FinishActivePresentationCommand(object);
-            }
-            MapObject_ClearHeldMovement(object);
-            MapObject_ClearSingleMovementActive(object);
-            if (restoreSpotPartner) {
-                OW_WILD_RUNTIME(state)->movementEmotePartnerPrepObjects[i] = NULL;
-                (void)OverworldWildSpawns_RunImmediateCanopyMovementCommand(
-                    object,
-                    OW_WILD_SPAWNER_SPOT_EMOTE_FREEZE_COMMAND);
-                (void)OverworldWildSpawns_RunImmediateCanopyMovementCommand(
-                    object,
-                    OW_WILD_SPAWNER_SPOT_EMOTE_PARTNER_RESTORE_COMMAND);
-            }
-            if (state->movementRuntimeState != NULL) {
-                OverworldWildSpawns_ResetSlotMovementCommandForMapHeaderChange(
-                    state,
-                    i,
-                    TRUE);
-            }
-            OverworldWildSpawns_RestoreMankeyTreeTopRenderOverride(i, object);
-            MapObject_ClearBits(object, OW_WILD_SPAWNER_CUSTOM_JUMP_OWNED_BITS);
-            OverworldWildSpawns_FinishActivePresentationCommand(object);
-            if (state->movementRuntimeState != NULL) {
-                OW_WILD_RUNTIME(state)->spawnPresentations.lastKnownX[i] =
-                    (s16)MapObject_GetCurrentX(object);
-                OW_WILD_RUNTIME(state)->spawnPresentations.lastKnownY[i] =
-                    (s16)MapObject_GetCurrentY(object);
-                OW_WILD_RUNTIME(state)->spawnPresentations.farSamples[i] = 0;
-            }
+        OverworldWildSpawns_ResetAllMovementCommands(state, TRUE, TRUE);
+        OW_WILD_RUNTIME(state)->movementNativeShadowRestorePending = TRUE;
+        if (state->spawns[OW_WILD_FOLLOWER_SLOT].active
+            && !OverworldWildSpawns_TryDispatchRuntimeTransition(
+                state, OW_WILD_FOLLOWER_SLOT,
+                OWBD_TRIGGER_FOLLOWER_APPLY, NULL)) {
+            return FALSE;
         }
-        if (state->movementRuntimeState != NULL) {
-            OW_WILD_RUNTIME(state)->movementNativeShadowRestorePending = TRUE;
-        }
-        return;
-    }
-    if (mode == OW_WILD_MAP_HEADER_CHANGE_PRESERVE
-        && state->movementRuntimeState != NULL) {
-        OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
-        u16 partnerPrepMask = 0;
-        u16 customJumpPrepMask = 0;
-
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            if (state->spawns[i].active
-                && runtime->movementEmotePartnerPrepObjects[i]
-                    == state->spawns[i].object) {
-                partnerPrepMask |= OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i);
-            }
-            if (state->spawns[i].active
-                && runtime->movementCustomJumpPrepActive[i]) {
-                customJumpPrepMask |= OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i);
-            }
-        }
-        OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, TRUE);
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            if ((partnerPrepMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) != 0) {
-                runtime->movementEmotePartnerPrepObjects[i] =
-                    state->spawns[i].object;
-            }
-            runtime->movementCustomJumpPrepActive[i] =
-                (customJumpPrepMask & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) != 0;
-        }
-        return;
+        return TRUE;
     }
     if (mode == OW_WILD_MAP_HEADER_CHANGE_DISCARD) {
-        OverworldWildSpawns_ClearContextLite(state);
+        if (!OverworldWildSpawns_ClearContextLite(state)) return FALSE;
     }
     OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, FALSE);
+    return TRUE;
 }
 
 static void __attribute__((noinline)) OverworldWildSpawns_CleanupPresentationBeforeUnload(OverworldWildSpawnState *state)
@@ -10546,27 +10536,26 @@ static BOOL OverworldWildSpawns_ResetSlotState(
     int slot,
     BOOL deleteAuxiliaryObjects)
 {
-    BOOL wasLive = state->spawns[slot].active;
+    BOOL wasAssigned =
+        OW_WILD_RUNTIME(state)->behaviorStackRuntime.slots[slot].lifecycleState
+            == OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED;
     u16 slotMask = OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
 
-    OverworldWildSpawns_InvalidateMovementCommandOrigin(state, slot);
-    if (!OverworldWildSpawns_ClearThrowStateForSlot(state, slot)) {
+    if (!OverworldWildSpawns_ClearThrowStateForSlot(state, slot))
         return FALSE;
-    }
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK
     OverworldWildSpawns_ResetSlotMovementCommand(state, slot, deleteAuxiliaryObjects);
 #endif
     OverworldWildRuntime_DestructivelyInvalidateSlot(
         &OW_WILD_RUNTIME(state)->behaviorStackRuntime,
         slot,
-        wasLive);
+        wasAssigned);
 
     if (state->spawns[slot].active
         && state->spawns[slot].object != NULL
         && OverworldWildSpawns_IsCurrentSpawnObject(gFieldSysPtr, &state->spawns[slot])) {
         OverworldWildSpawns_RestoreMankeyTreeTopRenderOverride(slot, state->spawns[slot].object);
     }
-    OverworldWildSpawns_ClearMankeyTreeTopProxyObject(state, slot, deleteAuxiliaryObjects);
     OverworldWildSpawns_ClearMankeyTreeTopCache(state, slot);
     OW_WILD_RUNTIME(state)->residentData->savedHp[slot] = 0;
 
@@ -10590,21 +10579,13 @@ static BOOL OverworldWildSpawns_ResetSlotState(
     OW_WILD_RUNTIME(state)->spawnPresentations.managerRestoreMask &=
         (u16)~slotMask;
     OW_WILD_RUNTIME(state)->spawnPresentations.farSamples[slot] = 0;
-    state->movementBehaviorClasses[slot] = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     OW_WILD_RUNTIME(state)->movementFrameDrivenChillMask &= ~slotMask;
     OW_WILD_RUNTIME(state)->movementFrameDrivenActiveMask &= ~slotMask;
     OW_WILD_RUNTIME(state)->movementChillPhantomMask &= ~slotMask;
     OW_WILD_RUNTIME(state)->movementActivePhantomMask &= ~slotMask;
-    if (state->movementQueuedBattleSlot == slot) {
-        state->movementQueuedBattleSlot = -1;
-    }
     if (state->pendingSlot == slot) {
         OverworldWildSpawns_ResetPendingBattle(state);
     }
-    state->movementSpawnRunTargetX[slot] = 0;
-    state->movementSpawnRunTargetY[slot] = 0;
-    state->movementSpawnRunActive[slot] = FALSE;
-    state->movementMankeyTreeTopProxyObjects[slot] = NULL;
 #if OW_WILD_SPAWNER_MANKEY_TREE_TOP_RENDER_OVERRIDE_SAVE_ENABLED
     sOverworldWildMankeyTreeTopPrioritySavedBits[slot] = 0;
     sOverworldWildMankeyTreeTopPriorityBitsSaved[slot] = FALSE;
@@ -10628,26 +10609,48 @@ static void OverworldWildSpawns_ResetPendingBattle(OverworldWildSpawnState *stat
 }
 
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
-static void OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state)
+static BOOL OverworldWildSpawns_PreflightAllSlotCleanup(
+    OverworldWildSpawnState *state)
 {
+    OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
+    const OverworldWildHelperOverlayEntry *helperEntry =
+        OverworldWildSpawns_GetHelperOverlayEntry();
     int i;
 
-    if (state == NULL) {
-        return;
-    }
+    if (helperEntry == NULL || helperEntry->clearPickupThrowState == NULL)
+        return FALSE;
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        OverworldWildRuntimeSlotSidecar *slot =
+            &runtime->behaviorStackRuntime.slots[i];
+        BOOL assigned = slot->lifecycleState
+            == OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED;
 
-    if (state->movementRuntimeState != NULL) {
-        OW_WILD_RUNTIME(state)->residentData = &gOverworldWildResidentData;
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            if (state->spawns[i].active) {
-                OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, FALSE);
-            }
+        if (state->spawns[i].active && !assigned) return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state)
+{
+    OverworldWildOverlayRuntimeState *runtime;
+    int i;
+
+    runtime = OW_WILD_RUNTIME(state);
+    if (!OverworldWildSpawns_PreflightAllSlotCleanup(state)) {
+        return FALSE;
+    }
+    runtime->residentData = &gOverworldWildResidentData;
+    memset(&runtime->throwState, 0, sizeof(runtime->throwState));
+    memset(runtime->pickupRelations, 0, sizeof(runtime->pickupRelations));
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        if (state->spawns[i].active
+            || runtime->behaviorStackRuntime.slots[i]
+                .lifecycleState
+                == OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED) {
+            OverworldWildSpawns_TrySaveShinyReservation(
+                state, &state->spawns[i]);
+            (void)OverworldWildSpawns_ResetSlotState(state, i, FALSE);
         }
-    } else {
-        for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-            OverworldWildSpawns_TrySaveShinyReservation(state, &state->spawns[i]);
-        }
-        memset(state->spawns, 0, sizeof(state->spawns));
     }
     state->captureTargetMask = 0;
 
@@ -10656,6 +10659,7 @@ static void OverworldWildSpawns_ClearContextLite(OverworldWildSpawnState *state)
     state->headbuttSpawnCooldown = OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN;
     state->fishingSpawnCooldown = OW_WILD_FISHING_REFILL_ATTEMPT_COOLDOWN;
     state->battleGraceSteps = 0;
+    return TRUE;
 }
 #endif
 
@@ -14303,7 +14307,6 @@ static LocalMapObject *__attribute__((noinline)) OverworldWildSpawns_RecreateSpa
     if (runtime->movementObjectGenerations[slot] == 0)
         runtime->movementObjectGenerations[slot] = 1;
     state->spawns[slot].object = replacement;
-    state->spawns[slot].objectId = OW_WILD_OBJECT_ID_START + slot;
     OW_WILD_RUNTIME(state)->spawnPresentations.lastKnownX[slot] = (s16)x;
     OW_WILD_RUNTIME(state)->spawnPresentations.lastKnownY[slot] = (s16)y;
     OverworldWildSpawns_ClearCanopyHopperVisualStateAtBoundary(state, fieldSystem, slot);
@@ -14936,6 +14939,37 @@ static BOOL OverworldWildSpawns_BuildSpawnStaticContext(
     return TRUE;
 }
 
+static BOOL OverworldWildSpawns_RebuildColdRuntime(
+    OverworldWildSpawnState *state)
+{
+    OverworldWildBehaviorStackRuntime *stack;
+    int slot;
+
+    stack = &OW_WILD_RUNTIME(state)->behaviorStackRuntime;
+    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        OverworldWildRuntimeSlotSidecar *runtimeSlot = &stack->slots[slot];
+        OverworldWildRuntimeStatus status;
+
+        if (runtimeSlot->lifecycleState
+                != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED) {
+            continue;
+        }
+        if (!state->spawns[slot].active) {
+            OverworldWildRuntime_DestructivelyInvalidateSlot(
+                stack, slot, TRUE);
+            continue;
+        }
+        status = OverworldWildRuntime_PrimeEffectiveCache(
+            stack, (u8)slot, runtimeSlot->slotGeneration,
+            &runtimeSlot->staticCache.staticContext, NULL);
+        if (status != OW_WILD_RUNTIME_STATUS_OK
+            && status != OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 static u8 OverworldWildSpawns_CountActivePopulationPolicy(
     OverworldWildSpawnState *state,
     int slot)
@@ -15014,7 +15048,6 @@ static BOOL OverworldWildSpawns_FinalizePreparedSpawn(
         &prepared->playerBallCatchValue)) {
         return FALSE;
     }
-    prepared->behaviorClass = staticContext.behaviorClass;
     OverworldWildRuntime_MarkSlotAssigned(
         &runtime->behaviorStackRuntime, slot);
     slotGeneration = runtime->behaviorStackRuntime.slots[slot].slotGeneration;
@@ -15388,7 +15421,6 @@ static BOOL OverworldWildSpawns_InitSpawnSlotState(
     LocalMapObject *object,
     const OverworldWildRolledEncounter *encounter,
     BOOL shiny,
-    u8 behaviorClass,
     u8 playerBallCatchValue)
 {
     OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
@@ -15425,7 +15457,6 @@ static BOOL OverworldWildSpawns_InitSpawnSlotState(
     if (encounterGeneration == 0) {
         encounterGeneration = 1;
     }
-    spawn.objectId = OW_WILD_OBJECT_ID_START + slot;
     spawn.encounterGeneration = encounterGeneration;
     state->spawns[slot] = spawn;
     runtime->playerBallCatchValues[slot] = playerBallCatchValue;
@@ -15435,7 +15466,6 @@ static BOOL OverworldWildSpawns_InitSpawnSlotState(
         (u16)~OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
     runtime->spawnPresentations.farSamples[slot] = 0;
     OverworldWildSpawns_ResetSlotSpotState(state, slot);
-    state->movementBehaviorClasses[slot] = behaviorClass;
     OverworldWildSpawns_ApplySpawnPassThroughFlag(state, slot, object);
 #if OW_WILD_SPAWNER_MANKEY_TREE_TOP_RENDER_OVERRIDE_SAVE_ENABLED
     sOverworldWildMankeyTreeTopPrioritySavedBits[slot] = 0;
@@ -15591,7 +15621,6 @@ static BOOL OverworldWildSpawns_SpawnPreparedEncounter(
         object,
         encounter,
         prepared->shiny,
-        prepared->behaviorClass,
         prepared->playerBallCatchValue)) {
         DeleteMapObject(object);
         OW_WILD_PERF_INC(sOverworldWildPerfMapObjectDeletesThisFrame);
@@ -15688,16 +15717,6 @@ static BOOL OverworldWildSpawns_RemoveFollower(
         return FALSE;
     }
 
-    if (OverworldWildSpawns_EffectiveRoleIs(
-            state, OW_WILD_FOLLOWER_SLOT, OWBD_ROLE_FOLLOWER)
-        && !OverworldWildSpawns_TryDispatchRuntimeTransition(
-            state, OW_WILD_FOLLOWER_SLOT,
-            OWBD_TRIGGER_FOLLOWER_REMOVE, NULL)) {
-        gOverworldWildResidentData.pendingFlags |=
-            OW_WILD_FIELD_IDLE_REARM_PENDING
-            | OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING;
-        return FALSE;
-    }
     if (!OverworldWildSpawns_ResetSlotState(
             state,
             OW_WILD_FOLLOWER_SLOT,
@@ -16622,10 +16641,10 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 
     if (!OverworldWildSpawns_IsFieldContextAvailable(fieldSystem)) {
         OverworldWildCustomMovement_SetFieldSystem(NULL);
-        OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, FALSE);
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
-        OverworldWildSpawns_ClearContextLite(state);
+        if (!OverworldWildSpawns_ClearContextLite(state)) return FALSE;
 #endif
+        OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, FALSE);
         state->mapId = MAP_NOTHING;
         state->mapObjectMan = NULL;
         state->mapObjects = NULL;
@@ -16635,7 +16654,7 @@ static BOOL OverworldWildSpawns_UpdateMapState(FieldSystem *fieldSystem, Overwor
 
     if (state->mapId != fieldSystem->location->mapId) {
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR
-        OverworldWildSpawns_ClearContextLite(state);
+        if (!OverworldWildSpawns_ClearContextLite(state)) return FALSE;
 #endif
         OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, FALSE);
 #if OW_WILD_UPDATE_DIAGNOSTIC_SKIP_CLEAR

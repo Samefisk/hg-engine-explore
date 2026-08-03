@@ -219,7 +219,6 @@ static BOOL OverworldFieldService_IsCurrentPrimaryObject(
         && objectAddress < objectsEnd
         && (objectAddress - objectsStart) % sizeof(LocalMapObject) == 0
         && spawn->mapId == previousMapId
-        && spawn->objectId == OW_WILD_OBJECT_ID_START + slot
         && (object->flags & MAPOBJECTFLAG_ACTIVE) != 0
         && (object->flags & MAPOBJECTFLAG_KEEP) != 0
         && object->id == OW_WILD_OBJECT_ID_START + slot
@@ -262,8 +261,7 @@ static BOOL OverworldFieldService_PrepareMapHeaderChange(
     if (entry->prepareMapHeaderChange == NULL) {
         return FALSE;
     }
-    entry->prepareMapHeaderChange(state, mode);
-    return TRUE;
+    return entry->prepareMapHeaderChange(state, mode);
 }
 
 static void OverworldFieldService_TransitionPlayerBall(
@@ -338,7 +336,6 @@ static void OverworldFieldService_DiscardRetainedPrimaries(
             state->spawns[slot].object = NULL;
         }
     } else {
-        memset(state->spawns, 0, sizeof(state->spawns));
         state->mapGeneration++;
         if (state->mapGeneration == 0) {
             state->mapGeneration = 1;
@@ -436,9 +433,12 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
     }
 
     /* The overlay owns transient task/effect cleanup and far-sample reset. */
-    (void)OverworldFieldService_PrepareMapHeaderChange(
-        state,
-        OW_WILD_MAP_HEADER_CHANGE_PRESERVE);
+    if (!OverworldFieldService_PrepareMapHeaderChange(
+            state,
+            OW_WILD_MAP_HEADER_CHANGE_PRESERVE)) {
+        OverworldFieldService_DiscardRetainedPrimaries(manager, state);
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+    }
 
     state->mapGeneration++;
     if (state->mapGeneration == 0) {
@@ -464,17 +464,15 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
     state->pendingEncounterGeneration = 0;
     state->battleGraceSteps = 0;
     state->presentationRestorePending = FALSE;
-    (void)OverworldFieldService_PrepareMapHeaderChange(
-        state,
-        OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE);
+    if (!OverworldFieldService_PrepareMapHeaderChange(
+            state,
+            OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE)) {
+        OverworldFieldService_DiscardRetainedPrimaries(manager, state);
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+    }
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
         if (!state->spawns[slot].active) {
             continue;
-        }
-        if (state->movementBehaviorClasses[slot]
-            == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
-            state->movementBehaviorClasses[slot] =
-                OW_WILD_BEHAVIOR_CLASS_DEFAULT;
         }
         helperEntry->normalizeThrowPresentation(fieldSystem, state, slot);
     }

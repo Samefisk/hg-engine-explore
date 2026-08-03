@@ -219,6 +219,15 @@ u32 OverworldWildSpawns_PopPendingBattle(FieldSystem *fieldSystem, LocalMapObjec
         }
     }
 
+    entry = OverworldWildSpawns_GetOverlayEntry(FALSE);
+    if (entry == NULL
+        || entry->prepareMapHeaderChange == NULL
+        || !entry->prepareMapHeaderChange(
+            &sOverworldWildSpawnState,
+            OW_WILD_LIFECYCLE_BATTLE_START)) {
+        return 0;
+    }
+
     pendingSpecies = sOverworldWildSpawnState.pendingSpecies;
     pendingBattle = (pendingSpecies & OW_WILD_SPECIES_MASK)
         | (sOverworldWildSpawnState.pendingLevel << OVERWORLD_WILD_PENDING_BATTLE_LEVEL_SHIFT)

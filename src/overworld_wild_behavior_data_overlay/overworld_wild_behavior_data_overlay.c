@@ -675,7 +675,8 @@ static void OverworldWildBehavior_ApplySpawnRenderParams(
 
 static BOOL OverworldWildBehavior_IsCurrentSpawnObject(
     FieldSystem *fieldSystem,
-    const OverworldWildSpawn *spawn)
+    const OverworldWildSpawn *spawn,
+    int slot)
 {
     MapObjectMan *mapObjectMan;
     u32 objectAddress;
@@ -701,8 +702,10 @@ static BOOL OverworldWildBehavior_IsCurrentSpawnObject(
         return FALSE;
     }
 
-    return (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-        && spawn->object->id == spawn->objectId
+    return slot >= 0
+        && slot < OW_WILD_MAX_SPAWNS
+        && (spawn->object->flags & MAPOBJECTFLAG_ACTIVE) != 0
+        && spawn->object->id == OW_WILD_OBJECT_ID_START + slot
         && spawn->object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT;
 }
 
@@ -722,7 +725,7 @@ static int OverworldWildBehavior_FindTalkedObjectSlot(
             slot = lastTalkedObjectId - OW_WILD_OBJECT_ID_START;
             if (state->spawns[slot].object != NULL
                 && state->spawns[slot].object->id == lastTalkedObjectId
-                && OverworldWildBehavior_IsCurrentSpawnObject(fieldSystem, &state->spawns[slot])) {
+                && OverworldWildBehavior_IsCurrentSpawnObject(fieldSystem, &state->spawns[slot], slot)) {
                 return slot;
             }
         }
@@ -733,7 +736,7 @@ static int OverworldWildBehavior_FindTalkedObjectSlot(
     }
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         if (state->spawns[i].object == talkedObject
-            && OverworldWildBehavior_IsCurrentSpawnObject(fieldSystem, &state->spawns[i])) {
+            && OverworldWildBehavior_IsCurrentSpawnObject(fieldSystem, &state->spawns[i], i)) {
             return i;
         }
     }
