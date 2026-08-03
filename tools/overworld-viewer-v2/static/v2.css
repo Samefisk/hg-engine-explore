@@ -2573,6 +2573,70 @@ button {
   box-shadow: none;
 }
 
+.stack-preview-layers {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.stack-preview-layers > header,
+.stack-preview-layer,
+.stack-preview-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.stack-preview-layer {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) 64px 30px;
+}
+
+.stack-preview-layer select,
+.stack-preview-layer input {
+  min-width: 0;
+}
+
+.stack-preview-errors,
+.stack-preview-result {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.stack-preview-errors p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #a94c43;
+  background: #f7e1dd;
+}
+
+.stack-preview-result table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.stack-preview-result th,
+.stack-preview-result td {
+  padding: 4px;
+  border-bottom: 1px solid #aaa8a1;
+  text-align: left;
+  vertical-align: top;
+}
+
+.stack-preview-identity {
+  display: grid;
+  grid-template-columns: auto 1fr;
+}
+
+.stack-status--winner { color: #195f3d; }
+.stack-status--hidden { color: #76540b; }
+.stack-status--not-applicable { color: #666; }
+
 .two-pane-workbench {
   display: grid;
   grid-template-columns: minmax(250px, 310px) minmax(520px, 1fr);

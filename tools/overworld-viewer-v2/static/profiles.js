@@ -1,5 +1,7 @@
 /* Overworld Viewer V2 — OWBD v40 state-profile editor foundation. */
 
+import { createStackPreviewController } from "./stack-preview.js";
+
 const GROUP_HELP = Object.freeze({
   behavior: "The single behavior represented by this complete state.",
   locomotion: "How the state moves. This profile has no hidden active or tired branch.",
@@ -293,6 +295,7 @@ export function createProfilesController({
   let filter = "all";
   let mode = state.profileDeckMode === "controllers" ? "controllers" : "states";
   let destroyed = false;
+  let stackPreviewController = null;
   const updates = new Map();
   const created = [];
   const controllerUpdates = new Map();
@@ -429,6 +432,7 @@ export function createProfilesController({
     // Until then these drafts are deliberately local and must not enable the
     // shell's Global Save transaction.
     state.profileDirty = false;
+    stackPreviewController?.refresh();
   }
 
   function visibleProfiles() {
@@ -922,7 +926,9 @@ export function createProfilesController({
       const response = await requestJson(api, `/api/v2/behavior-model?ts=${Date.now()}`);
       dataset = response?.data ?? response;
       if (dataset?.modelVersion !== 40 || !Array.isArray(dataset.stateProfiles) || !Array.isArray(dataset.stateProfileFields)
-          || !Array.isArray(dataset.controllers) || !Array.isArray(dataset.transitionGraph?.transitions)) {
+          || !Array.isArray(dataset.controllers) || !Array.isArray(dataset.transitionGraph?.transitions)
+          || !Array.isArray(dataset.owners) || !Array.isArray(dataset.overrideDefinitions)
+          || !Array.isArray(dataset.applicability) || Number(dataset.stackPreview?.capacity) !== 8) {
         throw new Error("The server did not return an OWBD v40 behavior model.");
       }
       saved = dataset.stateProfiles.map(clone);
@@ -937,6 +943,13 @@ export function createProfilesController({
       state.v40BehaviorModel = dataset;
       state.selectedProfileKey = selectedId;
       loading = false;
+      stackPreviewController?.destroy();
+      stackPreviewController = createStackPreviewController({
+        model: dataset,
+        getDraft: () => state.v40BehaviorModelDraft,
+        elements,
+        setStatus,
+      });
       render();
     } catch (error) {
       loading = false;
@@ -1069,6 +1082,7 @@ export function createProfilesController({
       root.removeEventListener("click", onClick);
       root.removeEventListener("input", onInput);
       root.removeEventListener("change", onChange);
+      stackPreviewController?.destroy();
     },
   });
 }

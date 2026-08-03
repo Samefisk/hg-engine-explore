@@ -135,6 +135,22 @@ V40_TRANSITION_TRIGGER_LABELS = {
     10: "Help call apply", 11: "Forced sleep apply", 12: "Follower apply",
     13: "Follower remove",
 }
+V40_OVERRIDE_KIND_LABELS = {1: "State candidate", 2: "Modifier"}
+V40_SELECTOR_KIND_LABELS = {1: "Exact node", 2: "Semantic role"}
+V40_CHANNEL_LABELS = {
+    0: "Static context", 1: "Controller state", 2: "Temporary effect",
+    3: "Scripted force", 4: "Possession", 5: "System safety",
+}
+V40_LIFETIME_LABELS = {1: "Clear", 2: "Preserve logical", 3: "System"}
+V40_TIMER_CLOCK_LABELS = {0: "None", 1: "Frame", 2: "Completed movement"}
+V40_TIMER_SOURCE_LABELS = {
+    0: "None", 1: "Fixed", 2: "Controller stamina", 3: "Candidate fold",
+}
+V40_HIDDEN_TIMER_LABELS = {
+    0: "None", 1: "Pause while hidden", 2: "Continue while hidden",
+    3: "Expire on hide",
+}
+V40_RECOVERY_POLICY_LABELS = {0: "None", 1: "Route transition"}
 V40_SECTION_SPECS = (
     ("stateBodies", 32), ("profileIdentities", 8), ("controllers", 24),
     ("controllerNodes", 12), ("sourceClassProfiles", 72),
@@ -373,6 +389,38 @@ def build_v40_state_profile_editor_data() -> dict:
                 "hidden": bool(flags & 4),
             })
 
+    applicability = {}
+    for index, record in enumerate(_v40_records(blob, "applicability", "<HHIHHBBH")):
+        (stable_id, flags, immutable_context_mask, controller_id,
+         effective_profile_id, semantic_role, reserved0, reserved) = record
+        if reserved0 or reserved or stable_id in applicability:
+            raise ParseError(f"V40 applicability #{index} is invalid")
+        applicability[stable_id] = {
+            "stableId": stable_id,
+            "name": registry_keys.get(stable_id, f"Applicability {stable_id}"),
+            "flags": flags,
+            "immutableContextMask": immutable_context_mask,
+            "controllerId": controller_id or None,
+            "effectiveProfileId": effective_profile_id or None,
+            "semanticRoleId": semantic_role or None,
+        }
+
+    owners = []
+    owner_ids = set()
+    for index, (stable_id, name_id, system_owned, flags) in enumerate(
+        _v40_records(blob, "owners", "<2H2B")
+    ):
+        if not stable_id or stable_id in owner_ids:
+            raise ParseError(f"V40 owner #{index} is invalid")
+        owner_ids.add(stable_id)
+        owners.append({
+            "stableId": stable_id,
+            "nameId": name_id,
+            "name": registry_keys.get(stable_id, f"Owner {stable_id}"),
+            "systemOwned": bool(system_owned),
+            "flags": flags,
+        })
+
     definitions = {}
     definition_byte_fields = (
         "kind", "channel", "selectorKind", "semanticRoleId", "mapLifetime",
@@ -381,7 +429,7 @@ def build_v40_state_profile_editor_data() -> dict:
         "hasRequiredOwnerId", "allowMultipleOwners", "allowMultipleInstancesPerOwner",
         "authoredTiredBound", "flags", "reserved0", "reserved1",
     )
-    for record in _v40_records(blob, "overrideDefinitions", "<8H20B"):
+    for index, record in enumerate(_v40_records(blob, "overrideDefinitions", "<8H20B")):
         definition = {
             "stableId": record[0], "nameId": record[1], "controllerId": record[2] or None,
             "nodeId": record[3] or None, "requiredOwnerId": record[4] or None,
@@ -389,6 +437,24 @@ def build_v40_state_profile_editor_data() -> dict:
             "priority": record[7],
         }
         definition.update(dict(zip(definition_byte_fields, record[8:])))
+        if definition["stableId"] in definitions or definition["applicabilityId"] not in applicability:
+            raise ParseError(f"V40 override definition #{index} is invalid")
+        if definition["hasRequiredOwnerId"] and definition["requiredOwnerId"] not in owner_ids:
+            raise ParseError(f"V40 override definition #{index} references an unknown owner")
+        definition.update({
+            "name": registry_keys.get(definition["stableId"], f"Definition {definition['stableId']}"),
+            "kindLabel": V40_OVERRIDE_KIND_LABELS.get(definition["kind"], f"Kind {definition['kind']}"),
+            "channelLabel": V40_CHANNEL_LABELS.get(definition["channel"], f"Channel {definition['channel']}"),
+            "selectorLabel": V40_SELECTOR_KIND_LABELS.get(definition["selectorKind"], f"Selector {definition['selectorKind']}"),
+            "semanticRole": V40_NODE_ROLE_LABELS.get(definition["semanticRoleId"]) if definition["semanticRoleId"] else None,
+            "mapLifetimeLabel": V40_LIFETIME_LABELS.get(definition["mapLifetime"], f"Policy {definition['mapLifetime']}"),
+            "battleLifetimeLabel": V40_LIFETIME_LABELS.get(definition["battleLifetime"], f"Policy {definition['battleLifetime']}"),
+            "timerClockLabel": V40_TIMER_CLOCK_LABELS.get(definition["timerClock"], f"Clock {definition['timerClock']}"),
+            "timerSourceLabel": V40_TIMER_SOURCE_LABELS.get(definition["timerSource"], f"Source {definition['timerSource']}"),
+            "hiddenTimerPolicyLabel": V40_HIDDEN_TIMER_LABELS.get(definition["hiddenTimerPolicy"], f"Policy {definition['hiddenTimerPolicy']}"),
+            "recoveryPolicyLabel": V40_RECOVERY_POLICY_LABELS.get(definition["recoveryPolicy"], f"Policy {definition['recoveryPolicy']}"),
+            "applicability": applicability[definition["applicabilityId"]],
+        })
         definitions[record[0]] = definition
 
     guard_records = _v40_records(blob, "transitionGuards", "<HH4BHH")
@@ -505,6 +571,17 @@ def build_v40_state_profile_editor_data() -> dict:
             for role in sorted(V40_NODE_ROLE_LABELS)
         ],
         "customRoles": custom_roles,
+        "owners": sorted(owners, key=lambda owner: owner["stableId"]),
+        "overrideDefinitions": sorted(definitions.values(), key=lambda definition: definition["stableId"]),
+        "applicability": sorted(applicability.values(), key=lambda rule: rule["stableId"]),
+        "stackPreview": {
+            "capacity": 8,
+            "precedence": ["channel", "priority", "definitionStableId", "ownerId", "instanceKey"],
+            "channels": [
+                {"value": value, "label": label}
+                for value, label in V40_CHANNEL_LABELS.items()
+            ],
+        },
         "policyCatalog": policy_catalog,
         "transitionGraph": {
             "transitions": transitions,

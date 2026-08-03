@@ -106,6 +106,36 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
         self.assertEqual(scoped["candidateDefinition"]["semanticRoleId"], 0)
         self.assertTrue(all(len(controller["transitionIds"]) == 20 for controller in self.data["controllers"]))
 
+    def test_stack_preview_catalog_preserves_exact_v40_definitions(self):
+        self.assertEqual(len(self.data["owners"]), 10)
+        self.assertEqual(len(self.data["overrideDefinitions"]), 19)
+        self.assertEqual(len(self.data["applicability"]), 19)
+        self.assertEqual(self.data["stackPreview"], {
+            "capacity": 8,
+            "precedence": ["channel", "priority", "definitionStableId", "ownerId", "instanceKey"],
+            "channels": [
+                {"value": 0, "label": "Static context"},
+                {"value": 1, "label": "Controller state"},
+                {"value": 2, "label": "Temporary effect"},
+                {"value": 3, "label": "Scripted force"},
+                {"value": 4, "label": "Possession"},
+                {"value": 5, "label": "System safety"},
+            ],
+        })
+        applicability_ids = {item["stableId"] for item in self.data["applicability"]}
+        owner_ids = {item["stableId"] for item in self.data["owners"]}
+        for definition in self.data["overrideDefinitions"]:
+            self.assertIn(definition["applicabilityId"], applicability_ids)
+            self.assertEqual(definition["applicability"]["stableId"], definition["applicabilityId"])
+            if definition["hasRequiredOwnerId"]:
+                self.assertIn(definition["requiredOwnerId"], owner_ids)
+            for key in (
+                "kind", "channel", "priority", "selectorKind", "mapLifetime",
+                "battleLifetime", "timerClock", "timerSource", "hiddenTimerPolicy",
+                "recoveryPolicy", "allowMultipleOwners", "allowMultipleInstancesPerOwner",
+            ):
+                self.assertIn(key, definition)
+
     def test_controller_node_slices_reject_bounds_overlap_and_wrong_owner(self):
         module = load_viewer()
         byte_values = module.re.findall(
