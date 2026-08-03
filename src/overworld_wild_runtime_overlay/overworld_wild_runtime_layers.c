@@ -571,6 +571,7 @@ static OverworldWildRuntimeStatus CheckApplicable(
     return OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE;
 }
 
+#ifdef OW_WILD_RUNTIME_HOST_TEST
 static OverworldWildRuntimeStatus CheckGeneratedTranslation(
     const OverworldWildRuntimeDefinition *definition,
     const OverworldWildRuntimeApplicabilityInput *input)
@@ -590,6 +591,7 @@ static OverworldWildRuntimeStatus CheckGeneratedTranslation(
         ? OW_WILD_RUNTIME_STATUS_OK
         : OW_WILD_RUNTIME_STATUS_INVALID_TRANSLATION;
 }
+#endif
 
 static OverworldWildRuntimeStatus ValidateHandle(
     const OverworldWildBehaviorStackRuntime *runtime,
@@ -1433,7 +1435,6 @@ static OverworldWildRuntimeStatus OW_WILD_RUNTIME_COMPOSITION_CODE
 ComposeProspective(
     const OverworldWildBehaviorStackRuntime *runtime,
     const OverworldWildRuntimeSlotSidecar *slot,
-    const OverworldWildRuntimeApplicabilityInput *input,
     const OverworldWildRuntimeStaticCache *resolvedStatic,
     const OverworldWildRuntimeLayer *layers,
     u8 layerCount,
@@ -1469,10 +1470,6 @@ ComposeProspective(
     } else {
         return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
     }
-    if ((input != NULL
-            && !OverworldWildRuntime_ApplicabilityMatchesStaticCache(
-                input, staticOut)))
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
     effectiveOut->controllerId = staticOut->controllerId;
     effectiveOut->nodeId = staticOut->baseNodeId;
     effectiveOut->profileId = staticOut->baseProfileId;
@@ -1910,10 +1907,6 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     status = ValidateStoredSlotSemantics(slot);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
-    status = OverworldWildRuntime_ResolveRetainedStaticCache(
-        &slot->staticCache, &slot->staticCache.staticContext,
-        slot->staticContextGeneration, &prospectiveStatic);
-    if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     memset(scratch, 0, sizeof(*scratch));
     for (i = 0; i < operationCount; i++) scratch->operationOrder[i] = i;
     for (i = 1; i < operationCount; i++) {
@@ -1947,6 +1940,10 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         status = ValidateApplicabilityShape(applicability);
         if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     }
+    status = OverworldWildRuntime_ResolveRetainedStaticCache(
+        &slot->staticCache, slot->staticContextGeneration,
+        &prospectiveStatic);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     for (i = 0; i < operationCount; i++) {
         const OverworldWildRuntimeDeltaOperation *operation =
             &operations[scratch->operationOrder[i]];
@@ -1970,8 +1967,10 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
                         & OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER
                     ? OW_WILD_RUNTIME_STATUS_INVALID_GENERATED_WRAPPER
                     : OW_WILD_RUNTIME_STATUS_INSTANCE_KEY_NOT_ALLOWED);
+#ifdef OW_WILD_RUNTIME_HOST_TEST
             status = CheckGeneratedTranslation(definition, applicability);
             if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
+#endif
             status = CheckApplicable(definition, applicability);
             if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
             existing = FindLayer(slot, operation->payload.apply.ownerId,
@@ -2200,9 +2199,14 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
             timer->timerGeneration = nextTimerGenerationAfter++;
         }
     }
+#ifdef OW_WILD_RUNTIME_HOST_TEST
+    if (needsApplicability
+        && !OverworldWildRuntime_ApplicabilityMatchesStaticCache(
+            applicability, &prospectiveStatic))
+        return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA);
+#endif
     status = ComposeProspective(
-        runtime, slot, needsApplicability ? applicability : NULL,
-        &prospectiveStatic,
+        runtime, slot, &prospectiveStatic,
         scratch->finalLayers,
         scratch->finalCount,
         OverworldWildRuntime_AdvanceNonzeroGeneration(slot->layerGeneration),
@@ -2296,6 +2300,20 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDelta(
     return ApplyDeltaCore(runtime, request->slotIndex,
         request->expectedSlotGeneration, &request->applicability,
         request->operations, request->operationCount, result);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDeltaCompact(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeStackDeltaRequest *request,
+    BOOL *mutatedOut)
+{
+    OverworldWildRuntimeStackDeltaResult result;
+    OverworldWildRuntimeStatus status;
+    if (mutatedOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    *mutatedOut = FALSE;
+    status = OverworldWildRuntime_ApplyStackDelta(runtime, request, &result);
+    *mutatedOut = result.mutated;
+    return status;
 }
 
 static OverworldWildRuntimeStatus OneOperation(
@@ -2420,7 +2438,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     BOOL changed;
     u8 i;
 
-    if (runtime == NULL || applicability == NULL || staticContext == NULL
+    if (runtime == NULL || staticContext == NULL
         || runtime != sOverworldWildRuntimeLayerService.boundRuntime
         || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
         || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
@@ -2435,8 +2453,10 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
         return OW_WILD_RUNTIME_STATUS_SLOT_GENERATION_MISMATCH;
     status = ValidateBank(slot);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-    status = ValidateApplicabilityShape(applicability);
-    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    if (applicability != NULL) {
+        status = ValidateApplicabilityShape(applicability);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
     if (!OverworldWildRuntime_CopyInstalledStaticCache(
             staticContext, applicability, slot->staticContextGeneration,
             &resolvedStatic))
@@ -2451,7 +2471,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     }
     for (i = 0; i < slot->activeLayerCount; i++) ReadLayer(slot, i, &layers[i]);
     status = ComposeProspective(
-        runtime, slot, applicability, &resolvedStatic, layers,
+        runtime, slot, &resolvedStatic, layers,
         slot->activeLayerCount, slot->layerGeneration,
         runtime->dataIncarnation, slot->cacheIncarnation, &staticCache,
         &effectiveCache, &provenance, &changed);

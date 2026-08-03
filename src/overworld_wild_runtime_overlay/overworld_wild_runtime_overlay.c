@@ -206,6 +206,14 @@ BOOL OverworldWildRuntime_CopyInstalledCatalogIdentity(u32 *identityOut)
     return TRUE;
 }
 
+#ifndef OW_WILD_RUNTIME_DISABLE_TRANSITION_VIEW
+const OverworldWildBehaviorDataBlobHeader *
+OverworldWildRuntime_AcquireInstalledTransitionCatalog(void)
+{
+    return (const void *)sOverworldWildValidatedV40;
+}
+#endif
+
 static BOOL CopyProfileValues(
     const OverworldWildBehaviorDataBlobHeader *header,
     u16 profileId,
@@ -280,10 +288,11 @@ static BOOL ApplyStaticScalar(
     const u8 operation = action->payload.modifier.operatorKind;
     const signed char delta = action->payload.modifier.delta;
     const u8 bound = action->payload.modifier.bound;
-    const int maskIndex = kind == 4 ? 0 : 1;
+    const int maskIndex = kind == 4 ? 0 : kind == 5 ? 1 : kind == 7 ? 2 : 3;
     const BOOL numeric = (sOwbdNumericFieldMasks[maskIndex]
         & (1u << field)) != 0;
-    const int minimum = kind == 4 && field == 3 ? 1 : 0;
+    const int minimum = (kind == 4 && field == 3)
+        || (kind == 7 && (field == 3 || field == 4)) ? 1 : 0;
     int maximum = 255;
     int result;
     const u8 before = values[fieldIndex];
@@ -336,6 +345,24 @@ static BOOL ApplyStaticScalar(
         recordOut->after = (u8)result;
     }
     return TRUE;
+}
+
+static BOOL CopyPolicyValues(
+    const OverworldWildBlobSection *section,
+    u16 stableId,
+    u8 valueOffset,
+    u8 valueSize,
+    u8 *valuesOut)
+{
+    const u8 *records = sOverworldWildValidatedV40 + section->offset;
+    u16 index;
+    for (index = 0; index < section->count; index++) {
+        const u8 *record = records + (u32)index * section->entrySize;
+        if ((u16)(record[0] | ((u16)record[1] << 8)) != stableId) continue;
+        memcpy(valuesOut, (void *)(record + valueOffset), valueSize);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 static const OverworldWildOverrideSourceRecord *MatchingSourceAtRank(
@@ -458,8 +485,7 @@ BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
 
     if (timerOut == NULL) return FALSE;
     memset(timerOut, 0, sizeof(*timerOut));
-    if (sOverworldWildValidatedV40 == NULL || staticCache == NULL
-        || staticCache->valid == 0 || staticCache->staticContext.reserved != 0
+    if (sOverworldWildValidatedV40 == NULL
         || !OverworldWildRuntime_CopyInstalledDefinition(
             definitionId, &runtimeDefinition)) return FALSE;
     header = (const void *)sOverworldWildValidatedV40;
@@ -494,7 +520,11 @@ BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
         || timerOut->source > OWBD_TIMER_SOURCE_CANDIDATE_FOLD
         || timerOut->hiddenPolicy < OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
         || timerOut->hiddenPolicy > OWBD_HIDDEN_TIMER_EXPIRE_ON_HIDE
-        || timerOut->recoveryPolicy != OWBD_RECOVERY_ROUTE_TRANSITION
+        || timerOut->recoveryPolicy != OWBD_RECOVERY_ROUTE_TRANSITION)
+        return FALSE;
+    /* A NULL cache requests validated timer identity metadata only. */
+    if (staticCache == NULL) return TRUE;
+    if (staticCache->valid == 0 || staticCache->staticContext.reserved != 0
         || !OverworldWildRuntime_CopyResolvedCachedNode(
             staticCache, &runtimeDefinition, &node)) return FALSE;
 
@@ -543,7 +573,7 @@ BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
     return TRUE;
 }
 
-BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
+static BOOL CopyInstalledStaticCompositionInternal(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,
     OverworldWildRuntimeStaticComposition *compositionOut)
@@ -561,11 +591,12 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     u16 selectedPriority = 0;
     u16 selectedRuleId = 0;
     u16 selectedActionId = 0;
+    u16 hookSetId;
     u16 i, j;
 
     if (compositionOut == NULL) return FALSE;
     memset(compositionOut, 0, sizeof(*compositionOut));
-    if (sOverworldWildValidatedV40 == NULL || input == NULL
+    if (sOverworldWildValidatedV40 == NULL
         || staticContext == NULL || staticContext->reserved != 0
         || staticContext->shiny > 1) return FALSE;
     header = (const void *)sOverworldWildValidatedV40;
@@ -714,6 +745,18 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     compositionOut->baseProfileId = base->profileId;
     compositionOut->spawnPolicyId = controller->spawnPolicyId;
     compositionOut->populationPolicyId = controller->populationPolicyId;
+    hookSetId = controller->hookSetId;
+    memset(&compositionOut->spawnConfiguration, 0,
+        sizeof(compositionOut->spawnConfiguration));
+    if (!CopyPolicyValues(&header->spawnPolicies,
+            compositionOut->spawnPolicyId, 6, 6,
+            &compositionOut->spawnConfiguration.spawnState)
+        || !CopyPolicyValues(&header->populationPolicies,
+            compositionOut->populationPolicyId, 8, 2,
+            &compositionOut->spawnConfiguration.populationLimit)
+        || !CopyPolicyValues(&header->hookSets, hookSetId, 4, 4,
+            &compositionOut->spawnConfiguration.helpCallInvocation))
+        return FALSE;
     compositionOut->baseSemanticRole = base->semanticRole;
     compositionOut->controllerValues[0] = controller->alertState;
     compositionOut->controllerValues[1] = controller->alertEmote;
@@ -774,10 +817,36 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
             } else if (action->kind == OWBD_STATIC_ACTION_BIND_SPAWN_POLICY) {
                 compositionOut->spawnPolicyId =
                     action->payload.bindPolicy.policyId;
+                if (!CopyPolicyValues(&header->spawnPolicies,
+                        compositionOut->spawnPolicyId, 6, 6,
+                        &compositionOut->spawnConfiguration.spawnState))
+                    return FALSE;
+            } else if (action->kind
+                    == OWBD_STATIC_ACTION_APPLY_SPAWN_POLICY_PATCH) {
+                if (!ApplyStaticScalar(7, action,
+                        &compositionOut->spawnConfiguration.spawnState,
+                        action->payload.modifier.fieldId - 1, NULL))
+                    return FALSE;
             } else if (action->kind
                     == OWBD_STATIC_ACTION_BIND_POPULATION_POLICY) {
                 compositionOut->populationPolicyId =
                     action->payload.bindPolicy.policyId;
+                if (!CopyPolicyValues(&header->populationPolicies,
+                        compositionOut->populationPolicyId, 8, 2,
+                        &compositionOut->spawnConfiguration.populationLimit))
+                    return FALSE;
+            } else if (action->kind
+                    == OWBD_STATIC_ACTION_APPLY_POPULATION_POLICY_PATCH) {
+                if (!ApplyStaticScalar(9, action,
+                        &compositionOut->spawnConfiguration.populationLimit,
+                        action->payload.modifier.fieldId - 1, NULL))
+                    return FALSE;
+            } else if (action->kind == OWBD_STATIC_ACTION_BIND_HOOK_SET) {
+                hookSetId = action->payload.bindPolicy.policyId;
+                if (!CopyPolicyValues(&header->hookSets,
+                        hookSetId, 4, 4,
+                        &compositionOut->spawnConfiguration.helpCallInvocation))
+                    return FALSE;
             }
         }
     }
@@ -794,7 +863,8 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     if (!base->bound || base->profileId == 0) return FALSE;
     memcpy(compositionOut->stateValues, base->stateValues,
         sizeof(compositionOut->stateValues));
-    if (!CanonicalApplicabilityMatches(compositionOut, input)) return FALSE;
+    if (input != NULL
+        && !CanonicalApplicabilityMatches(compositionOut, input)) return FALSE;
     compositionOut->staticContextIdentity = RuntimeCatalogMix(
         compositionOut->catalogIdentity,
         ((u32)controller->stableId << 16) | base->nodeId);
@@ -823,6 +893,18 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     return TRUE;
 }
 
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
+BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    const OverworldWildRuntimeApplicabilityInput *input,
+    OverworldWildRuntimeStaticComposition *compositionOut)
+{
+    return CopyInstalledStaticCompositionInternal(
+        staticContext, input, compositionOut);
+}
+#endif
+
 BOOL OverworldWildRuntime_CopyInstalledStaticCache(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,
@@ -833,7 +915,7 @@ BOOL OverworldWildRuntime_CopyInstalledStaticCache(
 
     if (cacheOut == NULL) return FALSE;
     memset(cacheOut, 0, sizeof(*cacheOut));
-    if (!OverworldWildRuntime_CopyInstalledStaticComposition(
+    if (!CopyInstalledStaticCompositionInternal(
             staticContext, input, &composition)) return FALSE;
     cacheOut->catalogIdentity = composition.catalogIdentity;
     cacheOut->staticContextIdentity = composition.staticContextIdentity;
@@ -846,6 +928,8 @@ BOOL OverworldWildRuntime_CopyInstalledStaticCache(
     return TRUE;
 }
 
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 BOOL OverworldWildRuntime_ApplicabilityMatchesStaticCache(
     const OverworldWildRuntimeApplicabilityInput *input,
     const OverworldWildRuntimeStaticCache *cache)
@@ -870,6 +954,7 @@ BOOL OverworldWildRuntime_ApplicabilityMatchesStaticCache(
     }
     return inputIndex == input->boundNodeCount;
 }
+#endif
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
     const OverworldWildRuntimeStaticCache *cache,
@@ -901,6 +986,25 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
         || cache->controllerId == 0 || cache->baseNodeId == 0
         || cache->baseProfileId == 0 || cache->baseSemanticRole == 0
         || cache->baseSemanticRole > 7
+        || cache->spawnPolicyId == 0 || cache->populationPolicyId == 0
+        || cache->spawnConfiguration.spawnState > 3
+        || cache->spawnConfiguration.destination > 16
+        || cache->spawnConfiguration.minimumDistance < 1
+        || cache->spawnConfiguration.minimumDistance > 8
+        || cache->spawnConfiguration.maximumDistance
+            < cache->spawnConfiguration.minimumDistance
+        || cache->spawnConfiguration.maximumDistance > 8
+        || cache->spawnConfiguration.spawnHopTime > 64
+        || cache->spawnConfiguration.spawnFlags != 0
+        || cache->spawnConfiguration.populationLimit > 10
+        || cache->spawnConfiguration.populationFlags != 0
+        || cache->spawnConfiguration.helpCallInvocation > 1
+        || cache->spawnConfiguration.pickupThrowEntry > 1
+        || cache->spawnConfiguration.pickupThrowActiveLoop
+            != cache->spawnConfiguration.pickupThrowEntry
+        || (cache->spawnConfiguration.helpCallInvocation
+            && cache->spawnConfiguration.pickupThrowEntry)
+        || cache->spawnConfiguration.hookFlags != 0
         || cache->staticContextGeneration != staticContextGeneration
         || cache->staticModifierCount
             > OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS
@@ -949,65 +1053,66 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
-static BOOL RuntimeRetainedBytesEqual(
-    const void *left, const void *right, u32 size)
+OverworldWildRuntimeStatus
+OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+    const OverworldWildRuntimeStaticCache *staticCache,
+    u32 expectedStaticContextGeneration,
+    OverworldWildRuntimeSpawnConfiguration *configurationOut)
 {
-    const u8 *leftBytes = left;
-    const u8 *rightBytes = right;
-    while (size-- != 0)
-        if (*leftBytes++ != *rightBytes++) return FALSE;
-    return TRUE;
-}
-
-static BOOL RuntimeCopyRetainedApplicability(
-    const OverworldWildRuntimeStaticCache *cache,
-    OverworldWildRuntimeApplicabilityInput *inputOut)
-{
-    u8 nodeIndex;
-    u8 inputIndex = 0;
-    memset(inputOut, 0, sizeof(*inputOut));
-    inputOut->immutableContextMask = cache->immutableContextMask;
-    inputOut->controllerId = cache->controllerId;
-    inputOut->effectiveProfileId = cache->baseProfileId;
-    inputOut->effectiveSemanticRole = cache->baseSemanticRole;
-    inputOut->semanticRoleMask = cache->semanticRoleMask;
-    for (nodeIndex = 0; nodeIndex < cache->nodeCount; nodeIndex++) {
-        if (!cache->resolvedNodes[nodeIndex].bound) continue;
-        if (inputIndex >= sizeof(inputOut->boundNodeIds)
-                / sizeof(inputOut->boundNodeIds[0])) return FALSE;
-        inputOut->boundNodeIds[inputIndex++] =
-            cache->resolvedNodes[nodeIndex].nodeId;
-    }
-    inputOut->boundNodeCount = inputIndex;
-    return inputIndex == cache->boundNodeCount;
-}
-
-OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(
-    const OverworldWildRuntimeStaticCache *retainedCache,
-    const OverworldWildRuntimeStaticContext *staticContext,
-    u32 staticContextGeneration,
-    OverworldWildRuntimeStaticCache *resolvedOut)
-{
-    OverworldWildRuntimeApplicabilityInput applicability;
     OverworldWildRuntimeStatus status;
-    if (retainedCache == NULL || staticContext == NULL || resolvedOut == NULL
-        || retainedCache == resolvedOut)
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    if (configurationOut == NULL)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    memset(configurationOut, 0, sizeof(*configurationOut));
     status = OverworldWildRuntime_ValidateStaticCache(
-        retainedCache, staticContextGeneration);
+        staticCache, expectedStaticContextGeneration);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-    if (!RuntimeRetainedBytesEqual(staticContext,
-            &retainedCache->staticContext, sizeof(*staticContext))
-        || !RuntimeCopyRetainedApplicability(retainedCache, &applicability)
-        || !OverworldWildRuntime_CopyInstalledStaticCache(
-            staticContext, &applicability, staticContextGeneration,
-            resolvedOut)
-        || !RuntimeRetainedBytesEqual(retainedCache, resolvedOut,
-            sizeof(*resolvedOut)))
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    *configurationOut = staticCache->spawnConfiguration;
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
+#ifndef OW_WILD_RUNTIME_ACCESSOR_HOST_TEST
+BOOL OverworldWildRuntime_MatchesPendingTimerExpiry(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    const OverworldWildRuntimeTimer *timer;
+    u8 index;
+    if (runtime == NULL || expiry == NULL
+        || expiry->slotIndex >= OW_WILD_MAX_SPAWNS)
+        return FALSE;
+    slot = &runtime->slots[expiry->slotIndex];
+    timer = slot->timerBank.timers;
+    for (index = 0; index < slot->activeLayerCount; index++, timer++) {
+        if (timer->entryGeneration == expiry->entryGeneration
+            && timer->timerGeneration == expiry->timerGeneration
+            && (timer->flags & (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+                == (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+            return TRUE;
+    }
+    return FALSE;
+}
+#endif
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(
+    const OverworldWildRuntimeStaticCache *retainedCache,
+    u32 staticContextGeneration,
+    OverworldWildRuntimeStaticCache *resolvedOut)
+{
+    if (retainedCache == NULL || resolvedOut == NULL
+        || retainedCache == resolvedOut
+        || OverworldWildRuntime_ValidateStaticCache(
+            retainedCache, staticContextGeneration)
+            != OW_WILD_RUNTIME_STATUS_OK)
+        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    *resolvedOut = *retainedCache;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 BOOL OverworldWildRuntime_CopyInstalledResolvedNode(
     const OverworldWildRuntimeStaticComposition *composition,
     const OverworldWildRuntimeDefinition *definition,
@@ -1036,6 +1141,7 @@ BOOL OverworldWildRuntime_CopyInstalledResolvedNode(
     *nodeOut = *match;
     return TRUE;
 }
+#endif
 
 BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     const OverworldWildRuntimeStaticCache *cache,
@@ -1084,6 +1190,8 @@ BOOL OverworldWildRuntime_CopyInstalledModifierOperations(
     return definition.kind != OW_WILD_RUNTIME_DEFINITION_MODIFIER;
 }
 
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     u8 tiredOriginKind,
     u16 destinationControllerId,
@@ -1092,6 +1200,7 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
 {
     const OverworldWildBehaviorDataBlobHeader *header;
     const OverworldWildTiredTranslationRecord *translations;
+    const u8 *transitions;
     u16 index;
     u8 count = 0;
 
@@ -1099,6 +1208,21 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     *candidateDefinitionIdOut = 0;
     if (sOverworldWildValidatedV40 == NULL) return 0;
     header = (const void *)sOverworldWildValidatedV40;
+    if (tiredOriginKind == 0) {
+        transitions = (const void *)(sOverworldWildValidatedV40
+            + header->transitions.offset);
+        for (index = 0; index < header->transitions.count; index++) {
+            const u8 *transition = transitions
+                + (u32)index * header->transitions.entrySize;
+            /* The frozen v40 trigger ABI assigns stamina exhaustion to 2. */
+            if (transition[18] != 2)
+                continue;
+            if (count++ == 0)
+                *candidateDefinitionIdOut = (u16)(transition[2]
+                    | ((u16)transition[3] << 8));
+        }
+        return count;
+    }
     translations = (const void *)(sOverworldWildValidatedV40
         + header->tiredTranslations.offset);
     for (index = 0; index < header->tiredTranslations.count; index++) {
@@ -1115,3 +1239,4 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     }
     return count;
 }
+#endif

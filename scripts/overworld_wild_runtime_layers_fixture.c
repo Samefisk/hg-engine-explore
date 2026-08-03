@@ -38,7 +38,7 @@ typedef struct FixtureDefinitionCatalog {
     u32 schemaFingerprint;
     u16 definitionCount;
     u16 reserved;
-    OverworldWildRuntimeDefinition definitions[32];
+    OverworldWildRuntimeDefinition definitions[40];
 } FixtureDefinitionCatalog;
 
 static FixtureDefinitionCatalog sFixtureCatalog;
@@ -60,6 +60,10 @@ static u32 fixture_hash_bytes(u32 hash, const void *data, u32 size)
 }
 
 enum {
+    TASK11_TRANSITION_ALERT_COMPLETE = 0xA001,
+    TASK11_DEF_CALM_OWNER_8102 = 0x7001,
+    TASK11_DEF_CALM_OWNER_8103 = 0x7002,
+    TASK11_DEF_CALM_OWNER_8104 = 0x7003,
     DEF_SHARED = 0x7001,
     DEF_EXCLUSIVE = 0x7002,
     DEF_EXACT = 0x7003,
@@ -92,6 +96,42 @@ enum {
     DEF_RUNTIME_S16_MIN = 0x701E,
     DEF_RUNTIME_S16_MAX = 0x701F,
 };
+
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static BOOL sUseTask11ProductionCatalog;
+
+enum {
+    TASK11_DEF_STAMINA = 0x7004,
+    TASK11_DEF_FLED_SEMANTIC = 0x7005,
+    TASK11_DEF_RAM_SEMANTIC = 0x7006,
+    TASK11_DEF_THROW_SEMANTIC = 0x7007,
+    TASK11_DEF_FORCED_SLEEP = 0x700A,
+    TASK11_DEF_FLED_EXACT = 0x700B,
+    TASK11_DEF_RAM_EXACT = 0x700E,
+    TASK11_DEF_THROW_EXACT = 0x7011,
+    TASK11_TRANSITION_STAMINA_APPLY = 0xA002,
+    TASK11_TRANSITION_STAMINA_RECOVER = 0xA003,
+    TASK11_TRANSITION_FLED_SEMANTIC = 0xA005,
+    TASK11_TRANSITION_RAM_SEMANTIC = 0xA007,
+    TASK11_TRANSITION_THROW_SEMANTIC = 0xA009,
+    TASK11_TRANSITION_FORCED_SLEEP = 0xA00F,
+    TASK11_TRANSITION_AGGRO_APPLY = 0xA00C,
+    TASK11_TRANSITION_HELP_CALL_APPLY = 0xA00D,
+    TASK11_TRANSITION_FLED_EXACT = 0xA012,
+    TASK11_TRANSITION_RAM_EXACT = 0xA015,
+    TASK11_TRANSITION_THROW_EXACT = 0xA018,
+};
+
+static union FixtureInstalledCatalogStorage {
+    OverworldWildBehaviorDataBlobHeader alignment;
+    u8 bytes[OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE];
+} sFixtureInstalledStorage;
+
+static const u8 sGeneratedV40Catalog[
+    OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE] = {
+#include "../data/OverworldWildBehaviorDataV40.generated.inc"
+};
+#endif
 
 static int sChecks;
 
@@ -258,11 +298,568 @@ static FixtureDefinitionCatalog fixture_catalog(void)
     return catalog;
 }
 
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static void init_fixture_installed_blob(void)
+{
+    memcpy(sFixtureInstalledStorage.bytes, sGeneratedV40Catalog,
+        sizeof(sFixtureInstalledStorage.bytes));
+}
+
+static OverworldWildBehaviorDataBlobHeader *fixture_installed_header(void)
+{
+    return (OverworldWildBehaviorDataBlobHeader *)
+        sFixtureInstalledStorage.bytes;
+}
+
+static void *fixture_section_record(
+    OverworldWildBlobSection *section,
+    u16 index,
+    u16 recordSize)
+{
+    require(section != NULL && section->entrySize == recordSize
+            && index < section->count
+            && section->offset <= sizeof(sFixtureInstalledStorage.bytes)
+            && recordSize <= sizeof(sFixtureInstalledStorage.bytes)
+                - section->offset
+            && (u32)index * recordSize
+                <= sizeof(sFixtureInstalledStorage.bytes) - section->offset
+                    - recordSize,
+        "generated v40 fixture section record is outside the blob");
+    return sFixtureInstalledStorage.bytes + section->offset
+        + (u32)index * recordSize;
+}
+
+static OverworldWildTransitionRecord *fixture_transition(u16 stableId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    u16 index;
+    for (index = 0; index < header->transitions.count; index++) {
+        OverworldWildTransitionRecord *record = fixture_section_record(
+            &header->transitions, index, sizeof(*record));
+        if (record->stableId == stableId) return record;
+    }
+    require(FALSE, "generated v40 transition is absent");
+    return NULL;
+}
+
+static OverworldWildOverrideDefinitionRecord *fixture_override_definition(
+    u16 stableId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    u16 index;
+    for (index = 0; index < header->overrideDefinitions.count; index++) {
+        OverworldWildOverrideDefinitionRecord *record = fixture_section_record(
+            &header->overrideDefinitions, index, sizeof(*record));
+        if (record->stableId == stableId) return record;
+    }
+    require(FALSE, "generated v40 override definition is absent");
+    return NULL;
+}
+
+static OverworldWildTransitionGuardRecord *fixture_transition_guard(
+    u16 transitionId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    u16 index;
+    for (index = 0; index < header->transitionGuards.count; index++) {
+        OverworldWildTransitionGuardRecord *record = fixture_section_record(
+            &header->transitionGuards, index, sizeof(*record));
+        if (record->transitionId == transitionId) return record;
+    }
+    require(FALSE, "generated v40 transition guard is absent");
+    return NULL;
+}
+
+static OverworldWildTransitionOperationRecord *fixture_transition_operation(
+    u16 transitionId,
+    u8 ordinal)
+{
+    OverworldWildTransitionRecord *transition =
+        fixture_transition(transitionId);
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    require(ordinal < transition->operationCount,
+        "generated v40 transition operation ordinal is invalid");
+    return fixture_section_record(&header->transitionOperations,
+        (u16)(transition->operationStart + ordinal),
+        sizeof(OverworldWildTransitionOperationRecord));
+}
+
+static OverworldWildTransitionActionRecord *fixture_transition_action(
+    u16 transitionId,
+    u8 ordinal)
+{
+    OverworldWildTransitionRecord *transition =
+        fixture_transition(transitionId);
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    require(ordinal < transition->actionCount,
+        "generated v40 transition action ordinal is invalid");
+    return fixture_section_record(&header->transitionActions,
+        (u16)(transition->actionStart + ordinal),
+        sizeof(OverworldWildTransitionActionRecord));
+}
+
+static OverworldWildRecoveryActionRecord *fixture_recovery_action(
+    u16 transitionId)
+{
+    OverworldWildTransitionRecord *transition =
+        fixture_transition(transitionId);
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    require(transition->recoveryCount == 1,
+        "generated v40 recovery route must have one recovery action");
+    return fixture_section_record(&header->recoveryActions,
+        transition->recoveryStart, sizeof(OverworldWildRecoveryActionRecord));
+}
+
+static OverworldWildTiredTranslationRecord *fixture_tired_translation(
+    u8 origin,
+    BOOL authoredTiredBound)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    OverworldWildTiredTranslationRecord *found = NULL;
+    u16 index;
+    for (index = 0; index < header->tiredTranslations.count; index++) {
+        OverworldWildTiredTranslationRecord *record = fixture_section_record(
+            &header->tiredTranslations, index, sizeof(*record));
+        if (record->tiredOriginKind != origin
+            || record->authoredTiredBound != (u8)authoredTiredBound
+            || record->destinationControllerId != 0x3001)
+            continue;
+        require(found == NULL,
+            "generated v40 tired translation is ambiguous");
+        found = record;
+    }
+    require(found != NULL, "generated v40 tired translation is absent");
+    return found;
+}
+
+static OverworldWildTiredTranslationRecord *fixture_tired_translation_for(
+    u8 origin,
+    BOOL authoredTiredBound,
+    u16 destinationControllerId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    OverworldWildTiredTranslationRecord *found = NULL;
+    u16 index;
+    for (index = 0; index < header->tiredTranslations.count; index++) {
+        OverworldWildTiredTranslationRecord *record = fixture_section_record(
+            &header->tiredTranslations, index, sizeof(*record));
+        if (record->tiredOriginKind != origin
+            || record->authoredTiredBound != (u8)authoredTiredBound
+            || record->destinationControllerId != destinationControllerId)
+            continue;
+        require(found == NULL,
+            "generated v40 tired translation key is ambiguous");
+        found = record;
+    }
+    require(found != NULL, "generated v40 tired translation key is absent");
+    return found;
+}
+
+static OverworldWildImportRecipeRecord *fixture_import_recipe_for(
+    u16 ownerId,
+    u8 semanticRole,
+    u16 controllerId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    OverworldWildImportRecipeRecord *found = NULL;
+    u16 index;
+    for (index = 0; index < header->importRecipes.count; index++) {
+        OverworldWildImportRecipeRecord *record = fixture_section_record(
+            &header->importRecipes, index, sizeof(*record));
+        if (record->ownerId != ownerId
+            || record->semanticRole != semanticRole
+            || record->controllerId != controllerId)
+            continue;
+        require(found == NULL,
+            "generated v40 import recipe key is ambiguous");
+        found = record;
+    }
+    require(found != NULL, "generated v40 import recipe key is absent");
+    return found;
+}
+
+static u32 fixture_crc32(const u8 *bytes, u32 size)
+{
+    u32 crc = 0xFFFFFFFFu;
+    u32 byteIndex;
+    for (byteIndex = 0; byteIndex < size; byteIndex++) {
+        u8 bit;
+        crc ^= bytes[byteIndex];
+        for (bit = 0; bit < 8; bit++)
+            crc = (crc >> 1) ^ (0xEDB88320u & (u32)-(int)(crc & 1));
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+static void fixture_reseal_installed_catalog(void)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    header->checksum = 0;
+    header->checksum = fixture_crc32(sFixtureInstalledStorage.bytes,
+        sizeof(sFixtureInstalledStorage.bytes));
+}
+
+static void fixture_assert_operation_claims_coherent(void)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    u8 claims[OWBD_TRANSITION_OPERATION_COUNT];
+    u16 transitionIndex;
+    u16 operationIndex;
+    memset(claims, 0, sizeof(claims));
+    for (transitionIndex = 0;
+            transitionIndex < header->transitions.count; transitionIndex++) {
+        OverworldWildTransitionRecord *transition = fixture_section_record(
+            &header->transitions, transitionIndex, sizeof(*transition));
+        require(transition->operationStart <= header->transitionOperations.count
+                && transition->operationCount
+                    <= header->transitionOperations.count
+                        - transition->operationStart,
+            "route-swap fixture operation slice is out of range");
+        for (operationIndex = transition->operationStart;
+                operationIndex < transition->operationStart
+                    + transition->operationCount; operationIndex++) {
+            OverworldWildTransitionOperationRecord *operation =
+                fixture_section_record(&header->transitionOperations,
+                    operationIndex, sizeof(*operation));
+            require(operation->transitionId == transition->stableId,
+                "route-swap fixture operation child backlink drifted");
+            claims[operationIndex]++;
+        }
+    }
+    for (operationIndex = 0;
+            operationIndex < header->transitionOperations.count;
+            operationIndex++)
+        require(claims[operationIndex] == 1,
+            "route-swap fixture operation claims are not globally coherent");
+}
+
+static void fixture_swap_recovery_route_claims(
+    u16 targetTransitionId,
+    u16 targetDefinitionId,
+    u16 targetOwnerId,
+    u16 donorTransitionId,
+    u16 donorDefinitionId,
+    u16 donorOwnerId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    OverworldWildTransitionRecord *target =
+        fixture_transition(targetTransitionId);
+    OverworldWildTransitionRecord *donor =
+        fixture_transition(donorTransitionId);
+    OverworldWildOverrideDefinitionRecord *targetDefinition =
+        fixture_override_definition(targetDefinitionId);
+    OverworldWildOverrideDefinitionRecord *donorDefinition =
+        fixture_override_definition(donorDefinitionId);
+    OverworldWildTransitionOperationRecord *targetOperation =
+        fixture_transition_operation(targetTransitionId, 0);
+    OverworldWildTransitionOperationRecord *donorOperation =
+        fixture_transition_operation(donorTransitionId, 0);
+    OverworldWildRecoveryActionRecord *targetRecovery =
+        fixture_recovery_action(targetTransitionId);
+    OverworldWildRecoveryActionRecord *donorRecovery =
+        fixture_recovery_action(donorTransitionId);
+    u16 index;
+
+    targetDefinition->recoveryTransitionId = donorTransitionId;
+    donorDefinition->recoveryTransitionId = targetTransitionId;
+    target->candidateDefinitionId = donorDefinitionId;
+    target->ownerId = donorOwnerId;
+    targetOperation->definitionId = donorDefinitionId;
+    targetOperation->ownerId = donorOwnerId;
+    targetRecovery->ownerId = donorOwnerId;
+    donor->candidateDefinitionId = targetDefinitionId;
+    donor->ownerId = targetOwnerId;
+    donorOperation->definitionId = targetDefinitionId;
+    donorOperation->ownerId = targetOwnerId;
+    donorRecovery->ownerId = targetOwnerId;
+    for (index = 0; index < header->tiredTranslations.count; index++) {
+        OverworldWildTiredTranslationRecord *translation =
+            fixture_section_record(&header->tiredTranslations, index,
+                sizeof(*translation));
+        if (translation->candidateDefinitionId == targetDefinitionId
+            && translation->recoveryTransitionId == targetTransitionId)
+            translation->recoveryTransitionId = donorTransitionId;
+        else if (translation->candidateDefinitionId == donorDefinitionId
+            && translation->recoveryTransitionId == donorTransitionId)
+            translation->recoveryTransitionId = targetTransitionId;
+    }
+    for (index = 0; index < header->importRecipes.count; index++) {
+        OverworldWildImportRecipeRecord *recipe = fixture_section_record(
+            &header->importRecipes, index, sizeof(*recipe));
+        if (recipe->recoveryTransitionId == targetTransitionId)
+            recipe->recoveryTransitionId = donorTransitionId;
+        else if (recipe->recoveryTransitionId == donorTransitionId)
+            recipe->recoveryTransitionId = targetTransitionId;
+    }
+    fixture_assert_operation_claims_coherent();
+}
+
+/* These mutations deliberately model authenticated post-install catalog
+ * drift. The portable v40 validator rejects each canonical table change;
+ * all selected definition/transition plan bytes stay valid until the named
+ * recovery backlink predicate is reached. */
+static void fixture_mutate_semantic_tired_backlink(u8 malformedCase)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    OverworldWildTiredTranslationRecord *first =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_FLED, TRUE, 0x3001);
+    OverworldWildTiredTranslationRecord *second =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_FLED, TRUE, 0x3002);
+    OverworldWildTiredTranslationRecord *third =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_FLED, TRUE, 0x3003);
+    OverworldWildTiredTranslationRecord *other =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_RAM_CRASH, FALSE, 0x3001);
+    OverworldWildTiredTranslationRecord *records[3] = {
+        first, second, third,
+    };
+    u8 index;
+
+    (void)header;
+    switch (malformedCase) {
+    case 0:
+        for (index = 0; index < 3; index++) {
+            records[index]->candidateDefinitionId =
+                TASK11_DEF_RAM_SEMANTIC;
+            records[index]->recoveryTransitionId =
+                TASK11_TRANSITION_RAM_SEMANTIC;
+        }
+        break;
+    case 1: second->destinationControllerId = first->destinationControllerId; break;
+    case 2: first->recoveryTransitionId = TASK11_TRANSITION_RAM_SEMANTIC; break;
+    case 3: other->recoveryTransitionId = TASK11_TRANSITION_FLED_SEMANTIC; break;
+    case 4: first->stableId = 0; break;
+    case 5: first->tiredOriginKind = OWBD_TIRED_ORIGIN_RAM_CRASH; break;
+    case 6: first->destinationControllerId = 0; break;
+    case 7: first->destinationControllerId = 0x3999; break;
+    case 8: first->authoredProfileId = 0; break;
+    case 9: first->timerOperator = OWBD_CANDIDATE_TIMER_ADD; break;
+    case 10: first->timerSource = 0; break;
+    case 11: first->mapLifetime = OWBD_LIFETIME_CLEAR; break;
+    case 12: first->battleLifetime = OWBD_LIFETIME_PRESERVE_LOGICAL; break;
+    case 13: first->flags = 1; break;
+    case 14: first->reserved = 1; break;
+    case 15: first->authoredTiredBound = FALSE; break;
+    case 16: first->exactFallbackControllerId = 0x3001; break;
+    case 17: first->exactFallbackNodeId = 0x3107; break;
+    case 18: {
+        u16 stableId = other->stableId;
+        *other = *first;
+        other->stableId = stableId;
+        other->destinationControllerId = 0x3999;
+        break;
+    }
+    }
+}
+
+static void fixture_mutate_exact_tired_backlink(u8 malformedCase)
+{
+    OverworldWildTiredTranslationRecord *target =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_FLED, FALSE, 0x3001);
+    OverworldWildTiredTranslationRecord *other =
+        fixture_tired_translation_for(
+            OWBD_TIRED_ORIGIN_RAM_CRASH, FALSE, 0x3001);
+
+    switch (malformedCase) {
+    case 0:
+        target->candidateDefinitionId = TASK11_DEF_RAM_EXACT;
+        target->recoveryTransitionId = TASK11_TRANSITION_RAM_EXACT;
+        break;
+    case 1: {
+        u16 stableId = other->stableId;
+        *other = *target;
+        other->stableId = stableId;
+        break;
+    }
+    case 2: target->recoveryTransitionId = TASK11_TRANSITION_RAM_EXACT; break;
+    case 3: other->recoveryTransitionId = TASK11_TRANSITION_FLED_EXACT; break;
+    case 4: target->stableId = 0; break;
+    case 5: target->tiredOriginKind = OWBD_TIRED_ORIGIN_RAM_CRASH; break;
+    case 6: target->destinationControllerId = 0; break;
+    case 7: target->authoredProfileId = 0; break;
+    case 8: target->timerOperator = OWBD_CANDIDATE_TIMER_ADD; break;
+    case 9: target->timerSource = 0; break;
+    case 10: target->mapLifetime = OWBD_LIFETIME_CLEAR; break;
+    case 11: target->battleLifetime = OWBD_LIFETIME_PRESERVE_LOGICAL; break;
+    case 12: target->flags = 1; break;
+    case 13: target->reserved = 1; break;
+    case 14: target->authoredTiredBound = TRUE; break;
+    case 15: target->destinationControllerId = 0x3002; break;
+    case 16: target->exactFallbackControllerId = 0x3002; break;
+    case 17: target->exactFallbackNodeId = 0x310E; break;
+    }
+}
+
+static void fixture_mutate_stamina_backlink(u8 malformedCase)
+{
+    if (malformedCase == 0)
+        fixture_transition(TASK11_TRANSITION_STAMINA_APPLY)->trigger =
+            OWBD_TRIGGER_ALERT_COMPLETE;
+    else
+        fixture_transition(0xA001)->trigger =
+            OWBD_TRIGGER_STAMINA_EXHAUSTED;
+}
+
+static void fixture_mutate_forced_sleep_backlink(u8 malformedCase)
+{
+    OverworldWildImportRecipeRecord *first = fixture_import_recipe_for(
+        0x810A, OWBD_ROLE_ASLEEP, 0x3001);
+    OverworldWildImportRecipeRecord *second = fixture_import_recipe_for(
+        0x810A, OWBD_ROLE_ASLEEP, 0x3002);
+    OverworldWildImportRecipeRecord *third = fixture_import_recipe_for(
+        0x810A, OWBD_ROLE_ASLEEP, 0x3003);
+    OverworldWildImportRecipeRecord *other = fixture_import_recipe_for(
+        0x810B, OWBD_ROLE_FOLLOWER, 0x3003);
+    OverworldWildImportRecipeRecord *records[3] = {
+        first, second, third,
+    };
+    u8 index;
+
+    switch (malformedCase) {
+    case 0:
+        for (index = 0; index < 3; index++) {
+            records[index]->ownerId = 0x8109;
+            records[index]->recoveryTransitionId = 0;
+        }
+        break;
+    case 1: second->controllerId = first->controllerId; break;
+    case 2: other->recoveryTransitionId = TASK11_TRANSITION_FORCED_SLEEP; break;
+    case 3: first->recoveryTransitionId = 0; break;
+    case 4: first->ownerId = 0x8109; break;
+    case 5: first->semanticRole = OWBD_ROLE_CARRIED; break;
+    case 6: first->controllerId = 0; break;
+    case 7: first->controllerId = 0x3999; break;
+    case 8: first->nodeId = 0; break;
+    case 9: first->nodeId = second->nodeId; break;
+    case 10: first->profileIdentityId = 0; break;
+    case 11: first->profileIdentityId = second->profileIdentityId; break;
+    case 12: first->semanticSourceId = 0; break;
+    case 13: first->semanticSourceId = other->semanticSourceId; break;
+    case 14: first->actionCount = 0; break;
+    case 15: first->actionStart++; break;
+    case 16: first->truthVector = 0; break;
+    case 17: first->lifetime = OWBD_LIFETIME_CLEAR; break;
+    case 18: first->flags = 1; break;
+    case 19: first->reserved = 1; break;
+    case 20: {
+        u16 stableId = other->stableId;
+        *other = *first;
+        other->stableId = stableId;
+        other->controllerId = 0x3999;
+        break;
+    }
+    case 21:
+        fixture_override_definition(0x7009)->recoveryTransitionId =
+            TASK11_TRANSITION_FORCED_SLEEP;
+        break;
+    }
+}
+
+BOOL OverworldWildRuntime_CopyInstalledCatalogBytes(
+    u32 offset, void *bytesOut, u32 size)
+{
+    if (bytesOut == NULL || size == 0
+        || offset > sizeof(sFixtureInstalledStorage.bytes)
+        || size > sizeof(sFixtureInstalledStorage.bytes) - offset)
+        return FALSE;
+    memcpy(bytesOut, sFixtureInstalledStorage.bytes + offset, size);
+    return TRUE;
+}
+#endif
+
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static BOOL copy_task11_production_definition(
+    u16 definitionId,
+    OverworldWildRuntimeDefinition *definitionOut)
+{
+    u16 ownerId = 0;
+    u8 origin = 0;
+    u8 selector = OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE;
+    u8 role = OWBD_ROLE_TIRED;
+    u16 controllerId = 0;
+    u16 nodeId = 0;
+    u8 flags = OW_WILD_RUNTIME_DEFINITION_FLAG_RUNTIME_ELIGIBLE;
+
+    if (definitionId >= TASK11_DEF_CALM_OWNER_8102
+        && definitionId <= TASK11_DEF_CALM_OWNER_8104) {
+        *definitionOut = make_definition(definitionId,
+            OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
+            OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE,
+            OWBD_ROLE_ATTENTIVE, 0, 0, flags);
+        definitionOut->mapLifetime = 2;
+        definitionOut->channel = 1;
+        definitionOut->priority = 200;
+        return TRUE;
+    } else if (definitionId == TASK11_DEF_STAMINA) ownerId = 0x8105;
+    else if (definitionId == TASK11_DEF_FLED_SEMANTIC) {
+        ownerId = 0x8107;
+        origin = OWBD_TIRED_ORIGIN_FLED;
+    } else if (definitionId == TASK11_DEF_RAM_SEMANTIC) {
+        ownerId = 0x8106;
+        origin = OWBD_TIRED_ORIGIN_RAM_CRASH;
+    } else if (definitionId == TASK11_DEF_THROW_SEMANTIC) {
+        ownerId = 0x8108;
+        origin = OWBD_TIRED_ORIGIN_THROW_RECOVERY;
+    } else if (definitionId == TASK11_DEF_FLED_EXACT) {
+        ownerId = 0x8107;
+        origin = OWBD_TIRED_ORIGIN_FLED;
+        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
+    } else if (definitionId == TASK11_DEF_RAM_EXACT) {
+        ownerId = 0x8106;
+        origin = OWBD_TIRED_ORIGIN_RAM_CRASH;
+        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
+    } else if (definitionId == TASK11_DEF_THROW_EXACT) {
+        ownerId = 0x8108;
+        origin = OWBD_TIRED_ORIGIN_THROW_RECOVERY;
+        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
+    } else if (definitionId == TASK11_DEF_FORCED_SLEEP) {
+        *definitionOut = make_definition(definitionId,
+            OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
+            OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE,
+            OWBD_ROLE_ASLEEP, 0, 0,
+            flags | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_INSTANCES);
+        definitionOut->mapLifetime = 2;
+        definitionOut->channel = 2;
+        definitionOut->priority = 200;
+        return TRUE;
+    } else {
+        memset(definitionOut, 0, sizeof(*definitionOut));
+        return FALSE;
+    }
+    flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER;
+    if (origin != 0)
+        flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_TIRED_ORIGIN;
+    if (selector == OW_WILD_RUNTIME_SELECTOR_EXACT) {
+        controllerId = 0x3001;
+        nodeId = 0x3107;
+        role = 0;
+    }
+    *definitionOut = make_definition(definitionId,
+        OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
+        selector, role, controllerId, nodeId, flags);
+    definitionOut->requiredOwnerId = ownerId;
+    definitionOut->tiredOriginKind = origin;
+    definitionOut->mapLifetime = 2;
+    definitionOut->channel = 2;
+    definitionOut->priority = 100;
+    return TRUE;
+}
+#endif
+
 BOOL OverworldWildRuntime_CopyInstalledDefinition(
     u16 definitionId,
     OverworldWildRuntimeDefinition *definitionOut)
 {
     u16 index;
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    if (sUseTask11ProductionCatalog)
+        return copy_task11_production_definition(
+            definitionId, definitionOut);
+#endif
     for (index = 0; index < sFixtureCatalog.definitionCount; index++) {
         if (sFixtureCatalog.definitions[index].stableId == definitionId) {
             *definitionOut = sFixtureCatalog.definitions[index];
@@ -279,6 +876,56 @@ BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
     OverworldWildRuntimeTimerDefinition *timerOut)
 {
     memset(timerOut, 0, sizeof(*timerOut));
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    if (sUseTask11ProductionCatalog) {
+        if (definitionId >= TASK11_DEF_CALM_OWNER_8102
+            && definitionId <= TASK11_DEF_CALM_OWNER_8104) {
+            return TRUE;
+        } else if (definitionId == TASK11_DEF_STAMINA) {
+            timerOut->recoveryTransitionId =
+                TASK11_TRANSITION_STAMINA_RECOVER;
+            timerOut->source = 3;
+        } else if (definitionId == TASK11_DEF_FLED_SEMANTIC) {
+            timerOut->recoveryTransitionId =
+                TASK11_TRANSITION_FLED_SEMANTIC;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_RAM_SEMANTIC) {
+            timerOut->recoveryTransitionId =
+                TASK11_TRANSITION_RAM_SEMANTIC;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_THROW_SEMANTIC) {
+            timerOut->recoveryTransitionId =
+                TASK11_TRANSITION_THROW_SEMANTIC;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_FLED_EXACT) {
+            timerOut->recoveryTransitionId = TASK11_TRANSITION_FLED_EXACT;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_RAM_EXACT) {
+            timerOut->recoveryTransitionId = TASK11_TRANSITION_RAM_EXACT;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_THROW_EXACT) {
+            timerOut->recoveryTransitionId = TASK11_TRANSITION_THROW_EXACT;
+            timerOut->source = 1;
+        } else if (definitionId == TASK11_DEF_FORCED_SLEEP) {
+            timerOut->recoveryTransitionId =
+                TASK11_TRANSITION_FORCED_SLEEP;
+            timerOut->source = 1;
+            timerOut->hiddenPolicy =
+                OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN;
+        } else {
+            return FALSE;
+        }
+        timerOut->clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        if (definitionId != TASK11_DEF_FORCED_SLEEP)
+            timerOut->hiddenPolicy =
+                OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN;
+        timerOut->recoveryPolicy = 1;
+        if (staticCache == NULL) return TRUE;
+        if (!staticCache->valid) return FALSE;
+        timerOut->duration = 4;
+        return TRUE;
+    }
+#endif
     if (staticCache == NULL || !staticCache->valid) return FALSE;
     if (definitionId == DEF_ORDINARY_TIRED
         || definitionId == DEF_STAMINA) {
@@ -332,32 +979,222 @@ u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     BOOL authoredTiredBound,
     u16 *candidateDefinitionIdOut)
 {
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    OverworldWildBehaviorDataBlobHeader *header;
+    u16 index;
+#endif
     *candidateDefinitionIdOut = 0;
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    if (sUseTask11ProductionCatalog) {
+        u8 count = 0;
+        header = fixture_installed_header();
+        if (tiredOriginKind == 0) {
+            for (index = 0; index < header->transitions.count; index++) {
+                OverworldWildTransitionRecord *transition =
+                    fixture_section_record(&header->transitions, index,
+                        sizeof(*transition));
+                if (transition->trigger
+                        != OWBD_TRIGGER_STAMINA_EXHAUSTED)
+                    continue;
+                if (count++ == 0)
+                    *candidateDefinitionIdOut =
+                        transition->candidateDefinitionId;
+            }
+            return count;
+        }
+        for (index = 0; index < header->tiredTranslations.count; index++) {
+            OverworldWildTiredTranslationRecord *translation =
+                fixture_section_record(&header->tiredTranslations, index,
+                    sizeof(*translation));
+            if (translation->tiredOriginKind != tiredOriginKind
+                || translation->destinationControllerId
+                    != destinationControllerId
+                || translation->authoredTiredBound
+                    != (authoredTiredBound != FALSE))
+                continue;
+            if (count++ == 0)
+                *candidateDefinitionIdOut =
+                    translation->candidateDefinitionId;
+        }
+        return count;
+    }
+#endif
     if (tiredOriginKind != 1 || destinationControllerId != 0x3001)
         return 0;
-    *candidateDefinitionIdOut = authoredTiredBound
-        ? DEF_FLED : DEF_FLED_EXACT;
+    *candidateDefinitionIdOut = authoredTiredBound ? DEF_FLED : DEF_FLED_EXACT;
     return 1;
 }
+
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static void init_task11_resolved_node(
+    OverworldWildRuntimeResolvedNode *node,
+    u16 nodeId,
+    u16 profileId,
+    u8 role)
+{
+    memset(node, 0, sizeof(*node));
+    node->nodeId = nodeId;
+    node->profileId = profileId;
+    node->semanticRole = role;
+    node->bound = TRUE;
+    node->stateValues[0] = role;
+    node->stateValues[1] = 1;
+    node->stateValues[2] = 2;
+    node->stateValues[3] = 2;
+    node->stateValues[4] = 4;
+    node->stateValues[7] = 15;
+    node->stateValues[9] = 1;
+    node->stateValues[10] = 2;
+    node->stateValues[12] = 4;
+    node->stateValues[14] = 4;
+}
+
+static BOOL copy_task11_static_composition(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    const OverworldWildRuntimeApplicabilityInput *input,
+    OverworldWildRuntimeStaticComposition *compositionOut)
+{
+    const BOOL fallback = staticContext != NULL
+        && (staticContext->behaviorClass == 1
+            || staticContext->behaviorClass == 9);
+    const BOOL asleep = staticContext != NULL
+        && staticContext->behaviorClass == 2;
+    const BOOL authoredRebind = staticContext != NULL
+        && staticContext->behaviorClass == 8;
+    const BOOL fallbackRebind = staticContext != NULL
+        && staticContext->behaviorClass == 9;
+    const BOOL calmBase = staticContext != NULL
+        && staticContext->species == 56 && staticContext->groupFlags == 8;
+    u8 index = 0;
+    u8 inputIndex = 0;
+
+    memset(compositionOut, 0, sizeof(*compositionOut));
+    if (staticContext == NULL || staticContext->reserved != 0
+        || staticContext->behaviorClass > 9)
+        return FALSE;
+    compositionOut->catalogIdentity =
+        fixture_installed_header()->schemaFingerprint;
+    compositionOut->staticContextIdentity =
+        0x71000000u ^ staticContext->groupFlags
+            ^ ((u32)staticContext->species << 8)
+            ^ staticContext->behaviorClass;
+    compositionOut->immutableContextMask = staticContext->groupFlags;
+    compositionOut->staticContext = *staticContext;
+    compositionOut->controllerId = 0x3001;
+    compositionOut->baseNodeId = calmBase ? 0x3101 : 0x3102;
+    compositionOut->baseProfileId = calmBase ? 0x2304 : 0x2202;
+    compositionOut->spawnPolicyId = 0x4001;
+    compositionOut->populationPolicyId = 0x4101;
+    compositionOut->spawnConfiguration.minimumDistance = 1;
+    compositionOut->spawnConfiguration.maximumDistance = 1;
+    compositionOut->spawnConfiguration.spawnHopTime = 1;
+    compositionOut->spawnConfiguration.populationLimit = 1;
+    compositionOut->baseSemanticRole = calmBase
+        ? OWBD_ROLE_CALM : OWBD_ROLE_ATTENTIVE;
+    compositionOut->valid = TRUE;
+    compositionOut->semanticRoleMask = OWBD_ROLE_MASK(OWBD_ROLE_CALM)
+        | OWBD_ROLE_MASK(OWBD_ROLE_ATTENTIVE)
+        | OWBD_ROLE_MASK(OWBD_ROLE_CUSTOM)
+        | (fallback ? 0 : OWBD_ROLE_MASK(OWBD_ROLE_TIRED))
+        | (asleep ? OWBD_ROLE_MASK(OWBD_ROLE_ASLEEP) : 0);
+    init_task11_resolved_node(&compositionOut->resolvedNodes[index++],
+        0x3101, calmBase ? 0x2304 : 0x2201, OWBD_ROLE_CALM);
+    init_task11_resolved_node(&compositionOut->resolvedNodes[index++],
+        0x3102, 0x2202, OWBD_ROLE_ATTENTIVE);
+    if (!fallback)
+        init_task11_resolved_node(&compositionOut->resolvedNodes[index++],
+            0x3103, authoredRebind ? 0x2206 : 0x2203,
+            OWBD_ROLE_TIRED);
+    if (asleep)
+        init_task11_resolved_node(&compositionOut->resolvedNodes[index++],
+            0x3106, 0x220C, OWBD_ROLE_ASLEEP);
+    init_task11_resolved_node(&compositionOut->resolvedNodes[index++],
+        0x3107, fallbackRebind ? 0x2211 : 0x2210, OWBD_ROLE_CUSTOM);
+    compositionOut->nodeCount = index;
+    compositionOut->boundNodeCount = index;
+    compositionOut->controllerValues[6] = 20;
+    compositionOut->controllerValues[7] = 10;
+    memcpy(compositionOut->stateValues,
+        compositionOut->resolvedNodes[calmBase ? 0 : 1].stateValues,
+        sizeof(compositionOut->stateValues));
+
+    if (staticContext->behaviorClass == 3)
+        compositionOut->semanticRoleMask &=
+            (u8)~OWBD_ROLE_MASK(OWBD_ROLE_TIRED);
+    else if (staticContext->behaviorClass == 4)
+        compositionOut->boundNodeCount--;
+    else if (staticContext->behaviorClass == 5)
+        compositionOut->resolvedNodes[2].nodeId = 0;
+    else if (staticContext->behaviorClass == 6)
+        compositionOut->resolvedNodes[2].profileId = 0;
+
+    compositionOut->staticSetHash = fixture_mix(0x4F575339u,
+        compositionOut->catalogIdentity);
+    compositionOut->staticSetHash = fixture_mix(
+        compositionOut->staticSetHash, compositionOut->staticContextIdentity);
+    compositionOut->staticSetHash = fixture_hash_bytes(
+        compositionOut->staticSetHash, &compositionOut->immutableContextMask,
+        sizeof(*compositionOut)
+            - offsetof(OverworldWildRuntimeStaticComposition,
+                immutableContextMask));
+    if (input == NULL) return TRUE;
+    if (input->immutableContextMask != compositionOut->immutableContextMask
+        || input->controllerId != compositionOut->controllerId
+        || input->effectiveProfileId != compositionOut->baseProfileId
+        || input->effectiveSemanticRole != compositionOut->baseSemanticRole
+        || input->boundNodeCount != compositionOut->boundNodeCount
+        || input->semanticRoleMask != compositionOut->semanticRoleMask)
+        return FALSE;
+    for (index = 0; index < compositionOut->nodeCount; index++) {
+        const OverworldWildRuntimeResolvedNode *node =
+            &compositionOut->resolvedNodes[index];
+        if (!node->bound) continue;
+        if (inputIndex >= input->boundNodeCount
+            || input->boundNodeIds[inputIndex++] != node->nodeId)
+            return FALSE;
+    }
+    return inputIndex == input->boundNodeCount;
+}
+#endif
 
 BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,
     OverworldWildRuntimeStaticComposition *compositionOut)
 {
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    if (sUseTask11ProductionCatalog)
+        return copy_task11_static_composition(
+            staticContext, input, compositionOut);
+#endif
+    const BOOL authoredTiredBound = staticContext != NULL
+        && staticContext->behaviorClass != 1;
+    const BOOL authoredAsleepBound = staticContext != NULL
+        && staticContext->behaviorClass == 2;
+    const u8 boundNodeCount = (u8)((authoredTiredBound ? 4 : 3)
+        + (authoredAsleepBound ? 1 : 0));
+    const u8 semanticRoleMask = OWBD_ROLE_MASK(1) | OWBD_ROLE_MASK(2)
+        | OWBD_ROLE_MASK(7)
+        | (authoredTiredBound ? OWBD_ROLE_MASK(3) : 0)
+        | (authoredAsleepBound ? OWBD_ROLE_MASK(4) : 0);
+
     memset(compositionOut, 0, sizeof(*compositionOut));
     if (staticContext == NULL || staticContext->reserved != 0
-        || input == NULL || input->controllerId != 0x3001
-        || input->effectiveProfileId != 0x2201
-        || input->effectiveSemanticRole != OWBD_ROLE_ATTENTIVE
-        || input->immutableContextMask != staticContext->groupFlags
-        || input->boundNodeCount != 4
-        || input->boundNodeIds[0] != 0x4001
-        || input->boundNodeIds[1] != 0x4100
-        || input->boundNodeIds[2] != 0x4101
-        || input->boundNodeIds[3] != 0x4107
-        || input->semanticRoleMask != (OWBD_ROLE_MASK(1)
-            | OWBD_ROLE_MASK(2) | OWBD_ROLE_MASK(3) | OWBD_ROLE_MASK(7)))
+        || staticContext->behaviorClass > 2
+        || (input != NULL && (input->controllerId != 0x3001
+            || input->effectiveProfileId != 0x2201
+            || input->effectiveSemanticRole != OWBD_ROLE_ATTENTIVE
+            || input->immutableContextMask != staticContext->groupFlags
+            || input->boundNodeCount != boundNodeCount
+            || input->boundNodeIds[0]
+                != (authoredTiredBound ? 0x4001 : 0x4100)
+            || input->boundNodeIds[1]
+                != (authoredTiredBound ? 0x4100 : 0x4101)
+            || input->boundNodeIds[2]
+                != (authoredTiredBound ? 0x4101 : 0x4107)
+            || (authoredTiredBound && input->boundNodeIds[3] != 0x4107)
+            || (authoredAsleepBound && input->boundNodeIds[4] != 0x4200)
+            || input->semanticRoleMask != semanticRoleMask)))
         return FALSE;
     compositionOut->catalogIdentity = 0xC88892BEu;
     compositionOut->staticContextIdentity =
@@ -366,16 +1203,20 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     compositionOut->staticSetHash = 0x51000001u;
     compositionOut->immutableContextMask = staticContext->groupFlags;
     compositionOut->staticContext = *staticContext;
-    compositionOut->controllerId = input->controllerId;
+    compositionOut->controllerId = 0x3001;
     compositionOut->baseNodeId = 0x4101;
     compositionOut->baseProfileId = 0x2201;
     compositionOut->spawnPolicyId = 0x4201;
     compositionOut->populationPolicyId = 0x4301;
+    compositionOut->spawnConfiguration.minimumDistance = 1;
+    compositionOut->spawnConfiguration.maximumDistance = 1;
+    compositionOut->spawnConfiguration.spawnHopTime = 1;
+    compositionOut->spawnConfiguration.populationLimit = 1;
     compositionOut->baseSemanticRole = OWBD_ROLE_ATTENTIVE;
     compositionOut->valid = TRUE;
-    compositionOut->nodeCount = 4;
-    compositionOut->boundNodeCount = 4;
-    compositionOut->semanticRoleMask = input->semanticRoleMask;
+    compositionOut->nodeCount = boundNodeCount;
+    compositionOut->boundNodeCount = boundNodeCount;
+    compositionOut->semanticRoleMask = semanticRoleMask;
     compositionOut->stateValues[0] = 2;
     compositionOut->stateValues[1] = 1;
     compositionOut->stateValues[2] = 2;
@@ -390,17 +1231,23 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     compositionOut->controllerValues[6] = 4;
     compositionOut->controllerValues[7] = 4;
     {
-        static const u16 nodeIds[4] = {0x4001, 0x4100, 0x4101, 0x4107};
-        static const u8 roles[4] = {3, 1, 2, 7};
+        static const u16 authoredNodeIds[5] = {
+            0x4001, 0x4100, 0x4101, 0x4107, 0x4200};
+        static const u8 authoredRoles[5] = {3, 1, 2, 7, 4};
+        static const u16 fallbackNodeIds[3] = {0x4100, 0x4101, 0x4107};
+        static const u8 fallbackRoles[3] = {1, 2, 7};
         u8 nodeIndex;
-        for (nodeIndex = 0; nodeIndex < 4; nodeIndex++) {
+        for (nodeIndex = 0; nodeIndex < boundNodeCount; nodeIndex++) {
             OverworldWildRuntimeResolvedNode *node =
                 &compositionOut->resolvedNodes[nodeIndex];
-            node->nodeId = nodeIds[nodeIndex];
-            node->profileId = (u16)(0x2200 + roles[nodeIndex]);
-            node->semanticRole = roles[nodeIndex];
+            const u8 role = authoredTiredBound
+                ? authoredRoles[nodeIndex] : fallbackRoles[nodeIndex];
+            node->nodeId = authoredTiredBound
+                ? authoredNodeIds[nodeIndex] : fallbackNodeIds[nodeIndex];
+            node->profileId = (u16)(0x2200 + role);
+            node->semanticRole = role;
             node->bound = TRUE;
-            node->stateValues[0] = roles[nodeIndex];
+            node->stateValues[0] = role;
             node->stateValues[1] = 1;
             node->stateValues[2] = 2;
             node->stateValues[3] = 2;
@@ -411,12 +1258,16 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
             node->stateValues[12] = 4;
             node->stateValues[14] = 4;
         }
-        compositionOut->resolvedNodes[2].profileId = 0x2201;
-        memcpy(compositionOut->resolvedNodes[2].stateValues,
+        compositionOut->resolvedNodes[authoredTiredBound ? 2 : 1].profileId =
+            0x2201;
+        memcpy(compositionOut->resolvedNodes[authoredTiredBound ? 2 : 1]
+                .stateValues,
             compositionOut->stateValues,
             sizeof(compositionOut->stateValues));
-        compositionOut->resolvedNodes[1].profileId = 0x2301;
-        compositionOut->resolvedNodes[1].stateValues[3] = 3;
+        compositionOut->resolvedNodes[authoredTiredBound ? 1 : 0].profileId =
+            0x2301;
+        compositionOut->resolvedNodes[authoredTiredBound ? 1 : 0]
+            .stateValues[3] = 3;
     }
     if (staticContext->groupFlags == 0x12345678u) {
         compositionOut->staticModifierCount = 2;
@@ -432,18 +1283,44 @@ BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
         compositionOut->staticModifiers[1].actionStableId = 0x6002;
         compositionOut->staticSetHash = 0x51000002u;
     }
+    compositionOut->staticSetHash = fixture_mix(0x4F575339u,
+        compositionOut->catalogIdentity);
+    compositionOut->staticSetHash = fixture_mix(
+        compositionOut->staticSetHash, compositionOut->staticContextIdentity);
+    compositionOut->staticSetHash = fixture_hash_bytes(
+        compositionOut->staticSetHash, &compositionOut->immutableContextMask,
+        sizeof(*compositionOut)
+            - offsetof(OverworldWildRuntimeStaticComposition,
+                immutableContextMask));
     return TRUE;
 }
 
 BOOL OverworldWildRuntime_CopyInstalledCatalogIdentity(u32 *identityOut)
 {
     if (identityOut == NULL) return FALSE;
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    if (sUseTask11ProductionCatalog) {
+        *identityOut = fixture_installed_header()->schemaFingerprint;
+        return *identityOut != 0;
+    }
+#endif
     if (sFixtureCatalogIdentity == 0) {
         *identityOut = 0;
         return FALSE;
     }
     *identityOut = sFixtureCatalogIdentity;
     return TRUE;
+}
+
+const OverworldWildBehaviorDataBlobHeader *
+OverworldWildRuntime_AcquireInstalledTransitionCatalog(void)
+{
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    return sUseTask11ProductionCatalog
+        ? fixture_installed_header() : NULL;
+#else
+    return NULL;
+#endif
 }
 
 BOOL OverworldWildRuntime_CopyInstalledStaticCache(
@@ -495,6 +1372,29 @@ BOOL OverworldWildRuntime_ApplicabilityMatchesStaticCache(
     return inputIndex == input->boundNodeCount;
 }
 
+BOOL OverworldWildRuntime_MatchesPendingTimerExpiry(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    u8 index;
+    if (runtime == NULL || expiry == NULL
+        || expiry->slotIndex >= OW_WILD_MAX_SPAWNS)
+        return FALSE;
+    slot = &runtime->slots[expiry->slotIndex];
+    for (index = 0; index < slot->activeLayerCount; index++) {
+        const OverworldWildRuntimeTimer *timer = &slot->timerBank.timers[index];
+        if (timer->entryGeneration == expiry->entryGeneration
+            && timer->timerGeneration == expiry->timerGeneration
+            && (timer->flags & (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+                == (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
     const OverworldWildRuntimeStaticCache *cache,
     u32 staticContextGeneration)
@@ -506,6 +1406,24 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
         || cache->nodeCount == 0 || cache->nodeCount > 8
         || cache->boundNodeCount == 0
         || cache->boundNodeCount > cache->nodeCount
+        || cache->spawnConfiguration.spawnState > 3
+        || cache->spawnConfiguration.destination > 16
+        || cache->spawnConfiguration.minimumDistance < 1
+        || cache->spawnConfiguration.minimumDistance > 8
+        || cache->spawnConfiguration.maximumDistance
+            < cache->spawnConfiguration.minimumDistance
+        || cache->spawnConfiguration.maximumDistance > 8
+        || cache->spawnConfiguration.spawnHopTime > 64
+        || cache->spawnConfiguration.spawnFlags
+        || cache->spawnConfiguration.populationLimit > 10
+        || cache->spawnConfiguration.populationFlags
+        || cache->spawnConfiguration.helpCallInvocation > 1
+        || cache->spawnConfiguration.pickupThrowEntry > 1
+        || cache->spawnConfiguration.pickupThrowActiveLoop
+            != cache->spawnConfiguration.pickupThrowEntry
+        || (cache->spawnConfiguration.helpCallInvocation
+            && cache->spawnConfiguration.pickupThrowEntry)
+        || cache->spawnConfiguration.hookFlags
         || cache->staticModifierCount > 8)
         return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
     return OW_WILD_RUNTIME_STATUS_OK;
@@ -513,44 +1431,16 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(
     const OverworldWildRuntimeStaticCache *retainedCache,
-    const OverworldWildRuntimeStaticContext *staticContext,
     u32 staticContextGeneration,
     OverworldWildRuntimeStaticCache *resolvedOut)
 {
-    OverworldWildRuntimeApplicabilityInput applicability;
-    OverworldWildRuntimeStatus status;
-    u8 nodeIndex;
-    u8 inputIndex = 0;
-    if (retainedCache == NULL || staticContext == NULL || resolvedOut == NULL
-        || retainedCache == resolvedOut)
+    if (retainedCache == NULL || resolvedOut == NULL
+        || retainedCache == resolvedOut
+        || OverworldWildRuntime_ValidateStaticCache(
+            retainedCache, staticContextGeneration)
+            != OW_WILD_RUNTIME_STATUS_OK)
         return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
-    status = OverworldWildRuntime_ValidateStaticCache(
-        retainedCache, staticContextGeneration);
-    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-    if (memcmp(staticContext, &retainedCache->staticContext,
-            sizeof(*staticContext)) != 0)
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
-    memset(&applicability, 0, sizeof(applicability));
-    applicability.immutableContextMask = retainedCache->immutableContextMask;
-    applicability.controllerId = retainedCache->controllerId;
-    applicability.effectiveProfileId = retainedCache->baseProfileId;
-    applicability.effectiveSemanticRole = retainedCache->baseSemanticRole;
-    applicability.semanticRoleMask = retainedCache->semanticRoleMask;
-    for (nodeIndex = 0; nodeIndex < retainedCache->nodeCount; nodeIndex++) {
-        if (!retainedCache->resolvedNodes[nodeIndex].bound) continue;
-        if (inputIndex >= sizeof(applicability.boundNodeIds)
-                / sizeof(applicability.boundNodeIds[0]))
-            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
-        applicability.boundNodeIds[inputIndex++] =
-            retainedCache->resolvedNodes[nodeIndex].nodeId;
-    }
-    applicability.boundNodeCount = inputIndex;
-    if (inputIndex != retainedCache->boundNodeCount
-        || !OverworldWildRuntime_CopyInstalledStaticCache(
-            staticContext, &applicability, staticContextGeneration,
-            resolvedOut)
-        || memcmp(retainedCache, resolvedOut, sizeof(*resolvedOut)) != 0)
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+    *resolvedOut = *retainedCache;
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
@@ -832,8 +1722,8 @@ static OverworldWildRuntimeLayerHandle apply_one(
         input, definition, owner, key, &result);
 
     if (status != OW_WILD_RUNTIME_STATUS_OK)
-        fprintf(stderr, "fixture apply definition=%04X status=%u\n",
-            definition, status);
+        fprintf(stderr, "fixture apply definition=%04X owner=%04X status=%u\n",
+            definition, owner, status);
     require(status == OW_WILD_RUNTIME_STATUS_OK, "fixture apply failed");
     require(result.ok && result.mutated, "fixture apply did not mutate");
     require(result.operationResultCount == 1, "fixture apply result count");
@@ -1977,6 +2867,7 @@ static void test_task9_composition_cache_and_provenance(
     OverworldWildRuntimeEffectiveCache copied;
     OverworldWildRuntimeProvenance provenance;
     OverworldWildRuntimeSlotSidecar bystander;
+    OverworldWildRuntimeStaticCache hostileConfiguration;
     OverworldWildRuntimeLayerHandle high;
     OverworldWildRuntimeLayerHandle low;
     OverworldWildRuntimeStatus status;
@@ -2009,6 +2900,33 @@ static void test_task9_composition_cache_and_provenance(
     require(runtime.slots[0].layerGeneration == 1
             && runtime.slots[0].effectiveGeneration == 1,
         "static-only composition advanced a generation");
+    require(runtime.slots[0].staticCache.spawnConfiguration.minimumDistance
+                == 1
+            && runtime.slots[0].staticCache.spawnConfiguration.maximumDistance
+                == 1
+            && runtime.slots[0].staticCache.spawnConfiguration.populationLimit
+                == 1,
+        "spawn configuration was not retained in the static cache");
+    hostileConfiguration = runtime.slots[0].staticCache;
+    hostileConfiguration.spawnConfiguration.populationLimit = 11;
+    hostileConfiguration.staticSetHash = fixture_mix(0x4F575339u,
+        hostileConfiguration.catalogIdentity);
+    hostileConfiguration.staticSetHash = fixture_mix(
+        hostileConfiguration.staticSetHash,
+        hostileConfiguration.staticContextIdentity);
+    hostileConfiguration.staticSetHash = fixture_hash_bytes(
+        hostileConfiguration.staticSetHash,
+        &hostileConfiguration.immutableContextMask,
+        sizeof(hostileConfiguration)
+            - offsetof(OverworldWildRuntimeStaticCache,
+                immutableContextMask));
+    require(hostileConfiguration.staticSetHash
+                != runtime.slots[0].staticCache.staticSetHash
+            && OverworldWildRuntime_ValidateStaticCache(
+                &hostileConfiguration,
+                runtime.slots[0].staticContextGeneration)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+        "spawn configuration was not authenticated or domain validated");
     require(OverworldWildRuntime_GetEffectiveCache(&runtime, 0,
             runtime.slots[0].slotGeneration, &cache)
             == OW_WILD_RUNTIME_STATUS_OK
@@ -2027,52 +2945,6 @@ static void test_task9_composition_cache_and_provenance(
             && capabilities == cache.capabilityMask,
         "O(1) capability query missed the validated cache");
     firstCacheIdentity = cache.cacheIdentity;
-
-    runtime.slots[0].staticCache.stateValues[3] = 3;
-    for (i = 0; i < runtime.slots[0].staticCache.nodeCount; i++) {
-        if (runtime.slots[0].staticCache.resolvedNodes[i].nodeId
-                == runtime.slots[0].staticCache.baseNodeId)
-            runtime.slots[0].staticCache.resolvedNodes[i].stateValues[3] = 3;
-    }
-    runtime.slots[0].staticCache.staticSetHash = fixture_mix(0x4F575339u,
-        runtime.slots[0].staticCache.catalogIdentity);
-    runtime.slots[0].staticCache.staticSetHash = fixture_mix(
-        runtime.slots[0].staticCache.staticSetHash,
-        runtime.slots[0].staticCache.staticContextIdentity);
-    runtime.slots[0].staticCache.staticSetHash = fixture_hash_bytes(
-        runtime.slots[0].staticCache.staticSetHash,
-        &runtime.slots[0].staticCache.immutableContextMask,
-        sizeof(runtime.slots[0].staticCache)
-            - offsetof(OverworldWildRuntimeStaticCache,
-                immutableContextMask));
-    runtime.slots[0].effectiveCache.stateValues[3] = 3;
-    runtime.slots[0].effectiveCache.staticSetHash =
-        runtime.slots[0].staticCache.staticSetHash;
-    runtime.slots[0].provenance.staticSetHash =
-        runtime.slots[0].staticCache.staticSetHash;
-    runtime.slots[0].effectiveCache.effectiveHash =
-        EffectiveHash(&runtime.slots[0].effectiveCache);
-    runtime.slots[0].provenance.effectiveHash =
-        runtime.slots[0].effectiveCache.effectiveHash;
-    runtime.slots[0].provenance.provenanceHash =
-        ProvenanceHash(&runtime.slots[0].provenance);
-    runtime.slots[0].effectiveCache.provenanceHash =
-        runtime.slots[0].provenance.provenanceHash;
-    runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
-        &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
-        &runtime.slots[0].provenance,
-        sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
-    runtime.slots[0].provenance.cacheIdentity =
-        runtime.slots[0].effectiveCache.cacheIdentity;
-    require(ValidateCacheKey(&runtime, &runtime.slots[0])
-            == OW_WILD_RUNTIME_STATUS_OK,
-        "hostile retained static fixture was not internally coherent");
-    before = runtime;
-    require(OverworldWildRuntime_Apply(&runtime, 0,
-            runtime.slots[0].slotGeneration, input, DEF_HIGH_STATE,
-            0x94FE, 0, &result) == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
-            && memcmp(&runtime, &before, sizeof(runtime)) == 0,
-        "coherently altered retained static changed live mutation bytes");
 
     prepare_runtime_unprimed(&runtime, 0);
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
@@ -2507,16 +3379,26 @@ static void test_task9_composition_cache_and_provenance(
     (void)high;
 }
 
+static OverworldWildRuntimeTimer *timer_for_owner_key(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex,
+    u16 ownerId,
+    u16 instanceKey)
+{
+    int index = FindLayer(
+        &runtime->slots[slotIndex], ownerId, instanceKey);
+    if (index < 0) return NULL;
+    if (!(runtime->slots[slotIndex].timerBank.timers[index].flags
+            & OW_WILD_RUNTIME_TIMER_VALID)) return NULL;
+    return &runtime->slots[slotIndex].timerBank.timers[index];
+}
+
 static OverworldWildRuntimeTimer *timer_for_owner(
     OverworldWildBehaviorStackRuntime *runtime,
     int slotIndex,
     u16 ownerId)
 {
-    int index = FindLayer(&runtime->slots[slotIndex], ownerId, 0);
-    if (index < 0) return NULL;
-    if (!(runtime->slots[slotIndex].timerBank.timers[index].flags
-            & OW_WILD_RUNTIME_TIMER_VALID)) return NULL;
-    return &runtime->slots[slotIndex].timerBank.timers[index];
+    return timer_for_owner_key(runtime, slotIndex, ownerId, 0);
 }
 
 static OverworldWildRuntimeTimerExpiry expiry_for_owner(
@@ -2524,7 +3406,7 @@ static OverworldWildRuntimeTimerExpiry expiry_for_owner(
     int slotIndex,
     u16 ownerId)
 {
-    OverworldWildRuntimeTimerExpiry expiry;
+    OverworldWildRuntimeTimerExpiry expiry = {0};
     u8 i;
     memset(&expiry, 0, sizeof(expiry));
     for (i = 0; i < OverworldWildRuntime_GetPendingTimerExpiryCount(
@@ -3102,12 +3984,1537 @@ static void test_task10_timer_engine(
     (void)tired;
 }
 
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static void prepare_task11_runtime(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    const OverworldWildRuntimeStaticContext *context,
+    OverworldWildRuntimeResolvedStaticContext *resolvedOut)
+{
+    prepare_runtime_unprimed(runtime, slotIndex);
+    require(OverworldWildRuntime_ResolveCanonicalStaticContext(
+            context, resolvedOut) == OW_WILD_RUNTIME_STATUS_OK
+        && OverworldWildRuntime_PrimeEffectiveCache(runtime,
+            slotIndex, runtime->slots[slotIndex].slotGeneration,
+            context, NULL) == OW_WILD_RUNTIME_STATUS_OK,
+        "Task11 runtime catalog-owned prime failed");
+}
+
+static void assign_task11_slot(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    const OverworldWildRuntimeStaticContext *context,
+    OverworldWildRuntimeResolvedStaticContext *resolvedOut)
+{
+    OverworldWildRuntime_MarkSlotAssigned(runtime, slotIndex);
+    require(OverworldWildRuntime_ResolveCanonicalStaticContext(
+            context, resolvedOut) == OW_WILD_RUNTIME_STATUS_OK
+        && OverworldWildRuntime_PrimeEffectiveCache(runtime,
+            slotIndex, runtime->slots[slotIndex].slotGeneration,
+            context, NULL) == OW_WILD_RUNTIME_STATUS_OK,
+        "Task11 secondary slot catalog-owned prime failed");
+}
+
+static void require_task11_invalid_recovery(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry,
+    const char *category,
+    u8 malformedCase)
+{
+    OverworldWildBehaviorStackRuntime runtimeBefore = *runtime;
+    OverworldWildRuntimeRecoveryPlan plan;
+    BOOL accepted = ValidateRecoveryCatalogClosure(expiry, &plan);
+
+    if (accepted || memcmp(runtime, &runtimeBefore, sizeof(*runtime)))
+        fprintf(stderr,
+            "%s invalid catalog case=%u accepted=%u\n",
+            category, malformedCase, accepted);
+    require(!accepted && !memcmp(runtime, &runtimeBefore, sizeof(*runtime)),
+        "invalid catalog closure changed runtime or was accepted");
+}
+
+static void test_task11_substrate(
+    const OverworldWildRuntimeApplicabilityInput *input)
+{
+    static const u16 identityMutationOffsets[] = {
+        offsetof(OverworldWildRuntimeCommandIdentity, commandGeneration),
+        offsetof(OverworldWildRuntimeCommandIdentity, commandSerial),
+        offsetof(OverworldWildRuntimeCommandIdentity, objectGeneration),
+        offsetof(OverworldWildRuntimeCommandIdentity,
+            staminaPolicyGeneration),
+        offsetof(OverworldWildRuntimeCommandIdentity, staminaPolicyId),
+        offsetof(OverworldWildRuntimeCommandIdentity, reserved[0]),
+        offsetof(OverworldWildRuntimeCommandIdentity, reserved[1]),
+    };
+    static const u16 originMutationOffsets[] = {
+        offsetof(OverworldWildRuntimeCommandOrigin, runtimeEpoch),
+        offsetof(OverworldWildRuntimeCommandOrigin, slotGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin, commandGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin, commandSerial),
+        offsetof(OverworldWildRuntimeCommandOrigin, winningEntryGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin, effectiveGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin, objectGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin,
+            staminaPolicyGeneration),
+        offsetof(OverworldWildRuntimeCommandOrigin, controllerId),
+        offsetof(OverworldWildRuntimeCommandOrigin, nodeId),
+        offsetof(OverworldWildRuntimeCommandOrigin, stateProfileId),
+        offsetof(OverworldWildRuntimeCommandOrigin, winningDefinitionId),
+        offsetof(OverworldWildRuntimeCommandOrigin, winningOwnerId),
+        offsetof(OverworldWildRuntimeCommandOrigin, winningInstanceKey),
+        offsetof(OverworldWildRuntimeCommandOrigin, staminaPolicyId),
+        offsetof(OverworldWildRuntimeCommandOrigin, slotIndex),
+        offsetof(OverworldWildRuntimeCommandOrigin, winnerKind),
+        offsetof(OverworldWildRuntimeCommandOrigin, flags),
+        offsetof(OverworldWildRuntimeCommandOrigin, reserved[0]),
+        offsetof(OverworldWildRuntimeCommandOrigin, reserved[1]),
+        offsetof(OverworldWildRuntimeCommandOrigin, reserved[2]),
+    };
+    static const u8 imperativeOrigins[3] = {
+        OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED,
+        OW_WILD_RUNTIME_RECOVERY_ORIGIN_RAM_CRASH,
+        OW_WILD_RUNTIME_RECOVERY_ORIGIN_THROW_RECOVERY,
+    };
+    static const u16 authoredDefinitions[3] = {
+        TASK11_DEF_FLED_SEMANTIC,
+        TASK11_DEF_RAM_SEMANTIC,
+        TASK11_DEF_THROW_SEMANTIC,
+    };
+    static const u16 exactDefinitions[3] = {
+        TASK11_DEF_FLED_EXACT,
+        TASK11_DEF_RAM_EXACT,
+        TASK11_DEF_THROW_EXACT,
+    };
+    static const u16 authoredTransitions[3] = {
+        TASK11_TRANSITION_FLED_SEMANTIC,
+        TASK11_TRANSITION_RAM_SEMANTIC,
+        TASK11_TRANSITION_THROW_SEMANTIC,
+    };
+    static const u16 exactTransitions[3] = {
+        TASK11_TRANSITION_FLED_EXACT,
+        TASK11_TRANSITION_RAM_EXACT,
+        TASK11_TRANSITION_THROW_EXACT,
+    };
+    static const u16 originOwners[3] = {0x8107, 0x8106, 0x8108};
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime runtimeBefore;
+    OverworldWildBehaviorStackRuntime expiredRuntime;
+    OverworldWildRuntimeResolvedStaticContext authored;
+    OverworldWildRuntimeResolvedStaticContext fallback;
+    OverworldWildRuntimeResolvedStaticContext resolved;
+    OverworldWildRuntimeResolvedStaticContext resolvedBefore;
+    OverworldWildRuntimeRecoveryCandidate candidate;
+    OverworldWildRuntimeRecoveryCandidate zeroCandidate;
+    OverworldWildRuntimeStaticContext context = fixture_static_context();
+    OverworldWildRuntimeStaticContext fallbackContext = fixture_static_context();
+    OverworldWildRuntimeStaticContext sleepContext = fixture_static_context();
+    OverworldWildRuntimeStaticContext invalidContext = fixture_static_context();
+    OverworldWildRuntimeStaticContext authoredRebindContext =
+        fixture_static_context();
+    OverworldWildRuntimeStaticContext fallbackRebindContext =
+        fixture_static_context();
+    OverworldWildRuntimeStaticContext mutationContexts[4];
+    OverworldWildRuntimeCommandOriginBank commandBank;
+    OverworldWildRuntimeCommandOriginBank commandBankBefore;
+    OverworldWildRuntimeCommandOriginBank capturedCommandBank;
+    OverworldWildRuntimeCommandOrigin consumed;
+    OverworldWildRuntimeCommandIdentity mutatedCommand;
+    OverworldWildRuntimeCommandIdentity commandA = {
+        .commandGeneration = 1,
+        .commandSerial = 101,
+        .objectGeneration = 201,
+        .staminaPolicyGeneration = 301,
+        .staminaPolicyId = 401,
+    };
+    OverworldWildRuntimeCommandIdentity commandB = {
+        .commandGeneration = 2,
+        .commandSerial = 102,
+        .objectGeneration = 202,
+        .staminaPolicyGeneration = 302,
+        .staminaPolicyId = 402,
+    };
+    OverworldWildRuntimeCommandIdentity wrongCommand = {
+        .commandGeneration = 9,
+        .commandSerial = 101,
+        .objectGeneration = 201,
+        .staminaPolicyGeneration = 301,
+        .staminaPolicyId = 401,
+    };
+    OverworldWildRuntimeTimerTickResult tick;
+    OverworldWildRuntimeTimerRecoveryResult recovery;
+    OverworldWildRuntimeTimerExpiry expiry;
+    union FixtureInstalledCatalogStorage catalogBefore;
+    u32 oldSlotGeneration;
+    u8 index;
+    u8 mutationIndex;
+    u8 malformedCase;
+    u8 malformedRecoveryCount = 0;
+    u8 closedFamilyMutationCount = 0;
+    u8 semanticBacklinkMutationCount = 0;
+    u8 exactBacklinkMutationCount = 0;
+    u8 staminaBacklinkMutationCount = 0;
+    u8 sleepBacklinkMutationCount = 0;
+    u8 endToEndStatus;
+    u8 invalidSelectionStatus;
+    u8 staleCommandStatus;
+    u8 calmRecoveryStatus;
+    u8 removeSelfStatus;
+
+    (void)input;
+    sUseTask11ProductionCatalog = TRUE;
+    memset(&zeroCandidate, 0, sizeof(zeroCandidate));
+    fallbackContext.behaviorClass = 1;
+    sleepContext.behaviorClass = 2;
+    invalidContext.behaviorClass = 4;
+    authoredRebindContext.behaviorClass = 8;
+    fallbackRebindContext.behaviorClass = 9;
+    for (index = 0; index < 4; index++) {
+        mutationContexts[index] = fixture_static_context();
+        mutationContexts[index].behaviorClass = (u8)(3 + index);
+    }
+    require(!memcmp(sFixtureInstalledStorage.bytes, sGeneratedV40Catalog,
+            sizeof(sGeneratedV40Catalog))
+            && fixture_installed_header()->schemaFingerprint != 0,
+        "Task11 fixture bytes differ from the generated v40 catalog");
+    catalogBefore = sFixtureInstalledStorage;
+    fixture_reseal_installed_catalog();
+    require(fixture_installed_header()->checksum
+            == catalogBefore.alignment.checksum,
+        "fixture catalog CRC reseal diverged from generated bytes");
+    sFixtureInstalledStorage = catalogBefore;
+    for (mutationIndex = 0; mutationIndex < 2; mutationIndex++) {
+        const u16 *definitionIds = mutationIndex == 0
+            ? authoredDefinitions : exactDefinitions;
+        const u16 *transitionIds = mutationIndex == 0
+            ? authoredTransitions : exactTransitions;
+        for (index = 0; index < 3; index++) {
+            OverworldWildOverrideDefinitionRecord *definition =
+                fixture_override_definition(definitionIds[index]);
+            OverworldWildTransitionRecord *transition =
+                fixture_transition(transitionIds[index]);
+            OverworldWildTransitionGuardRecord *guard =
+                fixture_transition_guard(transitionIds[index]);
+            OverworldWildRecoveryActionRecord *recoveryAction =
+                fixture_recovery_action(transitionIds[index]);
+            OverworldWildTiredTranslationRecord *translation =
+                fixture_tired_translation((u8)(index + 1),
+                    mutationIndex == 0);
+            require(definition->stableId == definitionIds[index]
+                    && definition->recoveryTransitionId
+                        == transitionIds[index]
+                    && definition->requiredOwnerId == originOwners[index]
+                    && definition->selectorKind
+                        == (mutationIndex == 0
+                            ? OWBD_SELECTOR_SEMANTIC_ROLE
+                            : OWBD_SELECTOR_EXACT)
+                    && definition->semanticRole
+                        == (mutationIndex == 0 ? OWBD_ROLE_TIRED : 0)
+                    && definition->controllerId
+                        == (mutationIndex == 0 ? 0 : 0x3001)
+                    && definition->nodeId
+                        == (mutationIndex == 0 ? 0 : 0x3107)
+                    && definition->hasTiredOriginKind
+                    && definition->tiredOriginKind == index + 1
+                    && definition->hasRequiredOwnerId
+                    && !definition->allowMultipleOwners
+                    && !definition->allowMultipleInstancesPerOwner
+                    && !definition->authoredTiredBound
+                    && definition->flags == (u8)(mutationIndex != 0)
+                    && definition->mapLifetime == 2
+                    && definition->battleLifetime == 1
+                    && definition->timerClock == OWBD_TIMER_CLOCK_FRAME
+                    && definition->timerSource == 1
+                    && definition->hiddenTimerPolicy
+                        == OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
+                    && definition->recoveryPolicy
+                        == OWBD_RECOVERY_ROUTE_TRANSITION
+                    && definition->timerValue == 4
+                    && !definition->reserved0 && !definition->reserved1,
+                "generated v40 wrapper definition bytes drifted");
+            require(transition->candidateDefinitionId
+                        == definitionIds[index]
+                    && transition->ownerId == originOwners[index]
+                    && transition->guardCount == 1
+                    && transition->operationCount
+                        == (u16)(index == 0 ? 1 : 4)
+                    && transition->actionCount == 2
+                    && transition->trigger == OWBD_TRIGGER_TIRED_EXPIRED
+                    && transition->fromRoleMask
+                        == (mutationIndex == 0
+                            ? 0x7F : OWBD_ROLE_MASK(OWBD_ROLE_CUSTOM))
+                    && transition->recoveryCount == 1
+                    && transition->dispatchPriority != 0
+                    && guard->stableId != 0
+                    && guard->transitionId == transitionIds[index]
+                    && guard->kind == OWBD_GUARD_CANDIDATE_TIMER_EXPIRED
+                    && !guard->negate
+                    && guard->payload == OWBD_TRIGGER_TIRED_EXPIRED
+                    && !guard->reserved0 && !guard->referenceId
+                    && !guard->reserved,
+                "generated v40 recovery topology bytes drifted");
+            for (malformedCase = 0;
+                    malformedCase < transition->operationCount;
+                    malformedCase++) {
+                OverworldWildTransitionOperationRecord *operation =
+                    fixture_transition_operation(
+                        transitionIds[index], malformedCase);
+                require(operation->stableId != 0
+                        && operation->transitionId == transitionIds[index]
+                        && operation->busyPolicy == OWBD_BUSY_REJECT
+                        && !operation->reserved
+                        && (malformedCase == 0
+                            ? (operation->kind
+                                    == OWBD_TRANSITION_REMOVE_REQUIRED
+                                && operation->required
+                                && operation->definitionId
+                                    == definitionIds[index]
+                                && operation->ownerId == originOwners[index]
+                                && !operation->replacementDefinitionId
+                                && !operation->policyId
+                                && !operation->instanceKey)
+                            : (operation->kind
+                                    == OWBD_TRANSITION_REMOVE_OWNER_IF_PRESENT
+                                && !operation->required
+                                && !operation->definitionId
+                                && operation->ownerId
+                                    == (u16)(0x8101 + malformedCase)
+                                && !operation->replacementDefinitionId
+                                && !operation->policyId
+                                && !operation->instanceKey)),
+                    "generated v40 recovery operation payload drifted");
+            }
+            require(fixture_transition_action(
+                        transitionIds[index], 0)->kind
+                        == OWBD_ACTION_RESET_TIRED_COUNTER
+                    && fixture_transition_action(
+                        transitionIds[index], 1)->kind
+                        == OWBD_ACTION_START_POST_TIRED_COOLDOWN
+                    && recoveryAction->stableId != 0
+                    && recoveryAction->transitionId == transitionIds[index]
+                    && recoveryAction->ownerId == originOwners[index]
+                    && recoveryAction->required
+                    && recoveryAction->kind
+                        == (index == 0
+                            ? OWBD_RECOVERY_ACTION_REMOVE_SELF
+                            : OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT)
+                    && translation->candidateDefinitionId
+                        == definitionIds[index]
+                    && translation->recoveryTransitionId
+                        == transitionIds[index]
+                    && translation->authoredProfileId
+                        == (mutationIndex == 0 ? 0x2203 : 0x2210)
+                    && translation->exactFallbackControllerId
+                        == (mutationIndex == 0 ? 0 : 0x3001)
+                    && translation->exactFallbackNodeId
+                        == (mutationIndex == 0 ? 0 : 0x3107)
+                    && translation->timerOperator == 1
+                    && translation->timerSource == 1
+                    && translation->mapLifetime == 2
+                    && translation->battleLifetime == 1
+                    && !translation->flags && !translation->reserved,
+                "generated v40 recovery action/translation bytes drifted");
+        }
+    }
+    require(OverworldWildRuntime_ResolveCanonicalStaticContext(
+            &context, &authored) == OW_WILD_RUNTIME_STATUS_OK
+            && authored.controllerId == 0x3001
+            && authored.baseNodeId == 0x3102
+            && authored.baseProfileId == 0x2202
+            && authored.authoredTiredBound
+            && authored.tiredNodeId == 0x3103
+            && authored.tiredProfileId == 0x2203
+            && authored.stamina == 20 && authored.restTime == 10,
+        "canonical context did not publish the exact installed binding");
+    require(OverworldWildRuntime_ResolveCanonicalStaticContext(
+            &fallbackContext, &fallback) == OW_WILD_RUNTIME_STATUS_OK
+            && !fallback.authoredTiredBound
+            && fallback.tiredNodeId == 0 && fallback.tiredProfileId == 0
+            && fallback.applicability.boundNodeCount == 3
+            && !(fallback.applicability.semanticRoleMask
+                & OWBD_ROLE_MASK(OWBD_ROLE_TIRED)),
+        "canonical context fabricated an authored tired binding");
+    memset(&resolved, 0xA5, sizeof(resolved));
+    require(OverworldWildRuntime_ResolveCanonicalStaticContext(
+            &invalidContext, &resolved)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && !memcmp(&resolved,
+                &(OverworldWildRuntimeResolvedStaticContext){0},
+                sizeof(resolved)),
+        "invalid canonical context retained partial output bytes");
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeCanonicalEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &context, &resolved)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && !memcmp(&resolved, &authored, sizeof(resolved))
+            && runtime.slots[0].staticCache.catalogIdentity
+                == authored.catalogIdentity
+            && runtime.slots[0].staticCache.staticContextIdentity
+                == authored.staticContextIdentity
+            && runtime.slots[0].staticCache.staticSetHash
+                == authored.staticSetHash,
+        "canonical prime did not publish the resolved static cache");
+    runtimeBefore = runtime;
+    memset(&resolved, 0xA5, sizeof(resolved));
+    require(OverworldWildRuntime_PrimeCanonicalEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &invalidContext, &resolved)
+            == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime))
+            && !memcmp(&resolved,
+                &(OverworldWildRuntimeResolvedStaticContext){0},
+                sizeof(resolved)),
+        "invalid canonical prime changed runtime or output bytes");
+
+    for (index = 0; index < 4; index++) {
+        runtimeBefore = runtime;
+        memset(&candidate, 0xA5, sizeof(candidate));
+        require(OverworldWildRuntime_ResolveRecoveryCandidate(
+                &mutationContexts[index],
+                OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+                == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+                && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+                && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+            "malformed canonical applicability changed output or runtime");
+    }
+
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(&context,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_STAMINA, &candidate)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && candidate.definitionId == TASK11_DEF_STAMINA
+            && candidate.ownerId == 0x8105
+            && candidate.recoveryTransitionId
+                == TASK11_TRANSITION_STAMINA_RECOVER
+            && candidate.nodeId == authored.tiredNodeId
+            && candidate.profileId == authored.tiredProfileId
+            && candidate.selection
+                == OW_WILD_RUNTIME_RECOVERY_SELECTION_AUTHORED_SEMANTIC,
+        "stamina did not select the authored tired candidate");
+    memset(&candidate, 0xA5, sizeof(candidate));
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(&fallbackContext,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_STAMINA, &candidate)
+            == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate)),
+        "stamina recovery was enabled without an authored tired binding");
+    for (index = 0; index < 3; index++) {
+        require(OverworldWildRuntime_ResolveRecoveryCandidate(&context,
+                imperativeOrigins[index], &candidate)
+                == OW_WILD_RUNTIME_STATUS_OK
+                && candidate.definitionId == authoredDefinitions[index]
+                && candidate.nodeId == authored.tiredNodeId
+                && candidate.profileId == authored.tiredProfileId
+                && candidate.selection
+                    == OW_WILD_RUNTIME_RECOVERY_SELECTION_AUTHORED_SEMANTIC
+                && candidate.selectorKind
+                    == OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE,
+            "imperative recovery did not select the authored semantic wrapper");
+        require(OverworldWildRuntime_ResolveRecoveryCandidate(
+                &fallbackContext,
+                imperativeOrigins[index], &candidate)
+                == OW_WILD_RUNTIME_STATUS_OK
+                && candidate.definitionId == exactDefinitions[index]
+                && candidate.nodeId == 0x3107
+                && candidate.profileId == 0x2210
+                && candidate.selection
+                    == OW_WILD_RUNTIME_RECOVERY_SELECTION_GENERATED_EXACT
+                && candidate.selectorKind == OW_WILD_RUNTIME_SELECTOR_EXACT,
+            "imperative recovery did not select the generated exact fallback");
+    }
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(
+            &authoredRebindContext,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && candidate.nodeId == 0x3103
+            && candidate.profileId == 0x2206,
+        "semantic recovery ignored the freshly rebound tired profile");
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(
+            &fallbackRebindContext,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && candidate.nodeId == 0x3107
+            && candidate.profileId == 0x2211
+            && candidate.semanticRole == 0,
+        "exact recovery ignored the freshly rebound custom profile");
+    catalogBefore = sFixtureInstalledStorage;
+    ((OverworldWildTiredTranslationRecord *)fixture_section_record(
+        &fixture_installed_header()->tiredTranslations, 3,
+        sizeof(OverworldWildTiredTranslationRecord)))
+            ->destinationControllerId = 0x3001;
+    resolvedBefore = authored;
+    runtimeBefore = runtime;
+    memset(&candidate, 0xA5, sizeof(candidate));
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(&context,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_AMBIGUOUS_SELECTOR
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+            && !memcmp(&authored, &resolvedBefore, sizeof(authored))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "invalid recovery selection changed caller or runtime bytes");
+    sFixtureInstalledStorage = catalogBefore;
+    fixture_installed_header()->tiredTranslations.count = 0;
+    memset(&candidate, 0xA5, sizeof(candidate));
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(&context,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_RAM_CRASH, &candidate)
+            == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "missing recovery selection changed output or runtime bytes");
+    sFixtureInstalledStorage = catalogBefore;
+    fixture_override_definition(TASK11_DEF_FLED_SEMANTIC)->selectorKind =
+        OW_WILD_RUNTIME_SELECTOR_EXACT;
+    memset(&candidate, 0xA5, sizeof(candidate));
+    invalidSelectionStatus = ResolveRecoveryCandidateCatalogOracle(
+        &context, OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate);
+    require(invalidSelectionStatus == OW_WILD_RUNTIME_STATUS_INVALID_TRANSLATION
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "invalid recovery definition changed output or runtime bytes");
+    sFixtureInstalledStorage = catalogBefore;
+    fixture_tired_translation(OWBD_TIRED_ORIGIN_FLED, TRUE)
+        ->authoredProfileId = 0x2202;
+    memset(&candidate, 0xA5, sizeof(candidate));
+    require(ResolveRecoveryCandidateCatalogOracle(&context,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_INVALID_TRANSLATION
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "semantic translation profile mismatch changed output or runtime");
+    sFixtureInstalledStorage = catalogBefore;
+    fixture_tired_translation(OWBD_TIRED_ORIGIN_FLED, FALSE)
+        ->authoredProfileId = 0x2203;
+    memset(&candidate, 0xA5, sizeof(candidate));
+    require(ResolveRecoveryCandidateCatalogOracle(&fallbackContext,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_INVALID_TRANSLATION
+            && !memcmp(&candidate, &zeroCandidate, sizeof(candidate))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "exact translation profile mismatch changed output or runtime");
+    sFixtureInstalledStorage = catalogBefore;
+
+    prepare_task11_runtime(&runtime, 0, &context, &resolved);
+    assign_task11_slot(&runtime, 1, &context, &resolved);
+    memset(&commandBank, 0, sizeof(commandBank));
+    runtimeBefore = runtime;
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && commandBank.records[0].winnerKind
+                == OW_WILD_RUNTIME_COMMAND_WINNER_BASE
+            && commandBank.records[0].winningDefinitionId == 0
+            && commandBank.records[0].winningOwnerId == 0
+            && commandBank.records[0].winningInstanceKey == 0
+            && commandBank.records[0].winningEntryGeneration == 0
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "base command origin fabricated layer winner fields");
+    require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA, &consumed)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && consumed.winnerKind == OW_WILD_RUNTIME_COMMAND_WINNER_BASE
+            && !memcmp(&commandBank,
+                &(OverworldWildRuntimeCommandOriginBank){0},
+                sizeof(commandBank)),
+        "base command origin was not consumable exactly once");
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_FLED_SEMANTIC, 0x8107, 0);
+    (void)apply_one(&runtime, 1, &authored.applicability,
+        TASK11_DEF_FLED_SEMANTIC, 0x8107, 0);
+    runtimeBefore = runtime;
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && (commandBank.records[0].flags
+                & OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID)
+            && commandBank.records[0].commandGeneration == 1
+            && commandBank.records[0].commandSerial == 101
+            && commandBank.records[0].objectGeneration == 201
+            && commandBank.records[0].staminaPolicyId == 401
+            && commandBank.records[0].staminaPolicyGeneration == 301
+            && commandBank.records[0].winnerKind
+                == OW_WILD_RUNTIME_COMMAND_WINNER_LAYER
+            && commandBank.records[0].winningDefinitionId
+                == TASK11_DEF_FLED_SEMANTIC
+            && commandBank.records[0].winningOwnerId == 0x8107
+            && commandBank.records[0].winningInstanceKey == 0
+            && commandBank.records[0].winningEntryGeneration != 0
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "command origin capture changed runtime or lost captured policy");
+    capturedCommandBank = commandBank;
+    for (mutationIndex = 0;
+            mutationIndex < sizeof(identityMutationOffsets)
+                / sizeof(identityMutationOffsets[0]); mutationIndex++) {
+        mutatedCommand = commandA;
+        ((u8 *)&mutatedCommand)[identityMutationOffsets[mutationIndex]]
+            ^= (u8)(mutationIndex < 5 ? 0x80 : 1);
+        commandBank = capturedCommandBank;
+        commandBankBefore = commandBank;
+        runtimeBefore = runtime;
+        memset(&consumed, 0xA5, sizeof(consumed));
+        require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime,
+                &commandBank, 0, runtime.slots[0].slotGeneration,
+                &mutatedCommand, &consumed)
+                == (mutationIndex < 5
+                    ? OW_WILD_RUNTIME_STATUS_STALE_NOOP
+                    : OW_WILD_RUNTIME_STATUS_INVALID_HANDLE)
+                && !memcmp(&consumed,
+                    &(OverworldWildRuntimeCommandOrigin){0},
+                    sizeof(consumed))
+                && !memcmp(&commandBank, &commandBankBefore,
+                    sizeof(commandBank))
+                && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+            "mutated V11 command identity changed captured state");
+    }
+    for (mutationIndex = 0;
+            mutationIndex < sizeof(originMutationOffsets)
+                / sizeof(originMutationOffsets[0]); mutationIndex++) {
+        commandBank = capturedCommandBank;
+        ((u8 *)&commandBank.records[0])[
+            originMutationOffsets[mutationIndex]] ^= 0x80;
+        commandBankBefore = commandBank;
+        runtimeBefore = runtime;
+        memset(&consumed, 0xA5, sizeof(consumed));
+        require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime,
+                &commandBank, 0, runtime.slots[0].slotGeneration,
+                &commandA, &consumed) == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+                && !memcmp(&consumed,
+                    &(OverworldWildRuntimeCommandOrigin){0},
+                    sizeof(consumed))
+                && !memcmp(&commandBank, &commandBankBefore,
+                    sizeof(commandBank))
+                && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+            "mutated V11 captured-origin tuple was consumed or changed");
+    }
+    commandBank = capturedCommandBank;
+    commandBankBefore = commandBank;
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandB)
+            == OW_WILD_RUNTIME_STATUS_DATA_BUSY
+            && !memcmp(&commandBank, &commandBankBefore, sizeof(commandBank))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "busy command capture changed the existing origin or runtime");
+    memset(&consumed, 0xA5, sizeof(consumed));
+    require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &wrongCommand, &consumed)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&consumed, &(OverworldWildRuntimeCommandOrigin){0},
+                sizeof(consumed))
+            && !memcmp(&commandBank, &commandBankBefore, sizeof(commandBank))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "stale command identity changed captured origin or runtime");
+    require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA, &consumed)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && consumed.commandGeneration == commandA.commandGeneration
+            && consumed.objectGeneration == commandA.objectGeneration
+            && !(commandBank.records[0].flags
+                & OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID)
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "consumed command origin was not an exact once-only result");
+    commandBankBefore = commandBank;
+    runtimeBefore = runtime;
+    memset(&consumed, 0xA5, sizeof(consumed));
+    staleCommandStatus = OverworldWildRuntime_ConsumeCommandOrigin(
+        &runtime, &commandBank, 0, runtime.slots[0].slotGeneration,
+        &commandA, &consumed);
+    require(staleCommandStatus == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&consumed, &(OverworldWildRuntimeCommandOrigin){0},
+                sizeof(consumed))
+            && !memcmp(&commandBank, &commandBankBefore, sizeof(commandBank))
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "duplicate command completion changed the command bank or runtime");
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandB)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "cancel fixture could not capture command origin");
+    OverworldWildRuntime_InvalidateCommandOrigin(&commandBank, 0);
+    commandBankBefore = commandBank;
+    memset(&consumed, 0xA5, sizeof(consumed));
+    require(OverworldWildRuntime_ConsumeCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandB, &consumed)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&commandBank, &commandBankBefore, sizeof(commandBank)),
+        "canceled command origin remained consumable");
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_CaptureCommandOrigin(&runtime,
+                &commandBank, 1, runtime.slots[1].slotGeneration, &commandB)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "per-slot command origins could not coexist");
+    OverworldWildRuntime_InvalidateCommandOrigin(&commandBank, 0);
+    require(!(commandBank.records[0].flags
+                & OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID)
+            && (commandBank.records[1].flags
+                & OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID),
+        "single-slot command invalidation changed a bystander slot");
+    OverworldWildRuntime_InvalidateAllCommandOrigins(&commandBank);
+    require(!memcmp(&commandBank,
+            &(OverworldWildRuntimeCommandOriginBank){0}, sizeof(commandBank)),
+        "all-bank invalidation retained a command origin");
+    require(OverworldWildRuntime_CaptureCommandOrigin(&runtime, &commandBank,
+            0, runtime.slots[0].slotGeneration, &commandA)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "slot-reuse fixture could not capture command origin");
+    oldSlotGeneration = runtime.slots[0].slotGeneration;
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
+    OverworldWildRuntime_MarkSlotAssigned(&runtime, 0);
+    require(OverworldWildRuntime_PrimeCanonicalEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &context, &resolved)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "slot-reuse fixture could not prime replacement encounter");
+    runtimeBefore = runtime;
+    commandBankBefore = commandBank;
+    memset(&consumed, 0xA5, sizeof(consumed));
+    require(runtime.slots[0].slotGeneration != oldSlotGeneration
+            && OverworldWildRuntime_ConsumeCommandOrigin(&runtime,
+                &commandBank, 0, runtime.slots[0].slotGeneration,
+                &commandA, &consumed) == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime))
+            && !memcmp(&commandBank, &commandBankBefore,
+                sizeof(commandBank)),
+        "slot reuse consumed or changed a stale command origin");
+    OverworldWildRuntime_InvalidateAllCommandOrigins(&commandBank);
+
+    prepare_task11_runtime(&runtime, 0, &context, &resolved);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_STAMINA, 0x8105, 0);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_CALM_OWNER_8102, 0x8102, 0);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_CALM_OWNER_8103, 0x8103, 0);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_CALM_OWNER_8104, 0x8104, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "legacy calm recovery fixture could not expire stamina tired");
+    expiry = expiry_for_owner(&runtime, 0, 0x8105);
+    require(expiry.validityTag != 0,
+        "legacy calm recovery fixture lacked exact identities");
+    calmRecoveryStatus = OverworldWildRuntime_RecoverExpiredTimer(
+        &runtime, &expiry, &recovery);
+    require(calmRecoveryStatus == OW_WILD_RUNTIME_STATUS_OK
+            && recovery.ok && recovery.mutated
+            && recovery.route
+                == OW_WILD_RUNTIME_TIMER_RECOVERY_LEGACY_RETURN_CALM
+            && recovery.calmResetOwnerCount == 3
+            && recovery.actionFlags
+                == (OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                    | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN)
+            && FindLayer(&runtime.slots[0], 0x8105, 0) < 0
+            && FindLayer(&runtime.slots[0], 0x8102, 0) < 0
+            && FindLayer(&runtime.slots[0], 0x8103, 0) < 0
+            && FindLayer(&runtime.slots[0], 0x8104, 0) < 0,
+        "legacy calm recovery disturbed an unrelated layer or timer");
+    runtimeBefore = runtime;
+    require(OverworldWildRuntime_RecoverExpiredTimer(
+            &runtime, &expiry, &recovery)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&runtime, &runtimeBefore, sizeof(runtime)),
+        "stale recovery ticket changed runtime bytes");
+
+    prepare_task11_runtime(&runtime, 0, &context, &resolved);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_STAMINA, 0x8105, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "rejected recovery fixture could not expire candidate");
+    expiry = expiry_for_owner(&runtime, 0, 0x8105);
+    expiredRuntime = runtime;
+    catalogBefore = sFixtureInstalledStorage;
+    for (malformedCase = 0; malformedCase < 66; malformedCase++) {
+        OverworldWildTransitionRecord *transition;
+        OverworldWildOverrideDefinitionRecord *definition;
+        OverworldWildTransitionGuardRecord *guard;
+        OverworldWildTransitionOperationRecord *operation;
+        OverworldWildTransitionActionRecord *action;
+        OverworldWildRecoveryActionRecord *recoveryAction;
+        sFixtureInstalledStorage = catalogBefore;
+        transition = fixture_transition(TASK11_TRANSITION_STAMINA_RECOVER);
+        definition = fixture_override_definition(TASK11_DEF_STAMINA);
+        guard = fixture_transition_guard(
+            TASK11_TRANSITION_STAMINA_RECOVER);
+        operation = fixture_transition_operation(
+            TASK11_TRANSITION_STAMINA_RECOVER, 0);
+        action = fixture_transition_action(
+            TASK11_TRANSITION_STAMINA_RECOVER, 0);
+        recoveryAction = fixture_recovery_action(
+            TASK11_TRANSITION_STAMINA_RECOVER);
+        switch (malformedCase) {
+        case 0: transition->stableId = 0; break;
+        case 1:
+            fixture_transition(TASK11_TRANSITION_FLED_SEMANTIC)->stableId =
+                TASK11_TRANSITION_STAMINA_RECOVER;
+            break;
+        case 2: transition->candidateDefinitionId ^= 1; break;
+        case 3: transition->ownerId ^= 1; break;
+        case 4: transition->guardStart++; break;
+        case 5: transition->guardCount = 0; break;
+        case 6: transition->operationStart++; break;
+        case 7: transition->operationCount = 2; break;
+        case 8: transition->actionStart++; break;
+        case 9: transition->actionCount = 1; break;
+        case 10: transition->trigger = 0; break;
+        case 11: transition->fromRoleMask = 0; break;
+        case 12: transition->recoveryStart++; break;
+        case 13: transition->recoveryCount = 0; break;
+        case 14: transition->dispatchPriority = 0; break;
+        case 15: definition->stableId = 0; break;
+        case 16:
+            fixture_override_definition(TASK11_DEF_FLED_SEMANTIC)->stableId =
+                TASK11_DEF_STAMINA;
+            break;
+        case 17: definition->recoveryTransitionId = 0; break;
+        case 18: definition->hasRequiredOwnerId = 0; break;
+        case 19: definition->requiredOwnerId = 0; break;
+        case 20: definition->reserved0 = 1; break;
+        case 21: definition->reserved1 = 1; break;
+        case 22: guard->stableId = 0; break;
+        case 23: guard->stableId = transition->stableId; break;
+        case 24: guard->transitionId = 0; break;
+        case 25: guard->kind = 0; break;
+        case 26: guard->negate = 1; break;
+        case 27: guard->payload = 0; break;
+        case 28: guard->reserved0 = 1; break;
+        case 29: guard->referenceId = 1; break;
+        case 30: guard->reserved = 1; break;
+        case 31: operation->stableId = 0; break;
+        case 32: operation->stableId = guard->stableId; break;
+        case 33: operation->transitionId = 0; break;
+        case 34: operation->definitionId = 0; break;
+        case 35: operation->ownerId = 0; break;
+        case 36: operation->replacementDefinitionId = 1; break;
+        case 37: operation->policyId = 1; break;
+        case 38: operation->instanceKey = 1; break;
+        case 39: operation->kind = 0; break;
+        case 40: operation->busyPolicy = OWBD_BUSY_QUEUE_EXACT; break;
+        case 41: operation->required = FALSE; break;
+        case 42: operation->reserved = 1; break;
+        case 43:
+            fixture_transition_operation(
+                TASK11_TRANSITION_STAMINA_RECOVER, 1)->required = TRUE;
+            break;
+        case 44:
+            fixture_transition_operation(
+                TASK11_TRANSITION_STAMINA_RECOVER, 1)->ownerId = 0x8103;
+            break;
+        case 45:
+            fixture_transition_operation(
+                TASK11_TRANSITION_STAMINA_RECOVER, 1)->definitionId = 1;
+            break;
+        case 46: action->stableId = 0; break;
+        case 47: action->stableId = guard->stableId; break;
+        case 48: action->transitionId = 0; break;
+        case 49: action->phase = OWBD_ACTION_PHASE_ENTRY; break;
+        case 50: action->kind = OWBD_ACTION_RESET_ACTIVE_STEPS; break;
+        case 51: action->referenceId = 1; break;
+        case 52: action->payload = 1; break;
+        case 53: recoveryAction->stableId = 0; break;
+        case 54: recoveryAction->stableId = guard->stableId; break;
+        case 55: recoveryAction->transitionId = 0; break;
+        case 56: recoveryAction->ownerId = 0; break;
+        case 57: recoveryAction->kind = 3; break;
+        case 58: recoveryAction->required = FALSE; break;
+        case 59:
+            fixture_transition_action(
+                TASK11_TRANSITION_STAMINA_RECOVER, 1)->kind =
+                    OWBD_ACTION_RESET_TIRED_COUNTER;
+            break;
+        case 60: definition->flags ^= 1; break;
+        case 61: definition->selectorKind = OWBD_SELECTOR_EXACT; break;
+        case 62: definition->controllerId = 0x3001; break;
+        case 63: definition->nodeId = 0x3103; break;
+        case 64: definition->semanticRole = OWBD_ROLE_ATTENTIVE; break;
+        case 65: definition->authoredTiredBound = 1; break;
+        }
+        runtime = expiredRuntime;
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "recovery-closure", malformedCase);
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    require(OverworldWildRuntime_ResolveRecoveryCandidate(&fallbackContext,
+            OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED, &candidate)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "exact malformed-plan fixture could not resolve its wrapper");
+    prepare_task11_runtime(&runtime, 0, &fallbackContext, &resolved);
+    (void)apply_one(&runtime, 0, &resolved.applicability,
+        candidate.definitionId, candidate.ownerId, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "exact malformed-plan fixture could not expire its wrapper");
+    expiry = expiry_for_owner(&runtime, 0, candidate.ownerId);
+    expiredRuntime = runtime;
+    catalogBefore = sFixtureInstalledStorage;
+    for (malformedCase = 0; malformedCase < 6; malformedCase++) {
+        OverworldWildOverrideDefinitionRecord *definition;
+        sFixtureInstalledStorage = catalogBefore;
+        definition = fixture_override_definition(TASK11_DEF_FLED_EXACT);
+        if (malformedCase == 0) definition->flags = 0;
+        else if (malformedCase == 1)
+            definition->selectorKind = OWBD_SELECTOR_SEMANTIC_ROLE;
+        else if (malformedCase == 2) definition->controllerId = 0;
+        else if (malformedCase == 3) definition->nodeId = 0;
+        else if (malformedCase == 4)
+            definition->semanticRole = OWBD_ROLE_TIRED;
+        else definition->authoredTiredBound = 1;
+        runtime = expiredRuntime;
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "exact-recovery-closure", malformedCase);
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    for (malformedCase = 0; malformedCase < 24; malformedCase++) {
+        const OverworldWildRuntimeStaticContext *candidateContext = &context;
+        OverworldWildOverrideDefinitionRecord *definition;
+        OverworldWildTransitionRecord *transition;
+        OverworldWildRecoveryActionRecord *recoveryAction;
+        u16 definitionId = TASK11_DEF_FLED_SEMANTIC;
+        u16 transitionId = TASK11_TRANSITION_FLED_SEMANTIC;
+        u16 ownerId = 0x8107;
+        u8 familyIndex = 0;
+        BOOL exactSelector = FALSE;
+
+        sFixtureInstalledStorage = catalogBefore;
+        if (malformedCase < 6 || (malformedCase >= 6
+                && malformedCase < 12)) {
+            familyIndex = (u8)((malformedCase % 6) / 2);
+            exactSelector = (malformedCase & 1) != 0;
+        } else if (malformedCase >= 13 && malformedCase < 16) {
+            familyIndex = (u8)(malformedCase - 13);
+        } else if (malformedCase == 17 || malformedCase == 23) {
+            exactSelector = TRUE;
+        }
+        if ((malformedCase < 12)
+            || (malformedCase >= 13 && malformedCase <= 17)
+            || malformedCase >= 22) {
+            definitionId = exactSelector
+                ? exactDefinitions[familyIndex]
+                : authoredDefinitions[familyIndex];
+            transitionId = exactSelector
+                ? exactTransitions[familyIndex]
+                : authoredTransitions[familyIndex];
+            ownerId = originOwners[familyIndex];
+            candidateContext = exactSelector ? &fallbackContext : &context;
+        } else if (malformedCase == 12) {
+            definitionId = TASK11_DEF_STAMINA;
+            transitionId = TASK11_TRANSITION_STAMINA_RECOVER;
+            ownerId = 0x8105;
+        } else {
+            definitionId = TASK11_DEF_FORCED_SLEEP;
+            transitionId = TASK11_TRANSITION_FORCED_SLEEP;
+            ownerId = malformedCase == 20 ? 0x810B : 0x810A;
+            candidateContext = &sleepContext;
+        }
+
+        if (malformedCase == 0) {
+            fixture_swap_recovery_route_claims(
+                TASK11_TRANSITION_FLED_SEMANTIC,
+                TASK11_DEF_FLED_SEMANTIC, 0x8107,
+                TASK11_TRANSITION_RAM_SEMANTIC,
+                TASK11_DEF_RAM_SEMANTIC, 0x8106);
+            transitionId = TASK11_TRANSITION_RAM_SEMANTIC;
+            fixture_reseal_installed_catalog();
+        } else if (malformedCase == 1) {
+            fixture_swap_recovery_route_claims(
+                TASK11_TRANSITION_FLED_EXACT,
+                TASK11_DEF_FLED_EXACT, 0x8107,
+                TASK11_TRANSITION_RAM_EXACT,
+                TASK11_DEF_RAM_EXACT, 0x8106);
+            transitionId = TASK11_TRANSITION_RAM_EXACT;
+            fixture_reseal_installed_catalog();
+        } else if (malformedCase == 21) {
+            fixture_swap_recovery_route_claims(
+                TASK11_TRANSITION_FORCED_SLEEP,
+                TASK11_DEF_FORCED_SLEEP, 0x810A,
+                TASK11_TRANSITION_STAMINA_RECOVER,
+                TASK11_DEF_STAMINA, 0x8105);
+            transitionId = TASK11_TRANSITION_STAMINA_RECOVER;
+            fixture_reseal_installed_catalog();
+        }
+
+        prepare_task11_runtime(&runtime, 0, candidateContext, &resolved);
+        (void)apply_one(&runtime, 0, &resolved.applicability,
+            definitionId, ownerId,
+            definitionId == TASK11_DEF_FORCED_SLEEP ? 7 : 0);
+        require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "closed-family malformed fixture could not expire candidate");
+        expiry = expiry_for_owner(&runtime, 0, ownerId);
+        definition = fixture_override_definition(definitionId);
+        transition = fixture_transition(transitionId);
+        recoveryAction = fixture_recovery_action(transitionId);
+
+        if (malformedCase < 6) {
+            if (familyIndex == 0) {
+                require(transition->operationCount
+                            == OW_WILD_RUNTIME_MAX_CALM_RESET_OWNERS + 1
+                        && recoveryAction->kind
+                            == OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT,
+                    "globally coherent tired route swap lost calm topology");
+            } else {
+                transition->operationCount = 1;
+                recoveryAction->kind = OWBD_RECOVERY_ACTION_REMOVE_SELF;
+            }
+        } else if (malformedCase < 12) {
+            static const u8 wrongOrigins[3] = {
+                OWBD_TIRED_ORIGIN_RAM_CRASH,
+                OWBD_TIRED_ORIGIN_THROW_RECOVERY,
+                OWBD_TIRED_ORIGIN_FLED,
+            };
+            definition->tiredOriginKind = wrongOrigins[familyIndex];
+        } else if (malformedCase == 12) {
+            definition->hasTiredOriginKind = TRUE;
+            definition->tiredOriginKind = OWBD_TIRED_ORIGIN_FLED;
+        } else if (malformedCase < 16) {
+            static const u16 wrongOwners[3] = {0x8106, 0x8108, 0x8107};
+            definition->requiredOwnerId = wrongOwners[familyIndex];
+        } else if (malformedCase == 16) {
+            definition->hasRequiredOwnerId = FALSE;
+        } else if (malformedCase == 17) {
+            definition->requiredOwnerId = 0;
+        } else if (malformedCase == 18) {
+            definition->hasRequiredOwnerId = TRUE;
+            definition->requiredOwnerId = 0x810A;
+        } else if (malformedCase == 19) {
+            transition->ownerId = 0x810B;
+        } else if (malformedCase == 20) {
+            OverworldWildTransitionOperationRecord *operation =
+                fixture_transition_operation(transitionId, 0);
+            transition->ownerId = ownerId;
+            operation->ownerId = ownerId;
+            recoveryAction->ownerId = ownerId;
+        } else if (malformedCase == 21) {
+            require(transition->operationCount
+                        == OW_WILD_RUNTIME_MAX_CALM_RESET_OWNERS + 1
+                    && recoveryAction->kind
+                        == OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT,
+                "globally coherent sleep route swap lost calm topology");
+        } else if (malformedCase == 22) {
+            const OverworldWildOverrideDefinitionRecord *exactDefinition =
+                fixture_override_definition(TASK11_DEF_FLED_EXACT);
+            definition->selectorKind = OWBD_SELECTOR_EXACT;
+            definition->controllerId = exactDefinition->controllerId;
+            definition->nodeId = exactDefinition->nodeId;
+            definition->semanticRole = 0;
+            definition->flags = 1;
+            transition->fromRoleMask = OWBD_ROLE_MASK(OWBD_ROLE_CUSTOM);
+        } else {
+            definition->selectorKind = OWBD_SELECTOR_SEMANTIC_ROLE;
+            definition->controllerId = 0;
+            definition->nodeId = 0;
+            definition->semanticRole = OWBD_ROLE_TIRED;
+            definition->flags = 0;
+            transition->fromRoleMask = 0x7F;
+        }
+        fixture_reseal_installed_catalog();
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "closed-family", malformedCase);
+        closedFamilyMutationCount++;
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    for (malformedCase = 0; malformedCase < 19; malformedCase++) {
+        sFixtureInstalledStorage = catalogBefore;
+        prepare_task11_runtime(&runtime, 0, &context, &resolved);
+        (void)apply_one(&runtime, 0, &resolved.applicability,
+            TASK11_DEF_FLED_SEMANTIC, 0x8107, 0);
+        require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "semantic backlink fixture could not expire candidate");
+        expiry = expiry_for_owner(&runtime, 0, 0x8107);
+        fixture_mutate_semantic_tired_backlink(malformedCase);
+        fixture_reseal_installed_catalog();
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "semantic-backlink", malformedCase);
+        semanticBacklinkMutationCount++;
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    for (malformedCase = 0; malformedCase < 18; malformedCase++) {
+        sFixtureInstalledStorage = catalogBefore;
+        prepare_task11_runtime(&runtime, 0, &fallbackContext, &resolved);
+        (void)apply_one(&runtime, 0, &resolved.applicability,
+            TASK11_DEF_FLED_EXACT, 0x8107, 0);
+        require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "exact backlink fixture could not expire candidate");
+        expiry = expiry_for_owner(&runtime, 0, 0x8107);
+        fixture_mutate_exact_tired_backlink(malformedCase);
+        fixture_reseal_installed_catalog();
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "exact-backlink", malformedCase);
+        exactBacklinkMutationCount++;
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    for (malformedCase = 0; malformedCase < 2; malformedCase++) {
+        sFixtureInstalledStorage = catalogBefore;
+        prepare_task11_runtime(&runtime, 0, &context, &resolved);
+        (void)apply_one(&runtime, 0, &resolved.applicability,
+            TASK11_DEF_STAMINA, 0x8105, 0);
+        require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "stamina backlink fixture could not expire candidate");
+        expiry = expiry_for_owner(&runtime, 0, 0x8105);
+        fixture_mutate_stamina_backlink(malformedCase);
+        fixture_reseal_installed_catalog();
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "stamina-backlink", malformedCase);
+        staminaBacklinkMutationCount++;
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    for (malformedCase = 0; malformedCase < 22; malformedCase++) {
+        sFixtureInstalledStorage = catalogBefore;
+        prepare_task11_runtime(&runtime, 0, &sleepContext, &resolved);
+        (void)apply_one(&runtime, 0, &resolved.applicability,
+            TASK11_DEF_FORCED_SLEEP, 0x810A, 7);
+        require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "forced-sleep backlink fixture could not expire candidate");
+        expiry = expiry_for_owner(&runtime, 0, 0x810A);
+        fixture_mutate_forced_sleep_backlink(malformedCase);
+        fixture_reseal_installed_catalog();
+        require_task11_invalid_recovery(
+            &runtime, &expiry, "sleep-backlink", malformedCase);
+        sleepBacklinkMutationCount++;
+        malformedRecoveryCount++;
+    }
+    sFixtureInstalledStorage = catalogBefore;
+
+    prepare_task11_runtime(&runtime, 0, &context, &resolved);
+    (void)apply_one(&runtime, 0, &authored.applicability,
+        TASK11_DEF_FLED_SEMANTIC, 0x8107, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "remove-self recovery fixture could not expire FLED candidate");
+    expiry = expiry_for_owner(&runtime, 0, 0x8107);
+    removeSelfStatus = OverworldWildRuntime_RecoverExpiredTimer(
+        &runtime, &expiry, &recovery);
+    require(removeSelfStatus == OW_WILD_RUNTIME_STATUS_OK
+            && recovery.route == OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF
+            && recovery.calmResetOwnerCount == 0
+            && FindLayer(&runtime.slots[0], 0x8107, 0) < 0
+            && recovery.actionFlags
+                == (OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                    | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN),
+        "remove-self recovery removed a bystander layer or timer");
+
+    for (mutationIndex = 0; mutationIndex < 2; mutationIndex++) {
+        const OverworldWildRuntimeStaticContext *candidateContext =
+            mutationIndex == 0 ? &context : &fallbackContext;
+        for (index = 0; index < 3; index++) {
+            const u8 expectedRoute = index == 0
+                ? OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF
+                : OW_WILD_RUNTIME_TIMER_RECOVERY_LEGACY_RETURN_CALM;
+            require(OverworldWildRuntime_ResolveRecoveryCandidate(
+                    candidateContext, imperativeOrigins[index], &candidate)
+                    == OW_WILD_RUNTIME_STATUS_OK,
+                "end-to-end recovery candidate resolution failed");
+            prepare_task11_runtime(&runtime, 0,
+                candidateContext, &resolved);
+            (void)apply_one(&runtime, 0, &resolved.applicability,
+                TASK11_DEF_CALM_OWNER_8102, 0x8102, 0);
+            (void)apply_one(&runtime, 0, &resolved.applicability,
+                TASK11_DEF_CALM_OWNER_8103, 0x8103, 0);
+            (void)apply_one(&runtime, 0, &resolved.applicability,
+                TASK11_DEF_CALM_OWNER_8104, 0x8104, 0);
+            (void)apply_one(&runtime, 0, &resolved.applicability,
+                candidate.definitionId, candidate.ownerId, 0);
+            require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                    runtime.slots[0].slotGeneration,
+                    OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                    == OW_WILD_RUNTIME_STATUS_OK,
+                "end-to-end generated wrapper timer did not tick");
+            expiry = expiry_for_owner(&runtime, 0, candidate.ownerId);
+            require(expiry.definitionId == candidate.definitionId
+                    && expiry.recoveryTransitionId
+                        == candidate.recoveryTransitionId,
+                "expiry ticket lost its exact generated wrapper identity");
+            endToEndStatus = OverworldWildRuntime_RecoverExpiredTimer(
+                &runtime, &expiry, &recovery);
+            if (endToEndStatus != OW_WILD_RUNTIME_STATUS_OK
+                || recovery.route != expectedRoute
+                || recovery.actionFlags
+                    != (OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                        | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN)
+                || recovery.calmResetOwnerCount
+                    != (u8)(index == 0 ? 0 : 3))
+                fprintf(stderr,
+                    "end-to-end recovery exact=%u origin=%u status=%u "
+                    "route=%u actions=%u calm=%u\n",
+                    mutationIndex, index + 1, endToEndStatus,
+                    recovery.route, recovery.actionFlags,
+                    recovery.calmResetOwnerCount);
+            require(endToEndStatus == OW_WILD_RUNTIME_STATUS_OK
+                    && recovery.route == expectedRoute
+                    && recovery.actionFlags
+                        == (OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                            | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN)
+                    && recovery.calmResetOwnerCount
+                        == (u8)(index == 0 ? 0 : 3)
+                    && FindLayer(&runtime.slots[0], candidate.ownerId, 0) < 0
+                    && (index == 0
+                        ? (FindLayer(&runtime.slots[0], 0x8102, 0) >= 0
+                            && FindLayer(&runtime.slots[0], 0x8103, 0) >= 0
+                            && FindLayer(&runtime.slots[0], 0x8104, 0) >= 0)
+                        : (FindLayer(&runtime.slots[0], 0x8102, 0) < 0
+                            && FindLayer(&runtime.slots[0], 0x8103, 0) < 0
+                            && FindLayer(&runtime.slots[0], 0x8104, 0) < 0)),
+                "semantic/exact generated wrapper recovery route diverged");
+        }
+    }
+
+    prepare_runtime_unprimed(&runtime, 0);
+    require(OverworldWildRuntime_PrimeCanonicalEffectiveCache(&runtime, 0,
+            runtime.slots[0].slotGeneration, &sleepContext, &resolved)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && (resolved.applicability.semanticRoleMask
+                & OWBD_ROLE_MASK(OWBD_ROLE_ASLEEP)),
+        "forced-sleep fixture did not bind an authored asleep node");
+    (void)apply_one(&runtime, 0, &resolved.applicability,
+        TASK11_DEF_FORCED_SLEEP, 0x810A, 7);
+    (void)apply_one(&runtime, 0, &resolved.applicability,
+        TASK11_DEF_CALM_OWNER_8102, 0x8121, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && (timer_for_owner_key(&runtime, 0, 0x810A, 7)->flags
+                & OW_WILD_RUNTIME_TIMER_ZERO_PENDING),
+        "hidden forced-sleep timer did not continue to expiry");
+    expiry = expiry_for_owner(&runtime, 0, 0x810A);
+    require(OverworldWildRuntime_RecoverExpiredTimer(
+            &runtime, &expiry, &recovery) == OW_WILD_RUNTIME_STATUS_OK
+            && recovery.route == OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF
+            && FindLayer(&runtime.slots[0], 0x810A, 7) < 0
+            && FindLayer(&runtime.slots[0], 0x8121, 0) >= 0,
+        "forced-sleep remove-self recovery disturbed its covering layer");
+    sUseTask11ProductionCatalog = FALSE;
+
+    printf("TASK11_SUBSTRATE_TRACE invalidSelection=%u staleCommand=%u "
+           "calmRecovery=%u removeSelf=%u canonicalMutations=6 "
+           "commandMutations=28 recoveries=6 malformed=%u "
+           "mappingMutations=%u backlinkMutations=61 "
+           "semanticBacklinks=%u exactBacklinks=%u staminaBacklinks=%u "
+           "sleepBacklinks=%u calmOwners=3 actions=10\n",
+        invalidSelectionStatus, staleCommandStatus,
+        calmRecoveryStatus, removeSelfStatus, malformedRecoveryCount,
+        closedFamilyMutationCount, semanticBacklinkMutationCount,
+        exactBacklinkMutationCount, staminaBacklinkMutationCount,
+        sleepBacklinkMutationCount);
+}
+
+static void test_task11_transition_dispatcher(void)
+{
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime before;
+    OverworldWildRuntimeResolvedStaticContext resolved;
+    OverworldWildRuntimeTransitionEvent event;
+    OverworldWildRuntimeTransitionEvent oldReplayEvent;
+    OverworldWildRuntimeTransitionResult result;
+    OverworldWildRuntimeStackDeltaResult delta;
+    OverworldWildRuntimeTimerTickResult tick;
+    OverworldWildRuntimeTimerExpiry expiry = {0};
+    OverworldWildRuntimeTimerExpiry rearmedExpiry = {0};
+    OverworldWildRuntimeStaticContext calmContext;
+    OverworldWildRuntimeStaticContext activeContext = fixture_static_context();
+    union FixtureInstalledCatalogStorage catalogBefore;
+    u16 fillDefinitions[8] = {
+        0x7001, 0x7003, 0x7004, 0x7005,
+        0x7006, 0x7007, 0x700A, 0x700A,
+    };
+    u16 fillOwners[8] = {
+        0x8102, 0x8104, 0x8105, 0x8107,
+        0x8106, 0x8108, 0x810A, 0x810A,
+    };
+    u16 fillKeys[8] = {0, 0, 0, 0, 0, 0, 1, 2};
+    u8 index;
+
+    sUseTask11ProductionCatalog = TRUE;
+    calmContext = fixture_static_context();
+    calmContext.species = 56;
+    calmContext.groupFlags = 8;
+    prepare_task11_runtime(&runtime, 0, &calmContext, &resolved);
+    require(runtime.slots[0].effectiveCache.semanticRole == OWBD_ROLE_CALM,
+        "transition fixture did not begin in calm role");
+    memset(&event, 0, sizeof(event));
+    event.trigger = OWBD_TRIGGER_ALERT_COMPLETE;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && result.ok && result.mutated && result.operationCount == 1
+            && result.transitionId == TASK11_TRANSITION_ALERT_COMPLETE
+            && result.definitionId == 0x7001
+            && result.ownerId == 0x8102 && result.instanceKey == 0
+            && result.actionFlags
+                == (OW_WILD_RUNTIME_TRANSITION_ACTION(
+                        OWBD_ACTION_RESET_ACTIVE_STEPS)
+                    | OW_WILD_RUNTIME_TRANSITION_ACTION(
+                        OWBD_ACTION_ALERT_COMPLETE)
+                    | OW_WILD_RUNTIME_TRANSITION_ACTION(
+                        OWBD_ACTION_ACTIVE_ENTRY_TRY_PICKUP_THROW))
+            && result.effectiveAfter.semanticRole == OWBD_ROLE_ATTENTIVE
+            && result.effectiveAfter.profileId != 0,
+        "alert transition did not publish catalog action/winner output");
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+            && !result.ok && !memcmp(&runtime, &before, sizeof(runtime)),
+        "alert effective-role guard changed state when false");
+
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    memset(&event, 0, sizeof(event));
+    event.trigger = event.systemRoute = OWBD_TRIGGER_STAMINA_EXHAUSTED;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && result.ok && result.mutated && result.operationCount == 1
+            && result.transitionId == TASK11_TRANSITION_STAMINA_APPLY
+            && result.definitionId == TASK11_DEF_STAMINA
+            && result.ownerId == 0x8105 && result.instanceKey == 0
+            && result.actionFlags
+                == OW_WILD_RUNTIME_TRANSITION_ACTION(
+                    OWBD_ACTION_CLEAR_MOVEMENT_CHAIN)
+            && result.effectiveAfter.semanticRole == OWBD_ROLE_TIRED
+            && result.effectiveAfter.profileId == resolved.tiredProfileId,
+        "stamina exhaustion did not apply the authored tired override");
+
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    memset(&event, 0, sizeof(event));
+    event.trigger = event.systemRoute = OWBD_TRIGGER_AGGRO_APPLY;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && result.transitionId == TASK11_TRANSITION_AGGRO_APPLY
+            && result.definitionId == 0x7002 && result.ownerId == 0x8103
+            && result.actionFlags
+                == OW_WILD_RUNTIME_TRANSITION_ACTION(
+                    OWBD_ACTION_RESET_ACTIVE_STEPS),
+        "aggro transition did not use catalog-owned identity");
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_IDEMPOTENT
+            && result.ok && !result.mutated && result.actionFlags == 0
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "duplicate aggro transition was not an action-free idempotent");
+    event.systemRoute = 0;
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "system-route guard failure changed runtime");
+
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    memset(&event, 0, sizeof(event));
+    event.trigger = event.systemRoute = OWBD_TRIGGER_HELP_CALL_APPLY;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && result.transitionId == TASK11_TRANSITION_HELP_CALL_APPLY
+            && result.definitionId == 0x7003 && result.ownerId == 0x8104,
+        "help-call transition did not use catalog-owned identity");
+
+    {
+        static const u8 systemRoutes[] = {
+            OWBD_TRIGGER_STAMINA_EXHAUSTED,
+            OWBD_TRIGGER_FLED,
+            OWBD_TRIGGER_RAM_CRASH,
+            OWBD_TRIGGER_THROW_RECOVERY,
+            OWBD_TRIGGER_AGGRO_APPLY,
+            OWBD_TRIGGER_HELP_CALL_APPLY,
+            OWBD_TRIGGER_FOLLOWER_APPLY,
+        };
+        for (index = 0; index < sizeof(systemRoutes); index++) {
+            prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+            memset(&event, 0, sizeof(event));
+            event.trigger = systemRoutes[index];
+            event.systemRoute = systemRoutes[index]
+                    == OWBD_TRIGGER_AGGRO_APPLY
+                ? OWBD_TRIGGER_HELP_CALL_APPLY
+                : OWBD_TRIGGER_AGGRO_APPLY;
+            before = runtime;
+            require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                    runtime.slots[0].slotGeneration, &event, &result)
+                    == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+                    && !memcmp(&runtime, &before, sizeof(runtime)),
+                "SYSTEM_ROUTE guard accepted mismatched live evidence");
+            prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+            memset(&event, 0, sizeof(event));
+            event.trigger = event.systemRoute = systemRoutes[index];
+            require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                    runtime.slots[0].slotGeneration, &event, &result)
+                    != OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE,
+                "SYSTEM_ROUTE guard rejected its exact live evidence");
+        }
+    }
+
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    for (index = 0; index < sizeof(event.replayExpiry); index++) {
+        memset(&event, 0, sizeof(event));
+        event.trigger = OWBD_TRIGGER_ALERT_COMPLETE;
+        ((u8 *)&event.replayExpiry)[index] = 1;
+        before = runtime;
+        require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+                && !result.ok && !memcmp(&runtime, &before, sizeof(runtime)),
+            "ordinary transition accepted a nonzero replay-only byte");
+    }
+
+    activeContext.behaviorClass = 2;
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    for (index = 0; index < 3; index++)
+        require(OverworldWildRuntime_Apply(&runtime, 0,
+                runtime.slots[0].slotGeneration, &resolved.applicability,
+                fillDefinitions[index], fillOwners[index], fillKeys[index],
+                &delta)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "multi-operation recovery setup failed");
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 255, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_GetPendingTimerExpiryByIndex(&runtime, 0,
+                runtime.slots[0].slotGeneration, 0, &expiry)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "multi-operation recovery expiry setup failed");
+    memset(&event, 0, sizeof(event));
+    event.trigger = OWBD_TRIGGER_TIRED_EXPIRED;
+    event.replayExpiry = expiry;
+    event.flags = OW_WILD_RUNTIME_TRANSITION_EVENT_REPLAY;
+    oldReplayEvent = event;
+    before = runtime;
+    event.replayExpiry.timerGeneration++;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && result.ok && !result.mutated
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "edited replay timer identity was not a mutation-free stale no-op");
+    event = oldReplayEvent;
+    for (index = 0; index < runtime.slots[0].activeLayerCount; index++)
+        if (runtime.slots[0].timerBank.timers[index].timerGeneration
+                == expiry.timerGeneration)
+            break;
+    require(index < runtime.slots[0].activeLayerCount,
+        "expiry replay lost its pending live timer");
+    runtime.slots[0].timerBank.timers[index].remainingTicks = 1;
+    runtime.slots[0].timerBank.timers[index].flags &=
+        (u8)~OW_WILD_RUNTIME_TIMER_ZERO_PENDING;
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && result.ok && !result.mutated
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "non-pending replay ticket affected a live timer");
+    runtime.slots[0].timerBank.timers[index].remainingTicks = 0;
+    runtime.slots[0].timerBank.timers[index].flags |=
+        OW_WILD_RUNTIME_TIMER_ZERO_PENDING;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && result.mutated && result.operationCount == 4
+            && runtime.slots[0].activeLayerCount == 0
+            && result.actionFlags
+                == (OW_WILD_RUNTIME_TRANSITION_ACTION(
+                        OWBD_ACTION_RESET_TIRED_COUNTER)
+                    | OW_WILD_RUNTIME_TRANSITION_ACTION(
+                        OWBD_ACTION_START_POST_TIRED_COOLDOWN))
+            && result.effectiveAfter.semanticRole
+                == runtime.slots[0].staticCache.baseSemanticRole,
+        "catalog multi-operation recovery was not one atomic winner reveal");
+
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, &resolved.applicability,
+            expiry.definitionId, expiry.ownerId, expiry.instanceKey, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 255, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_GetPendingTimerExpiryByIndex(&runtime, 0,
+                runtime.slots[0].slotGeneration, 0, &rearmedExpiry)
+                == OW_WILD_RUNTIME_STATUS_OK
+            && (rearmedExpiry.entryGeneration != expiry.entryGeneration
+                || rearmedExpiry.timerGeneration != expiry.timerGeneration),
+        "timer replay fixture did not create a distinct rearmed identity");
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &oldReplayEvent, &result)
+            == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && result.ok && !result.mutated
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "old expiry ticket affected a rearmed current timer");
+
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    for (index = 0; index < 8; index++)
+        require(OverworldWildRuntime_Apply(&runtime, 0,
+                runtime.slots[0].slotGeneration, &resolved.applicability,
+                fillDefinitions[index], fillOwners[index], fillKeys[index],
+                &delta)
+                == OW_WILD_RUNTIME_STATUS_OK,
+            "capacity rollback setup failed");
+    before = runtime;
+    memset(&event, 0, sizeof(event));
+    event.trigger = event.systemRoute = OWBD_TRIGGER_AGGRO_APPLY;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_CAPACITY_EXCEEDED
+            && !result.ok && !memcmp(&runtime, &before, sizeof(runtime)),
+        "failed catalog transition published a partial delta");
+
+    catalogBefore = sFixtureInstalledStorage;
+    fixture_transition(TASK11_TRANSITION_HELP_CALL_APPLY)->trigger =
+        OWBD_TRIGGER_AGGRO_APPLY;
+    fixture_transition(TASK11_TRANSITION_HELP_CALL_APPLY)->dispatchPriority =
+        fixture_transition(TASK11_TRANSITION_AGGRO_APPLY)->dispatchPriority;
+    prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+    before = runtime;
+    require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+            runtime.slots[0].slotGeneration, &event, &result)
+            == OW_WILD_RUNTIME_STATUS_AMBIGUOUS_SELECTOR
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "equal-priority transition selection was not rejected atomically");
+    sFixtureInstalledStorage = catalogBefore;
+    sUseTask11ProductionCatalog = FALSE;
+}
+#endif
+
 int main(void)
 {
     OverworldWildRuntimeApplicabilityInput input = fixture_applicability();
     OverworldWildRuntimeDefinition copied;
 
     sFixtureCatalog = fixture_catalog();
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    init_fixture_installed_blob();
+#endif
     require(
         OverworldWildRuntime_CopyInstalledDefinition(DEF_SHARED, &copied)
             && copied.stableId == DEF_SHARED,
@@ -3127,6 +5534,10 @@ int main(void)
     test_task5_v40_scalar_domains();
     test_task9_composition_cache_and_provenance(&input);
     test_task10_timer_engine(&input);
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+    test_task11_substrate(&input);
+    test_task11_transition_dispatcher();
+#endif
     run_task6_crosscheck_corpus(&input);
     printf(
         "runtime layers host fixture: %d checks; handle=%lu op=%lu request=%lu result=%lu; maxOps=%d capacity=%d\n",

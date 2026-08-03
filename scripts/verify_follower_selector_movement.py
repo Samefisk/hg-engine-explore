@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,10 @@ from desmume.emulator import DeSmuME
 
 
 VERIFY_VERSION = 4
+FOLLOWER_RELEASE_SOURCE = (
+    REPO_ROOT
+    / "src/overworld_follower_release_overlay2/overworld_follower_release_overlay2.c"
+)
 SELECTOR_ENTRY = 0x023C0400
 SELECTOR_MAGIC = 0x3153464F
 SELECTOR_FLAGS = 0x023C8148
@@ -64,6 +69,69 @@ def linked_symbol_address(name: str) -> int:
 
 
 G_FIELD_SYS_PTR = linked_symbol_address("gFieldSysPtr")
+
+
+def extract_c_function(source: str, name: str) -> str:
+    signature = source.find(name)
+    if signature < 0:
+        raise RuntimeError(f"source contract function not found: {name}")
+    body_start = source.find("{", signature)
+    if body_start < 0:
+        raise RuntimeError(f"source contract body not found: {name}")
+    depth = 0
+    for index in range(body_start, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[signature : index + 1]
+    raise RuntimeError(f"source contract body is incomplete: {name}")
+
+
+def verify_aggro_intent_bridge_source() -> dict[str, Any]:
+    body = extract_c_function(
+        FOLLOWER_RELEASE_SOURCE.read_text(),
+        "OverworldWildSpawns_EnterAggroState",
+    )
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", body, flags=re.DOTALL)
+    required = {
+        "additive aggro/pending publication": (
+            r"state->spawns\[slot\]\.active\s*\|=\s*"
+            r"TRUE\s*\|\s*OW_WILD_SPAWN_AGGRO_FLAG\s*\|\s*"
+            r"OW_WILD_SPAWN_AGGRO_PENDING_FLAG\s*;"
+        ),
+        "nullable release presentation": (
+            r"if\s*\(spawnedFollower\s*!=\s*NULL\)\s*\{\s*"
+            r"spawnedFollower->flags\s*\|=\s*BIT_VANISH\s*;\s*\}"
+        ),
+    }
+    missing = [
+        label for label, pattern in required.items()
+        if re.search(pattern, code) is None
+    ]
+    forbidden = {
+        "legacy behavior-controller state": "movementSpotStates",
+        "pre-commit active-step reset": "movementActiveSteps",
+        "pending-intent clear": "&=",
+    }
+    present = [label for label, text in forbidden.items() if text in code]
+    if "state->spawns[slot].active =" in code:
+        present.append("destructive spawn-state assignment")
+    if missing or present:
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if present:
+            details.append("forbidden " + ", ".join(present))
+        raise RuntimeError("aggro intent bridge source contract failed: " + "; ".join(details))
+    return {
+        "passed": True,
+        "source": str(FOLLOWER_RELEASE_SOURCE),
+        "repeated_calls_preserve_pending": True,
+        "null_follower_supported": True,
+        "behavior_authority_deferred": True,
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -354,6 +422,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir")
     parser.add_argument("--json")
     parser.add_argument("--show-emulator-log", action="store_true")
+    parser.add_argument(
+        "--source-contract-only",
+        action="store_true",
+        help="verify the fixed follower aggro intent bridge without launching a ROM",
+    )
     parser.add_argument("--internal-branch", dest="branch", help=argparse.SUPPRESS)
     parser.add_argument("--state", help=argparse.SUPPRESS)
     parser.add_argument("--branch-output", help=argparse.SUPPRESS)
@@ -364,6 +437,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    source_contract = verify_aggro_intent_bridge_source()
+    if args.source_contract_only:
+        print(json.dumps(source_contract, indent=2, sort_keys=True))
+        return 0
     if args.branch:
         with HARNESS.silence_native_output(not args.show_emulator_log):
             return run_branch(args)
@@ -438,6 +515,7 @@ def main() -> int:
         "y_frame": args.y_frame,
         "bootstrap": bootstrap,
         "g_field_sys_ptr": f"0x{G_FIELD_SYS_PTR:08X}",
+        "aggro_intent_bridge_source": source_contract,
         "comparison": comparison,
         "screenshots": sorted(str(path) for path in output_dir.glob("*.png")),
         "elapsed_seconds": round(time.monotonic() - started_at, 3),

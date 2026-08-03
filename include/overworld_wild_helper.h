@@ -80,11 +80,9 @@ typedef struct OverworldWildPreparedSpawn {
     OverworldWildSpawnPosition position;
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnStartup startup;
-    OverworldWildBehaviorProfile behaviorProfile;
     int savedShinySlot;
     u8 behaviorClass;
     u8 shiny;
-    u8 behaviorLimitKey;
     u8 playerBallCatchValue;
 } OverworldWildPreparedSpawn;
 

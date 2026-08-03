@@ -376,6 +376,7 @@ FIXED_INPUTS = (
     "scripts/overworld_wild_behavior_v40_validation_shared.h",
     "scripts/overworld_wild_runtime_sidecars_fixture.c",
     "scripts/overworld_wild_runtime_catalog_fixture.c",
+    "scripts/overworld_wild_runtime_catalog_timer_fixture.c",
     "scripts/overworld_wild_runtime_layers_fixture.c",
     "scripts/verify_overworld_wild_overlay_size.py",
     "scripts/verify_overworld_learnset_cache.py",

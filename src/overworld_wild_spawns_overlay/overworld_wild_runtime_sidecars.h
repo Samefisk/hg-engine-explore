@@ -44,6 +44,18 @@
 #define OW_WILD_RUNTIME_TIMER_VALID (1u << 0)
 #define OW_WILD_RUNTIME_TIMER_ZERO_PENDING (1u << 1)
 
+#define OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID (1u << 0)
+
+#define OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_ACTIVE_STEPS (1u << 0)
+#define OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER (1u << 1)
+#define OW_WILD_RUNTIME_RECOVERY_ACTION_CLEAR_MOVEMENT_CHAIN (1u << 2)
+#define OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN (1u << 3)
+
+#define OW_WILD_RUNTIME_TRANSITION_EVENT_REPLAY (1u << 0)
+#define OW_WILD_RUNTIME_TRANSITION_ACTION(kind) (1u << ((kind) - 1))
+
+#define OW_WILD_RUNTIME_MAX_CALM_RESET_OWNERS 3
+
 typedef enum OverworldWildRuntimeTimerClock {
     OW_WILD_RUNTIME_TIMER_CLOCK_NONE = 0,
     OW_WILD_RUNTIME_TIMER_CLOCK_FRAME = 1,
@@ -56,6 +68,30 @@ typedef enum OverworldWildRuntimeHiddenTimerPolicy {
     OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN = 2,
     OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE = 3,
 } OverworldWildRuntimeHiddenTimerPolicy;
+
+typedef enum OverworldWildRuntimeRecoveryOrigin {
+    OW_WILD_RUNTIME_RECOVERY_ORIGIN_STAMINA = 1,
+    OW_WILD_RUNTIME_RECOVERY_ORIGIN_RAM_CRASH = 2,
+    OW_WILD_RUNTIME_RECOVERY_ORIGIN_THROW_RECOVERY = 3,
+    OW_WILD_RUNTIME_RECOVERY_ORIGIN_BATTLE_FLED = 4,
+} OverworldWildRuntimeRecoveryOrigin;
+
+typedef enum OverworldWildRuntimeRecoverySelection {
+    OW_WILD_RUNTIME_RECOVERY_SELECTION_NONE = 0,
+    OW_WILD_RUNTIME_RECOVERY_SELECTION_AUTHORED_SEMANTIC = 1,
+    OW_WILD_RUNTIME_RECOVERY_SELECTION_GENERATED_EXACT = 2,
+} OverworldWildRuntimeRecoverySelection;
+
+typedef enum OverworldWildRuntimeTimerRecoveryRoute {
+    OW_WILD_RUNTIME_TIMER_RECOVERY_NONE = 0,
+    OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF = 1,
+    OW_WILD_RUNTIME_TIMER_RECOVERY_LEGACY_RETURN_CALM = 2,
+} OverworldWildRuntimeTimerRecoveryRoute;
+
+typedef enum OverworldWildRuntimeCommandWinnerKind {
+    OW_WILD_RUNTIME_COMMAND_WINNER_BASE = 1,
+    OW_WILD_RUNTIME_COMMAND_WINNER_LAYER = 2,
+} OverworldWildRuntimeCommandWinnerKind;
 
 typedef enum OverworldWildRuntimeStatus {
     OW_WILD_RUNTIME_STATUS_OK = 0,
@@ -156,6 +192,77 @@ typedef struct OverworldWildRuntimeStaticContext {
     u8 behaviorClass;
     u16 reserved;
 } OverworldWildRuntimeStaticContext;
+
+/* Canonical value-copy bridge from immutable spawn inputs to the installed
+ * controller/node catalog. Callers never retain catalog pointers or infer a
+ * generated definition/owner from serialized order. */
+typedef struct OverworldWildRuntimeResolvedStaticContext {
+    OverworldWildRuntimeApplicabilityInput applicability;
+    u32 catalogIdentity;
+    u32 staticContextIdentity;
+    u32 staticSetHash;
+    u16 controllerId;
+    u16 baseNodeId;
+    u16 baseProfileId;
+    u16 tiredNodeId;
+    u16 tiredProfileId;
+    u16 spawnPolicyId;
+    u16 populationPolicyId;
+    u8 baseSemanticRole;
+    u8 authoredTiredBound;
+    u8 stamina;
+    u8 restTime;
+} OverworldWildRuntimeResolvedStaticContext;
+
+typedef struct OverworldWildRuntimeRecoveryCandidate {
+    u16 definitionId;
+    u16 ownerId;
+    u16 recoveryTransitionId;
+    u16 controllerId;
+    u16 nodeId;
+    u16 profileId;
+    u8 origin;
+    u8 selection;
+    u8 selectorKind;
+    u8 semanticRole;
+} OverworldWildRuntimeRecoveryCandidate;
+
+typedef struct OverworldWildRuntimeCommandIdentity {
+    u32 commandGeneration;
+    u32 commandSerial;
+    u32 objectGeneration;
+    u32 staminaPolicyGeneration;
+    u16 staminaPolicyId;
+    u8 reserved[2];
+} OverworldWildRuntimeCommandIdentity;
+
+/* One caller-owned record per spawn slot. The live-spawns integration places
+ * this bank before its fixed resident behaviorStackRuntime suffix. */
+typedef struct OverworldWildRuntimeCommandOrigin {
+    u32 runtimeEpoch;
+    u32 slotGeneration;
+    u32 commandGeneration;
+    u32 commandSerial;
+    u32 winningEntryGeneration;
+    u32 effectiveGeneration;
+    u32 objectGeneration;
+    u32 staminaPolicyGeneration;
+    u16 controllerId;
+    u16 nodeId;
+    u16 stateProfileId;
+    u16 winningDefinitionId;
+    u16 winningOwnerId;
+    u16 winningInstanceKey;
+    u16 staminaPolicyId;
+    u8 slotIndex;
+    u8 winnerKind;
+    u8 flags;
+    u8 reserved[3];
+} OverworldWildRuntimeCommandOrigin;
+
+typedef struct OverworldWildRuntimeCommandOriginBank {
+    OverworldWildRuntimeCommandOrigin records[OW_WILD_MAX_SPAWNS];
+} OverworldWildRuntimeCommandOriginBank;
 
 typedef struct OverworldWildRuntimeStackDeltaRequest {
     u32 expectedSlotGeneration;
@@ -280,6 +387,26 @@ typedef struct OverworldWildRuntimeTimerTickResult {
     u8 pendingExpiryCount;
 } OverworldWildRuntimeTimerTickResult;
 
+typedef struct OverworldWildRuntimeTimerRecoveryResult {
+    u32 runtimeEpochBefore;
+    u32 runtimeEpochAfter;
+    u32 slotGeneration;
+    u32 layerGenerationBefore;
+    u32 layerGenerationAfter;
+    u32 effectiveGenerationBefore;
+    u32 effectiveGenerationAfter;
+    u16 recoveryTransitionId;
+    u16 calmResetOwnerIds[OW_WILD_RUNTIME_MAX_CALM_RESET_OWNERS];
+    u8 status;
+    u8 ok;
+    u8 mutated;
+    u8 route;
+    u8 actionFlags;
+    u8 calmResetOwnerCount;
+    u8 slotIndex;
+    u8 reserved;
+} OverworldWildRuntimeTimerRecoveryResult;
+
 typedef struct OverworldWildRuntimeEffectiveCache {
     u32 cacheIdentity;
     u32 dataIncarnation;
@@ -304,6 +431,30 @@ typedef struct OverworldWildRuntimeEffectiveCache {
     u8 controllerValues[OW_WILD_RUNTIME_CONTROLLER_VALUE_COUNT];
     u8 primitives[OW_WILD_RUNTIME_PRIMITIVE_VALUE_COUNT];
 } OverworldWildRuntimeEffectiveCache;
+
+/* Runtime inputs only. Ordinary gameplay events leave replayExpiry entirely
+ * zero.  Timer replay carries the complete authenticated expiry ticket so a
+ * stale event can never target a newly armed timer with recycled catalog IDs. */
+typedef struct OverworldWildRuntimeTransitionEvent {
+    OverworldWildRuntimeTimerExpiry replayExpiry;
+    u8 trigger;
+    u8 systemRoute;
+    u8 chanceRoll;
+    u8 flags;
+} OverworldWildRuntimeTransitionEvent;
+
+typedef struct OverworldWildRuntimeTransitionResult {
+    OverworldWildRuntimeEffectiveCache effectiveAfter;
+    u32 actionFlags;
+    u16 transitionId;
+    u16 definitionId;
+    u16 ownerId;
+    u16 instanceKey;
+    u8 status;
+    u8 ok;
+    u8 mutated;
+    u8 operationCount;
+} OverworldWildRuntimeTransitionResult;
 
 typedef struct OverworldWildRuntimeStaticModifierContribution {
     u16 modifierDefinitionId;
@@ -331,6 +482,23 @@ typedef struct OverworldWildRuntimeResolvedNode {
     u8 stateValues[OW_WILD_RUNTIME_STATE_VALUE_COUNT];
 } OverworldWildRuntimeResolvedNode;
 
+/* Fully resolved spawn-time policy values.  Runtime consumers never retain
+ * or parse the installed serialized policy/hook tables. */
+typedef struct OverworldWildRuntimeSpawnConfiguration {
+    u8 spawnState;
+    u8 destination;
+    u8 minimumDistance;
+    u8 maximumDistance;
+    u8 spawnHopTime;
+    u8 spawnFlags;
+    u8 populationLimit;
+    u8 populationFlags;
+    u8 helpCallInvocation;
+    u8 pickupThrowEntry;
+    u8 pickupThrowActiveLoop;
+    u8 hookFlags;
+} OverworldWildRuntimeSpawnConfiguration;
+
 typedef struct OverworldWildRuntimeStaticCache {
     u32 catalogIdentity;
     u32 staticContextIdentity;
@@ -343,6 +511,7 @@ typedef struct OverworldWildRuntimeStaticCache {
     u16 baseProfileId;
     u16 spawnPolicyId;
     u16 populationPolicyId;
+    OverworldWildRuntimeSpawnConfiguration spawnConfiguration;
     u8 baseSemanticRole;
     u8 valid;
     u8 nodeCount;
@@ -486,14 +655,30 @@ typedef char OverworldWildRuntimeTimerExpirySizeMustRemain32[
     sizeof(OverworldWildRuntimeTimerExpiry) == 32 ? 1 : -1];
 typedef char OverworldWildRuntimeStaticContextSizeMustRemain12[
     sizeof(OverworldWildRuntimeStaticContext) == 12 ? 1 : -1];
+typedef char OverworldWildRuntimeResolvedStaticContextSizeMustRemain60[
+    sizeof(OverworldWildRuntimeResolvedStaticContext) == 60 ? 1 : -1];
+typedef char OverworldWildRuntimeRecoveryCandidateSizeMustRemain16[
+    sizeof(OverworldWildRuntimeRecoveryCandidate) == 16 ? 1 : -1];
+typedef char OverworldWildRuntimeCommandIdentitySizeMustRemain20[
+    sizeof(OverworldWildRuntimeCommandIdentity) == 20 ? 1 : -1];
+typedef char OverworldWildRuntimeCommandOriginSizeMustRemain52[
+    sizeof(OverworldWildRuntimeCommandOrigin) == 52 ? 1 : -1];
+typedef char OverworldWildRuntimeCommandOriginBankSizeMustRemain520[
+    sizeof(OverworldWildRuntimeCommandOriginBank) == 520 ? 1 : -1];
 typedef char OverworldWildRuntimeEffectiveCacheSizeMustRemain104[
     sizeof(OverworldWildRuntimeEffectiveCache) == 104 ? 1 : -1];
+typedef char OverworldWildRuntimeTransitionEventSizeMustRemain36[
+    sizeof(OverworldWildRuntimeTransitionEvent) == 36 ? 1 : -1];
+typedef char OverworldWildRuntimeTransitionResultSizeMustRemain120[
+    sizeof(OverworldWildRuntimeTransitionResult) == 120 ? 1 : -1];
 typedef char OverworldWildRuntimeStaticModifierContributionSizeMustRemain18[
     sizeof(OverworldWildRuntimeStaticModifierContribution) == 18 ? 1 : -1];
 typedef char OverworldWildRuntimeResolvedNodeSizeMustRemain38[
     sizeof(OverworldWildRuntimeResolvedNode) == 38 ? 1 : -1];
-typedef char OverworldWildRuntimeStaticCacheSizeMustRemain540[
-    sizeof(OverworldWildRuntimeStaticCache) == 540 ? 1 : -1];
+typedef char OverworldWildRuntimeSpawnConfigurationSizeMustRemain12[
+    sizeof(OverworldWildRuntimeSpawnConfiguration) == 12 ? 1 : -1];
+typedef char OverworldWildRuntimeStaticCacheSizeMustRemain552[
+    sizeof(OverworldWildRuntimeStaticCache) == 552 ? 1 : -1];
 typedef char OverworldWildRuntimeCandidateProvenanceSizeMustRemain20[
     sizeof(OverworldWildRuntimeCandidateProvenance) == 20 ? 1 : -1];
 typedef char OverworldWildRuntimeModifierProvenanceSizeMustRemain16[
@@ -502,10 +687,10 @@ typedef char OverworldWildRuntimeFieldContributionSizeMustRemain14[
     sizeof(OverworldWildRuntimeFieldContribution) == 14 ? 1 : -1];
 typedef char OverworldWildRuntimeProvenanceSizeMustRemain728[
     sizeof(OverworldWildRuntimeProvenance) == 728 ? 1 : -1];
-typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1712[
-    sizeof(OverworldWildRuntimeSlotSidecar) == 1712 ? 1 : -1];
-typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain17132[
-    sizeof(OverworldWildBehaviorStackRuntime) == 17132 ? 1 : -1];
+typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1724[
+    sizeof(OverworldWildRuntimeSlotSidecar) == 1724 ? 1 : -1];
+typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain17252[
+    sizeof(OverworldWildBehaviorStackRuntime) == 17252 ? 1 : -1];
 typedef char OverworldWildRuntimeLayerArrayMustRemainFixed[
     sizeof(((OverworldWildRuntimeLayerBank *)0)->entryGenerations)
         == sizeof(u32) * OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
@@ -526,6 +711,8 @@ typedef char OverworldWildRuntimeDeltaOperationResultSizeMustRemain28[
     sizeof(OverworldWildRuntimeDeltaOperationResult) == 28 ? 1 : -1];
 typedef char OverworldWildRuntimeStackDeltaResultSizeMustRemain484[
     sizeof(OverworldWildRuntimeStackDeltaResult) == 484 ? 1 : -1];
+typedef char OverworldWildRuntimeTimerRecoveryResultSizeMustRemain44[
+    sizeof(OverworldWildRuntimeTimerRecoveryResult) == 44 ? 1 : -1];
 
 #ifndef OW_WILD_RUNTIME_SIDECAR_CODE
 #ifdef OVERWORLD_WILD_RUNTIME_SIDECARS_IMPLEMENTATION
@@ -611,6 +798,22 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     u32 expectedSlotGeneration,
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *applicability);
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
+OverworldWildRuntimeStatus OverworldWildRuntime_ResolveCanonicalStaticContext(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    OverworldWildRuntimeResolvedStaticContext *resolvedOut);
+OverworldWildRuntimeStatus OverworldWildRuntime_PrimeCanonicalEffectiveCache(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeStaticContext *staticContext,
+    OverworldWildRuntimeResolvedStaticContext *resolvedOut);
+OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRecoveryCandidate(
+    const OverworldWildRuntimeStaticContext *staticContext,
+    u8 origin,
+    OverworldWildRuntimeRecoveryCandidate *candidateOut);
+#endif
 OverworldWildRuntimeStatus OverworldWildRuntime_GetEffectiveCache(
     const OverworldWildBehaviorStackRuntime *runtime,
     u8 slotIndex,
@@ -626,6 +829,11 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
     u8 slotIndex,
     u32 expectedSlotGeneration,
     OverworldWildRuntimeProvenance *provenanceOut);
+OverworldWildRuntimeStatus
+OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+    const OverworldWildRuntimeStaticCache *staticCache,
+    u32 expectedStaticContextGeneration,
+    OverworldWildRuntimeSpawnConfiguration *configurationOut);
 
 u8 OverworldWildRuntime_GetTimerCount(
     const OverworldWildBehaviorStackRuntime *runtime,
@@ -671,10 +879,42 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetPendingTimerExpiryByIndex(
     u32 expectedSlotGeneration,
     u8 pendingIndex,
     OverworldWildRuntimeTimerExpiry *expiryOut);
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 OverworldWildRuntimeStatus OverworldWildRuntime_CommitTimerExpiry(
     OverworldWildBehaviorStackRuntime *runtime,
     const OverworldWildRuntimeTimerExpiry *expiry,
     OverworldWildRuntimeStackDeltaResult *result);
+OverworldWildRuntimeStatus OverworldWildRuntime_RecoverExpiredTimer(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry,
+    OverworldWildRuntimeTimerRecoveryResult *result);
+#endif
+OverworldWildRuntimeStatus OverworldWildRuntime_DispatchTransition(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeTransitionEvent *event,
+    OverworldWildRuntimeTransitionResult *result);
+
+OverworldWildRuntimeStatus OverworldWildRuntime_CaptureCommandOrigin(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    OverworldWildRuntimeCommandOriginBank *bank,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeCommandIdentity *identity);
+OverworldWildRuntimeStatus OverworldWildRuntime_ConsumeCommandOrigin(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    OverworldWildRuntimeCommandOriginBank *bank,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeCommandIdentity *identity,
+    OverworldWildRuntimeCommandOrigin *originOut);
+void OverworldWildRuntime_InvalidateCommandOrigin(
+    OverworldWildRuntimeCommandOriginBank *bank,
+    u8 slotIndex);
+void OverworldWildRuntime_InvalidateAllCommandOrigins(
+    OverworldWildRuntimeCommandOriginBank *bank);
 
 u8 OverworldWildRuntime_GetLayerCount(
     const OverworldWildBehaviorStackRuntime *runtime,

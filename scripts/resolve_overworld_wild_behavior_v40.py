@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay only the emitted v40 authored graph against the frozen v39 oracle."""
+"""Independently validate and replay the emitted direct-cutover v40 graph."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from overworld_wild_behavior_v40_field_metadata import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_TYPED_EVENT_DIGEST = "3f15ab3dcac064c8c413b383f7b5c6e18752917387fc56d1d061ca5d63f51adb"
+EXPECTED_TYPED_EVENT_DIGEST = "1f57fc0f2996f8c25d1838db27e895cda1ce63a15b24d080847f923041238701"
 
 # Deliberately duplicated frozen decode vocabulary.  The parity executor must
 # not import generator mappings or the host validator it is cross-checking.
@@ -60,8 +60,8 @@ SECTION_SPECS = (
     ("spawnPolicies", 3, 12), ("populationPolicies", 6, 10),
     ("hookSets", 3, 8), ("owners", 10, 6),
     ("overrideDefinitions", 19, 36), ("transitions", 26, 24),
-    ("transitionGuards", 26, 12), ("transitionOperations", 35, 18),
-    ("transitionActions", 32, 10), ("recoveryActions", 15, 8),
+    ("transitionGuards", 26, 12), ("transitionOperations", 53, 18),
+    ("transitionActions", 41, 10), ("recoveryActions", 15, 8),
     ("importRecipes", 12, 24), ("applicability", 19, 16),
     ("tiredTranslations", 18, 24),
     ("semanticIds", 16, 8),
@@ -90,9 +90,95 @@ class Graph:
         return [struct.unpack_from(fmt, self.blob, offset + index * stride) for index in range(count)]
 
 
+def validate_direct_cutover_records(graph):
+    path = graph.path
+    semantic = {record[0]: record for record in graph.records("semanticIds", "<HBBHH")}
+    spawn = {record[0]: record for record in graph.records("spawnPolicies", "<3H6B")}
+    population = {record[0]: record for record in graph.records("populationPolicies", "<4H2B")}
+    hooks = {record[0]: record for record in graph.records("hookSets", "<2H4B")}
+    controllers = graph.records("controllers", "<7H10B")
+    nodes = graph.records("controllerNodes", "<4HBBH")
+
+    for stable, name, provenance, state, destination, minimum, maximum, hop, flags in spawn.values():
+        if (stable != name or provenance not in semantic or semantic[provenance][1] != 1 \
+                or state > 3 or destination > 16 or not 1 <= minimum <= maximum <= 8 \
+                or hop > 64 or flags):
+            raise ValueError(f"{path}: direct-cutover spawn configuration mismatch")
+    for stable, name, group, provenance, limit, flags in population.values():
+        if stable != name or group not in semantic or semantic[group][1] != 3 \
+                or not provenance or limit > 10 or flags:
+            raise ValueError(f"{path}: direct-cutover population configuration mismatch")
+    for stable, name, help_call, pickup_entry, pickup_loop, flags in hooks.values():
+        if stable != name or help_call > 1 or pickup_entry > 1 or pickup_loop != pickup_entry \
+                or (help_call and pickup_entry) or flags:
+            raise ValueError(f"{path}: direct-cutover hook configuration mismatch")
+    for index, controller in enumerate(controllers):
+        stable, name, node_start, node_count, spawn_id, population_id, hook_id = controller[:7]
+        if stable != name or node_start != index * 7 or node_count != 7 \
+                or spawn_id not in spawn or population_id not in population or hook_id not in hooks \
+                or controller[15:] != (0, 0) \
+                or any(not scalar_value_valid(5, field, value)
+                       for field, value in enumerate(controller[7:14], 1)) \
+                or any(node[1] != stable for node in nodes[node_start:node_start + node_count]):
+            raise ValueError(f"{path}: direct-cutover controller/configuration binding mismatch")
+
+    definitions = {record[0]: record for record in graph.records("overrideDefinitions", "<8H20B")}
+    owners = {record[0]: record for record in graph.records("owners", "<2H2B")}
+    guards = graph.records("transitionGuards", "<HH4BHH")
+    operations = graph.records("transitionOperations", "<7H4B")
+    actions = graph.records("transitionActions", "<HHBBHH")
+    recoveries = graph.records("recoveryActions", "<HHHBB")
+    cursors = [0, 0, 0, 0]
+    for transition_index, transition in enumerate(graph.records("transitions", "<9H4BH")):
+        (stable, definition, owner, guard_start, guard_count, operation_start,
+         operation_count, action_start, action_count, trigger, from_roles,
+         recovery_start, recovery_count, priority) = transition
+        if definition not in definitions or owner not in owners or not 1 <= trigger <= 13 \
+                or not from_roles or from_roles & ~0x7F or not priority \
+                or [guard_start, operation_start, action_start, recovery_start] != cursors:
+            raise ValueError(f"{path}: direct-cutover transition header/slice mismatch")
+        transition_guards = guards[guard_start:guard_start + guard_count]
+        transition_operations = operations[operation_start:operation_start + operation_count]
+        transition_actions = actions[action_start:action_start + action_count]
+        transition_recoveries = recoveries[recovery_start:recovery_start + recovery_count]
+        if len(transition_guards) != guard_count or len(transition_operations) != operation_count \
+                or len(transition_actions) != action_count or len(transition_recoveries) != recovery_count:
+            raise ValueError(f"{path}: direct-cutover transition slice escaped section")
+        for guard in transition_guards:
+            if guard[1] != stable or not 1 <= guard[2] <= 8 or guard[3] > 1 \
+                    or guard[5] or guard[7]:
+                raise ValueError(f"{path}: direct-cutover transition guard mismatch")
+        for operation in transition_operations:
+            kind = operation[7]
+            if operation[1] != stable or not 1 <= kind <= 6 or operation[8] not in (1, 2) \
+                    or operation[9] > 1 or operation[10] \
+                    or (operation[2] and operation[2] not in definitions) \
+                    or (operation[3] and operation[3] not in owners) \
+                    or (operation[6] and kind not in (1, 2)):
+                raise ValueError(f"{path}: direct-cutover transition operation mismatch")
+        for action in transition_actions:
+            if action[1] != stable or not 1 <= action[2] <= 4 or not 1 <= action[3] <= 8:
+                raise ValueError(f"{path}: direct-cutover transition action mismatch")
+        for recovery in transition_recoveries:
+            if recovery[1] != stable or recovery[2] not in owners \
+                    or recovery[3] not in (1, 2) or recovery[4] != 1:
+                raise ValueError(f"{path}: direct-cutover recovery action mismatch")
+        if trigger == 2 and not any(guard[2] == 8 and guard[4] == trigger
+                                    for guard in transition_guards):
+            raise ValueError(f"{path}: stamina transition lacks exact system-route evidence")
+        if transition_index >= 17 and (trigger != 3 or from_roles != 0x40 \
+                or guard_count != 1 or transition_guards[0][2:5] != (6, 0, 3) \
+                or action_count != 2 or recovery_count != 1):
+            raise ValueError(f"{path}: exact tired cutover transition topology mismatch")
+        cursors = [guard_start + guard_count, operation_start + operation_count,
+                   action_start + action_count, recovery_start + recovery_count]
+    if cursors != [len(guards), len(operations), len(actions), len(recoveries)]:
+        raise ValueError(f"{path}: unclaimed direct-cutover transition records")
+
+
 def validate_wire(path, source):
     blob = path.read_bytes()
-    if len(blob) != 11220: raise ValueError(f"{path}: independent exact size mismatch")
+    if len(blob) != 11636: raise ValueError(f"{path}: independent exact size mismatch")
     magic, version, header_size, size, flags, checksum, fingerprint = struct.unpack_from("<IHHIIII", blob)
     defines = {name: int(value, 0) for name, value in re.findall(
         r"^\s*#\s*define\s+(OVERWORLD_WILD_BEHAVIOR_DATA_(?:CHECKSUM|SCHEMA_FINGERPRINT))\s+(0[xX][0-9A-Fa-f]+|[0-9]+)(?:u)?\b",
@@ -152,6 +238,7 @@ def validate_wire(path, source):
                 raise ValueError(f"{path}: independent contextual import lifetime mismatch")
             if source_id != expected_source:
                 raise ValueError(f"{path}: independent contextual import source mismatch")
+    validate_direct_cutover_records(graph)
     return graph
 
 
@@ -797,6 +884,7 @@ def verify_mutation_detection(blob, source, frozen):
         "role-mask": "field chillSpeed", "state-body": "field chillSpeed",
         "typed-value": "field attentiveSpeed", "derived-field": "derived state-body invariant",
         "exact-selector-discriminant": "typed import/tired/transition execution fixture",
+        "transition-operation": "direct-cutover transition operation mismatch",
         "import-lifetime": "contextual import lifetime mismatch",
         "contextual-import-profile": "contextual node tag mismatch",
         "transitional-source-profile": "source-profile projection differs",
@@ -812,7 +900,6 @@ def verify_mutation_detection(blob, source, frozen):
         "transition-from-role": (2, (False,), 0),
         "transition-dispatch-priority": 0x2001,
         "transition-guard": (1, 0, True),
-        "transition-operation": ((4,), 0),
         "transition-busy": (False, (2,)),
         "owner-taxonomy": 0,
         "definition-channel": (2,),

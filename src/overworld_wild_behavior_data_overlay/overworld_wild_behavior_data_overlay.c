@@ -268,9 +268,7 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
                 state->movementFieldSystem,
                 i,
                 directions,
-                4,
-                NULL,
-                NULL)) {
+                4)) {
             return TRUE;
         }
     }

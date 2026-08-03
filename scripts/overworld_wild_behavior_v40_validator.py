@@ -453,7 +453,8 @@ def validate_v40_owbd(path: Path, source: Path) -> None:
             require(definition in definitions and owner in ids["owners"]
                     and (definitions[definition][4] == 0 or owner == definitions[definition][4])
                     and not replacement and not policy
-                    and instance == definition and required == (kind == 3), f"{path}: operation ref/payload invalid")
+                    and instance == (definition if kind == 1 else 0)
+                    and required == (kind == 3), f"{path}: operation ref/payload invalid")
         elif kind == 2:
             require(definition in definitions and owner in ids["owners"]
                     and (definitions[definition][4] == 0 or owner == definitions[definition][4])

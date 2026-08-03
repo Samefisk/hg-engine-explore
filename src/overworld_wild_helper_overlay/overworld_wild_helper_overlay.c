@@ -1076,9 +1076,7 @@ static BOOL OverworldWildHelper_CopyPreparedSpawn(
     prepared->encounter = *encounter;
     prepared->savedShinySlot = savedShinySlot;
     prepared->shiny = shiny;
-    prepared->behaviorLimitKey = 0;
     prepared->playerBallCatchValue = 0;
-    prepared->behaviorProfile = (OverworldWildBehaviorProfile){ 0 };
     prepared->startup = (OverworldWildSpawnStartup){ 0 };
     prepared->behaviorClass = 0;
     return TRUE;

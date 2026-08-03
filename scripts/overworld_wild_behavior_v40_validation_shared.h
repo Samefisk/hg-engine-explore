@@ -51,7 +51,7 @@ OWBD_RESIDENT_DATA const OwbdSectionSpec sOwbdSpecs[OWBD_S_COUNT] = {
 };
 #endif
 
-#define OWBD_SHARED_ID_COUNT 713u
+#define OWBD_SHARED_ID_COUNT 740u
 #define OWBD_SHARED_CRC_CHUNK 256u
 
 typedef struct OwbdSharedContext {
@@ -575,11 +575,11 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
             break;
         case 3:
             if (!OwbdHasId(ctx, OWBD_S_DEFINITION, definition)
-                || replacement || policy || instance != definition || r[16] != 1) return FALSE;
+                || replacement || policy || instance || r[16] != 1) return FALSE;
             break;
         case 4:
             if (!OwbdHasId(ctx, OWBD_S_DEFINITION, definition)
-                || replacement || policy || instance != definition || r[16]) return FALSE;
+                || replacement || policy || instance || r[16]) return FALSE;
             break;
         case 5:
             if (definition || replacement || policy || instance || r[16]) return FALSE;

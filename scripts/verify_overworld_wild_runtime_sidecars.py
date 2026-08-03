@@ -138,13 +138,19 @@ def verify_private_layout(
         "sizeof(OverworldWildRuntimeTimerBank) == 192",
         "sizeof(OverworldWildRuntimeTimerExpiry) == 32",
         "sizeof(OverworldWildRuntimeStaticContext) == 12",
+        "sizeof(OverworldWildRuntimeResolvedStaticContext) == 60",
+        "sizeof(OverworldWildRuntimeRecoveryCandidate) == 16",
+        "sizeof(OverworldWildRuntimeCommandIdentity) == 20",
+        "sizeof(OverworldWildRuntimeCommandOrigin) == 52",
+        "sizeof(OverworldWildRuntimeCommandOriginBank) == 520",
+        "sizeof(OverworldWildRuntimeTimerRecoveryResult) == 44",
         "sizeof(OverworldWildRuntimeStaticModifierContribution) == 18",
         "sizeof(OverworldWildRuntimeResolvedNode) == 38",
-        "sizeof(OverworldWildRuntimeStaticCache) == 540",
+        "sizeof(OverworldWildRuntimeStaticCache) == 552",
         "sizeof(OverworldWildRuntimeEffectiveCache) == 104",
         "sizeof(OverworldWildRuntimeProvenance) == 728",
-        "sizeof(OverworldWildRuntimeSlotSidecar) == 1712",
-        "sizeof(OverworldWildBehaviorStackRuntime) == 17132",
+        "sizeof(OverworldWildRuntimeSlotSidecar) == 1724",
+        "sizeof(OverworldWildBehaviorStackRuntime) == 17252",
         "u32 handleEpoch;",
         "u32 dataIncarnation;",
         "u32 slotGeneration;",
@@ -381,7 +387,7 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     require("OverworldWildRuntime_DestructivelyInvalidateSlot" not in follower,
             "follower recall double-advances the runtime sidecar")
 
-    assignment = function_body(source, "OverworldWildSpawns_InitSpawnSlotState")
+    assignment = function_body(source, "OverworldWildSpawns_FinalizePreparedSpawn")
     require(assignment.count("OverworldWildRuntime_MarkSlotAssigned(") == 1,
             "encounter assignment does not mark the resident slot exactly once")
     require("OverworldWildRuntime_DestructivelyInvalidateSlot" not in assignment,

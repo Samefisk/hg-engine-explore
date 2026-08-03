@@ -18,6 +18,9 @@ FIXTURE = Path(__file__).with_name("overworld_wild_runtime_layers_fixture.c")
 CATALOG_FIXTURE = Path(__file__).with_name(
     "overworld_wild_runtime_catalog_fixture.c"
 )
+CATALOG_TIMER_FIXTURE = Path(__file__).with_name(
+    "overworld_wild_runtime_catalog_timer_fixture.c"
+)
 VALIDATED_V40 = ROOT / "build/OverworldWildBehaviorDataV40.expected.bin"
 MODEL = Path(__file__).with_name("overworld_behavior_stack_model.py")
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
@@ -354,6 +357,46 @@ def verify_timer_oracle_trace(fixture_output: str) -> int:
     return len(expected) + len(correction_expected)
 
 
+def verify_task11_substrate_trace(fixture_output: str) -> int:
+    status_values = {
+        name: int(value) for name, value in re.findall(
+            r"OW_WILD_RUNTIME_STATUS_([A-Z_]+)\s*=\s*(\d+)",
+            HEADER.read_text())
+    }
+    match = re.search(
+        r"TASK11_SUBSTRATE_TRACE invalidSelection=(\d+) "
+        r"staleCommand=(\d+) calmRecovery=(\d+) removeSelf=(\d+) "
+        r"canonicalMutations=(\d+) commandMutations=(\d+) "
+        r"recoveries=(\d+) malformed=(\d+) mappingMutations=(\d+) "
+        r"backlinkMutations=(\d+) semanticBacklinks=(\d+) "
+        r"exactBacklinks=(\d+) staminaBacklinks=(\d+) "
+        r"sleepBacklinks=(\d+) "
+        r"calmOwners=(\d+) actions=(\d+)",
+        fixture_output,
+    )
+    expected = (
+        status_values["INVALID_TRANSLATION"],
+        status_values["STALE_NOOP"],
+        status_values["OK"],
+        status_values["OK"],
+        6,
+        28,
+        6,
+        157,
+        24,
+        61,
+        19,
+        18,
+        2,
+        22,
+        3,
+        10,
+    )
+    require(match is not None and tuple(map(int, match.groups())) == expected,
+            "Task11 substrate trace differs from the typed runtime contract")
+    return len(expected)
+
+
 def verify_make_package_invocation() -> None:
     source = MAKE_SCRIPT.read_text()
     require("if loader != 0x023BB980:" in source
@@ -500,8 +543,12 @@ def verify_make_package_invocation() -> None:
         "--scalar-shard",
         "build/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.o",
         "--catalog-owner", "build/overworld_wild_runtime_overlay_linked.o",
+        "--catalog-carrier",
+        "build/overworld_wild_runtime_overlay_catalog_symbols.o",
         "--task8-carrier",
         "build/overworld_wild_runtime_layers_overlay_task8_symbols.o",
+        "--production-object",
+        "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o",
         "--runtime-carrier",
         "build/pokemon_move_history_task6_overlay_task7_runtime_symbols.o",
         "--spawns-consumer", "build/overworld_wild_spawns_overlay_linked.o",
@@ -631,45 +678,59 @@ def verify_make_package_invocation() -> None:
         and not timer_function.args.kwarg
         and not timer_function.args.defaults,
         "packaging overlay159 verifier signature drifted")
-    timer_values: dict[str, object] = {
-        "linked_path": ("parameter", "linked_path"),
-        "output_path": ("parameter", "output_path"),
-        "packaged_path": ("parameter", "packaged_path"),
-    }
+    def timer_package_invocations(candidate: ast.Module) -> list[list[object]]:
+        functions = [
+            node for node in candidate.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "VerifyOverworldWildRuntimeTimersOverlay"
+        ]
+        if len(functions) != 1:
+            return []
+        values: dict[str, object] = {
+            "linked_path": ("parameter", "linked_path"),
+            "output_path": ("parameter", "output_path"),
+            "packaged_path": ("parameter", "packaged_path"),
+        }
 
-    def evaluate_timer(expression: ast.expr) -> object:
-        if isinstance(expression, ast.Constant) and isinstance(expression.value, str):
-            return expression.value
-        if isinstance(expression, ast.Name) and expression.id in timer_values:
-            return timer_values[expression.id]
-        if (isinstance(expression, ast.Attribute)
-                and isinstance(expression.value, ast.Name)
-                and expression.value.id == "sys"
-                and expression.attr == "executable"):
-            return executable
-        if isinstance(expression, ast.List):
-            return [evaluate_timer(element) for element in expression.elts]
-        raise ValueError(ast.dump(expression, include_attributes=False))
+        def evaluate_timer(expression: ast.expr) -> object:
+            if (isinstance(expression, ast.Constant)
+                    and isinstance(expression.value, str)):
+                return expression.value
+            if isinstance(expression, ast.Name) and expression.id in values:
+                return values[expression.id]
+            if (isinstance(expression, ast.Attribute)
+                    and isinstance(expression.value, ast.Name)
+                    and expression.value.id == "sys"
+                    and expression.attr == "executable"):
+                return executable
+            if isinstance(expression, ast.List):
+                return [evaluate_timer(element) for element in expression.elts]
+            raise ValueError(ast.dump(expression, include_attributes=False))
 
-    timer_invocations: list[list[object]] = []
-    for statement in timer_function.body:
-        if (isinstance(statement, ast.Assign)
-                and len(statement.targets) == 1
-                and isinstance(statement.targets[0], ast.Name)):
-            try:
-                timer_values[statement.targets[0].id] = evaluate_timer(
-                    statement.value)
-            except ValueError:
-                pass
-            continue
-        if (isinstance(statement, ast.Expr)
-                and isinstance(statement.value, ast.Call)
-                and isinstance(statement.value.func, ast.Attribute)
-                and isinstance(statement.value.func.value, ast.Name)
-                and statement.value.func.value.id == "subprocess"
-                and statement.value.func.attr == "check_call"):
-            timer_invocations.append(evaluate_timer(statement.value.args[0]))
-    require(timer_invocations == [[
+        invocations: list[list[object]] = []
+        for statement in functions[0].body:
+            if (isinstance(statement, ast.Assign)
+                    and len(statement.targets) == 1
+                    and isinstance(statement.targets[0], ast.Name)):
+                try:
+                    values[statement.targets[0].id] = evaluate_timer(
+                        statement.value)
+                except ValueError:
+                    pass
+                continue
+            if (isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Attribute)
+                    and isinstance(statement.value.func.value, ast.Name)
+                    and statement.value.func.value.id == "subprocess"
+                    and statement.value.func.attr == "check_call"):
+                try:
+                    invocations.append(evaluate_timer(statement.value.args[0]))
+                except (IndexError, ValueError):
+                    return []
+        return invocations
+
+    expected_timer_invocations = [[
         executable,
         "scripts/verify_overworld_wild_overlay_size.py",
         ("parameter", "linked_path"),
@@ -677,9 +738,55 @@ def verify_make_package_invocation() -> None:
         "--layers-owner", "build/overworld_wild_runtime_layers_overlay_linked.o",
         "--task8-carrier",
         "build/overworld_wild_runtime_layers_overlay_task8_symbols.o",
+        "--catalog-owner", "build/overworld_wild_runtime_overlay_linked.o",
+        "--catalog-carrier",
+        "build/overworld_wild_runtime_overlay_catalog_symbols.o",
         "--timer-carrier",
         "build/overworld_wild_runtime_timers_overlay_timer_symbols.o",
-    ]], "packaging-time overlay159 verifier invocation drifted")
+        "--timer-object",
+        "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o",
+        "--production-object",
+        "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o",
+    ]]
+    require(timer_package_invocations(tree) == expected_timer_invocations,
+            "packaging-time overlay159 verifier invocation drifted")
+    for mutation, message in (
+        ("missing", "packaging overlay159 accepted absent timer-object wiring"),
+        ("wrong", "packaging overlay159 accepted wrong timer-object wiring"),
+    ):
+        candidate = ast.parse(source, filename=str(MAKE_SCRIPT))
+        candidate_function = next(
+            node for node in candidate.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "VerifyOverworldWildRuntimeTimersOverlay"
+        )
+        if mutation == "wrong":
+            assignment = next(
+                node for node in candidate_function.body
+                if isinstance(node, ast.Assign)
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "timer_object"
+            )
+            assignment.value = ast.Constant(
+                "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o"
+            )
+        else:
+            invocation = next(
+                node.value for node in candidate_function.body
+                if isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Attribute)
+                and node.value.func.attr == "check_call"
+            )
+            command = invocation.args[0]
+            flag_index = next(
+                index for index, element in enumerate(command.elts)
+                if isinstance(element, ast.Constant)
+                and element.value == "--timer-object"
+            )
+            del command.elts[flag_index:flag_index + 2]
+        require(timer_package_invocations(candidate)
+                != expected_timer_invocations, message)
 
     def overlay159_integration_matches(candidate: ast.Module) -> bool:
         writeall = next((node for node in candidate.body
@@ -742,6 +849,7 @@ def verify_source_contracts() -> None:
     spawns_linker = SPAWNS_LINKER.read_text()
     fixture = FIXTURE.read_text()
     catalog_fixture = CATALOG_FIXTURE.read_text()
+    catalog_timer_fixture = CATALOG_TIMER_FIXTURE.read_text()
     task6_linker = TASK6_LINKER.read_text()
     history_linker = HISTORY_LINKER.read_text()
     overlays_mk = OVERLAYS_MK.read_text()
@@ -819,7 +927,6 @@ def verify_source_contracts() -> None:
         "ValidateCacheKey(",
         "OverworldWildRuntime_ValidateStaticCache(",
         "OverworldWildRuntime_CopyResolvedCachedNode(",
-        "OverworldWildRuntime_ApplicabilityMatchesStaticCache(",
         "OverworldWildRuntime_ResolveRetainedStaticCache(",
         "OverworldWildRuntime_HandleSlotGenerationWrap(",
         "InitializeInvalidatedSlot(",
@@ -837,31 +944,28 @@ def verify_source_contracts() -> None:
             and "ResolveRetainedStaticCache(\n"
                 "    const OverworldWildRuntimeSlotSidecar" not in implementation
             and "OverworldWildRuntime_ResolveRetainedStaticCache(\n"
-                "        &slot->staticCache, &slot->staticCache.staticContext,\n"
-                "        slot->staticContextGeneration, &prospectiveStatic);"
+                "        &slot->staticCache, slot->staticContextGeneration,\n"
+                "        &prospectiveStatic);"
                 in implementation,
             "overlay158 retained-static authentication ownership drifted")
     require("OverworldWildRuntimeStatus "
                 "OverworldWildRuntime_ResolveRetainedStaticCache(\n"
                 "    const OverworldWildRuntimeStaticCache *retainedCache,\n"
-                "    const OverworldWildRuntimeStaticContext *staticContext,\n"
                 "    u32 staticContextGeneration,\n"
                 "    OverworldWildRuntimeStaticCache *resolvedOut);"
                 in internal_header,
             "typed retained-static catalog API declaration drifted")
     for token in (
-        "static BOOL RuntimeCopyRetainedApplicability(",
         "OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(",
         "retainedCache == resolvedOut",
-        "OverworldWildRuntime_ValidateStaticCache(\n        retainedCache, "
-            "staticContextGeneration)",
-        "&retainedCache->staticContext, sizeof(*staticContext)",
-        "OverworldWildRuntime_CopyInstalledStaticCache(",
-        "RuntimeRetainedBytesEqual(retainedCache, resolvedOut,\n"
-            "            sizeof(*resolvedOut))",
+        "OverworldWildRuntime_ValidateStaticCache(\n"
+            "            retainedCache, staticContextGeneration)",
+        "*resolvedOut = *retainedCache",
     ):
         require(token in source,
                 f"overlay157 retained-static API assertion missing: {token}")
+    require("RuntimeCopyRetainedApplicability(" not in source,
+            "overlay157 retained re-resolution rebuilt caller applicability")
     require("overworld_wild_runtime_layers_internal.h" in source,
             "production runtime overlay does not bind the internal module")
     require("void OverworldWildRuntime_MarkResidentCold(" in source
@@ -964,6 +1068,7 @@ def verify_source_contracts() -> None:
         "--keep-symbol=OverworldWildRuntime_CopyInstalledStaticCache",
         "--keep-symbol=OverworldWildRuntime_ResolveRetainedStaticCache",
         "--keep-symbol=OverworldWildRuntime_ValidateStaticCache",
+        "--keep-symbol=OverworldWildRuntime_CopyValidatedSpawnConfiguration",
         "--keep-symbol=OverworldWildRuntime_CopyResolvedCachedNode",
         "--keep-symbol=OverworldWildRuntime_MarkResidentCold",
         "--task5-owner $(BUILD)/pokemon_move_history_task6_overlay_linked.o",
@@ -971,7 +1076,9 @@ def verify_source_contracts() -> None:
         "--lifecycle-object $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
         "--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS)",
         "--catalog-owner $(overworld_wild_runtime_overlay_LINK)",
+        "--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)",
         "--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS)",
+        "--production-object $(OVERWORLD_WILD_LAYERS_OBJECT)",
         "--runtime-carrier $(OVERWORLD_WILD_RUNTIME_SYMBOLS)",
         "--spawns-consumer $(BUILD)/overworld_wild_spawns_overlay_linked.o",
         "--overlay 157",
@@ -979,6 +1086,7 @@ def verify_source_contracts() -> None:
         "--overlay 159",
         "--layers-owner $(overworld_wild_runtime_layers_overlay_LINK)",
         "--timer-carrier $(OVERWORLD_WILD_TIMER_SYMBOLS)",
+        "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)",
     ):
         require(token in overlays_mk, f"resident build/link integration missing: {token}")
     task8_carrier = overlays_mk[
@@ -1007,7 +1115,11 @@ def verify_source_contracts() -> None:
         "OverworldWildRuntime_TickCompletedMovementTimers",
         "OverworldWildRuntime_GetPendingTimerExpiryCount",
         "OverworldWildRuntime_GetPendingTimerExpiryByIndex",
-        "OverworldWildRuntime_CommitTimerExpiry",
+        "OverworldWildRuntime_DispatchTransition",
+        "OverworldWildRuntime_CaptureCommandOrigin",
+        "OverworldWildRuntime_ConsumeCommandOrigin",
+        "OverworldWildRuntime_InvalidateCommandOrigin",
+        "OverworldWildRuntime_InvalidateAllCommandOrigins",
     )
     timer_carrier_start = overlays_mk.index("$(OVERWORLD_WILD_TIMER_SYMBOLS):")
     timer_carrier = overlays_mk[timer_carrier_start:]
@@ -1020,6 +1132,7 @@ def verify_source_contracts() -> None:
         "OverworldWildRuntime_TimerExpiryTagInternal",
         "OverworldWildRuntime_PreflightTimerExpiryInternal",
         "OverworldWildRuntime_MakeTimerRemovalHandleInternal",
+        "OverworldWildRuntime_ApplyStackDeltaCompact",
     ):
         require(f"--keep-symbol={name}" in task8_carrier,
                 f"overlay158 timer-internal carrier is missing {name}")
@@ -1027,17 +1140,43 @@ def verify_source_contracts() -> None:
             "overlay158 production compile does not externalize timer APIs")
     layers_output_rule = overlays_mk[
         overlays_mk.index("$(overworld_wild_runtime_layers_overlay_OUTPUT):"):
-        overlays_mk.index("$(BUILD)/overworld_wild_behavior_validator_overlay_linked.o:")]
+        overlays_mk.index("$(overworld_wild_runtime_timers_overlay_LINK):")]
     require(layers_output_rule.count("$(overworld_wild_runtime_overlay_LINK)") == 2,
             "overlay158 package gate does not depend on and authenticate the exact "
             "same-build overlay157 owner")
     timers_output_rule = overlays_mk[
         overlays_mk.index("$(overworld_wild_runtime_timers_overlay_OUTPUT):"):
         overlays_mk.index("$(BUILD)/overworld_wild_behavior_validator_overlay_linked.o:")]
-    require("$(overworld_wild_runtime_layers_overlay_LINK)" in timers_output_rule
-            and "$(OVERWORLD_WILD_TASK8_SYMBOLS)" in timers_output_rule
-            and timers_output_rule.count("$(OVERWORLD_WILD_TIMER_SYMBOLS)") == 2,
+    def timers_output_gate_matches(rule: str) -> bool:
+        prerequisite_end = rule.find("\n\t")
+        if prerequisite_end < 0:
+            return False
+        prerequisites = rule[:prerequisite_end]
+        recipe = rule[prerequisite_end:]
+        return (
+            rule.count("$(overworld_wild_runtime_layers_overlay_LINK)") == 2
+            and rule.count("$(overworld_wild_runtime_overlay_LINK)") == 2
+            and rule.count("$(OVERWORLD_WILD_TASK8_SYMBOLS)") == 2
+            and rule.count("$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)") == 2
+            and rule.count("$(OVERWORLD_WILD_TIMER_SYMBOLS)") == 2
+            and prerequisites.count("$(OVERWORLD_WILD_TIMERS_OBJECT)") == 1
+            and recipe.count(
+                "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)") == 1
+        )
+
+    require(timers_output_gate_matches(timers_output_rule),
             "overlay159 package gate lacks exact same-build owner/carriers")
+    missing_prerequisite = timers_output_rule.replace(
+        "    $(OVERWORLD_WILD_TIMERS_OBJECT) \\\n", "", 1)
+    missing_argument = timers_output_rule.replace(
+        " \\\n\t\t--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)", "", 1)
+    wrong_argument = timers_output_rule.replace(
+        "--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT)",
+        "--timer-object $(OVERWORLD_WILD_RUNTIME_SYMBOLS)", 1)
+    require(not timers_output_gate_matches(missing_prerequisite)
+            and not timers_output_gate_matches(missing_argument)
+            and not timers_output_gate_matches(wrong_argument),
+            "overlay159 timer-object Make wiring mutation was accepted")
     require(all(name + "(" in timers_source for name in timer_api_names),
             "overlay159 timer shard is missing a public API implementation")
     timer_query_body = function_body(
@@ -1143,7 +1282,6 @@ def verify_source_contracts() -> None:
         "global rekey reused data/empty-bystander cache incarnation",
         "candidate provenance published an incorrect isWinner flag",
         "static action order or static-before-runtime folding changed",
-        "coherently altered retained static changed live mutation bytes",
         "OverworldWildRuntime_ResolveRetainedStaticCache(\n",
         "false destructive wrapper changed runtime bytes",
         "ordinary live invalidation did not advance identity and clear Task-9 caches",
@@ -1160,18 +1298,127 @@ def verify_source_contracts() -> None:
         "altered nonzero current validity tag was not stale-safe",
         "indefinite timer below 255 was accepted or changed runtime",
         "TASK10_TIMER_CORRECTION_TRACE",
+        "canonical context did not publish the exact installed binding",
+        "stamina recovery was enabled without an authored tired binding",
+        "imperative recovery did not select the authored semantic wrapper",
+        "imperative recovery did not select the generated exact fallback",
+        "Task11 fixture bytes differ from the generated v40 catalog",
+        "generated v40 wrapper definition bytes drifted",
+        "generated v40 recovery operation payload drifted",
+        "malformed canonical applicability changed output or runtime",
+        "semantic recovery ignored the freshly rebound tired profile",
+        "exact recovery ignored the freshly rebound custom profile",
+        "semantic translation profile mismatch changed output or runtime",
+        "exact translation profile mismatch changed output or runtime",
+        "invalid recovery selection changed caller or runtime bytes",
+        "base command origin fabricated layer winner fields",
+        "mutated V11 command identity changed captured state",
+        "mutated V11 captured-origin tuple was consumed or changed",
+        "consumed command origin was not an exact once-only result",
+        "duplicate command completion changed the command bank or runtime",
+        "canceled command origin remained consumable",
+        "all-bank invalidation retained a command origin",
+        "legacy calm recovery disturbed an unrelated layer or timer",
+        "remove-self recovery removed a bystander layer or timer",
+        "stale recovery ticket changed runtime bytes",
+        "invalid catalog closure changed runtime or was accepted",
+        "fixture_reseal_installed_catalog();",
+        "fixture_swap_recovery_route_claims(",
+        "route-swap fixture operation claims are not globally coherent",
+        "fixture_mutate_semantic_tired_backlink(",
+        "fixture_mutate_exact_tired_backlink(",
+        "fixture_mutate_stamina_backlink(",
+        "fixture_mutate_forced_sleep_backlink(",
+        "authenticated post-install catalog",
+        "fixture catalog CRC reseal diverged from generated bytes",
+        "expiry ticket lost its exact generated wrapper identity",
+        "semantic/exact generated wrapper recovery route diverged",
+        "forced-sleep remove-self recovery disturbed its covering layer",
+        "../data/OverworldWildBehaviorDataV40.generated.inc",
+        "TASK11_SUBSTRATE_TRACE",
     ):
         require(token in fixture, f"review fixture is absent: {token}")
     for token in (
         "production retained resolver changed an independent valid copy",
         "production retained resolver accepted exact input/output aliasing",
-        "production retained resolver accepted a mismatched static context",
+        "production retained resolver accepted a mutated retained context",
         "production retained resolver accepted a mismatched generation",
-        "production retained resolver accepted coherent bytes that differ ",
-        "RuntimeCatalogHashBytes(\n            modifiedCache.staticSetHash",
     ):
         require(token in catalog_fixture,
                 f"production retained-resolver fixture is absent: {token}")
+    for token in (
+        "production canonical static composition rejected NULL input",
+        "production stamina trigger projection was not unique/exact",
+        "production stamina identity-only timer projection differs",
+    ):
+        require(token in catalog_fixture,
+                f"production catalog projection fixture is absent: {token}")
+    actual_fixture_includes = (
+        "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+        "../src/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c",
+    )
+    projected_apis = (
+        "OverworldWildRuntime_CopyInstalledStaticComposition",
+        "OverworldWildRuntime_CountInstalledTiredTranslations",
+        "OverworldWildRuntime_ResolveInstalledTimerDefinition",
+    )
+
+    def catalog_timer_ownership_matches(candidate: str) -> bool:
+        for path in actual_fixture_includes:
+            include_pattern = (
+                rf'(?m)^[ \t]*#[ \t]*include[ \t]+"{re.escape(path)}"'
+                r'[ \t]*$'
+            )
+            if len(re.findall(include_pattern, candidate)) != 1:
+                return False
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", "", candidate,
+                      flags=re.DOTALL)
+        for path in actual_fixture_includes:
+            code = re.sub(
+                rf'(?m)^[ \t]*#[ \t]*include[ \t]+"{re.escape(path)}"'
+                r'[ \t]*$', "", code)
+        for api in projected_apis:
+            if re.search(rf"(?m)^[ \t]*#[^\n]*\b{api}\b", code):
+                return False
+            declaration = (
+                rf"(?ms)^[ \t]*(?:(?:extern|static|inline|const|volatile)"
+                rf"[ \t]+)*(?:BOOL|u8|int|void)[ \t*]+{api}[ \t]*"
+                r"\([^;{}]*\)[ \t\r\n]*(?:;|\{)"
+            )
+            split_definition = (
+                rf"(?ms)^[ \t]*{api}[ \t]*\([^;{{}}]*\)"
+                r"[ \t\r\n]*(?:;|\{)"
+            )
+            if (re.search(declaration, code)
+                    or re.search(split_definition, code)):
+                return False
+        return True
+
+    require(catalog_timer_ownership_matches(catalog_timer_fixture),
+            "production catalog/timer fixture ownership is not structural")
+    for path in actual_fixture_includes:
+        include_line = f'#include "{path}"'
+        comment_only = catalog_timer_fixture.replace(
+            include_line, f'/* {include_line} */', 1)
+        require(not catalog_timer_ownership_matches(comment_only),
+                "comment-only production source path bypass was accepted")
+    for api in projected_apis:
+        for mutation in (
+            f"\nBOOL {api}(void) {{ return FALSE; }}\n",
+            f"\nextern BOOL {api}(void);\n",
+            f"\n#define {api} FixtureReplacement\n",
+            f"\n#define FixtureReplacement {api}\n",
+        ):
+            require(not catalog_timer_ownership_matches(
+                        catalog_timer_fixture + mutation),
+                    f"local replacement for {api} was accepted")
+    for token in (
+        "OW_WILD_RUNTIME_RECOVERY_ORIGIN_STAMINA",
+        "actual overlay157-to-overlay159 stamina recovery differs",
+        "actual overlay157-to-overlay159 semantic recovery differs",
+    ):
+        require(token in catalog_timer_fixture,
+                f"production catalog/timer integration fixture is absent: {token}")
 
 
 def run_host_fixture() -> str:
@@ -1204,8 +1451,22 @@ def run_host_fixture() -> str:
             [str(split_binary)], cwd=ROOT, check=True, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
-        require(split_completed.stdout == completed.stdout,
-                "overlay159 split fixture differs from monolithic host semantics")
+        legacy_trace_prefixes = (
+            "TASK6_", "TASK10_TIMER_TRACE", "TASK10_TIMER_CORRECTION_TRACE",
+        )
+        legacy_trace = tuple(
+            line for line in completed.stdout.splitlines()
+            if line.startswith(legacy_trace_prefixes)
+        )
+        split_legacy_trace = tuple(
+            line for line in split_completed.stdout.splitlines()
+            if line.startswith(legacy_trace_prefixes)
+        )
+        require(split_legacy_trace == legacy_trace,
+                "overlay159 split fixture differs from monolithic Task6/Task10 semantics")
+        require("TASK11_SUBSTRATE_TRACE" in split_completed.stdout,
+                "overlay159 split fixture did not execute Task11 substrate coverage")
+        completed = split_completed
     require("runtime layers host fixture:" in completed.stdout,
             "host fixture did not publish its deterministic summary")
     return completed.stdout.strip()
@@ -1235,10 +1496,48 @@ def run_catalog_fixture() -> str:
             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
     expected_summary = (
-        "runtime catalog host fixture: 178 checks; definitions=19 translations=18"
+        "runtime catalog host fixture: 191 checks; definitions=19 translations=18"
     )
     require(completed.stdout.strip() == expected_summary,
             "production catalog fixture summary changed: "
+            f"{completed.stdout.strip()!r}")
+    return completed.stdout.strip()
+
+
+def run_catalog_timer_fixture() -> str:
+    compiler = shutil.which("cc") or shutil.which("clang")
+    require(compiler is not None, "no host C compiler available")
+    with tempfile.TemporaryDirectory(
+            prefix="ow-runtime-catalog-timer-") as directory:
+        binary = Path(directory) / "fixture"
+        command = [
+            compiler,
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-Wno-unused-function",
+            "-Wno-address-of-packed-member",
+            "-O2",
+            "-ffunction-sections",
+            "-fdata-sections",
+            str(CATALOG_TIMER_FIXTURE),
+            "-Wl,-dead_strip" if sys.platform == "darwin"
+                else "-Wl,--gc-sections",
+            "-o",
+            str(binary),
+        ]
+        subprocess.run(command, cwd=ROOT, check=True)
+        completed = subprocess.run(
+            [str(binary)], cwd=ROOT, check=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+    expected_summary = (
+        "runtime catalog/timer host fixture: 3 checks; "
+        "stamina=0x7004 semantic=0x7005 transition=0xA005"
+    )
+    require(completed.stdout.strip() == expected_summary,
+            "production catalog/timer fixture summary changed: "
             f"{completed.stdout.strip()!r}")
     return completed.stdout.strip()
 
@@ -1249,13 +1548,17 @@ def main() -> None:
     fixture_summary = run_host_fixture()
     oracle_checks = verify_oracle_status_trace(fixture_summary)
     timer_oracle_checks = verify_timer_oracle_trace(fixture_summary)
+    task11_checks = verify_task11_substrate_trace(fixture_summary)
     catalog_summary = run_catalog_fixture()
+    catalog_timer_summary = run_catalog_timer_fixture()
     print(fixture_summary)
     print(catalog_summary)
+    print(catalog_timer_summary)
     print(
         "runtime layer source verifier: closed tagged-union ABI, canonical fixed "
         f"scratch semantics, authenticated handles, {oracle_checks}-status "
-        f"Task-6 and {timer_oracle_checks}-field Task-10 oracle traces verified"
+        f"Task-6, {timer_oracle_checks}-field Task-10, and "
+        f"{task11_checks}-field Task-11 oracle traces verified"
     )
 
 

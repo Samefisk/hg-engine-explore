@@ -304,10 +304,14 @@ OverworldWildSpawns_EnterAggroState(
     int slot,
     LocalMapObject *spawnedFollower)
 {
-    state->spawns[slot].active = TRUE | OW_WILD_SPAWN_AGGRO_FLAG;
-    state->movementActiveSteps[slot] = 0;
+    /*
+     * This fixed entry only publishes aggro intent.  The spawns overlay keeps
+     * the request pending until its authored AGGRO_APPLY transition commits;
+     * that transaction owns the controller change and active-step reset.
+    */
+    state->spawns[slot].active |=
+        TRUE | OW_WILD_SPAWN_AGGRO_FLAG | OW_WILD_SPAWN_AGGRO_PENDING_FLAG;
     if (spawnedFollower != NULL) {
         spawnedFollower->flags |= BIT_VANISH;
-        state->movementSpotStates[slot] = 2;
     }
 }

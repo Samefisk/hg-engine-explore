@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 CONFIG = {
@@ -33,12 +34,18 @@ RETAINED_STATIC_RESOLVER = (
 )
 DESTRUCTIVE_WRAPPER = "OverworldWildRuntime_DestructivelyInvalidateSlot"
 DESTRUCTIVE_HELPER = "OverworldWildRuntime_HandleSlotGenerationWrap"
-TIMER_INTERNAL_APIS = (
+TIMER_LAYER_IMPORT_APIS = (
+    "OverworldWildRuntime_ApplyStackDeltaCompact",
+    "OverworldWildRuntime_GetEffectiveCache",
+    "OverworldWildRuntime_GetProvenance",
     "OverworldWildRuntime_ValidateTimerQueryInternal",
     "OverworldWildRuntime_TimerExpiryTagInternal",
     "OverworldWildRuntime_PreflightTimerExpiryInternal",
     "OverworldWildRuntime_MakeTimerRemovalHandleInternal",
-    "OverworldWildRuntime_Remove",
+)
+TIMER_CATALOG_IMPORT_APIS = (
+    "OverworldWildRuntime_AcquireInstalledTransitionCatalog",
+    "OverworldWildRuntime_MatchesPendingTimerExpiry",
 )
 TIMER_PUBLIC_APIS = (
     "OverworldWildRuntime_GetTimerCount",
@@ -49,8 +56,320 @@ TIMER_PUBLIC_APIS = (
     "OverworldWildRuntime_TickCompletedMovementTimers",
     "OverworldWildRuntime_GetPendingTimerExpiryCount",
     "OverworldWildRuntime_GetPendingTimerExpiryByIndex",
-    "OverworldWildRuntime_CommitTimerExpiry",
+    "OverworldWildRuntime_DispatchTransition",
+    "OverworldWildRuntime_CaptureCommandOrigin",
+    "OverworldWildRuntime_ConsumeCommandOrigin",
+    "OverworldWildRuntime_InvalidateCommandOrigin",
+    "OverworldWildRuntime_InvalidateAllCommandOrigins",
 )
+
+OVERLAY_149_PRELINK_TEXT_LIMIT = 0xAEC4
+OVERLAY_149_PRELINK_RESIDENT_LIMIT = 0xAF80
+OVERLAY_149_LINK_ORDER = (
+    ".overworld_wild_spawns_entry", ".init", ".text", ".ctors", ".dtors",
+    ".rodata", ".data", ".fini",
+)
+
+
+def read_allocated_input_sections(
+        path: Path) -> list[tuple[str, int, int, bool]]:
+    lines = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-h", path], text=True
+    ).splitlines()
+    rows = []
+    for line_index, line in enumerate(lines):
+        match = re.match(
+            r"\s*\d+\s+(\S+)\s+([0-9A-Fa-f]+)\s+"
+            r"[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+2\*\*(\d+)",
+            line,
+        )
+        if match is not None:
+            name, size_hex, alignment_power = match.groups()
+            flags = lines[line_index + 1] if line_index + 1 < len(lines) else ""
+            if "ALLOC" in flags:
+                rows.append((
+                    name,
+                    int(size_hex, 16),
+                    1 << int(alignment_power),
+                    "CONTENTS" in flags,
+                ))
+    return rows
+
+
+def read_linked_allocated_sections(
+        path: Path) -> list[tuple[str, int, int, int, bool]]:
+    """Return every SHF_ALLOC section with its exact linked alignment.
+
+    objcopy's binary excludes NOBITS sections, while the resident arena must
+    reserve both initialized bytes and BSS.  Keep those spans separate so the
+    size gate cannot silently omit an aligned entry section or trailing BSS.
+    """
+    lines = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-h", path], text=True
+    ).splitlines()
+    rows = []
+    for line_index, line in enumerate(lines):
+        match = re.match(
+            r"\s*\d+\s+(\S+)\s+([0-9A-Fa-f]+)\s+"
+            r"([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+"
+            r"2\*\*(\d+)",
+            line,
+        )
+        if match is None:
+            continue
+        name, size_hex, address_hex, alignment_power = match.groups()
+        flags = lines[line_index + 1] if line_index + 1 < len(lines) else ""
+        if "ALLOC" not in flags:
+            continue
+        rows.append((
+            name,
+            int(size_hex, 16),
+            int(address_hex, 16),
+            1 << int(alignment_power),
+            "CONTENTS" in flags,
+        ))
+    return rows
+
+
+def verify_exact_production_link(args: argparse.Namespace) -> None:
+    if args.production_object is None:
+        raise SystemExit(
+            f"overlay {args.overlay}: exact production object is required"
+        )
+    root = Path(__file__).resolve().parents[1]
+    linker = {
+        157: root / "src/overworld_wild_runtime_overlay/linker.ld",
+        158: root / "src/overworld_wild_runtime_layers_overlay/linker.ld",
+        159: root / "src/overworld_wild_runtime_timers_overlay/linker.ld",
+    }[args.overlay]
+    command = [
+        "arm-none-eabi-ld",
+        str(root / "rom_gen.ld"),
+        "-T",
+        str(linker),
+    ]
+    if args.overlay == 157:
+        if args.scalar_shard is None:
+            raise SystemExit("overlay 157: scalar shard is required for exact link")
+        command.append(f"--just-symbols={args.scalar_shard}")
+    elif args.overlay == 158:
+        if args.catalog_carrier is None or args.scalar_shard is None:
+            raise SystemExit(
+                "overlay 158: catalog/scalar carriers are required for exact link"
+            )
+        command.extend((
+            f"--just-symbols={args.catalog_carrier}",
+            f"--just-symbols={args.scalar_shard}",
+        ))
+    else:
+        if args.task8_carrier is None or args.catalog_carrier is None:
+            raise SystemExit(
+                "overlay 159: layer/catalog carriers are required for exact link"
+            )
+        command.extend((
+            f"--just-symbols={args.task8_carrier}",
+            f"--just-symbols={args.catalog_carrier}",
+        ))
+    with tempfile.TemporaryDirectory(prefix="ow-exact-overlay-link-") as temp:
+        relinked = Path(temp) / "linked.o"
+        binary = Path(temp) / "linked.bin"
+        subprocess.run(
+            [*command, "-o", str(relinked), str(args.production_object)],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run([
+            "arm-none-eabi-objcopy", "-O", "binary", str(relinked), str(binary)
+        ], check=True)
+        if (read_linked_allocated_sections(relinked)
+                != read_linked_allocated_sections(args.elf)):
+            raise SystemExit(
+                f"overlay {args.overlay}: supplied ELF differs from exact production link"
+            )
+        if binary.read_bytes() != args.binary.read_bytes():
+            raise SystemExit(
+                f"overlay {args.overlay}: supplied binary differs from exact production link"
+            )
+
+
+def overlay_149_prelink_layout(
+        rows: list[tuple[str, int, int, bool]]) -> tuple[int, int, int, int, int]:
+    unexpected = sorted(
+        name for name, _, _, _ in rows
+        if name not in OVERLAY_149_LINK_ORDER
+        and name != ".bss"
+        and not name.startswith(".rodata.")
+    )
+    if unexpected:
+        raise ValueError(
+            "unexpected allocated input section(s): " + ", ".join(unexpected)
+        )
+
+    initialized_rows = []
+    for section_name in OVERLAY_149_LINK_ORDER[:6]:
+        initialized_rows.extend(
+            row for row in rows if row[0] == section_name
+        )
+    initialized_rows.extend(
+        row for row in rows if row[0].startswith(".rodata.")
+    )
+    for section_name in OVERLAY_149_LINK_ORDER[6:]:
+        initialized_rows.extend(
+            row for row in rows if row[0] == section_name
+        )
+    bss_rows = [row for row in rows if row[0] == ".bss"]
+
+    cursor = 0
+    for name, size, alignment, has_contents in initialized_rows:
+        if size != 0 and not has_contents:
+            raise ValueError(f"initialized section {name} is NOBITS")
+        cursor = (cursor + alignment - 1) & ~(alignment - 1)
+        cursor += size
+    cursor = (cursor + 3) & ~3
+    initialized = cursor
+
+    packed_allocated = initialized
+    linked_allocated = OVERLAY_149_PRELINK_TEXT_LIMIT
+    for name, size, alignment, has_contents in bss_rows:
+        if size != 0 and has_contents:
+            raise ValueError(f"{name} unexpectedly contains initialized bytes")
+        packed_allocated = (
+            (packed_allocated + alignment - 1) & ~(alignment - 1)
+        ) + size
+        linked_allocated = (
+            (linked_allocated + alignment - 1) & ~(alignment - 1)
+        ) + size
+    packed_allocated = (packed_allocated + 3) & ~3
+    linked_allocated = (linked_allocated + 3) & ~3
+    return (
+        initialized,
+        packed_allocated,
+        linked_allocated,
+        OVERLAY_149_PRELINK_TEXT_LIMIT - initialized,
+        OVERLAY_149_PRELINK_RESIDENT_LIMIT - linked_allocated,
+    )
+
+
+def verify_overlay_149_prelink_object(path: Path) -> None:
+    rows = read_allocated_input_sections(path)
+    sections = {name for name, _, _, _ in rows}
+    entry_size = sum(
+        size for name, size, _, _ in rows
+        if name == ".overworld_wild_spawns_entry"
+    )
+    if entry_size != 28:
+        raise SystemExit("overlay 149 pre-link gate: entry section is not 28 bytes")
+    common_symbols = [
+        line for line in subprocess.check_output(
+            ["arm-none-eabi-nm", "-S", path], text=True
+        ).splitlines()
+        if re.search(r"\s[Cc]\s", line)
+    ]
+    if common_symbols:
+        raise SystemExit(
+            "overlay 149 pre-link gate: COMMON input is not allowed"
+        )
+    try:
+        initialized, packed, linked, text_headroom, resident_headroom = (
+            overlay_149_prelink_layout(rows)
+        )
+    except ValueError as error:
+        raise SystemExit(f"overlay 149 pre-link gate: {error}") from error
+    if text_headroom < 0:
+        raise SystemExit(
+            f"overlay 149 pre-link gate: initialized span 0x{initialized:X} exceeds "
+            f"sealed 0x{OVERLAY_149_PRELINK_TEXT_LIMIT:X} budget by 0x{-text_headroom:X}"
+        )
+    if resident_headroom < 0:
+        raise SystemExit(
+            f"overlay 149 pre-link gate: linked allocation 0x{linked:X} exceeds "
+            f"resident 0x{OVERLAY_149_PRELINK_RESIDENT_LIMIT:X} budget by "
+            f"0x{-resident_headroom:X}"
+        )
+    text_negative = list(rows)
+    text_negative.append((
+        ".rodata.prelink_negative", text_headroom + 4, 1, True
+    ))
+    if overlay_149_prelink_layout(text_negative)[3] >= 0:
+        raise SystemExit("overlay 149 pre-link negative budget fixture was accepted")
+    bss_negative = [
+        (name, size + resident_headroom + 4, alignment, contents)
+        if name == ".bss" else (name, size, alignment, contents)
+        for name, size, alignment, contents in rows
+    ]
+    if ".bss" not in sections:
+        bss_negative.append((".bss", resident_headroom + 4, 4, False))
+    if overlay_149_prelink_layout(bss_negative)[4] >= 0:
+        raise SystemExit("overlay 149 pre-link BSS negative fixture was accepted")
+    try:
+        overlay_149_prelink_layout(
+            rows + [(".unexpected_alloc", 4, 4, True)]
+        )
+    except ValueError:
+        pass
+    else:
+        raise SystemExit(
+            "overlay 149 pre-link unknown allocated-section fixture was accepted"
+        )
+
+    order_fixture_base = [(".text", 0xAA9C, 4, True)]
+    aligned_then_byte = order_fixture_base + [
+        (".rodata.z", 4, 1024, True),
+        (".rodata.a", 1, 1, True),
+    ]
+    name_sorted_underestimate = order_fixture_base + [
+        (".rodata.a", 1, 1, True),
+        (".rodata.z", 4, 1024, True),
+    ]
+    aligned_first_span = overlay_149_prelink_layout(aligned_then_byte)[0]
+    sorted_underestimate_span = overlay_149_prelink_layout(
+        name_sorted_underestimate
+    )[0]
+    if aligned_first_span != 0xAC08 or sorted_underestimate_span != 0xAC04:
+        raise SystemExit(
+            "overlay 149 pre-link underestimated encounter-order fixture failed"
+        )
+    byte_then_aligned = order_fixture_base + [
+        (".rodata.z", 1, 1, True),
+        (".rodata.a", 4, 1024, True),
+    ]
+    name_sorted_overestimate = order_fixture_base + [
+        (".rodata.a", 4, 1024, True),
+        (".rodata.z", 1, 1, True),
+    ]
+    if (
+        overlay_149_prelink_layout(byte_then_aligned)[0] != 0xAC04
+        or overlay_149_prelink_layout(name_sorted_overestimate)[0] != 0xAC08
+    ):
+        raise SystemExit(
+            "overlay 149 pre-link overestimated encounter-order fixture failed"
+        )
+    order_overflow_size = (
+        OVERLAY_149_PRELINK_TEXT_LIMIT - aligned_first_span + 4
+    )
+    if order_overflow_size <= 0:
+        raise SystemExit(
+            "overlay 149 pre-link order fixture has no overflow headroom"
+        )
+    aligned_overflow = aligned_then_byte + [
+        (".rodata.order_overflow", order_overflow_size, 1, True)
+    ]
+    byte_fits = name_sorted_underestimate + [
+        (".rodata.order_overflow", order_overflow_size, 1, True)
+    ]
+    if (
+        overlay_149_prelink_layout(aligned_overflow)[3] >= 0
+        or overlay_149_prelink_layout(byte_fits)[3] < 0
+    ):
+        raise SystemExit(
+            "overlay 149 pre-link aligned encounter-order overflow fixture failed"
+        )
+    print(
+        f"overlay 149 pre-link: initialized=0x{initialized:X} "
+        f"packed-allocated=0x{packed:X} linked-allocated=0x{linked:X} "
+        f"text-headroom=0x{text_headroom:X} "
+        f"resident-headroom=0x{resident_headroom:X}"
+    )
 
 
 def read_symbol_rows(path: Path) -> dict[str, tuple[int, int, str, str, str]]:
@@ -413,17 +732,24 @@ def verify_destructive_lifecycle_identity(
 
 
 def timer_shard_identity_error(layers_owner, task8_carrier, timer_owner,
-                               timer_carrier) -> str | None:
+                               timer_carrier, catalog_owner,
+                               catalog_carrier) -> str | None:
     carrier_exports = {
         name for name, row in timer_carrier.items()
         if row[2] == "FUNC" and row[3] == "GLOBAL"
     }
     if carrier_exports != set(TIMER_PUBLIC_APIS):
         return "overlay 159 timer carrier export inventory differs"
-    for name in TIMER_INTERNAL_APIS:
+    for name in TIMER_LAYER_IMPORT_APIS:
         error = imported_function_identity_error(
             layers_owner, task8_carrier, timer_owner, name,
             "overlay 158", "__text_start", "__text_end")
+        if error is not None:
+            return error
+    for name in TIMER_CATALOG_IMPORT_APIS:
+        error = imported_function_identity_error(
+            catalog_owner, catalog_carrier, timer_owner, name,
+            "overlay 157", "__text_start", "__text_end")
         if error is not None:
             return error
     for name in TIMER_PUBLIC_APIS:
@@ -447,82 +773,175 @@ def timer_shard_identity_error(layers_owner, task8_carrier, timer_owner,
     return None
 
 
+def timer_object_import_inventory(timer_object_path: Path) -> set[str]:
+    if not timer_object_path.is_file():
+        raise SystemExit(
+            f"overlay 159 timer source object is absent: {timer_object_path}"
+        )
+    object_rows = read_symbol_rows(timer_object_path)
+    undefined = {
+        name for name, row in object_rows.items()
+        if row[3] == "GLOBAL" and row[4] == "UND"
+    }
+    relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", timer_object_path], text=True
+    )
+    relocation_types: dict[str, set[str]] = {}
+    for kind, name in re.findall(
+            r"(?m)^\s*[0-9A-Fa-f]+\s+(R_ARM_\S+)\s+(\S+)", relocations):
+        relocation_types.setdefault(name.split("+")[0], set()).add(kind)
+    if set(relocation_types) & undefined != undefined:
+        raise SystemExit("overlay 159 has an undefined symbol without relocation")
+    for name in undefined:
+        if relocation_types[name] != {"R_ARM_THM_CALL"}:
+            raise SystemExit(
+                f"overlay 159 imported {name} through non-call relocation(s): "
+                + ", ".join(sorted(relocation_types[name]))
+            )
+    expected_imports = set(
+        TIMER_LAYER_IMPORT_APIS + TIMER_CATALOG_IMPORT_APIS)
+    expected_undefined = expected_imports | {
+        "memcpy", "memset",
+    }
+    if undefined != expected_undefined:
+        raise SystemExit(
+            "overlay 159 source-object import inventory differs: "
+            f"missing={sorted(expected_undefined - undefined)}, "
+            f"unexpected={sorted(undefined - expected_undefined)}"
+        )
+    return {name for name in undefined if name.startswith(
+        "OverworldWildRuntime_")}
+
+
 def verify_timer_shard_identity(layers_owner_path: Path,
                                 task8_carrier_path: Path,
                                 timer_owner_path: Path,
-                                timer_carrier_path: Path) -> None:
+                                timer_carrier_path: Path,
+                                catalog_owner_path: Path,
+                                catalog_carrier_path: Path,
+                                timer_object_path: Path) -> None:
     layers_owner = read_symbol_rows(layers_owner_path)
     task8_carrier = read_symbol_rows(task8_carrier_path)
     timer_owner = read_symbol_rows(timer_owner_path)
     timer_carrier = read_symbol_rows(timer_carrier_path)
+    catalog_owner = read_symbol_rows(catalog_owner_path)
+    catalog_carrier = read_symbol_rows(catalog_carrier_path)
+    expected_imports = set(
+        TIMER_LAYER_IMPORT_APIS + TIMER_CATALOG_IMPORT_APIS)
+    actual_imports = timer_object_import_inventory(timer_object_path)
+    if actual_imports != expected_imports:
+        missing = sorted(expected_imports - actual_imports)
+        unexpected = sorted(actual_imports - expected_imports)
+        raise SystemExit(
+            "overlay 159 cross-overlay call inventory differs: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     error = timer_shard_identity_error(
-        layers_owner, task8_carrier, timer_owner, timer_carrier)
+        layers_owner, task8_carrier, timer_owner, timer_carrier,
+        catalog_owner, catalog_carrier)
     if error is not None:
         raise SystemExit(error)
 
-    internal = TIMER_INTERNAL_APIS[0]
     public = TIMER_PUBLIC_APIS[0]
-    internal_row = timer_owner[internal]
     public_row = timer_owner[public]
     negative_fixtures = []
-
-    moved_import = dict(timer_owner)
-    moved_import[internal] = (internal_row[0] + 2, *internal_row[1:])
-    negative_fixtures.append((layers_owner, task8_carrier,
-                              moved_import, timer_carrier))
-    mistyped_import = dict(timer_owner)
-    mistyped_import[internal] = (
-        internal_row[0], internal_row[1], "NOTYPE", *internal_row[3:])
-    negative_fixtures.append((layers_owner, task8_carrier,
-                              mistyped_import, timer_carrier))
-    missing_import_carrier = dict(task8_carrier)
-    del missing_import_carrier[internal]
-    negative_fixtures.append((layers_owner, missing_import_carrier,
-                              timer_owner, timer_carrier))
 
     moved_public_carrier = dict(timer_carrier)
     moved_public_carrier[public] = (
         public_row[0] + 2, *moved_public_carrier[public][1:])
-    negative_fixtures.append((layers_owner, task8_carrier,
-                              timer_owner, moved_public_carrier))
+    negative_fixtures.append((layers_owner, task8_carrier, timer_owner,
+                              moved_public_carrier, catalog_owner,
+                              catalog_carrier))
     absolute_public_carrier = dict(timer_carrier)
     absolute_public_carrier[public] = (
         *absolute_public_carrier[public][:4], "ABS")
-    negative_fixtures.append((layers_owner, task8_carrier,
-                              timer_owner, absolute_public_carrier))
+    negative_fixtures.append((layers_owner, task8_carrier, timer_owner,
+                              absolute_public_carrier, catalog_owner,
+                              catalog_carrier))
     truncated_timer_owner = dict(timer_owner)
     text_end = timer_owner["__text_end"]
     truncated_timer_owner["__text_end"] = (
         (public_row[0] & ~1) + public_row[1] - 2, *text_end[1:])
     negative_fixtures.append((layers_owner, task8_carrier,
-                              truncated_timer_owner, timer_carrier))
+                              truncated_timer_owner, timer_carrier,
+                              catalog_owner, catalog_carrier))
     extra_public_carrier = dict(timer_carrier)
     extra_public_carrier["UnexpectedTimerExport"] = public_row
-    negative_fixtures.append((layers_owner, task8_carrier,
-                              timer_owner, extra_public_carrier))
+    negative_fixtures.append((layers_owner, task8_carrier, timer_owner,
+                              extra_public_carrier, catalog_owner,
+                              catalog_carrier))
 
     if any(timer_shard_identity_error(*fixture) is None
            for fixture in negative_fixtures):
         raise SystemExit("overlay 159 typed-owner negative fixture was accepted")
 
+    # Every actual cross-overlay call gets both drift and ELF-type negatives.
+    # This makes coverage systematic instead of relying on one representative
+    # API from each owner.
+    for name in TIMER_LAYER_IMPORT_APIS + TIMER_CATALOG_IMPORT_APIS:
+        row = timer_owner[name]
+        if name in TIMER_LAYER_IMPORT_APIS:
+            carrier = task8_carrier
+            carrier_slot = 1
+        else:
+            carrier = catalog_carrier
+            carrier_slot = 5
+        moved_consumer = dict(timer_owner)
+        moved_consumer[name] = (row[0] + 2, *row[1:])
+        mistyped_consumer = dict(timer_owner)
+        mistyped_consumer[name] = (
+            row[0], row[1], "NOTYPE", *row[3:])
+        carrier_row = carrier[name]
+        moved_carrier = dict(carrier)
+        moved_carrier[name] = (
+            carrier_row[0] + 2, *carrier_row[1:])
+        mistyped_carrier = dict(carrier)
+        mistyped_carrier[name] = (
+            carrier_row[0], carrier_row[1], "NOTYPE", *carrier_row[3:])
+        for label, candidate_consumer, candidate_carrier in (
+                ("consumer address drift", moved_consumer, carrier),
+                ("consumer ELF mistyping", mistyped_consumer, carrier),
+                ("carrier address drift", timer_owner, moved_carrier),
+                ("carrier ELF mistyping", timer_owner, mistyped_carrier)):
+            arguments = [layers_owner, task8_carrier, candidate_consumer,
+                         timer_carrier, catalog_owner, catalog_carrier]
+            arguments[carrier_slot] = candidate_carrier
+            if timer_shard_identity_error(*arguments) is None:
+                raise SystemExit(
+                    f"overlay 159 accepted {label} for imported {name}"
+                )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("elf", type=Path)
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
     parser.add_argument("--overlay", type=int, choices=CONFIG, required=True)
+    parser.add_argument("--prelink-object", action="store_true")
     parser.add_argument("--minimum-headroom", type=lambda value: int(value, 0))
     parser.add_argument("--task5-owner", type=Path)
     parser.add_argument("--lifecycle-consumer", type=Path)
     parser.add_argument("--lifecycle-object", type=Path)
     parser.add_argument("--scalar-shard", type=Path)
     parser.add_argument("--catalog-owner", type=Path)
+    parser.add_argument("--catalog-carrier", type=Path)
     parser.add_argument("--task8-carrier", type=Path)
     parser.add_argument("--layers-owner", type=Path)
     parser.add_argument("--timer-carrier", type=Path)
+    parser.add_argument("--timer-object", type=Path)
+    parser.add_argument("--production-object", type=Path)
     parser.add_argument("--runtime-carrier", type=Path)
     parser.add_argument("--spawns-consumer", type=Path)
     args = parser.parse_args()
+    if args.prelink_object:
+        if args.overlay != 149 or args.binary is not None:
+            raise SystemExit("pre-link object mode is exclusive to overlay 149")
+        verify_overlay_149_prelink_object(args.elf)
+        return 0
+    if args.binary is None:
+        raise SystemExit("--binary is required for linked overlay verification")
+    if args.overlay in (157, 158, 159):
+        verify_exact_production_link(args)
     origin, length, entry_name, default_headroom = CONFIG[args.overlay]
     minimum = default_headroom if args.minimum_headroom is None else args.minimum_headroom
 
@@ -545,11 +964,11 @@ def main() -> int:
             "OverworldWildRuntime_CopyInstalledDefinition",
             "OverworldWildRuntime_CopyInstalledCatalogIdentity",
             "OverworldWildRuntime_MarkResidentCold",
-            "OverworldWildRuntime_CopyInstalledStaticComposition",
             "OverworldWildRuntime_ResolveRetainedStaticCache",
-            "OverworldWildRuntime_CopyInstalledResolvedNode",
+            "OverworldWildRuntime_CopyValidatedSpawnConfiguration",
+            "OverworldWildRuntime_MatchesPendingTimerExpiry",
             "OverworldWildRuntime_CopyInstalledModifierOperations",
-            "OverworldWildRuntime_CountInstalledTiredTranslations",
+            "OverworldWildRuntime_AcquireInstalledTransitionCatalog",
         ))
     if args.overlay == 158:
         required.update((
@@ -560,6 +979,7 @@ def main() -> int:
             "OverworldWildRuntime_InitializeStorage",
             "OverworldWildRuntime_BindPrivateIdentity",
             "OverworldWildRuntime_ApplyStackDelta",
+            "OverworldWildRuntime_ApplyStackDeltaCompact",
             "OverworldWildRuntime_Apply",
             "OverworldWildRuntime_Replace",
             "OverworldWildRuntime_Remove",
@@ -596,22 +1016,35 @@ def main() -> int:
             or symbols["__end__"] != symbols["_end"]:
         raise SystemExit(f"overlay {args.overlay}: malformed end symbols")
 
-    section_output = subprocess.check_output(["arm-none-eabi-objdump", "-h", args.elf], text=True)
+    allocated = read_linked_allocated_sections(args.elf)
     end = origin
+    initialized_end = origin
     saw_text = False
-    for line in section_output.splitlines():
-        match = re.match(r"\s*\d+\s+(\S+)\s+([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+)\s+", line)
-        if match is None: continue
-        name, size_hex, address_hex = match.groups()
-        size, address = int(size_hex, 16), int(address_hex, 16)
-        if name == ".text": saw_text = address == origin and size > 0
-        if origin <= address < origin + length: end = max(end, address + size)
+    for name, size, address, alignment, has_contents in allocated:
+        if size == 0:
+            continue
+        if (address < origin or address + size > origin + length
+                or address % alignment != 0):
+            raise SystemExit(
+                f"overlay {args.overlay}: allocated section {name} escaped "
+                "or violated its linked alignment"
+            )
+        if name == ".text":
+            saw_text = address == origin
+        end = max(end, address + size)
+        if has_contents:
+            initialized_end = max(initialized_end, address + size)
     end = max(end, symbols["_end"])
     if not saw_text or end > origin + length:
-        raise SystemExit(f"overlay {args.overlay}: linked sections exceed or do not identify fixed window")
+        raise SystemExit(
+            f"overlay {args.overlay}: all allocated sections do not fit fixed window"
+        )
     raw_size = args.binary.stat().st_size
-    if raw_size != max(0, end - origin):
-        raise SystemExit(f"overlay {args.overlay}: raw size {raw_size} != linked span {end - origin}")
+    if raw_size != max(0, initialized_end - origin):
+        raise SystemExit(
+            f"overlay {args.overlay}: raw size {raw_size} != initialized "
+            f"allocated span {initialized_end - origin}"
+        )
     if args.overlay == 149 and (end != 0x023D7F3C or raw_size != 0xAF3C):
         raise SystemExit(
             f"overlay 149: sealed boundary changed: end=0x{end:08X} raw=0x{raw_size:X}"
@@ -675,6 +1108,11 @@ def main() -> int:
                 f"overlay {args.overlay}: BSS 0x{bss_size:X} exceeds fixed "
                 f"0x{bss_limit:X} budget"
             )
+        if symbols["__bss_end__"] != end:
+            raise SystemExit(
+                f"overlay {args.overlay}: allocated image end does not include "
+                "the exact aligned BSS end"
+            )
         usable_end = {
             157: 0x023BD380,
             158: 0x023BB900,
@@ -689,7 +1127,7 @@ def main() -> int:
             if "_from_thumb" in name or "veneer" in name.lower()
         }
         expected_veneers = {"__memset_from_thumb"}
-        if args.overlay in (157, 158):
+        if args.overlay in (157, 158, 159):
             expected_veneers.add("__memcpy_from_thumb")
         if args.overlay == 157:
             expected_veneers.add("____gnu_thumb1_case_uqi_from_thumb")
@@ -727,20 +1165,28 @@ def main() -> int:
                 args.spawns_consumer)
         if args.overlay == 159:
             if (args.layers_owner is None or args.task8_carrier is None
-                    or args.timer_carrier is None):
+                    or args.timer_carrier is None
+                    or args.catalog_owner is None
+                    or args.catalog_carrier is None
+                    or args.timer_object is None):
                 raise SystemExit(
-                    "overlay 159: same-build layers owner and typed carriers "
-                    "are required"
+                    "overlay 159: same-build source object, layers/catalog "
+                    "owners, and typed carriers are required"
                 )
             verify_timer_shard_identity(
                 args.layers_owner, args.task8_carrier, args.elf,
-                args.timer_carrier)
+                args.timer_carrier, args.catalog_owner,
+                args.catalog_carrier, args.timer_object)
     headroom = origin + length - end
     if headroom < minimum:
         raise SystemExit(f"overlay {args.overlay}: headroom {headroom} below required {minimum}")
     extra = ""
     if args.overlay in (157, 158, 159):
-        extra = f" bss={symbols['__bss_end__'] - symbols['__bss_start__']}"
+        extra = (
+            f" initialized={initialized_end - origin}"
+            f" allocSections={len(allocated)}"
+            f" bss={symbols['__bss_end__'] - symbols['__bss_start__']}"
+        )
     print(f"overlay {args.overlay}: origin=0x{origin:08X} end=0x{end:08X} raw={raw_size} headroom={headroom}{extra}")
     return 0
 

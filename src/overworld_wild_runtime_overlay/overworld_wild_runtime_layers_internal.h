@@ -1,6 +1,7 @@
 #ifndef OVERWORLD_WILD_RUNTIME_LAYERS_INTERNAL_H
 #define OVERWORLD_WILD_RUNTIME_LAYERS_INTERNAL_H
 
+#include "../../include/overworld_wild_behavior_data.h"
 #include "../overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
 
 #define OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE 1
@@ -56,10 +57,22 @@ typedef struct OverworldWildRuntimeTimerDefinition {
 typedef char OverworldWildRuntimeTimerDefinitionSizeMustRemain8[
     sizeof(OverworldWildRuntimeTimerDefinition) == 8 ? 1 : -1];
 
+/* Borrowed immutable view of the transition-only portion of the validated
+ * installed catalog.  The view is valid only for the duration of one
+ * synchronous runtime call; callers must never retain its pointers. */
 BOOL OverworldWildRuntime_CopyInstalledDefinition(
     u16 definitionId,
     OverworldWildRuntimeDefinition *definitionOut);
 BOOL OverworldWildRuntime_CopyInstalledCatalogIdentity(u32 *identityOut);
+const OverworldWildBehaviorDataBlobHeader *
+OverworldWildRuntime_AcquireInstalledTransitionCatalog(void);
+/* The exhaustive host catalog-closure oracle uses bounded record copies.
+ * Production consumes only typed projections from the immutable validated
+ * installation, so this broad byte seam is deliberately absent there. */
+#ifdef OW_WILD_RUNTIME_HOST_TEST
+BOOL OverworldWildRuntime_CopyInstalledCatalogBytes(
+    u32 offset, void *bytesOut, u32 size) __attribute__((weak));
+#endif
 BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
     u16 definitionId,
     const OverworldWildRuntimeStaticCache *staticCache,
@@ -81,6 +94,10 @@ OverworldWildRuntime_MakeTimerRemovalHandleInternal(
     u8 slotIndex,
     u8 layerIndex,
     OverworldWildRuntimeLayerHandle *handleOut);
+OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDeltaCompact(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeStackDeltaRequest *request,
+    BOOL *mutatedOut);
 
 typedef struct OverworldWildRuntimeStaticComposition {
     u32 catalogIdentity;
@@ -93,6 +110,7 @@ typedef struct OverworldWildRuntimeStaticComposition {
     u16 baseProfileId;
     u16 spawnPolicyId;
     u16 populationPolicyId;
+    OverworldWildRuntimeSpawnConfiguration spawnConfiguration;
     u8 baseSemanticRole;
     u8 valid;
     u8 nodeCount;
@@ -117,10 +135,13 @@ typedef struct OverworldWildRuntimeModifierOperation {
     u8 bound;
 } OverworldWildRuntimeModifierOperation;
 
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,
     OverworldWildRuntimeStaticComposition *compositionOut);
+#endif
 BOOL OverworldWildRuntime_CopyInstalledStaticCache(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,
@@ -128,19 +149,32 @@ BOOL OverworldWildRuntime_CopyInstalledStaticCache(
     OverworldWildRuntimeStaticCache *cacheOut);
 OverworldWildRuntimeStatus OverworldWildRuntime_ResolveRetainedStaticCache(
     const OverworldWildRuntimeStaticCache *retainedCache,
-    const OverworldWildRuntimeStaticContext *staticContext,
     u32 staticContextGeneration,
     OverworldWildRuntimeStaticCache *resolvedOut);
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 BOOL OverworldWildRuntime_ApplicabilityMatchesStaticCache(
     const OverworldWildRuntimeApplicabilityInput *input,
     const OverworldWildRuntimeStaticCache *cache);
+#endif
 OverworldWildRuntimeStatus OverworldWildRuntime_ValidateStaticCache(
     const OverworldWildRuntimeStaticCache *cache,
     u32 staticContextGeneration);
+OverworldWildRuntimeStatus
+OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+    const OverworldWildRuntimeStaticCache *staticCache,
+    u32 expectedStaticContextGeneration,
+    OverworldWildRuntimeSpawnConfiguration *configurationOut);
+BOOL OverworldWildRuntime_MatchesPendingTimerExpiry(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry);
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 BOOL OverworldWildRuntime_CopyInstalledResolvedNode(
     const OverworldWildRuntimeStaticComposition *composition,
     const OverworldWildRuntimeDefinition *definition,
     OverworldWildRuntimeResolvedNode *nodeOut);
+#endif
 BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     const OverworldWildRuntimeStaticCache *cache,
     const OverworldWildRuntimeDefinition *definition,
@@ -165,11 +199,14 @@ BOOL OwbdModifierPayloadValid(
     u8 bound);
 #endif
 
+#if defined(OW_WILD_RUNTIME_HOST_TEST) \
+    || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 u8 OverworldWildRuntime_CountInstalledTiredTranslations(
     u8 tiredOriginKind,
     u16 destinationControllerId,
     BOOL authoredTiredBound,
     u16 *candidateDefinitionIdOut);
+#endif
 
 void OverworldWildBehavior_ReleaseValidatedBundle(void *projection);
 void OverworldWildBehavior_FreeValidatedBundle(void *projection);

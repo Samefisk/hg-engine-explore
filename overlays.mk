@@ -12,8 +12,7 @@ OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_CFLAGS := -frename-registers \
     -fno-guess-branch-probability -fno-expensive-optimizations \
     -DOW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
 OVERWORLD_WILD_RUNTIME_TIMERS_OVERLAY_CFLAGS := -frename-registers \
-    -fno-tree-dominator-opts -fno-inline-functions-called-once \
-    -fno-tree-sra -fno-tree-vrp -fno-ipa-cp
+    -fno-tree-dominator-opts
 OVERWORLD_WILD_RUNTIME_SYMBOLS := $(BUILD)/pokemon_move_history_task6_overlay_task7_runtime_symbols.o
 OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS := $(BUILD)/overworld_wild_runtime_overlay_catalog_symbols.o
 OVERWORLD_WILD_TASK8_SYMBOLS := $(BUILD)/overworld_wild_runtime_layers_overlay_task8_symbols.o
@@ -54,6 +53,7 @@ $1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c
 
 
 $(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_runtime_layers_overlay,$1),$(OVERWORLD_WILD_LAYERS_OBJECT),) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_wild_runtime_layers_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld $(C_SUBDIR)/$1/linker.ld
+	$(if $(filter overworld_wild_spawns_overlay,$1),$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o --overlay 149 --prelink-object,)
 	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_behavior_validator_overlay,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS),$(if $(filter pokemon_move_history_task6_overlay,$1),$(POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_runtime_layers_overlay,$1),$(OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_LDFLAGS),))))) -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_runtime_layers_overlay,$1),$(OVERWORLD_WILD_LAYERS_OBJECT),) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_wild_runtime_layers_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
 $(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o $(if $(filter overworld_wild_spawns_overlay overworld_wild_behavior_validator_overlay overworld_wild_runtime_overlay overworld_wild_runtime_layers_overlay,$1),scripts/verify_overworld_wild_overlay_size.py,)
@@ -92,7 +92,9 @@ $(overworld_wild_runtime_overlay_LINK): \
 
 $(overworld_wild_runtime_overlay_OUTPUT): $(overworld_wild_runtime_overlay_LINK) scripts/verify_overworld_wild_overlay_size.py
 	$(OBJCOPY) -O binary $< $@
-	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< --binary $@ --overlay 157
+	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< --binary $@ --overlay 157 \
+		--production-object $(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o \
+		--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS)
 
 $(overworld_wild_runtime_layers_overlay_LINK): \
     $(OVERWORLD_WILD_LAYERS_OBJECT) $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
@@ -120,28 +122,39 @@ $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers
 		--lifecycle-object $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o \
 		--scalar-shard $(OVERWORLD_WILD_V40_SCALAR_SYMBOLS) \
 		--catalog-owner $(overworld_wild_runtime_overlay_LINK) \
+		--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
 		--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+		--production-object $(OVERWORLD_WILD_LAYERS_OBJECT) \
 		--runtime-carrier $(OVERWORLD_WILD_RUNTIME_SYMBOLS) \
 		--spawns-consumer $(BUILD)/overworld_wild_spawns_overlay_linked.o
 
 $(overworld_wild_runtime_timers_overlay_LINK): \
     $(OVERWORLD_WILD_TIMERS_OBJECT) $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+    $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
     rom_gen.ld src/overworld_wild_runtime_timers_overlay/linker.ld
 	$(LD) rom_gen.ld -T src/overworld_wild_runtime_timers_overlay/linker.ld \
 		--just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) \
+		--just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
 		-o $@ $(OVERWORLD_WILD_TIMERS_OBJECT)
 
 $(overworld_wild_runtime_timers_overlay_OUTPUT): $(overworld_wild_runtime_timers_overlay_LINK) \
     $(overworld_wild_runtime_layers_overlay_LINK) \
+    $(overworld_wild_runtime_overlay_LINK) \
     $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+    $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
     $(OVERWORLD_WILD_TIMER_SYMBOLS) \
+    $(OVERWORLD_WILD_TIMERS_OBJECT) \
     scripts/verify_overworld_wild_overlay_size.py
 	$(OBJCOPY) -O binary $< $@
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< \
 		--binary $@ --overlay 159 \
 		--layers-owner $(overworld_wild_runtime_layers_overlay_LINK) \
 		--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS) \
-		--timer-carrier $(OVERWORLD_WILD_TIMER_SYMBOLS)
+		--catalog-owner $(overworld_wild_runtime_overlay_LINK) \
+		--catalog-carrier $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
+		--timer-carrier $(OVERWORLD_WILD_TIMER_SYMBOLS) \
+		--timer-object $(OVERWORLD_WILD_TIMERS_OBJECT) \
+		--production-object $(OVERWORLD_WILD_TIMERS_OBJECT)
 
 $(BUILD)/overworld_wild_behavior_validator_overlay_linked.o: \
     $(BUILD)/pokemon_move_history_task6_overlay_linked.o \
@@ -177,6 +190,7 @@ $(OVERWORLD_WILD_TASK8_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_TimerExpiryTagInternal \
 		--keep-symbol=OverworldWildRuntime_PreflightTimerExpiryInternal \
 		--keep-symbol=OverworldWildRuntime_MakeTimerRemovalHandleInternal \
+		--keep-symbol=OverworldWildRuntime_ApplyStackDeltaCompact \
 		--keep-symbol=OverworldWildRuntime_GetLayerCount \
 		--keep-symbol=OverworldWildRuntime_GetLayerByIndex \
 		--keep-symbol=OverworldWildRuntime_FindLayer \
@@ -192,15 +206,14 @@ $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_ResolveInstalledTimerDefinition \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledCatalogIdentity \
 		--keep-symbol=OverworldWildRuntime_MarkResidentCold \
-		--keep-symbol=OverworldWildRuntime_CopyInstalledStaticComposition \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledStaticCache \
 		--keep-symbol=OverworldWildRuntime_ResolveRetainedStaticCache \
-		--keep-symbol=OverworldWildRuntime_ApplicabilityMatchesStaticCache \
 		--keep-symbol=OverworldWildRuntime_ValidateStaticCache \
-		--keep-symbol=OverworldWildRuntime_CopyInstalledResolvedNode \
+		--keep-symbol=OverworldWildRuntime_CopyValidatedSpawnConfiguration \
+		--keep-symbol=OverworldWildRuntime_MatchesPendingTimerExpiry \
 		--keep-symbol=OverworldWildRuntime_CopyResolvedCachedNode \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledModifierOperations \
-		--keep-symbol=OverworldWildRuntime_CountInstalledTiredTranslations \
+		--keep-symbol=OverworldWildRuntime_AcquireInstalledTransitionCatalog \
 		$< $@
 
 $(BUILD)/overworld_wild_runtime_layers_overlay_linked.o: \
@@ -217,7 +230,11 @@ $(OVERWORLD_WILD_TIMER_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_TickCompletedMovementTimers \
 		--keep-symbol=OverworldWildRuntime_GetPendingTimerExpiryCount \
 		--keep-symbol=OverworldWildRuntime_GetPendingTimerExpiryByIndex \
-		--keep-symbol=OverworldWildRuntime_CommitTimerExpiry \
+		--keep-symbol=OverworldWildRuntime_DispatchTransition \
+		--keep-symbol=OverworldWildRuntime_CaptureCommandOrigin \
+		--keep-symbol=OverworldWildRuntime_ConsumeCommandOrigin \
+		--keep-symbol=OverworldWildRuntime_InvalidateCommandOrigin \
+		--keep-symbol=OverworldWildRuntime_InvalidateAllCommandOrigins \
 		$< $@
 
 $(OVERWORLD_WILD_RUNTIME_SYMBOLS): \

@@ -34,8 +34,8 @@ FLAGS = 0x6  # names-hashed + compact authored source
 HEADER_SIZE = 216
 CHECKSUM_OFFSET = 16
 HARD_CAP = 0x3000
-SCHEMA_REVISION = b"owbd-v40-authored-r9:candidate-timer-fold:closed-scalar-domains"
-PINNED_REGISTRY_MANIFEST_SHA256 = "8f78a9f09a65f0b8f6bdfe9a15add0b8add2fc7a94510d10362b64f5ab913dda"
+SCHEMA_REVISION = b"owbd-v40-authored-r10:candidate-timer-fold:closed-scalar-domains:exact-recovery-topology"
+PINNED_REGISTRY_MANIFEST_SHA256 = "42f8ede614c7ff08c967086c7a2fae66cd4c9c6c182bded1a5e1fb48ca8ac5f4"
 
 PROFILE_FIELDS = (
     "chillState", "alertState", "alertEmote", "alertTime", "alertness",
@@ -201,6 +201,8 @@ def fixed_ids():
     for i in range(1, 11): values[f"owner:{i}"] = 0x8101 + i
     add("transition", 0xA001, 26); add("guard", 0xB001, 26)
     add("operation", 0xC001, 35); add("transition-action", 0xD001, 32)
+    add("exact-calm-operation", 0xC02D, 18)
+    add("exact-cooldown-action", 0xD02A, 9)
     add("recovery", 0xE001, 15); add("import", 0xF001, 12)
     add("applicability", 0xF101, 19); add("tired-translation", 0xF201, 18)
     add("assignment", 0x5301, 115)
@@ -384,6 +386,14 @@ def assert_destructive_registry_history_rejected():
 
 def pack_profile(source):
     return bytes(scalar(source[name]) for name in PROFILE_FIELDS)
+
+
+def transition_guard(trigger):
+    if trigger == 1:
+        return 2, 1
+    if trigger == 3:
+        return 6, 3
+    return 8, trigger
 
 
 def generate(data, extend_registry=False):
@@ -606,7 +616,8 @@ def generate(data, extend_registry=False):
         owner = definition_specs[definition_index][0]
         op_start = len(operations)
         kind = 1 if family == "apply" else 3
-        operations.append(struct.pack("<7H4B", ids[f"operation:{len(operations)}"], tid, did, owner, 0, 0, did,
+        operations.append(struct.pack("<7H4B", ids[f"operation:{len(operations)}"], tid, did, owner, 0, 0,
+                                      did if kind == 1 else 0,
                                       kind, 1, 0 if kind == 1 else 1, 0))
         if family == "calm":
             for calm_owner in (0x8102, 0x8103, 0x8104):
@@ -616,8 +627,10 @@ def generate(data, extend_registry=False):
         for action_kind in action_kinds:
             typed_actions.append(struct.pack("<HHBBHH", ids[f"transition-action:{len(typed_actions)}"], tid,
                                              2 if family != "apply" else 1, action_kind, 0, 0))
-        guard_kind = 6 if trigger == 3 else (2 if trigger == 1 else 8)
-        guard_payload = 3 if trigger == 3 else (1 if trigger == 1 else trigger)
+        guard_kind, guard_payload = transition_guard(trigger)
+        if trigger == 2 and (guard_kind, guard_payload) != (8, 2):
+            raise ValueError(
+                "stamina exhaustion must require its exact system route")
         guards.append(struct.pack("<HH4BHH", ids[f"guard:{route_index}"], tid, guard_kind, 0,
                                   guard_payload, 0, 0, 0))
         recovery_start = len(recoveries)
@@ -632,17 +645,29 @@ def generate(data, extend_registry=False):
     for wrapper_offset in range(9):
         definition_index = 10 + wrapper_offset
         tid, did = ids[f"transition:{17 + wrapper_offset}"], ids[f"definition:{definition_index}"]
-        owner = {1: 0x8107, 2: 0x8106, 3: 0x8108}[wrapper_offset // 3 + 1]
+        origin = wrapper_offset // 3 + 1
+        owner = {1: 0x8107, 2: 0x8106, 3: 0x8108}[origin]
         guard_start, op_start = len(guards), len(operations)
         action_start, recovery_start = len(typed_actions), len(recoveries)
         guards.append(struct.pack("<HH4BHH", ids[f"guard:{len(guards)}"], tid, 6, 0, 3, 0, 0, 0))
-        operations.append(struct.pack("<7H4B", ids[f"operation:{len(operations)}"], tid, did, owner,
-                                      0, 0, did, 3, 1, 1, 0))
-        typed_actions.append(struct.pack("<HHBBHH", ids[f"transition-action:{len(typed_actions)}"],
-                                         tid, 2, 2, 0, 0))
-        recoveries.append(struct.pack("<HHHBB", ids[f"recovery:{len(recoveries)}"], tid, owner, 1, 1))
-        transitions.append(struct.pack("<9H4BH", tid, did, owner, guard_start, 1, op_start, 1,
-            action_start, 1, 3, 4, recovery_start, 1, 0x3000 + wrapper_offset))
+        operations.append(struct.pack("<7H4B", ids[f"operation:{26 + wrapper_offset}"], tid, did, owner,
+                                      0, 0, 0, 3, 1, 1, 0))
+        if origin in (2, 3):
+            for calm_index, calm_owner in enumerate((0x8102, 0x8103, 0x8104)):
+                added_index = (wrapper_offset - 3) * 3 + calm_index
+                operations.append(struct.pack("<7H4B", ids[f"exact-calm-operation:{added_index}"], tid,
+                    0, calm_owner, 0, 0, 0, 5, 1, 0, 0))
+        typed_actions.append(struct.pack("<HHBBHH",
+            ids[f"transition-action:{23 + wrapper_offset}"], tid, 2, 2, 0, 0))
+        typed_actions.append(struct.pack("<HHBBHH",
+            ids[f"exact-cooldown-action:{wrapper_offset}"], tid, 2, 4, 0, 0))
+        recoveries.append(struct.pack("<HHHBB", ids[f"recovery:{len(recoveries)}"],
+            tid, owner, 1 if origin == 1 else 2, 1))
+        transitions.append(struct.pack("<9H4BH", tid, did, owner, guard_start, 1, op_start,
+            len(operations) - op_start, action_start, len(typed_actions) - action_start,
+            3, 1 << (7 - 1), recovery_start, 1, 0x3000 + wrapper_offset))
+    if (len(operations), len(typed_actions), len(recoveries)) != (53, 41, 15):
+        raise ValueError("exact tired fallback topology counts changed")
 
     imports = []
     # Semantic sources are serialized, never inferred from a legacy index.

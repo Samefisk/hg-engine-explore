@@ -83,7 +83,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "2747a3ceec5546ce4300379ecce34540767f7e4988dbefeef632a9b12f2b14e4",
+        "de54796376e2154cab61de0d68ced08073f920773c707e02c2587ce0f4dd988b",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2185,6 +2185,8 @@ __wrap___gnu_thumb1_case_sqi:
         and "scripts/overworld_wild_behavior_v40_validation_shared.h" in FIXED_INPUTS
         and "scripts/overworld_wild_runtime_sidecars_fixture.c" in FIXED_INPUTS
         and "scripts/overworld_wild_runtime_catalog_fixture.c" in FIXED_INPUTS
+        and "scripts/overworld_wild_runtime_catalog_timer_fixture.c"
+        in FIXED_INPUTS
         and "scripts/overworld_wild_runtime_layers_fixture.c" in FIXED_INPUTS
         and "scripts/overworld_wild_heap_probe.py" in FIXED_INPUTS
         and "scripts/verify_overworld_wild_overlay_size.py" in FIXED_INPUTS
@@ -2277,6 +2279,17 @@ __wrap___gnu_thumb1_case_sqi:
         len(FIXED_INPUTS) == len(set(FIXED_INPUTS)),
         "fixed manifest inputs contain duplicate paths",
     )
+    for runtime_fixture_input in (
+        "scripts/overworld_wild_runtime_sidecars_fixture.c",
+        "scripts/overworld_wild_runtime_catalog_fixture.c",
+        "scripts/overworld_wild_runtime_catalog_timer_fixture.c",
+        "scripts/overworld_wild_runtime_layers_fixture.c",
+    ):
+        require(
+            FIXED_INPUTS.count(runtime_fixture_input) == 1,
+            f"runtime fixture input is not uniquely sealed: "
+            f"{runtime_fixture_input}",
+        )
 
     for api in (
         "PokemonMoveHistory_ReplaceMove",
@@ -5944,164 +5957,26 @@ def verify_overworld_wild_runtime_link_contracts(
         ],
         "overlay 149 object lifecycle relocation inventory differs",
     )
-    signed_switch_symbol = "__gnu_thumb1_case_sqi"
-    signed_switch_wrapper = "__wrap___gnu_thumb1_case_sqi"
-    signed_switch_wrapper_bytes = bytes.fromhex(
-        "02 b4 71 46 49 08 49 00 09 56 49 00 8e 44 02 bc 70 47"
-    )
-    signed_switch_wrapper_row = linked_records.get(signed_switch_wrapper)
+    # The direct-state cutover removed the legacy signed-byte primitive
+    # resolver.  Keep that absence explicit so an old projection switch cannot
+    # silently return to the live spawn overlay.
     require(
-        signed_switch_wrapper_row is not None
-        and signed_switch_wrapper_row[0] & 1 == 1
-        and signed_switch_wrapper_row[1:] == (18, "FUNC", "GLOBAL", "1"),
-        "overlay 149 signed-byte switch wrapper symbol row differs",
+        re.search(
+            r"^\s*[0-9A-Fa-f]+\s+R_ARM_\S+\s+"
+            r"__gnu_thumb1_case_sqi$",
+            object_relocations,
+            re.MULTILINE,
+        ) is None,
+        "overlay 149 restored a legacy signed-byte switch relocation",
     )
-    signed_switch_wrapper_address = signed_switch_wrapper_row[0] & ~1
-    require(
-        linked_symbols["__text_start"] <= signed_switch_wrapper_address
-        and signed_switch_wrapper_address + len(signed_switch_wrapper_bytes)
-            <= linked_symbols["__text_end"],
-        "overlay 149 signed-byte switch wrapper is outside sealed text",
-    )
-    signed_switch_wrapper_offset = (
-        signed_switch_wrapper_address - OVERLAY149_BASE)
-
-    def signed_switch_wrapper_matches(image: bytes) -> bool:
-        return image[
-            signed_switch_wrapper_offset:
-            signed_switch_wrapper_offset + len(signed_switch_wrapper_bytes)
-        ] == signed_switch_wrapper_bytes
-
-    require(
-        signed_switch_wrapper_matches(raw)
-        and elf_bytes_at(
-            spawns_linked,
-            signed_switch_wrapper_address,
-            len(signed_switch_wrapper_bytes),
-        ) == signed_switch_wrapper_bytes,
-        "overlay 149 signed-byte switch wrapper instructions differ",
-    )
-    signed_switch_relocations = re.findall(
-        r"^\s*[0-9A-Fa-f]+\s+(R_ARM_\S+)\s+"
-        r"__gnu_thumb1_case_sqi$",
-        object_relocations,
-        re.MULTILINE,
-    )
-    require(
-        signed_switch_relocations == ["R_ARM_THM_CALL"],
-        "overlay 149 source object signed-byte switch relocation differs",
-    )
-    signed_switch_raw_row = linked_records.get(signed_switch_symbol)
-    require(
-        signed_switch_raw_row is not None
-        and signed_switch_raw_row[2:] == ("NOTYPE", "GLOBAL", "ABS")
-        and signed_switch_raw_row[0] & 1 == 1,
-        "overlay 149 raw signed-byte switch helper symbol row differs",
-    )
-    signed_switch_raw_address = signed_switch_raw_row[0] & ~1
-    resolve_row = linked_records.get(
-        "OverworldWildSpawns_ResolveBehaviorPrimitives")
-    require(
-        resolve_row is not None
-        and resolve_row[0] & 1 == 1
-        and resolve_row[1] > 0
-        and resolve_row[2:] == ("FUNC", "LOCAL", "1"),
-        "overlay 149 signed-byte switch call container differs",
-    )
-    resolve_start = resolve_row[0] & ~1
-    resolve_end = resolve_start + resolve_row[1]
-
-    def signed_switch_call_inventory_matches(image: bytes) -> bool:
-        calls = packaged_thumb_calls(
-            image,
-            OVERLAY149_BASE,
-            linked_symbols["__text_start"],
-            linked_symbols["__text_end"] - linked_symbols["__text_start"],
-        )
-        wrapper_calls = [
-            call for call in calls
-            if call[2] == signed_switch_wrapper_address
-        ]
-        raw_calls = [
-            call for call in calls if call[2] == signed_switch_raw_address
-        ]
-        return (
-            len(wrapper_calls) == 1
-            and wrapper_calls[0][1] == "bl"
-            and resolve_start <= wrapper_calls[0][0]
-            and wrapper_calls[0][0] + 4 <= resolve_end
-            and not raw_calls
-        )
-
-    require(
-        signed_switch_call_inventory_matches(raw),
-        "overlay 149 signed-byte switch direct-call inventory differs",
-    )
-    signed_switch_calls = [
-        call for call in decoded_calls
-        if call[2] == signed_switch_wrapper_address
-    ]
-    require(
-        len(signed_switch_calls) == 1
-        and signed_switch_calls[0][1] == "bl",
-        "overlay 149 signed-byte switch call is not one direct BL",
-    )
-    signed_switch_call_address = signed_switch_calls[0][0]
-    signed_switch_call_offset = signed_switch_call_address - OVERLAY149_BASE
-    require(
-        struct.pack("<I", signed_switch_raw_address) not in raw
-        and struct.pack("<I", signed_switch_raw_row[0]) not in raw,
-        "overlay 149 retained a raw signed-byte switch target literal",
-    )
-    wrapper_mutations: list[tuple[str, bytearray]] = []
-    removed_wrapper = bytearray(raw)
-    removed_wrapper[
-        signed_switch_wrapper_offset:
-        signed_switch_wrapper_offset + len(signed_switch_wrapper_bytes)
-    ] = bytes(len(signed_switch_wrapper_bytes))
-    wrapper_mutations.append(("removed signed-byte wrapper", removed_wrapper))
-    unsigned_wrapper = bytearray(raw)
-    unsigned_load_offset = signed_switch_wrapper_offset + 8
-    unsigned_wrapper[unsigned_load_offset:unsigned_load_offset + 2] = b"\x09\x5c"
-    wrapper_mutations.append(("unsigned signed-byte wrapper load", unsigned_wrapper))
-    for label, mutation in wrapper_mutations:
+    signed_switch_wrapper_row = linked_records.get(
+        "__wrap___gnu_thumb1_case_sqi")
+    if signed_switch_wrapper_row is not None:
+        signed_switch_wrapper_address = signed_switch_wrapper_row[0] & ~1
         require(
-            not signed_switch_wrapper_matches(bytes(mutation)),
-            f"overlay 149 {label} passed exact wrapper authentication",
-        )
-    signed_switch_call_mutations: list[tuple[str, bytearray]] = []
-    removed_call = bytearray(raw)
-    removed_call[
-        signed_switch_call_offset:signed_switch_call_offset + 4
-    ] = b"\0\0\0\0"
-    signed_switch_call_mutations.append((
-        "removed signed-byte wrapper call", removed_call))
-    retargeted_call = bytearray(raw)
-    retargeted_call[
-        signed_switch_call_offset:signed_switch_call_offset + 4
-    ] = encode_thumb_bl(
-        signed_switch_call_address, signed_switch_raw_address)
-    signed_switch_call_mutations.append((
-        "raw-target signed-byte switch call", retargeted_call))
-    extra_call = bytearray(raw)
-    extra_call_address = signed_switch_call_address + 4
-    extra_call_offset = extra_call_address - OVERLAY149_BASE
-    extra_call[extra_call_offset:extra_call_offset + 4] = encode_thumb_bl(
-        extra_call_address, signed_switch_wrapper_address)
-    signed_switch_call_mutations.append((
-        "extra signed-byte wrapper call", extra_call))
-    require(
-        len({
-            bytes(mutation)
-            for _label, mutation in (
-                wrapper_mutations + signed_switch_call_mutations)
-        }) == 5,
-        "overlay 149 signed-byte switch mutation fixtures contain a duplicate",
-    )
-    for label, mutation in signed_switch_call_mutations:
-        require(
-            not signed_switch_call_inventory_matches(bytes(mutation)),
-            f"overlay 149 {label} passed exact call authentication",
+            all(call[2] != signed_switch_wrapper_address
+                for call in decoded_calls),
+            "overlay 149 restored a legacy signed-byte switch call",
         )
     require(
         ".ow_wild_runtime_sidecars" not in elf_section_names(spawns_linked),
@@ -6408,14 +6283,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     151: (
         OVERLAY151_BASE,
-        0x3FF8,
+        0x3FD8,
         0,
         0,
         0,
         151,
         0,
         0x41B600,
-        0x41F5F8,
+        0x41F5D8,
     ),
     153: (
         OVERLAY_BASE,
@@ -7315,7 +7190,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         linked_helper_bytes = reproduced_helper_binary.read_bytes()
     require(
         ov151_base == OVERLAY151_BASE
-        and ov151_component.ram_size == 0x3FF8
+        and ov151_component.ram_size == 0x3FD8
         and ov151_component.bss_size == 0
         and ov151_component.static_init_start == 0
         and ov151_component.static_init_end == 0

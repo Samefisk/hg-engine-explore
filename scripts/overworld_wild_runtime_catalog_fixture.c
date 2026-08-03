@@ -33,7 +33,10 @@ typedef int BOOL;
 #define OWBD_STATIC_ACTION_APPLY_STATE_MODIFIER 4
 #define OWBD_STATIC_ACTION_APPLY_CONTROLLER_MODIFIER 5
 #define OWBD_STATIC_ACTION_BIND_SPAWN_POLICY 6
+#define OWBD_STATIC_ACTION_APPLY_SPAWN_POLICY_PATCH 7
 #define OWBD_STATIC_ACTION_BIND_POPULATION_POLICY 8
+#define OWBD_STATIC_ACTION_APPLY_POPULATION_POLICY_PATCH 9
+#define OWBD_STATIC_ACTION_BIND_HOOK_SET 10
 #define OWBD_STATIC_ACTION_APPLY_CANDIDATE_TIMER_OPERATOR 11
 #define OWBD_OVERRIDE_KIND_STATE_CANDIDATE 1
 #define OWBD_TIMER_CLOCK_NONE 0
@@ -61,6 +64,7 @@ typedef int BOOL;
 
 typedef enum OverworldWildRuntimeStatus {
     OW_WILD_RUNTIME_STATUS_OK = 0,
+    OW_WILD_RUNTIME_STATUS_INVALID_HANDLE = 4,
     OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA = 21,
 } OverworldWildRuntimeStatus;
 
@@ -146,6 +150,36 @@ typedef struct __attribute__((packed)) OverworldWildControllerRecord {
     u8 flags;
     u8 reserved;
 } OverworldWildControllerRecord;
+
+typedef struct __attribute__((packed)) OverworldWildSpawnPolicyRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 provenanceId;
+    u8 spawnState;
+    u8 destination;
+    u8 minimumDistance;
+    u8 maximumDistance;
+    u8 spawnHopTime;
+    u8 flags;
+} OverworldWildSpawnPolicyRecord;
+
+typedef struct __attribute__((packed)) OverworldWildPopulationPolicyRecord {
+    u16 stableId;
+    u16 nameId;
+    u16 populationGroupId;
+    u16 provenanceId;
+    u8 limit;
+    u8 flags;
+} OverworldWildPopulationPolicyRecord;
+
+typedef struct __attribute__((packed)) OverworldWildHookSetRecord {
+    u16 stableId;
+    u16 nameId;
+    u8 helpCallInvocation;
+    u8 pickupThrowEntry;
+    u8 pickupThrowActiveLoop;
+    u8 flags;
+} OverworldWildHookSetRecord;
 
 typedef struct __attribute__((packed)) OverworldWildControllerNodeRecord {
     u16 stableId;
@@ -340,6 +374,21 @@ typedef struct OverworldWildRuntimeResolvedNode {
     u8 stateValues[28];
 } OverworldWildRuntimeResolvedNode;
 
+typedef struct OverworldWildRuntimeSpawnConfiguration {
+    u8 spawnState;
+    u8 destination;
+    u8 minimumDistance;
+    u8 maximumDistance;
+    u8 spawnHopTime;
+    u8 spawnFlags;
+    u8 populationLimit;
+    u8 populationFlags;
+    u8 helpCallInvocation;
+    u8 pickupThrowEntry;
+    u8 pickupThrowActiveLoop;
+    u8 hookFlags;
+} OverworldWildRuntimeSpawnConfiguration;
+
 typedef struct OverworldWildRuntimeStaticComposition {
     u32 catalogIdentity;
     u32 staticContextIdentity;
@@ -351,6 +400,7 @@ typedef struct OverworldWildRuntimeStaticComposition {
     u16 baseProfileId;
     u16 spawnPolicyId;
     u16 populationPolicyId;
+    OverworldWildRuntimeSpawnConfiguration spawnConfiguration;
     u8 baseSemanticRole;
     u8 valid;
     u8 nodeCount;
@@ -378,6 +428,7 @@ typedef struct OverworldWildRuntimeStaticCache {
     u16 baseProfileId;
     u16 spawnPolicyId;
     u16 populationPolicyId;
+    OverworldWildRuntimeSpawnConfiguration spawnConfiguration;
     u8 baseSemanticRole;
     u8 valid;
     u8 nodeCount;
@@ -416,9 +467,11 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticModifierContribution) == 18
     "runtime static-contribution ABI");
 _Static_assert(sizeof(OverworldWildRuntimeResolvedNode) == 38,
     "runtime resolved-node ABI");
-_Static_assert(sizeof(OverworldWildRuntimeStaticComposition) == 536,
+_Static_assert(sizeof(OverworldWildRuntimeSpawnConfiguration) == 12,
+    "runtime spawn-configuration ABI");
+_Static_assert(sizeof(OverworldWildRuntimeStaticComposition) == 548,
     "runtime static-composition ABI");
-_Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 540,
+_Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
     "runtime static-cache ABI");
 
 /* Compile the exact shared Task-5 resident scalar table/helpers into this host
@@ -463,7 +516,7 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 540,
 #define OWBD_CANDIDATE_TIMER_ADD_MIN -32
 #define OWBD_CANDIDATE_TIMER_ADD_MAX 32
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11220u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11636u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
 #define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x6E9B5D94u
@@ -479,6 +532,7 @@ BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     OverworldWildRuntimeResolvedNode *nodeOut);
 
 #define OW_WILD_RUNTIME_ACCESSOR_HOST_TEST
+#define OW_WILD_RUNTIME_DISABLE_TRANSITION_VIEW
 #include "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
 
 static int sChecks;
@@ -522,7 +576,7 @@ int main(int argc, char **argv)
     require(file != NULL, "validated-v40 file did not open");
     require(fseek(file, 0, SEEK_END) == 0, "validated-v40 seek failed");
     size = ftell(file);
-    require(size == 11220, "validated-v40 size changed");
+    require(size == 11636, "validated-v40 size changed");
     require(fseek(file, 0, SEEK_SET) == 0, "validated-v40 rewind failed");
     blob = malloc((size_t)size);
     require(blob != NULL, "fixture allocation failed");
@@ -639,17 +693,21 @@ int main(int argc, char **argv)
         static const u8 expectedMankeyController[9] = {
             2, 2, 20, 4, 4, 100, 60, 10, 0,
         };
+        static const OverworldWildRuntimeSpawnConfiguration
+            expectedMankeySpawn = {
+                2, 1, 1, 5, 6, 0, 1, 0, 0, 1, 1, 0,
+            };
         OverworldWildRuntimeStaticContext staticContext;
         OverworldWildRuntimeApplicabilityInput input;
+        OverworldWildRuntimeStaticComposition canonical;
         OverworldWildRuntimeStaticComposition first;
         OverworldWildRuntimeStaticComposition second;
         OverworldWildRuntimeStaticCache resolvedCache;
         OverworldWildRuntimeStaticCache retainedResolved;
         OverworldWildRuntimeStaticCache modifiedCache;
-        OverworldWildRuntimeStaticContext wrongContext;
+        OverworldWildRuntimeSpawnConfiguration copiedConfiguration;
         OverworldWildRuntimeResolvedNode node;
         OverworldWildRuntimeModifierOperation operation;
-        BOOL sawModifiedBase = FALSE;
         u8 operationCount = 0xFF;
 
         memset(&staticContext, 0, sizeof(staticContext));
@@ -668,7 +726,11 @@ int main(int argc, char **argv)
         input.effectiveProfileId = 0x2304;
         input.effectiveSemanticRole = 1;
         require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                &staticContext, NULL, &canonical),
+            "production canonical static composition rejected NULL input");
+        require(OverworldWildRuntime_CopyInstalledStaticComposition(
                 &staticContext, &input, &first)
+                && !memcmp(&canonical, &first, sizeof(first))
                 && first.controllerId == input.controllerId
                 && first.baseProfileId == input.effectiveProfileId
                 && first.baseNodeId == 0x3101
@@ -704,6 +766,230 @@ int main(int argc, char **argv)
                 && OverworldWildRuntime_ApplicabilityMatchesStaticCache(
                     &input, &resolvedCache),
             "authenticated complete static-cache projection differs from resolver");
+        require(!memcmp(&resolvedCache.spawnConfiguration,
+                    &expectedMankeySpawn, sizeof(expectedMankeySpawn))
+                && resolvedCache.spawnPolicyId == 0x4001
+                && resolvedCache.populationPolicyId == 0x4105,
+            "resolved spawn/population/hook configuration changed exact values");
+        memset(&copiedConfiguration, 0xA5, sizeof(copiedConfiguration));
+        require(OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+                    &resolvedCache, 7, &copiedConfiguration)
+                    == OW_WILD_RUNTIME_STATUS_OK
+                && !memcmp(&copiedConfiguration, &expectedMankeySpawn,
+                    sizeof(copiedConfiguration)),
+            "validated spawn-configuration consumer copy changed exact values");
+        memset(&copiedConfiguration, 0xA5, sizeof(copiedConfiguration));
+        require(OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+                    &resolvedCache, 8, &copiedConfiguration)
+                    == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+                && !memcmp(&copiedConfiguration,
+                    &(OverworldWildRuntimeSpawnConfiguration){0},
+                    sizeof(copiedConfiguration)),
+            "validated spawn-configuration consumer accepted stale generation");
+        modifiedCache = resolvedCache;
+        modifiedCache.spawnConfiguration.spawnHopTime++;
+        memset(&copiedConfiguration, 0xA5, sizeof(copiedConfiguration));
+        require(OverworldWildRuntime_CopyValidatedSpawnConfiguration(
+                    &modifiedCache, 7, &copiedConfiguration)
+                    == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA
+                && !memcmp(&copiedConfiguration,
+                    &(OverworldWildRuntimeSpawnConfiguration){0},
+                    sizeof(copiedConfiguration)),
+            "validated spawn-configuration consumer accepted tampered bytes");
+        retainedResolved = resolvedCache;
+        retainedResolved.spawnConfiguration.populationLimit = 11;
+        retainedResolved.staticSetHash = RuntimeCatalogMix(
+            0x4F575339u, retainedResolved.catalogIdentity);
+        retainedResolved.staticSetHash = RuntimeCatalogMix(
+            retainedResolved.staticSetHash,
+            retainedResolved.staticContextIdentity);
+        retainedResolved.staticSetHash = RuntimeCatalogHashBytes(
+            retainedResolved.staticSetHash,
+            &retainedResolved.immutableContextMask,
+            sizeof(retainedResolved) - offsetof(
+                OverworldWildRuntimeStaticCache, immutableContextMask));
+        require(retainedResolved.staticSetHash != resolvedCache.staticSetHash
+                && OverworldWildRuntime_ValidateStaticCache(
+                    &retainedResolved, 7)
+                    == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
+            "spawn configuration did not participate in static identity/domain validation");
+        {
+            static const OverworldWildRuntimeSpawnConfiguration
+                expectedHookBind = {
+                    2, 1, 1, 5, 6, 0, 1, 0, 1, 0, 0, 0,
+                };
+            static const OverworldWildRuntimeSpawnConfiguration
+                expectedSpawnBindThenPatch = {
+                    2, 1, 1, 5, 4, 0, 1, 0, 0, 1, 1, 0,
+                };
+            static const OverworldWildRuntimeSpawnConfiguration
+                expectedSpawnPatchThenBind = {
+                    0, 0, 1, 5, 4, 0, 1, 0, 0, 1, 1, 0,
+                };
+            static const OverworldWildRuntimeSpawnConfiguration
+                expectedPopulationBindThenPatch = {
+                    2, 1, 1, 5, 6, 0, 5, 0, 0, 1, 1, 0,
+                };
+            static const OverworldWildRuntimeSpawnConfiguration
+                expectedPopulationPatchThenBind = {
+                    2, 1, 1, 5, 6, 0, 0, 0, 0, 1, 1, 0,
+                };
+            const OverworldWildOverrideSourceRecord *sources =
+                (const void *)(blob + header->overrideSources.offset);
+            OverworldWildStaticActionRecord *actions =
+                (void *)(blob + header->overrideActions.offset);
+            OverworldWildStaticActionRecord *spawnFirst = NULL;
+            OverworldWildStaticActionRecord *spawnLast = NULL;
+            OverworldWildStaticActionRecord *populationFirst = NULL;
+            OverworldWildStaticActionRecord *populationLast = NULL;
+            OverworldWildStaticActionRecord *hookBind = NULL;
+            OverworldWildStaticActionRecord savedSpawnFirst;
+            OverworldWildStaticActionRecord savedSpawnLast;
+            OverworldWildStaticActionRecord savedPopulationFirst;
+            OverworldWildStaticActionRecord savedPopulationLast;
+            OverworldWildStaticActionRecord savedHookBind;
+            OverworldWildRuntimeStaticComposition orderedFirst;
+            OverworldWildRuntimeStaticComposition orderedSecond;
+            u16 sourceRank;
+
+            for (sourceRank = 0;
+                    sourceRank < header->overrideSources.count;
+                    sourceRank++) {
+                const OverworldWildOverrideSourceRecord *source =
+                    MatchingSourceAtRank(header, sources,
+                        &staticContext, sourceRank);
+                OverworldWildStaticActionRecord *sourceSpawnFirst = NULL;
+                OverworldWildStaticActionRecord *sourceSpawnLast = NULL;
+                OverworldWildStaticActionRecord *sourceController = NULL;
+                OverworldWildStaticActionRecord *sourcePopulation = NULL;
+                u16 actionIndex;
+                if (source == NULL) break;
+                for (actionIndex = 0; actionIndex < source->actionCount;
+                        actionIndex++) {
+                    OverworldWildStaticActionRecord *action =
+                        &actions[source->actionStart + actionIndex];
+                    if (action->kind
+                            == OWBD_STATIC_ACTION_APPLY_SPAWN_POLICY_PATCH) {
+                        if (sourceSpawnFirst == NULL
+                            || action->stableId < sourceSpawnFirst->stableId)
+                            sourceSpawnFirst = action;
+                        if (sourceSpawnLast == NULL
+                            || action->stableId > sourceSpawnLast->stableId)
+                            sourceSpawnLast = action;
+                    } else if (action->kind
+                            == OWBD_STATIC_ACTION_APPLY_CONTROLLER_MODIFIER) {
+                        if (sourceController == NULL
+                            || action->stableId < sourceController->stableId)
+                            sourceController = action;
+                    } else if (action->kind
+                            == OWBD_STATIC_ACTION_BIND_POPULATION_POLICY) {
+                        sourcePopulation = action;
+                    } else if (action->kind
+                            == OWBD_STATIC_ACTION_BIND_HOOK_SET) {
+                        hookBind = action;
+                    }
+                }
+                if (sourceSpawnFirst != NULL
+                    && sourceSpawnFirst != sourceSpawnLast) {
+                    spawnFirst = sourceSpawnFirst;
+                    spawnLast = sourceSpawnLast;
+                }
+                if (sourceController != NULL && sourcePopulation != NULL) {
+                    populationFirst = sourceController;
+                    populationLast = sourcePopulation;
+                }
+            }
+            require(spawnFirst != NULL && spawnLast != NULL
+                    && populationFirst != NULL && populationLast != NULL
+                    && hookBind != NULL,
+                "spawn/population/hook ordering fixture actions disappeared");
+            savedSpawnFirst = *spawnFirst;
+            savedSpawnLast = *spawnLast;
+            savedPopulationFirst = *populationFirst;
+            savedPopulationLast = *populationLast;
+            savedHookBind = *hookBind;
+
+            hookBind->payload.bindPolicy.policyId = 0x4202;
+            require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                    &staticContext, NULL, &orderedFirst)
+                    && !memcmp(&orderedFirst.spawnConfiguration,
+                        &expectedHookBind, sizeof(expectedHookBind))
+                    && orderedFirst.staticSetHash != canonical.staticSetHash,
+                "hook-set bind did not replace the exact consumer values/hash");
+            *hookBind = savedHookBind;
+
+            spawnFirst->kind = OWBD_STATIC_ACTION_BIND_SPAWN_POLICY;
+            memset(&spawnFirst->payload, 0, sizeof(spawnFirst->payload));
+            spawnFirst->payload.bindPolicy.policyId = 0x4002;
+            spawnLast->kind = OWBD_STATIC_ACTION_APPLY_SPAWN_POLICY_PATCH;
+            memset(&spawnLast->payload, 0, sizeof(spawnLast->payload));
+            spawnLast->payload.modifier.fieldId = 1;
+            spawnLast->payload.modifier.operatorKind =
+                OW_WILD_RUNTIME_OPERATOR_SET;
+            spawnLast->payload.modifier.delta = 2;
+            require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                    &staticContext, NULL, &orderedFirst)
+                    && !memcmp(&orderedFirst.spawnConfiguration,
+                        &expectedSpawnBindThenPatch,
+                        sizeof(expectedSpawnBindThenPatch))
+                    && orderedFirst.spawnPolicyId == 0x4002
+                    && orderedFirst.staticSetHash != canonical.staticSetHash,
+                "spawn bind-then-patch order changed exact values/hash");
+            {
+                u16 stableId = spawnFirst->stableId;
+                spawnFirst->stableId = spawnLast->stableId;
+                spawnLast->stableId = stableId;
+            }
+            require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                    &staticContext, NULL, &orderedSecond)
+                    && !memcmp(&orderedSecond.spawnConfiguration,
+                        &expectedSpawnPatchThenBind,
+                        sizeof(expectedSpawnPatchThenBind))
+                    && orderedSecond.spawnPolicyId == 0x4002
+                    && orderedSecond.staticSetHash
+                        != orderedFirst.staticSetHash,
+                "spawn patch-then-bind did not overwrite in authored order");
+            *spawnFirst = savedSpawnFirst;
+            *spawnLast = savedSpawnLast;
+
+            populationFirst->kind =
+                OWBD_STATIC_ACTION_BIND_POPULATION_POLICY;
+            memset(&populationFirst->payload, 0,
+                sizeof(populationFirst->payload));
+            populationFirst->payload.bindPolicy.policyId = 0x4101;
+            populationLast->kind =
+                OWBD_STATIC_ACTION_APPLY_POPULATION_POLICY_PATCH;
+            memset(&populationLast->payload, 0,
+                sizeof(populationLast->payload));
+            populationLast->payload.modifier.fieldId = 1;
+            populationLast->payload.modifier.operatorKind =
+                OW_WILD_RUNTIME_OPERATOR_SET;
+            populationLast->payload.modifier.delta = 5;
+            require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                    &staticContext, NULL, &orderedFirst)
+                    && !memcmp(&orderedFirst.spawnConfiguration,
+                        &expectedPopulationBindThenPatch,
+                        sizeof(expectedPopulationBindThenPatch))
+                    && orderedFirst.populationPolicyId == 0x4101
+                    && orderedFirst.staticSetHash != canonical.staticSetHash,
+                "population bind-then-patch order changed exact values/hash");
+            {
+                u16 stableId = populationFirst->stableId;
+                populationFirst->stableId = populationLast->stableId;
+                populationLast->stableId = stableId;
+            }
+            require(OverworldWildRuntime_CopyInstalledStaticComposition(
+                    &staticContext, NULL, &orderedSecond)
+                    && !memcmp(&orderedSecond.spawnConfiguration,
+                        &expectedPopulationPatchThenBind,
+                        sizeof(expectedPopulationPatchThenBind))
+                    && orderedSecond.populationPolicyId == 0x4101
+                    && orderedSecond.staticSetHash
+                        != orderedFirst.staticSetHash,
+                "population patch-then-bind did not overwrite in authored order");
+            *populationFirst = savedPopulationFirst;
+            *populationLast = savedPopulationLast;
+        }
         {
             OverworldWildOverrideDefinitionRecord *mutableDefinitions =
                 (void *)(blob + header->overrideDefinitions.offset);
@@ -735,6 +1021,23 @@ int main(int argc, char **argv)
             }
             require(stamina != NULL && sleep != NULL && fled != NULL,
                 "production timer definition families disappeared");
+            {
+                u16 candidate = 0;
+                require(OverworldWildRuntime_CountInstalledTiredTranslations(
+                        0, 0, FALSE, &candidate) == 1
+                        && candidate == stamina->stableId,
+                    "production stamina trigger projection was not unique/exact");
+            }
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, NULL, &timer)
+                    && timer.recoveryTransitionId
+                        == stamina->recoveryTransitionId
+                    && timer.clock == stamina->timerClock
+                    && timer.source == stamina->timerSource
+                    && timer.hiddenPolicy == stamina->hiddenTimerPolicy
+                    && timer.recoveryPolicy == stamina->recoveryPolicy
+                    && timer.duration == 0 && timer.reserved == 0,
+                "production stamina identity-only timer projection differs");
             require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
                     stamina->stableId, &resolvedCache, &timer)
                     && timer.clock == OWBD_TIMER_CLOCK_FRAME
@@ -847,53 +1150,25 @@ int main(int argc, char **argv)
         }
         memset(&retainedResolved, 0xA5, sizeof(retainedResolved));
         require(OverworldWildRuntime_ResolveRetainedStaticCache(
-                &resolvedCache, &staticContext, 7, &retainedResolved)
+                &resolvedCache, 7, &retainedResolved)
                 == OW_WILD_RUNTIME_STATUS_OK
                 && !memcmp(&retainedResolved, &resolvedCache,
                     sizeof(resolvedCache)),
             "production retained resolver changed an independent valid copy");
         require(OverworldWildRuntime_ResolveRetainedStaticCache(
-                &resolvedCache, &staticContext, 7, &resolvedCache)
+                &resolvedCache, 7, &resolvedCache)
                 == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
             "production retained resolver accepted exact input/output aliasing");
-        wrongContext = staticContext;
-        wrongContext.species++;
+        modifiedCache = resolvedCache;
+        modifiedCache.staticContext.species++;
         require(OverworldWildRuntime_ResolveRetainedStaticCache(
-                &resolvedCache, &wrongContext, 7, &retainedResolved)
+                &modifiedCache, 7, &retainedResolved)
                 == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
-            "production retained resolver accepted a mismatched static context");
+            "production retained resolver accepted a mutated retained context");
         require(OverworldWildRuntime_ResolveRetainedStaticCache(
-                &resolvedCache, &staticContext, 8, &retainedResolved)
+                &resolvedCache, 8, &retainedResolved)
                 == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
             "production retained resolver accepted a mismatched generation");
-        modifiedCache = resolvedCache;
-        modifiedCache.stateValues[3] =
-            modifiedCache.stateValues[3] == 4 ? 3 : 4;
-        for (index = 0; index < modifiedCache.nodeCount; index++) {
-            if (modifiedCache.resolvedNodes[index].nodeId
-                    != modifiedCache.baseNodeId)
-                continue;
-            modifiedCache.resolvedNodes[index].stateValues[3] =
-                modifiedCache.stateValues[3];
-            sawModifiedBase = TRUE;
-            break;
-        }
-        modifiedCache.staticSetHash = RuntimeCatalogMix(
-            0x4F575339u, modifiedCache.catalogIdentity);
-        modifiedCache.staticSetHash = RuntimeCatalogMix(
-            modifiedCache.staticSetHash, modifiedCache.staticContextIdentity);
-        modifiedCache.staticSetHash = RuntimeCatalogHashBytes(
-            modifiedCache.staticSetHash, &modifiedCache.immutableContextMask,
-            sizeof(modifiedCache) - offsetof(
-                OverworldWildRuntimeStaticCache, immutableContextMask));
-        require(sawModifiedBase
-                && OverworldWildRuntime_ValidateStaticCache(
-                    &modifiedCache, 7) == OW_WILD_RUNTIME_STATUS_OK
-                && OverworldWildRuntime_ResolveRetainedStaticCache(
-                    &modifiedCache, &staticContext, 7, &retainedResolved)
-                    == OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA,
-            "production retained resolver accepted coherent bytes that differ "
-            "from installed-catalog re-resolution");
         require(OverworldWildRuntime_CopyInstalledDefinition(
                 definitions[0].stableId, &actual),
             "candidate definition recopy failed");

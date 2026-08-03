@@ -134,6 +134,298 @@ def require(condition: bool, message: str) -> None:
         fail(message)
 
 
+def verify_overlap_resolver_callback_source_contract(
+    header: str,
+    source: str,
+) -> None:
+    typedef_match = re.search(
+        r"typedef BOOL \(\*OverworldWildStartSpawnerMovementFunc\)\((.*?)\);",
+        header,
+        re.DOTALL,
+    )
+    require(typedef_match is not None, "overlap movement callback typedef is missing")
+    typedef_body = " ".join(typedef_match.group(1).split())
+    require(
+        typedef_body
+        == (
+            "struct OverworldWildSpawnState *state, FieldSystem *fieldSystem, "
+            "int slot, const u8 *directions, int directionCount"
+        ),
+        "overlap movement callback must expose only slot and direction inputs",
+    )
+    require(
+        "OverworldWildBehaviorProfile" not in typedef_body
+        and "OverworldWildBehaviorPrimitives" not in typedef_body,
+        "overlap movement callback still transports legacy behavior inputs",
+    )
+
+    resolver_start = source.index(
+        "static BOOL OverworldWildBehavior_TryResolveOverlap("
+    )
+    resolver_body_start = source.index("\n{", resolver_start)
+    resolver_end = source.index("\n}\n", resolver_body_start)
+    resolver = source[resolver_body_start:resolver_end]
+    calls = re.findall(r"startMovement\((.*?)\)\)", resolver, re.DOTALL)
+    require(len(calls) == 1, "overlap resolver must issue exactly one movement callback")
+    callback_args = [part.strip() for part in calls[0].split(",")]
+    require(
+        callback_args
+        == ["state", "state->movementFieldSystem", "i", "directions", "4"],
+        "overlap resolver movement callback arguments differ from the direct-slot ABI",
+    )
+
+
+def verify_overlap_callback_target_source_contract(source: str) -> None:
+    target_match = re.search(
+        r"static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand\s*"
+        r"\((.*?)\)\s*\{",
+        source,
+        re.DOTALL,
+    )
+    require(target_match is not None, "overlap movement callback target is missing")
+    target_parameters = " ".join(target_match.group(1).split())
+    require(
+        target_parameters
+        == (
+            "OverworldWildSpawnState *state, FieldSystem *fieldSystem, int slot, "
+            "const u8 *directions, int directionCount"
+        ),
+        "overlap movement callback target must implement the exact five-argument ABI",
+    )
+    require(
+        all(
+            legacy not in target_parameters
+            for legacy in (
+                "OverworldWildBehaviorProfile",
+                "OverworldWildBehaviorPrimitives",
+                "OverworldWildRuntimeEffectiveCache",
+                "current",
+            )
+        ),
+        "overlap movement callback target still accepts transported behavior state",
+    )
+    target = extract_c_function(
+        source,
+        "static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(",
+    )
+    require(
+        re.search(
+            r"OverworldWildSpawns_GetCurrentBehavior\(\s*"
+            r"state\s*,\s*slot\s*,\s*&resolvedCurrent\s*\)",
+            target,
+        )
+        is not None,
+        "overlap movement callback no longer resolves authenticated slot behavior internally",
+    )
+    require(
+        "const OverworldWildRuntimeEffectiveCache *current = &resolvedCurrent;"
+        in " ".join(target.split()),
+        "overlap movement callback does not bind its internally resolved behavior",
+    )
+    require(
+        re.search(
+            r"OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY->tryResolve\(.*?"
+            r"helperEntry->queryPickupThrowTarget,\s*"
+            r"OverworldWildSpawns_TryStartSpawnerMovementCommand\)\)",
+            source,
+            re.DOTALL,
+        )
+        is not None,
+        "overlap resolver callsite no longer binds the exact direct callback target",
+    )
+    require(
+        "(OverworldWildStartSpawnerMovementFunc)"
+        not in source,
+        "overlap resolver callback target is hidden behind a function-pointer cast",
+    )
+
+
+def extract_c_function(source: str, marker: str, occurrence: int = 0) -> str:
+    definition = -1
+    for _ in range(occurrence + 1):
+        definition = source.index(marker, definition + 1)
+    body = source.index("{", definition)
+    depth = 0
+    for index in range(body, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[definition : index + 1]
+    fail(f"function beginning {marker!r} is unterminated")
+
+
+def extract_overlap_resolver(source: str) -> str:
+    marker = "static BOOL OverworldWildBehavior_TryResolveOverlap("
+    return extract_c_function(source, marker, 1)
+
+
+def verify_overlap_resolver_host_fixture(repo: Path, source: str) -> None:
+    resolver = extract_overlap_resolver(source)
+    harness = f"""
+#include <stdint.h>
+#include <string.h>
+
+typedef int BOOL;
+typedef uint8_t u8;
+typedef uint16_t u16;
+#define TRUE 1
+#define FALSE 0
+#define OW_WILD_MAX_SPAWNS 10
+#define OW_WILD_FOLLOWER_SLOT 7
+#define OW_WILD_HELPER_PICKUP_THROW_QUERY_STABLE 1
+#define OW_WILD_DIRECTION_UP 0
+#define OW_WILD_DIRECTION_DOWN 1
+#define OW_WILD_DIRECTION_LEFT 2
+#define OW_WILD_DIRECTION_RIGHT 3
+
+typedef struct LocalMapObject {{ int x; int y; }} LocalMapObject;
+typedef struct PlayerAvatar {{ int x; int y; }} PlayerAvatar;
+typedef struct FieldSystem {{ PlayerAvatar *playerAvatar; }} FieldSystem;
+typedef struct OverworldWildSpawn {{
+    LocalMapObject *object;
+    u8 active;
+}} OverworldWildSpawn;
+typedef struct OverworldWildSpawnState {{
+    OverworldWildSpawn spawns[OW_WILD_MAX_SPAWNS];
+    FieldSystem *movementFieldSystem;
+    u8 movementEmoteTimers[OW_WILD_MAX_SPAWNS];
+    u8 movementPhantomVisiblePause[OW_WILD_MAX_SPAWNS];
+    u16 captureTargetMask;
+}} OverworldWildSpawnState;
+typedef struct OverworldWildThrowState {{
+    u16 targetMask;
+    u16 carrierMask;
+}} OverworldWildThrowState;
+typedef BOOL (*OverworldWildQueryPickupThrowTargetFunc)(
+    OverworldWildSpawnState *, OverworldWildThrowState *, int, int, u8, u16);
+typedef BOOL (*OverworldWildStartSpawnerMovementFunc)(
+    OverworldWildSpawnState *, FieldSystem *, int, const u8 *, int);
+
+static int MapObject_GetCurrentX(LocalMapObject *object) {{ return object->x; }}
+static int MapObject_GetCurrentY(LocalMapObject *object) {{ return object->y; }}
+static int GetPlayerXCoord(PlayerAvatar *avatar) {{ return avatar->x; }}
+static int GetPlayerYCoord(PlayerAvatar *avatar) {{ return avatar->y; }}
+
+{resolver}
+
+static int queryCalls;
+static int startCalls;
+static int lastCarrier;
+static int lastTarget;
+static u16 lastUnstable;
+static int lastSlot;
+static BOOL startResult;
+
+static BOOL Query(OverworldWildSpawnState *state, OverworldWildThrowState *throwState,
+    int carrierSlot, int targetSlot, u8 query, u16 unstableMask)
+{{
+    if (state == 0 || throwState == 0 || query != OW_WILD_HELPER_PICKUP_THROW_QUERY_STABLE)
+        return FALSE;
+    queryCalls++;
+    lastCarrier = carrierSlot;
+    lastTarget = targetSlot;
+    lastUnstable = unstableMask;
+    return TRUE;
+}}
+
+static BOOL Start(OverworldWildSpawnState *state, FieldSystem *fieldSystem,
+    int slot, const u8 *directions, int directionCount)
+{{
+    if (state == 0 || fieldSystem != state->movementFieldSystem
+        || directionCount != 4 || directions[0] != OW_WILD_DIRECTION_UP
+        || directions[1] != OW_WILD_DIRECTION_RIGHT
+        || directions[2] != OW_WILD_DIRECTION_DOWN
+        || directions[3] != OW_WILD_DIRECTION_LEFT)
+        return FALSE;
+    startCalls++;
+    lastSlot = slot;
+    return startResult;
+}}
+
+#define CHECK(value) do {{ if (!(value)) return __LINE__; }} while (0)
+
+static void Reset(OverworldWildSpawnState *state, OverworldWildThrowState *throwState,
+    FieldSystem *fieldSystem)
+{{
+    memset(state, 0, sizeof(*state));
+    memset(throwState, 0, sizeof(*throwState));
+    state->movementFieldSystem = fieldSystem;
+    queryCalls = startCalls = 0;
+    lastCarrier = lastTarget = lastSlot = -1;
+    lastUnstable = 0;
+    startResult = TRUE;
+}}
+
+int main(void)
+{{
+    OverworldWildSpawnState state;
+    OverworldWildThrowState throwState;
+    PlayerAvatar player = {{ 50, 60 }};
+    FieldSystem fieldSystem = {{ &player }};
+    LocalMapObject first = {{ 5, 6 }};
+    LocalMapObject second = {{ 5, 6 }};
+    LocalMapObject playerOverlap = {{ 50, 60 }};
+
+    Reset(&state, &throwState, &fieldSystem);
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(0, &throwState, 0, Query, Start));
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(&state, 0, 0, Query, Start));
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 0, 0, Start));
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 0, Query, 0));
+
+    state.spawns[1].object = &first;
+    state.spawns[1].active = TRUE;
+    state.spawns[2].object = &second;
+    state.spawns[2].active = TRUE;
+    CHECK(OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 0x1234, Query, Start));
+    CHECK(queryCalls == 1 && startCalls == 1 && lastCarrier == 0);
+    CHECK(lastTarget == 1 && lastSlot == 1 && lastUnstable == 0x1234);
+
+    throwState.targetMask = 1u << 1;
+    queryCalls = startCalls = 0;
+    CHECK(OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 7, Query, Start));
+    CHECK(lastTarget == 2 && lastSlot == 2 && queryCalls == 1 && startCalls == 1);
+
+    Reset(&state, &throwState, &fieldSystem);
+    state.spawns[3].object = &playerOverlap;
+    state.spawns[3].active = TRUE;
+    CHECK(OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 9, Query, Start));
+    CHECK(lastSlot == 3);
+
+    Reset(&state, &throwState, &fieldSystem);
+    state.spawns[OW_WILD_FOLLOWER_SLOT].object = &playerOverlap;
+    state.spawns[OW_WILD_FOLLOWER_SLOT].active = TRUE;
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 0, Query, Start));
+    CHECK(startCalls == 0);
+
+    Reset(&state, &throwState, &fieldSystem);
+    state.spawns[1].object = &first;
+    state.spawns[1].active = TRUE;
+    state.spawns[2].object = &second;
+    state.spawns[2].active = TRUE;
+    startResult = FALSE;
+    CHECK(!OverworldWildBehavior_TryResolveOverlap(&state, &throwState, 0, Query, Start));
+    CHECK(startCalls == 2);
+    return 0;
+}}
+"""
+    with tempfile.TemporaryDirectory(prefix="overlap-resolver-fixture-") as root_name:
+        root = Path(root_name)
+        fixture = root / "overlap_resolver_fixture.c"
+        executable = root / "overlap_resolver_fixture"
+        fixture.write_text(harness)
+        subprocess.run(
+            ["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", str(fixture), "-o", str(executable)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run([str(executable)], check=True, capture_output=True, text=True)
+    print("overlap resolver production host fixture: exact")
+
+
 def read_at(image: bytes, address: int, size: int) -> bytes:
     offset = address - ARM9_BASE
     require(offset >= 0 and offset + size <= len(image), f"ARM9 range 0x{address:08X} missing")
@@ -1405,8 +1697,13 @@ def verify_personal_dispatch_sources(repo: Path, patched_arm9: Path | None) -> N
 
 
 def verify_personal_overlay_source_contract(repo: Path) -> None:
+    header = (repo / "include/overworld_wild_behavior_data.h").read_text()
     source = (repo / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c").read_text()
+    spawns_source = (repo / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
     linker = (repo / "src/overworld_wild_behavior_data_overlay/linker.ld").read_text()
+    verify_overlap_resolver_callback_source_contract(header, source)
+    verify_overlap_callback_target_source_contract(spawns_source)
+    verify_overlap_resolver_host_fixture(repo, source)
     for fragment in (
         "#define OW_WILD_PERSONAL_ROW_COUNT (MAX_SPECIES_INCLUDING_FORMS + 1)",
         "#define OW_WILD_PERSONAL_ROW_SIZE 44",
@@ -2673,6 +2970,88 @@ def run_unit_fixtures() -> None:
     require(resolve_stock_personal_species(25, 2) == 25, "stock non-vanilla form fixture differs")
     require(resolve_stock_personal_species(386, 3) == 498, "Deoxys form fixture differs")
     require(resolve_stock_personal_species(386, 4) == 386, "Deoxys invalid-form fixture differs")
+
+    direct_overlap_header = """
+typedef BOOL (*OverworldWildStartSpawnerMovementFunc)(
+    struct OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    const u8 *directions,
+    int directionCount);
+"""
+    direct_overlap_source = """
+static BOOL OverworldWildBehavior_TryResolveOverlap(
+    OverworldWildSpawnState *state);
+static BOOL OverworldWildBehavior_TryResolveOverlap(
+    OverworldWildSpawnState *state)
+{
+    if (occupied
+        && startMovement(
+            state,
+            state->movementFieldSystem,
+            i,
+            directions,
+            4)) {
+        return TRUE;
+    }
+    return FALSE;
+}
+"""
+    verify_overlap_resolver_callback_source_contract(
+        direct_overlap_header,
+        direct_overlap_source,
+    )
+    expect_rejection(
+        lambda: verify_overlap_resolver_callback_source_contract(
+            direct_overlap_header.replace(
+                "int directionCount);",
+                "int directionCount, const OverworldWildBehaviorProfile *profile);",
+            ),
+            direct_overlap_source,
+        ),
+        "overlap callback carrying a legacy profile",
+    )
+    expect_rejection(
+        lambda: verify_overlap_resolver_callback_source_contract(
+            direct_overlap_header,
+            direct_overlap_source.replace("4))", "4, NULL, NULL))"),
+        ),
+        "overlap resolver supplying legacy behavior arguments",
+    )
+    direct_target_source = """
+static BOOL OverworldWildSpawns_TryStartSpawnerMovementCommand(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    const u8 *directions,
+    int directionCount)
+{
+    OverworldWildRuntimeEffectiveCache resolvedCurrent;
+    const OverworldWildRuntimeEffectiveCache *current = &resolvedCurrent;
+    if (!OverworldWildSpawns_GetCurrentBehavior(state, slot, &resolvedCurrent))
+        return FALSE;
+    return current != 0;
+}
+static BOOL Tick(void)
+{
+    return OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY->tryResolve(
+        state,
+        throwState,
+        unstableMask,
+        helperEntry->queryPickupThrowTarget,
+        OverworldWildSpawns_TryStartSpawnerMovementCommand));
+}
+"""
+    verify_overlap_callback_target_source_contract(direct_target_source)
+    expect_rejection(
+        lambda: verify_overlap_callback_target_source_contract(
+            direct_target_source.replace(
+                "int directionCount)\n{",
+                "int directionCount, const void *currentBehavior)\n{",
+            )
+        ),
+        "overlap callback target with a sixth behavior pointer",
+    )
     print("cache verifier unit fixtures: exact")
 
 
@@ -2694,10 +3073,10 @@ def main() -> None:
     repo = args.repo.resolve()
 
     run_unit_fixtures()
+    verify_personal_overlay_source_contract(repo)
     if args.self_test_only:
         return
 
-    verify_personal_overlay_source_contract(repo)
     verify_buildtime_learnset_filter_contract(repo)
     move_layout = derive_authoritative_move_layout(repo)
     verify_production_filter_black_box(repo, move_layout)

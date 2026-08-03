@@ -268,9 +268,19 @@ def VerifyOverworldWildRuntimeOverlay(
         linked_path: str,
         output_path: str,
         packaged_path: str) -> None:
+    production_object = (
+        'build/overworld_wild_runtime_overlay/'
+        'overworld_wild_runtime_overlay.o'
+    )
+    scalar_shard = (
+        'build/overworld_wild_runtime_layers_overlay/'
+        'owbd_v40_scalar_symbols.o'
+    )
     subprocess.check_call([
         sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
         '--binary', output_path, '--overlay', '157',
+        '--production-object', production_object,
+        '--scalar-shard', scalar_shard,
     ])
     with open(output_path, 'rb') as file:
         overlay = file.read()
@@ -305,6 +315,12 @@ def VerifyOverworldWildRuntimeLayersOverlay(
         'owbd_v40_scalar_symbols.o'
     )
     catalog_owner = 'build/overworld_wild_runtime_overlay_linked.o'
+    catalog_carrier = (
+        'build/overworld_wild_runtime_overlay_catalog_symbols.o'
+    )
+    production_object = (
+        'build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o'
+    )
     task8_carrier = (
         'build/overworld_wild_runtime_layers_overlay_task8_symbols.o'
     )
@@ -324,7 +340,9 @@ def VerifyOverworldWildRuntimeLayersOverlay(
         '--lifecycle-object', lifecycle_object,
         '--scalar-shard', scalar_shard,
         '--catalog-owner', catalog_owner,
+        '--catalog-carrier', catalog_carrier,
         '--task8-carrier', task8_carrier,
+        '--production-object', production_object,
         '--runtime-carrier', runtime_carrier,
         '--spawns-consumer', spawns_consumer,
     ])
@@ -345,18 +363,29 @@ def VerifyOverworldWildRuntimeTimersOverlay(
         output_path: str,
         packaged_path: str) -> None:
     layers_owner = 'build/overworld_wild_runtime_layers_overlay_linked.o'
+    catalog_owner = 'build/overworld_wild_runtime_overlay_linked.o'
+    catalog_carrier = (
+        'build/overworld_wild_runtime_overlay_catalog_symbols.o'
+    )
     task8_carrier = (
         'build/overworld_wild_runtime_layers_overlay_task8_symbols.o'
     )
     timer_carrier = (
         'build/overworld_wild_runtime_timers_overlay_timer_symbols.o'
     )
+    timer_object = (
+        'build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o'
+    )
     subprocess.check_call([
         sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
         '--binary', output_path, '--overlay', '159',
         '--layers-owner', layers_owner,
         '--task8-carrier', task8_carrier,
+        '--catalog-owner', catalog_owner,
+        '--catalog-carrier', catalog_carrier,
         '--timer-carrier', timer_carrier,
+        '--timer-object', timer_object,
+        '--production-object', timer_object,
     ])
     with open(output_path, 'rb') as file:
         overlay = file.read()
