@@ -112,6 +112,40 @@ V40_STATE_ROLE_LABELS = {
     6: "Follower",
     7: "Fallback tired",
 }
+V40_NODE_ROLE_LABELS = {
+    1: "Calm", 2: "Active", 3: "Tired", 4: "Asleep",
+    5: "Carried", 6: "Follower", 7: "Custom",
+}
+V40_CONTROLLER_SCALAR_SCHEMA = (
+    ("alertState", "Alert state", "enum", (0, 1, 2), ("None", "Question", "Exclamation")),
+    ("alertEmote", "Alert emote", "enum", (*range(11), 255),
+     (*[f"Emote {value}" for value in range(11)], "None")),
+    ("alertTime", "Alert time", "number", (0, 64), ()),
+    ("alertness", "Alertness", "number", (0, 64), ()),
+    ("alertRange", "Alert range", "enum", tuple(range(6)),
+     ("None", "Adjacent", "Near", "Medium", "Far", "Global")),
+    ("alertChance", "Alert chance", "number", (0, 100), ()),
+    ("stamina", "Stamina", "number", (0, 64), ()),
+    ("restTime", "Rest time", "number", (0, 255), ()),
+)
+V40_TRANSITION_TRIGGER_LABELS = {
+    1: "Alert complete", 2: "Stamina exhausted", 3: "Tired expired",
+    4: "Possession apply", 5: "Possession remove", 6: "Fled",
+    7: "RAM crash", 8: "Throw recovery", 9: "Aggro apply",
+    10: "Help call apply", 11: "Forced sleep apply", 12: "Follower apply",
+    13: "Follower remove",
+}
+V40_SECTION_SPECS = (
+    ("stateBodies", 32), ("profileIdentities", 8), ("controllers", 24),
+    ("controllerNodes", 12), ("sourceClassProfiles", 72),
+    ("genericAssignments", 20), ("speciesAssignments", 8),
+    ("overrideSources", 28), ("overrideMembers", 2), ("overrideActions", 12),
+    ("spawnPolicies", 12), ("populationPolicies", 10), ("hookSets", 8),
+    ("owners", 6), ("overrideDefinitions", 36), ("transitions", 24),
+    ("transitionGuards", 12), ("transitionOperations", 18),
+    ("transitionActions", 10), ("recoveryActions", 8), ("importRecipes", 24),
+    ("applicability", 16), ("tiredTranslations", 24), ("semanticIds", 8),
+)
 V40_STATE_FIELD_SCHEMA = (
     ("behaviorKind", "Behavior", "behavior", "enum", (0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11),
      ("None", "Idle", "Wander", "Chase", "Flee", "Playful", "RAM", "Canopy hop", "Asleep", "Tired emote", "No visual")),
@@ -164,6 +198,59 @@ def _v40_state_field_metadata() -> list[dict]:
     return fields
 
 
+def _v40_typed_field_metadata(schema: tuple) -> list[dict]:
+    fields = []
+    for key, label, kind, domain, labels in schema:
+        item = {"key": key, "label": label, "type": kind}
+        if kind == "number":
+            item.update({"minimum": domain[0], "maximum": domain[1]})
+        else:
+            item["options"] = [
+                {"value": value, "label": option_label}
+                for value, option_label in zip(domain, labels)
+            ]
+        fields.append(item)
+    return fields
+
+
+def _v40_section(blob: bytes, name: str) -> tuple[int, int, int]:
+    try:
+        index = next(index for index, spec in enumerate(V40_SECTION_SPECS) if spec[0] == name)
+    except StopIteration as exc:
+        raise ParseError(f"unknown V40 section: {name}") from exc
+    offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
+    expected_stride = V40_SECTION_SPECS[index][1]
+    if stride != expected_stride or offset < 216 or offset + count * stride > len(blob):
+        raise ParseError(f"V40 {name} section is invalid")
+    return offset, count, stride
+
+
+def _v40_records(blob: bytes, name: str, format_string: str) -> list[tuple]:
+    offset, count, stride = _v40_section(blob, name)
+    if struct.calcsize(format_string) != stride:
+        raise ParseError(f"V40 {name} decoder does not match its wire stride")
+    return [struct.unpack_from(format_string, blob, offset + index * stride) for index in range(count)]
+
+
+def _v40_controller_node_slices(blob: bytes, controller_records: list[tuple]) -> tuple[list[tuple], dict[int, list[tuple]]]:
+    node_records = _v40_records(blob, "controllerNodes", "<4HBBH")
+    claims = [0] * len(node_records)
+    nodes_by_controller = {}
+    for controller_index, controller in enumerate(controller_records):
+        controller_id, node_start, node_count = controller[0], controller[2], controller[3]
+        if node_start > len(node_records) or node_count > len(node_records) - node_start:
+            raise ParseError(f"V40 controller #{controller_index} has an invalid node slice")
+        local_nodes = node_records[node_start:node_start + node_count]
+        if not local_nodes or any(node[1] != controller_id for node in local_nodes):
+            raise ParseError(f"V40 controller #{controller_index} does not own its ordered node slice")
+        for node_index in range(node_start, node_start + node_count):
+            claims[node_index] += 1
+        nodes_by_controller[controller_id] = local_nodes
+    if any(claim != 1 for claim in claims):
+        raise ParseError("V40 controller node slices must claim every node exactly once in serialized order")
+    return node_records, nodes_by_controller
+
+
 def _v40_display_metadata(registry_key: str, stable_id: int, role_label: str) -> tuple[str, list[str]]:
     source = registry_key.removeprefix("authored-profile:")
     parts = [part for part in source.split(":") if part]
@@ -196,9 +283,9 @@ def build_v40_state_profile_editor_data() -> dict:
     if (magic, version, header_size, blob_size) != (0x4F574244, 40, 216, len(blob)):
         raise ParseError("V40 behavior catalog header is invalid")
 
-    body_offset, body_count, body_stride = struct.unpack_from("<IHH", blob, 24)
-    identity_offset, identity_count, identity_stride = struct.unpack_from("<IHH", blob, 32)
-    node_offset, node_count, node_stride = struct.unpack_from("<IHH", blob, 48)
+    body_offset, body_count, body_stride = _v40_section(blob, "stateBodies")
+    identity_offset, identity_count, identity_stride = _v40_section(blob, "profileIdentities")
+    node_offset, node_count, node_stride = _v40_section(blob, "controllerNodes")
     if body_stride != 32 or identity_stride != 8 or node_stride != 12:
         raise ParseError("V40 state-profile section layout is invalid")
 
@@ -207,6 +294,7 @@ def build_v40_state_profile_editor_data() -> dict:
         value: key for key, value in registry.items()
         if key.startswith("authored-profile:")
     }
+    registry_keys = {value: key for key, value in registry.items()}
     bodies = {}
     for index in range(body_count):
         stable_id, role, value_count, values = struct.unpack_from(
@@ -216,17 +304,18 @@ def build_v40_state_profile_editor_data() -> dict:
             raise ParseError(f"V40 state body #{index} is invalid")
         bodies[stable_id] = (role, list(values))
 
+    controller_records = _v40_records(blob, "controllers", "<7H10B")
+    node_records, serialized_node_slices = _v40_controller_node_slices(blob, controller_records)
     usages: dict[int, list[dict]] = {}
-    for index in range(node_count):
-        node_id, controller_id, profile_id, _custom_role, role, flags, reserved = struct.unpack_from(
-            "<4HBBH", blob, node_offset + index * node_stride
-        )
+    for index, (node_id, controller_id, profile_id, custom_role, role, flags, reserved) in enumerate(node_records):
         if reserved:
             raise ParseError(f"V40 controller node #{index} has reserved data")
         usages.setdefault(profile_id, []).append({
             "controllerId": controller_id,
             "nodeId": node_id,
-            "semanticRole": V40_STATE_ROLE_LABELS.get(role, f"Role {role}"),
+            "semanticRole": V40_NODE_ROLE_LABELS.get(role, f"Role {role}"),
+            "semanticRoleId": role,
+            "customRoleId": custom_role or None,
             "base": bool(flags & 1),
         })
 
@@ -259,11 +348,171 @@ def build_v40_state_profile_editor_data() -> dict:
             "backlinks": usages.get(stable_id, []),
         })
 
+    all_controller_ids = [record[0] for record in controller_records]
+    custom_roles = [
+        {"stableId": stable_id, "value": value, "name": f"Custom role {value}"}
+        for stable_id, kind, value, reserved_a, reserved_b in _v40_records(blob, "semanticIds", "<HBBHH")
+        if kind == 2 and not reserved_a and not reserved_b
+    ]
+    nodes_by_controller: dict[int, list[dict]] = {}
+    for controller_id, serialized_nodes in serialized_node_slices.items():
+        nodes_by_controller[controller_id] = []
+        for order, (node_id, owner_id, profile_id, custom_role, role, flags, reserved) in enumerate(serialized_nodes):
+            if reserved or not 1 <= role <= 7:
+                raise ParseError(f"V40 controller {controller_id} node #{order} is invalid")
+            nodes_by_controller[controller_id].append({
+                "stableId": node_id,
+                "controllerId": owner_id,
+                "order": order,
+                "semanticRoleId": role,
+                "semanticRole": V40_NODE_ROLE_LABELS.get(role, f"Role {role}"),
+                "customRoleId": custom_role or None,
+                "profileStableId": profile_id,
+                "base": bool(flags & 1),
+                "optional": bool(flags & 2),
+                "hidden": bool(flags & 4),
+            })
+
+    definitions = {}
+    definition_byte_fields = (
+        "kind", "channel", "selectorKind", "semanticRoleId", "mapLifetime",
+        "battleLifetime", "timerClock", "timerSource", "hiddenTimerPolicy",
+        "recoveryPolicy", "timerValue", "hasTiredOriginKind", "tiredOriginKind",
+        "hasRequiredOwnerId", "allowMultipleOwners", "allowMultipleInstancesPerOwner",
+        "authoredTiredBound", "flags", "reserved0", "reserved1",
+    )
+    for record in _v40_records(blob, "overrideDefinitions", "<8H20B"):
+        definition = {
+            "stableId": record[0], "nameId": record[1], "controllerId": record[2] or None,
+            "nodeId": record[3] or None, "requiredOwnerId": record[4] or None,
+            "recoveryTransitionId": record[5] or None, "applicabilityId": record[6],
+            "priority": record[7],
+        }
+        definition.update(dict(zip(definition_byte_fields, record[8:])))
+        definitions[record[0]] = definition
+
+    guard_records = _v40_records(blob, "transitionGuards", "<HH4BHH")
+    operation_records = _v40_records(blob, "transitionOperations", "<7H4B")
+    action_records = _v40_records(blob, "transitionActions", "<HHBBHH")
+    recovery_records = _v40_records(blob, "recoveryActions", "<HHHBB")
+    transitions = []
+    for record in _v40_records(blob, "transitions", "<9H4BH"):
+        (stable_id, definition_id, owner_id, guard_start, guard_count,
+         operation_start, operation_count, action_start, action_count,
+         trigger, from_role_mask, recovery_start, recovery_count, priority) = record
+        definition = definitions.get(definition_id)
+        if definition is None:
+            raise ParseError(f"V40 transition {stable_id} has an unknown candidate definition")
+        controller_ids = [definition["controllerId"]] if definition["controllerId"] else list(all_controller_ids)
+        transitions.append({
+            "stableId": stable_id,
+            "name": registry_keys.get(stable_id, f"transition:{stable_id}"),
+            "order": len(transitions),
+            "controllerIds": controller_ids,
+            "candidateDefinitionId": definition_id,
+            "candidateDefinition": definition,
+            "ownerId": owner_id,
+            "trigger": trigger,
+            "triggerLabel": V40_TRANSITION_TRIGGER_LABELS.get(trigger, f"Event {trigger}"),
+            "fromRoleMask": from_role_mask,
+            "fromSemanticRoleIds": [role for role in range(1, 8) if from_role_mask & (1 << (role - 1))],
+            "dispatchPriority": priority,
+            "guards": [
+                {"stableId": child[0], "kind": child[2], "negate": bool(child[3]),
+                 "payload": child[4], "referenceId": child[6] or None}
+                for child in guard_records[guard_start:guard_start + guard_count]
+            ],
+            "operations": [
+                {"stableId": child[0], "definitionId": child[2] or None,
+                 "ownerId": child[3] or None, "replacementDefinitionId": child[4] or None,
+                 "policyId": child[5] or None, "instanceKey": child[6] or None,
+                 "kind": child[7], "busyPolicy": child[8], "required": bool(child[9])}
+                for child in operation_records[operation_start:operation_start + operation_count]
+            ],
+            "actions": [
+                {"stableId": child[0], "phase": child[2], "kind": child[3],
+                 "referenceId": child[4] or None, "payload": child[5]}
+                for child in action_records[action_start:action_start + action_count]
+            ],
+            "recoveryActions": [
+                {"stableId": child[0], "ownerId": child[2], "kind": child[3],
+                 "required": bool(child[4])}
+                for child in recovery_records[recovery_start:recovery_start + recovery_count]
+            ],
+        })
+
+    controllers = []
+    scalar_keys = [field[0] for field in V40_CONTROLLER_SCALAR_SCHEMA]
+    for index, record in enumerate(controller_records):
+        (stable_id, name_id, node_start, node_count, spawn_policy_id,
+         population_policy_id, hook_set_id, *scalar_and_flags) = record
+        local_nodes = nodes_by_controller[stable_id]
+        if node_count != len(local_nodes):
+            raise ParseError(f"V40 controller #{index} node count changed after slice validation")
+        base_nodes = [node["stableId"] for node in local_nodes if node["base"]]
+        if len(base_nodes) != 1:
+            raise ParseError(f"V40 controller #{index} must have exactly one base node")
+        controllers.append({
+            "stableId": stable_id,
+            "nameId": name_id,
+            "name": f"Controller {index + 1}",
+            "registryKey": registry_keys.get(stable_id, ""),
+            "baseNodeId": base_nodes[0],
+            "nodes": local_nodes,
+            "scalarDefaults": dict(zip(scalar_keys, scalar_and_flags[:8])),
+            "policyIds": {
+                "spawnPolicyId": spawn_policy_id,
+                "populationPolicyId": population_policy_id,
+                "hookSetId": hook_set_id,
+            },
+            "transitionIds": [
+                transition["stableId"] for transition in transitions
+                if stable_id in transition["controllerIds"]
+            ],
+        })
+
+    policy_catalog = {
+        "spawnPolicies": [
+            {"stableId": record[0], "name": registry_keys.get(record[0], f"Spawn policy {record[0]}"),
+             "provenanceId": record[2], "spawnState": record[3], "destination": record[4],
+             "minimumDistance": record[5], "maximumDistance": record[6],
+             "spawnHopTime": record[7], "flags": record[8]}
+            for record in _v40_records(blob, "spawnPolicies", "<3H6B")
+        ],
+        "populationPolicies": [
+            {"stableId": record[0], "name": registry_keys.get(record[0], f"Population policy {record[0]}"),
+             "populationGroupId": record[2], "provenanceId": record[3],
+             "limit": record[4], "flags": record[5]}
+            for record in _v40_records(blob, "populationPolicies", "<4H2B")
+        ],
+        "hookSets": [
+            {"stableId": record[0], "name": registry_keys.get(record[0], f"Hook set {record[0]}"),
+             "helpCallInvocation": record[2], "pickupThrowEntry": record[3],
+             "pickupThrowActiveLoop": record[4], "flags": record[5]}
+            for record in _v40_records(blob, "hookSets", "<2H4B")
+        ],
+    }
+
     return {
         "modelVersion": 40,
-        "entityType": "stateProfile",
+        "entityType": "behaviorModel",
         "stateProfiles": sorted(profiles, key=lambda profile: profile["stableId"]),
         "stateProfileFields": _v40_state_field_metadata(),
+        "controllers": controllers,
+        "controllerScalarFields": _v40_typed_field_metadata(V40_CONTROLLER_SCALAR_SCHEMA),
+        "semanticRoles": [
+            {"value": role, "label": V40_NODE_ROLE_LABELS[role], "custom": role == 7}
+            for role in sorted(V40_NODE_ROLE_LABELS)
+        ],
+        "customRoles": custom_roles,
+        "policyCatalog": policy_catalog,
+        "transitionGraph": {
+            "transitions": transitions,
+            "triggerOptions": [
+                {"value": value, "label": label}
+                for value, label in V40_TRANSITION_TRIGGER_LABELS.items()
+            ],
+        },
         "groups": [
             {"key": key, "label": label}
             for key, label in (

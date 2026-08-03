@@ -68,6 +68,71 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
                 self.assertGreater(backlink["nodeId"], 0)
                 self.assertIn("semanticRole", backlink)
 
+    def test_controllers_expose_exact_typed_rosters_and_policy_defaults(self):
+        self.assertEqual(len(self.data["controllers"]), 3)
+        first = self.data["controllers"][0]
+        self.assertEqual(first["stableId"], 12289)
+        self.assertEqual(first["baseNodeId"], 12545)
+        self.assertEqual(len(first["nodes"]), 7)
+        self.assertEqual(sum(node["base"] for node in first["nodes"]), 1)
+        self.assertEqual(
+            first["scalarDefaults"],
+            {"alertState": 2, "alertEmote": 7, "alertTime": 10, "alertness": 3,
+             "alertRange": 2, "alertChance": 100, "stamina": 20, "restTime": 10},
+        )
+        self.assertEqual(first["policyIds"], {
+            "spawnPolicyId": 16385,
+            "populationPolicyId": 16641,
+            "hookSetId": 16897,
+        })
+        self.assertEqual(
+            len({node["semanticRoleId"] for node in first["nodes"]}),
+            len(first["nodes"]),
+        )
+        self.assertNotIn("semanticRole", self.data["stateProfiles"][0])
+
+    def test_transition_graph_preserves_exact_v40_rows_and_child_slices(self):
+        transitions = self.data["transitionGraph"]["transitions"]
+        self.assertEqual(len(transitions), 26)
+        first = transitions[0]
+        self.assertEqual(first["stableId"], 40961)
+        self.assertEqual(first["trigger"], 1)
+        self.assertEqual(first["fromRoleMask"], 0x7F)
+        self.assertEqual(first["dispatchPriority"], 0x2000)
+        self.assertEqual(first["controllerIds"], [12289, 12290, 12291])
+        self.assertEqual((len(first["guards"]), len(first["operations"]), len(first["actions"])), (1, 1, 3))
+        scoped = transitions[-1]
+        self.assertEqual(scoped["controllerIds"], [12291])
+        self.assertEqual(scoped["candidateDefinition"]["semanticRoleId"], 0)
+        self.assertTrue(all(len(controller["transitionIds"]) == 20 for controller in self.data["controllers"]))
+
+    def test_controller_node_slices_reject_bounds_overlap_and_wrong_owner(self):
+        module = load_viewer()
+        byte_values = module.re.findall(
+            r"\b0x([0-9A-Fa-f]{2})\b",
+            module.V40_BEHAVIOR_DATA_SOURCE.read_text(),
+        )
+        blob = bytes(int(value, 16) for value in byte_values)
+        controllers = module._v40_records(blob, "controllers", "<7H10B")
+        nodes, slices = module._v40_controller_node_slices(blob, controllers)
+        self.assertEqual([node[0] for node in slices[12289]], [node[0] for node in nodes[:7]])
+
+        out_of_bounds = [tuple(record) for record in controllers]
+        out_of_bounds[0] = (*out_of_bounds[0][:2], len(nodes), 1, *out_of_bounds[0][4:])
+        with self.assertRaises(module.ParseError):
+            module._v40_controller_node_slices(blob, out_of_bounds)
+
+        wrong_owner = bytearray(blob)
+        node_offset, _, _ = module._v40_section(blob, "controllerNodes")
+        module.struct.pack_into("<H", wrong_owner, node_offset + 2, 12290)
+        with self.assertRaises(module.ParseError):
+            module._v40_controller_node_slices(bytes(wrong_owner), controllers)
+
+        overlap = [tuple(record) for record in controllers]
+        overlap[1] = (*overlap[1][:2], 0, overlap[1][3], *overlap[1][4:])
+        with self.assertRaises(module.ParseError):
+            module._v40_controller_node_slices(blob, overlap)
+
 
 if __name__ == "__main__":
     unittest.main()

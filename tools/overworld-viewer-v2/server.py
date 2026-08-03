@@ -217,6 +217,8 @@ class V2ViewerHandler(legacy.ViewerHandler):
                             "available": True,
                             "modelVersion": behavior_model["modelVersion"],
                             "stateProfileCount": len(behavior_model["stateProfiles"]),
+                            "controllerCount": len(behavior_model["controllers"]),
+                            "transitionCount": len(behavior_model["transitionGraph"]["transitions"]),
                         }
                     except Exception as exc:
                         # V40 profile availability is independent from the
