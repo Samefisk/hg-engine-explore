@@ -2,13 +2,34 @@
 
 ## Status
 
-Accepted as the implementation contract for `feature/stackable-state-profiles`.
+Implemented on `feature/stackable-state-profiles`. This is the authoritative V40
+runtime, data, and editor contract.
 
-This document freezes the behavior model before the runtime, data format, migration, and editor are changed. Names in the eventual C implementation may differ, but implementations must preserve the semantics and invariants below.
+The one-time V39 derivation is retained below as historical rationale and parity
+evidence only. It is not a reader, writer, projection, or compatibility contract.
+Production and editor code read and write V40 directly; there is no legacy schema
+window and no behavior projection in NARC member 21.
+
+## Implemented Result
+
+- Each state profile is one complete state. Controllers and stackable override
+  definitions select states and apply independently owned effects; removing one
+  override recomposes from the remaining stack.
+- V40 is a single canonical, checked model. Its runtime bundle is 11,340 bytes,
+  including a fixed 208-byte section header, with catalog CRC `0x64D0FC6E` and
+  schema fingerprint `0x5C5FBF57`.
+- Removing the 3,416-byte projection/member-21 payload reduced the combined
+  runtime behavior bundle from 15,052 to 11,340 bytes: 3,712 bytes saved
+  (24.7%). The completed V39/projection cleanup removed 513,227 net tracked
+  bytes from the feature worktree.
+- The final physical overlay headroom is `0xC4` bytes for overlay 149 and
+  `0xA0` bytes for overlay 158. Overlay 158 reserves `0x80`, leaving a protected
+  usable margin of `0x20` bytes.
 
 ## Decision
 
-The current 72-byte `OverworldWildBehaviorProfile` will be replaced by a typed model with five independent concerns:
+The former 72-byte `OverworldWildBehaviorProfile` is replaced by a typed model
+with five independent concerns:
 
 1. A **state profile** describes one complete, runnable overworld behavior state.
 2. A **controller** owns the initial state, transition graph, alert policy, stamina policy, and recovery policy.
@@ -31,9 +52,9 @@ controller base state
 
 The runtime must never undo a layer by applying an inverse operation. Removal always recomposes from immutable source data and all remaining layers.
 
-## Why the Current Shape Must Change
+## Historical Rationale: Why the V39 Shape Changed
 
-`OverworldWildBehaviorProfile` currently stores 72 one-byte fields. It combines:
+`OverworldWildBehaviorProfile` stored 72 one-byte fields. It combined:
 
 - Three behavior states: chill, attentive/active, and tired.
 - Alert presentation and detection.
@@ -41,11 +62,21 @@ The runtime must never undo a layer by applying an inverse operation. Removal al
 - Spawn placement and spawn animation.
 - Population limiting.
 - Per-state locomotion parameters.
-- A numeric `profileId` that has no current runtime reader.
+- A numeric `profileId` that had no runtime reader.
 
-Runtime state is held separately in `movementSpotStates`, where `CHILL`, `ACTIVE`, and `TIRED` select different fields in the same flattened profile. `EMOTING` is an intermediate presentation phase. Tired is not presently an applied override: entering tired changes `movementSpotStates`, after which the tired-prefixed fields are read from the same resolved profile. Picked-up behavior replaces `movementBehaviorClasses`, and the follower path suppresses one matching static override by index. These are the behaviors the new model must replace, not mechanisms to preserve.
+Runtime state was held separately in `movementSpotStates`, where `CHILL`,
+`ACTIVE`, and `TIRED` selected different fields in the same flattened profile.
+`EMOTING` was an intermediate presentation phase. Tired changed that byte and
+then read tired-prefixed fields from the same resolved profile; pickup replaced
+`movementBehaviorClasses`, and follower logic suppressed a static override by
+array index. These behaviors informed the one-time V40 derivation, but none of
+those storage mechanisms remains an active compatibility surface.
 
-The current static resolver already demonstrates useful composition rules: it starts with a class profile, applies all matching overrides in authored order, supports exact, relative, minimum, and maximum operations, and normalizes once after the fold. The new design retains recomposition and explicit operators while removing array-order identity and the three-state record shape.
+The V39 static resolver demonstrated useful composition rules: it started with a
+class profile, applied all matching overrides in authored order, supported exact,
+relative, minimum, and maximum operations, and normalized once after the fold.
+V40 retains recomposition and explicit operators while removing array-order
+identity and the three-state record shape.
 
 ## Goals
 
@@ -56,13 +87,15 @@ The current static resolver already demonstrates useful composition rules: it st
 - Give every layer an explicit owner and a stale-safe removal handle.
 - Keep spawn, population, membership, and transition topology outside ordinary runtime modifiers.
 - Avoid heap allocation and table scans in the frame movement hot path.
-- Preserve the behavior of all current profile fields through deterministic migration.
+- Preserve observable V39 behavior through the completed, deterministic one-time
+  V40 derivation; do not preserve the V39 schema or its storage layout.
 - Give the editor enough typed metadata to create states, controllers, transitions, and modifiers without understanding C layout.
 
 ## Non-goals
 
 - This ADR does not freeze the visual layout of the profile editor.
-- This ADR does not assign the next behavior blob version or exact serialized offsets.
+- This ADR does not promise that later schema versions will retain V40 byte
+  offsets; V40 itself has a fixed, validated 208-byte section header.
 - This ADR does not make arbitrary script callbacks authorable from data.
 - This ADR does not persist transient wild-Pokemon runtime layers in save data.
 - This ADR does not make presentation phases such as alert emotes into behavior states.
@@ -213,7 +246,9 @@ typedef struct OverworldWildRuntimeLayer {
 } OverworldWildRuntimeLayer;
 ```
 
-The exact packing may change after overlay measurement. `Apply`/`Replace` accepts no origin or authorization override: before idempotency, collision, or multiplicity shortcuts, preflight validates both canonical definition pairs, requires the operation owner to equal `requiredOwnerId` when its tag is present, and copies both pairs into the prospective runtime layer. Failure is `OWNER_NOT_AUTHORIZED` or `INVALID_GENERATED_WRAPPER` and changes nothing. Imperative routes must select a wrapper whose present origin and required owner match the route/recovery family; stamina copies the absent origin plus required `stamina` owner and bypasses all imperative translation. Public `Replace` may cross between generated tired wrappers only when old/new required-owner and origin pairs are byte-identical; generated↔ordinary or different-origin/owner-family replacement returns `GENERATED_WRAPPER_FAMILY_MISMATCH`. Authenticated retained-context translation is the sole internal exception: it may switch the same-origin semantic/exact wrapper while preserving owner, both generated metadata pairs, handle/timer identity, and remaining time. The semantic key remains `(ownerId, instanceKey)`, and `entryGeneration` protects handles from replacement and reuse.
+The checked implementation packs this identity into the fixed runtime sidecar;
+its exact layout is guarded by compile-time and overlay-size checks.
+`Apply`/`Replace` accepts no origin or authorization override: before idempotency, collision, or multiplicity shortcuts, preflight validates both canonical definition pairs, requires the operation owner to equal `requiredOwnerId` when its tag is present, and copies both pairs into the prospective runtime layer. Failure is `OWNER_NOT_AUTHORIZED` or `INVALID_GENERATED_WRAPPER` and changes nothing. Imperative routes must select a wrapper whose present origin and required owner match the route/recovery family; stamina copies the absent origin plus required `stamina` owner and bypasses all imperative translation. Public `Replace` may cross between generated tired wrappers only when old/new required-owner and origin pairs are byte-identical; generated↔ordinary or different-origin/owner-family replacement returns `GENERATED_WRAPPER_FAMILY_MISMATCH`. Authenticated retained-context translation is the sole internal exception: it may switch the same-origin semantic/exact wrapper while preserving owner, both generated metadata pairs, handle/timer identity, and remaining time. The semantic key remains `(ownerId, instanceKey)`, and `entryGeneration` protects handles from replacement and reuse.
 
 ### Owner
 
@@ -242,7 +277,12 @@ After the state winner is selected, every applicable modifier is folded over tha
 
 The authoritative runtime state identity is `(effectiveControllerId, effectiveNodeId, effectiveStateProfileId, effectiveSemanticRole)`. There is no second mutable `CHILL`/`ACTIVE`/`TIRED` enum that can disagree with it.
 
-`EMOTING` remains a presentation phase with a recorded pending target transition. It never participates in state precedence and never selects a separate behavior profile.
+The former mechanical `movementSpotStates` byte was removed. Its only remaining
+purpose was presentation, so the implementation names it
+`movementPresentationStates` and exposes the typed
+`OverworldWildMovementPresentationState` API (`NONE` or `SPOT_EMOTE`). This byte
+never selects behavior, participates in precedence, or identifies a state
+profile; authoritative behavior comes exclusively from the composed V40 stack.
 
 ## Channels and Deterministic Precedence
 
@@ -543,9 +583,16 @@ The current asleep repair rules must not survive as hidden behavior mutation. As
 
 Corrupt loaded data rejects the behavior blob and activates the existing known-safe fallback. Corruption discovered in a runtime delta rejects that delta. Defensive fallback must increment diagnostics and is not a substitute for authoring validation.
 
-## Field Taxonomy for the Current 72-Byte Profile
+## Historical V39 Field Taxonomy
 
-Every current `OverworldWildBehaviorProfile` field is assigned below. “Numeric” means `SET`, relative, and bounded operations are eligible subject to field-domain metadata. “Exact” means `SET` only. “Forbidden” means an ordinary runtime modifier cannot address the field.
+This taxonomy records how the former 72-byte record was interpreted during the
+one-time derivation. It is parity evidence, not a V39 runtime representation and
+not a requirement to preserve legacy fields in V40 authoring.
+
+Every former `OverworldWildBehaviorProfile` field is assigned below. “Numeric”
+means `SET`, relative, and bounded operations are eligible subject to field-domain
+metadata. “Exact” means `SET` only. “Forbidden” means an ordinary runtime
+modifier cannot address the field.
 
 | Current field(s) | New owner and field | Runtime modifier | Migration rule |
 |---|---|---|---|
@@ -559,7 +606,7 @@ Every current `OverworldWildBehaviorProfile` field is assigned below. “Numeric
 | `chillSpeed`, `attentiveSpeed`, `tiredSpeed` | State profile `speed` | Numeric | Copy the corresponding value into each generated state profile. |
 | `range` | State profile `movementRange` | Numeric | Copy into every generated state profile. A changed effective value must reconcile map-object X/Y range. |
 | `jumpLevel` | State profile `jumpLevel` | Exact | Copy into every generated state profile. |
-| `profileId` | Retired legacy identity | Forbidden | Replace with stable entity IDs and explicit controller/population IDs. It currently has no runtime reader. |
+| `profileId` | Retired legacy identity | Forbidden | Replaced by stable entity IDs and explicit controller/population IDs; it had no V39 runtime reader. |
 | `spawnState` | Spawn policy `presentation` | Forbidden | Copy once to the controller's spawn policy. |
 | `chillAction`, `movementStyle`, `specialAction` | State profile `locomotion` | Exact | Map chill, attentive, and tired values respectively. |
 | `chillTarget`, `targetSelector` | State profile `target` | Exact | Map chill and attentive values. Generate tired target from the same behavior-kind derivation used by the current primitive resolver. |
@@ -1000,7 +1047,7 @@ The runtime and validator must enforce all of the following:
 26. All BUSY/error decisions precede transition side effects, and every post-point-of-no-return required operation is infallible; rollback is not a permitted post-PONR strategy.
 27. Transition guards in one dispatch pass read one immutable snapshot and only the highest deterministic matching row commits.
 28. Idempotent, rejected, stale, BUSY, and no-guard-match requests do not change generations.
-29. The checked-in verifier invocation is exactly `python3 scripts/verify_overworld_wild_state_access.py`, with no mutable command-line allowlist. Its legacy writer allowlist for `OverworldWildSpawnState.movementSpotStates` is empty. If the compatibility field is retained, its frozen name is `movementSpotStateCompatibilityMirror` and its sole writer-symbol allowlist is exactly `{OverworldWildStateOrchestrator_PublishCompatibilityMirror}`. Makefile/CI invokes that exact no-argument command. The verifier fails closed on parse/type-resolution failure, a missing audited source path, missing/duplicate allowed symbol, address/alias escape, compound/inc/dec, macro/cast/helper-mediated store, or `memcpy`/`memset`/whole-struct mutation. A regex remains smoke-only.
+29. The checked-in live-runtime verifier rejects presentation data as behavior authority. `movementPresentationStates` is byte-sized for ABI stability, is accessed only through the typed `OverworldWildSpawns_GetMovementPresentationState`/`OverworldWildSpawns_SetMovementPresentationState` boundary, and has no `CHILL`/`ACTIVE`/`TIRED` compatibility values. The source mutation fixtures reject direct field access and numeric presentation comparisons.
 
 ## Validation Requirements
 
@@ -1046,11 +1093,18 @@ The generated data validator and editor must reject:
 - Duplicate static action IDs or static action tuples whose complete ordering key is equal.
 - Definitions retained by shallow controller duplication when they contain controller-local exact selectors, node/owner/action IDs, backlinks, or controller applicability; such definitions must be cloned/remapped or the operation must require deep copy.
 
-The editor may warn rather than reject deterministic equal-priority conflicts, unreachable states, and missing recovery paths, but migration commit must block on behavioral parity failures.
+The editor may warn rather than reject deterministic equal-priority conflicts,
+unreachable states, and missing recovery paths. Global Save blocks on material
+whole-graph validation failures before writing V40 source or generated data.
 
-## Migration Constraints
+## Historical One-Time V39 Derivation
 
-Migration from behavior data version 39 must be deterministic and initially one-to-one:
+The rules in this section document how the checked-in V40 model was originally
+derived and parity-checked. The derivation is complete. These rules do not
+authorize a V39 runtime reader, V39 writer, projection generator, member-21
+payload, or dual-schema compatibility window.
+
+The version-39 derivation was deterministic and initially one-to-one:
 
 - Each assignable legacy class profile produces a controller with a bound `CALM` node and optional `ATTENTIVE`/authored-`TIRED` roster nodes, plus separate complete state profiles, spawn policy, and population policy. A legacy `NONE` behavior leaves the authored optional node unbound; a matching kind override may bind/enable it, and a later `NONE` kind write unbinds it. The separately generated `CUSTOM/FALLBACK_TIRED` node remains exact-route-only for the imperative routes defined above.
 - `OW_WILD_BEHAVIOR_CLASS_PICKED_UP` is exempt from that ordinary class/controller import. Resolve its class profile exactly as source does—skip **all** ordinary override rows—project its chill fields into one non-AI complete `CARRIED` system profile, and generate the `POSSESSION` candidate wrapper used by pickup. Do not generate a spawn assignment, population identity, or ordinary static-rule target for the pseudo-class. Import the controller-local `CARRIED` node/reference into each pickup-compatible controller with deterministic IDs derived from `(controllerStableId, carried-templateStableId)`.
@@ -1067,8 +1121,9 @@ Migration from behavior data version 39 must be deterministic and initially one-
 - Overlapping matches all remain active. Controller assignment chooses one explicit winner; role bindings choose the last explicit priority; modifiers all fold ascending. Nothing relies on serialized order after migration.
 - `profileId` is not reused as a stable entity ID unless the migration can prove uniqueness and semantics; generated stable IDs are preferred.
 - Follower, picked-up, forced-asleep, phantom, canopy, RAM, playful, and aggressive families receive explicit parity fixtures.
-- The first migration does not deduplicate apparently identical state profiles. Deduplication is a reviewed follow-up after parity.
-- The legacy and new schemas may be read during a compatibility window, but only one schema is writable.
+- The one-time derivation did not deduplicate apparently identical state profiles;
+  V40-native cleanup may now deduplicate only when stable identity and behavior
+  remain explicit.
 
 The special imports are deterministic and bypass generic static matching only through these named recipes:
 
@@ -1080,66 +1135,65 @@ The special imports are deterministic and bypass generic static matching only th
 
 Generated priority values above are stored definition data, not caller-supplied priority. Generated stable IDs and controller-local node/profile IDs come from a deterministic migration namespace keyed by `(legacyDataVersion, controllerStableId, importedFamily, role)`; serialized array position is not identity.
 
-For every golden context, migration first runs the version-39 resolver to a fully normalized 72-byte result and records the legacy behavior-limit key. It then resolves the generated controller, node bindings, modifiers, spawn policy, and population policy and compares the split result role by role. A kind-binding variant begins from its class role's complete state values; all matching non-kind modifiers are then folded over the winning binding, so an earlier speed write survives a later kind write exactly as it did in the flat resolver.
+For every golden context, the derivation first ran the version-39 resolver to a
+fully normalized 72-byte result and recorded the legacy behavior-limit key. It
+then resolved the generated controller, node bindings, modifiers, spawn policy,
+and population policy and compared the split result role by role. A kind-binding
+variant began from its class role's complete state values; all matching non-kind
+modifiers were then folded over the winning binding, so an earlier speed write
+survived a later kind write exactly as it did in the flat resolver.
 
-The old-versus-new oracle must compare effective fields, derived primitives, spawn behavior, transition results, population grouping, typed hooks, and special-family side effects across contexts and event sequences. `attentiveAvoidPreviousTile` is compared by observed behavior, not dead-byte equality, using the derivation in the taxonomy.
+The retired old-versus-new oracle compared effective fields, derived primitives,
+spawn behavior, transition results, population grouping, typed hooks, and
+special-family side effects across contexts and event sequences.
+`attentiveAvoidPreviousTile` was compared by observed behavior, not dead-byte
+equality, using the taxonomy above. Runtime validation now targets only the
+canonical V40 model and blob.
 
-## Editor Contract Implied by This ADR
+## Implemented V40 Editor Contract
 
-The editor exposes separate libraries for state profiles, controllers, candidate wrappers, modifiers, spawn policies, population policies, controller-hook sets, and static rules while presenting a guided “behavior set” workflow for ordinary authors.
+The profile deck is now a one-state editor. A profile create or duplicate operation
+produces one complete typed state with no chill/active/tired tabs and no inherited
+values. Fields are grouped by behavior, locomotion, target, surfaces, speed/range,
+hop, teleport, RAM/chain, battle, and advanced capabilities. Descriptive tags and
+names are presentation/search metadata only.
 
-The generic state editor edits one complete state with no chill/active/tired tabs and no `Inherit` values. It groups behavior, locomotion, target, tiles/surfaces, speed/range, hop, teleport, RAM/chain, battle, and advanced capability fields. The modifier editor is distinct: untouched fields inherit, touched fields choose a legal typed operator, and it exposes applicability, channel, priority, multiplicity, map/battle lifetime, and conflict provenance.
+The controller editor creates and duplicates typed controllers in the same V40
+draft graph. It exposes the controller-local node roster, semantic role, profile
+binding, base-node selection, scalar defaults, policies, transitions, guards,
+stack operations, transition actions, recovery actions, and the candidate
+definition's applicability, priority, multiplicity, lifetime, and timer fields.
+Adding a transition also creates its owned draft candidate definition and
+applicability record, so authors do not need to manage a second hidden state
+record manually.
 
-The controller editor contains an accessible state roster with node ID, semantic role, bound profile, base-node selection, and usage backlinks. Nodes do not own candidate timers or recovery. Timer clock/source/hidden policy and recovery actions belong to the transition-owned candidate wrapper, so two transitions selecting one node may have different owners and timer behavior. The keyboard-accessible transition table is authoritative and exposes from-role mask, event, guard, dispatch priority, owner/instance key, atomic actions, wrapper/timer/recovery metadata, BUSY policy, and typed invocation hooks. A derived graph may aid navigation but cannot contain data absent from the table.
+Draft identity is `draft:<uuid>` and never a display name or array index. Global
+Save validates the complete graph, allocates persistent stable IDs, returns the
+draft-to-persistent map, and atomically rewrites the canonical JSON, generated
+blob include, and checked constants header. A source-revision conflict or any
+validation/write/reparse failure leaves the saved model unchanged and preserves
+the editor draft for correction. There are no V39 save endpoints.
 
-Every saved entity follows this create/update/delete contract. Create allocates a collision-proof draft ID and all required fields/references in the draft graph. Update preserves stable identity and applies only through Global Save. Delete is blocked while backlinks remain unless the same model transaction replaces/removes every backlink; array reordering alone never changes semantics.
+Deletion is reference-safe. The UI refuses state-profile deletion when the
+authoritative controller-node backlink index is missing or nonempty. The writer
+also validates the whole prospective graph, so controller, transition, owned
+definition/applicability, and other removals cannot commit with dangling
+backlinks. Reordering edits explicit order/priority values; it does not change
+stable identity.
 
-| Saved entity | Create/update contract | Delete contract | Complete Behavior Set |
-|---|---|---|---|
-| State profile | Create only a complete runnable record. Update validates every field and all consumers against the same draft revision. | Block while any controller node or materialized preview references it; “Replace references with…” is atomic. | Creates three distinct complete profiles for calm/active/tired; no deduplication. |
-| Controller, local node, transition row, and action | Controller create requires a bound base node, valid spawn/population references, unique local node/row/action IDs, total selectors, and closed-union actions. Updating a transition-owned candidate action updates its exclusively owned wrapper in the same transaction. | Controller deletion is blocked by assignment/static-rule backlinks. Removing a node/row/action is blocked by local and external references; removing an owning action cascade-deletes only its exclusively owned hidden wrapper. | Creates one controller, three nodes, awareness/exhaustion/recovery rows/actions, and their owner references. |
-| State-candidate definition/owned wrapper | Independent advanced create is allowed only for a visible shared definition. A hidden transition-owned wrapper is created/updated only through its owning action and contains selector, channel/priority, multiplicity, lifetime, timer, and recovery metadata. Generated tired wrappers additionally serialize read-only origin/required-owner metadata: imperative wrappers carry their exact pair, while stamina carries absent origin plus required `stamina`. Ordinary definitions show canonical absence and remain owner-unconstrained. | Shared definitions are backlink-blocked. An exclusively owned hidden wrapper is deleted atomically with its owning action and cannot be independently deleted. Generated authorization metadata cannot be independently edited, redirected, or deleted. | Creates active and tired wrappers and assigns each to the corresponding transition action; it creates no free-floating unused wrapper. |
-| Modifier definition | Create/update exposes typed patch operators, applicability, precedence, multiplicity, and lifetime; forbidden/state-identity fields never appear. | Backlink-blocked with atomic reference replacement. | Not created by the basic calm/active/tired set unless the selected template explicitly previews one. |
-| Spawn policy | Create/update validates complete placement/presentation data. | Block while referenced by a controller or static binding. | Creates one and assigns it to the new controller. |
-| Population policy | Create/update validates the limit and stable population-group ID. | Block while referenced by a controller/static binding or retained saved-source graph. | Creates one and assigns it to the new controller. |
-| Controller-hook set | Create/update requires one complete typed hook set; empty is an explicit valid set, and updating it never merges callbacks field by field. | Block while referenced by a controller or `BIND_HOOK_SET`; replacement of every backlink plus deletion is atomic. | Creates and assigns the selected template's complete set when the template declares hooks; otherwise assigns the explicit empty set. |
-| Static rule and typed action | Create requires immutable match criteria, explicit priority, stable action IDs, and one closed-union action per row. Update preserves rule/action identity; drag operations edit explicit priorities only. | Block while a referenced target would dangle; deleting an assignment never implicitly deletes its controller. | Does not silently assign. If the author supplies match criteria and explicit assignment priority in the wizard, creates exactly one previewed `ASSIGN_CONTROLLER` action in the same transaction; otherwise the set remains an unassigned library object. |
+The deterministic client preview supports Saved, Draft, and Saved ↔ Draft modes.
+It resolves entity context once, orders state candidates by
+`(channel, priority, definitionStableId, ownerId, instanceKey)`, displays the
+winning and hidden layers with provenance, and replays bounded transition-event
+sequences. Frame/movement timers, hidden-timer policy, presentation clock gates,
+expiry, and recovery-transition batches are modeled without writing files.
+Modifier layers are deliberately rejected with `MODIFIER_PREVIEW_UNSUPPORTED`
+rather than approximated; authoritative modifier composition remains a runtime
+and validator responsibility.
 
-Creating a calm/active/tired behavior set atomically creates:
+## Implemented Cross-Overlay ABI Gates
 
-- One controller.
-- Three complete state profiles.
-- State-candidate definitions for active and tired.
-- Awareness, exhaustion, and recovery transitions with stable owners.
-- One spawn policy and one population policy.
-- Optionally, exactly one explicit controller-assignment rule/action when the wizard was given match criteria and priority; never an implicit assignment.
-
-Creation templates are data-driven and include at least bird wander/chase/tired, bird wander/flee/tired, ground wander/RAM/tired, playful, phantom, canopy hopper, and stationary/asleep. The wizard can create State, Controller, Modifier, or Complete Behavior Set and previews every record and reference it will add.
-
-Duplication has frozen meanings:
-
-- **Shallow state:** duplicate only the selected complete state profile.
-- **Shallow controller:** allocate fresh controller, local-node, transition-row, action, and exclusively owned hidden-wrapper draft IDs. Remap the base-node ID, every row-local node reference, every exact selector to `(newControllerId,newNodeId)`, every controller applicability reference, and every wrapper/action backlink. Generated exact fallback wrappers, fallback-node bindings, and internal `(tiredOriginKind,destinationController,authoredTiredBound)` translation rows are controller-local and always regenerate/remap together: origin tags, fixed required system owner IDs, and frozen `FALSE/FALSE` multiplicity copy unchanged, while controller/node/wrapper target IDs are remapped; a regenerated destination with different generated authorization/multiplicity is invalid. A retained shared reference is legal only when the referenced definition is portable semantic data: it uses semantic selectors and contains no controller-local exact selector, controller-local owner, local-node ID, local action/wrapper backlink, or controller applicability constraint. Fixed required system-owner metadata is portable only with its complete generated wrapper family and does not become a remappable controller-local owner. Any definition containing a local reference must be cloned/remapped into the shallow closure; if its ownership/backlinks cannot be cloned without a larger closure, shallow duplication is blocked and the editor requires deep copy. State profiles, portable visible/shared modifiers, spawn policy, population policy, and portable shared definitions may remain shared. Static rules are not copied. Stable system owner constants, including generated `requiredOwnerId`, stay unchanged; controller-local authored owner IDs are remapped.
-- **Deep controller:** perform the shallow clone, then duplicate the fixed selected closure of linked node profiles, owned candidate wrappers/timer/recovery metadata, spawn policy, population policy, and any explicitly selected visible modifier/static-rule records. Every copied entity/rule/action gets a fresh draft ID. References whose targets are inside the closure remap to the copies; references crossing the closure remain on the originals. Exact selectors remap controller and node, semantic selectors retain role/custom-role but remap explicit controller applicability, and copied static rules retain explicit priority values while receiving fresh rule/action IDs. Shared static rules are opt-in only.
-- **Effective to state:** materialize the current saved/draft preview result as a new complete profile with no runtime layers.
-
-The duplication preview exposes the complete old-to-new ID/reference map and copy closure before commit. Cancel creates nothing; save assigns persistent IDs once and returns the corresponding draft-to-persistent map.
-
-Every entity shows backlinks. Deletion of a referenced entity is blocked. “Replace references with…” previews and commits all reference changes plus deletion as one behavior-model transaction.
-
-New draft entities use collision-proof client IDs such as `draft:<uuid>`, never names or temporary array indexes. Global Save validates the whole draft graph, assigns persistent stable IDs, returns a draft-to-persistent mapping, writes all affected source/data domains atomically behind a snapshot, reparses the result, and rolls back the complete write on any failure. Optimistic source-revision mismatch rejects with a structured conflict; it never partially saves or silently overwrites newer source. There are no immediate create/delete/reorder endpoints.
-
-Static rule ordering edits explicit `u16` assignment/static priority. Dragging is only a convenience for assigning those values; DOM order and source order never resolve behavior.
-
-The stack preview must use the same precedence key, guard dispatch, timers, recovery batches, and composition semantics as runtime. It shows state candidates separately from modifiers, allows simulated apply/remove by owner, and can run event sequences such as detection → alert completion → tired → forced sleep → wake → recovery. Every step shows the winning controller node/semantic role, hidden and skipped layers, timers, transition row/guard result, normalization, capabilities, and field provenance.
-
-Preview has explicit Saved Source, Draft, and Saved ↔ Draft comparison modes. Draft preview resolves unsaved entities and hidden wrappers without writing files. Validation errors have stable codes plus entity ID, field path, and message so the editor can focus the exact control.
-
-Ordinary users select a target controller node in a transition. The editor/compiler creates and maintains the required state-candidate override definition as a hidden stable-ID wrapper containing channel, priority, applicability, multiplicity, lifetime, and timer metadata. Advanced mode may inspect it, but deleting or editing it independently is blocked while its transition owns it. Modifier definitions remain first-class visible entities.
-
-## Frozen Cross-Overlay ABI Gates
-
-Phase 0 must preserve the existing ARM/Thumb ABI exactly:
+The implementation preserves the existing ARM/Thumb ABI exactly:
 
 - `OverworldWildSpawns_EnterAggroState` has aligned linker/code address `0x0225046C`, callable Thumb address `0x0225046D`, and the exact half-open budget `[0x0225046C, 0x022504A0)` (`0x34` bytes). Its prototype remains `void (OverworldWildSpawnState *state, int slot, LocalMapObject *spawnedFollower)`.
 - `OverworldWildSpawns_StartFollowerReleaseBounce` has aligned linker/code address `0x0224F298`, callable Thumb address `0x0224F299`, and its fixed entry must fit the `0x300`-byte slot before `0x0224F598`. Its prototype remains `BOOL (FieldSystem *fieldSystem, OverworldWildSpawnState *state, void *projectile, int slot)`.
@@ -1165,18 +1219,23 @@ Duplicate key `K` is exactly `(slot,expectedSlotGeneration,expectedEncounterGene
 
 Busy durability uses a second bounded fixed array `aggroBridgeRetry[OW_WILD_MAX_SPAWNS]`, one `EMPTY/RETRY_PENDING` record per source slot carrying `(K,retryGeneration,sourceOwnerGeneration)`. Before returning ABI `FALSE` for `BRIDGE_BUSY`, producer code atomically publishes/coalesces that exact retry record but does not change the primary cell, aggro metadata, or tile selection. The source projectile/release owner is generation-authenticated and cannot move, terminate, or relinquish the relation while its retry is pending. A live different retry key for the same slot is invalid/system-safety quarantine; a provably stale retry may clear. When the primary cell becomes `EMPTY`, mandatory maintenance promotes the exact retry and re-enters the full producer path; destructive source/slot invalidation consumes it diagnostically. Retry-generation wrap drains/promotes or destructively invalidates the owner before reuse. Thus BUSY cannot lose a hit and never enters the optional queue.
 
-After authenticating an accepted target, fixed code sets both durable source-parity metadata effects—`OW_WILD_SPAWN_AGGRO_FLAG` on the hit encounter and `OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG` on release state—writes the complete cell payload/sequence, and publishes `PENDING` last, all **before** attempting bounce-tile selection. A no-tile `FALSE` result retains both effects and the cell; another slot may publish independently. Legacy `OW_WILD_SPAWN_AGGRO_PENDING_FLAG`, if retained, is an optional compatibility mirror and cannot drive behavior. Fixed code never changes active-step counters.
+After authenticating an accepted target, fixed code sets both durable source-parity metadata effects—`OW_WILD_SPAWN_AGGRO_FLAG` on the hit encounter and `OW_WILD_FOLLOWER_RELEASE_AGGRO_FLAG` on release state—writes the complete cell payload/sequence, and publishes `PENDING` last, all **before** attempting bounce-tile selection. A no-tile `FALSE` result retains both effects and the cell; another slot may publish independently. The retained `OW_WILD_SPAWN_AGGRO_PENDING_FLAG` is a bounded presentation/dispatch bridge request; it is not a behavior state, profile-schema mirror, or V39 compatibility reader. Fixed code never changes active-step counters.
 
 Only the spawns consumer may atomically claim `PENDING→CLAIMED` for exact `(K,publicationSequence)`. It reauthenticates authoritative slot/encounter/object generations and attempts one atomic tired-expiry-plus-aggro-plus-active-step transaction. If required orchestration returns `BUSY`—including a published tired expiry that has not committed—the consumer conditionally restores `CLAIMED→PENDING` with identical key, sequence, and payload; the retry remains mandatory and no stack/timer/counter change commits. Success conditionally clears `CLAIMED→EMPTY` only after the whole transaction commits, then promotes any retry. Reauthentication mismatch conditionally clears only that exact primary cell/claim. It never clears the unkeyed legacy pending compatibility bit on mismatch and never clears, zeros, or advances `slotGenerationMirror`, `objectGenerationMirror`, authoritative encounter generation, the publication-sequence carrier, either durable aggro flag, or the retry owner; only authenticated success or destructive slot lifecycle owns those values. Permanent schema failure enters system-safety quarantine rather than dropping the request. The carrier contains no sidecar pointer or layer handle. Existing projectile-prefix `impactSlot` and `impactEncounterGeneration` remain dedicated to projectile/capture presentation validation and may not be repurposed as this carrier.
 
-## Implementation Boundaries Still to Measure
+## Final Implementation Measurements
 
-The following are implementation measurements, not unresolved behavior decisions:
+- Canonical V40 runtime blob: 11,340 bytes, with a fixed 208-byte header.
+- Catalog CRC/checksum: `0x64D0FC6E`.
+- Schema fingerprint: `0x5C5FBF57`.
+- Removed projection/member-21 payload: 3,416 bytes.
+- Combined runtime behavior bundle: 15,052 → 11,340 bytes, saving 3,712
+  bytes (24.7%).
+- Net tracked legacy/projection cleanup: 513,227 bytes removed.
+- Overlay 149 physical headroom: `0xC4` bytes.
+- Overlay 158 physical headroom: `0xA0` bytes; with its `0x80` reserve, the
+  protected usable margin is `0x20` bytes.
 
-- Exact C packing and which runtime sidecar owns the fixed arrays.
-- Exact serialized table offsets and the next behavior-data version number.
-- Whether full provenance is compiled only in diagnostic builds.
-- Overlay budget after the schema and migration corpus are generated.
-- Exact UI component and source-file boundaries.
-
-If a measurement forces a semantic change to capacity, precedence, lifetime, ownership, or composition, this ADR must be amended explicitly before that change is implemented.
+These are checked implementation facts, not rollout questions. Any later change
+to capacity, precedence, lifetime, ownership, composition, or serialized ABI must
+update this contract and its validators together.
