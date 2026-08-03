@@ -34,9 +34,10 @@ MAX_LAYERS = 8
 STATE_SIZE = 0x458
 STATE_RUNTIME_POINTER_OFFSET = 0xE4
 
-# Frozen by compile-time size assertions in overworld_wild_runtime_sidecars.h
-# and the resident-suffix assertion in the live overlay.
-LIVE_STACK_OFFSET = 2056
+# Frozen by compile-time size/offset assertions in the runtime sidecar header
+# and live overlay. These enclosing-state offsets must move with the private
+# OverworldWildOverlayRuntimeState layout; idle zeroes cannot validate them.
+LIVE_STACK_OFFSET = 0x804
 STACK_HEADER_SIZE = 12
 SLOT_SIZE = 1724
 SLOT_LAYER_BANK_OFFSET = 36
@@ -45,14 +46,14 @@ SLOT_EFFECTIVE_CACHE_OFFSET = 892
 EFFECTIVE_ROLE_OFFSET = 58
 LAYER_BANK_SIZE = 112
 TIMER_BANK_SIZE = 192
-PICKUP_RELATIONS_OFFSET = 1096
+PICKUP_RELATIONS_OFFSET = 0x444
 PICKUP_RELATION_SIZE = 44
 STATE_MAP_ID_OFFSET = 212
 STATE_MOVEMENT_IN_PROGRESS_OFFSET = 248
 STATE_ACTIVE_STEPS_OFFSET = 354
 STATE_MAP_GENERATION_OFFSET = 1096
-LIVE_PRESENTATION_POSITIONS_OFFSET = 486
-LIVE_MOVEMENT_OBJECT_GENERATIONS_OFFSET = 1056
+LIVE_PRESENTATION_POSITIONS_OFFSET = 0x1E4
+LIVE_MOVEMENT_OBJECT_GENERATIONS_OFFSET = 0x3F4
 TIMER_VALID = 1 << 0
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import struct
 import sys
 from pathlib import Path
@@ -103,8 +104,66 @@ def result_fixture(*, bad_timer: bool = False, carried: bool = False) -> dict:
     return {"reads": reads, "heap_margin": {"passed": True}}
 
 
+def layout_contract(source: str) -> dict[str, int]:
+    return {
+        name: int(value, 0)
+        for name, value in re.findall(
+            r"^#define (OW_WILD_SNAPSHOT_[A-Z_]+_OFFSET) "
+            r"(0x[0-9A-Fa-f]+|[0-9]+)$",
+            source,
+            re.MULTILINE,
+        )
+    }
+
+
+def require_current_layout_contract(source: str) -> None:
+    require(
+        layout_contract(source)
+        == {
+            "OW_WILD_SNAPSHOT_PRESENTATION_POSITIONS_OFFSET": (
+                MODULE.LIVE_PRESENTATION_POSITIONS_OFFSET
+            ),
+            "OW_WILD_SNAPSHOT_MOVEMENT_OBJECT_GENERATIONS_OFFSET": (
+                MODULE.LIVE_MOVEMENT_OBJECT_GENERATIONS_OFFSET
+            ),
+            "OW_WILD_SNAPSHOT_PICKUP_RELATIONS_OFFSET": (
+                MODULE.PICKUP_RELATIONS_OFFSET
+            ),
+            "OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET": MODULE.LIVE_STACK_OFFSET,
+            "OW_WILD_SNAPSHOT_SLOT_EFFECTIVE_CACHE_OFFSET": (
+                MODULE.SLOT_EFFECTIVE_CACHE_OFFSET
+            ),
+            "OW_WILD_SNAPSHOT_EFFECTIVE_ROLE_OFFSET": MODULE.EFFECTIVE_ROLE_OFFSET,
+        },
+        "snapshot decoder offsets differ from the live overlay contract",
+    )
+
+
 def main() -> int:
     checks = 0
+    source = (
+        ROOT
+        / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+    ).read_text()
+    require_current_layout_contract(source)
+    checks += 1
+    try:
+        require_current_layout_contract(
+            source.replace(
+                "#define OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET 0x804",
+                "#define OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET 0x808",
+            )
+        )
+    except AssertionError:
+        checks += 1
+    else:
+        raise AssertionError("mutated enclosing runtime offset was accepted")
+    require(
+        source.count("#define OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET 0x804")
+        == 1,
+        "layout mutation fixture did not target exactly one source definition",
+    )
+    checks += 1
     for scenario in MODULE.SCENARIOS.values():
         frames = MODULE.validate_actions(scenario.actions, scenario.frame_budget)
         require(0 < frames <= scenario.frame_budget, f"{scenario.name} budget differs")
@@ -167,6 +226,14 @@ def main() -> int:
     )
     require(not issues, f"valid snapshot rejected: {issues}")
     checks += 1
+
+    timer = parsed["slots"][0]["timers"][0]
+    require(
+        timer["instance_key"] == 2,
+        "timer instance key was decoded from the wrong field",
+    )
+    require(timer["flags"] == MODULE.TIMER_VALID, "timer flags were not decoded")
+    checks += 2
 
     bad = MODULE.snapshot_from_result(result_fixture(bad_timer=True))
     issues = MODULE.evaluate_snapshot(

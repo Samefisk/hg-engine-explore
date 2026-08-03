@@ -665,6 +665,45 @@ typedef struct OverworldWildOverlayRuntimeState {
     OverworldWildBehaviorStackRuntime behaviorStackRuntime;
 } OverworldWildOverlayRuntimeState;
 
+#define OW_WILD_SNAPSHOT_PRESENTATION_POSITIONS_OFFSET 0x1E4
+#define OW_WILD_SNAPSHOT_MOVEMENT_OBJECT_GENERATIONS_OFFSET 0x3F4
+#define OW_WILD_SNAPSHOT_PICKUP_RELATIONS_OFFSET 0x444
+#define OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET 0x804
+#define OW_WILD_SNAPSHOT_SLOT_EFFECTIVE_CACHE_OFFSET 0x37C
+#define OW_WILD_SNAPSHOT_EFFECTIVE_ROLE_OFFSET 0x3A
+
+typedef char OverworldWildSnapshotPresentationPositionsOffsetMustRemain0x1E4[
+    offsetof(OverworldWildOverlayRuntimeState, spawnPresentations)
+                + offsetof(OverworldWildPresentationState, lastKnownX)
+            == OW_WILD_SNAPSHOT_PRESENTATION_POSITIONS_OFFSET
+        ? 1
+        : -1];
+typedef char OverworldWildSnapshotMovementObjectGenerationsOffsetMustRemain0x3F4[
+    offsetof(OverworldWildOverlayRuntimeState, movementObjectGenerations)
+            == OW_WILD_SNAPSHOT_MOVEMENT_OBJECT_GENERATIONS_OFFSET
+        ? 1
+        : -1];
+typedef char OverworldWildSnapshotPickupRelationsOffsetMustRemain0x444[
+    offsetof(OverworldWildOverlayRuntimeState, pickupRelations)
+            == OW_WILD_SNAPSHOT_PICKUP_RELATIONS_OFFSET
+        ? 1
+        : -1];
+typedef char OverworldWildSnapshotBehaviorStackOffsetMustRemain0x804[
+    offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)
+            == OW_WILD_SNAPSHOT_BEHAVIOR_STACK_OFFSET
+        ? 1
+        : -1];
+typedef char OverworldWildSnapshotSlotEffectiveCacheOffsetMustRemain0x37C[
+    offsetof(OverworldWildRuntimeSlotSidecar, effectiveCache)
+            == OW_WILD_SNAPSHOT_SLOT_EFFECTIVE_CACHE_OFFSET
+        ? 1
+        : -1];
+typedef char OverworldWildSnapshotEffectiveRoleOffsetMustRemain0x3A[
+    offsetof(OverworldWildRuntimeEffectiveCache, semanticRole)
+            == OW_WILD_SNAPSHOT_EFFECTIVE_ROLE_OFFSET
+        ? 1
+        : -1];
+
 typedef char OverworldWildBehaviorStackRuntimeMustRemainResidentSuffix[
     offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)
             + sizeof(OverworldWildBehaviorStackRuntime)
