@@ -2947,6 +2947,10 @@ static void test_task9_composition_cache_and_provenance(
     u8 wideMaximum;
     u8 conflictStatus;
     u8 i;
+    u8 zeroCacheRegion[
+        offsetof(OverworldWildRuntimeSlotSidecar, provenance)
+            + sizeof(runtime.slots[0].provenance)
+            - offsetof(OverworldWildRuntimeSlotSidecar, staticCache)] = {0};
 
     prepare_runtime_unprimed(&runtime, 0);
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
@@ -3372,13 +3376,13 @@ static void test_task9_composition_cache_and_provenance(
     firstDataIncarnation = runtime.dataIncarnation;
     firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
     OverworldWildRuntime_MarkResidentCold(&runtime);
-    require(!runtime.slots[0].staticCache.valid
-            && !(runtime.slots[0].effectiveCache.flags
-                & OW_WILD_RUNTIME_CACHE_VALID)
-            && runtime.slots[0].provenance.flags == 0
+    require(!memcmp((u8 *)&runtime.slots[0]
+                + offsetof(OverworldWildRuntimeSlotSidecar, staticCache),
+                zeroCacheRegion,
+                sizeof(zeroCacheRegion))
             && runtime.dataIncarnation != firstDataIncarnation
             && runtime.slots[0].cacheIncarnation != firstSlotIncarnation,
-        "cold restart retained copied catalog/cache/provenance bytes");
+        "cold restart retained static/effective/provenance cache bytes");
     before = runtime;
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
             runtime.slots[0].slotGeneration, &staticContext, input)
