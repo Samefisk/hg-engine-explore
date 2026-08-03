@@ -50,10 +50,6 @@ Object.defineProperty(state, "selectedPokemonKey", {
 
 const MUTATION_PATHS = new Set([
   "/api/v2/commit",
-  "/save-profiles",
-  "/save-profile-memberships",
-  "/manage-profiles",
-  "/save-profile-overrides",
   "/save-encounters",
   "/save-spawn-settings",
 ]);
@@ -275,9 +271,6 @@ const api = {
     return result;
   },
 
-  resolve(params) {
-    return this.get(`/api/v2/resolve?${new URLSearchParams(params)}`);
-  },
 };
 
 function setStatus(message, kind = "ready") {
@@ -963,9 +956,6 @@ function collectCommitDomains() {
 
 const COMMIT_DOMAIN_CONTROLLERS = Object.freeze({
   behaviorModel: "profiles",
-  profiles: "profiles",
-  profileMemberships: "profiles",
-  profileOverrides: "profiles",
   encounters: "routes",
   spawnSettings: "routes",
   pokemonUpdates: "pokemon",

@@ -16,7 +16,7 @@ from email.parser import BytesParser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from PIL import Image
 
@@ -255,8 +255,8 @@ class V2ViewerHandler(legacy.ViewerHandler):
                             "transitionCount": len(behavior_model["transitionGraph"]["transitions"]),
                         }
                     except Exception as exc:
-                        # V40 profile availability is independent from the
-                        # legacy V39 class-table parser used by other decks.
+                        # V40 model availability is independent from the route,
+                        # sound, and Pokémon datasets used by the other decks.
                         payload["v40BehaviorModelCapability"] = {
                             "available": False,
                             "reason": str(exc),
@@ -455,24 +455,6 @@ class V2ViewerHandler(legacy.ViewerHandler):
             if path == "/api/v2/workspace-meta":
                 with reliability.workspace_guard(ROOT):
                     payload = reliability.workspace_metadata(legacy, ROOT)
-                self.send_json(payload)
-                return
-            if path == "/api/v2/resolve":
-                reliability.require_capability(legacy, "profiles")
-                query = parse_qs(urlparse(self.path).query)
-                with reliability.workspace_guard(ROOT):
-                    payload, source_revision = reliability.stable_source_read(
-                        legacy,
-                        ROOT,
-                        lambda: reliability.resolve_context(
-                            legacy,
-                            (query.get("species") or [""])[0],
-                            (query.get("level") or [None])[0],
-                            (query.get("terrain") or [None])[0],
-                            (query.get("shiny") or [None])[0],
-                        ),
-                    )
-                    payload["sourceRevision"] = source_revision
                 self.send_json(payload)
                 return
         except reliability.SourceReadConflict as exc:

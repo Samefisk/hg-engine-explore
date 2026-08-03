@@ -5025,14 +5025,6 @@ def source_capabilities() -> dict[str, dict]:
         ARMIPS_CONSTANTS,
         ARMIPS_CONFIG,
     )
-    profile_required = (
-        OVERLAY_SOURCE,
-        HELPER_SOURCE,
-        BEHAVIOR_DATA_SOURCE,
-        BEHAVIOR_DATA_HEADER,
-        SPAWNS_PUBLIC_HEADER,
-        SPAWNS_INTERNAL_HEADER,
-    )
     spawn_required = tuple(
         dict.fromkeys(
             [Path(setting["source"]) for setting in SPAWN_SETTING_BY_SYMBOL.values()]
@@ -5050,7 +5042,13 @@ def source_capabilities() -> dict[str, dict]:
             optional=(HEADBUTT_SOURCE, ENCOUNTER_LOOKUP_SOURCE, ENCOUNTER_OVERRIDES_SOURCE),
             label="Route deck",
         ),
-        "profiles": capability(profile_required, label="Profile deck"),
+        "profiles": {
+            "available": False,
+            "writable": False,
+            "missingSources": [],
+            "missingOptionalSources": [],
+            "reason": "The flattened profile editor was retired; use the V40 behavior model editor",
+        },
         "spawnSettings": capability(spawn_required, label="Overworld spawn settings"),
         "routeOverrides": capability(
             (OVERLAY_SOURCE, HELPER_SOURCE, BEHAVIOR_DATA_HEADER, ENCOUNTER_LOOKUP_SOURCE),
@@ -5505,28 +5503,15 @@ def invalidate_data_cache() -> None:
 
 
 def build_workspace_data() -> dict:
-    """Assemble independently optional profile, route, and spawn datasets."""
+    """Assemble route and spawn datasets around the separate V40 editor."""
 
     capabilities = source_capabilities()
-    profile_error: Exception | None = None
-    payload: dict | None = None
-    if capabilities["profiles"]["available"]:
-        try:
-            payload = build_data(
-                include_routes=False,
-                include_spawn_settings=False,
-            )
-        except Exception as exc:
-            profile_error = exc
-    else:
-        profile_error = RuntimeError(capabilities["profiles"]["reason"])
-
-    if payload is None:
-        payload = build_route_only_data(
-            profile_error,
-            include_routes=False,
-            include_spawn_settings=False,
-        )
+    profile_error = RuntimeError(capabilities["profiles"]["reason"])
+    payload = build_route_only_data(
+        profile_error,
+        include_routes=False,
+        include_spawn_settings=False,
+    )
 
     assembled_capabilities = {
         key: dict(value) for key, value in payload["capabilities"].items()
@@ -26503,18 +26488,6 @@ class ViewerHandler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(content_length)
-            if path == "/save-profiles":
-                self.send_json(apply_profile_changes(body))
-                return
-            if path == "/save-profile-memberships":
-                self.send_json(apply_profile_membership_changes(body))
-                return
-            if path == "/manage-profiles":
-                self.send_json(apply_profile_management_change(body))
-                return
-            if path == "/save-profile-overrides":
-                self.send_json(apply_profile_override_changes(body))
-                return
             if path == "/save-encounters":
                 self.send_json(apply_encounter_changes(body))
                 return
@@ -26555,31 +26528,20 @@ def serve(host: str, port: int) -> None:
 
 def validate_override_profile_source() -> None:
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    if "OverworldWildBehaviorDataV40.generated.inc" in raw_behavior_data:
-        from overworld_wild_behavior_v40_validator import validate_v40_owbd
+    if "OverworldWildBehaviorDataV40.generated.inc" not in raw_behavior_data:
+        raise ValueError("retired flattened behavior data is unsupported; generate OWBD V40")
+    from overworld_wild_behavior_v40_validator import validate_v40_owbd
 
-        with tempfile.TemporaryDirectory() as temp_name:
-            blob = Path(temp_name) / "OverworldWildBehaviorDataV40.bin"
-            subprocess.run([
-                sys.executable,
-                str(ROOT / "scripts" / "generate_overworld_wild_behavior_v40.py"),
-                "--check",
-                "--raw-output",
-                str(blob),
-            ], check=True)
-            validate_v40_owbd(blob, BEHAVIOR_DATA_HEADER)
-        return
-    expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
-    macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values, destination_values = parse_behavior_data_enums()
-    macros.update(terrain_values)
-    macros.update(destination_values)
-    validate_behavior_data_override_profiles(
-        raw_behavior_data,
-        macros,
-        invert_labels(macros, GROUP_PREFIX),
-    )
+    with tempfile.TemporaryDirectory() as temp_name:
+        blob = Path(temp_name) / "OverworldWildBehaviorDataV40.bin"
+        subprocess.run([
+            sys.executable,
+            str(ROOT / "scripts" / "generate_overworld_wild_behavior_v40.py"),
+            "--check",
+            "--raw-output",
+            str(blob),
+        ], check=True)
+        validate_v40_owbd(blob, BEHAVIOR_DATA_HEADER)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26595,7 +26557,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Pillow is required for viewer JSON/server modes")
 
     if args.json:
-        json.dump(build_data(), sys.stdout, indent=2)
+        json.dump(build_workspace_data(), sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0
     if args.validate_overrides:

@@ -141,7 +141,7 @@ class BehaviorModelCommitTest(unittest.TestCase):
         self.assertEqual((saved_profile["name"], saved_profile["descriptiveTags"]), ("Saved profile", ["bird", "saved"]))
         self.assertEqual(saved_controller["nodes"][0]["profileId"], mapping["draft:profile"])
 
-    def test_stale_revision_and_legacy_domains_preserve_every_file(self):
+    def test_stale_revision_and_retired_domains_preserve_every_file(self):
         before = self.bodies()
         with self.assertRaises(reliability.RevisionConflict):
             self.commit({"behaviorModel": {"modelVersion": 40}}, "sha256:stale")
@@ -150,9 +150,19 @@ class BehaviorModelCommitTest(unittest.TestCase):
             {"profiles": {}},
             {"behaviorModel": {"modelVersion": 40}, "profileOverrides": {}},
         ):
-            with self.assertRaisesRegex(ValueError, "legacy profile commit domains"):
+            with self.assertRaisesRegex(ValueError, "retired profile commit domains"):
                 self.commit(domains)
             self.assertEqual(self.bodies(), before)
+
+    def test_flattened_profile_endpoints_are_retired(self):
+        import server
+
+        self.assertFalse(server.legacy.source_capabilities()["profiles"]["available"])
+        self.assertFalse(hasattr(reliability, "resolve_context"))
+        self.assertEqual(
+            set(reliability.MUTATION_HANDLERS),
+            {"/save-encounters", "/save-spawn-settings"},
+        )
 
     def test_combined_domain_failure_rolls_back_behavior_model_and_route(self):
         model = self.model()

@@ -37,8 +37,9 @@ navigation; they do not prevent the remaining decks from loading.
   learnset, evolution, and asset sources used by the Pokémon data API.
 - **Route Deck** is available when encounter sources can be parsed. Profile
   headers, override assignments, and spawn-setting sources are optional.
-- **Profile Deck** appears only when the overworld behavior profile sources are
-  present and readable.
+- **Profile Deck** loads from the canonical OWBD V40 JSON model and generated
+  data. It is available only when that graph parses and validates successfully;
+  it does not depend on the retired flattened-profile sources.
 - **Sound Deck and build utilities** remain capability-gated by their own
   source and tool requirements.
 
@@ -49,9 +50,9 @@ the first available deck (normally Pokédex Workshop). Pokémon-only commits are
 validated independently and do not require Profile Deck infrastructure.
 
 Keep `scripts/overworld_behavior_profile_viewer.py` beside the shared V2 server:
-it is still the compatibility adapter for route/profile source formats. Its
-presence does not mean a project must contain the optional overworld profile
-sources themselves.
+it still provides route, spawn-setting, shared Pokémon-data, build, launcher,
+and audio services. Profile authoring uses the separate OWBD V40 endpoint and
+writer; the shared backend no longer exposes the flattened-profile editor.
 
 ## What V2 changes
 
@@ -81,8 +82,8 @@ sources themselves.
   ownership, precedence, effective values, and validation failures before Save.
 - Protects every source mutation with a deterministic content revision.
   Stale editors receive a conflict instead of silently overwriting newer work.
-- Verifies the source revision before and after every full-data or resolver
-  read, retrying instead of pairing stale parsed data with a newer revision.
+- Verifies the source revision before and after workspace and behavior-model
+  reads, retrying instead of pairing stale parsed data with a newer revision.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
   across V40 state profiles, controllers, transitions and their override graph,
   encounters, and spawn settings.
@@ -103,15 +104,15 @@ sources themselves.
 
 - `server.py` serves the standalone V2 app, preserves the proven backend
   endpoints, and exposes the V2 APIs.
-- `reliability.py` owns revisions, mutation locking, transactions, rollback,
-  and context-accurate resolution.
+- `reliability.py` owns revisions, mutation locking, transactions, and
+  rollback.
 - `static/index.html` and `static/v2.css` define the new semantic UI and visual
   system.
 - `static/v2.js` orchestrates navigation, atomic saves, builds, ROM launching,
   status, and utilities.
-- `static/profiles.js`, `static/routes.js`, and `static/routes-sounds.js`
-  implement the focused profile, route, and sound workflows without copying
-  the legacy DOM.
+- `static/profiles.js`, `static/stack-preview.js`, `static/routes.js`, and
+  `static/routes-sounds.js` implement the focused profile, client-side stack
+  preview, route, and sound workflows without copying the legacy DOM.
 - `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
   same controller-base, state-candidate winner, ordered modifier fold, and
   owner-addressed recomposition contract in the game runtime.
@@ -120,7 +121,7 @@ The V2-only API surface is:
 
 - `GET /api/v2/health`
 - `GET /api/v2/workspace-meta`
-- `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...`
+- `GET /api/v2/behavior-model`
 - `POST /api/v2/commit`
 
 ## Source and ROM state
