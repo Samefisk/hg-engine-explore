@@ -301,10 +301,12 @@ def verify_private_layout(
 def verify_lifecycle_topology(source: str, helper: str) -> None:
     reset = function_body(source, "OverworldWildSpawns_ResetSlotState")
     require_tokens(reset, "authoritative destructive reset", (
-        "BOOL wasLive = state->spawns[slot].active;",
+        "BOOL wasAssigned =",
+        "behaviorStackRuntime.slots[slot].lifecycleState",
+        "== OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED;",
         "OverworldWildRuntime_DestructivelyInvalidateSlot(",
         "&OW_WILD_RUNTIME(state)->behaviorStackRuntime",
-        "wasLive",
+        "wasAssigned",
         "state->spawns[slot].active = FALSE;",
     ))
     require(reset.count("OverworldWildRuntime_DestructivelyInvalidateSlot(") == 1,
@@ -312,8 +314,15 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     require(reset.index("OverworldWildRuntime_DestructivelyInvalidateSlot(")
             < reset.index("state->spawns[slot].active = FALSE;"),
             "destructive reset captures liveness after clearing the encounter")
-    require(source.count("OverworldWildRuntime_DestructivelyInvalidateSlot(") == 1,
-            "a destructive lifecycle route bypasses the authoritative reset")
+    cold_rebuild = function_body(source, "OverworldWildSpawns_RebuildColdRuntime")
+    require_tokens(cold_rebuild, "cold orphan invalidation", (
+        "runtimeSlot->lifecycleState",
+        "!= OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED",
+        "if (!state->spawns[slot].active)",
+        "OverworldWildRuntime_DestructivelyInvalidateSlot(\n                stack, slot, TRUE);",
+    ))
+    require(source.count("OverworldWildRuntime_DestructivelyInvalidateSlot(") == 2,
+            "destructive lifecycle routes differ from reset and cold-orphan repair")
 
     clear_slot = function_body(source, "OverworldWildSpawns_ClearSlotAndSaveShiny")
     require(clear_slot.count("OverworldWildSpawns_ResetSlotState(") == 1,
@@ -325,18 +334,21 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     ))
     clear_lite = function_body(source, "OverworldWildSpawns_ClearContextLite")
     require_tokens(clear_lite, "light context clear", (
-        "if (state->movementRuntimeState != NULL) {",
-        "OW_WILD_RUNTIME(state)->residentData = &gOverworldWildResidentData;",
-        "if (state->spawns[i].active)",
-        "OverworldWildSpawns_ClearSlotAndSaveShiny(state, i, FALSE);",
-        "memset(state->spawns, 0, sizeof(state->spawns));",
+        "runtime = OW_WILD_RUNTIME(state);",
+        "OverworldWildSpawns_PreflightAllSlotCleanup(state)",
+        "runtime->residentData = &gOverworldWildResidentData;",
+        "if (state->spawns[i].active",
+        "|| runtime->behaviorStackRuntime.slots[i]",
+        "== OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED",
+        "OverworldWildSpawns_TrySaveShinyReservation(",
+        "OverworldWildSpawns_ResetSlotState(state, i, FALSE);",
     ))
     require("residentData != NULL" not in clear_lite,
             "cold retained runtime still bypasses destructive slot reset")
     require(
         clear_lite.index(
-            "OW_WILD_RUNTIME(state)->residentData = &gOverworldWildResidentData;"
-        ) < clear_lite.index("if (state->spawns[i].active)"),
+            "runtime->residentData = &gOverworldWildResidentData;"
+        ) < clear_lite.index("for (i = 0; i < OW_WILD_MAX_SPAWNS; i++)"),
         "cold discard reattaches resident data after destructive cleanup",
     )
 
@@ -432,7 +444,9 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
         require_non_destructive(function_body(source, name), name)
 
     map_change = function_body(source, "OverworldWildSpawns_PrepareMapHeaderChange")
-    require(map_change.count("OverworldWildSpawns_ClearContextLite(state);") == 1,
+    require(map_change.count("OverworldWildSpawns_ClearContextLite(state)") == 1
+            and "if (!OverworldWildSpawns_ClearContextLite(state)) return FALSE;"
+                in map_change,
             "map-header discard does not have one explicit destructive context clear")
     require("if (mode == OW_WILD_MAP_HEADER_CHANGE_DISCARD)" in map_change,
             "destructive map-header clear is not guarded by DISCARD")
@@ -440,9 +454,11 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
             and "OverworldWildRuntime_DestructivelyInvalidateSlot" not in map_change,
             "map-header preparation bypasses the context-clear wrapper")
     discard = map_change.index("if (mode == OW_WILD_MAP_HEADER_CHANGE_DISCARD)")
-    preserve = map_change.index("if (mode == OW_WILD_MAP_HEADER_CHANGE_PRESERVE")
+    preserve = map_change.index("if (mode == OW_WILD_LIFECYCLE_BATTLE_START")
+    require("|| mode == OW_WILD_MAP_HEADER_CHANGE_PRESERVE" in map_change,
+            "map-preserve policy no longer shares the bounded boundary path")
     canonicalize = map_change.index("if (mode == OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE)")
-    require(canonicalize < preserve < discard,
+    require(preserve < canonicalize < discard,
             "non-destructive map-header paths no longer return before DISCARD")
 
 
