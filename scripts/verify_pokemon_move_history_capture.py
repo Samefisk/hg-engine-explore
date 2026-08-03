@@ -5825,15 +5825,20 @@ def verify_overworld_wild_runtime_link_contracts(
         return start <= call[0] and call[0] + 4 <= (
             start + linked_sizes[function_name])
 
+    expected_call_routes = (
+        (resident_targets[0], containing_functions[0]),
+        (resident_targets[1], containing_functions[0]),
+        (resident_targets[1], containing_functions[1]),
+    )
     require(
-        len(expected_imported_calls) == 2
-        and [call[1] for call in expected_imported_calls] == ["bl", "bl"]
-        and [call[2] for call in expected_imported_calls]
-            == list(resident_targets)
-        and call_is_within(
-            expected_imported_calls[0], containing_functions[0])
-        and call_is_within(
-            expected_imported_calls[1], containing_functions[1]),
+        len(expected_imported_calls) == len(expected_call_routes)
+        and all(
+            call[1] == "bl"
+            and call[2] == target
+            and call_is_within(call, function_name)
+            for call, (target, function_name) in zip(
+                expected_imported_calls, expected_call_routes)
+        ),
         "overlay 149 resident lifecycle direct-call inventory differs",
     )
 
@@ -5847,12 +5852,14 @@ def verify_overworld_wild_runtime_link_contracts(
             if call[2] in resident_targets
         ]
         return (
-            len(imported_calls) == 2
-            and [call[1] for call in imported_calls] == ["bl", "bl"]
-            and [call[2] for call in imported_calls]
-                == list(resident_targets)
-            and call_is_within(imported_calls[0], containing_functions[0])
-            and call_is_within(imported_calls[1], containing_functions[1])
+            len(imported_calls) == len(expected_call_routes)
+            and all(
+                call[1] == "bl"
+                and call[2] == target
+                and call_is_within(call, function_name)
+                for call, (target, function_name) in zip(
+                    imported_calls, expected_call_routes)
+            )
         )
 
     require(
@@ -5860,22 +5867,38 @@ def verify_overworld_wild_runtime_link_contracts(
         "overlay 149 resident lifecycle direct-call inventory differs",
     )
     call_mutations: list[tuple[str, bytearray]] = []
-    first_missing_call = bytearray(raw)
+    for index, (call, (target, function_name)) in enumerate(zip(
+        expected_imported_calls, expected_call_routes
+    )):
+        call_offset = call[0] - OVERLAY149_BASE
+        missing_call = bytearray(raw)
+        missing_call[call_offset:call_offset + 4] = b"\0\0\0\0"
+        call_mutations.append((
+            f"missing lifecycle call {index}", missing_call))
+        retargeted_call = bytearray(raw)
+        alternate_target = (
+            resident_targets[1]
+            if target == resident_targets[0]
+            else resident_targets[0]
+        )
+        retargeted_call[call_offset:call_offset + 4] = encode_thumb_bl(
+            call[0], alternate_target)
+        call_mutations.append((
+            f"retargeted lifecycle call {index}", retargeted_call))
+        relocated_call = bytearray(raw)
+        relocated_call[call_offset:call_offset + 4] = b"\0\0\0\0"
+        relocated_address = (
+            linked_symbols[function_name] + linked_sizes[function_name])
+        relocated_offset = relocated_address - OVERLAY149_BASE
+        relocated_call[
+            relocated_offset:relocated_offset + 4
+        ] = encode_thumb_bl(relocated_address, target)
+        call_mutations.append((
+            f"lifecycle call {index} outside {function_name}",
+            relocated_call,
+        ))
     first_offset = expected_imported_calls[0][0] - OVERLAY149_BASE
-    first_missing_call[first_offset:first_offset + 4] = b"\0\0\0\0"
-    call_mutations.append(("missing first lifecycle call", first_missing_call))
-    first_retargeted_call = bytearray(raw)
-    first_retargeted_call[first_offset:first_offset + 4] = encode_thumb_bl(
-        expected_imported_calls[0][0], expected_imported_calls[1][2])
-    call_mutations.append(("retargeted first lifecycle call", first_retargeted_call))
-    second_missing_call = bytearray(raw)
     second_offset = expected_imported_calls[1][0] - OVERLAY149_BASE
-    second_missing_call[second_offset:second_offset + 4] = b"\0\0\0\0"
-    call_mutations.append(("missing second lifecycle call", second_missing_call))
-    second_retargeted_call = bytearray(raw)
-    second_retargeted_call[second_offset:second_offset + 4] = encode_thumb_bl(
-        expected_imported_calls[1][0], expected_imported_calls[0][2])
-    call_mutations.append(("retargeted second lifecycle call", second_retargeted_call))
     swapped_calls = bytearray(raw)
     swapped_calls[first_offset:first_offset + 4] = encode_thumb_bl(
         expected_imported_calls[0][0], expected_imported_calls[1][2])
@@ -5888,32 +5911,6 @@ def verify_overworld_wild_runtime_link_contracts(
     extra_call[extra_offset:extra_offset + 4] = encode_thumb_bl(
         extra_address, expected_imported_calls[0][2])
     call_mutations.append(("extra lifecycle call", extra_call))
-    relocated_init = bytearray(raw)
-    relocated_init[first_offset:first_offset + 4] = b"\0\0\0\0"
-    relocated_init_address = (
-        linked_symbols[containing_functions[0]]
-        + linked_sizes[containing_functions[0]]
-    )
-    relocated_init_offset = relocated_init_address - OVERLAY149_BASE
-    relocated_init[
-        relocated_init_offset:relocated_init_offset + 4
-    ] = encode_thumb_bl(relocated_init_address, resident_targets[0])
-    call_mutations.append((
-        "init call outside EnsureRuntimeState", relocated_init))
-    relocated_destructive = bytearray(raw)
-    relocated_destructive[second_offset:second_offset + 4] = b"\0\0\0\0"
-    relocated_destructive_address = (
-        linked_symbols[containing_functions[1]]
-        + linked_sizes[containing_functions[1]]
-    )
-    relocated_destructive_offset = (
-        relocated_destructive_address - OVERLAY149_BASE)
-    relocated_destructive[
-        relocated_destructive_offset:relocated_destructive_offset + 4
-    ] = encode_thumb_bl(
-        relocated_destructive_address, resident_targets[1])
-    call_mutations.append((
-        "destructive call outside ResetSlotState", relocated_destructive))
     mutation_images = [bytes(mutation) for _label, mutation in call_mutations]
     require(len(mutation_images) == len(set(mutation_images)),
             "overlay 149 lifecycle mutation fixtures contain a duplicate")
@@ -5937,6 +5934,8 @@ def verify_overworld_wild_runtime_link_contracts(
     require(
         lifecycle_relocations == [
             ("R_ARM_THM_CALL", "OverworldWildRuntime_Init"),
+            ("R_ARM_THM_CALL",
+                "OverworldWildRuntime_DestructivelyInvalidateSlot"),
             ("R_ARM_THM_CALL",
                 "OverworldWildRuntime_DestructivelyInvalidateSlot"),
         ],
