@@ -1868,20 +1868,6 @@ def source_contracts() -> None:
     spawns_thumb_help = (
         REPO / "asm/overworld_wild_spawns_overlay/thumb_help.s"
     ).read_text()
-    signed_byte_switch_wrapper = """.global __wrap___gnu_thumb1_case_sqi
-.thumb_func
-.type __wrap___gnu_thumb1_case_sqi,function
-__wrap___gnu_thumb1_case_sqi:
-    push {r1}
-    mov r1, lr
-    lsrs r1, r1, #1
-    lsls r1, r1, #1
-    ldrsb r1, [r1, r0]
-    lsls r1, r1, #1
-    add lr, lr, r1
-    pop {r1}
-    bx lr
-.size __wrap___gnu_thumb1_case_sqi, . - __wrap___gnu_thumb1_case_sqi"""
     spawns_ldflags = re.findall(
         r"^OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := (.+)$",
         overlays_make,
@@ -1893,14 +1879,13 @@ __wrap___gnu_thumb1_case_sqi:
         re.MULTILINE,
     )
     require(
-        spawns_thumb_help.count(signed_byte_switch_wrapper) == 1
+        "__wrap___gnu_thumb1_case_sqi" not in spawns_thumb_help
         and len(spawns_ldflags) == 1
-        and spawns_ldflags[0].split().count(
-            "--wrap=__gnu_thumb1_case_sqi") == 1
+        and "--wrap=__gnu_thumb1_case_sqi" not in spawns_ldflags[0]
         and len(helper_ldflags) == 1
         and "--wrap=__gnu_thumb1_case_sqi" not in helper_ldflags[0]
-        and overlays_make.count("--wrap=__gnu_thumb1_case_sqi") == 1,
-        "overlay 149 signed-byte switch wrapper source or link scope differs",
+        and "--wrap=__gnu_thumb1_case_sqi" not in overlays_make,
+        "overlay 149 restored the legacy signed-byte switch wrapper",
     )
     require(
         outer_make_invocation_is_safe(),
