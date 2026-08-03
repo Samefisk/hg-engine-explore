@@ -8183,7 +8183,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
             ov153_base,
             0x023BF248,
             0x50,
-            "cac9be4a9ac82731fe28e6abe16a97e51fa8de30bac5a70fae99dd5d3a4c636f",
+            "1a55aa003cc6cf268a55f76c1d9afa974023f4aa928ddeb5de7b05199f6d31a2",
             [
                 (0x023BF254, "bl", 0x023BF314),
                 (0x023BF266, "bl", 0x023BF314),
