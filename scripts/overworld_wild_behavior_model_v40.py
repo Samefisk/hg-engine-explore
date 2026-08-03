@@ -501,6 +501,12 @@ def validate_model(model: dict[str, Any]) -> None:
     owner_ids = {record["stableId"] for record in model["owners"]}
     definition_ids = {record["stableId"] for record in model["overrideDefinitions"]}
     transition_ids = {record["stableId"] for record in model["transitions"]}
+    transition_orders = [
+        _integer(record.get("order"), "transition.order")
+        for record in model["transitions"]
+    ]
+    if sorted(transition_orders) != list(range(len(transition_orders))):
+        raise ModelError("transition order must be one unique contiguous sequence")
     applicability_ids = {record["stableId"] for record in model["applicability"]}
     override_ids = {record["stableId"] for record in model["overrides"]}
     semantic_by_id: dict[int, tuple[int, int]] = {}
@@ -859,8 +865,9 @@ def decode_blob(blob: bytes, *, stable_id_history: dict[str, Any] | None = None)
                   ("recoveryActions", recoveries, RECOVERY_FIELDS))
     claims = {name: [False] * len(values) for name, values, _ in child_sets}
     transitions = []
-    for raw in sections["transitions"]:
+    for order, raw in enumerate(sections["transitions"]):
         record = _named_record(TRANSITION_STRUCT.unpack(raw), TRANSITION_FIELDS)
+        record["order"] = order
         for name, values, fields in child_sets:
             prefix = "recovery" if name == "recoveryActions" else name[:-1] if name.endswith("s") else name
             start, count = record.pop(prefix + "Start"), record.pop(prefix + "Count")
@@ -1005,7 +1012,7 @@ def _flatten_model(model: dict[str, Any]) -> dict[str, list[bytes]]:
             output[section].append(_pack_named(record, section, codec, fields))
 
     guard_cursor = operation_cursor = transition_action_cursor = recovery_cursor = 0
-    for transition in _sorted(model["transitions"]):
+    for transition in sorted(model["transitions"], key=lambda record: (record["order"], record["stableId"])):
         wire = dict(transition)
         wire.update({"guardStart": guard_cursor, "guardCount": len(transition["guards"]),
                      "operationStart": operation_cursor, "operationCount": len(transition["operations"]),
@@ -1032,7 +1039,7 @@ def _flatten_model(model: dict[str, Any]) -> dict[str, list[bytes]]:
 
 
 def encode_model(model: dict[str, Any]) -> bytes:
-    """Encode the canonical model in stable-ID and nested authored order."""
+    """Encode the canonical model in stable-ID and explicit authored semantic order."""
     sections = _flatten_model(model)
     payload = bytearray(b"\0" * HEADER_SIZE)
     descriptors = []

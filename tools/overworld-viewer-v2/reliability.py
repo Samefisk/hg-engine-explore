@@ -29,6 +29,7 @@ import pokemon_evolution_writer
 import pokemon_learnset_writer
 import pokemon_form_writer
 import pokemon_asset_writer
+import behavior_model_writer
 
 
 MUTATION_LOCK = threading.RLock()
@@ -171,6 +172,7 @@ def mutation_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
     paths.update(pokemon_evolution_writer.mutation_source_paths(root))
     paths.update(pokemon_learnset_writer.mutation_source_paths(root))
     paths.update(pokemon_form_writer.mutation_source_paths(root))
+    paths.update(root / relative for relative in behavior_model_writer.MANAGED_PATHS)
     return tuple(
         sorted(
             (Path(path).resolve() for path in paths),
@@ -484,9 +486,7 @@ def transactional_mutation(
 
 
 COMMIT_STEPS: tuple[tuple[str, str], ...] = (
-    ("profiles", "apply_profile_changes"),
-    ("profileMemberships", "apply_profile_membership_changes"),
-    ("profileOverrides", "apply_profile_override_changes"),
+    ("behaviorModel", "apply_behavior_model_changes"),
     ("encounters", "apply_encounter_changes"),
     ("spawnSettings", "apply_spawn_setting_changes"),
 )
@@ -551,6 +551,12 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
         raise ValueError(f"invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("commit payload must be an object")
+    legacy_profile_domains = PROFILE_COMMIT_DOMAINS & set(payload)
+    if legacy_profile_domains:
+        raise ValueError(
+            "legacy profile commit domains are unsupported; use behaviorModel only "
+            f"({', '.join(sorted(legacy_profile_domains))})"
+        )
     pokemon_domains = {
         "pokemonUpdates",
         "pokemonEvolutionUpdates",
@@ -573,6 +579,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
         if value is not None and not isinstance(value, dict):
             raise ValueError(f"commit domain {domain} must be an object")
     requested = [(key, handler) for key, handler in COMMIT_STEPS if payload.get(key) is not None]
+    behavior_model_updates = payload.get("behaviorModel")
     pokemon_updates = _canonicalize_pokemon_domain(payload.get("pokemonUpdates"))
     pokemon_evolution_updates = _canonicalize_pokemon_domain(
         payload.get("pokemonEvolutionUpdates"), evolution=True
@@ -609,6 +616,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
     }
     for capability in {
         capability_by_domain[domain] for domain in requested_domains
+        if domain in capability_by_domain
     }:
         require_capability(legacy, capability)
     if payload_requests_route_overrides(payload.get("encounters")):
@@ -646,8 +654,26 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
             results: dict[str, dict[str, Any]] = {}
             try:
                 for key, handler_name in requested:
-                    handler: Callable[[bytes], dict[str, Any]] = getattr(legacy, handler_name)
-                    results[key] = dict(handler(_as_body(payload[key])))
+                    if key == "behaviorModel":
+                        before = {
+                            (root / relative).resolve(): snapshot[(root / relative).resolve()].body
+                            for relative in behavior_model_writer.MANAGED_PATHS
+                        }
+                        draft_id_map = behavior_model_writer.apply_behavior_model_changes(
+                            root, behavior_model_updates
+                        )
+                        changed = any(path.read_bytes() != original for path, original in before.items())
+                        results[key] = {
+                            "saved": changed,
+                            "draftIdMap": draft_id_map,
+                            "changedFiles": sum(
+                                path.read_bytes() != original for path, original in before.items()
+                            ),
+                        }
+                        legacy.invalidate_data_cache()
+                    else:
+                        handler: Callable[[bytes], dict[str, Any]] = getattr(legacy, handler_name)
+                        results[key] = dict(handler(_as_body(payload[key])))
                 if pokemon_updates is not None:
                     results["pokemonUpdates"] = dict(
                         pokemon_writer.apply_pokemon_updates(root, pokemon_updates)
@@ -749,6 +775,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
                 "saved": bool(changed_domains),
                 "message": "Saved as one transaction" if changed_domains else "No code changes needed",
                 "domains": results,
+                "draftIdMap": results.get("behaviorModel", {}).get("draftIdMap", {}),
                 "changedDomains": changed_domains,
                 "previousRevision": previous_revision,
                 "sourceRevision": next_revision,

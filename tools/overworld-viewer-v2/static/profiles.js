@@ -58,6 +58,11 @@ export function createCompleteStateDraft(fields, source = null, preferredName = 
     field.key,
     source?.values?.[field.key] ?? fieldDefault(field),
   ]));
+  const templateProvenance = source?.templateProvenance || (
+    source?.bodyProvenance?.kind && source?.provenanceId
+      ? { kind: Number(source.bodyProvenance.kind), provenanceId: Number(source.provenanceId) }
+      : null
+  );
   return {
     draftId: draftId(),
     stableId: null,
@@ -65,6 +70,7 @@ export function createCompleteStateDraft(fields, source = null, preferredName = 
     descriptiveTags: [...(source?.descriptiveTags || [])],
     values,
     backlinks: [],
+    ...(templateProvenance ? { templateProvenance: clone(templateProvenance) } : {}),
     created: true,
   };
 }
@@ -109,7 +115,10 @@ function nodeProfileRef(node) {
   return node?.profileRef ?? node?.profileStableId;
 }
 
-export function createControllerDraft({ source = null, profiles = [], transitions = [], policyDefaults = null } = {}) {
+export function createControllerDraft({
+  source = null, profiles = [], transitions = [], policyDefaults = null,
+  transitionOrderStart = 0, behaviorModelAuthoring = null,
+} = {}) {
   const controllerDraftId = draftId();
   const profileId = profiles[0]?.stableId ?? null;
   const sourceNodes = source?.nodes?.length ? source.nodes : [{
@@ -128,6 +137,8 @@ export function createControllerDraft({ source = null, profiles = [], transition
     if (transition.draftId) transitionIdMap.set(String(transition.draftId), transitionIdMap.get(localTransitionId(transition)));
   });
   const definitionMap = new Map();
+  const applicabilityMap = new Map();
+  const sourceControllerId = source?.draftId ?? source?.stableId ?? null;
   for (const transition of transitions) {
     const sourceDefinition = transition.candidateDefinition || {};
     const definitionKey = String(transition.candidateDefinitionId ?? sourceDefinition.stableId ?? sourceDefinition.draftId);
@@ -140,6 +151,27 @@ export function createControllerDraft({ source = null, profiles = [], transition
     if (mappedNode) definition.nodeId = mappedNode;
     const mappedRecovery = transitionIdMap.get(String(definition.recoveryTransitionId));
     if (mappedRecovery) definition.recoveryTransitionId = mappedRecovery;
+    const displayedApplicability = sourceDefinition.applicability;
+    const authoredApplicability = (behaviorModelAuthoring?.applicability || []).find(
+      (item) => String(item.stableId) === String(displayedApplicability?.stableId ?? sourceDefinition.applicabilityId),
+    );
+    const sourceApplicability = displayedApplicability
+      ? { ...clone(displayedApplicability), ...clone(authoredApplicability || {}) }
+      : clone(authoredApplicability || null);
+    const applicabilityKey = sourceApplicability?.draftId ?? sourceApplicability?.stableId;
+    if (sourceApplicability && applicabilityKey != null
+        && sourceDefinition.controllerId != null
+        && String(sourceApplicability.controllerId) === String(sourceControllerId)) {
+      if (!applicabilityMap.has(String(applicabilityKey))) {
+        const applicability = clone(sourceApplicability);
+        applicability.stableId = null;
+        applicability.draftId = draftId();
+        applicability.controllerId = controllerDraftId;
+        applicabilityMap.set(String(applicabilityKey), applicability);
+      }
+      definition.applicability = clone(applicabilityMap.get(String(applicabilityKey)));
+      definition.applicabilityId = definition.applicability.draftId;
+    }
     definitionMap.set(definitionKey, definition);
   }
   const mapDefinitionId = (value) => definitionMap.get(String(value))?.draftId || value;
@@ -147,7 +179,7 @@ export function createControllerDraft({ source = null, profiles = [], transition
     const copy = clone(transition);
     copy.stableId = null;
     copy.draftId = transitionIdMap.get(localTransitionId(transition));
-    copy.order = order;
+    copy.order = Number(transitionOrderStart) + order;
     const definitionKey = String(transition.candidateDefinitionId ?? transition.candidateDefinition?.stableId ?? transition.candidateDefinition?.draftId);
     copy.candidateDefinition = clone(definitionMap.get(definitionKey));
     copy.candidateDefinitionId = copy.candidateDefinition.draftId;
@@ -274,9 +306,150 @@ function requestJson(api, path, options = {}) {
   throw new TypeError("Profile editor requires an injected read API");
 }
 
+const DEFINITION_AUTHORED_FIELDS = Object.freeze([
+  "controllerId", "nodeId", "requiredOwnerId", "recoveryTransitionId",
+  "applicabilityId", "priority", "kind", "channel", "selectorKind",
+  "semanticRoleId", "mapLifetime", "battleLifetime", "timerClock",
+  "timerSource", "hiddenTimerPolicy", "recoveryPolicy", "timerValue",
+  "hasTiredOriginKind", "tiredOriginKind", "hasRequiredOwnerId",
+  "allowMultipleOwners", "allowMultipleInstancesPerOwner",
+  "authoredTiredBound", "flags", "reserved0", "reserved1",
+]);
+
+const CHILD_FIELDS = Object.freeze({
+  guards: ["kind", "negate", "payload", "referenceId"],
+  operations: ["definitionId", "ownerId", "replacementDefinitionId", "policyId", "instanceKey", "kind", "busyPolicy", "required"],
+  actions: ["phase", "kind", "referenceId", "payload"],
+  recoveryActions: ["ownerId", "kind", "required"],
+});
+
+function authoredIdentity(entity) {
+  return entity?.draftId
+    ? { draftId: entity.draftId }
+    : { stableId: Number(entity?.stableId) };
+}
+
+function pickFields(source, fields) {
+  return Object.fromEntries(fields.map((key) => [key, source?.[key] ?? null]));
+}
+
+function compactProfile(profile, creating) {
+  return {
+    ...authoredIdentity(profile),
+    name: String(profile.name),
+    descriptiveTags: [...(profile.descriptiveTags || [])],
+    values: clone(profile.values || {}),
+    ...(creating ? { templateProvenance: clone(profile.templateProvenance) } : {}),
+  };
+}
+
+function compactNode(node) {
+  return {
+    ...authoredIdentity(node),
+    profileRef: node.profileRef ?? node.profileStableId,
+    semanticRoleId: Number(node.semanticRoleId),
+    customRoleId: node.customRoleId ?? null,
+    base: Boolean(node.base),
+    optional: Boolean(node.optional),
+    hidden: Boolean(node.hidden),
+  };
+}
+
+function compactController(controller) {
+  return {
+    ...authoredIdentity(controller),
+    name: String(controller.name),
+    nodes: (controller.nodes || []).map(compactNode),
+    scalarDefaults: clone(controller.scalarDefaults || {}),
+    policyIds: clone(controller.policyIds || {}),
+  };
+}
+
+function compactApplicability(definition, model) {
+  const embedded = definition?.applicability;
+  const stableId = embedded?.stableId ?? definition?.applicabilityId;
+  const authored = embedded?.kind !== undefined
+    ? embedded
+    : (model?.behaviorModelAuthoring?.applicability || []).find((item) => String(item.stableId) === String(stableId));
+  if (!authored) throw new Error(`Applicability ${stableId ?? ""} is not representable by the V40 writer.`);
+  return {
+    ...authoredIdentity(authored),
+    ...pickFields(authored, ["name", "kind", "groupMask", "controllerId", "profileId", "minimum", "maximum", "flags"]),
+  };
+}
+
+function compactDefinition(definition, model) {
+  if (!definition) throw new Error("A transition candidate definition is required.");
+  return {
+    ...authoredIdentity(definition),
+    ...(definition.name ? { name: String(definition.name) } : {}),
+    ...pickFields(definition, DEFINITION_AUTHORED_FIELDS),
+    applicability: compactApplicability(definition, model),
+  };
+}
+
+function compactChild(child, kind) {
+  return {
+    ...authoredIdentity(child),
+    ...pickFields(child, CHILD_FIELDS[kind]),
+  };
+}
+
+function compactTransition(transition, model) {
+  return {
+    ...authoredIdentity(transition),
+    name: String(transition.name),
+    controllerIds: [...(transition.controllerIds || [])],
+    candidateDefinitionId: transition.candidateDefinitionId,
+    candidateDefinition: compactDefinition(transition.candidateDefinition, model),
+    ownerId: transition.ownerId,
+    trigger: Number(transition.trigger),
+    fromRoleMask: Number(transition.fromRoleMask),
+    dispatchPriority: Number(transition.dispatchPriority),
+    order: Number(transition.order),
+    ...Object.fromEntries(Object.keys(CHILD_FIELDS).map((kind) => [
+      kind, (transition[kind] || []).map((child) => compactChild(child, kind)),
+    ])),
+  };
+}
+
+function sameAuthored(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Return the writer's compact delta; display-only and derived fields never cross the API. */
+export function compactBehaviorModelDraft(draft, model) {
+  const transaction = { modelVersion: 40 };
+  const specifications = {
+    stateProfiles: [(item, creating) => compactProfile(item, creating), model?.stateProfiles || []],
+    controllers: [(item) => compactController(item), model?.controllers || []],
+    transitions: [(item) => compactTransition(item, model), model?.transitionGraph?.transitions || []],
+  };
+  for (const [domain, [compact, saved]] of Object.entries(specifications)) {
+    const delta = draft?.[domain] || {};
+    const create = (delta.create || []).map((item) => compact(item, true, model));
+    const update = (delta.update || []).map((item) => compact(item, false, model)).filter((item) => {
+      const source = saved.find((candidate) => Number(candidate.stableId) === Number(item.stableId));
+      return !source || !sameAuthored(item, compact(source, false, model));
+    });
+    const remove = [...(delta.remove || [])];
+    const authored = Object.fromEntries(Object.entries({ create, update, remove }).filter(([, values]) => values.length));
+    if (Object.keys(authored).length) transaction[domain] = authored;
+  }
+  return transaction;
+}
+
+export function behaviorModelChangeCount(transaction) {
+  return ["stateProfiles", "controllers", "transitions"].reduce(
+    (total, domain) => total + ["create", "update", "remove"].reduce(
+      (domainTotal, operation) => domainTotal + (transaction?.[domain]?.[operation]?.length || 0), 0,
+    ), 0,
+  );
+}
+
 export function createProfilesController({
   state = {}, api, elements = {}, setStatus = () => {},
-  reportSelection = () => {},
+  reportSelection = () => {}, markDirty = () => {},
 } = {}) {
   const root = elements.profilesView;
   const list = elements.profileLibrary;
@@ -299,6 +472,7 @@ export function createProfilesController({
   let stackPreviewController = null;
   let graphDiagnostics = [];
   let graphDiagnosticIndex = {};
+  let writerValidationError = "";
   const updates = new Map();
   const created = [];
   const controllerUpdates = new Map();
@@ -423,7 +597,31 @@ export function createProfilesController({
     return graphDiagnosticIndex[`${type}:${String(entity?.draftId ?? entity?.stableId)}`] || [];
   }
 
-  function syncDirty() {
+  function currentCommit() {
+    try {
+      const transaction = compactBehaviorModelDraft(state.v40BehaviorModelDraft, dataset);
+      writerValidationError = "";
+      return { transaction, count: behaviorModelChangeCount(transaction) };
+    } catch (error) {
+      writerValidationError = String(error?.message || error);
+      const draft = state.v40BehaviorModelDraft || {};
+      const count = ["stateProfiles", "controllers", "transitions"].reduce(
+        (total, domain) => total + ["create", "update", "remove"].reduce(
+          (subtotal, operation) => subtotal + (draft?.[domain]?.[operation]?.length || 0), 0,
+        ), 0,
+      );
+      return { transaction: null, count };
+    }
+  }
+
+  function blockingDiagnostics() {
+    const diagnostics = graphDiagnostics.filter((item) => item.severity !== "warning");
+    return writerValidationError
+      ? [{ code: "REPRESENTATION_UNSUPPORTED", message: writerValidationError, entityType: "draft", entityId: "draft" }, ...diagnostics]
+      : diagnostics;
+  }
+
+  function syncDirty({ notify = true } = {}) {
     state.selectedProfileKey = selectedId;
     state.selectedControllerKey = selectedControllerId;
     state.profileDeckMode = mode;
@@ -444,12 +642,10 @@ export function createProfilesController({
         remove: [...removedTransitionIds],
       },
     };
-    // State-profile persistence is introduced with the atomic model writer.
-    // Until then these drafts are deliberately local and must not enable the
-    // shell's Global Save transaction.
-    state.profileDirty = false;
     recomputeGraphDiagnostics();
+    state.profileDirty = currentCommit().count > 0;
     stackPreviewController?.refresh();
+    if (notify) markDirty();
   }
 
   function visibleProfiles() {
@@ -560,7 +756,7 @@ export function createProfilesController({
         </div>
       </header>
       <section class="v40-state-identity" aria-labelledby="stateIdentityTitle">
-        <div><span class="eyebrow" id="stateIdentityTitle">${profile.created ? "Local draft identity" : "Stable identity"}</span><strong>${profile.created ? escapeHtml(profile.draftId) : `ID ${profile.stableId}`}</strong><small>${profile.created ? "Local and unpersisted. Global Save does not include this draft yet." : escapeHtml(profile.registryKey || "Runtime catalog identity")}</small></div>
+        <div><span class="eyebrow" id="stateIdentityTitle">${profile.created ? "Draft identity" : "Stable identity"}</span><strong>${profile.created ? escapeHtml(profile.draftId) : `ID ${profile.stableId}`}</strong><small>${profile.created ? "Pending Global Save." : escapeHtml(profile.registryKey || "Runtime catalog identity")}</small></div>
         <label><span>Name</span><input type="text" value="${escapeHtml(profile.name)}" data-state-identity="name" aria-invalid="${nameError ? "true" : "false"}">${nameError ? `<small class="field-error">${escapeHtml(nameError.message)}</small>` : ""}</label>
         <label class="v40-state-tags"><span>Descriptive tags</span><input type="text" value="${escapeHtml(tagText)}" data-state-identity="descriptiveTags" placeholder="bird, air, relaxed"><small>Search and documentation only. Tags never select runtime behavior.</small></label>
       </section>
@@ -644,7 +840,7 @@ export function createProfilesController({
     inspector.innerHTML = `<article class="profile-field-editor v40-controller-editor" data-selected-controller="${escapeHtml(controllerIdFor(controller))}">
       <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed controller</span><h2>${escapeHtml(controller.name)}</h2><small>${controller.created ? escapeHtml(controller.draftId) : `Stable ID ${controller.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-controller-action="duplicate">Duplicate controller</button></div></header>
       ${errors.length || entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${errors.length + entityDiagnostics.length} model issue${errors.length + entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0]?.message || errors[0]?.message)}</span></aside>` : ""}
-      <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label><div><span>Identity</span><strong>${controller.created ? escapeHtml(controller.draftId) : controller.stableId}</strong><small>${controller.created ? "Local and unpersisted" : escapeHtml(controller.registryKey)}</small></div></section>
+      <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label><div><span>Identity</span><strong>${controller.created ? escapeHtml(controller.draftId) : controller.stableId}</strong><small>${controller.created ? "Pending Global Save" : escapeHtml(controller.registryKey)}</small></div></section>
       <details class="pv2-field-section" open><summary><span><strong>Controller defaults</strong><small>Typed scalar defaults and stable policy references.</small></span></summary><div class="profile-fields">${scalarFields}${policyControls}</div></details>
       <section class="v40-controller-section"><header><div><span class="eyebrow">State roster</span><h3>Bound nodes</h3></div><button type="button" data-controller-action="add-node">Add node</button></header><div class="v40-table-scroll"><table class="v40-controller-table"><thead><tr><th>Base</th><th>Node ID</th><th>Semantic role</th><th>Bound profile</th><th>Order</th></tr></thead><tbody>${nodeRows}</tbody></table></div></section>
       <section class="v40-controller-section"><header><div><span class="eyebrow">Authoritative graph</span><h3>Transitions</h3></div><button type="button" data-controller-action="add-transition">Add transition</button></header><div class="v40-table-scroll"><table class="v40-controller-table v40-transition-table"><thead><tr><th>Row ID</th><th>Event</th><th>From roles</th><th>Definition</th><th>Owner</th><th>Priority</th><th>Order</th></tr></thead><tbody>${transitionRows || `<tr><td colspan="7">No transitions.</td></tr>`}</tbody></table></div></section>
@@ -673,7 +869,13 @@ export function createProfilesController({
 
   function addProfile(source = null) {
     const preferred = source ? `${source.name} copy` : "New state profile";
-    const draft = createCompleteStateDraft(dataset.stateProfileFields, source, ensureUniqueName(preferred));
+    const draft = createCompleteStateDraft(
+      dataset.stateProfileFields, source || saved[0], ensureUniqueName(preferred),
+    );
+    if (!source) {
+      draft.name = ensureUniqueName(preferred);
+      draft.descriptiveTags = [];
+    }
     created.push(draft);
     selectedId = draft.draftId;
     syncDirty();
@@ -708,6 +910,8 @@ export function createProfilesController({
     const draft = createControllerDraft({
       source, profiles: profiles(), transitions: sourceTransitions,
       policyDefaults: dataset.controllers?.[0]?.policyIds,
+      transitionOrderStart: transitions().length,
+      behaviorModelAuthoring: dataset.behaviorModelAuthoring,
     });
     draft.controller.name = uniqueControllerName(source ? `${source.name} copy` : "New controller");
     createdControllers.push(draft.controller);
@@ -728,10 +932,14 @@ export function createProfilesController({
   }
 
   function updateControllerValue(domain, key, raw) {
-    const controller = editableController(selectedController());
-    if (!controller) return;
-    if (domain === "identity") controller[key] = String(raw);
-    else controller[domain][key] = Number(raw);
+    const selectedValue = selectedController();
+    if (!selectedValue) return;
+    const value = domain === "identity" ? String(raw) : Number(raw);
+    const previous = domain === "identity" ? selectedValue[key] : selectedValue[domain]?.[key];
+    if (previous === value) return;
+    const controller = editableController(selectedValue);
+    if (domain === "identity") controller[key] = value;
+    else controller[domain][key] = value;
     syncDirty();
     renderList();
   }
@@ -759,14 +967,21 @@ export function createProfilesController({
   }
 
   function updateNode(nodeId, key, raw) {
-    const controller = editableController(selectedController());
+    const selectedValue = selectedController();
+    const current = selectedValue?.nodes.find((item) => localNodeId(item) === nodeId);
+    if (!current) return;
+    const value = key === "base" ? Boolean(raw)
+      : key === "profileRef" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+    if (key === "base" && current.base && value) return;
+    if (key !== "base" && current[key] === value) return;
+    const controller = editableController(selectedValue);
     const node = controller?.nodes.find((item) => localNodeId(item) === nodeId);
     if (!node) return;
     if (key === "base") {
       controller.nodes.forEach((item) => { item.base = item === node; });
       controller.baseNodeId = nodeId;
     } else {
-      node[key] = key === "profileRef" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+      node[key] = value;
       if (key === "semanticRoleId") {
         node.semanticRole = dataset.semanticRoles?.find((option) => Number(option.value) === Number(raw))?.label || "";
         if (Number(raw) === 7) {
@@ -786,6 +1001,9 @@ export function createProfilesController({
     const controller = editableController(selectedController());
     const index = controller?.nodes.findIndex((node) => localNodeId(node) === nodeId) ?? -1;
     if (!controller || index < 0) return;
+    if ((action === "remove" && controller.nodes.length <= 1)
+        || (action === "up" && index === 0)
+        || (action === "down" && index === controller.nodes.length - 1)) return;
     if (action === "remove" && controller.nodes.length > 1) {
       const [removed] = controller.nodes.splice(index, 1);
       if (removed.base) {
@@ -814,7 +1032,7 @@ export function createProfilesController({
     transition.stableId = null;
     transition.draftId = draftId();
     transition.name = "New transition";
-    transition.order = controllerTransitions(controller).length;
+    transition.order = transitions().length;
     const controllerId = controller.draftId || controller.stableId;
     const definition = clone(transition.candidateDefinition || {});
     const sourceDefinitionId = transition.candidateDefinitionId ?? definition.stableId ?? definition.draftId;
@@ -850,10 +1068,13 @@ export function createProfilesController({
   }
 
   function updateTransition(id, key, raw) {
-    const transition = editableTransition(findTransition(id));
+    const found = findTransition(id);
+    const value = key === "candidateDefinitionId" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+    if (!found || found[key] === value) return;
+    const transition = editableTransition(found);
     if (!transition) return;
     const previousCandidateId = transition.candidateDefinitionId;
-    transition[key] = key === "candidateDefinitionId" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+    transition[key] = value;
     if (key === "candidateDefinitionId") {
       const source = transitions().find((item) => String(item.candidateDefinitionId) === String(raw))
         || (dataset.transitionGraph?.transitions || []).find((item) => String(item.candidateDefinitionId) === String(raw));
@@ -884,10 +1105,13 @@ export function createProfilesController({
   }
 
   function updateTransitionRole(id, role, checked) {
-    const transition = editableTransition(findTransition(id));
-    if (!transition) return;
+    const found = findTransition(id);
+    if (!found) return;
     const bit = 1 << (Number(role) - 1);
-    transition.fromRoleMask = checked ? Number(transition.fromRoleMask) | bit : Number(transition.fromRoleMask) & ~bit;
+    const value = checked ? Number(found.fromRoleMask) | bit : Number(found.fromRoleMask) & ~bit;
+    if (value === Number(found.fromRoleMask)) return;
+    const transition = editableTransition(found);
+    transition.fromRoleMask = value;
     transition.fromSemanticRoleIds = (dataset.semanticRoles || []).map((item) => Number(item.value)).filter((value) => transition.fromRoleMask & (1 << (value - 1)));
     syncDirty();
   }
@@ -899,6 +1123,7 @@ export function createProfilesController({
     if (!controller || index < 0) return;
     const transition = local[index];
     if (action === "remove") {
+      const removedOrder = Number(transition.order);
       if (transition.draftId) createdTransitions.splice(createdTransitions.indexOf(transition), 1);
       else {
         transitionUpdates.delete(transition.stableId);
@@ -909,13 +1134,15 @@ export function createProfilesController({
         const editable = editableController(item);
         editable.transitionIds = editable.transitionIds.filter((reference) => String(reference) !== String(transition.stableId) && String(reference) !== id);
       });
+      transitions().filter((item) => Number(item.order) > removedOrder).forEach((item) => {
+        editableTransition(item).order = Number(item.order) - 1;
+      });
     } else {
       const otherIndex = action === "up" ? index - 1 : index + 1;
-      if (otherIndex >= 0 && otherIndex < local.length) {
-        const first = editableTransition(transition);
-        const second = editableTransition(local[otherIndex]);
-        [first.order, second.order] = [second.order, first.order];
-      }
+      if (otherIndex < 0 || otherIndex >= local.length) return;
+      const first = editableTransition(transition);
+      const second = editableTransition(local[otherIndex]);
+      [first.order, second.order] = [second.order, first.order];
     }
     syncDirty();
     render();
@@ -933,29 +1160,37 @@ export function createProfilesController({
       <option value="saved">Saved states</option>
       <option value="draft">New drafts</option>`;
     elements.profileKindFilter.value = filter;
-    syncDirty();
+    state.profileDeckMode = mode;
     render();
   }
 
   function updateIdentity(key, raw) {
-    const profile = editable(selected());
-    if (!profile) return;
+    const selectedValue = selected();
+    if (!selectedValue) return;
+    const value = key === "descriptiveTags"
+      ? [...new Set(String(raw).split(",").map((tag) => tag.trim()).filter(Boolean))]
+      : String(raw);
+    if (JSON.stringify(selectedValue[key]) === JSON.stringify(value)) return;
+    const profile = editable(selectedValue);
     if (key === "descriptiveTags") {
-      profile.descriptiveTags = [...new Set(String(raw).split(",").map((tag) => tag.trim()).filter(Boolean))];
-    } else profile[key] = String(raw);
+      profile.descriptiveTags = value;
+    } else profile[key] = value;
     syncDirty();
     renderList();
   }
 
   function updateField(key, raw) {
-    const profile = editable(selected());
-    if (!profile) return;
-    profile.values[key] = Number(raw);
+    const selectedValue = selected();
+    const value = Number(raw);
+    if (!selectedValue || selectedValue.values[key] === value) return;
+    const profile = editable(selectedValue);
+    profile.values[key] = value;
     syncDirty();
     renderList();
   }
 
   function resetLocalDrafts() {
+    const hadChanges = currentCommit().count > 0;
     const previous = selected();
     const previousStableId = previous?.stableId;
     updates.clear();
@@ -969,7 +1204,7 @@ export function createProfilesController({
       ? `state:${previousStableId}`
       : (saved[0] ? `state:${saved[0].stableId}` : "");
     selectedControllerId = savedControllers[0] ? `controller:${savedControllers[0].stableId}` : "";
-    syncDirty();
+    syncDirty({ notify: hadChanges });
     render();
     setStatus("Local state-profile drafts discarded.", "info");
   }
@@ -999,7 +1234,7 @@ export function createProfilesController({
       state.v40BehaviorModel = dataset;
       state.selectedProfileKey = selectedId;
       loading = false;
-      recomputeGraphDiagnostics();
+      syncDirty({ notify: false });
       stackPreviewController?.destroy();
       stackPreviewController = createStackPreviewController({
         model: dataset,
@@ -1103,23 +1338,29 @@ export function createProfilesController({
   load();
 
   return Object.freeze({
-    hasChanges: () => false,
-    changeCount: () => 0,
-    hasInvalid: () => false,
-    validationCount: () => 0,
-    validationMessage: () => "",
+    hasChanges: () => currentCommit().count > 0,
+    changeCount: () => currentCommit().count,
+    hasInvalid: () => blockingDiagnostics().length > 0,
+    validationCount: () => blockingDiagnostics().length,
+    validationMessage: () => blockingDiagnostics()[0]?.message || "",
     focusFirstInvalid: () => inspector.querySelector("[aria-invalid='true']")?.focus(),
-    // Task 19 owns the atomic model-transaction writer. The typed draft graph
-    // is already exposed on state.v40BehaviorModelDraft for that integration.
-    commitPayload: () => ({}),
-    clearCommitted: () => {
+    commitPayload: () => {
+      const commit = currentCommit();
+      return commit.count && commit.transaction ? { behaviorModel: commit.transaction } : {};
+    },
+    clearCommitted: (result = {}) => {
+      const mapping = result?.domains?.behaviorModel?.draftIdMap || result?.draftIdMap || {};
+      if (mapping[selectedId]) selectedId = `state:${mapping[selectedId]}`;
+      if (mapping[selectedControllerId]) selectedControllerId = `controller:${mapping[selectedControllerId]}`;
       updates.clear(); created.splice(0);
       controllerUpdates.clear(); createdControllers.splice(0);
       transitionUpdates.clear(); createdTransitions.splice(0); removedTransitionIds.clear();
-      syncDirty(); load();
+      state.selectedProfileKey = selectedId;
+      state.selectedControllerKey = selectedControllerId;
+      syncDirty();
     },
     reset: resetLocalDrafts,
-    refresh: () => { if (!loading && !created.length && !updates.size) load(); },
+    refresh: () => (!loading && currentCommit().count === 0 ? load() : undefined),
     refreshPreservingDrafts: () => load(),
     navigationContext: () => mode === "controllers"
       ? ({ selection: selectedControllerId, label: selectedController()?.name || "" })

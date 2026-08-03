@@ -962,6 +962,7 @@ function collectCommitDomains() {
 }
 
 const COMMIT_DOMAIN_CONTROLLERS = Object.freeze({
+  behaviorModel: "profiles",
   profiles: "profiles",
   profileMemberships: "profiles",
   profileOverrides: "profiles",
@@ -987,7 +988,11 @@ function clearCommittedControllers(controllerNames, result, requestedDomains = [
   controllerNames.forEach((name) => {
     const controller = state.controllers[name];
     if (!controller?.clearCommitted) return;
-    controller.clearCommitted(name === "pokemon" ? { ...result, requestedDomains } : undefined);
+    controller.clearCommitted(
+      name === "pokemon" ? { ...result, requestedDomains }
+        : name === "profiles" ? result
+          : undefined,
+    );
   });
 }
 

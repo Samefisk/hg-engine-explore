@@ -111,6 +111,7 @@ def transition_payload(transition, definition, applicability, identity, definiti
         "trigger": transition["trigger"],
         "fromRoleMask": transition["fromRoleMask"],
         "dispatchPriority": transition["dispatchPriority"],
+        "order": transition["order"],
         "guards": [], "operations": [operation] if operation else [],
         "actions": [], "recoveryActions": [],
     }
@@ -257,6 +258,39 @@ class BehaviorModelWriterTest(unittest.TestCase):
         self.assertEqual(next(item for item in editor["transitionGraph"]["transitions"]
                               if item["stableId"] == transition["stableId"])["name"],
                          "Named transition")
+
+    def test_transition_reorder_survives_wire_and_reader_reload(self):
+        model = self.model()
+        first, second = model["transitions"][:2]
+        first_update = saved_transition_payload(
+            model, first, name=first.get("name", first["registryKey"])
+        )
+        second_update = saved_transition_payload(
+            model, second, name=second.get("name", second["registryKey"])
+        )
+        first_update["order"], second_update["order"] = second["order"], first["order"]
+        stable_ids = {item["stableId"] for item in model["transitions"]}
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "transitions": {"update": [first_update, second_update]},
+        })
+        saved = self.model()
+        self.assertEqual({item["stableId"] for item in saved["transitions"]}, stable_ids)
+        self.assertEqual([item["stableId"] for item in saved["transitions"][:2]],
+                         [second["stableId"], first["stableId"]])
+        self.assertEqual([item["order"] for item in saved["transitions"]],
+                         list(range(len(saved["transitions"]))))
+        blob = self.writer.v40.read_inc(self.workspace / INC_REL)
+        decoded = self.writer.v40.decode_blob(blob, stable_id_history=saved["stableIdHistory"])
+        self.assertEqual([item["stableId"] for item in decoded["transitions"][:2]],
+                         [second["stableId"], first["stableId"]])
+        viewer = load_viewer()
+        viewer.V40_BEHAVIOR_DATA_SOURCE = self.workspace / INC_REL
+        viewer.V40_BEHAVIOR_MODEL_SOURCE = self.workspace / MODEL_REL
+        reloaded = viewer.build_v40_state_profile_editor_data()
+        self.assertEqual(
+            [item["stableId"] for item in reloaded["transitionGraph"]["transitions"][:2]],
+            [second["stableId"], first["stableId"]],
+        )
 
     def test_active_and_tired_duplicates_preserve_template_provenance(self):
         model = self.model()

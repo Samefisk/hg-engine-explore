@@ -413,6 +413,7 @@ function modelDiagnostics(model) {
 
   const transitions = asArray(model?.transitionGraph?.transitions);
   const transitionIds = new Set();
+  const transitionOrders = new Set();
   transitions.forEach((transition, index) => { const id = identity(transition, "transition", `transitionGraph.transitions.${index}`); if (id !== null) transitionIds.add(String(id)); });
   const transitionsById = new Map(transitions.map((transition) => [String(ref(transition)), transition]));
   const definitionsById = new Map(definitions.map((definition) => [String(ref(definition)), definition]));
@@ -436,6 +437,10 @@ function modelDiagnostics(model) {
   transitions.forEach((transition, index) => {
     const path = `transitionGraph.transitions.${index}`;
     const id = ref(transition);
+    if (!Number.isInteger(transition?.order) || transition.order < 0 || transition.order >= transitions.length || transitionOrders.has(transition.order)) {
+      errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.order`, "Transition order must be a unique contiguous index.", "transition", id));
+    }
+    transitionOrders.add(transition?.order);
     const definition = definitions.find((item) => same(ref(item), transition?.candidateDefinitionId));
     requireRef(transition?.candidateDefinitionId, definitionIds, `${path}.candidateDefinitionId`, "transition", id, "Candidate definition");
     if (transition?.candidateDefinition && !same(ref(transition.candidateDefinition), transition.candidateDefinitionId)) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.candidateDefinition`, "Embedded candidate definition identity must match candidateDefinitionId.", "transition", id));

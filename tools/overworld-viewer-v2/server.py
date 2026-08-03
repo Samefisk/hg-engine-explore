@@ -28,6 +28,7 @@ import pokemon_asset_writer
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_VIEWER_SOURCE = ROOT / "scripts/overworld_behavior_profile_viewer.py"
 STATIC_DIR = Path(__file__).resolve().with_name("static")
+BEHAVIOR_MODEL_SOURCE = ROOT / "data/OverworldWildBehaviorModelV40.json"
 
 V2_ASSETS = {
     "/v2-assets/v2.css": (STATIC_DIR / "v2.css", "text/css; charset=utf-8"),
@@ -64,6 +65,23 @@ def load_legacy_viewer() -> ModuleType:
 
 
 legacy = load_legacy_viewer()
+
+
+def build_behavior_model_editor_payload() -> dict[str, object]:
+    """Join display data with the authored applicability rows needed by the writer."""
+
+    payload = legacy.build_v40_state_profile_editor_data()
+    authored = json.loads(BEHAVIOR_MODEL_SOURCE.read_text())
+    applicability_keys = (
+        "stableId", "name", "kind", "groupMask", "controllerId",
+        "profileId", "minimum", "maximum", "flags",
+    )
+    applicability_rows = [
+        {key: row[key] for key in applicability_keys if key in row}
+        for row in authored.get("applicability", [])
+    ]
+    payload["behaviorModelAuthoring"] = {"applicability": applicability_rows}
+    return payload
 
 
 def render_normal_battle_palette(body: bytes, palette_path: Path | None) -> bytes:
@@ -258,7 +276,7 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 return
             if path == "/api/v2/behavior-model":
                 with reliability.workspace_guard(ROOT):
-                    payload = legacy.build_v40_state_profile_editor_data()
+                    payload = build_behavior_model_editor_payload()
                     payload["sourceRevision"] = reliability.current_revision(legacy, ROOT)
                     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                     etag = f'"sha256:{hashlib.sha256(body).hexdigest()}"'

@@ -53,7 +53,7 @@ NODE_FIELDS = frozenset((
 TRANSITION_FIELDS = frozenset((
     "draftId", "stableId", "name", "controllerIds", "candidateDefinitionId",
     "candidateDefinition", "ownerId", "trigger", "fromRoleMask",
-    "dispatchPriority", "guards", "operations", "actions", "recoveryActions",
+    "dispatchPriority", "order", "guards", "operations", "actions", "recoveryActions",
 ))
 DEFINITION_AUTHORED_FIELDS = (
     "controllerId", "nodeId", "requiredOwnerId", "recoveryTransitionId",
@@ -546,7 +546,7 @@ def _transition_record(
 ) -> dict[str, Any]:
     _keys(item, TRANSITION_FIELDS, (
         "name", "controllerIds", "candidateDefinitionId", "candidateDefinition",
-        "ownerId", "trigger", "fromRoleMask", "dispatchPriority",
+        "ownerId", "trigger", "fromRoleMask", "dispatchPriority", "order",
         "guards", "operations", "actions", "recoveryActions",
     ), path)
     identity = _identity(item, creating, path)
@@ -598,6 +598,7 @@ def _transition_record(
         result = {key: copy.deepcopy(value) for key, value in existing.items() if key not in CHILD_FIELDS}
     result.update({
         "name": _name(item["name"], f"{path}.name"), "definitionId": definition_ref,
+        "order": _integer(item["order"], f"{path}.order"),
         "ownerId": _resolve(item["ownerId"], allocator, f"{path}.ownerId"),
         "trigger": _integer(item["trigger"], f"{path}.trigger", 0xFF),
         "fromRoleMask": _integer(item["fromRoleMask"], f"{path}.fromRoleMask", 0xFF),
@@ -715,7 +716,12 @@ def _materialize(
             _retire(rule["registryKey"], retirements, retired)
             del applicability[stable_id]
 
-    result["transitions"] = list(transitions.values())
+    ordered_transitions = sorted(
+        transitions.values(), key=lambda record: (record["order"], record["stableId"])
+    )
+    for order, transition in enumerate(ordered_transitions):
+        transition["order"] = order
+    result["transitions"] = ordered_transitions
     result["overrideDefinitions"] = list(definitions.values())
     result["applicability"] = list(applicability.values())
 

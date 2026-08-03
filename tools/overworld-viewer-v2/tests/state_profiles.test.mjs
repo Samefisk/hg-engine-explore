@@ -3,6 +3,8 @@ import {
   createCompleteStateDraft,
   createControllerDraft,
   createProfilesController,
+  compactBehaviorModelDraft,
+  behaviorModelChangeCount,
   validateCompleteStateProfile,
   validateControllerDraft,
   v40ProfileDeckCapability,
@@ -19,6 +21,14 @@ assert.match(draft.draftId, /^draft:/);
 assert.equal(draft.stableId, null);
 assert.deepEqual(draft.values, { behaviorKind: 1, hopMinDistance: 0, hopMaxDistance: 0 });
 assert.deepEqual(validateCompleteStateProfile(draft, fields), []);
+draft.templateProvenance = { kind: 1, provenanceId: 36865 };
+const compactDraft = compactBehaviorModelDraft({ stateProfiles: { create: [draft] } }, {
+  stateProfiles: [], controllers: [], transitionGraph: { transitions: [] },
+});
+assert.equal(behaviorModelChangeCount(compactDraft), 1);
+assert.deepEqual(Object.keys(compactDraft.stateProfiles.create[0]).sort(), [
+  "descriptiveTags", "draftId", "name", "templateProvenance", "values",
+].sort());
 
 const copy = createCompleteStateDraft(fields, {
   name: "Bird active",
@@ -62,8 +72,12 @@ const controllerSource = {
 };
 const transitionSource = {
   stableId: 40961,
+  order: 0,
   controllerIds: [12289],
-  candidateDefinition: { stableId: 28673, controllerId: 12289, nodeId: 12545 },
+  candidateDefinition: {
+    stableId: 28673, controllerId: 12289, nodeId: 12545, applicabilityId: 61697,
+    applicability: { stableId: 61697, name: "Controller scope", flags: 2, immutableContextMask: 0xFFFFFFFF, controllerId: 12289, effectiveProfileId: null, semanticRoleId: null },
+  },
   candidateDefinitionId: 28673,
   ownerId: 33026,
   trigger: 1,
@@ -75,16 +89,35 @@ const transitionSource = {
 const sharedTransitionSource = {
   ...structuredClone(transitionSource),
   stableId: 40962,
+  order: 1,
   controllerIds: [12289],
   candidateDefinitionId: 28674,
-  candidateDefinition: { stableId: 28674, controllerId: null, nodeId: null },
+  candidateDefinition: {
+    ...structuredClone(transitionSource.candidateDefinition),
+    stableId: 28674, controllerId: null, nodeId: null,
+  },
   guards: [{ stableId: 45058, kind: 1, referenceId: null }],
 };
+const secondScopedTransitionSource = {
+  ...structuredClone(transitionSource), stableId: 40963, order: 2,
+};
 controllerModel.transitionGraph.transitions = [transitionSource, sharedTransitionSource];
+controllerModel.behaviorModelAuthoring = { applicability: [
+  { stableId: 61697, kind: 1, groupMask: 0xFFFFFFFF, controllerId: 12289, profileId: 0, minimum: 0, maximum: 0, flags: 2 },
+] };
+const reordered = [structuredClone(transitionSource), structuredClone(sharedTransitionSource)];
+[reordered[0].order, reordered[1].order] = [reordered[1].order, reordered[0].order];
+const reorderPayload = compactBehaviorModelDraft({ transitions: { update: reordered } }, {
+  ...controllerModel, controllers: [controllerSource], transitionGraph: { ...controllerModel.transitionGraph, transitions: [transitionSource, sharedTransitionSource] },
+});
+assert.equal(behaviorModelChangeCount(reorderPayload), 2);
+assert.deepEqual(reorderPayload.transitions.update.map((item) => item.order), [1, 0]);
 const controllerCopy = createControllerDraft({
   source: controllerSource,
   profiles: controllerModel.stateProfiles,
-  transitions: [transitionSource],
+  transitions: [transitionSource, secondScopedTransitionSource],
+  transitionOrderStart: 20,
+  behaviorModelAuthoring: controllerModel.behaviorModelAuthoring,
 });
 assert.match(controllerCopy.controller.draftId, /^draft:/);
 assert.match(controllerCopy.controller.nodes[0].draftId, /^draft:/);
@@ -94,6 +127,18 @@ assert.match(controllerCopy.transitions[0].draftId, /^draft:/);
 assert.equal(controllerCopy.transitions[0].candidateDefinition.nodeId, controllerCopy.controller.nodes[0].draftId);
 assert.equal(controllerCopy.transitions[0].candidateDefinition.stableId, null);
 assert.match(controllerCopy.transitions[0].candidateDefinition.draftId, /^draft:/);
+assert.match(controllerCopy.transitions[0].candidateDefinition.applicability.draftId, /^draft:/);
+assert.equal(controllerCopy.transitions[0].candidateDefinition.applicabilityId, controllerCopy.transitions[0].candidateDefinition.applicability.draftId);
+assert.equal(controllerCopy.transitions[0].candidateDefinition.applicability.controllerId, controllerCopy.controller.draftId);
+assert.deepEqual(
+  Object.fromEntries(["kind", "groupMask", "profileId", "minimum", "maximum"].map((key) => [key, controllerCopy.transitions[0].candidateDefinition.applicability[key]])),
+  { kind: 1, groupMask: 0xFFFFFFFF, profileId: 0, minimum: 0, maximum: 0 },
+);
+assert.equal(controllerCopy.transitions[1].candidateDefinition.applicability.draftId, controllerCopy.transitions[0].candidateDefinition.applicability.draftId);
+assert.equal(transitionSource.candidateDefinition.applicability.stableId, 61697);
+assert.equal(transitionSource.candidateDefinition.applicability.controllerId, 12289);
+assert.equal("kind" in transitionSource.candidateDefinition.applicability, false);
+assert.deepEqual(controllerCopy.transitions.map((item) => item.order), [20, 21]);
 assert.equal(controllerCopy.transitions[0].candidateDefinitionId, controllerCopy.transitions[0].candidateDefinition.draftId);
 assert.deepEqual(controllerCopy.transitions[0].controllerIds, [controllerCopy.controller.draftId]);
 assert.equal(controllerCopy.transitions[0].guards[0].referenceId, controllerCopy.controller.nodes[0].draftId);
@@ -181,6 +226,7 @@ const controller = createProfilesController({
         name: "Bird calm",
         descriptiveTags: ["bird"],
         registryKey: "authored-profile:class-0:chill",
+        provenanceId: 36865,
         bodyProvenance: { kind: 1, label: "Calm" },
         values: { behaviorKind: 1, hopMinDistance: 0, hopMaxDistance: 0 },
         backlinks: [],
@@ -203,6 +249,7 @@ const controller = createProfilesController({
         transitions: [transitionSource, sharedTransitionSource],
         triggerOptions: controllerModel.transitionGraph.triggerOptions,
       },
+      behaviorModelAuthoring: controllerModel.behaviorModelAuthoring,
     }),
   },
   elements: {
@@ -234,18 +281,18 @@ root.dispatch("input", {
   matches: (selector) => selector === "[data-state-identity]",
 });
 
-assert.equal(controller.hasChanges(), false);
-assert.equal(controller.changeCount(), 0);
-assert.equal(shellMarkDirtyCalls, 0);
-assert.deepEqual(controller.commitPayload(), {});
-assert.equal(state.profileDirty, false);
+assert.equal(controller.hasChanges(), true);
+assert.equal(controller.changeCount(), 1);
+assert.equal(shellMarkDirtyCalls, 2);
+assert.equal(controller.commitPayload().behaviorModel.stateProfiles.create.length, 1);
+assert.equal(state.profileDirty, true);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 1);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create[0].name, "Bird relaxed");
 
 root.dispatch("click", actionTarget("reset-local"));
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 0);
 assert.equal(state.v40BehaviorModelDraft.stateProfiles.update.length, 0);
-assert.equal(shellMarkDirtyCalls, 0);
+assert.equal(shellMarkDirtyCalls, 3);
 assert.deepEqual(controller.commitPayload(), {});
 
 root.dispatch("click", {
@@ -315,8 +362,27 @@ assert.notEqual(
   state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId,
   state.v40BehaviorModelDraft.controllers.create[1].nodes[0].draftId,
 );
-assert.equal(shellMarkDirtyCalls, 0);
+assert.equal(shellMarkDirtyCalls, 13);
+assert.equal(controller.hasInvalid(), true);
+assert.ok(controller.commitPayload().behaviorModel);
+
+const preservedControllerDraftId = controller.navigationContext().selection;
+const preservedPayload = structuredClone(controller.commitPayload());
+assert.equal(controller.hasChanges(), true);
+assert.equal(state.v40BehaviorModelDraft.controllers.create.some((item) => item.draftId === preservedControllerDraftId), true);
+assert.deepEqual(controller.commitPayload(), preservedPayload);
+await controller.refreshPreservingDrafts();
+assert.equal(state.v40BehaviorModelDraft.controllers.create.some((item) => item.draftId === preservedControllerDraftId), true);
+assert.deepEqual(controller.commitPayload(), preservedPayload);
+assert.equal(shellMarkDirtyCalls, 13);
+
+controller.clearCommitted({
+  domains: { behaviorModel: { draftIdMap: { [preservedControllerDraftId]: 62001 } } },
+});
+assert.equal(controller.hasChanges(), false);
 assert.deepEqual(controller.commitPayload(), {});
+assert.equal(controller.navigationContext().selection, "controller:62001");
+assert.equal(shellMarkDirtyCalls, 14);
 
 controller.destroy();
 console.log("V40 local-draft shell integration checks passed");
