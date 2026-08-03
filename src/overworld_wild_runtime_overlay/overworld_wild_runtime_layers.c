@@ -32,6 +32,11 @@ typedef struct OverworldWildRuntimeLayerService {
 
 static OverworldWildRuntimeLayerService sOverworldWildRuntimeLayerService;
 
+static void ExpireHiddenTimers(
+    OverworldWildRuntimeTimer *timers,
+    u8 count,
+    const OverworldWildRuntimeProvenance *provenance);
+
 void OverworldWildRuntime_ClearSlotStorage(
     OverworldWildRuntimeSlotSidecar *slot)
 {
@@ -248,6 +253,50 @@ static u32 HandleTag(
     return (tag << 1) | (tag >> 31);
 }
 
+u32 OverworldWildRuntime_TimerExpiryTagInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry)
+{
+    u32 tag = HandleTag(runtime, expiry->runtimeEpoch, expiry->slotIndex,
+        expiry->slotGeneration, expiry->ownerId, expiry->instanceKey,
+        expiry->entryGeneration);
+    tag = Mix(tag, expiry->timerGeneration);
+    tag = Mix(tag, ((u32)expiry->definitionId << 16)
+        | expiry->recoveryTransitionId);
+    tag = Mix(tag, expiry->recoveryPolicy);
+    return tag != 0 ? tag : 0x4F575458u;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_PreflightTimerExpiryInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    if (runtime == NULL || expiry == NULL
+        || runtime != sOverworldWildRuntimeLayerService.boundRuntime
+        || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
+        || runtime->handleEpoch == 0
+        || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
+        || runtime->reserved[0] || runtime->reserved[1]
+        || runtime->reserved[2]
+        || expiry->runtimeEpoch == 0 || expiry->slotGeneration == 0
+        || expiry->entryGeneration == 0 || expiry->timerGeneration == 0
+        || expiry->ownerId == 0 || expiry->definitionId == 0
+        || expiry->recoveryPolicy == 0
+        || expiry->slotIndex >= OW_WILD_MAX_SPAWNS
+        || expiry->validityTag == 0 || expiry->reserved[0]
+        || expiry->reserved[1])
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    slot = &runtime->slots[expiry->slotIndex];
+    if (expiry->runtimeEpoch != runtime->handleEpoch
+        || expiry->slotGeneration != slot->slotGeneration)
+        return OW_WILD_RUNTIME_STATUS_STALE_NOOP;
+    if (expiry->validityTag
+            != OverworldWildRuntime_TimerExpiryTagInternal(runtime, expiry))
+        return OW_WILD_RUNTIME_STATUS_STALE_NOOP;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
 static void ReadLayer(
     const OverworldWildRuntimeSlotSidecar *slot,
     u8 index,
@@ -289,6 +338,17 @@ static void WriteLayers(
             flags |= OW_WILD_RUNTIME_GENERATED_FLAG_HAS_REQUIRED_OWNER;
         slot->layerBank.generatedFlags[i] = flags;
     }
+}
+
+static void WriteTimers(
+    OverworldWildRuntimeSlotSidecar *slot,
+    const OverworldWildRuntimeTimer *timers,
+    u8 count)
+{
+    memset(&slot->timerBank, 0, sizeof(slot->timerBank));
+    if (count != 0)
+        memcpy(slot->timerBank.timers, (void *)timers,
+            count * sizeof(slot->timerBank.timers[0]));
 }
 
 static int CompareKeys(
@@ -384,6 +444,10 @@ static OverworldWildRuntimeStatus ValidateBank(
     u8 i, j;
     if (slot->activeLayerCount > OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
         || slot->slotGeneration == 0 || slot->nextEntryGeneration == 0
+        || slot->nextTimerGeneration == 0
+        || slot->presentationGate > 1
+        || slot->timerStateReserved[0] || slot->timerStateReserved[1]
+        || slot->timerStateReserved[2]
         || slot->layerGeneration == 0 || slot->effectiveGeneration == 0)
         return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     memset(&previous, 0, sizeof(previous));
@@ -399,6 +463,41 @@ static OverworldWildRuntimeStatus ValidateBank(
         }
         if (i != 0 && CompareKeys(&previous, &layer) >= 0)
             return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+        {
+            const OverworldWildRuntimeTimer *timer =
+                &slot->timerBank.timers[i];
+            if (timer->flags & OW_WILD_RUNTIME_TIMER_VALID) {
+                if ((timer->flags & ~(OW_WILD_RUNTIME_TIMER_VALID
+                            | OW_WILD_RUNTIME_TIMER_ZERO_PENDING)) != 0
+                    || timer->entryGeneration != layer.entryGeneration
+                    || timer->ownerId != layer.ownerId
+                    || timer->instanceKey != layer.instanceKey
+                    || timer->definitionId != layer.definitionId
+                    || timer->timerGeneration == 0
+                    || timer->timerGeneration >= slot->nextTimerGeneration
+                    || timer->clock < OW_WILD_RUNTIME_TIMER_CLOCK_FRAME
+                    || timer->clock
+                        > OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT
+                    || timer->hiddenPolicy
+                        < OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
+                    || timer->hiddenPolicy
+                        > OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE
+                    || timer->recoveryPolicy == 0
+                    || timer->reserved[0] || timer->reserved[1]
+                    || ((timer->flags & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+                        != (timer->remainingTicks == 0
+                            ? OW_WILD_RUNTIME_TIMER_ZERO_PENDING : 0)))
+                    return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+                for (j = 0; j < i; j++)
+                    if ((slot->timerBank.timers[j].flags
+                            & OW_WILD_RUNTIME_TIMER_VALID)
+                        && slot->timerBank.timers[j].timerGeneration
+                            == timer->timerGeneration)
+                        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+            } else if (!BytesAreZero(timer, sizeof(*timer))) {
+                return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+            }
+        }
         previous = layer;
     }
     for (; i < OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT; i++) {
@@ -406,7 +505,9 @@ static OverworldWildRuntimeStatus ValidateBank(
             || slot->layerBank.ownerIds[i] || slot->layerBank.instanceKeys[i]
             || slot->layerBank.requiredOwnerIds[i]
             || slot->layerBank.tiredOriginKinds[i]
-            || slot->layerBank.generatedFlags[i])
+            || slot->layerBank.generatedFlags[i]
+            || !BytesAreZero(&slot->timerBank.timers[i],
+                sizeof(slot->timerBank.timers[i])))
             return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     }
     if (slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID) {
@@ -539,6 +640,23 @@ static OverworldWildRuntimeLayerHandle MakeHandle(
         handle.slotGeneration, handle.ownerId, handle.instanceKey,
         handle.entryGeneration);
     return handle;
+}
+
+OverworldWildRuntimeStatus
+OverworldWildRuntime_MakeTimerRemovalHandleInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u8 layerIndex,
+    OverworldWildRuntimeLayerHandle *handleOut)
+{
+    OverworldWildRuntimeLayer layer;
+    if (runtime == NULL || handleOut == NULL
+        || slotIndex >= OW_WILD_MAX_SPAWNS
+        || layerIndex >= runtime->slots[slotIndex].activeLayerCount)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    ReadLayer(&runtime->slots[slotIndex], layerIndex, &layer);
+    *handleOut = MakeHandle(runtime, slotIndex, &layer);
+    return OW_WILD_RUNTIME_STATUS_OK;
 }
 
 static OverworldWildRuntimeStatus ValidateOperation(
@@ -829,6 +947,7 @@ static OverworldWildRuntimeStatus ValidateStoredSlotSemantics(
     const OverworldWildRuntimeSlotSidecar *slot)
 {
     OverworldWildRuntimeDefinition definition;
+    OverworldWildRuntimeTimerDefinition timerDefinition;
     u8 i, j;
     for (i = 0; i < slot->activeLayerCount; i++) {
         OverworldWildRuntimeStatus status = CopyDefinition(
@@ -836,6 +955,28 @@ static OverworldWildRuntimeStatus ValidateStoredSlotSemantics(
         if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
         if (!StoredLayerMatchesDefinition(slot, i, &definition))
             return OW_WILD_RUNTIME_STATUS_INVALID_GENERATED_WRAPPER;
+        if (!OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                definition.stableId, &slot->staticCache, &timerDefinition))
+            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        if (timerDefinition.clock == OW_WILD_RUNTIME_TIMER_CLOCK_NONE) {
+            if (!BytesAreZero(&slot->timerBank.timers[i],
+                    sizeof(slot->timerBank.timers[i])))
+                return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+        } else {
+            const OverworldWildRuntimeTimer *timer =
+                &slot->timerBank.timers[i];
+            if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)
+                || timer->recoveryTransitionId
+                    != timerDefinition.recoveryTransitionId
+                || timer->armedDuration != timerDefinition.duration
+                || (timer->armedDuration == 255
+                    ? timer->remainingTicks != 255
+                    : timer->remainingTicks > timer->armedDuration)
+                || timer->clock != timerDefinition.clock
+                || timer->hiddenPolicy != timerDefinition.hiddenPolicy
+                || timer->recoveryPolicy != timerDefinition.recoveryPolicy)
+                return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+        }
         if ((definition.flags
                 & OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER)
             && slot->layerBank.ownerIds[i] != definition.requiredOwnerId)
@@ -865,10 +1006,18 @@ static OverworldWildRuntimeStatus ValidateStoredSlotSemantics(
 
 static void RekeySlot(OverworldWildRuntimeSlotSidecar *slot, u8 count)
 {
+    u32 nextTimer = 1;
     u8 i;
-    for (i = 0; i < count; i++)
+    for (i = 0; i < count; i++) {
         slot->layerBank.entryGenerations[i] = (u32)i + 1;
+        if (slot->timerBank.timers[i].flags
+                & OW_WILD_RUNTIME_TIMER_VALID) {
+            slot->timerBank.timers[i].entryGeneration = (u32)i + 1;
+            slot->timerBank.timers[i].timerGeneration = nextTimer++;
+        }
+    }
     slot->nextEntryGeneration = (u32)count + 1;
+    slot->nextTimerGeneration = nextTimer;
 }
 
 static void __attribute__((noinline)) InitializeInvalidatedSlot(
@@ -1732,8 +1881,13 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     OverworldWildRuntimeStaticCache prospectiveStatic;
     OverworldWildRuntimeEffectiveCache prospectiveEffective;
     OverworldWildRuntimeProvenance prospectiveProvenance;
+    OverworldWildRuntimeTimer prospectiveTimers[
+        OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
     u32 nextEntryGenerationAfter;
+    u32 nextTimerGenerationAfter;
     u8 i, j, survivors, mutated = FALSE, rekey = FALSE;
+    u8 newLayerMask = 0;
+    u8 timedAdditionCount = 0;
     BOOL effectiveChanged = FALSE;
     BOOL needsApplicability = FALSE;
     if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
@@ -1920,9 +2074,23 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     status = ValidateMultiplicity(scratch->finalLayers, scratch->finalCount,
         &scratch->definitions[0]);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
-    if (scratch->additionCount
-        && slot->nextEntryGeneration
-            > 0xFFFFFFFFu - scratch->additionCount) {
+    for (i = 0; i < scratch->finalCount; i++) {
+        OverworldWildRuntimeTimerDefinition timerDefinition;
+        if (!scratch->finalLayers[i].reserved) continue;
+        newLayerMask |= (u8)(1u << i);
+        if (!OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                scratch->finalLayers[i].definitionId, &prospectiveStatic,
+                &timerDefinition))
+            return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA);
+        if (timerDefinition.clock != OW_WILD_RUNTIME_TIMER_CLOCK_NONE)
+            timedAdditionCount++;
+    }
+    if ((scratch->additionCount
+            && slot->nextEntryGeneration
+                > 0xFFFFFFFFu - scratch->additionCount)
+        || (timedAdditionCount
+            && slot->nextTimerGeneration
+                > 0xFFFFFFFFu - timedAdditionCount)) {
         if (runtime->handleEpoch != 0xFFFFFFFFu
             && !StageSlotsForRekey(runtime)) {
             RestartRuntime(runtime, FALSE);
@@ -1969,6 +2137,8 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         return OW_WILD_RUNTIME_STATUS_RUNTIME_EPOCH_RESTARTED;
     }
     nextEntryGenerationAfter = slot->nextEntryGeneration;
+    nextTimerGenerationAfter = slot->nextTimerGeneration;
+    memset(prospectiveTimers, 0, sizeof(prospectiveTimers));
     if (rekey) {
         for (i = 0; i < scratch->finalCount; i++) {
             scratch->finalLayers[i].entryGeneration = (u32)i + 1;
@@ -1982,6 +2152,52 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
                     nextEntryGenerationAfter++;
                 scratch->finalLayers[i].reserved = 0;
             }
+        }
+    }
+    for (i = 0; i < scratch->finalCount; i++) {
+        OverworldWildRuntimeLayer *layer = &scratch->finalLayers[i];
+        OverworldWildRuntimeTimer *timer = &prospectiveTimers[i];
+        if (newLayerMask & (1u << i)) {
+            OverworldWildRuntimeTimerDefinition timerDefinition;
+            if (!OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    layer->definitionId, &prospectiveStatic,
+                    &timerDefinition))
+                return Fail(result,
+                    OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA);
+            if (timerDefinition.clock
+                    != OW_WILD_RUNTIME_TIMER_CLOCK_NONE) {
+                timer->entryGeneration = layer->entryGeneration;
+                timer->timerGeneration = rekey
+                    ? 1 : nextTimerGenerationAfter++;
+                timer->ownerId = layer->ownerId;
+                timer->instanceKey = layer->instanceKey;
+                timer->definitionId = layer->definitionId;
+                timer->recoveryTransitionId =
+                    timerDefinition.recoveryTransitionId;
+                timer->remainingTicks = timerDefinition.duration;
+                timer->armedDuration = timerDefinition.duration;
+                timer->clock = timerDefinition.clock;
+                timer->hiddenPolicy = timerDefinition.hiddenPolicy;
+                timer->recoveryPolicy = timerDefinition.recoveryPolicy;
+                timer->flags = OW_WILD_RUNTIME_TIMER_VALID;
+                if (timer->remainingTicks == 0)
+                    timer->flags |= OW_WILD_RUNTIME_TIMER_ZERO_PENDING;
+            }
+        } else {
+            int oldIndex = FindLayer(slot, layer->ownerId,
+                layer->instanceKey);
+            if (oldIndex < 0)
+                return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_HANDLE);
+            *timer = slot->timerBank.timers[oldIndex];
+        }
+    }
+    if (rekey) {
+        nextTimerGenerationAfter = 1;
+        for (i = 0; i < scratch->finalCount; i++) {
+            OverworldWildRuntimeTimer *timer = &prospectiveTimers[i];
+            if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)) continue;
+            timer->entryGeneration = scratch->finalLayers[i].entryGeneration;
+            timer->timerGeneration = nextTimerGenerationAfter++;
         }
     }
     status = ComposeProspective(
@@ -2001,6 +2217,9 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         &prospectiveStatic, &prospectiveEffective, &prospectiveProvenance,
         &effectiveChanged);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
+    if (!slot->presentationGate)
+        ExpireHiddenTimers(prospectiveTimers, scratch->finalCount,
+            &prospectiveProvenance);
     if (rekey) {
         runtime->handleEpoch++;
         runtime->dataIncarnation = prospectiveEffective.dataIncarnation;
@@ -2021,7 +2240,9 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
         }
     }
     slot->nextEntryGeneration = nextEntryGenerationAfter;
+    slot->nextTimerGeneration = nextTimerGenerationAfter;
     WriteLayers(slot, scratch->finalLayers, scratch->finalCount);
+    WriteTimers(slot, prospectiveTimers, scratch->finalCount);
     slot->layerGeneration = OverworldWildRuntime_AdvanceNonzeroGeneration(
         slot->layerGeneration);
     slot->staticCache = prospectiveStatic;
@@ -2315,6 +2536,363 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
     *provenanceOut = runtime->slots[slotIndex].provenance;
     return OW_WILD_RUNTIME_STATUS_OK;
 }
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration);
+#define ValidateTimerQuery OverworldWildRuntime_ValidateTimerQueryInternal
+
+#ifndef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+u8 OverworldWildRuntime_GetTimerCount(
+    const OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    u8 i, count = 0;
+    if (ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration)
+            != OW_WILD_RUNTIME_STATUS_OK) return 0;
+    slot = &runtime->slots[slotIndex];
+    for (i = 0; i < slot->activeLayerCount; i++)
+        if (slot->timerBank.timers[i].flags & OW_WILD_RUNTIME_TIMER_VALID)
+            count++;
+    return count;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_GetTimerByIndex(
+    const OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration, u8 timerIndex,
+    OverworldWildRuntimeTimer *timerOut)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeStatus status;
+    u8 i, count = 0;
+    if (timerOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    memset(timerOut, 0, sizeof(*timerOut));
+    status = ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    slot = &runtime->slots[slotIndex];
+    for (i = 0; i < slot->activeLayerCount; i++) {
+        if (!(slot->timerBank.timers[i].flags
+                & OW_WILD_RUNTIME_TIMER_VALID)) continue;
+        if (count++ == timerIndex) {
+            *timerOut = slot->timerBank.timers[i];
+            return OW_WILD_RUNTIME_STATUS_OK;
+        }
+    }
+    return OW_WILD_RUNTIME_STATUS_NOT_FOUND;
+}
+#endif
+
+#ifndef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static u8 CountPendingTimerExpiries(
+    const OverworldWildRuntimeSlotSidecar *slot)
+{
+    u8 i, count = 0;
+    for (i = 0; i < slot->activeLayerCount; i++)
+        if ((slot->timerBank.timers[i].flags
+                & (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+            == (OW_WILD_RUNTIME_TIMER_VALID
+                | OW_WILD_RUNTIME_TIMER_ZERO_PENDING)) count++;
+    return count;
+}
+#endif
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration)
+{
+    OverworldWildRuntimeStatus status = ValidateCacheQuery(runtime,
+        slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    status = ValidateBank(&runtime->slots[slotIndex]);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    return ValidateStoredSlotSemantics(&runtime->slots[slotIndex]);
+}
+
+static BOOL ExpireHiddenTimer(
+    OverworldWildRuntimeTimer *timer,
+    const OverworldWildRuntimeProvenance *provenance)
+{
+    if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)
+        || timer->hiddenPolicy
+            != OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE
+        || (provenance->winningOwnerId == timer->ownerId
+            && provenance->winningInstanceKey == timer->instanceKey)
+        || (timer->flags & OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+        return FALSE;
+    timer->remainingTicks = 0;
+    timer->flags |= OW_WILD_RUNTIME_TIMER_ZERO_PENDING;
+    return TRUE;
+}
+
+static void ExpireHiddenTimers(
+    OverworldWildRuntimeTimer *timers,
+    u8 count,
+    const OverworldWildRuntimeProvenance *provenance)
+{
+    u8 i;
+    for (i = 0; i < count; i++)
+        ExpireHiddenTimer(&timers[i], provenance);
+}
+
+#ifndef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+static void InitTimerTickResult(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    OverworldWildRuntimeTimerTickResult *result)
+{
+    memset(result, 0, sizeof(*result));
+    if (runtime == NULL || slotIndex >= OW_WILD_MAX_SPAWNS) return;
+    result->runtimeEpoch = runtime->handleEpoch;
+    result->slotGeneration = runtime->slots[slotIndex].slotGeneration;
+    result->layerGenerationBefore = runtime->slots[slotIndex].layerGeneration;
+    result->layerGenerationAfter = runtime->slots[slotIndex].layerGeneration;
+    result->effectiveGenerationBefore =
+        runtime->slots[slotIndex].effectiveGeneration;
+    result->effectiveGenerationAfter =
+        runtime->slots[slotIndex].effectiveGeneration;
+}
+#endif
+
+#ifndef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+OverworldWildRuntimeStatus OverworldWildRuntime_SetTimerPresentationGate(
+    OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration, BOOL active)
+{
+    OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeStatus status;
+    if (active != FALSE && active != TRUE)
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    status = ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    slot = &runtime->slots[slotIndex];
+    if (slot->presentationGate == (u8)active)
+        return OW_WILD_RUNTIME_STATUS_IDEMPOTENT;
+    slot->presentationGate = (u8)active;
+    if (active) return OW_WILD_RUNTIME_STATUS_OK;
+    ExpireHiddenTimers(slot->timerBank.timers, slot->activeLayerCount,
+        &slot->provenance);
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_TickCandidateTimers(
+    OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration, u8 clock, u8 ticks,
+    BOOL presentationGate, OverworldWildRuntimeTimerTickResult *result)
+{
+    OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeStatus status;
+    u8 i;
+    if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    InitTimerTickResult(runtime, slotIndex, result);
+    if ((clock != OW_WILD_RUNTIME_TIMER_CLOCK_FRAME
+            && clock != OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT)
+        || (presentationGate != FALSE && presentationGate != TRUE)) {
+        result->status = OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    }
+    status = ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) {
+        result->status = status;
+        return status;
+    }
+    slot = &runtime->slots[slotIndex];
+    if (slot->presentationGate != (u8)presentationGate) {
+        result->status = OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+        return result->status;
+    }
+    if (!slot->presentationGate) {
+        for (i = 0; i < slot->activeLayerCount; i++) {
+            OverworldWildRuntimeTimer *timer = &slot->timerBank.timers[i];
+            BOOL winner = slot->provenance.winningOwnerId == timer->ownerId
+                && slot->provenance.winningInstanceKey == timer->instanceKey;
+            int remaining;
+            if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)
+                || timer->clock != clock
+                || (timer->flags & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+                || timer->remainingTicks == 255) continue;
+            if (ExpireHiddenTimer(timer, &slot->provenance)) {
+                result->changedTimerCount++;
+                continue;
+            }
+            if (!winner && timer->hiddenPolicy
+                    != OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN)
+                continue;
+            remaining = timer->remainingTicks - ticks;
+            if (remaining < 0) remaining = 0;
+            if ((u8)remaining != timer->remainingTicks) {
+                timer->remainingTicks = (u8)remaining;
+                result->changedTimerCount++;
+                if (remaining == 0)
+                    timer->flags |= OW_WILD_RUNTIME_TIMER_ZERO_PENDING;
+            }
+        }
+    }
+    result->pendingExpiryCount = CountPendingTimerExpiries(slot);
+    result->status = OW_WILD_RUNTIME_STATUS_OK;
+    result->ok = TRUE;
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_TickCompletedMovementTimers(
+    OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration, BOOL presentationGate,
+    OverworldWildRuntimeTimerTickResult *result)
+{
+    return OverworldWildRuntime_TickCandidateTimers(runtime, slotIndex,
+        expectedSlotGeneration,
+        OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT, 1,
+        presentationGate, result);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_TickFrameTimers(
+    OverworldWildBehaviorStackRuntime *runtime, u16 presentationGateMask,
+    OverworldWildRuntimeTimerTickResult results[OW_WILD_MAX_SPAWNS])
+{
+    OverworldWildRuntimeStatus status;
+    u8 i;
+    if (runtime == NULL || results == NULL
+        || (presentationGateMask & ~((1u << OW_WILD_MAX_SPAWNS) - 1u)))
+        return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[i];
+        InitTimerTickResult(runtime, i, &results[i]);
+        if (slot->lifecycleState
+                != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED) {
+            results[i].status = OW_WILD_RUNTIME_STATUS_INACTIVE_SLOT;
+            continue;
+        }
+        status = ValidateTimerQuery(runtime, i, slot->slotGeneration);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) {
+            results[i].status = status;
+            return status;
+        }
+    }
+    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
+        BOOL gate = (presentationGateMask & (1u << i)) != 0;
+        OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[i];
+        if (slot->lifecycleState
+                != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED)
+            continue;
+        status = OverworldWildRuntime_SetTimerPresentationGate(runtime, i,
+            slot->slotGeneration, gate);
+        if (status != OW_WILD_RUNTIME_STATUS_OK
+            && status != OW_WILD_RUNTIME_STATUS_IDEMPOTENT)
+            return status;
+        status = OverworldWildRuntime_TickCandidateTimers(runtime, i,
+            slot->slotGeneration, OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1,
+            gate, &results[i]);
+        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    }
+    return OW_WILD_RUNTIME_STATUS_OK;
+}
+
+u8 OverworldWildRuntime_GetPendingTimerExpiryCount(
+    const OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    if (ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration)
+            != OW_WILD_RUNTIME_STATUS_OK)
+        return 0;
+    slot = &runtime->slots[slotIndex];
+    return CountPendingTimerExpiries(slot);
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_GetPendingTimerExpiryByIndex(
+    const OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,
+    u32 expectedSlotGeneration, u8 pendingIndex,
+    OverworldWildRuntimeTimerExpiry *expiryOut)
+{
+    const OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeStatus status;
+    u8 i, count = 0;
+    if (expiryOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    memset(expiryOut, 0, sizeof(*expiryOut));
+    status = ValidateTimerQuery(runtime, slotIndex, expectedSlotGeneration);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
+    slot = &runtime->slots[slotIndex];
+    for (i = 0; i < slot->activeLayerCount; i++) {
+        const OverworldWildRuntimeTimer *timer = &slot->timerBank.timers[i];
+        if ((timer->flags & (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+                != (OW_WILD_RUNTIME_TIMER_VALID
+                    | OW_WILD_RUNTIME_TIMER_ZERO_PENDING)) continue;
+        if (count++ != pendingIndex) continue;
+        expiryOut->runtimeEpoch = runtime->handleEpoch;
+        expiryOut->slotGeneration = slot->slotGeneration;
+        expiryOut->entryGeneration = timer->entryGeneration;
+        expiryOut->timerGeneration = timer->timerGeneration;
+        expiryOut->ownerId = timer->ownerId;
+        expiryOut->instanceKey = timer->instanceKey;
+        expiryOut->definitionId = timer->definitionId;
+        expiryOut->recoveryTransitionId = timer->recoveryTransitionId;
+        expiryOut->slotIndex = slotIndex;
+        expiryOut->recoveryPolicy = timer->recoveryPolicy;
+        expiryOut->validityTag =
+            OverworldWildRuntime_TimerExpiryTagInternal(runtime, expiryOut);
+        return OW_WILD_RUNTIME_STATUS_OK;
+    }
+    return OW_WILD_RUNTIME_STATUS_NOT_FOUND;
+}
+
+static OverworldWildRuntimeStatus StaleTimerExpiryResult(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    OverworldWildRuntimeStackDeltaResult *result)
+{
+    InitResult(runtime, slotIndex, result);
+    result->status = OW_WILD_RUNTIME_STATUS_STALE_NOOP;
+    result->ok = TRUE;
+    return OW_WILD_RUNTIME_STATUS_STALE_NOOP;
+}
+
+OverworldWildRuntimeStatus OverworldWildRuntime_CommitTimerExpiry(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry,
+    OverworldWildRuntimeStackDeltaResult *result)
+{
+    OverworldWildRuntimeSlotSidecar *slot;
+    const OverworldWildRuntimeTimer *timer;
+    OverworldWildRuntimeLayer layer;
+    OverworldWildRuntimeLayerHandle handle;
+    OverworldWildRuntimeStatus status;
+    int index;
+    if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    InitResult(runtime, expiry != NULL ? expiry->slotIndex : 0xFF, result);
+    status = OverworldWildRuntime_PreflightTimerExpiryInternal(runtime, expiry);
+    if (status == OW_WILD_RUNTIME_STATUS_STALE_NOOP)
+        return StaleTimerExpiryResult(runtime, expiry->slotIndex, result);
+    if (status != OW_WILD_RUNTIME_STATUS_OK)
+        return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_HANDLE);
+    slot = &runtime->slots[expiry->slotIndex];
+    if (OverworldWildRuntime_ValidateTimerQueryInternal(runtime,
+            expiry->slotIndex, expiry->slotGeneration)
+            != OW_WILD_RUNTIME_STATUS_OK)
+        return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_HANDLE);
+    index = FindLayer(slot, expiry->ownerId, expiry->instanceKey);
+    if (index < 0)
+        return StaleTimerExpiryResult(runtime, expiry->slotIndex, result);
+    timer = &slot->timerBank.timers[index];
+    if ((timer->flags & (OW_WILD_RUNTIME_TIMER_VALID
+                | OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
+            != (OW_WILD_RUNTIME_TIMER_VALID
+                | OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+        || timer->entryGeneration != expiry->entryGeneration
+        || timer->timerGeneration != expiry->timerGeneration
+        || timer->definitionId != expiry->definitionId
+        || timer->recoveryTransitionId != expiry->recoveryTransitionId
+        || timer->recoveryPolicy != expiry->recoveryPolicy)
+        return StaleTimerExpiryResult(runtime, expiry->slotIndex, result);
+    ReadLayer(slot, (u8)index, &layer);
+    handle = MakeHandle(runtime, expiry->slotIndex, &layer);
+    return OverworldWildRuntime_Remove(runtime, expiry->slotIndex,
+        slot->slotGeneration, &handle, result);
+}
+#endif
 
 u8 OverworldWildRuntime_GetLayerCount(
     const OverworldWildBehaviorStackRuntime *runtime, u8 slotIndex,

@@ -8,20 +8,27 @@ OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-fun
 OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS := -fmerge-all-constants -fno-tree-dce -fno-tree-sink -fno-cse-follow-jumps
 OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_CFLAGS := -frename-registers \
     -fno-tree-dominator-opts -fno-inline-functions-called-once \
+    -fno-tree-sra -fno-tree-vrp -fno-ipa-cp \
+    -fno-guess-branch-probability -fno-expensive-optimizations \
+    -DOW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+OVERWORLD_WILD_RUNTIME_TIMERS_OVERLAY_CFLAGS := -frename-registers \
+    -fno-tree-dominator-opts -fno-inline-functions-called-once \
     -fno-tree-sra -fno-tree-vrp -fno-ipa-cp
 OVERWORLD_WILD_RUNTIME_SYMBOLS := $(BUILD)/pokemon_move_history_task6_overlay_task7_runtime_symbols.o
 OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS := $(BUILD)/overworld_wild_runtime_overlay_catalog_symbols.o
 OVERWORLD_WILD_TASK8_SYMBOLS := $(BUILD)/overworld_wild_runtime_layers_overlay_task8_symbols.o
+OVERWORLD_WILD_TIMER_SYMBOLS := $(BUILD)/overworld_wild_runtime_timers_overlay_timer_symbols.o
 OVERWORLD_WILD_LAYERS_OBJECT := $(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o
+OVERWORLD_WILD_TIMERS_OBJECT := $(BUILD)/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o
 OVERWORLD_WILD_V40_SCALAR_SYMBOLS := $(BUILD)/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.o
-OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_sqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
+OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_TIMER_SYMBOLS) --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_sqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
 OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS := --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi
 OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_LDFLAGS := --just-symbols=$(BUILD)/pokemon_move_history_task6_overlay_linked.o --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)
 POKEMON_MOVE_HISTORY_TASK6_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) --wrap=memset
 OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_LDFLAGS := --just-symbols=$(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) --just-symbols=$(OVERWORLD_WILD_V40_SCALAR_SYMBOLS)
 
 INDIVIDUAL := individual
-OVERLAYS := $(filter-out $(INDIVIDUAL) overworld_wild_runtime_overlay overworld_wild_runtime_layers_overlay $(shell cd $(C_SUBDIR); ls *.*),$(shell cd $(C_SUBDIR); ls))
+OVERLAYS := $(filter-out $(INDIVIDUAL) overworld_wild_runtime_overlay overworld_wild_runtime_layers_overlay overworld_wild_runtime_timers_overlay $(shell cd $(C_SUBDIR); ls *.*),$(shell cd $(C_SUBDIR); ls))
 
 INDIVIDUAL_OVERLAYS = $(basename $(notdir $(wildcard $(C_SUBDIR)/$(INDIVIDUAL)/*.c)))
 
@@ -59,18 +66,21 @@ $(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o $(if $(filter overworld_wild_spawns_
 endef
 $(foreach overlay, $(OVERLAYS), $(eval $(call OVERLAY_DEFINE,$(overlay))))
 
-# The Task-9 resident split is intentionally explicit: overlay 157 owns only
-# the validated catalog/loader object, and overlay 158 owns only the complete
-# mutation/composition layers object plus typed catalog symbol imports.
+# The resident runtime split is intentionally explicit: overlay 157 owns the
+# validated catalog, overlay 158 owns mutation/composition, and overlay 159
+# owns the public timer scheduler surface.
 overworld_wild_runtime_overlay_LINK = $(BUILD)/overworld_wild_runtime_overlay_linked.o
 overworld_wild_runtime_overlay_OUTPUT = $(BUILD)/output_overworld_wild_runtime_overlay.bin
 overworld_wild_runtime_layers_overlay_LINK = $(BUILD)/overworld_wild_runtime_layers_overlay_linked.o
 overworld_wild_runtime_layers_overlay_OUTPUT = $(BUILD)/output_overworld_wild_runtime_layers_overlay.bin
-OVERLAY_OUTPUTS += $(overworld_wild_runtime_overlay_OUTPUT) $(overworld_wild_runtime_layers_overlay_OUTPUT)
-LINKED_OUTPUTS += $(overworld_wild_runtime_overlay_LINK) $(overworld_wild_runtime_layers_overlay_LINK)
-CODE_BUILD_DIRS += $(BUILD)/overworld_wild_runtime_overlay $(BUILD)/overworld_wild_runtime_layers_overlay
+overworld_wild_runtime_timers_overlay_LINK = $(BUILD)/overworld_wild_runtime_timers_overlay_linked.o
+overworld_wild_runtime_timers_overlay_OUTPUT = $(BUILD)/output_overworld_wild_runtime_timers_overlay.bin
+OVERLAY_OUTPUTS += $(overworld_wild_runtime_overlay_OUTPUT) $(overworld_wild_runtime_layers_overlay_OUTPUT) $(overworld_wild_runtime_timers_overlay_OUTPUT)
+LINKED_OUTPUTS += $(overworld_wild_runtime_overlay_LINK) $(overworld_wild_runtime_layers_overlay_LINK) $(overworld_wild_runtime_timers_overlay_LINK)
+CODE_BUILD_DIRS += $(BUILD)/overworld_wild_runtime_overlay $(BUILD)/overworld_wild_runtime_layers_overlay $(BUILD)/overworld_wild_runtime_timers_overlay
 ALL_C_SRCS += $(C_SUBDIR)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c
 ALL_C_SRCS += $(C_SUBDIR)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c
+ALL_C_SRCS += $(C_SUBDIR)/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c
 ALL_ASM_SRCS += $(ASM_SUBDIR)/overworld_wild_runtime_layers_overlay/owbd_v40_scalar_symbols.s
 
 $(overworld_wild_runtime_overlay_LINK): \
@@ -114,6 +124,25 @@ $(overworld_wild_runtime_layers_overlay_OUTPUT): $(overworld_wild_runtime_layers
 		--runtime-carrier $(OVERWORLD_WILD_RUNTIME_SYMBOLS) \
 		--spawns-consumer $(BUILD)/overworld_wild_spawns_overlay_linked.o
 
+$(overworld_wild_runtime_timers_overlay_LINK): \
+    $(OVERWORLD_WILD_TIMERS_OBJECT) $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+    rom_gen.ld src/overworld_wild_runtime_timers_overlay/linker.ld
+	$(LD) rom_gen.ld -T src/overworld_wild_runtime_timers_overlay/linker.ld \
+		--just-symbols=$(OVERWORLD_WILD_TASK8_SYMBOLS) \
+		-o $@ $(OVERWORLD_WILD_TIMERS_OBJECT)
+
+$(overworld_wild_runtime_timers_overlay_OUTPUT): $(overworld_wild_runtime_timers_overlay_LINK) \
+    $(overworld_wild_runtime_layers_overlay_LINK) \
+    $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+    $(OVERWORLD_WILD_TIMER_SYMBOLS) \
+    scripts/verify_overworld_wild_overlay_size.py
+	$(OBJCOPY) -O binary $< $@
+	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_overlay_size.py $< \
+		--binary $@ --overlay 159 \
+		--layers-owner $(overworld_wild_runtime_layers_overlay_LINK) \
+		--task8-carrier $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+		--timer-carrier $(OVERWORLD_WILD_TIMER_SYMBOLS)
+
 $(BUILD)/overworld_wild_behavior_validator_overlay_linked.o: \
     $(BUILD)/pokemon_move_history_task6_overlay_linked.o \
     $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)
@@ -124,7 +153,8 @@ $(BUILD)/pokemon_move_history_task6_overlay_linked.o: \
 $(BUILD)/overworld_wild_spawns_overlay_linked.o: \
     $(OVERWORLD_WILD_RUNTIME_SYMBOLS) \
     $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS) \
-    $(OVERWORLD_WILD_TASK8_SYMBOLS)
+    $(OVERWORLD_WILD_TASK8_SYMBOLS) \
+    $(OVERWORLD_WILD_TIMER_SYMBOLS)
 
 $(OVERWORLD_WILD_TASK8_SYMBOLS): \
     $(BUILD)/overworld_wild_runtime_layers_overlay_linked.o
@@ -143,6 +173,10 @@ $(OVERWORLD_WILD_TASK8_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_GetEffectiveCache \
 		--keep-symbol=OverworldWildRuntime_GetCapabilityMask \
 		--keep-symbol=OverworldWildRuntime_GetProvenance \
+		--keep-symbol=OverworldWildRuntime_ValidateTimerQueryInternal \
+		--keep-symbol=OverworldWildRuntime_TimerExpiryTagInternal \
+		--keep-symbol=OverworldWildRuntime_PreflightTimerExpiryInternal \
+		--keep-symbol=OverworldWildRuntime_MakeTimerRemovalHandleInternal \
 		--keep-symbol=OverworldWildRuntime_GetLayerCount \
 		--keep-symbol=OverworldWildRuntime_GetLayerByIndex \
 		--keep-symbol=OverworldWildRuntime_FindLayer \
@@ -155,6 +189,7 @@ $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS): \
 		--keep-symbol=OverworldWildBehavior_ReleaseValidatedBundle \
 		--keep-symbol=OverworldWildBehavior_FreeValidatedBundle \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledDefinition \
+		--keep-symbol=OverworldWildRuntime_ResolveInstalledTimerDefinition \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledCatalogIdentity \
 		--keep-symbol=OverworldWildRuntime_MarkResidentCold \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledStaticComposition \
@@ -170,6 +205,20 @@ $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS): \
 
 $(BUILD)/overworld_wild_runtime_layers_overlay_linked.o: \
     $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS)
+
+$(OVERWORLD_WILD_TIMER_SYMBOLS): \
+    $(BUILD)/overworld_wild_runtime_timers_overlay_linked.o
+	$(OBJCOPY) --strip-all \
+		--keep-symbol=OverworldWildRuntime_GetTimerCount \
+		--keep-symbol=OverworldWildRuntime_GetTimerByIndex \
+		--keep-symbol=OverworldWildRuntime_SetTimerPresentationGate \
+		--keep-symbol=OverworldWildRuntime_TickCandidateTimers \
+		--keep-symbol=OverworldWildRuntime_TickFrameTimers \
+		--keep-symbol=OverworldWildRuntime_TickCompletedMovementTimers \
+		--keep-symbol=OverworldWildRuntime_GetPendingTimerExpiryCount \
+		--keep-symbol=OverworldWildRuntime_GetPendingTimerExpiryByIndex \
+		--keep-symbol=OverworldWildRuntime_CommitTimerExpiry \
+		$< $@
 
 $(OVERWORLD_WILD_RUNTIME_SYMBOLS): \
     $(BUILD)/pokemon_move_history_task6_overlay_linked.o

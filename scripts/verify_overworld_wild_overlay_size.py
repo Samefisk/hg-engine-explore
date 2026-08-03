@@ -14,9 +14,11 @@ CONFIG = {
     # and the validator keeps another 0x60 of post-link growth margin.
     156: (0x023C0400, 0x1D60, "gOverworldWildBehaviorValidatorOverlayEntry", 0x60),
     # Frozen Task-8 validated-catalog owner and loader.
-    157: (0x023BB400, 0x2000, "OverworldWildBehavior_LoadValidatedBundle", 0x80),
+    157: (0x023BB980, 0x1A80, "OverworldWildBehavior_LoadValidatedBundle", 0x80),
     # Task-9 mutation/composition/cache/provenance service.
-    158: (0x023B8400, 0x3000, "OverworldWildRuntime_ApplyStackDelta", 0x80),
+    158: (0x023B8400, 0x3580, "OverworldWildRuntime_ApplyStackDelta", 0x80),
+    # Task-10 timer scheduler shard, followed by the retained 0x80 arena guard.
+    159: (0x023BF480, 0xF80, "OverworldWildRuntime_GetTimerCount", 0x80),
 }
 
 TASK5_SCALAR_SYMBOLS = {
@@ -31,6 +33,24 @@ RETAINED_STATIC_RESOLVER = (
 )
 DESTRUCTIVE_WRAPPER = "OverworldWildRuntime_DestructivelyInvalidateSlot"
 DESTRUCTIVE_HELPER = "OverworldWildRuntime_HandleSlotGenerationWrap"
+TIMER_INTERNAL_APIS = (
+    "OverworldWildRuntime_ValidateTimerQueryInternal",
+    "OverworldWildRuntime_TimerExpiryTagInternal",
+    "OverworldWildRuntime_PreflightTimerExpiryInternal",
+    "OverworldWildRuntime_MakeTimerRemovalHandleInternal",
+    "OverworldWildRuntime_Remove",
+)
+TIMER_PUBLIC_APIS = (
+    "OverworldWildRuntime_GetTimerCount",
+    "OverworldWildRuntime_GetTimerByIndex",
+    "OverworldWildRuntime_SetTimerPresentationGate",
+    "OverworldWildRuntime_TickCandidateTimers",
+    "OverworldWildRuntime_TickFrameTimers",
+    "OverworldWildRuntime_TickCompletedMovementTimers",
+    "OverworldWildRuntime_GetPendingTimerExpiryCount",
+    "OverworldWildRuntime_GetPendingTimerExpiryByIndex",
+    "OverworldWildRuntime_CommitTimerExpiry",
+)
 
 
 def read_symbol_rows(path: Path) -> dict[str, tuple[int, int, str, str, str]]:
@@ -392,6 +412,100 @@ def verify_destructive_lifecycle_identity(
             )
 
 
+def timer_shard_identity_error(layers_owner, task8_carrier, timer_owner,
+                               timer_carrier) -> str | None:
+    carrier_exports = {
+        name for name, row in timer_carrier.items()
+        if row[2] == "FUNC" and row[3] == "GLOBAL"
+    }
+    if carrier_exports != set(TIMER_PUBLIC_APIS):
+        return "overlay 159 timer carrier export inventory differs"
+    for name in TIMER_INTERNAL_APIS:
+        error = imported_function_identity_error(
+            layers_owner, task8_carrier, timer_owner, name,
+            "overlay 158", "__text_start", "__text_end")
+        if error is not None:
+            return error
+    for name in TIMER_PUBLIC_APIS:
+        owner_row = timer_owner.get(name)
+        carrier_row = timer_carrier.get(name)
+        text_start = timer_owner.get("__text_start")
+        text_end = timer_owner.get("__text_end")
+        if (text_start is None or text_end is None
+                or text_end[0] <= text_start[0]):
+            return "overlay 159 has a malformed timer owner span"
+        if (owner_row is None or owner_row[1] == 0
+                or owner_row[2] != "FUNC" or owner_row[3] != "GLOBAL"
+                or owner_row[4] == "ABS" or owner_row[0] & 1 == 0):
+            return f"overlay 159 lacks owned Thumb FUNC typing for {name}"
+        address = owner_row[0] & ~1
+        if address < text_start[0] or address + owner_row[1] > text_end[0]:
+            return f"overlay 159 timer API escaped its owner span: {name}"
+        if (carrier_row is None or carrier_row[:4] != owner_row[:4]
+                or carrier_row[4] == "ABS"):
+            return f"timer carrier differs from overlay 159: {name}"
+    return None
+
+
+def verify_timer_shard_identity(layers_owner_path: Path,
+                                task8_carrier_path: Path,
+                                timer_owner_path: Path,
+                                timer_carrier_path: Path) -> None:
+    layers_owner = read_symbol_rows(layers_owner_path)
+    task8_carrier = read_symbol_rows(task8_carrier_path)
+    timer_owner = read_symbol_rows(timer_owner_path)
+    timer_carrier = read_symbol_rows(timer_carrier_path)
+    error = timer_shard_identity_error(
+        layers_owner, task8_carrier, timer_owner, timer_carrier)
+    if error is not None:
+        raise SystemExit(error)
+
+    internal = TIMER_INTERNAL_APIS[0]
+    public = TIMER_PUBLIC_APIS[0]
+    internal_row = timer_owner[internal]
+    public_row = timer_owner[public]
+    negative_fixtures = []
+
+    moved_import = dict(timer_owner)
+    moved_import[internal] = (internal_row[0] + 2, *internal_row[1:])
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              moved_import, timer_carrier))
+    mistyped_import = dict(timer_owner)
+    mistyped_import[internal] = (
+        internal_row[0], internal_row[1], "NOTYPE", *internal_row[3:])
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              mistyped_import, timer_carrier))
+    missing_import_carrier = dict(task8_carrier)
+    del missing_import_carrier[internal]
+    negative_fixtures.append((layers_owner, missing_import_carrier,
+                              timer_owner, timer_carrier))
+
+    moved_public_carrier = dict(timer_carrier)
+    moved_public_carrier[public] = (
+        public_row[0] + 2, *moved_public_carrier[public][1:])
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              timer_owner, moved_public_carrier))
+    absolute_public_carrier = dict(timer_carrier)
+    absolute_public_carrier[public] = (
+        *absolute_public_carrier[public][:4], "ABS")
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              timer_owner, absolute_public_carrier))
+    truncated_timer_owner = dict(timer_owner)
+    text_end = timer_owner["__text_end"]
+    truncated_timer_owner["__text_end"] = (
+        (public_row[0] & ~1) + public_row[1] - 2, *text_end[1:])
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              truncated_timer_owner, timer_carrier))
+    extra_public_carrier = dict(timer_carrier)
+    extra_public_carrier["UnexpectedTimerExport"] = public_row
+    negative_fixtures.append((layers_owner, task8_carrier,
+                              timer_owner, extra_public_carrier))
+
+    if any(timer_shard_identity_error(*fixture) is None
+           for fixture in negative_fixtures):
+        raise SystemExit("overlay 159 typed-owner negative fixture was accepted")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("elf", type=Path)
@@ -404,6 +518,8 @@ def main() -> int:
     parser.add_argument("--scalar-shard", type=Path)
     parser.add_argument("--catalog-owner", type=Path)
     parser.add_argument("--task8-carrier", type=Path)
+    parser.add_argument("--layers-owner", type=Path)
+    parser.add_argument("--timer-carrier", type=Path)
     parser.add_argument("--runtime-carrier", type=Path)
     parser.add_argument("--spawns-consumer", type=Path)
     args = parser.parse_args()
@@ -457,6 +573,8 @@ def main() -> int:
             "OverworldWildRuntime_GetLayerByIndex",
             "OverworldWildRuntime_FindLayer",
         ))
+    if args.overlay == 159:
+        required.update(("__bss_start__", "__bss_end__", *TIMER_PUBLIC_APIS))
     missing = sorted(required - symbols.keys())
     if missing: raise SystemExit(f"overlay {args.overlay}: missing identity symbols: {', '.join(missing)}")
     if symbols["__text_start"] != origin:
@@ -549,13 +667,19 @@ def main() -> int:
         )
         if "R_ARM_" in relocations:
             raise SystemExit("overlay 156: unresolved relocation remains after resident link")
-    if args.overlay in (157, 158):
+    if args.overlay in (157, 158, 159):
         bss_size = symbols["__bss_end__"] - symbols["__bss_start__"]
-        if bss_size < 0 or bss_size > 0x140:
+        bss_limit = 0 if args.overlay == 159 else 0x140
+        if bss_size < 0 or bss_size > bss_limit:
             raise SystemExit(
-                f"overlay {args.overlay}: BSS 0x{bss_size:X} exceeds fixed 0x140 budget"
+                f"overlay {args.overlay}: BSS 0x{bss_size:X} exceeds fixed "
+                f"0x{bss_limit:X} budget"
             )
-        usable_end = 0x023BD380 if args.overlay == 157 else 0x023BB380
+        usable_end = {
+            157: 0x023BD380,
+            158: 0x023BB900,
+            159: 0x023C0380,
+        }[args.overlay]
         if symbols["__bss_end__"] > usable_end:
             raise SystemExit(
                 f"overlay {args.overlay}: complete image exceeds 0x{usable_end:08X}"
@@ -564,7 +688,9 @@ def main() -> int:
             name for name in symbols
             if "_from_thumb" in name or "veneer" in name.lower()
         }
-        expected_veneers = {"__memcpy_from_thumb", "__memset_from_thumb"}
+        expected_veneers = {"__memset_from_thumb"}
+        if args.overlay in (157, 158):
+            expected_veneers.add("__memcpy_from_thumb")
         if args.overlay == 157:
             expected_veneers.add("____gnu_thumb1_case_uqi_from_thumb")
         if args.overlay == 158:
@@ -599,11 +725,21 @@ def main() -> int:
                 args.elf, args.task8_carrier, args.lifecycle_consumer,
                 args.lifecycle_object, args.runtime_carrier,
                 args.spawns_consumer)
+        if args.overlay == 159:
+            if (args.layers_owner is None or args.task8_carrier is None
+                    or args.timer_carrier is None):
+                raise SystemExit(
+                    "overlay 159: same-build layers owner and typed carriers "
+                    "are required"
+                )
+            verify_timer_shard_identity(
+                args.layers_owner, args.task8_carrier, args.elf,
+                args.timer_carrier)
     headroom = origin + length - end
     if headroom < minimum:
         raise SystemExit(f"overlay {args.overlay}: headroom {headroom} below required {minimum}")
     extra = ""
-    if args.overlay in (157, 158):
+    if args.overlay in (157, 158, 159):
         extra = f" bss={symbols['__bss_end__'] - symbols['__bss_start__']}"
     print(f"overlay {args.overlay}: origin=0x{origin:08X} end=0x{end:08X} raw={raw_size} headroom={headroom}{extra}")
     return 0

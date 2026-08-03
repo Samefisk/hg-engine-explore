@@ -66,7 +66,7 @@ OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
     "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "3fc67324c6c491934725a7abf4e63f3e0c02ce57f74519b0c26836779886dd58"
+    "73c329d10428c8a0e44f43a45b5f282136c62cbefdf30e2787250f214621ec7c"
 )
 EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256 = (
     "0a3063658de225df67e82770965b3c01b6a075d7ee73fa4f1ccbb404e7120a77"
@@ -83,7 +83,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "c53588e70a416c59135f3d77ae48b2512f6ec65bb932ee1f02457a9cebcf86c6",
+        "2747a3ceec5546ce4300379ecce34540767f7e4988dbefeef632a9b12f2b14e4",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2152,6 +2152,8 @@ __wrap___gnu_thumb1_case_sqi:
         in DEPENDENCY_FILES
         and "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d"
         in DEPENDENCY_FILES
+        and "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.d"
+        in DEPENDENCY_FILES
         and "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.d"
         in DEPENDENCY_FILES
         and "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d"
@@ -2169,11 +2171,14 @@ __wrap___gnu_thumb1_case_sqi:
         in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/linker.ld" in FIXED_INPUTS
         and "src/overworld_wild_runtime_layers_overlay/linker.ld" in FIXED_INPUTS
+        and "src/overworld_wild_runtime_timers_overlay/linker.ld" in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
         in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h"
         in FIXED_INPUTS
         and "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+        in FIXED_INPUTS
+        and "src/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c"
         in FIXED_INPUTS
         and "src/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.c"
         in FIXED_INPUTS
@@ -2215,6 +2220,14 @@ __wrap___gnu_thumb1_case_sqi:
         == "build/output_overworld_wild_runtime_layers_overlay.bin"
         and OUTPUTS.get("overworld_wild_task8_symbols")
         == "build/overworld_wild_runtime_layers_overlay_task8_symbols.o"
+        and OUTPUTS.get("overworld_wild_runtime_timers_object")
+        == "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o"
+        and OUTPUTS.get("overworld_wild_runtime_timers_linked")
+        == "build/overworld_wild_runtime_timers_overlay_linked.o"
+        and OUTPUTS.get("overworld_wild_runtime_timers_binary")
+        == "build/output_overworld_wild_runtime_timers_overlay.bin"
+        and OUTPUTS.get("overworld_wild_runtime_timer_symbols")
+        == "build/overworld_wild_runtime_timers_overlay_timer_symbols.o"
         and OUTPUTS.get("overworld_wild_helper_object")
         == "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o"
         and OUTPUTS.get("overworld_wild_helper_thumb_help_object")
@@ -2227,6 +2240,8 @@ __wrap___gnu_thumb1_case_sqi:
         == "base/overlay/overlay_0149.bin"
         and OUTPUTS.get("patched_overlay151")
         == "base/overlay/overlay_0151.bin"
+        and OUTPUTS.get("patched_overlay159")
+        == "base/overlay/overlay_0159.bin"
         and OUTPUTS.get("save_object") == "build/save.o",
         "save/field lifecycle and generator provenance inputs are not sealed",
     )
@@ -3348,7 +3363,7 @@ __wrap___gnu_thumb1_case_sqi:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "65059fccd9e271ee8a69448b165bf2680ac732c4fecd63c59b39543dd1379176"
+        "efe796f2de7384f3534a42818d27f2e2af38b4452ac5de40f86065be93e7255a"
     )
     require(
         make_publication_contract_matches(
@@ -4012,6 +4027,7 @@ __wrap___gnu_thumb1_case_sqi:
             "$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o",
             "$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o",
             "$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o",
+            "$(BUILD)/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o",
             "$(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o",
             "$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o",
             "$(BUILD)/overworld_wild_helper_overlay/thumb_help.o",
@@ -4030,7 +4046,7 @@ __wrap___gnu_thumb1_case_sqi:
         == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
         and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the twenty-three capture objects",
+        "move-history provenance does not force exactly the twenty-four capture objects",
     )
     require(
         "scripts/verify_overworld_wild_runtime_sidecars.py" not in makefile,
@@ -6558,6 +6574,25 @@ def packaged_components_from_bytes(
             component.ram_size == len(component.data),
             f"overlay {overlay_id} RAM size differs from uncompressed payload",
         )
+    for overlay_id, base, usable_end in (
+        (157, 0x023BB980, 0x023BD380),
+        (158, 0x023B8400, 0x023BB900),
+        (159, 0x023BF480, 0x023C0380),
+    ):
+        require(overlay_id in overlays,
+                f"packaged resident overlay {overlay_id} is absent")
+        component = overlays[overlay_id]
+        require(
+            component.ram_address == base
+            and component.ram_size == len(component.data) > 0
+            and base + component.ram_size <= usable_end
+            and component.bss_size == 0
+            and component.static_init_start == 0
+            and component.static_init_end == 0
+            and component.file_id == overlay_id
+            and component.flags == 0,
+            f"overlay {overlay_id} resident y9/FAT identity differs",
+        )
     return arm9_base, rom[arm9_offset:arm9_offset + arm9_size], overlays
 
 
@@ -6874,7 +6909,7 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
         overlay149_fat_start + 4,
         overlay149_fat_end + 4,
     )
-    for overlay_id in (131, 151, 154, 155):
+    for overlay_id in (131, 151, 154, 155, 157, 158, 159):
         for field, label in enumerate(
             (
                 "ID",
@@ -9201,11 +9236,152 @@ def run_boot_decoder_freshness_fixtures() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
+    # The current startup body is exactly 0x20 bytes, so it ends aligned at
+    # 0x02110354 and emits no .pool padding.  The following eight bytes are
+    # therefore the untouched stock build/arm9.bin bytes, not Task-9's former
+    # two-byte alignment fill followed by a six-byte stock suffix.
+    startup_source = (REPO / "armips/asm/syntheticoverlay.s").read_text()
+    startup_body = startup_source[
+        startup_source.index("load_arm9_expansion:"):
+        startup_source.index("\n\n.pool", startup_source.index(
+            "load_arm9_expansion:"))
+    ]
+    startup_instructions = [
+        line.split("//", 1)[0].strip()
+        for line in startup_body.splitlines()
+        if line.split("//", 1)[0].strip().startswith(
+            ("push ", "mov ", "bl ", "pop "))
+    ]
+    require(startup_instructions == [
+            "push {r2, lr}",
+            "mov r0, #129",
+            "mov r1, #2",
+            "bl HandleLoadOverlay129",
+            "mov r1, #155",
+            "bl LoadResidentOverlay",
+            "bl LoadResidentRuntimeOverlays",
+            "mov r1, #153",
+            "bl LoadResidentOverlay",
+            "mov r0, #0",
+            "mov r1, #3",
+            "pop {r2, pc}",
+        ]
+        and sum(4 if instruction.startswith("bl ") else 2
+                for instruction in startup_instructions) == 0x20
+        and module.RESIDENT_RUNTIME_STARTUP_PRESERVED_ADDRESS
+            == 0x02110334 + 0x20,
+        "resident startup source no longer ends at its preserved stock boundary",
+    )
+
+    expected_boot_regions = (
+        (
+            0x021102E0,
+            bytes.fromhex(
+                "38 B5 9D 24 21 1C FF F7 F5 FF 01 34 A0 2C F9 D3 "
+                "38 BD FF FF"
+            ),
+        ),
+        (0x021102F4, b"\xFF" * 4),
+        (0x021102F8, b"\x02\x00\x00\x00"),
+        (
+            0x02110334,
+            bytes.fromhex(
+                "04 B5 81 20 02 21 FF F7 C3 FF 9B 21 FF F7 C8 FF "
+                "FF F7 CC FF 99 21 FF F7 C3 FF 00 20 03 21 04 BD"
+            ),
+        ),
+        (0x02110354, b"\xFF\xFF\xFF\xFF\x02\x00\x00\x00"),
+    )
+    module_boot_regions = (
+        (
+            module.RESIDENT_RUNTIME_HELPER_ADDRESS,
+            module.RESIDENT_RUNTIME_HELPER_BYTES,
+        ),
+        (
+            module.RESIDENT_RUNTIME_HELPER_PADDING_ADDRESS,
+            module.RESIDENT_RUNTIME_HELPER_PADDING_BYTES,
+        ),
+        (
+            module.RESIDENT_RUNTIME_ADJACENT_WORD_ADDRESS,
+            module.RESIDENT_RUNTIME_ADJACENT_WORD_BYTES,
+        ),
+        (
+            module.RESIDENT_RUNTIME_STARTUP_ADDRESS,
+            module.RESIDENT_RUNTIME_STARTUP_BYTES,
+        ),
+        (
+            module.RESIDENT_RUNTIME_STARTUP_PRESERVED_ADDRESS,
+            module.RESIDENT_RUNTIME_STARTUP_PRESERVED_BYTES,
+        ),
+    )
+    require(module_boot_regions == expected_boot_regions,
+            "packaged verifier differs from the frozen helper/stock bytes")
+    fixture_arm9 = bytearray(
+        max(address + len(data) for address, data in expected_boot_regions)
+        - module.MAIN_RAM_START
+    )
+    for address, data in expected_boot_regions:
+        offset = address - module.MAIN_RAM_START
+        fixture_arm9[offset:offset + len(data)] = data
+    fixture_arm9 = bytes(fixture_arm9)
+    require(module.resident_runtime_bootstrap_bytes_match(
+                fixture_arm9, module.MAIN_RAM_START),
+        "packaged verifier rejects the exact resident bootstrap contract")
+    semantic_mutations = {
+        0x021102E0: ("helper push/stack alignment", 0x18),
+        0x021102E2: ("helper loop start", 0x9C),
+        0x021102E7: ("helper BL encoding", 0xE7),
+        0x021102E8: ("helper BL target", 0xF4),
+        0x021102EC: ("helper loop bound", 0x9F),
+        0x021102EE: ("helper loop branch target", 0xFA),
+        0x021102EF: ("helper loop branch condition", 0xD2),
+        0x021102F0: ("helper pop/stack restore", 0x18),
+        0x021102F2: ("helper in-area FF fill", 0xFE),
+        0x021102F4: ("helper preserved FF padding", 0xFE),
+        0x021102F8: ("helper adjacent word 2", 0x03),
+        0x02110336: ("startup MOV value", 0x80),
+        0x0211033B: ("startup BL encoding", 0xE7),
+        0x0211033C: ("startup BL target", 0xC2),
+        0x0211033E: ("startup MOV/order", 0x99),
+        0x02110348: ("startup MOV/order", 0x9B),
+        0x02110354: ("startup preserved FF suffix", 0xFE),
+        0x02110358: ("startup preserved suffix word 2", 0x03),
+    }
+    mutation_count = 0
+    semantic_addresses_seen = set()
+    for region_address, data in expected_boot_regions:
+        for byte_index, original in enumerate(data):
+            address = region_address + byte_index
+            description, replacement = semantic_mutations.get(
+                address,
+                (f"bootstrap byte at 0x{address:08X}", original ^ 1),
+            )
+            mutated = bytearray(fixture_arm9)
+            offset = address - module.MAIN_RAM_START
+            require(mutated[offset] != replacement,
+                    f"{description} mutation does not change its source byte")
+            mutated[offset] = replacement
+            require(not module.resident_runtime_bootstrap_bytes_match(
+                        bytes(mutated), module.MAIN_RAM_START),
+                f"packaged verifier accepted changed {description} byte")
+            mutation_count += 1
+            if address in semantic_mutations:
+                semantic_addresses_seen.add(address)
+    require(
+        mutation_count == sum(len(data) for _, data in expected_boot_regions)
+        and semantic_addresses_seen == set(semantic_mutations),
+        "complete bootstrap byte-mutation inventory was not exercised",
+    )
+    require(not module.resident_runtime_bootstrap_bytes_match(
+                fixture_arm9[:-1], module.MAIN_RAM_START),
+        "packaged verifier accepted a truncated bootstrap boundary")
+
     candidate_rom = b"task8-candidate-rom"
     candidate_arm9 = b"task8-candidate-arm9"
     captured_arm9 = candidate_arm9 + b"\x21\x06\xC0\xDE\xA0\x0B" + bytes(6)
     candidate_overlay = b"task8-candidate-overlay157"
     candidate_layers_overlay = b"task9-candidate-overlay158"
+    candidate_timers_overlay = b"task10-candidate-overlay159"
 
     def record(data: bytes) -> dict[str, object]:
         return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
@@ -9215,8 +9391,10 @@ def run_boot_decoder_freshness_fixtures() -> None:
         "armips/asm/syntheticoverlay.s",
         "src/overworld_wild_runtime_overlay/linker.ld",
         "src/overworld_wild_runtime_layers_overlay/linker.ld",
+        "src/overworld_wild_runtime_timers_overlay/linker.ld",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
         "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+        "src/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c",
     ):
         inputs[path_text] = record((REPO / path_text).read_bytes())
     document = {
@@ -9227,6 +9405,9 @@ def run_boot_decoder_freshness_fixtures() -> None:
             "overworld_wild_runtime_binary": record(candidate_overlay),
             "overworld_wild_runtime_layers_binary": record(
                 candidate_layers_overlay
+            ),
+            "overworld_wild_runtime_timers_binary": record(
+                candidate_timers_overlay
             ),
             "packaged_rom": record(candidate_rom),
         },
@@ -9242,6 +9423,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
             candidate_arm9,
             candidate_overlay,
             candidate_layers_overlay,
+            candidate_timers_overlay,
             captured_arm9,
         )
         require(not absent_final_manifest.exists(),
@@ -9258,6 +9440,7 @@ def run_boot_decoder_freshness_fixtures() -> None:
                 candidate_arm9,
                 candidate_overlay,
                 candidate_layers_overlay,
+                candidate_timers_overlay,
                 captured_arm9,
             )
         except SystemExit:

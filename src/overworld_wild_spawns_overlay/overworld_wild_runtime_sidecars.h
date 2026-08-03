@@ -41,6 +41,22 @@
 #define OW_WILD_RUNTIME_GENERATED_FLAG_HAS_TIRED_ORIGIN (1u << 0)
 #define OW_WILD_RUNTIME_GENERATED_FLAG_HAS_REQUIRED_OWNER (1u << 1)
 
+#define OW_WILD_RUNTIME_TIMER_VALID (1u << 0)
+#define OW_WILD_RUNTIME_TIMER_ZERO_PENDING (1u << 1)
+
+typedef enum OverworldWildRuntimeTimerClock {
+    OW_WILD_RUNTIME_TIMER_CLOCK_NONE = 0,
+    OW_WILD_RUNTIME_TIMER_CLOCK_FRAME = 1,
+    OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT = 2,
+} OverworldWildRuntimeTimerClock;
+
+typedef enum OverworldWildRuntimeHiddenTimerPolicy {
+    OW_WILD_RUNTIME_HIDDEN_TIMER_NONE = 0,
+    OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN = 1,
+    OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN = 2,
+    OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE = 3,
+} OverworldWildRuntimeHiddenTimerPolicy;
+
 typedef enum OverworldWildRuntimeStatus {
     OW_WILD_RUNTIME_STATUS_OK = 0,
     OW_WILD_RUNTIME_STATUS_IDEMPOTENT = 1,
@@ -212,6 +228,57 @@ typedef struct OverworldWildRuntimeLayerBank {
     u8 tiredOriginKinds[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
     u8 generatedFlags[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
 } OverworldWildRuntimeLayerBank;
+
+/* One timer record is stored at the same index as its owning sorted layer.
+ * The complete logical key is duplicated deliberately: a timer is valid only
+ * when all four owner/instance/entry/timer identity fields authenticate. */
+typedef struct OverworldWildRuntimeTimer {
+    u32 entryGeneration;
+    u32 timerGeneration;
+    u16 ownerId;
+    u16 instanceKey;
+    u16 definitionId;
+    u16 recoveryTransitionId;
+    u8 remainingTicks;
+    u8 armedDuration;
+    u8 clock;
+    u8 hiddenPolicy;
+    u8 recoveryPolicy;
+    u8 flags;
+    u8 reserved[2];
+} OverworldWildRuntimeTimer;
+
+typedef struct OverworldWildRuntimeTimerBank {
+    OverworldWildRuntimeTimer timers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
+} OverworldWildRuntimeTimerBank;
+
+typedef struct OverworldWildRuntimeTimerExpiry {
+    u32 runtimeEpoch;
+    u32 slotGeneration;
+    u32 entryGeneration;
+    u32 timerGeneration;
+    u32 validityTag;
+    u16 ownerId;
+    u16 instanceKey;
+    u16 definitionId;
+    u16 recoveryTransitionId;
+    u8 slotIndex;
+    u8 recoveryPolicy;
+    u8 reserved[2];
+} OverworldWildRuntimeTimerExpiry;
+
+typedef struct OverworldWildRuntimeTimerTickResult {
+    u32 runtimeEpoch;
+    u32 slotGeneration;
+    u32 layerGenerationBefore;
+    u32 layerGenerationAfter;
+    u32 effectiveGenerationBefore;
+    u32 effectiveGenerationAfter;
+    u8 status;
+    u8 ok;
+    u8 changedTimerCount;
+    u8 pendingExpiryCount;
+} OverworldWildRuntimeTimerTickResult;
 
 typedef struct OverworldWildRuntimeEffectiveCache {
     u32 cacheIdentity;
@@ -386,7 +453,10 @@ typedef struct OverworldWildRuntimeSlotSidecar {
     u16 lifecycleTransitions;
     u8 activeLayerCount;
     u8 lifecycleState;
+    u8 presentationGate;
+    u8 timerStateReserved[3];
     OverworldWildRuntimeLayerBank layerBank;
+    OverworldWildRuntimeTimerBank timerBank;
     OverworldWildRuntimeStaticCache staticCache;
     OverworldWildRuntimeEffectiveCache effectiveCache;
     OverworldWildRuntimeProvenance provenance;
@@ -408,6 +478,12 @@ typedef char OverworldWildRuntimeLayerSizeMustRemain16[
     sizeof(OverworldWildRuntimeLayer) == 16 ? 1 : -1];
 typedef char OverworldWildRuntimeLayerBankSizeMustRemain112[
     sizeof(OverworldWildRuntimeLayerBank) == 112 ? 1 : -1];
+typedef char OverworldWildRuntimeTimerSizeMustRemain24[
+    sizeof(OverworldWildRuntimeTimer) == 24 ? 1 : -1];
+typedef char OverworldWildRuntimeTimerBankSizeMustRemain192[
+    sizeof(OverworldWildRuntimeTimerBank) == 192 ? 1 : -1];
+typedef char OverworldWildRuntimeTimerExpirySizeMustRemain32[
+    sizeof(OverworldWildRuntimeTimerExpiry) == 32 ? 1 : -1];
 typedef char OverworldWildRuntimeStaticContextSizeMustRemain12[
     sizeof(OverworldWildRuntimeStaticContext) == 12 ? 1 : -1];
 typedef char OverworldWildRuntimeEffectiveCacheSizeMustRemain104[
@@ -426,10 +502,10 @@ typedef char OverworldWildRuntimeFieldContributionSizeMustRemain14[
     sizeof(OverworldWildRuntimeFieldContribution) == 14 ? 1 : -1];
 typedef char OverworldWildRuntimeProvenanceSizeMustRemain728[
     sizeof(OverworldWildRuntimeProvenance) == 728 ? 1 : -1];
-typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1516[
-    sizeof(OverworldWildRuntimeSlotSidecar) == 1516 ? 1 : -1];
-typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain15172[
-    sizeof(OverworldWildBehaviorStackRuntime) == 15172 ? 1 : -1];
+typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1712[
+    sizeof(OverworldWildRuntimeSlotSidecar) == 1712 ? 1 : -1];
+typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain17132[
+    sizeof(OverworldWildBehaviorStackRuntime) == 17132 ? 1 : -1];
 typedef char OverworldWildRuntimeLayerArrayMustRemainFixed[
     sizeof(((OverworldWildRuntimeLayerBank *)0)->entryGenerations)
         == sizeof(u32) * OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
@@ -550,6 +626,55 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
     u8 slotIndex,
     u32 expectedSlotGeneration,
     OverworldWildRuntimeProvenance *provenanceOut);
+
+u8 OverworldWildRuntime_GetTimerCount(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration);
+OverworldWildRuntimeStatus OverworldWildRuntime_GetTimerByIndex(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u8 timerIndex,
+    OverworldWildRuntimeTimer *timerOut);
+OverworldWildRuntimeStatus OverworldWildRuntime_TickCandidateTimers(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u8 clock,
+    u8 ticks,
+    BOOL presentationGate,
+    OverworldWildRuntimeTimerTickResult *result);
+OverworldWildRuntimeStatus OverworldWildRuntime_SetTimerPresentationGate(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    BOOL active);
+OverworldWildRuntimeStatus OverworldWildRuntime_TickFrameTimers(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u16 presentationGateMask,
+    OverworldWildRuntimeTimerTickResult
+        results[OW_WILD_MAX_SPAWNS]);
+OverworldWildRuntimeStatus OverworldWildRuntime_TickCompletedMovementTimers(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    BOOL presentationGate,
+    OverworldWildRuntimeTimerTickResult *result);
+u8 OverworldWildRuntime_GetPendingTimerExpiryCount(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration);
+OverworldWildRuntimeStatus OverworldWildRuntime_GetPendingTimerExpiryByIndex(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    u8 pendingIndex,
+    OverworldWildRuntimeTimerExpiry *expiryOut);
+OverworldWildRuntimeStatus OverworldWildRuntime_CommitTimerExpiry(
+    OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry,
+    OverworldWildRuntimeStackDeltaResult *result);
 
 u8 OverworldWildRuntime_GetLayerCount(
     const OverworldWildBehaviorStackRuntime *runtime,

@@ -319,6 +319,7 @@ DEPENDENCY_FILES = (
     "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d",
     "build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.d",
     "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d",
+    "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.d",
     "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.d",
     "build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.d",
     "build/save.d",
@@ -359,9 +360,11 @@ FIXED_INPUTS = (
     "src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h",
     "src/overworld_wild_runtime_overlay/linker.ld",
     "src/overworld_wild_runtime_layers_overlay/linker.ld",
+    "src/overworld_wild_runtime_timers_overlay/linker.ld",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers_internal.h",
     "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+    "src/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c",
     "src/overworld_wild_behavior_validator_overlay/linker.ld",
     "src/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.c",
     "src/summary_move_relearn_overlay/linker.ld",
@@ -446,6 +449,14 @@ OUTPUTS = {
         "build/output_overworld_wild_runtime_layers_overlay.bin",
     "overworld_wild_task8_symbols":
         "build/overworld_wild_runtime_layers_overlay_task8_symbols.o",
+    "overworld_wild_runtime_timers_object":
+        "build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o",
+    "overworld_wild_runtime_timers_linked":
+        "build/overworld_wild_runtime_timers_overlay_linked.o",
+    "overworld_wild_runtime_timers_binary":
+        "build/output_overworld_wild_runtime_timers_overlay.bin",
+    "overworld_wild_runtime_timer_symbols":
+        "build/overworld_wild_runtime_timers_overlay_timer_symbols.o",
     "overworld_wild_behavior_validator_object":
         "build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o",
     "overworld_wild_behavior_validator_linked":
@@ -484,6 +495,7 @@ OUTPUTS = {
     "patched_overlay156": "base/overlay/overlay_0156.bin",
     "patched_overlay157": "base/overlay/overlay_0157.bin",
     "patched_overlay158": "base/overlay/overlay_0158.bin",
+    "patched_overlay159": "base/overlay/overlay_0159.bin",
 }
 
 

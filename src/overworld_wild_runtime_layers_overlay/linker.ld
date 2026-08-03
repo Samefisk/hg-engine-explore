@@ -2,8 +2,8 @@
 /* Boot-resident Task-9 mutation, composition, cache, and provenance service. */
 OUTPUT_ARCH(arm)
 MEMORY {
-        rom   : ORIGIN = 0x023B8400, LENGTH = 0x3000
-        ewram : ORIGIN = 0x023B8400, LENGTH = 0x3000
+        rom   : ORIGIN = 0x023B8400, LENGTH = 0x3580
+        ewram : ORIGIN = 0x023B8400, LENGTH = 0x3580
 }
 SECTIONS {
         .text : {
@@ -23,7 +23,7 @@ SECTIONS {
                 __bss_end__ = . ;
                 ASSERT(__bss_end__ - __bss_start__ <= 0x140,
                     "runtime layers overlay BSS exceeds fixed scratch budget");
-                ASSERT(__bss_end__ <= 0x023BB380,
+                ASSERT(__bss_end__ <= 0x023BB900,
                     "runtime layers overlay consumed 0x80 headroom");
                 _end = __bss_end__ ;
                 __end__ = __bss_end__ ;

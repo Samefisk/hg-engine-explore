@@ -34,6 +34,24 @@ typedef int BOOL;
 #define OWBD_STATIC_ACTION_APPLY_CONTROLLER_MODIFIER 5
 #define OWBD_STATIC_ACTION_BIND_SPAWN_POLICY 6
 #define OWBD_STATIC_ACTION_BIND_POPULATION_POLICY 8
+#define OWBD_STATIC_ACTION_APPLY_CANDIDATE_TIMER_OPERATOR 11
+#define OWBD_OVERRIDE_KIND_STATE_CANDIDATE 1
+#define OWBD_TIMER_CLOCK_NONE 0
+#define OWBD_TIMER_CLOCK_FRAME 1
+#define OWBD_TIMER_CLOCK_COMPLETED_MOVEMENT 2
+#define OWBD_TIMER_SOURCE_NONE 0
+#define OWBD_TIMER_SOURCE_FIXED 1
+#define OWBD_TIMER_SOURCE_CONTROLLER_STAMINA 2
+#define OWBD_TIMER_SOURCE_CANDIDATE_FOLD 3
+#define OWBD_HIDDEN_TIMER_NONE 0
+#define OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN 1
+#define OWBD_HIDDEN_TIMER_EXPIRE_ON_HIDE 3
+#define OWBD_RECOVERY_ROUTE_TRANSITION 1
+#define OWBD_CANDIDATE_TIMER_SET 1
+#define OWBD_CANDIDATE_TIMER_ADD 2
+#define OWBD_CANDIDATE_TIMER_ADD_CLAMP_MAX 64
+#define OWBD_ROLE_TIRED 3
+#define OWBD_ROLE_ASLEEP 4
 
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_RUNTIME_ELIGIBLE (1u << 0)
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_TIRED_ORIGIN (1u << 1)
@@ -183,6 +201,7 @@ typedef union __attribute__((packed)) OverworldWildStaticActionPayload {
     struct __attribute__((packed)) { u16 controllerId, nodeId, profileIdentityId, reserved; } bindNode;
     struct __attribute__((packed)) { u8 fieldId, operatorKind; int8_t delta; u8 bound, semanticRoleMask, reserved; u16 controllerId; } modifier;
     struct __attribute__((packed)) { u16 policyId, reserved0, reserved1, reserved2; } bindPolicy;
+    struct __attribute__((packed)) { u16 controllerId, nodeId; u8 operatorKind, operand; u16 reserved; } timer;
     u8 raw[8];
 } OverworldWildStaticActionPayload;
 
@@ -263,6 +282,16 @@ typedef struct OverworldWildRuntimeDefinition {
     u8 channel;
     u8 priority;
 } OverworldWildRuntimeDefinition;
+
+typedef struct OverworldWildRuntimeTimerDefinition {
+    u16 recoveryTransitionId;
+    u8 clock;
+    u8 source;
+    u8 hiddenPolicy;
+    u8 recoveryPolicy;
+    u8 duration;
+    u8 reserved;
+} OverworldWildRuntimeTimerDefinition;
 
 typedef struct OverworldWildRuntimeApplicabilityInput {
     u32 immutableContextMask;
@@ -443,6 +472,11 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 540,
 #define OWBD_BLOB_FLAG_AUTHORED_SOURCE (1u << 2)
 #define OWBD_VALIDATION_NO_PROJECTION_BUILDER
 #include "overworld_wild_behavior_v40_validation_shared.h"
+
+BOOL OverworldWildRuntime_CopyResolvedCachedNode(
+    const OverworldWildRuntimeStaticCache *cache,
+    const OverworldWildRuntimeDefinition *definition,
+    OverworldWildRuntimeResolvedNode *nodeOut);
 
 #define OW_WILD_RUNTIME_ACCESSOR_HOST_TEST
 #include "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
@@ -670,6 +704,147 @@ int main(int argc, char **argv)
                 && OverworldWildRuntime_ApplicabilityMatchesStaticCache(
                     &input, &resolvedCache),
             "authenticated complete static-cache projection differs from resolver");
+        {
+            OverworldWildOverrideDefinitionRecord *mutableDefinitions =
+                (void *)(blob + header->overrideDefinitions.offset);
+            OverworldWildStaticActionRecord *mutableActions =
+                (void *)(blob + header->overrideActions.offset);
+            const OverworldWildOverrideSourceRecord *sources =
+                (const void *)(blob + header->overrideSources.offset);
+            OverworldWildOverrideDefinitionRecord *stamina = NULL;
+            OverworldWildOverrideDefinitionRecord *sleep = NULL;
+            OverworldWildOverrideDefinitionRecord *fled = NULL;
+            OverworldWildStaticActionRecord *ordered[256];
+            OverworldWildStaticActionRecord saved[256];
+            OverworldWildRuntimeTimerDefinition timer;
+            u16 orderedCount = 0;
+            u16 sourceRank, actionRank;
+
+            for (index = 0; index < header->overrideDefinitions.count;
+                    index++) {
+                if (mutableDefinitions[index].requiredOwnerId == 0x8105)
+                    stamina = &mutableDefinitions[index];
+                if (mutableDefinitions[index].semanticRole == OWBD_ROLE_ASLEEP
+                    && mutableDefinitions[index].timerClock
+                        != OWBD_TIMER_CLOCK_NONE)
+                    sleep = &mutableDefinitions[index];
+                if (mutableDefinitions[index].requiredOwnerId == 0x8107
+                    && mutableDefinitions[index].selectorKind
+                        == OWBD_SELECTOR_SEMANTIC_ROLE)
+                    fled = &mutableDefinitions[index];
+            }
+            require(stamina != NULL && sleep != NULL && fled != NULL,
+                "production timer definition families disappeared");
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, &resolvedCache, &timer)
+                    && timer.clock == OWBD_TIMER_CLOCK_FRAME
+                    && timer.source == OWBD_TIMER_SOURCE_CANDIDATE_FOLD
+                    && timer.hiddenPolicy
+                        == OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
+                    && timer.recoveryTransitionId
+                        == stamina->recoveryTransitionId
+                    && timer.duration >= 1 && timer.duration <= 254,
+                "production stamina timer metadata/fold did not resolve");
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    sleep->stableId, &resolvedCache, &timer)
+                    && timer.duration == 4
+                    && timer.hiddenPolicy == 2,
+                "production forced-sleep fixed timer metadata differs");
+
+            for (sourceRank = 0;
+                    sourceRank < header->overrideSources.count;
+                    sourceRank++) {
+                const OverworldWildOverrideSourceRecord *source =
+                    MatchingSourceAtRank(header, sources,
+                        &staticContext, sourceRank);
+                if (source == NULL) break;
+                for (actionRank = 0; actionRank < source->actionCount;
+                        actionRank++) {
+                    OverworldWildStaticActionRecord *action =
+                        (void *)SourceActionAtRank(source, mutableActions,
+                            actionRank);
+                    if (action != NULL) {
+                        require(orderedCount < 256,
+                            "production timer action fixture overflowed");
+                        ordered[orderedCount] = action;
+                        saved[orderedCount++] = *action;
+                    }
+                }
+            }
+            require(orderedCount >= 2,
+                "production timer-source mapping lacks ordered fold coverage");
+
+            for (index = 0; index < orderedCount; index++) {
+                ordered[index]->kind =
+                    OWBD_STATIC_ACTION_APPLY_CANDIDATE_TIMER_OPERATOR;
+                ordered[index]->payload.timer.controllerId =
+                    resolvedCache.controllerId;
+                ordered[index]->payload.timer.nodeId = 0x3103;
+                ordered[index]->payload.timer.reserved = 0;
+                ordered[index]->payload.timer.operatorKind =
+                    OWBD_CANDIDATE_TIMER_SET;
+                ordered[index]->payload.timer.operand = 255;
+            }
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, &resolvedCache, &timer)
+                    && timer.duration == 254,
+                "candidate timer SET did not retain full byte through final normalization");
+
+            for (index = 0; index < orderedCount; index++) {
+                ordered[index]->payload.timer.operatorKind = index == 0
+                    ? OWBD_CANDIDATE_TIMER_SET : OWBD_CANDIDATE_TIMER_ADD;
+                ordered[index]->payload.timer.operand = index == 0
+                    ? 250 : index == 1 ? 32 : 0;
+            }
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, &resolvedCache, &timer)
+                    && timer.duration == 64,
+                "candidate timer ADD did not clamp each intermediate result to 0..64");
+
+            for (index = 0; index < orderedCount; index++) {
+                ordered[index]->payload.timer.operatorKind =
+                    index + 1 == orderedCount
+                        ? OWBD_CANDIDATE_TIMER_SET
+                        : OWBD_CANDIDATE_TIMER_ADD;
+                ordered[index]->payload.timer.operand =
+                    index + 1 == orderedCount ? 7 : 1;
+            }
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, &resolvedCache, &timer)
+                    && timer.duration == 7,
+                "candidate timer SET/ADD fold ignored total authored action order");
+
+            for (index = 0; index < orderedCount; index++) {
+                ordered[index]->payload.timer.operatorKind =
+                    OWBD_CANDIDATE_TIMER_SET;
+                ordered[index]->payload.timer.operand = 0;
+            }
+            require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                    stamina->stableId, &resolvedCache, &timer)
+                    && timer.duration == 1,
+                "non-ASLEEP tired zero was not repaired to finite one");
+            for (index = 0; index < orderedCount; index++)
+                *ordered[index] = saved[index];
+
+            {
+                u8 savedValue = sleep->timerValue;
+                sleep->timerValue = 0;
+                require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                        sleep->stableId, &resolvedCache, &timer)
+                        && timer.duration == 255,
+                    "ASLEEP zero did not normalize to indefinite 255");
+                sleep->timerValue = savedValue;
+            }
+            {
+                u8 savedValue = fled->timerValue;
+                fled->timerValue = 255;
+                require(OverworldWildRuntime_ResolveInstalledTimerDefinition(
+                        fled->stableId, &resolvedCache, &timer)
+                        && timer.duration == 254,
+                    "non-ASLEEP literal 255 became indefinite");
+                fled->timerValue = savedValue;
+            }
+        }
         memset(&retainedResolved, 0xA5, sizeof(retainedResolved));
         require(OverworldWildRuntime_ResolveRetainedStaticCache(
                 &resolvedCache, &staticContext, 7, &retainedResolved)

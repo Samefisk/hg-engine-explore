@@ -6,6 +6,7 @@ import shutil
 import struct
 import sys
 import hashlib
+import re
 from datetime import datetime
 import _io
 import ndspy.codeCompression
@@ -153,6 +154,20 @@ def GetSectionSize(section_file: str, section_name: str) -> int:
     return 0
 
 
+def ParseOverlayLinkerId(header: str, source_path: str) -> int:
+    if not isinstance(header, str) or not isinstance(source_path, str):
+        raise RuntimeError('overlay linker identity input is not text')
+    match = re.fullmatch(r'/\* Overlay ([0-9]+) \*/', header.rstrip('\r\n'))
+    if match is None:
+        raise RuntimeError(
+            f'{source_path}: first line must be /* Overlay ### */'
+        )
+    overlay_id = int(match.group(1), 10)
+    if overlay_id > 0xFFFF:
+        raise RuntimeError(f'{source_path}: overlay ID is outside u16')
+    return overlay_id
+
+
 def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     subprocess.check_call([
         sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
@@ -269,10 +284,10 @@ def VerifyOverworldWildRuntimeOverlay(
         if len(parts) >= 6:
             symbols[parts[-1]] = int(parts[0], 16)
     loader = symbols.get('OverworldWildBehavior_LoadValidatedBundle')
-    if loader != 0x023BB400:
+    if loader != 0x023BB980:
         raise RuntimeError(
             'overlay 157 retained-bundle loader moved: '
-            f'{loader!r} != 0x023BB400'
+            f'{loader!r} != 0x023BB980'
         )
     print(
         f'overlay 157 packaged runtime gate: size={len(overlay)} '
@@ -321,6 +336,36 @@ def VerifyOverworldWildRuntimeLayersOverlay(
         raise RuntimeError('packaged overlay 158 differs from its linked binary')
     print(
         f'overlay 158 packaged runtime-layers gate: size={len(overlay)} '
+        f'sha256={hashlib.sha256(overlay).hexdigest()}'
+    )
+
+
+def VerifyOverworldWildRuntimeTimersOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    layers_owner = 'build/overworld_wild_runtime_layers_overlay_linked.o'
+    task8_carrier = (
+        'build/overworld_wild_runtime_layers_overlay_task8_symbols.o'
+    )
+    timer_carrier = (
+        'build/overworld_wild_runtime_timers_overlay_timer_symbols.o'
+    )
+    subprocess.check_call([
+        sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
+        '--binary', output_path, '--overlay', '159',
+        '--layers-owner', layers_owner,
+        '--task8-carrier', task8_carrier,
+        '--timer-carrier', timer_carrier,
+    ])
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 159 differs from its linked binary')
+    print(
+        f'overlay 159 packaged runtime-timers gate: size={len(overlay)} '
         f'sha256={hashlib.sha256(overlay).hexdigest()}'
     )
 
@@ -825,10 +870,9 @@ def writeall():
 
     # all of the conglomerated overlays
     for i in range(0, len(OVERLAYS)):
-        with open(SOURCE + "/" + OVERLAYS[i] + "/linker.ld") as file:
-            line = file.readline()
-            # grab first line of format /* Overlay ### */, convert ### to a number
-            newOverlay = int(line.split(" ")[2])
+        linkerPath = SOURCE + "/" + OVERLAYS[i] + "/linker.ld"
+        with open(linkerPath) as file:
+            newOverlay = ParseOverlayLinkerId(file.readline(), linkerPath)
             # determine insertion location
             for line in file:
                 if "ORIGIN" in line:
@@ -877,6 +921,12 @@ def writeall():
                 NEW_OVERLAYS[i],
                 overlayPath,
             )
+        if newOverlay == 159:
+            VerifyOverworldWildRuntimeTimersOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
         if newOverlay == 131:
             VerifyOverworldFieldServiceOverlay(
                 LINKED_SECTIONS[i + 1],
@@ -893,10 +943,12 @@ def writeall():
 
     # all of the individual overlays
     for i in range(0, len(INDIVIDUAL_OVERLAYS)):
-        with open(SOURCE + "/individual/linker/" + INDIVIDUAL_OVERLAYS[i] + ".ld") as file:
-            line = file.readline()
-            # grab first line of format /* Overlay ### */, convert ### to a number
-            newOverlay = int(line.split(" ")[2])
+        linkerPath = (
+            SOURCE + "/individual/linker/"
+            + INDIVIDUAL_OVERLAYS[i] + ".ld"
+        )
+        with open(linkerPath) as file:
+            newOverlay = ParseOverlayLinkerId(file.readline(), linkerPath)
             # determine insertion location
             for line in file:
                 if "ORIGIN" in line:

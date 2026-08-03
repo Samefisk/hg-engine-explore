@@ -187,6 +187,8 @@ static FixtureDefinitionCatalog fixture_catalog(void)
         DEF_INELIGIBLE, 1, 2, 2, 0, 0, 0);
     catalog.definitions[10] = make_definition(
         DEF_CALM, 1, 2, 1, 0, 0, eligible);
+    catalog.definitions[10].channel = 4;
+    catalog.definitions[10].priority = 250;
     catalog.definitions[11] = make_definition(
         DEF_CUSTOM, 1, 2, 7, 0, 0, eligible);
     catalog.definitions[12] = make_definition(
@@ -269,6 +271,59 @@ BOOL OverworldWildRuntime_CopyInstalledDefinition(
     }
     memset(definitionOut, 0, sizeof(*definitionOut));
     return FALSE;
+}
+
+BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
+    u16 definitionId,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    OverworldWildRuntimeTimerDefinition *timerOut)
+{
+    memset(timerOut, 0, sizeof(*timerOut));
+    if (staticCache == NULL || !staticCache->valid) return FALSE;
+    if (definitionId == DEF_ORDINARY_TIRED
+        || definitionId == DEF_STAMINA) {
+        timerOut->recoveryTransitionId = 0xA003;
+        timerOut->clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        timerOut->source = 3;
+        timerOut->hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN;
+        timerOut->recoveryPolicy = 1;
+        timerOut->duration = definitionId == DEF_STAMINA ? 6 : 4;
+    } else if (definitionId == DEF_HIGH_STATE) {
+        timerOut->recoveryTransitionId = 0xA004;
+        timerOut->clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        timerOut->source = 1;
+        timerOut->hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN;
+        timerOut->recoveryPolicy = 1;
+        timerOut->duration = 2;
+    } else if (definitionId == DEF_LOW_STATE) {
+        timerOut->recoveryTransitionId = 0xA005;
+        timerOut->clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        timerOut->source = 1;
+        timerOut->hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE;
+        timerOut->recoveryPolicy = 1;
+        timerOut->duration = 3;
+    } else if (definitionId == DEF_EXACT) {
+        timerOut->recoveryTransitionId = 0xA006;
+        timerOut->clock =
+            OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT;
+        timerOut->source = 1;
+        timerOut->hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN;
+        timerOut->recoveryPolicy = 1;
+        timerOut->duration = 5;
+    } else if (definitionId == DEF_FLED) {
+        timerOut->recoveryTransitionId = 0xA007;
+        timerOut->clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        timerOut->source = 1;
+        timerOut->hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN;
+        timerOut->recoveryPolicy = 1;
+        timerOut->duration = 255;
+    }
+    return TRUE;
 }
 
 u8 OverworldWildRuntime_CountInstalledTiredTranslations(
@@ -681,6 +736,9 @@ BOOL OverworldWildRuntime_CopyInstalledModifierOperations(
 }
 
 #include "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.c"
+#ifdef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
+#include "../src/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.c"
+#endif
 
 static OverworldWildRuntimeApplicabilityInput fixture_applicability(void)
 {
@@ -2449,6 +2507,601 @@ static void test_task9_composition_cache_and_provenance(
     (void)high;
 }
 
+static OverworldWildRuntimeTimer *timer_for_owner(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex,
+    u16 ownerId)
+{
+    int index = FindLayer(&runtime->slots[slotIndex], ownerId, 0);
+    if (index < 0) return NULL;
+    if (!(runtime->slots[slotIndex].timerBank.timers[index].flags
+            & OW_WILD_RUNTIME_TIMER_VALID)) return NULL;
+    return &runtime->slots[slotIndex].timerBank.timers[index];
+}
+
+static OverworldWildRuntimeTimerExpiry expiry_for_owner(
+    OverworldWildBehaviorStackRuntime *runtime,
+    int slotIndex,
+    u16 ownerId)
+{
+    OverworldWildRuntimeTimerExpiry expiry;
+    u8 i;
+    memset(&expiry, 0, sizeof(expiry));
+    for (i = 0; i < OverworldWildRuntime_GetPendingTimerExpiryCount(
+            runtime, (u8)slotIndex,
+            runtime->slots[slotIndex].slotGeneration); i++) {
+        require(OverworldWildRuntime_GetPendingTimerExpiryByIndex(runtime,
+                (u8)slotIndex, runtime->slots[slotIndex].slotGeneration,
+                i, &expiry) == OW_WILD_RUNTIME_STATUS_OK,
+            "pending expiry enumeration failed");
+        if (expiry.ownerId == ownerId) return expiry;
+    }
+    memset(&expiry, 0, sizeof(expiry));
+    return expiry;
+}
+
+static void test_task10_timer_engine(
+    const OverworldWildRuntimeApplicabilityInput *input)
+{
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime beforeFailure;
+    OverworldWildRuntimeStackDeltaResult delta;
+    OverworldWildRuntimeTimerTickResult tick;
+    OverworldWildRuntimeLayerHandle low;
+    OverworldWildRuntimeLayerHandle tired;
+    OverworldWildRuntimeLayerHandle high;
+    OverworldWildRuntimeLayerHandle calm;
+    OverworldWildRuntimeLayerHandle exact;
+    OverworldWildRuntimeTimerExpiry highExpiry;
+    OverworldWildRuntimeTimerExpiry lowExpiry;
+    OverworldWildRuntimeTimerExpiry staleExpiry;
+    OverworldWildRuntimeTimerExpiry malformedExpiry;
+    OverworldWildRuntimeTimer timerOut;
+    OverworldWildRuntimeTimerTickResult
+        frameTicks[OW_WILD_MAX_SPAWNS];
+    OverworldWildRuntimeTimer preservedA;
+    OverworldWildRuntimeTimer preservedC;
+    OverworldWildRuntimeStaticCache cachedStatic;
+    OverworldWildRuntimeEffectiveCache cachedEffective;
+    OverworldWildRuntimeProvenance cachedProvenance;
+    OverworldWildRuntimeStaticContext staticContext = fixture_static_context();
+    u32 layerGeneration;
+    u32 effectiveGeneration;
+    u32 effectiveHash;
+    u8 metadataStatus;
+    u8 finiteStatus;
+    u8 indefiniteStatus;
+    u8 rekeyStatus;
+    u8 restartStatus;
+    u8 malformedStatus;
+    u8 frameFailureStatus;
+    u8 frameRetryStatus;
+    u8 tagReplayStatus;
+    u8 indefiniteDriftStatus;
+
+    prepare_runtime(&runtime, 0);
+    low = apply_one(&runtime, 0, input, DEF_LOW_STATE, 0x9601, 0);
+    require(timer_for_owner(&runtime, 0, 0x9601)->remainingTicks == 3,
+        "expire-on-hide timer did not arm");
+    tired = apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9602, 0);
+    require((timer_for_owner(&runtime, 0, 0x9601)->flags
+            & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+            && timer_for_owner(&runtime, 0, 0x9601)->remainingTicks == 0,
+        "recomposition did not publish EXPIRE_ON_HIDE immediately");
+    high = apply_one(&runtime, 0, input, DEF_HIGH_STATE, 0x9603, 0);
+    calm = apply_one(&runtime, 0, input, DEF_CALM, 0x9604, 0);
+    exact = apply_one(&runtime, 0, input, DEF_EXACT, 0x9605, 0);
+    require(OverworldWildRuntime_GetTimerCount(&runtime, 0,
+            runtime.slots[0].slotGeneration) == 4,
+        "simultaneous layer timers were collapsed");
+    require(timer_for_owner(&runtime, 0, 0x9602)->remainingTicks == 4
+            && timer_for_owner(&runtime, 0, 0x9603)->remainingTicks == 2
+            && timer_for_owner(&runtime, 0, 0x9605)->remainingTicks == 5,
+        "simultaneous timer arm values differ");
+
+    require(OverworldWildRuntime_SetTimerPresentationGate(&runtime, 0,
+            runtime.slots[0].slotGeneration, TRUE)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "presentation gate did not activate");
+    layerGeneration = runtime.slots[0].layerGeneration;
+    effectiveGeneration = runtime.slots[0].effectiveGeneration;
+    effectiveHash = runtime.slots[0].effectiveCache.effectiveHash;
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, TRUE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && tick.changedTimerCount == 0,
+        "presentation gate advanced gameplay timers");
+    require(timer_for_owner(&runtime, 0, 0x9602)->remainingTicks == 4
+            && timer_for_owner(&runtime, 0, 0x9603)->remainingTicks == 2,
+        "presentation gate changed hidden timers");
+    require(OverworldWildRuntime_SetTimerPresentationGate(&runtime, 0,
+            runtime.slots[0].slotGeneration, FALSE)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "presentation gate did not release");
+    cachedStatic = runtime.slots[0].staticCache;
+    cachedEffective = runtime.slots[0].effectiveCache;
+    cachedProvenance = runtime.slots[0].provenance;
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "first ungated frame tick failed");
+    require(timer_for_owner(&runtime, 0, 0x9602)->remainingTicks == 4
+            && timer_for_owner(&runtime, 0, 0x9603)->remainingTicks == 1,
+        "pause/continue hidden policies were conflated");
+    require(runtime.slots[0].layerGeneration == layerGeneration
+            && runtime.slots[0].effectiveGeneration == effectiveGeneration
+            && runtime.slots[0].effectiveCache.effectiveHash == effectiveHash
+            && !memcmp(&runtime.slots[0].staticCache, &cachedStatic,
+                sizeof(cachedStatic))
+            && !memcmp(&runtime.slots[0].effectiveCache, &cachedEffective,
+                sizeof(cachedEffective))
+            && !memcmp(&runtime.slots[0].provenance, &cachedProvenance,
+                sizeof(cachedProvenance))
+            && tick.layerGenerationBefore == tick.layerGenerationAfter
+            && tick.effectiveGenerationBefore == tick.effectiveGenerationAfter,
+        "ordinary timer decrement changed composition generations/hash");
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 9, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && (timer_for_owner(&runtime, 0, 0x9603)->flags
+                & OW_WILD_RUNTIME_TIMER_ZERO_PENDING),
+        "continue-hidden timer did not publish zero pending");
+    highExpiry = expiry_for_owner(&runtime, 0, 0x9603);
+    lowExpiry = expiry_for_owner(&runtime, 0, 0x9601);
+    require(highExpiry.validityTag != 0 && lowExpiry.validityTag != 0,
+        "exact pending expiry tickets were not published");
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &highExpiry,
+            &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && FindLayer(&runtime.slots[0], 0x9603, 0) < 0
+            && FindLayer(&runtime.slots[0], 0x9604, 0) >= 0,
+        "hidden middle timer expiry removed the wrong layer");
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &highExpiry,
+            &delta) == OW_WILD_RUNTIME_STATUS_STALE_NOOP,
+        "consumed expiry ticket was not stale-safe");
+    require(OverworldWildRuntime_Remove(&runtime, 0,
+            runtime.slots[0].slotGeneration, &calm, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "top untimed layer removal failed");
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9602)->remainingTicks == 3,
+        "revealed paused timer did not resume");
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &lowExpiry,
+            &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && FindLayer(&runtime.slots[0], 0x9601, 0) < 0
+            && timer_for_owner(&runtime, 0, 0x9602) != NULL
+            && timer_for_owner(&runtime, 0, 0x9605) != NULL,
+        "exact hidden expiry disturbed unrelated timers");
+
+    prepare_runtime(&runtime, 0);
+    exact = apply_one(&runtime, 0, input, DEF_EXACT, 0x9610, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 3, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9610)->remainingTicks == 5,
+        "FRAME tick advanced COMPLETED_MOVEMENT timer");
+    require(OverworldWildRuntime_TickCompletedMovementTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9610)->remainingTicks == 4,
+        "completed movement did not advance its timer clock");
+    require(OverworldWildRuntime_ClearAllForSlot(&runtime, 0,
+            runtime.slots[0].slotGeneration, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "movement clock fixture cleanup failed");
+    (void)exact;
+    (void)apply_one(&runtime, 0, input, DEF_FLED, 0x8107, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 254, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x8107)->remainingTicks == 255
+            && !(timer_for_owner(&runtime, 0, 0x8107)->flags
+                & OW_WILD_RUNTIME_TIMER_ZERO_PENDING),
+        "indefinite 255 timer decremented or expired");
+
+    prepare_runtime(&runtime, 0);
+    tired = apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9620, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "replace fixture pre-tick failed");
+    preservedA = *timer_for_owner(&runtime, 0, 0x9620);
+    beforeFailure = runtime;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_ORDINARY_TIRED, 0x9620, 0, &delta)
+            == OW_WILD_RUNTIME_STATUS_IDEMPOTENT
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "idempotent timed Apply refreshed timer state");
+    require(OverworldWildRuntime_Replace(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, 0x9620, 0,
+            DEF_ORDINARY_TIRED, &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9620)->remainingTicks == 4
+            && timer_for_owner(&runtime, 0, 0x9620)->entryGeneration
+                != preservedA.entryGeneration
+            && timer_for_owner(&runtime, 0, 0x9620)->timerGeneration
+                != preservedA.timerGeneration,
+        "same-definition Replace did not mint/restart exact timer");
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "replacement expiry tick failed");
+    staleExpiry = expiry_for_owner(&runtime, 0, 0x9620);
+    require(staleExpiry.validityTag != 0,
+        "replacement did not publish expiry ticket");
+    require(OverworldWildRuntime_Replace(&runtime, 0,
+            runtime.slots[0].slotGeneration, input, 0x9620, 0,
+            DEF_ORDINARY_TIRED, &delta) == OW_WILD_RUNTIME_STATUS_OK,
+        "second replacement failed");
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &staleExpiry,
+            &delta) == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && timer_for_owner(&runtime, 0, 0x9620)->remainingTicks == 4,
+        "stale expiry removed/refreshed replacement timer");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9701, 0);
+    high = apply_one(&runtime, 0, input, DEF_HIGH_STATE, 0x9702, 0);
+    (void)apply_one(&runtime, 0, input, DEF_EXACT, 0x9703, 0);
+    preservedA = *timer_for_owner(&runtime, 0, 0x9701);
+    preservedC = *timer_for_owner(&runtime, 0, 0x9703);
+    require(OverworldWildRuntime_Remove(&runtime, 0,
+            runtime.slots[0].slotGeneration, &high, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && !memcmp(timer_for_owner(&runtime, 0, 0x9701),
+                &preservedA, sizeof(preservedA))
+            && !memcmp(timer_for_owner(&runtime, 0, 0x9703),
+                &preservedC, sizeof(preservedC)),
+        "middle removal changed unrelated aligned timer bytes");
+    require(OverworldWildRuntime_RemoveOwner(&runtime, 0,
+            runtime.slots[0].slotGeneration, 0x9701, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9703) != NULL,
+        "bottom removal disturbed top timer");
+    require(OverworldWildRuntime_RemoveOwner(&runtime, 0,
+            runtime.slots[0].slotGeneration, 0x9703, &delta)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_GetTimerCount(&runtime, 0,
+                runtime.slots[0].slotGeneration) == 0,
+        "top removal retained timer");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9801, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "rekey fixture pre-tick failed");
+    runtime.slots[0].nextEntryGeneration = 0xFFFFFFFFu;
+    runtime.slots[0].nextTimerGeneration = 0xFFFFFFFFu;
+    layerGeneration = runtime.handleEpoch;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXACT, 0x9802, 0, &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.handleEpoch == layerGeneration + 1
+            && timer_for_owner(&runtime, 0, 0x9801)->remainingTicks == 3
+            && timer_for_owner(&runtime, 0, 0x9801)->entryGeneration == 1
+            && timer_for_owner(&runtime, 0, 0x9801)->timerGeneration == 1,
+        "entry/timer wrap did not atomically rekey surviving timer");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9811, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "timer-only wrap pre-tick failed");
+    require(runtime.slots[0].nextEntryGeneration != 0xFFFFFFFFu,
+        "timer-only wrap fixture unexpectedly armed entry wrap");
+    runtime.slots[0].nextTimerGeneration = 0xFFFFFFFFu;
+    layerGeneration = runtime.handleEpoch;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXACT, 0x9812, 0, &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.handleEpoch == layerGeneration + 1
+            && timer_for_owner(&runtime, 0, 0x9811)->remainingTicks == 3
+            && timer_for_owner(&runtime, 0, 0x9811)->timerGeneration == 1,
+        "timer-only carrier wrap did not rekey/preserve survivor");
+
+    prepare_runtime(&runtime, 0);
+    assign_and_prime(&runtime, 1);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9821, 0);
+    (void)apply_one(&runtime, 1, input, DEF_ORDINARY_TIRED, 0x9822, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_TickCandidateTimers(&runtime, 1,
+                runtime.slots[1].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "cross-slot wrap timer preparation failed");
+    staleExpiry = expiry_for_owner(&runtime, 1, 0x9822);
+    require(staleExpiry.validityTag != 0,
+        "cross-slot rekey fixture did not capture its old expiry ticket");
+    runtime.slots[0].nextTimerGeneration = 0xFFFFFFFFu;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXACT, 0x9823, 0, &delta) == OW_WILD_RUNTIME_STATUS_OK
+            && timer_for_owner(&runtime, 0, 0x9821)->remainingTicks == 3
+            && timer_for_owner(&runtime, 1, 0x9822)->remainingTicks == 0
+            && (timer_for_owner(&runtime, 1, 0x9822)->flags
+                & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+            && timer_for_owner(&runtime, 1, 0x9822)->timerGeneration == 1,
+        "cross-slot rekey changed survivor remaining/zero-pending state");
+    beforeFailure = runtime;
+    rekeyStatus = OverworldWildRuntime_CommitTimerExpiry(
+        &runtime, &staleExpiry, &delta);
+    require(rekeyStatus == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "old-identity rekey expiry was not a mutation-free stale no-op");
+    malformedExpiry = staleExpiry;
+    malformedExpiry.reserved[0] = 1;
+    beforeFailure = runtime;
+    malformedStatus = OverworldWildRuntime_CommitTimerExpiry(
+        &runtime, &malformedExpiry, &delta);
+    require(malformedStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "structurally malformed stale expiry was not rejected atomically");
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 1,
+            runtime.slots[1].slotGeneration, &staticContext, input)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && expiry_for_owner(&runtime, 1, 0x9822).validityTag != 0,
+        "cross-slot rekey did not republish exact pending ticket");
+
+    prepare_runtime(&runtime, 0);
+    assign_and_prime(&runtime, 1);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9831, 0);
+    (void)apply_one(&runtime, 1, input, DEF_ORDINARY_TIRED, 0x9832, 0);
+    timer_for_owner(&runtime, 1, 0x9832)->ownerId ^= 1;
+    runtime.slots[0].nextTimerGeneration = 0xFFFFFFFFu;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXACT, 0x9833, 0, &delta)
+            == OW_WILD_RUNTIME_STATUS_RUNTIME_EPOCH_RESTARTED
+            && runtime.slots[0].activeLayerCount == 0
+            && runtime.slots[1].activeLayerCount == 0
+            && OverworldWildRuntime_GetPendingTimerExpiryCount(&runtime, 0,
+                runtime.slots[0].slotGeneration) == 0,
+        "corrupted bystander was not rejected by atomic wrap recovery");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9841, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "terminal epoch fixture did not publish expiry");
+    staleExpiry = expiry_for_owner(&runtime, 0, 0x9841);
+    runtime.handleEpoch = 0xFFFFFFFFu;
+    runtime.slots[0].nextTimerGeneration = 0xFFFFFFFFu;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXACT, 0x9842, 0, &delta)
+            == OW_WILD_RUNTIME_STATUS_RUNTIME_EPOCH_RESTARTED
+            && runtime.handleEpoch == 1
+            && runtime.slots[0].activeLayerCount == 0
+            && !memcmp(&runtime.slots[0].timerBank,
+                &(OverworldWildRuntimeTimerBank){{{0}}},
+                sizeof(runtime.slots[0].timerBank)),
+        "terminal epoch restart retained timer state");
+    beforeFailure = runtime;
+    restartStatus = OverworldWildRuntime_CommitTimerExpiry(
+        &runtime, &staleExpiry, &delta);
+    require(restartStatus == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "old-identity restart expiry was not a mutation-free stale no-op");
+
+    OverworldWildRuntime_DestructivelyInvalidateSlot(&runtime, 0, TRUE);
+    require(runtime.slots[0].activeLayerCount == 0
+            && runtime.slots[0].nextTimerGeneration == 1
+            && !memcmp(&runtime.slots[0].timerBank,
+                &(OverworldWildRuntimeTimerBank){{{0}}},
+                sizeof(runtime.slots[0].timerBank)),
+        "destructive reuse retained timer storage");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9901, 0);
+    beforeFailure = runtime;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_EXCLUSIVE, 0x9901, 0, &delta)
+            == OW_WILD_RUNTIME_STATUS_OWNER_KEY_OCCUPIED
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "failed atomic delta partially changed timer/layer state");
+    timer_for_owner(&runtime, 0, 0x9901)->hiddenPolicy =
+        OW_WILD_RUNTIME_HIDDEN_TIMER_CONTINUE_WHILE_HIDDEN;
+    beforeFailure = runtime;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+            runtime.slots[0].slotGeneration, input,
+            DEF_ORDINARY_TIRED, 0x9901, 0, &delta)
+            == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "idempotent Apply accepted unauthenticated timer metadata");
+    metadataStatus = OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+        runtime.slots[0].slotGeneration,
+        OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick);
+    require(metadataStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "timer tick accepted valid-enum metadata drift or changed runtime");
+    memset(&timerOut, 0xA5, sizeof(timerOut));
+    require(OverworldWildRuntime_GetTimerCount(&runtime, 0,
+                runtime.slots[0].slotGeneration) == 0
+            && OverworldWildRuntime_GetTimerByIndex(&runtime, 0,
+                runtime.slots[0].slotGeneration, 0, &timerOut)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&timerOut, &(OverworldWildRuntimeTimer){0},
+                sizeof(timerOut))
+            && OverworldWildRuntime_GetPendingTimerExpiryCount(&runtime, 0,
+                runtime.slots[0].slotGeneration) == 0
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "timer queries exposed valid-enum metadata drift");
+    memset(&malformedExpiry, 0xA5, sizeof(malformedExpiry));
+    require(OverworldWildRuntime_GetPendingTimerExpiryByIndex(&runtime, 0,
+                runtime.slots[0].slotGeneration, 0, &malformedExpiry)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&malformedExpiry,
+                &(OverworldWildRuntimeTimerExpiry){0},
+                sizeof(malformedExpiry))
+            && OverworldWildRuntime_SetTimerPresentationGate(&runtime, 0,
+                runtime.slots[0].slotGeneration, TRUE)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "pending query/gate accepted valid-enum metadata drift");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9911, 0);
+    timer_for_owner(&runtime, 0, 0x9911)->remainingTicks =
+        timer_for_owner(&runtime, 0, 0x9911)->armedDuration + 1;
+    beforeFailure = runtime;
+    finiteStatus = OverworldWildRuntime_GetTimerByIndex(&runtime, 0,
+        runtime.slots[0].slotGeneration, 0, &timerOut);
+    require(finiteStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "finite timer extension was accepted or changed runtime");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9921, 0);
+    timer_for_owner(&runtime, 0, 0x9921)->remainingTicks = 255;
+    beforeFailure = runtime;
+    indefiniteStatus = OverworldWildRuntime_SetTimerPresentationGate(
+        &runtime, 0, runtime.slots[0].slotGeneration, TRUE);
+    require(indefiniteStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+                runtime.slots[0].slotGeneration,
+                OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "finite-to-indefinite timer edit was accepted or changed runtime");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_FLED, 0x8107, 0);
+    require(timer_for_owner(&runtime, 0, 0x8107)->armedDuration == 255
+            && timer_for_owner(&runtime, 0, 0x8107)->remainingTicks == 255,
+        "indefinite drift fixture did not arm a genuine indefinite timer");
+    timer_for_owner(&runtime, 0, 0x8107)->remainingTicks = 254;
+    beforeFailure = runtime;
+    indefiniteDriftStatus = OverworldWildRuntime_TickCandidateTimers(
+        &runtime, 0, runtime.slots[0].slotGeneration,
+        OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 1, FALSE, &tick);
+    require(indefiniteDriftStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "indefinite timer below 255 was accepted or changed runtime");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9931, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "commit semantic-preflight fixture did not expire");
+    staleExpiry = expiry_for_owner(&runtime, 0, 0x9931);
+    timer_for_owner(&runtime, 0, 0x9931)->clock =
+        OW_WILD_RUNTIME_TIMER_CLOCK_COMPLETED_MOVEMENT;
+    beforeFailure = runtime;
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &staleExpiry,
+                &delta) == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime)),
+        "expiry commit accepted valid-enum timer metadata drift");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9932, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 4, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "altered-tag fixture did not publish a pending expiry");
+    staleExpiry = expiry_for_owner(&runtime, 0, 0x9932);
+    require(staleExpiry.validityTag != 0,
+        "altered-tag fixture captured a zero validity tag");
+    malformedExpiry = staleExpiry;
+    malformedExpiry.validityTag = staleExpiry.validityTag == 1 ? 2 : 1;
+    beforeFailure = runtime;
+    tagReplayStatus = OverworldWildRuntime_CommitTimerExpiry(
+        &runtime, &malformedExpiry, &delta);
+    highExpiry = expiry_for_owner(&runtime, 0, 0x9932);
+    require(tagReplayStatus == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && delta.status == OW_WILD_RUNTIME_STATUS_STALE_NOOP
+            && delta.ok && !delta.mutated
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime))
+            && OverworldWildRuntime_GetPendingTimerExpiryCount(&runtime, 0,
+                runtime.slots[0].slotGeneration) == 1
+            && timer_for_owner(&runtime, 0, 0x9932) != NULL
+            && (timer_for_owner(&runtime, 0, 0x9932)->flags
+                & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
+            && !memcmp(&highExpiry, &staleExpiry, sizeof(highExpiry)),
+        "altered nonzero current validity tag was not stale-safe");
+
+    prepare_runtime(&runtime, 0);
+    assign_and_prime(&runtime, 1);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9941, 0);
+    (void)apply_one(&runtime, 1, input, DEF_ORDINARY_TIRED, 0x9942, 0);
+    require(OverworldWildRuntime_SetTimerPresentationGate(&runtime, 0,
+                runtime.slots[0].slotGeneration, TRUE)
+                == OW_WILD_RUNTIME_STATUS_OK
+            && OverworldWildRuntime_SetTimerPresentationGate(&runtime, 1,
+                runtime.slots[1].slotGeneration, TRUE)
+                == OW_WILD_RUNTIME_STATUS_OK,
+        "multi-slot frame fixture could not arm presentation gates");
+    timer_for_owner(&runtime, 1, 0x9942)->remainingTicks =
+        timer_for_owner(&runtime, 1, 0x9942)->armedDuration + 1;
+    beforeFailure = runtime;
+    frameFailureStatus = OverworldWildRuntime_TickFrameTimers(
+        &runtime, 0, frameTicks);
+    require(frameFailureStatus == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&runtime, &beforeFailure, sizeof(runtime))
+            && runtime.slots[0].presentationGate
+            && timer_for_owner(&runtime, 0, 0x9941)->remainingTicks == 4,
+        "later invalid frame slot partially changed an earlier slot");
+    timer_for_owner(&runtime, 1, 0x9942)->remainingTicks =
+        timer_for_owner(&runtime, 1, 0x9942)->armedDuration;
+    frameRetryStatus = OverworldWildRuntime_TickFrameTimers(
+        &runtime, 0, frameTicks);
+    require(frameRetryStatus == OW_WILD_RUNTIME_STATUS_OK
+            && !runtime.slots[0].presentationGate
+            && !runtime.slots[1].presentationGate
+            && timer_for_owner(&runtime, 0, 0x9941)->remainingTicks == 3
+            && timer_for_owner(&runtime, 1, 0x9942)->remainingTicks == 3
+            && frameTicks[0].changedTimerCount == 1
+            && frameTicks[1].changedTimerCount == 1,
+        "corrected frame retry did not decrement each slot exactly once");
+
+    prepare_runtime(&runtime, 0);
+    (void)apply_one(&runtime, 0, input, DEF_ORDINARY_TIRED, 0x9D01, 0);
+    (void)apply_one(&runtime, 0, input, DEF_HIGH_STATE, 0x9D02, 0);
+    (void)apply_one(&runtime, 0, input, DEF_CALM, 0x9D03, 0);
+    require(OverworldWildRuntime_TickCandidateTimers(&runtime, 0,
+            runtime.slots[0].slotGeneration,
+            OW_WILD_RUNTIME_TIMER_CLOCK_FRAME, 2, FALSE, &tick)
+            == OW_WILD_RUNTIME_STATUS_OK,
+        "timer oracle trace tick failed");
+    highExpiry = expiry_for_owner(&runtime, 0, 0x9D02);
+    require(OverworldWildRuntime_CommitTimerExpiry(&runtime, &highExpiry,
+            &delta) == OW_WILD_RUNTIME_STATUS_OK,
+        "timer oracle trace commit failed");
+    printf("TASK10_TIMER_TRACE paused=%u continued=0 pending=1 layers=%u timers=%u\n",
+        timer_for_owner(&runtime, 0, 0x9D01)->remainingTicks,
+        runtime.slots[0].activeLayerCount,
+        OverworldWildRuntime_GetTimerCount(&runtime, 0,
+            runtime.slots[0].slotGeneration));
+    printf("TASK10_TIMER_CORRECTION_TRACE metadata=%u finite=%u indefinite=%u "
+        "rekey=%u restart=%u malformed=%u frameFailure=%u frameRetry=%u "
+        "tagReplay=%u indefiniteDrift=%u slot0=3 slot1=3\n",
+        metadataStatus, finiteStatus, indefiniteStatus, rekeyStatus,
+        restartStatus, malformedStatus, frameFailureStatus,
+        frameRetryStatus, tagReplayStatus, indefiniteDriftStatus);
+    (void)low;
+    (void)tired;
+}
+
 int main(void)
 {
     OverworldWildRuntimeApplicabilityInput input = fixture_applicability();
@@ -2473,6 +3126,7 @@ int main(void)
     test_forced_zero_identity_rotation(&input);
     test_task5_v40_scalar_domains();
     test_task9_composition_cache_and_provenance(&input);
+    test_task10_timer_engine(&input);
     run_task6_crosscheck_corpus(&input);
     printf(
         "runtime layers host fixture: %d checks; handle=%lu op=%lu request=%lu result=%lu; maxOps=%d capacity=%d\n",

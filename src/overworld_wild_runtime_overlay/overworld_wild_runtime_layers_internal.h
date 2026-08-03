@@ -40,10 +40,47 @@ typedef struct OverworldWildRuntimeDefinition {
 typedef char OverworldWildRuntimeDefinitionSizeMustRemain24[
     sizeof(OverworldWildRuntimeDefinition) == 24 ? 1 : -1];
 
+/* Timer metadata is projected separately so the frozen Task-9 composition
+ * definition remains a compact 24-byte value copy.  duration is the complete
+ * statically folded and normalized arm-time value for the supplied cache. */
+typedef struct OverworldWildRuntimeTimerDefinition {
+    u16 recoveryTransitionId;
+    u8 clock;
+    u8 source;
+    u8 hiddenPolicy;
+    u8 recoveryPolicy;
+    u8 duration;
+    u8 reserved;
+} OverworldWildRuntimeTimerDefinition;
+
+typedef char OverworldWildRuntimeTimerDefinitionSizeMustRemain8[
+    sizeof(OverworldWildRuntimeTimerDefinition) == 8 ? 1 : -1];
+
 BOOL OverworldWildRuntime_CopyInstalledDefinition(
     u16 definitionId,
     OverworldWildRuntimeDefinition *definitionOut);
 BOOL OverworldWildRuntime_CopyInstalledCatalogIdentity(u32 *identityOut);
+BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
+    u16 definitionId,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    OverworldWildRuntimeTimerDefinition *timerOut);
+
+OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration);
+u32 OverworldWildRuntime_TimerExpiryTagInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry);
+OverworldWildRuntimeStatus OverworldWildRuntime_PreflightTimerExpiryInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    const OverworldWildRuntimeTimerExpiry *expiry);
+OverworldWildRuntimeStatus
+OverworldWildRuntime_MakeTimerRemovalHandleInternal(
+    const OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u8 layerIndex,
+    OverworldWildRuntimeLayerHandle *handleOut);
 
 typedef struct OverworldWildRuntimeStaticComposition {
     u32 catalogIdentity;

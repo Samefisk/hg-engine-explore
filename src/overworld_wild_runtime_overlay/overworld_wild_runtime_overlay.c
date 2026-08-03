@@ -440,6 +440,109 @@ static BOOL CanonicalApplicabilityMatches(
     return inputIndex == input->boundNodeCount;
 }
 
+BOOL OverworldWildRuntime_ResolveInstalledTimerDefinition(
+    u16 definitionId,
+    const OverworldWildRuntimeStaticCache *staticCache,
+    OverworldWildRuntimeTimerDefinition *timerOut)
+{
+    const OverworldWildBehaviorDataBlobHeader *header;
+    const OverworldWildOverrideDefinitionRecord *definitions;
+    const OverworldWildOverrideSourceRecord *sources;
+    const OverworldWildStaticActionRecord *actions;
+    const OverworldWildOverrideDefinitionRecord *definition = NULL;
+    OverworldWildRuntimeDefinition runtimeDefinition;
+    OverworldWildRuntimeResolvedNode node;
+    u16 i, j;
+    int duration;
+    BOOL asleep;
+
+    if (timerOut == NULL) return FALSE;
+    memset(timerOut, 0, sizeof(*timerOut));
+    if (sOverworldWildValidatedV40 == NULL || staticCache == NULL
+        || staticCache->valid == 0 || staticCache->staticContext.reserved != 0
+        || !OverworldWildRuntime_CopyInstalledDefinition(
+            definitionId, &runtimeDefinition)) return FALSE;
+    header = (const void *)sOverworldWildValidatedV40;
+    definitions = (const void *)(sOverworldWildValidatedV40
+        + header->overrideDefinitions.offset);
+    sources = (const void *)(sOverworldWildValidatedV40
+        + header->overrideSources.offset);
+    actions = (const void *)(sOverworldWildValidatedV40
+        + header->overrideActions.offset);
+    for (i = 0; i < header->overrideDefinitions.count; i++) {
+        if (definitions[i].stableId == definitionId) {
+            definition = &definitions[i];
+            break;
+        }
+    }
+    if (definition == NULL || definition->kind != OWBD_OVERRIDE_KIND_STATE_CANDIDATE)
+        return definition != NULL && definition->timerClock == OWBD_TIMER_CLOCK_NONE;
+    timerOut->recoveryTransitionId = definition->recoveryTransitionId;
+    timerOut->clock = definition->timerClock;
+    timerOut->source = definition->timerSource;
+    timerOut->hiddenPolicy = definition->hiddenTimerPolicy;
+    timerOut->recoveryPolicy = definition->recoveryPolicy;
+    if (timerOut->clock == OWBD_TIMER_CLOCK_NONE) {
+        timerOut->source = OWBD_TIMER_SOURCE_NONE;
+        timerOut->hiddenPolicy = OWBD_HIDDEN_TIMER_NONE;
+        timerOut->duration = 0;
+        return TRUE;
+    }
+    if ((timerOut->clock != OWBD_TIMER_CLOCK_FRAME
+            && timerOut->clock != OWBD_TIMER_CLOCK_COMPLETED_MOVEMENT)
+        || timerOut->source == OWBD_TIMER_SOURCE_NONE
+        || timerOut->source > OWBD_TIMER_SOURCE_CANDIDATE_FOLD
+        || timerOut->hiddenPolicy < OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
+        || timerOut->hiddenPolicy > OWBD_HIDDEN_TIMER_EXPIRE_ON_HIDE
+        || timerOut->recoveryPolicy != OWBD_RECOVERY_ROUTE_TRANSITION
+        || !OverworldWildRuntime_CopyResolvedCachedNode(
+            staticCache, &runtimeDefinition, &node)) return FALSE;
+
+    duration = definition->timerValue;
+    if (timerOut->source == OWBD_TIMER_SOURCE_CONTROLLER_STAMINA)
+        duration = staticCache->controllerValues[6];
+    if (timerOut->source == OWBD_TIMER_SOURCE_CANDIDATE_FOLD) {
+        for (i = 0; i < header->overrideSources.count; i++) {
+            const OverworldWildOverrideSourceRecord *source =
+                MatchingSourceAtRank(header, sources,
+                    &staticCache->staticContext, i);
+            if (source == NULL) break;
+            for (j = 0; j < source->actionCount; j++) {
+                const OverworldWildStaticActionRecord *action =
+                    SourceActionAtRank(source, actions, j);
+                int operand;
+                if (action == NULL) return FALSE;
+                if (action->kind
+                        != OWBD_STATIC_ACTION_APPLY_CANDIDATE_TIMER_OPERATOR
+                    || action->payload.timer.controllerId
+                        != staticCache->controllerId
+                    || action->payload.timer.nodeId != node.nodeId)
+                    continue;
+                if (action->payload.timer.reserved != 0) return FALSE;
+                if (action->payload.timer.operatorKind
+                        == OWBD_CANDIDATE_TIMER_SET) {
+                    duration = action->payload.timer.operand;
+                } else if (action->payload.timer.operatorKind
+                        == OWBD_CANDIDATE_TIMER_ADD) {
+                    operand = (signed char)action->payload.timer.operand;
+                    duration += operand;
+                    if (duration < 0) duration = 0;
+                    if (duration > OWBD_CANDIDATE_TIMER_ADD_CLAMP_MAX)
+                        duration = OWBD_CANDIDATE_TIMER_ADD_CLAMP_MAX;
+                } else {
+                    return FALSE;
+                }
+            }
+        }
+    }
+    asleep = node.semanticRole == OWBD_ROLE_ASLEEP;
+    if (asleep && duration == 0) duration = 255;
+    else if (node.semanticRole == OWBD_ROLE_TIRED && duration == 0) duration = 1;
+    else if (duration >= 255) duration = 254;
+    timerOut->duration = (u8)duration;
+    return TRUE;
+}
+
 BOOL OverworldWildRuntime_CopyInstalledStaticComposition(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *input,

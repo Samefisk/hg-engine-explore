@@ -113,8 +113,17 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
         if (slot == targetSlot) continue;
-        for (layer = 0; layer < runtime->slots[slot].activeLayerCount; layer++)
+        runtime->slots[slot].nextTimerGeneration = 1;
+        for (layer = 0; layer < runtime->slots[slot].activeLayerCount; layer++) {
             runtime->slots[slot].layerBank.entryGenerations[layer] = layer + 1;
+            if (runtime->slots[slot].timerBank.timers[layer].flags
+                    & OW_WILD_RUNTIME_TIMER_VALID) {
+                runtime->slots[slot].timerBank.timers[layer].entryGeneration =
+                    layer + 1;
+                runtime->slots[slot].timerBank.timers[layer].timerGeneration =
+                    runtime->slots[slot].nextTimerGeneration++;
+            }
+        }
         runtime->slots[slot].nextEntryGeneration =
             runtime->slots[slot].activeLayerCount + 1;
         if (runtime->slots[slot].activeLayerCount)
@@ -138,14 +147,17 @@ _Static_assert(OW_WILD_MAX_SPAWNS == 10, "spawn capacity changed");
 _Static_assert(OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT == 8, "layer capacity changed");
 _Static_assert(sizeof(OverworldWildRuntimeLayer) == 16, "layer layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeLayerBank) == 112, "layer bank layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeTimer) == 24, "timer layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeTimerBank) == 192, "timer bank layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeTimerExpiry) == 32, "expiry layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeStaticContext) == 12, "static context layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeStaticModifierContribution) == 18, "static contribution layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeResolvedNode) == 38, "resolved node layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 540, "static cache layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeEffectiveCache) == 104, "effective cache layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeProvenance) == 728, "provenance layout changed");
-_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1516, "slot layout changed");
-_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 15172, "runtime layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1712, "slot layout changed");
+_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 17132, "runtime layout changed");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, slotGeneration) == 0, "slot generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, staticContextGeneration) == 4, "static generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, nextEntryGeneration) == 8, "entry generation moved");
@@ -156,7 +168,9 @@ _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, cacheIncarnation) == 24
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleTransitions) == 28, "diagnostics moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, activeLayerCount) == 30, "active count moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, lifecycleState) == 31, "lifecycle state moved");
-_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, layerBank) == 32, "layer bank moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, presentationGate) == 32, "timer gate moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, layerBank) == 36, "layer bank moved");
+_Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, timerBank) == 148, "timer bank moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, handleEpoch) == 0, "runtime epoch moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, dataIncarnation) == 4, "runtime incarnation moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, lifetimeState) == 8, "runtime lifetime moved");
@@ -203,7 +217,9 @@ static void require_empty_slot(
     require(slot->lifecycleTransitions == transitions, "lifecycle diagnostic differs");
     require(slot->activeLayerCount == 0, "empty slot has active layers");
     require(slot->lifecycleState == lifecycleState, "lifecycle state differs");
+    require(slot->presentationGate == 0, "empty slot retained timer gate");
     require(bytes_are_zero(&slot->layerBank, sizeof(slot->layerBank)), "empty slot retained layer bytes");
+    require(bytes_are_zero(&slot->timerBank, sizeof(slot->timerBank)), "empty slot retained timer bytes");
     require(bytes_are_zero(&slot->staticCache, sizeof(slot->staticCache)), "empty slot retained static cache bytes");
     require(bytes_are_zero(&slot->effectiveCache, sizeof(slot->effectiveCache)), "empty slot retained effective cache bytes");
     require(bytes_are_zero(&slot->provenance, sizeof(slot->provenance)), "empty slot retained provenance bytes");
@@ -222,6 +238,7 @@ static void fill_live_slot(OverworldWildBehaviorStackRuntime *runtime, int slotI
     slot->effectiveGeneration = 0x55667788u;
     slot->lifecycleTransitions = 0xA55Au;
     slot->activeLayerCount = OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT;
+    slot->presentationGate = TRUE;
     for (i = 0; i < OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT; i++) {
         slot->layerBank.entryGenerations[i] = (u32)i + 17;
         slot->layerBank.definitionIds[i] = (u16)(100 + i);
@@ -230,6 +247,18 @@ static void fill_live_slot(OverworldWildBehaviorStackRuntime *runtime, int slotI
         slot->layerBank.requiredOwnerIds[i] = (u16)(400 + i);
         slot->layerBank.tiredOriginKinds[i] = (u8)i;
         slot->layerBank.generatedFlags[i] = 0xA5;
+        slot->timerBank.timers[i].entryGeneration = (u32)i + 17;
+        slot->timerBank.timers[i].timerGeneration = (u32)i + 33;
+        slot->timerBank.timers[i].ownerId = (u16)(200 + i);
+        slot->timerBank.timers[i].instanceKey = (u16)(300 + i);
+        slot->timerBank.timers[i].definitionId = (u16)(100 + i);
+        slot->timerBank.timers[i].remainingTicks = (u8)(8 - i);
+        slot->timerBank.timers[i].armedDuration = 8;
+        slot->timerBank.timers[i].clock = OW_WILD_RUNTIME_TIMER_CLOCK_FRAME;
+        slot->timerBank.timers[i].hiddenPolicy =
+            OW_WILD_RUNTIME_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN;
+        slot->timerBank.timers[i].recoveryPolicy = 1;
+        slot->timerBank.timers[i].flags = OW_WILD_RUNTIME_TIMER_VALID;
     }
     memset(&slot->staticCache, 0x5A, sizeof(slot->staticCache));
     memset(&slot->effectiveCache, 0x6B, sizeof(slot->effectiveCache));

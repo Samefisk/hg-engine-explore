@@ -24,13 +24,12 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #155
     bl LoadResidentOverlay
 
-// load overlay 157's runtime-layer service into the third reserved window
-    mov r1, #157
-    bl LoadResidentOverlay
+// load overlays 157..159 through the bounded padding helper
+    bl LoadResidentRuntimeOverlays
 
-// load overlays 158 and 153 through the bounded padding helper
-    bl LoadRuntimeLayersAndHistory
-    nop
+// keep move history last so all overworld-wild services are resident first
+    mov r1, #153
+    bl LoadResidentOverlay
 
     mov r0, #0
     mov r1, #3
@@ -63,13 +62,16 @@ LoadResidentOverlay:
 // cannot be overwritten.
 .org 0x021102E0
 .area 0x14, 0xFF
-LoadRuntimeLayersAndHistory:
-    push {r3, lr}
-    mov r1, #158
+LoadResidentRuntimeOverlays:
+    push {r3-r5, lr}
+    mov r4, #157
+LoadNextResidentRuntimeOverlay:
+    mov r1, r4
     bl LoadResidentOverlay
-    mov r1, #153
-    bl LoadResidentOverlay
-    pop {r3, pc}
+    add r4, #1
+    cmp r4, #160
+    blo LoadNextResidentRuntimeOverlay
+    pop {r3-r5, pc}
 .endarea
 
 .close

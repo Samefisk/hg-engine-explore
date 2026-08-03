@@ -142,6 +142,7 @@ MOVE_HISTORY_CAPTURE_OBJECTS = \
 	$(BUILD)/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o \
 	$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o \
 	$(BUILD)/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o \
+	$(BUILD)/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o \
 	$(BUILD)/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o \
 	$(BUILD)/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o \
 	$(BUILD)/overworld_wild_helper_overlay/thumb_help.o \
@@ -292,7 +293,7 @@ $(BUILD)/overworld_wild_spawns_overlay/%.o: $(OVERWORLD_WILD_SPAWNS_FLAG_STAMP)
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
 $1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/%.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o,$1),$(OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_CFLAGS))))) -c $2 -o $1
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/%.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_behavior_validator_overlay/overworld_wild_behavior_validator_overlay.o,$1),$(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_runtime_overlay/overworld_wild_runtime_layers.o,$1),$(OVERWORLD_WILD_RUNTIME_LAYERS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_runtime_timers_overlay/overworld_wild_runtime_timers.o,$1),$(OVERWORLD_WILD_RUNTIME_TIMERS_OVERLAY_CFLAGS)))))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d
