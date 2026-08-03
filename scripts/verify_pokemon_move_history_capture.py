@@ -54,16 +54,13 @@ OVERLAY155_PRIVATE_START = 0x023BDE80
 OVERLAY155_CALL_INVENTORY_SHA256 = (
     "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
-OVERLAY155_RUNTIME_CALL_INVENTORY_SHA256 = (
-    "4fd739649efbb4da97924e9e226053859a499f3b78cb019d182c909217aa73d4"
-)
 OVERLAY149_BASE = 0x023CD000
 OVERLAY149_END = 0x023D7F3C
 OVERLAY149_RESERVE_START = 0x023D7F80
 OVERLAY149_LIMIT = 0x023D8000
 OVERLAY151_BASE = 0x023C4000
 OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
-    "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
+    "7e101965f0d2d513d8d7e549feb10fd6571c201b57685b49ffbfad8c139f443e"
 )
 EXPECTED_MAKEFILE_SHA256 = (
     "1a01c988c2d78960bafb4c644b9b1377a593e9ede9a3055e166615b85c9c059e"
@@ -7582,16 +7579,52 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         OVERLAY155_PRIVATE_START,
         private_end - OVERLAY155_PRIVATE_START,
     )
-    require(
-        len(task6_private_calls) == 17
-        and all(
-            kind == "bl"
-            for _address, kind, _target in task6_private_calls
+
+    def private_call_inventory_matches(image: bytes) -> bool:
+        calls = packaged_thumb_calls(
+            image,
+            ov155_base,
+            OVERLAY155_PRIVATE_START,
+            private_end - OVERLAY155_PRIVATE_START,
         )
-        and call_inventory_sha256(task6_private_calls)
-        == OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256,
+        return (
+            len(calls) == 15
+            and all(kind == "bl" for _address, kind, _target in calls)
+            and call_inventory_sha256(calls)
+                == OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256
+        )
+
+    require(
+        private_call_inventory_matches(packaged_ov155),
         "overlay-155 private support call-site inventory differs",
     )
+    first_private_call = task6_private_calls[0]
+    first_private_offset = first_private_call[0] - ov155_base
+    removed_private_call = bytearray(packaged_ov155)
+    removed_private_call[
+        first_private_offset:first_private_offset + 4
+    ] = b"\0\0\0\0"
+    retargeted_private_call = bytearray(packaged_ov155)
+    retargeted_private_call[
+        first_private_offset:first_private_offset + 4
+    ] = encode_thumb_bl(
+        first_private_call[0], task6_private_calls[1][2])
+    added_private_call = bytearray(packaged_ov155)
+    added_private_call_address = private_end - 4
+    added_private_call[
+        added_private_call_address - ov155_base:
+        added_private_call_address - ov155_base + 4
+    ] = encode_thumb_bl(
+        added_private_call_address, first_private_call[2])
+    for label, mutation in (
+        ("removed", removed_private_call),
+        ("retargeted", retargeted_private_call),
+        ("added", added_private_call),
+    ):
+        require(
+            not private_call_inventory_matches(bytes(mutation)),
+            f"overlay-155 {label} private support call passes inventory",
+        )
     require_fully_linked_without_veneer(task6_linked, "overlay 155")
     summary_symbols = symbol_table(summary_linked)
     require(
