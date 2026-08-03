@@ -954,7 +954,7 @@ def main() -> int:
         if len(parts) >= 3: symbols[parts[-1]] = int(parts[0], 16)
     required = {"__text_start", "__text_end", "_end", "__end__", entry_name}
     if args.overlay == 156:
-        required.add("OverworldWildBehaviorValidator_LoadProjection")
+        required.add("OverworldWildBehaviorValidator_LoadCatalog")
     if args.overlay == 157:
         required.update((
             "__bss_start__",
@@ -1052,7 +1052,7 @@ def main() -> int:
     if args.overlay == 156:
         raw = args.binary.read_bytes()
         callback = int.from_bytes(raw[8:12], "little")
-        expected_callback = symbols["OverworldWildBehaviorValidator_LoadProjection"] | 1
+        expected_callback = symbols["OverworldWildBehaviorValidator_LoadCatalog"] | 1
         if callback != expected_callback:
             raise SystemExit(f"overlay 156: callback 0x{callback:08X} != linked Thumb symbol 0x{expected_callback:08X}")
         readelf = subprocess.check_output(

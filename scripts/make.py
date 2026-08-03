@@ -232,7 +232,7 @@ def VerifyOverworldWildBehaviorValidatorOverlay(
         linked_path: str,
         output_path: str,
         packaged_path: str) -> None:
-    callback_name = 'OverworldWildBehaviorValidator_LoadProjection'
+    callback_name = 'OverworldWildBehaviorValidator_LoadCatalog'
     subprocess.check_call([
         sys.executable, 'scripts/verify_overworld_wild_overlay_size.py', linked_path,
         '--binary', output_path, '--overlay', '156',
