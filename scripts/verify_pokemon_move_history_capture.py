@@ -6246,14 +6246,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     131: (
         0x023C8000,
-        0x4FD2,
+        0x4FC2,
         0,
         0,
         0,
         131,
         0,
         0x3F3400,
-        0x3F83D2,
+        0x3F83C2,
     ),
     149: (
         OVERLAY149_BASE,
@@ -6268,14 +6268,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     151: (
         OVERLAY151_BASE,
-        0x3FD8,
+        0x3F90,
         0,
         0,
         0,
         151,
         0,
         0x41B600,
-        0x41F5D8,
+        0x41F590,
     ),
     153: (
         OVERLAY_BASE,
@@ -6751,6 +6751,28 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
         reject_mutation(
             f"overlay 149 {label}", "<I", field_offset, value ^ 1)
     fat_offset = struct.unpack_from("<I", rom, 0x48)[0]
+    overlay131_file_id = struct.unpack_from(
+        "<I", rom, y9_offset + 131 * 32 + 24)[0]
+    overlay131_fat_end_offset = fat_offset + overlay131_file_id * 8 + 4
+    overlay131_fat_end = struct.unpack_from(
+        "<I", rom, overlay131_fat_end_offset)[0]
+    reject_mutation(
+        "overlay 131 FAT end",
+        "<I",
+        overlay131_fat_end_offset,
+        overlay131_fat_end - 4,
+    )
+    overlay151_file_id = struct.unpack_from(
+        "<I", rom, y9_offset + 151 * 32 + 24)[0]
+    overlay151_fat_end_offset = fat_offset + overlay151_file_id * 8 + 4
+    overlay151_fat_end = struct.unpack_from(
+        "<I", rom, overlay151_fat_end_offset)[0]
+    reject_mutation(
+        "overlay 151 FAT end",
+        "<I",
+        overlay151_fat_end_offset,
+        overlay151_fat_end - 4,
+    )
     overlay129_file_id = struct.unpack_from(
         "<I", rom, y9_offset + 129 * 32 + 24)[0]
     overlay129_fat_end_offset = fat_offset + overlay129_file_id * 8 + 4
@@ -7195,7 +7217,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         linked_helper_bytes = reproduced_helper_binary.read_bytes()
     require(
         ov151_base == OVERLAY151_BASE
-        and ov151_component.ram_size == 0x3FD8
+        and ov151_component.ram_size == 0x3F90
         and ov151_component.bss_size == 0
         and ov151_component.static_init_start == 0
         and ov151_component.static_init_end == 0
@@ -7243,7 +7265,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
     )
     require(
         ov131_base == 0x023C8000
-        and len(packaged_ov131) == 0x4FD2
+        and len(packaged_ov131) == 0x4FC2
         and ov131_component.ram_size == len(packaged_ov131)
         and ov131_component.bss_size == 0
         and ov131_component.static_init_start == 0
@@ -7251,7 +7273,7 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         and ov131_component.file_id == 131
         and ov131_component.flags == 0
         and ov131_component.fat_start == 0x003F3400
-        and ov131_component.fat_end == 0x003F83D2,
+        and ov131_component.fat_end == 0x003F83C2,
         "packaged scripted-daycare field overlay 131 metadata differs",
     )
     require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
