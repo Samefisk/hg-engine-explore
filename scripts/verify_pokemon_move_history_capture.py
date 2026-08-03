@@ -66,14 +66,14 @@ OVERLAY155_PRIVATE_CALL_INVENTORY_SHA256 = (
     "05161dc124ab4bc560b9ab5f1eb6022ec6b0f02f8118e840eaca9c331ab910ac"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "73c329d10428c8a0e44f43a45b5f282136c62cbefdf30e2787250f214621ec7c"
+    "1a01c988c2d78960bafb4c644b9b1377a593e9ede9a3055e166615b85c9c059e"
 )
 EXPECTED_BUILD_WRAPPER_NORMALIZED_SHA256 = (
     "0a3063658de225df67e82770965b3c01b6a075d7ee73fa4f1ccbb404e7120a77"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
-        "cb2a802725304c06da76e718ffe29099d3642439a913ae74a0c20af487753093",
+        "724c32410be27f0f12ea6a3dc30238cb6529546860892045920a3eacbb08f279",
     "data/graphics/itemgra.mk":
         "3e90342beaa98774e2e1bb62fd0c0b32673edee65d69b1ce85603c81a8aad444",
     "data/graphics/pokegra.mk":
@@ -83,7 +83,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "de54796376e2154cab61de0d68ced08073f920773c707e02c2587ce0f4dd988b",
+        "d32bad0844a16b855d717f2265edc0048ce1fea76b2a8c1f3676edef57c11ca2",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
