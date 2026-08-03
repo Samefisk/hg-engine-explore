@@ -57,34 +57,43 @@ sources themselves.
 
 - Replaces the legacy information architecture with focused Profile, Route,
   and Sound decks plus a compact Utilities menu.
-- Keeps base profiles and override profiles visually distinct.
-- Keeps drag handles and keyboard move controls for override ordering.
-- Treats each override profile as one runtime layer with one explicit member
-  set and one optional shared condition. The profile is evaluated and applied
-  at most once for a Pokémon context.
-- Adds member-set shortcuts for individual Pokémon, evolution families, types,
-  and live encounter pools. These shortcuts materialize members in the same
-  profile; they never create per-Pokémon backend rules. New override drafts
-  start disabled until members or an all-Pokémon shared condition is selected.
-- Documents the resolver contract in the UI: evaluation is top to bottom and
-  the last matching override applies last.
-- Adds an exact context resolver for Pokémon, terrain, level, and shiny state.
-  It shows matched layers, skipped-layer count, effective values, and base
-  values in parentheses.
+- Splits Profile Deck into **State Profiles** and **Controllers**. The `+`
+  action creates the entity for the selected view, and new entities remain
+  local drafts until Global Save.
+- Treats every state profile as one complete, runnable behavior state. Calm,
+  attentive, tired, carried, and custom meanings belong to controller-local
+  nodes and semantic roles instead of sub-states inside a profile.
+- Lets a controller bind complete profiles to a unique node roster with one
+  required base node, typed scalar and policy defaults, and an authoritative
+  transition roster.
+- Authors each transition together with its trigger, source-role mask, guards,
+  atomic operations, actions, recovery actions, applicability, and override
+  definition. An override definition is either a state candidate that selects
+  one complete controller node or a modifier that changes typed values without
+  changing state identity.
+- Allows multiple independently owned override layers to be active at once.
+  State candidates compete for the winning complete state; matching modifiers
+  then fold over that state in deterministic order. Removing any owner-addressed
+  layer recomposes from the base and all remaining layers instead of applying an
+  inverse patch.
+- Adds a Stack preview that can compare saved and drafted graphs, resolve the
+  controller for an entity context, apply event sequences, and show layer
+  ownership, precedence, effective values, and validation failures before Save.
 - Protects every source mutation with a deterministic content revision.
   Stale editors receive a conflict instead of silently overwriting newer work.
 - Verifies the source revision before and after every full-data or resolver
   read, retrying instead of pairing stale parsed data with a newer revision.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
-  across profiles, memberships, overrides, encounters, and spawn settings.
+  across V40 state profiles, controllers, transitions and their override graph,
+  encounters, and spawn settings.
 - Rebuilds Route Deck around the proven encounter workflow: persisted
   per-source filters, semantic route/Pokémon/type search, method-grouped sprite
   actions, compact aggregate summaries, and contextual per-slot editing.
 - Keeps route-only encounters as one reversible route operation. Manual source
   edits first restore the complete stored baseline, and conflicting external
   source changes block restoration instead of being overwritten.
-- Blocks Save while shared profile conditions, slot values, forms, level ranges, or global
-  spawn-distance relationships are invalid.
+- Blocks Save while the V40 behavior graph, slot values, forms, level ranges, or
+  global spawn-distance relationships are invalid.
 - Holds the same cross-process workspace lock for the full ROM build, so a
   second V2 process cannot rewrite source files mid-build.
 - Snapshots every writable source and restores the complete snapshot if a
@@ -104,7 +113,8 @@ sources themselves.
   implement the focused profile, route, and sound workflows without copying
   the legacy DOM.
 - `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
-  same profile-first, apply-once resolution contract in the game runtime.
+  same controller-base, state-candidate winner, ordered modifier fold, and
+  owner-addressed recomposition contract in the game runtime.
 
 The V2-only API surface is:
 
