@@ -33,6 +33,10 @@ _Static_assert(sizeof(OverworldWildRuntimeStackDeltaRequest) == 484, "request AB
 _Static_assert(sizeof(OverworldWildRuntimeDeltaOperationResult) == 28, "op result ABI");
 _Static_assert(sizeof(OverworldWildRuntimeStackDeltaResult) == 484, "result ABI");
 _Static_assert(sizeof(OverworldWildRuntimeDefinition) == 24, "definition ABI");
+_Static_assert(sizeof(OverworldWildRuntimeCompositionWorkspaceStorage) == 2084,
+    "composition workspace ABI");
+_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 12616,
+    "runtime workspace ABI");
 
 typedef struct FixtureDefinitionCatalog {
     u32 schemaFingerprint;
@@ -1681,6 +1685,69 @@ static void prepare_runtime(
             runtime->slots[slotIndex].slotGeneration, &context, &input)
             == OW_WILD_RUNTIME_STATUS_OK,
         "runtime static snapshot prime failed");
+}
+
+static void test_composition_workspace_busy(
+    const OverworldWildRuntimeApplicabilityInput *input)
+{
+    OverworldWildBehaviorStackRuntime runtime;
+    OverworldWildBehaviorStackRuntime unbound;
+    OverworldWildBehaviorStackRuntime before;
+    OverworldWildRuntimeStaticContext context = fixture_static_context();
+    OverworldWildRuntimeStackDeltaResult result;
+    OverworldWildRuntimeProvenance provenance;
+
+    prepare_runtime(&runtime, 0);
+    OverworldWildRuntime_Init(&unbound);
+    OverworldWildRuntime_MarkSlotAssigned(&unbound, 0);
+    unbound.compositionWorkspace.alignment = 1;
+    before = unbound;
+    require(OverworldWildRuntime_Apply(&unbound, 0,
+                unbound.slots[0].slotGeneration, input,
+                DEF_SHARED, 0x90EF, 0, &result)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && result.status == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&unbound, &before, sizeof(unbound)),
+        "unbound runtime busy marker overrode INVALID_HANDLE or mutated state");
+    require(OverworldWildRuntime_PrimeEffectiveCache(&unbound, 0,
+                unbound.slots[0].slotGeneration, &context, input)
+                == OW_WILD_RUNTIME_STATUS_INVALID_HANDLE
+            && !memcmp(&unbound, &before, sizeof(unbound)),
+        "unbound prime inspected workspace before ownership validation");
+    require(runtime.compositionWorkspace.alignment == 0,
+        "composition workspace was not released after prime");
+    runtime.compositionWorkspace.alignment = 1;
+    before = runtime;
+    require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
+                runtime.slots[0].slotGeneration, &context, input)
+                == OW_WILD_RUNTIME_STATUS_DATA_BUSY
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "nested prime did not return DATA_BUSY without mutation");
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+                runtime.slots[0].slotGeneration, input,
+                DEF_SHARED, 0x90F0, 0, &result)
+                == OW_WILD_RUNTIME_STATUS_DATA_BUSY
+            && result.status == OW_WILD_RUNTIME_STATUS_DATA_BUSY
+            && !result.ok && !result.mutated
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "nested mutation did not return DATA_BUSY without mutation");
+    memset(&provenance, 0xA5, sizeof(provenance));
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+                runtime.slots[0].slotGeneration, &provenance)
+                == OW_WILD_RUNTIME_STATUS_DATA_BUSY
+            && !memcmp(&provenance, &(OverworldWildRuntimeProvenance){0},
+                sizeof(provenance))
+            && !memcmp(&runtime, &before, sizeof(runtime)),
+        "nested provenance query did not return DATA_BUSY without mutation");
+    runtime.compositionWorkspace.alignment = 0;
+    require(OverworldWildRuntime_Apply(&runtime, 0,
+                runtime.slots[0].slotGeneration, input,
+                DEF_SHARED, 0x90F0, 0, &result)
+                == OW_WILD_RUNTIME_STATUS_OK
+            && !memcmp(&runtime.compositionWorkspace,
+                &(OverworldWildRuntimeCompositionWorkspaceStorage){0},
+                sizeof(runtime.compositionWorkspace)),
+        "composition workspace retained transactional scratch after mutation");
 }
 
 static void assign_and_prime(
@@ -5637,6 +5704,7 @@ int main(void)
             && copied.stableId == DEF_SHARED,
         "validated definition copy-out failed");
     test_apply_replace_remove(&input);
+    test_composition_workspace_busy(&input);
     test_handles_and_atomicity(&input);
     test_boundary_phase_late_slot_atomicity(&input);
     test_ambiguity_and_order(&input);

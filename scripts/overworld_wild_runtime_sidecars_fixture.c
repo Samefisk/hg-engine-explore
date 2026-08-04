@@ -168,7 +168,11 @@ _Static_assert(sizeof(OverworldWildRuntimeProvenance) == 728, "provenance layout
 _Static_assert(sizeof(OverworldWildRuntimeResidentProvenance) == 56,
     "resident provenance layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1052, "slot layout changed");
-_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 10532, "runtime layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeCompositionWorkspaceStorage) == 2084,
+    "composition workspace layout changed");
+_Static_assert(_Alignof(OverworldWildRuntimeCompositionWorkspaceStorage) == 4,
+    "composition workspace alignment changed");
+_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 12616, "runtime layout changed");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, slotGeneration) == 0, "slot generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, staticContextGeneration) == 4, "static generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, nextEntryGeneration) == 8, "entry generation moved");
@@ -186,6 +190,11 @@ _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, handleEpoch) == 0, "r
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, dataIncarnation) == 4, "runtime incarnation moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, lifetimeState) == 8, "runtime lifetime moved");
 _Static_assert(offsetof(OverworldWildBehaviorStackRuntime, slots) == 12, "runtime slots moved");
+_Static_assert(offsetof(OverworldWildBehaviorStackRuntime,
+    compositionWorkspace) == 10532, "composition workspace moved");
+_Static_assert(offsetof(OverworldWildBehaviorStackRuntime,
+    compositionWorkspace) % sizeof(u32) == 0,
+    "composition workspace became unaligned");
 
 static int sChecks;
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import os
 import re
 import shutil
 import subprocess
@@ -968,6 +969,42 @@ def verify_source_contracts() -> None:
     for forbidden in ("malloc(", "calloc(", "realloc(", "sys_AllocMemory("):
         require(forbidden not in implementation,
                 f"mutation implementation allocates through {forbidden}")
+    for token in (
+        "OverworldWildRuntimeCompositionWorkspace",
+        "AcquireCompositionWorkspace(runtime)",
+        "ReleaseCompositionWorkspace(runtime)",
+        "OW_WILD_RUNTIME_STATUS_DATA_BUSY",
+        "ApplyDeltaCoreWithWorkspace(",
+        "workspace->prospectiveProvenance",
+        "internalBoundaryPolicy",
+    ):
+        require(token in implementation,
+                f"runtime-owned composition workspace contract missing: {token}")
+    prime_body = function_body(
+        implementation,
+        "OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(")
+    mutation_body = function_body(
+        implementation,
+        "static OverworldWildRuntimeStatus ApplyDeltaCoreWithWorkspace(")
+    compose_body = function_body(implementation, "ComposeProspective(")
+    for body, forbidden, label in (
+        (prime_body, "OverworldWildRuntimeProvenance provenance;", "prime"),
+        (mutation_body, "OverworldWildRuntimeDeltaScratch scratchStorage;",
+            "mutation"),
+        (compose_body, "OverworldWildRuntimeModifierWork modifiers[",
+            "composition"),
+    ):
+        require(forbidden not in body,
+                f"{label} path restored large automatic composition scratch")
+    for token in (
+        "nested prime did not return DATA_BUSY without mutation",
+        "nested mutation did not return DATA_BUSY without mutation",
+        "nested provenance query did not return DATA_BUSY without mutation",
+        "unbound runtime busy marker overrode INVALID_HANDLE",
+        "composition workspace retained transactional scratch after mutation",
+    ):
+        require(token in fixture,
+                f"composition workspace fixture is absent: {token}")
     require("OwbdStaticValueValid" in shared_v40_validation
             and "OwbdModifierPayloadValid" in shared_v40_validation,
             "shared Task-5 v40 scalar domain helpers are absent")
@@ -1679,6 +1716,261 @@ def run_catalog_timer_fixture() -> str:
     return completed.stdout.strip()
 
 
+def run_arm_stack_budget_gate() -> str:
+    """Measure the production ARM frames in the two critical call chains.
+
+    2048 bytes is a deliberately conservative verification budget, not an
+    interpretation of the SDK linker StackSize fields. The separate reserve
+    catches growth in unlisted launcher/callback frames.
+    """
+    common_flags = [
+        "-mthumb", "-mno-thumb-interwork", "-mcpu=arm7tdmi",
+        "-mtune=arm7tdmi", "-mno-long-calls", "-march=armv4t",
+        "-Wall", "-Wextra", "-Wno-builtin-declaration-mismatch",
+        "-Wno-sequence-point", "-Wno-address-of-packed-member", "-Os",
+        "-fira-loop-pressure", "-fipa-pta", "-fstack-usage",
+    ]
+    layers_flags = [
+        "-frename-registers", "-fno-tree-dominator-opts",
+        "-fno-inline-functions-called-once", "-fno-tree-sra",
+        "-fno-tree-vrp", "-fno-ipa-cp", "-fno-guess-branch-probability",
+        "-fno-expensive-optimizations",
+        "-DOW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD",
+    ]
+    spawns_flags = [
+        "-fmerge-all-constants", "-frename-registers", "-fno-ipa-pta",
+        "-fno-expensive-optimizations", "-fno-tree-dominator-opts",
+        "-fno-if-conversion", "-fno-tree-pre", "-fno-tree-copy-prop",
+        "-fno-guess-branch-probability", "-fno-schedule-insns2",
+        "-fno-early-inlining", "-fno-tree-loop-ivcanon",
+        "-fno-move-loop-invariants", "-fno-tree-sra", "-fno-tree-dce",
+        "-fno-tree-ch", "-finline-limit=30",
+    ]
+    sources = (
+        ("layers", IMPLEMENTATION, layers_flags),
+        ("catalog", OVERLAY_SOURCE, []),
+        ("spawns", ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+            spawns_flags),
+    )
+
+    with tempfile.TemporaryDirectory(prefix="ow-runtime-arm-stack-") as directory:
+        output_dir = Path(directory)
+        compiler_candidates = []
+        if os.environ.get("DEVKITARM"):
+            compiler_candidates.append(
+                str(Path(os.environ["DEVKITARM"]) / "bin/arm-none-eabi-gcc"))
+        compiler = shutil.which("arm-none-eabi-gcc")
+        if compiler:
+            compiler_candidates.append(compiler)
+        native_error = "no ARM compiler found"
+        compiled = False
+        for candidate in dict.fromkeys(compiler_candidates):
+            try:
+                for name, source, extra_flags in sources:
+                    subprocess.run(
+                        [candidate, *common_flags, *extra_flags, "-c",
+                         str(source), "-o", str(output_dir / f"{name}.o")],
+                        cwd=ROOT, check=True, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    )
+                compiled = True
+                break
+            except (OSError, subprocess.CalledProcessError) as error:
+                native_error = str(error)
+        if not compiled:
+            docker = shutil.which("docker")
+            require(docker is not None,
+                    "ARM stack gate cannot compile production sources: "
+                    + native_error)
+            image = os.environ.get("HG_ENGINE_STACK_GATE_IMAGE", "hg-engine:latest")
+            try:
+                for name, source, extra_flags in sources:
+                    relative_source = source.relative_to(ROOT).as_posix()
+                    subprocess.run(
+                        [docker, "run", "--rm",
+                         "-v", f"{ROOT}:/hg-engine:ro",
+                         "-v", f"{output_dir}:/stack-out",
+                         "-w", "/hg-engine", image, "arm-none-eabi-gcc",
+                         *common_flags, *extra_flags, "-c", relative_source,
+                         "-o", f"/stack-out/{name}.o"],
+                        cwd=ROOT, check=True, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    )
+            except (OSError, subprocess.CalledProcessError) as error:
+                raise SystemExit(
+                    "runtime layer verification failed: ARM stack gate "
+                    f"compile failed (native: {native_error}; container: {error})"
+                ) from error
+
+        frames: dict[str, int] = {}
+        for stack_file in output_dir.glob("*.su"):
+            for line in stack_file.read_text().splitlines():
+                columns = line.split("\t")
+                if len(columns) < 2:
+                    continue
+                name = columns[0].rsplit(":", 1)[-1]
+                try:
+                    frames[name] = int(columns[1])
+                except ValueError:
+                    continue
+
+    def chain(*names: str) -> int:
+        missing = [name for name in names if name not in frames]
+        require(not missing,
+                "ARM stack report omitted required frame(s): "
+                + ", ".join(missing))
+        return sum(frames[name] for name in names)
+
+    spawns_source = sources[2][1].read_text()
+    inline_capable_helpers = (
+        "OverworldWildSpawns_TryPrepareSpawnWithHelper",
+        "OverworldWildSpawns_TrySpawnFollower",
+        "OverworldWildSpawns_TickQueuedHelpChildren",
+        "OverworldWildSpawns_TrySpawnOneHelpChild",
+        "OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper",
+    )
+    for name in inline_capable_helpers:
+        require(name + "(" in spawns_source,
+                f"spawn stack branch helper disappeared from source: {name}")
+
+    def spawn_function_body(name: str) -> str:
+        matches = list(re.finditer(
+            rf"static\s+(?:BOOL|void)\s+{re.escape(name)}\s*"
+            r"\([^;{}]*\)\s*\{", spawns_source))
+        require(len(matches) == 1,
+                f"spawn stack branch has ambiguous definition: {name}")
+        brace = matches[0].end() - 1
+        depth = 0
+        for cursor in range(brace, len(spawns_source)):
+            if spawns_source[cursor] == "{":
+                depth += 1
+            elif spawns_source[cursor] == "}":
+                depth -= 1
+                if depth == 0:
+                    return spawns_source[brace:cursor + 1]
+        raise SystemExit(
+            f"runtime layer verification failed: unterminated spawn helper: {name}")
+
+    branch_edges = {
+        "OverworldWildSpawns_OverlayOnPlayerStep": (
+            "OverworldWildSpawns_TryRefill",
+        ),
+        "OverworldWildSpawns_FrameMovementTask": (
+            "OverworldWildSpawns_TryRefill",
+            "OverworldWildSpawns_TickQueuedHelpChildren",
+        ),
+        "OverworldWildSpawns_TryRefill": (
+            "OverworldWildSpawns_TrySpawnFollower",
+            "OverworldWildSpawns_SpawnOne",
+        ),
+        "OverworldWildSpawns_SpawnOne": (
+            "OverworldWildSpawns_TryPrepareSpawnWithHelper",
+        ),
+        "OverworldWildSpawns_TryPrepareSpawnWithHelper": (
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ),
+        "OverworldWildSpawns_TrySpawnFollower": (
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ),
+        "OverworldWildSpawns_TickQueuedHelpChildren": (
+            "OverworldWildSpawns_TrySpawnOneHelpChild",
+        ),
+        "OverworldWildSpawns_TrySpawnOneHelpChild": (
+            "OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper",
+        ),
+        "OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper": (
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ),
+        "OverworldWildSpawns_FinalizePreparedSpawn": (
+            "OverworldWildRuntime_PrimeEffectiveCache",
+        ),
+    }
+    for caller, callees in branch_edges.items():
+        body = spawn_function_body(caller)
+        for callee in callees:
+            require(callee + "(" in body,
+                    f"spawn stack branch edge disappeared: {caller} -> {callee}")
+
+    # A production-static helper absent from .su was completely folded into
+    # its caller, so its locals are already part of that caller's measured
+    # frame. If a later compiler emits it, count its frame conservatively.
+    def emitted_helper(name: str) -> int:
+        return frames.get(name, 0)
+
+    spawn_static_branch = chain(
+        "OverworldWildRuntime_CopyInstalledStaticCache")
+    spawn_composition_branch = chain(
+        "ComposeProspective", "ApplyModifierWork",
+        "OverworldWildRuntime_CopyInstalledModifierOperations")
+    prime_peak = chain("OverworldWildRuntime_PrimeEffectiveCache") + max(
+        spawn_static_branch, spawn_composition_branch)
+    spawn_branches = {
+        "ordinary-refill": chain(
+            "OverworldWildSpawns_FrameMovementTask",
+            "OverworldWildSpawns_TryRefill",
+            "OverworldWildSpawns_SpawnOne",
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ) + emitted_helper(
+            "OverworldWildSpawns_TryPrepareSpawnWithHelper") + prime_peak,
+        "follower-refill": chain(
+            "OverworldWildSpawns_FrameMovementTask",
+            "OverworldWildSpawns_TryRefill",
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ) + emitted_helper(
+            "OverworldWildSpawns_TrySpawnFollower") + prime_peak,
+        "queued-help-child": chain(
+            "OverworldWildSpawns_FrameMovementTask",
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ) + emitted_helper(
+            "OverworldWildSpawns_TickQueuedHelpChildren") + emitted_helper(
+            "OverworldWildSpawns_TrySpawnOneHelpChild") + emitted_helper(
+            "OverworldWildSpawns_TryPrepareEncounterSpawnWithHelper") + prime_peak,
+        # A pending follower can also refill synchronously on the player-step
+        # entry before the maintenance task owns later ordinary refills.
+        "player-step-follower": chain(
+            "OverworldWildSpawns_OverlayOnPlayerStep",
+            "OverworldWildSpawns_TryRefill",
+            "OverworldWildSpawns_FinalizePreparedSpawn",
+        ) + emitted_helper(
+            "OverworldWildSpawns_TrySpawnFollower") + prime_peak,
+    }
+    spawn_peak = max(spawn_branches.values())
+    mutation_peak = chain(
+        "OverworldWildRuntime_ApplyStackDeltaCompact",
+        "OverworldWildRuntime_ApplyStackDelta",
+        "ApplyDeltaCore", "ApplyDeltaCoreWithWorkspace",
+        "ComposeProspective", "ApplyModifierWork",
+        "OverworldWildRuntime_CopyInstalledModifierOperations",
+    )
+    budget = 2048
+    reserve = 256
+    allowed = budget - reserve
+    for branch_name, branch_usage in spawn_branches.items():
+        require(branch_usage <= allowed,
+                f"{branch_name} ARM chain uses {branch_usage} bytes; "
+                f"conservative limit is {allowed} ({reserve}-byte reserve)")
+    require(mutation_peak <= allowed,
+            f"compact mutation ARM chain uses {mutation_peak} bytes; "
+            f"conservative limit is {allowed} ({reserve}-byte reserve)")
+    # Mutation owns its 192-byte prospective timer bank locally; unlike
+    # composition, that path is not nested under the spawn refill chain.
+    require(frames["OverworldWildRuntime_PrimeEffectiveCache"] <= 128
+            and frames["ApplyDeltaCoreWithWorkspace"] <= 416
+            and frames["ComposeProspective"] <= 320,
+            "runtime-owned composition scratch regressed into large automatic frames")
+    branch_summary = ", ".join(
+        f"{name}={usage}" for name, usage in spawn_branches.items())
+    inlined_summary = ",".join(
+        name.removeprefix("OverworldWildSpawns_")
+        for name in inline_capable_helpers if name not in frames)
+    return (
+        "ARM stack budget gate: " + branch_summary
+        + f", max-spawn={spawn_peak}, compact-mutation={mutation_peak}, "
+        + f"budget={budget}, reserve={reserve} bytes; "
+        + "production-inlined=" + (inlined_summary or "none")
+    )
+
+
 def main() -> None:
     verify_source_contracts()
     verify_make_package_invocation()
@@ -1688,9 +1980,11 @@ def main() -> None:
     task11_checks = verify_task11_substrate_trace(fixture_summary)
     catalog_summary = run_catalog_fixture()
     catalog_timer_summary = run_catalog_timer_fixture()
+    stack_summary = run_arm_stack_budget_gate()
     print(fixture_summary)
     print(catalog_summary)
     print(catalog_timer_summary)
+    print(stack_summary)
     print(
         "runtime layer source verifier: closed tagged-union ABI, canonical fixed "
         f"scratch semantics, authenticated handles, {oracle_checks}-status "

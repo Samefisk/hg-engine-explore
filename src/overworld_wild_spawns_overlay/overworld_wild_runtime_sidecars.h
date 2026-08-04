@@ -17,6 +17,11 @@
 #define OW_WILD_RUNTIME_MAX_PROVENANCE_NORMALIZATIONS 8
 #define OW_WILD_RUNTIME_PROVENANCE_FIELD_COUNT 36
 
+/* Composition is synchronous and non-reentrant. Keep its large transactional
+ * scratch out of large nested automatic frames on the bounded ARM9 launcher
+ * stack. */
+#define OW_WILD_RUNTIME_COMPOSITION_WORKSPACE_SIZE 0x824
+
 #define OW_WILD_RUNTIME_CACHE_VALID (1u << 0)
 #define OW_WILD_RUNTIME_PROVENANCE_VALID (1u << 0)
 #define OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CANDIDATES (1u << 1)
@@ -669,12 +674,21 @@ typedef struct OverworldWildRuntimeSlotSidecar {
     OverworldWildRuntimeResidentProvenance provenance;
 } OverworldWildRuntimeSlotSidecar;
 
+/* Overlay 158 owns the private typed view of this storage. The u32 member
+ * preserves the alignment required by caches and generation counters while
+ * keeping catalog-private definition types out of the shared runtime ABI. */
+typedef union OverworldWildRuntimeCompositionWorkspaceStorage {
+    u32 alignment;
+    u8 bytes[OW_WILD_RUNTIME_COMPOSITION_WORKSPACE_SIZE];
+} OverworldWildRuntimeCompositionWorkspaceStorage;
+
 typedef struct OverworldWildBehaviorStackRuntime {
     u32 handleEpoch;
     u32 dataIncarnation;
     u8 lifetimeState;
     u8 reserved[3];
     OverworldWildRuntimeSlotSidecar slots[OW_WILD_MAX_SPAWNS];
+    OverworldWildRuntimeCompositionWorkspaceStorage compositionWorkspace;
 } OverworldWildBehaviorStackRuntime;
 
 typedef char OverworldWildRuntimeSpawnCapacityMustRemain10[
@@ -733,8 +747,20 @@ typedef char OverworldWildRuntimeResidentProvenancePrefixMustMatch[
         ? 1 : -1];
 typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1052[
     sizeof(OverworldWildRuntimeSlotSidecar) == 1052 ? 1 : -1];
-typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain10532[
-    sizeof(OverworldWildBehaviorStackRuntime) == 10532 ? 1 : -1];
+typedef char OverworldWildRuntimeCompositionWorkspaceSizeMustRemain2084[
+    sizeof(OverworldWildRuntimeCompositionWorkspaceStorage) == 2084 ? 1 : -1];
+typedef char OverworldWildRuntimeCompositionWorkspaceAlignmentMustRemain4[
+    __alignof__(OverworldWildRuntimeCompositionWorkspaceStorage) == 4
+        ? 1 : -1];
+typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain12616[
+    sizeof(OverworldWildBehaviorStackRuntime) == 12616 ? 1 : -1];
+typedef char OverworldWildRuntimeCompositionWorkspaceOffsetMustRemain10532[
+    offsetof(OverworldWildBehaviorStackRuntime, compositionWorkspace) == 10532
+        ? 1 : -1];
+typedef char OverworldWildRuntimeCompositionWorkspaceMustRemainAligned[
+    offsetof(OverworldWildBehaviorStackRuntime, compositionWorkspace)
+            % sizeof(u32) == 0
+        ? 1 : -1];
 typedef char OverworldWildRuntimeLayerArrayMustRemainFixed[
     sizeof(((OverworldWildRuntimeLayerBank *)0)->entryGenerations)
         == sizeof(u32) * OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT

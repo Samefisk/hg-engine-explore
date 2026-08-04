@@ -19,17 +19,66 @@ typedef struct OverworldWildRuntimeDeltaScratch {
     u8 reserved;
 } OverworldWildRuntimeDeltaScratch;
 
+typedef struct OverworldWildRuntimeModifierWork {
+    OverworldWildRuntimeDefinition definition;
+    u16 ownerId;
+    u16 instanceKey;
+} OverworldWildRuntimeModifierWork;
+
+typedef struct OverworldWildRuntimeRekeyStage {
+    u32 layerGenerations[OW_WILD_MAX_SPAWNS];
+    u8 layerCounts[OW_WILD_MAX_SPAWNS];
+    u8 reserved[2];
+} OverworldWildRuntimeRekeyStage;
+
+typedef struct __attribute__((may_alias)) OverworldWildRuntimeCompositionWorkspace {
+    u32 busy;
+    OverworldWildRuntimeDeltaScratch delta;
+    OverworldWildRuntimeStaticCache prospectiveStatic;
+    OverworldWildRuntimeEffectiveCache prospectiveEffective;
+    OverworldWildRuntimeProvenance prospectiveProvenance;
+    OverworldWildRuntimeRekeyStage rekey;
+    OverworldWildRuntimeModifierWork modifiers[
+        OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
+            + OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS];
+} OverworldWildRuntimeCompositionWorkspace;
+
+typedef char OverworldWildRuntimeCompositionWorkspaceMustExactlyFit[
+    sizeof(OverworldWildRuntimeCompositionWorkspace)
+            == OW_WILD_RUNTIME_COMPOSITION_WORKSPACE_SIZE
+        ? 1 : -1];
+
 typedef struct OverworldWildRuntimeLayerService {
     OverworldWildBehaviorStackRuntime *boundRuntime;
     u32 privateRuntimeIdentity;
-    OverworldWildRuntimeDeltaOperation oneOperation;
-    u32 wrapLayerGenerations[OW_WILD_MAX_SPAWNS];
-    u8 wrapLayerCounts[OW_WILD_MAX_SPAWNS];
-    u8 preflightOnly;
-    u8 wrapReserved;
 } OverworldWildRuntimeLayerService;
 
 static OverworldWildRuntimeLayerService sOverworldWildRuntimeLayerService;
+
+static BOOL CompositionWorkspaceIsBusy(
+    const OverworldWildBehaviorStackRuntime *runtime)
+{
+    return runtime != NULL && runtime->compositionWorkspace.alignment != 0;
+}
+
+static OverworldWildRuntimeCompositionWorkspace *AcquireCompositionWorkspace(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    OverworldWildRuntimeCompositionWorkspace *workspace;
+    if (CompositionWorkspaceIsBusy(runtime)) return NULL;
+    workspace = (OverworldWildRuntimeCompositionWorkspace *)
+        runtime->compositionWorkspace.bytes;
+    /* ReleaseCompositionWorkspace leaves all scratch zeroed. */
+    workspace->busy = TRUE;
+    return workspace;
+}
+
+static __attribute__((noinline)) void ReleaseCompositionWorkspace(
+    OverworldWildBehaviorStackRuntime *runtime)
+{
+    memset(&runtime->compositionWorkspace, 0,
+        sizeof(runtime->compositionWorkspace));
+}
 
 static void ExpireHiddenTimers(
     OverworldWildRuntimeTimer *timers,
@@ -676,7 +725,8 @@ OverworldWildRuntime_MakeTimerRemovalHandleInternal(
 }
 
 static OverworldWildRuntimeStatus ValidateOperation(
-    const OverworldWildRuntimeDeltaOperation *operation)
+    const OverworldWildRuntimeDeltaOperation *operation,
+    BOOL internalBoundaryPolicy)
 {
     if (operation->operationId == 0 || operation->reserved != 0
         || operation->kind < OW_WILD_RUNTIME_DELTA_APPLY
@@ -699,8 +749,7 @@ static OverworldWildRuntimeStatus ValidateOperation(
     } else if (operation->kind == OW_WILD_RUNTIME_DELTA_REMOVE_POLICY) {
         if (operation->payload.policy.mapLifetime > 3
             || (operation->payload.policy.mapLifetime == 0
-                && operation
-                    != &sOverworldWildRuntimeLayerService.oneOperation)
+                && !internalBoundaryPolicy)
             || operation->payload.policy.boundary
                 > OW_WILD_RUNTIME_POLICY_BOUNDARY_BATTLE
             || !BytesAreZero(operation->payload.policy.reserved, 22))
@@ -1085,7 +1134,9 @@ static void RestartRuntime(
     RotatePrivateIdentity(runtime);
 }
 
-static BOOL StageSlotsForRekey(OverworldWildBehaviorStackRuntime *runtime)
+static BOOL StageSlotsForRekey(
+    OverworldWildBehaviorStackRuntime *runtime,
+    OverworldWildRuntimeRekeyStage *stage)
 {
     OverworldWildRuntimeStatus status;
     u8 slotIndex;
@@ -1095,9 +1146,8 @@ static BOOL StageSlotsForRekey(OverworldWildBehaviorStackRuntime *runtime)
         if (status != OW_WILD_RUNTIME_STATUS_OK) return FALSE;
         status = ValidateStoredSlotSemantics(slot);
         if (status != OW_WILD_RUNTIME_STATUS_OK) return FALSE;
-        sOverworldWildRuntimeLayerService.wrapLayerCounts[slotIndex] =
-            slot->activeLayerCount;
-        sOverworldWildRuntimeLayerService.wrapLayerGenerations[slotIndex] =
+        stage->layerCounts[slotIndex] = slot->activeLayerCount;
+        stage->layerGenerations[slotIndex] =
             slot->activeLayerCount
             ? OverworldWildRuntime_AdvanceNonzeroGeneration(
                 slot->layerGeneration)
@@ -1114,12 +1164,6 @@ enum {
     OW_WILD_RUNTIME_NORMALIZE_SECONDARY_TILE = 2,
     OW_WILD_RUNTIME_NORMALIZE_STAMINA = 3,
 };
-
-typedef struct OverworldWildRuntimeModifierWork {
-    OverworldWildRuntimeDefinition definition;
-    u16 ownerId;
-    u16 instanceKey;
-} OverworldWildRuntimeModifierWork;
 
 static int OW_WILD_RUNTIME_COMPOSITION_CODE CompareDefinitionKey(
     const OverworldWildRuntimeDefinition *left,
@@ -1470,14 +1514,13 @@ ComposeProspective(
     OverworldWildRuntimeStaticCache *staticOut,
     OverworldWildRuntimeEffectiveCache *effectiveOut,
     OverworldWildRuntimeProvenance *provenanceOut,
-    BOOL *effectiveChangedOut)
+    BOOL *effectiveChangedOut,
+    OverworldWildRuntimeCompositionWorkspace *workspace)
 {
     OverworldWildRuntimeDefinition winnerDefinition;
     OverworldWildRuntimeResolvedNode winnerNode;
     OverworldWildRuntimeResidentProvenance residentProvenance;
-    OverworldWildRuntimeModifierWork modifiers[
-        OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
-            + OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS];
+    OverworldWildRuntimeModifierWork *modifiers = workspace->modifiers;
     u8 modifierCount = 0;
     u8 i, j;
     BOOL hasWinner = FALSE;
@@ -1577,7 +1620,8 @@ ComposeProspective(
             }
             AddCandidateProvenance(provenanceOut, &candidate);
         } else if (definition.kind == OW_WILD_RUNTIME_DEFINITION_MODIFIER) {
-            if (modifierCount >= sizeof(modifiers) / sizeof(modifiers[0]))
+            if (modifierCount >= OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
+                    + OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS)
                 return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
             modifiers[modifierCount].definition = definition;
             modifiers[modifierCount].ownerId = layers[i].ownerId;
@@ -1827,6 +1871,7 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
     OverworldWildBehaviorStackRuntime *runtime,
     int targetSlotIndex)
 {
+    OverworldWildRuntimeRekeyStage stage;
     OverworldWildRuntimeSlotSidecar *targetSlot;
     u32 slotGeneration;
     u32 cacheIncarnation;
@@ -1846,7 +1891,7 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
         RestartRuntime(runtime, TRUE);
         return;
     }
-    if (!StageSlotsForRekey(runtime)) {
+    if (!StageSlotsForRekey(runtime, &stage)) {
         RestartRuntime(runtime, FALSE);
         return;
     }
@@ -1864,11 +1909,8 @@ void OverworldWildRuntime_HandleSlotGenerationWrap(
             slot->cacheIncarnation =
                 OverworldWildRuntime_AdvanceNonzeroGeneration(
                     slot->cacheIncarnation);
-            RekeySlot(slot,
-                sOverworldWildRuntimeLayerService.wrapLayerCounts[slotIndex]);
-            slot->layerGeneration =
-                sOverworldWildRuntimeLayerService
-                    .wrapLayerGenerations[slotIndex];
+            RekeySlot(slot, stage.layerCounts[slotIndex]);
+            slot->layerGeneration = stage.layerGenerations[slotIndex];
             memset(&slot->effectiveCache, 0, sizeof(slot->effectiveCache));
             memset(&slot->provenance, 0, sizeof(slot->provenance));
         }
@@ -1892,24 +1934,23 @@ OverworldWildRuntimeStatus OverworldWildRuntime_BindPrivateIdentity(
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
-static OverworldWildRuntimeStatus ApplyDeltaCore(
+static OverworldWildRuntimeStatus ApplyDeltaCoreWithWorkspace(
     OverworldWildBehaviorStackRuntime *runtime,
     u8 slotIndex,
     u32 expectedSlotGeneration,
     const OverworldWildRuntimeApplicabilityInput *applicability,
     const OverworldWildRuntimeDeltaOperation *operations,
     u8 operationCount,
-    OverworldWildRuntimeStackDeltaResult *result)
+    OverworldWildRuntimeStackDeltaResult *result,
+    BOOL preflightOnly,
+    BOOL internalBoundaryPolicy,
+    OverworldWildRuntimeCompositionWorkspace *workspace)
 {
-    OverworldWildRuntimeDeltaScratch scratchStorage;
-    OverworldWildRuntimeDeltaScratch *scratch = &scratchStorage;
-    OverworldWildRuntimeSlotSidecar *slot;
-    OverworldWildRuntimeStatus status;
-    OverworldWildRuntimeStaticCache prospectiveStatic;
-    OverworldWildRuntimeEffectiveCache prospectiveEffective;
-    OverworldWildRuntimeProvenance prospectiveProvenance;
+    OverworldWildRuntimeDeltaScratch *scratch = &workspace->delta;
     OverworldWildRuntimeTimer prospectiveTimers[
         OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
+    OverworldWildRuntimeSlotSidecar *slot;
+    OverworldWildRuntimeStatus status;
     u32 nextEntryGenerationAfter;
     u32 nextTimerGenerationAfter;
     u8 i, j, survivors, mutated = FALSE, rekey = FALSE;
@@ -1917,17 +1958,9 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     u8 timedAdditionCount = 0;
     BOOL effectiveChanged = FALSE;
     BOOL needsApplicability = FALSE;
-    if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
-    InitResult(runtime, slotIndex, result);
-    if (runtime == NULL || operations == NULL || applicability == NULL
-        || runtime != sOverworldWildRuntimeLayerService.boundRuntime
-        || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
-        || runtime->handleEpoch == 0
-        || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
-        || runtime->reserved[0] || runtime->reserved[1] || runtime->reserved[2]
-        || slotIndex >= OW_WILD_MAX_SPAWNS || expectedSlotGeneration == 0
-        || operationCount > OW_WILD_RUNTIME_MAX_DELTA_OPERATIONS)
-        return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_HANDLE);
+#define prospectiveStatic workspace->prospectiveStatic
+#define prospectiveEffective workspace->prospectiveEffective
+#define prospectiveProvenance workspace->prospectiveProvenance
     slot = &runtime->slots[slotIndex];
     if (slot->lifecycleState != OW_WILD_RUNTIME_SLOT_LIFECYCLE_ASSIGNED)
         return Fail(result, OW_WILD_RUNTIME_STATUS_INACTIVE_SLOT);
@@ -1954,7 +1987,7 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     for (i = 0; i < operationCount; i++) {
         const OverworldWildRuntimeDeltaOperation *operation =
             &operations[scratch->operationOrder[i]];
-        status = ValidateOperation(operation);
+        status = ValidateOperation(operation, internalBoundaryPolicy);
         if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
         if (operation->kind <= OW_WILD_RUNTIME_DELTA_REPLACE)
             needsApplicability = TRUE;
@@ -2121,7 +2154,7 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
             && slot->nextTimerGeneration
                 > 0xFFFFFFFFu - timedAdditionCount)) {
         if (runtime->handleEpoch != 0xFFFFFFFFu
-            && !StageSlotsForRekey(runtime)) {
+            && !StageSlotsForRekey(runtime, &workspace->rekey)) {
             RestartRuntime(runtime, FALSE);
             memset(result->operationResults, 0,
                 sizeof(result->operationResults));
@@ -2249,13 +2282,13 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
                 slot->cacheIncarnation)
             : slot->cacheIncarnation,
         &prospectiveStatic, &prospectiveEffective, &prospectiveProvenance,
-        &effectiveChanged);
+        &effectiveChanged, workspace);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     if (!slot->presentationGate)
         ExpireHiddenTimers(prospectiveTimers, scratch->finalCount,
             prospectiveProvenance.winningOwnerId,
             prospectiveProvenance.winningInstanceKey);
-    if (sOverworldWildRuntimeLayerService.preflightOnly)
+    if (preflightOnly)
         return OW_WILD_RUNTIME_STATUS_OK;
     if (rekey) {
         runtime->handleEpoch++;
@@ -2266,10 +2299,9 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
             runtime->slots[i].cacheIncarnation =
                 OverworldWildRuntime_AdvanceNonzeroGeneration(
                     runtime->slots[i].cacheIncarnation);
-            RekeySlot(&runtime->slots[i],
-                sOverworldWildRuntimeLayerService.wrapLayerCounts[i]);
+            RekeySlot(&runtime->slots[i], workspace->rekey.layerCounts[i]);
             runtime->slots[i].layerGeneration =
-                sOverworldWildRuntimeLayerService.wrapLayerGenerations[i];
+                workspace->rekey.layerGenerations[i];
             memset(&runtime->slots[i].effectiveCache, 0,
                 sizeof(runtime->slots[i].effectiveCache));
             memset(&runtime->slots[i].provenance, 0,
@@ -2305,6 +2337,45 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     result->status = OW_WILD_RUNTIME_STATUS_OK;
     result->ok = result->mutated = TRUE;
     return OW_WILD_RUNTIME_STATUS_OK;
+#undef prospectiveProvenance
+#undef prospectiveEffective
+#undef prospectiveStatic
+}
+
+static OverworldWildRuntimeStatus ApplyDeltaCore(
+    OverworldWildBehaviorStackRuntime *runtime,
+    u8 slotIndex,
+    u32 expectedSlotGeneration,
+    const OverworldWildRuntimeApplicabilityInput *applicability,
+    const OverworldWildRuntimeDeltaOperation *operations,
+    u8 operationCount,
+    OverworldWildRuntimeStackDeltaResult *result,
+    BOOL preflightOnly,
+    BOOL internalBoundaryPolicy)
+{
+    OverworldWildRuntimeCompositionWorkspace *workspace;
+    OverworldWildRuntimeStatus status;
+
+    if (result == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
+    InitResult(runtime, slotIndex, result);
+    if (runtime == NULL
+        || runtime != sOverworldWildRuntimeLayerService.boundRuntime
+        || sOverworldWildRuntimeLayerService.privateRuntimeIdentity == 0
+        || runtime->handleEpoch == 0
+        || runtime->lifetimeState != OW_WILD_RUNTIME_LIFETIME_ACTIVE
+        || runtime->reserved[0] || runtime->reserved[1] || runtime->reserved[2]
+        || operations == NULL || applicability == NULL
+        || slotIndex >= OW_WILD_MAX_SPAWNS || expectedSlotGeneration == 0
+        || operationCount > OW_WILD_RUNTIME_MAX_DELTA_OPERATIONS)
+        return Fail(result, OW_WILD_RUNTIME_STATUS_INVALID_HANDLE);
+    workspace = AcquireCompositionWorkspace(runtime);
+    if (workspace == NULL)
+        return Fail(result, OW_WILD_RUNTIME_STATUS_DATA_BUSY);
+    status = ApplyDeltaCoreWithWorkspace(runtime, slotIndex,
+        expectedSlotGeneration, applicability, operations, operationCount,
+        result, preflightOnly, internalBoundaryPolicy, workspace);
+    ReleaseCompositionWorkspace(runtime);
+    return status;
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDelta(
@@ -2332,7 +2403,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDelta(
                 : OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     return ApplyDeltaCore(runtime, request->slotIndex,
         request->expectedSlotGeneration, &request->applicability,
-        request->operations, request->operationCount, result);
+        request->operations, request->operationCount, result, FALSE, FALSE);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ApplyStackDeltaCompact(
@@ -2355,17 +2426,18 @@ static OverworldWildRuntimeStatus OneOperation(
     u32 expectedSlotGeneration,
     const OverworldWildRuntimeApplicabilityInput *applicability,
     const OverworldWildRuntimeDeltaOperation *operation,
-    OverworldWildRuntimeStackDeltaResult *result)
+    OverworldWildRuntimeStackDeltaResult *result,
+    BOOL preflightOnly,
+    BOOL internalBoundaryPolicy)
 {
     OverworldWildRuntimeApplicabilityInput copiedApplicability;
-    sOverworldWildRuntimeLayerService.oneOperation = *operation;
     if (applicability != NULL)
         copiedApplicability = *applicability;
     else
         memset(&copiedApplicability, 0, sizeof(copiedApplicability));
     return ApplyDeltaCore(runtime, slotIndex, expectedSlotGeneration,
-        &copiedApplicability,
-        &sOverworldWildRuntimeLayerService.oneOperation, 1, result);
+        &copiedApplicability, operation, 1, result,
+        preflightOnly, internalBoundaryPolicy);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
@@ -2383,10 +2455,8 @@ OverworldWildRuntimeStatus OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(
     operation.operationId = 1;
     operation.kind = OW_WILD_RUNTIME_DELTA_REMOVE_POLICY;
     operation.payload.policy.boundary = boundary;
-    sOverworldWildRuntimeLayerService.preflightOnly = preflightOnly;
     status = OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        NULL, &operation, &result);
-    sOverworldWildRuntimeLayerService.preflightOnly = FALSE;
+        NULL, &operation, &result, preflightOnly, TRUE);
     return status;
 }
 
@@ -2405,7 +2475,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_Apply(
     operation.payload.apply.ownerId = ownerId;
     operation.payload.apply.instanceKey = instanceKey;
     return OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        applicability, &operation, result);
+        applicability, &operation, result, FALSE, FALSE);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_Replace(
@@ -2423,7 +2493,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_Replace(
     operation.payload.apply.ownerId = ownerId;
     operation.payload.apply.instanceKey = instanceKey;
     return OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        applicability, &operation, result);
+        applicability, &operation, result, FALSE, FALSE);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_Remove(
@@ -2439,7 +2509,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_Remove(
     operation.kind = OW_WILD_RUNTIME_DELTA_REMOVE_IF_PRESENT;
     if (handle) operation.payload.handle = *handle;
     status = OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        NULL, &operation, result);
+        NULL, &operation, result, FALSE, FALSE);
     if (status == OW_WILD_RUNTIME_STATUS_IDEMPOTENT
         && result->operationResults[0].status
             == OW_WILD_RUNTIME_STATUS_STALE_NOOP) {
@@ -2460,7 +2530,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_RemoveOwner(
     operation.kind = OW_WILD_RUNTIME_DELTA_REMOVE_OWNER_IF_PRESENT;
     operation.payload.owner.ownerId = ownerId;
     return OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        NULL, &operation, result);
+        NULL, &operation, result, FALSE, FALSE);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ClearAllForSlot(
@@ -2473,7 +2543,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ClearAllForSlot(
     operation.operationId = 1;
     operation.kind = OW_WILD_RUNTIME_DELTA_CLEAR;
     return OneOperation(runtime, slotIndex, expectedSlotGeneration,
-        NULL, &operation, result);
+        NULL, &operation, result, FALSE, FALSE);
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
@@ -2483,12 +2553,8 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     const OverworldWildRuntimeStaticContext *staticContext,
     const OverworldWildRuntimeApplicabilityInput *applicability)
 {
+    OverworldWildRuntimeCompositionWorkspace *workspace;
     OverworldWildRuntimeSlotSidecar *slot;
-    OverworldWildRuntimeLayer layers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
-    OverworldWildRuntimeStaticCache staticCache;
-    OverworldWildRuntimeStaticCache resolvedStatic;
-    OverworldWildRuntimeEffectiveCache effectiveCache;
-    OverworldWildRuntimeProvenance provenance;
     OverworldWildRuntimeStatus status;
     BOOL changed;
     u8 i;
@@ -2512,29 +2578,42 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
         status = ValidateApplicabilityShape(applicability);
         if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
     }
+    workspace = AcquireCompositionWorkspace(runtime);
+    if (workspace == NULL) return OW_WILD_RUNTIME_STATUS_DATA_BUSY;
     if (!OverworldWildRuntime_CopyInstalledStaticCache(
             staticContext, applicability, slot->staticContextGeneration,
-            &resolvedStatic))
-        return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+            &workspace->prospectiveStatic)) {
+        status = OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        goto release_workspace;
+    }
     if (slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID) {
         status = ValidateCacheKey(runtime, slot);
-        if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-        if (!BytesEqual(&slot->staticCache, &resolvedStatic,
-                sizeof(resolvedStatic)))
-            return OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
-        return OW_WILD_RUNTIME_STATUS_IDEMPOTENT;
+        if (status != OW_WILD_RUNTIME_STATUS_OK) goto release_workspace;
+        status = BytesEqual(&slot->staticCache,
+                &workspace->prospectiveStatic,
+                sizeof(workspace->prospectiveStatic))
+            ? OW_WILD_RUNTIME_STATUS_IDEMPOTENT
+            : OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA;
+        goto release_workspace;
     }
-    for (i = 0; i < slot->activeLayerCount; i++) ReadLayer(slot, i, &layers[i]);
+    for (i = 0; i < slot->activeLayerCount; i++)
+        ReadLayer(slot, i, &workspace->delta.finalLayers[i]);
     status = ComposeProspective(
-        runtime, slot, &resolvedStatic, layers,
+        runtime, slot, &workspace->prospectiveStatic,
+        workspace->delta.finalLayers,
         slot->activeLayerCount, slot->layerGeneration,
-        runtime->dataIncarnation, slot->cacheIncarnation, &staticCache,
-        &effectiveCache, &provenance, &changed);
-    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-    slot->staticCache = staticCache;
-    slot->effectiveCache = effectiveCache;
-    StoreResidentProvenance(&slot->provenance, &provenance);
-    return OW_WILD_RUNTIME_STATUS_OK;
+        runtime->dataIncarnation, slot->cacheIncarnation,
+        &workspace->prospectiveStatic, &workspace->prospectiveEffective,
+        &workspace->prospectiveProvenance, &changed, workspace);
+    if (status == OW_WILD_RUNTIME_STATUS_OK) {
+        slot->staticCache = workspace->prospectiveStatic;
+        slot->effectiveCache = workspace->prospectiveEffective;
+        StoreResidentProvenance(&slot->provenance,
+            &workspace->prospectiveProvenance);
+    }
+release_workspace:
+    ReleaseCompositionWorkspace(runtime);
+    return status;
 }
 
 
@@ -2602,11 +2681,10 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
     u32 expectedSlotGeneration,
     OverworldWildRuntimeProvenance *provenanceOut)
 {
+    OverworldWildBehaviorStackRuntime *mutableRuntime;
+    OverworldWildRuntimeCompositionWorkspace *workspace;
     const OverworldWildRuntimeSlotSidecar *slot;
     const OverworldWildRuntimeResidentProvenance *resident;
-    OverworldWildRuntimeLayer layers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
-    OverworldWildRuntimeStaticCache staticCache;
-    OverworldWildRuntimeEffectiveCache effectiveCache;
     OverworldWildRuntimeStatus status;
     BOOL changed;
     u8 count;
@@ -2623,15 +2701,25 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
         memset(provenanceOut, 0, sizeof(*provenanceOut));
         return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
     }
+    /* Scratch does not form part of the logical query state and is cleared
+     * before returning; the guard makes nested queries fail deterministically. */
+    mutableRuntime = (OverworldWildBehaviorStackRuntime *)runtime;
+    workspace = AcquireCompositionWorkspace(mutableRuntime);
+    if (workspace == NULL) {
+        memset(provenanceOut, 0, sizeof(*provenanceOut));
+        return OW_WILD_RUNTIME_STATUS_DATA_BUSY;
+    }
     for (index = 0; index < count; index++)
-        ReadLayer(slot, index, &layers[index]);
-    status = ComposeProspective(runtime, slot, &slot->staticCache, layers,
+        ReadLayer(slot, index, &workspace->delta.finalLayers[index]);
+    status = ComposeProspective(runtime, slot, &slot->staticCache,
+        workspace->delta.finalLayers,
         count, slot->layerGeneration,
-        runtime->dataIncarnation, slot->cacheIncarnation, &staticCache,
-        &effectiveCache, provenanceOut, &changed);
+        runtime->dataIncarnation, slot->cacheIncarnation,
+        &workspace->prospectiveStatic, &workspace->prospectiveEffective,
+        provenanceOut, &changed, workspace);
     if (status != OW_WILD_RUNTIME_STATUS_OK) {
         memset(provenanceOut, 0, sizeof(*provenanceOut));
-        return status;
+        goto release_workspace;
     }
     resident = &slot->provenance;
     if (changed
@@ -2642,11 +2730,15 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
                     dataIncarnation))
         || provenanceOut->candidateCount != resident->candidateCount) {
         memset(provenanceOut, 0, sizeof(*provenanceOut));
-        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+        status = OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+        goto release_workspace;
     }
     memcpy(provenanceOut, (void *)resident,
         offsetof(OverworldWildRuntimeProvenance, candidateCount));
-    return OW_WILD_RUNTIME_STATUS_OK;
+    status = OW_WILD_RUNTIME_STATUS_OK;
+release_workspace:
+    ReleaseCompositionWorkspace(mutableRuntime);
+    return status;
 }
 
 OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(
