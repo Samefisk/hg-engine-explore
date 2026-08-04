@@ -149,8 +149,9 @@ def verify_private_layout(
         "sizeof(OverworldWildRuntimeStaticCache) == 552",
         "sizeof(OverworldWildRuntimeEffectiveCache) == 104",
         "sizeof(OverworldWildRuntimeProvenance) == 728",
-        "sizeof(OverworldWildRuntimeSlotSidecar) == 1724",
-        "sizeof(OverworldWildBehaviorStackRuntime) == 17252",
+        "sizeof(OverworldWildRuntimeResidentProvenance) == 56",
+        "sizeof(OverworldWildRuntimeSlotSidecar) == 1052",
+        "sizeof(OverworldWildBehaviorStackRuntime) == 10532",
         "u32 handleEpoch;",
         "u32 dataIncarnation;",
         "u32 slotGeneration;",
@@ -172,7 +173,7 @@ def verify_private_layout(
         "OverworldWildRuntimeTimerBank timerBank;",
         "OverworldWildRuntimeStaticCache staticCache;",
         "OverworldWildRuntimeEffectiveCache effectiveCache;",
-        "OverworldWildRuntimeProvenance provenance;",
+        "OverworldWildRuntimeResidentProvenance provenance;",
         "OverworldWildRuntimeSlotSidecar slots[OW_WILD_MAX_SPAWNS];",
     ))
     for name in (

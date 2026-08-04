@@ -43,7 +43,6 @@ DESTRUCTIVE_HELPER = "OverworldWildRuntime_HandleSlotGenerationWrap"
 TIMER_LAYER_IMPORT_APIS = (
     "OverworldWildRuntime_ApplyStackDeltaCompact",
     "OverworldWildRuntime_GetEffectiveCache",
-    "OverworldWildRuntime_GetProvenance",
     "OverworldWildRuntime_ValidateTimerQueryInternal",
     "OverworldWildRuntime_TimerExpiryTagInternal",
     "OverworldWildRuntime_PreflightTimerExpiryInternal",

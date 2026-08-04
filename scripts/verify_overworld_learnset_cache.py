@@ -1684,11 +1684,83 @@ def verify_personal_dispatch_sources(repo: Path, patched_arm9: Path | None) -> N
         )
 
 
+def verify_spawn_metadata_streaming_source_contract(source: str) -> None:
+    validate_start = source.index(
+        "static BOOL OverworldWildBehavior_ValidateSpawnMetadata(\n")
+    validate_end = source.index(
+        "\n}\n\nstatic BOOL OverworldWildBehavior_LoadSpawnMetadata", validate_start)
+    validate = source[validate_start:validate_end]
+    load_start = source.index(
+        "static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)\n{")
+    load_end = source.index(
+        "\n}\n\nstatic BOOL OverworldWildBehavior_WarmLevelUpLearnsetCache", load_start)
+    load = source[load_start:load_end]
+    lookup_start = source.index(
+        "static BOOL OverworldWildBehavior_TryGetSpawnMetadata(\n",
+        load_end)
+    lookup_end = source.index(
+        "\n}\n\nstatic void OverworldWildBehavior_CleanupSpawnMetadata", lookup_start)
+    lookup = source[lookup_start:lookup_end]
+
+    for forbidden in (
+        "sys_AllocMemory", "sys_AllocMemoryLo", "NARC_ReadWholeMember",
+        "sOverworldWildSpawnMetadataBlob",
+    ):
+        require(forbidden not in validate + load + lookup,
+                f"spawn metadata streaming path retained bulk storage: {forbidden}")
+    for fragment in (
+        "size != OVERWORLD_WILD_SPAWN_METADATA_EXPECTED_SIZE",
+        "header.baseCount == OVERWORLD_WILD_SPAWN_METADATA_BASE_COUNT",
+        "== OVERWORLD_WILD_SPAWN_METADATA_EXCEPTIONS_OFFSET",
+        "== OVERWORLD_WILD_SPAWN_METADATA_EXCEPTION_COUNT",
+        "== OVERWORLD_WILD_SPAWN_METADATA_FORM_SPECIES_BASE_COUNT",
+        "header.checksum == OVERWORLD_WILD_SPAWN_METADATA_CHECKSUM",
+    ):
+        require(fragment in validate,
+                f"spawn metadata sealed identity contract lost: {fragment}")
+    require(validate.count("NARC_ReadFromMember(") == 1,
+            "spawn metadata startup reads more than its sealed header")
+    require("NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD)" in load
+            and "NARC_dtor(narc);" in load
+            and load.index("NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD)")
+                < load.index("NARC_dtor(narc);"),
+            "spawn metadata validation archive lifetime is unbalanced")
+    for fragment in (
+        "sOverworldWildSpawnMetadataLastValid",
+        "NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD)",
+        "while (low <= high)",
+        "OVERWORLD_WILD_SPAWN_METADATA_EXCEPTIONS_OFFSET",
+        "sizeof(OverworldWildSpawnMetadataBlobHeader)",
+        "candidate.species != species || candidate.form != form",
+        "candidate.reserved != 0",
+        "candidate.metadata.renderModePlusOne == 0",
+        "metadata->renderModePlusOne == 0",
+        "goto failure;",
+        "NARC_dtor(narc);",
+    ):
+        require(fragment in lookup,
+                f"spawn metadata streamed lookup contract lost: {fragment}")
+    ctor = lookup.index("NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD)")
+    dtor = lookup.index("NARC_dtor(narc);")
+    opened_region = lookup[ctor:dtor].replace(
+        "if (narc == NULL) return FALSE;", "")
+    require(ctor < lookup.index("while (low <= high)") < dtor
+            and lookup.index("goto success;") < dtor
+            and "return FALSE;" not in opened_region,
+            "spawn metadata lookup can leave its archive open")
+    require(lookup.count("NARC_dtor(narc);") == 2
+            and lookup.index("failure:") < lookup.rindex("NARC_dtor(narc);"),
+            "spawn metadata malformed-record path does not close its archive")
+    require(source.count("OverworldWildBehavior_TryGetSpawnMetadata(") == 4,
+            "spawn metadata lookup escaped the two spawn-setup consumers")
+
+
 def verify_personal_overlay_source_contract(repo: Path) -> None:
     header = (repo / "include/overworld_wild_behavior_data.h").read_text()
     source = (repo / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c").read_text()
     spawns_source = (repo / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
     linker = (repo / "src/overworld_wild_behavior_data_overlay/linker.ld").read_text()
+    verify_spawn_metadata_streaming_source_contract(source)
     verify_overlap_resolver_callback_source_contract(header, source)
     verify_overlap_callback_target_source_contract(spawns_source)
     verify_overlap_resolver_host_fixture(repo, source)

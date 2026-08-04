@@ -162,8 +162,10 @@ _Static_assert(sizeof(OverworldWildRuntimeResolvedNode) == 38, "resolved node la
 _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552, "static cache layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeEffectiveCache) == 104, "effective cache layout changed");
 _Static_assert(sizeof(OverworldWildRuntimeProvenance) == 728, "provenance layout changed");
-_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1724, "slot layout changed");
-_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 17252, "runtime layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeResidentProvenance) == 56,
+    "resident provenance layout changed");
+_Static_assert(sizeof(OverworldWildRuntimeSlotSidecar) == 1052, "slot layout changed");
+_Static_assert(sizeof(OverworldWildBehaviorStackRuntime) == 10532, "runtime layout changed");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, slotGeneration) == 0, "slot generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, staticContextGeneration) == 4, "static generation moved");
 _Static_assert(offsetof(OverworldWildRuntimeSlotSidecar, nextEntryGeneration) == 8, "entry generation moved");

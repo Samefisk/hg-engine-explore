@@ -615,6 +615,30 @@ typedef struct OverworldWildRuntimeProvenance {
         normalizations[OW_WILD_RUNTIME_MAX_PROVENANCE_NORMALIZATIONS];
 } OverworldWildRuntimeProvenance;
 
+/* Detailed candidate/modifier/contribution provenance is produced while a
+ * composition is evaluated, but gameplay only needs the authenticated cache
+ * key and winning layer identity after that evaluation completes.  Keep that
+ * durable summary per spawn instead of retaining ten full diagnostic traces. */
+typedef struct OverworldWildRuntimeResidentProvenance {
+    u32 freshnessGeneration;
+    u32 cacheIdentity;
+    u32 dataIncarnation;
+    u32 cacheIncarnation;
+    u32 catalogIdentity;
+    u32 staticContextIdentity;
+    u32 staticSetHash;
+    u32 staticContextGeneration;
+    u32 layerGeneration;
+    u32 effectiveGeneration;
+    u32 effectiveHash;
+    u32 provenanceHash;
+    u16 winningDefinitionId;
+    u16 winningOwnerId;
+    u16 winningInstanceKey;
+    u8 flags;
+    u8 candidateCount;
+} OverworldWildRuntimeResidentProvenance;
+
 typedef struct OverworldWildRuntimeSlotSidecar {
     u32 slotGeneration;
     u32 staticContextGeneration;
@@ -632,7 +656,7 @@ typedef struct OverworldWildRuntimeSlotSidecar {
     OverworldWildRuntimeTimerBank timerBank;
     OverworldWildRuntimeStaticCache staticCache;
     OverworldWildRuntimeEffectiveCache effectiveCache;
-    OverworldWildRuntimeProvenance provenance;
+    OverworldWildRuntimeResidentProvenance provenance;
 } OverworldWildRuntimeSlotSidecar;
 
 typedef struct OverworldWildBehaviorStackRuntime {
@@ -691,10 +715,16 @@ typedef char OverworldWildRuntimeFieldContributionSizeMustRemain14[
     sizeof(OverworldWildRuntimeFieldContribution) == 14 ? 1 : -1];
 typedef char OverworldWildRuntimeProvenanceSizeMustRemain728[
     sizeof(OverworldWildRuntimeProvenance) == 728 ? 1 : -1];
-typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1724[
-    sizeof(OverworldWildRuntimeSlotSidecar) == 1724 ? 1 : -1];
-typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain17252[
-    sizeof(OverworldWildBehaviorStackRuntime) == 17252 ? 1 : -1];
+typedef char OverworldWildRuntimeResidentProvenanceSizeMustRemain56[
+    sizeof(OverworldWildRuntimeResidentProvenance) == 56 ? 1 : -1];
+typedef char OverworldWildRuntimeResidentProvenancePrefixMustMatch[
+    offsetof(OverworldWildRuntimeProvenance, candidateCount)
+            == offsetof(OverworldWildRuntimeResidentProvenance, candidateCount)
+        ? 1 : -1];
+typedef char OverworldWildRuntimeSlotSidecarSizeMustRemain1052[
+    sizeof(OverworldWildRuntimeSlotSidecar) == 1052 ? 1 : -1];
+typedef char OverworldWildBehaviorStackRuntimeSizeMustRemain10532[
+    sizeof(OverworldWildBehaviorStackRuntime) == 10532 ? 1 : -1];
 typedef char OverworldWildRuntimeLayerArrayMustRemainFixed[
     sizeof(((OverworldWildRuntimeLayerBank *)0)->entryGenerations)
         == sizeof(u32) * OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT

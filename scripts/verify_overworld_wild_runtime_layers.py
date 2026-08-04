@@ -1239,6 +1239,15 @@ def verify_source_contracts() -> None:
             "overlay159 timer-object Make wiring mutation was accepted")
     require(all(name + "(" in timers_source for name in timer_api_names),
             "overlay159 timer shard is missing a public API implementation")
+    command_origin_body = function_body(
+        timers_source,
+        "static OverworldWildRuntimeStatus CopyCommandOrigin(\n"
+        "    const OverworldWildBehaviorStackRuntime *runtime,",
+    )
+    require("OverworldWildRuntime_GetEffectiveCache(" in command_origin_body
+            and "slot->provenance.winningDefinitionId" in command_origin_body
+            and "OverworldWildRuntime_GetProvenance(" not in command_origin_body,
+            "command-origin hot path reconstructs diagnostic provenance")
     timer_query_body = function_body(
         implementation,
         "OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(\n"

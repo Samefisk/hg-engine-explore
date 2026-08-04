@@ -1703,7 +1703,8 @@ static void refresh_cache_identity(
     OverworldWildRuntimeSlotSidecar *slot = &runtime->slots[slotIndex];
     if (!(slot->effectiveCache.flags & OW_WILD_RUNTIME_CACHE_VALID)) return;
     slot->effectiveCache.cacheIdentity = CacheIdentity(
-        runtime, slot, &slot->effectiveCache, &slot->provenance,
+        runtime, slot, &slot->effectiveCache,
+        slot->provenance.freshnessGeneration,
         sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
     slot->provenance.cacheIdentity = slot->effectiveCache.cacheIdentity;
 }
@@ -2939,6 +2940,8 @@ static void test_task9_composition_cache_and_provenance(
     u32 firstDataIncarnation;
     u32 firstSlotIncarnation;
     u32 priorSlotGeneration;
+    u16 savedWinnerOwner;
+    u8 savedActiveLayerCount;
     u8 speedZeroStatus;
     u8 avoidSetTwoStatus;
     u8 avoidAddStatus;
@@ -3134,6 +3137,35 @@ static void test_task9_composition_cache_and_provenance(
             && provenance.candidates[2].definitionId == DEF_LOW_STATE
             && !provenance.candidates[2].isWinner,
         "hidden candidate did not refresh winner/candidate provenance");
+    savedActiveLayerCount = runtime.slots[0].activeLayerCount;
+    runtime.slots[0].activeLayerCount = savedActiveLayerCount - 1;
+    memset(&provenance, 0xA5, sizeof(provenance));
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION
+            && !memcmp(&provenance, &(OverworldWildRuntimeProvenance){0},
+                sizeof(provenance)),
+        "diagnostic provenance accepted hidden candidate-count drift");
+    runtime.slots[0].activeLayerCount =
+        OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT + 1;
+    memset(&provenance, 0xA5, sizeof(provenance));
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION
+            && !memcmp(&provenance, &(OverworldWildRuntimeProvenance){0},
+                sizeof(provenance)),
+        "diagnostic provenance copied an oversized runtime layer bank");
+    runtime.slots[0].activeLayerCount = savedActiveLayerCount;
+    savedWinnerOwner = runtime.slots[0].layerBank.ownerIds[0];
+    runtime.slots[0].layerBank.ownerIds[0] ^= 1;
+    memset(&provenance, 0xA5, sizeof(provenance));
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION
+            && !memcmp(&provenance, &(OverworldWildRuntimeProvenance){0},
+                sizeof(provenance)),
+        "diagnostic provenance accepted winner-key drift");
+    runtime.slots[0].layerBank.ownerIds[0] = savedWinnerOwner;
     (void)apply_one(&runtime, 0, input, DEF_ORDER_A, 0x9600, 0);
     (void)apply_one(&runtime, 0, input, DEF_ORDER_B, 0x9400, 0);
     require(OverworldWildRuntime_GetProvenance(&runtime, 0,
@@ -3182,9 +3214,12 @@ static void test_task9_composition_cache_and_provenance(
         "visible state replacement did not publish one effective change");
     hiddenEffective = runtime.slots[0].effectiveGeneration;
     (void)apply_one(&runtime, 0, input, DEF_MULTI_INSTANCE, 0x9504, 1);
-    require(runtime.slots[0].provenance.modifierCount == 1
-            && !runtime.slots[0].provenance.modifiers[0].applied
-            && runtime.slots[0].provenance.modifiers[0].skipReason != 0,
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && provenance.modifierCount == 1
+            && !provenance.modifiers[0].applied
+            && provenance.modifiers[0].skipReason != 0,
         "inapplicable active modifier lacked a concrete skip diagnostic");
 
     (void)apply_one(&runtime, 0, input, DEF_SET_SPEED_FOUR, 0x9503, 0);
@@ -3198,8 +3233,11 @@ static void test_task9_composition_cache_and_provenance(
             && runtime.slots[0].effectiveCache.stateValues[3] == 4
             && runtime.slots[0].effectiveGeneration == visibleEffective,
         "raw contributor with identical saturated output advanced effective generation");
-    require(runtime.slots[0].provenance.contributionCount == 1
-            && runtime.slots[0].provenance.contributions[0].definitionId
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && provenance.contributionCount == 1
+            && provenance.contributions[0].definitionId
                 == DEF_CLAMP_SPEED_FOUR,
         "no-op-normalized replacement did not refresh provenance");
 
@@ -3212,17 +3250,20 @@ static void test_task9_composition_cache_and_provenance(
             && runtime.slots[0].effectiveCache.stateValues[3] == 2,
         "static modifier was not folded through the common operator pipeline");
     (void)apply_one(&runtime, 0, &staticInput, DEF_RUNTIME_ADD, 0x9510, 0);
-    require(runtime.slots[0].effectiveCache.stateValues[3] == 3
-            && runtime.slots[0].provenance.modifierCount == 3
-            && runtime.slots[0].provenance.modifiers[0].definitionId
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[3] == 3
+            && provenance.modifierCount == 3
+            && provenance.modifiers[0].definitionId
                 == DEF_STATIC_SET_ORDER
-            && runtime.slots[0].provenance.modifiers[0].staticPriority == 1
-            && runtime.slots[0].provenance.modifiers[0].ruleStableId == 0x5001
-            && runtime.slots[0].provenance.modifiers[0].actionStableId == 0x6001
-            && runtime.slots[0].provenance.modifiers[1].definitionId
+            && provenance.modifiers[0].staticPriority == 1
+            && provenance.modifiers[0].ruleStableId == 0x5001
+            && provenance.modifiers[0].actionStableId == 0x6001
+            && provenance.modifiers[1].definitionId
                 == DEF_STATIC_ADD
-            && runtime.slots[0].provenance.modifiers[1].actionStableId == 0x6002
-            && runtime.slots[0].provenance.modifiers[2].definitionId
+            && provenance.modifiers[1].actionStableId == 0x6002
+            && provenance.modifiers[2].definitionId
                 == DEF_RUNTIME_ADD,
         "static action order or static-before-runtime folding changed");
 
@@ -3233,16 +3274,19 @@ static void test_task9_composition_cache_and_provenance(
             == OW_WILD_RUNTIME_STATUS_OK,
         "operator fixture prime failed");
     (void)apply_one(&runtime, 0, input, DEF_ALL_OPERATORS, 0x9520, 0);
-    require(runtime.slots[0].effectiveCache.stateValues[3] == 2
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[3] == 2
             && runtime.slots[0].effectiveCache.stateValues[4] == 5
             && runtime.slots[0].effectiveCache.stateValues[11] == 4
             && runtime.slots[0].effectiveCache.stateValues[13] == 0
             && runtime.slots[0].effectiveCache.stateValues[14] == 2
             && runtime.slots[0].effectiveCache.stateValues[12] == 5
             && runtime.slots[0].effectiveCache.stateValues[10] == 12
-            && runtime.slots[0].provenance.contributionCount == 8
-            && runtime.slots[0].provenance.normalizationCount == 1
-            && runtime.slots[0].provenance.lastWriterDefinitionIds[3]
+            && provenance.contributionCount == 8
+            && provenance.normalizationCount == 1
+            && provenance.lastWriterDefinitionIds[3]
                 == DEF_ALL_OPERATORS,
         "six operator families/normalization/provenance diverged from Task 6");
 
@@ -3280,9 +3324,12 @@ static void test_task9_composition_cache_and_provenance(
             && memcmp(&runtime, &before, sizeof(runtime)) == 0,
         "Task-6 speed SET zero was accepted or changed live bytes");
     (void)apply_one(&runtime, 0, input, DEF_AVOID_SET_ONE, 0x9523, 0);
-    require(runtime.slots[0].effectiveCache.stateValues[22] == 1
-            && runtime.slots[0].provenance.contributions[
-                runtime.slots[0].provenance.contributionCount - 1].fieldId
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && runtime.slots[0].effectiveCache.stateValues[22] == 1
+            && provenance.contributions[
+                provenance.contributionCount - 1].fieldId
                 == 22,
         "Task-6 avoidPreviousTile SET one was not composed/provenanced");
     require(OverworldWildRuntime_Replace(&runtime, 0,
@@ -3317,9 +3364,12 @@ static void test_task9_composition_cache_and_provenance(
     for (i = 0; i < 3; i++)
         (void)apply_one(&runtime, 0, input, DEF_ALL_OPERATORS,
             (u16)(0x9530 + i), i);
-    require((runtime.slots[0].provenance.flags
+    require(OverworldWildRuntime_GetProvenance(&runtime, 0,
+            runtime.slots[0].slotGeneration, &provenance)
+            == OW_WILD_RUNTIME_STATUS_OK
+            && (provenance.flags
                 & OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_CONTRIBUTIONS)
-            && runtime.slots[0].provenance.contributionCount
+            && provenance.contributionCount
                 == OW_WILD_RUNTIME_MAX_PROVENANCE_CONTRIBUTIONS,
         "bounded provenance did not report deterministic truncation");
 
@@ -3337,7 +3387,7 @@ static void test_task9_composition_cache_and_provenance(
     runtime.slots[0].provenance.layerGeneration = 0xFFFFFFFFu;
     runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
         &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
-        &runtime.slots[0].provenance,
+        runtime.slots[0].provenance.freshnessGeneration,
         sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
     runtime.slots[0].provenance.cacheIdentity =
         runtime.slots[0].effectiveCache.cacheIdentity;
@@ -3360,7 +3410,7 @@ static void test_task9_composition_cache_and_provenance(
     firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
     runtime.slots[0].effectiveCache.cacheIdentity = CacheIdentity(
         &runtime, &runtime.slots[0], &runtime.slots[0].effectiveCache,
-        &runtime.slots[0].provenance,
+        runtime.slots[0].provenance.freshnessGeneration,
         sOverworldWildRuntimeLayerService.privateRuntimeIdentity);
     runtime.slots[0].provenance.cacheIdentity =
         runtime.slots[0].effectiveCache.cacheIdentity;
@@ -3505,7 +3555,7 @@ static void test_task10_timer_engine(
     OverworldWildRuntimeTimer preservedC;
     OverworldWildRuntimeStaticCache cachedStatic;
     OverworldWildRuntimeEffectiveCache cachedEffective;
-    OverworldWildRuntimeProvenance cachedProvenance;
+    OverworldWildRuntimeResidentProvenance cachedProvenance;
     OverworldWildRuntimeStaticContext staticContext = fixture_static_context();
     u32 layerGeneration;
     u32 effectiveGeneration;

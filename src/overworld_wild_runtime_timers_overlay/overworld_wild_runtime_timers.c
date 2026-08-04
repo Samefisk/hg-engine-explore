@@ -25,7 +25,7 @@ static void InitTick(const OverworldWildBehaviorStackRuntime *runtime,
 }
 
 static BOOL ExpireHidden(OverworldWildRuntimeTimer *timer,
-    const OverworldWildRuntimeProvenance *provenance)
+    const OverworldWildRuntimeResidentProvenance *provenance)
 {
     if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)
         || timer->hiddenPolicy != OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE
@@ -1794,15 +1794,11 @@ static OverworldWildRuntimeStatus CopyCommandOrigin(
     OverworldWildRuntimeCommandOrigin *originOut)
 {
     OverworldWildRuntimeEffectiveCache effective;
-    OverworldWildRuntimeProvenance provenance;
     OverworldWildRuntimeStatus status;
     const OverworldWildRuntimeSlotSidecar *slot;
     u8 layerIndex;
     status = OverworldWildRuntime_GetEffectiveCache(runtime, slotIndex,
         expectedSlotGeneration, &effective);
-    if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
-    status = OverworldWildRuntime_GetProvenance(runtime, slotIndex,
-        expectedSlotGeneration, &provenance);
     if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
     slot = &runtime->slots[slotIndex];
     memset(originOut, 0, sizeof(*originOut));
@@ -1817,9 +1813,10 @@ static OverworldWildRuntimeStatus CopyCommandOrigin(
     originOut->controllerId = effective.controllerId;
     originOut->nodeId = effective.nodeId;
     originOut->stateProfileId = effective.profileId;
-    originOut->winningDefinitionId = provenance.winningDefinitionId;
-    originOut->winningOwnerId = provenance.winningOwnerId;
-    originOut->winningInstanceKey = provenance.winningInstanceKey;
+    originOut->winningDefinitionId =
+        slot->provenance.winningDefinitionId;
+    originOut->winningOwnerId = slot->provenance.winningOwnerId;
+    originOut->winningInstanceKey = slot->provenance.winningInstanceKey;
     originOut->slotIndex = slotIndex;
     originOut->flags = OW_WILD_RUNTIME_COMMAND_ORIGIN_VALID;
     if (originOut->controllerId == 0 || originOut->nodeId == 0

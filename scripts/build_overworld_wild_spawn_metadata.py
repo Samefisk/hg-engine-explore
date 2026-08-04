@@ -19,6 +19,11 @@ OWSM_EXCEPTION_SIZE = 12
 OWSM_CHECKSUM_OFFSET = 32
 OWSM_MAX_ENCODED_FORM = 31
 OWSM_EXPECTED_DENSE_RECORD_COUNT = 1076
+OWSM_EXPECTED_SIZE = 12424
+OWSM_EXPECTED_EXCEPTIONS_OFFSET = 8644
+OWSM_EXPECTED_EXCEPTION_COUNT = 315
+OWSM_EXPECTED_FORM_SPECIES_BASE_COUNT = 1075
+OWSM_EXPECTED_CHECKSUM = 310972
 NEEDS_REVERSION = 0x8000
 OVERLAY_1_RENDER_DESCRIPTOR_OFFSET = 0x21A18
 OVERLAY_1_RENDER_DESCRIPTOR_SIZE = 8
@@ -88,6 +93,12 @@ def validate_shared_format_header(path: Path) -> None:
         "OVERWORLD_WILD_SPAWN_METADATA_MAGIC": OWSM_MAGIC,
         "OVERWORLD_WILD_SPAWN_METADATA_VERSION": OWSM_VERSION,
         "OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM": OWSM_MAX_ENCODED_FORM,
+        "OVERWORLD_WILD_SPAWN_METADATA_EXPECTED_SIZE": OWSM_EXPECTED_SIZE,
+        "OVERWORLD_WILD_SPAWN_METADATA_BASE_COUNT": OWSM_EXPECTED_DENSE_RECORD_COUNT,
+        "OVERWORLD_WILD_SPAWN_METADATA_EXCEPTIONS_OFFSET": OWSM_EXPECTED_EXCEPTIONS_OFFSET,
+        "OVERWORLD_WILD_SPAWN_METADATA_EXCEPTION_COUNT": OWSM_EXPECTED_EXCEPTION_COUNT,
+        "OVERWORLD_WILD_SPAWN_METADATA_FORM_SPECIES_BASE_COUNT": OWSM_EXPECTED_FORM_SPECIES_BASE_COUNT,
+        "OVERWORLD_WILD_SPAWN_METADATA_CHECKSUM": OWSM_EXPECTED_CHECKSUM,
     }
     for name, expected in constants.items():
         actual = parse_object_define(source, name)
@@ -417,6 +428,13 @@ def validate_blob(blob: bytes, sources: MetadataSources, label: str) -> tuple[in
     require(flags == 0, f"{label}: bad flags")
     require(total_size == exceptions_offset + exception_count * exception_record_size, f"{label}: bad exception range")
     require(stored_checksum == checksum(blob), f"{label}: bad checksum")
+    require(total_size == OWSM_EXPECTED_SIZE, f"{label}: sealed total size changed")
+    require(base_count == OWSM_EXPECTED_DENSE_RECORD_COUNT, f"{label}: sealed dense count changed")
+    require(exceptions_offset == OWSM_EXPECTED_EXCEPTIONS_OFFSET, f"{label}: sealed exception offset changed")
+    require(exception_count == OWSM_EXPECTED_EXCEPTION_COUNT, f"{label}: sealed exception count changed")
+    require(form_species_base_count == OWSM_EXPECTED_FORM_SPECIES_BASE_COUNT,
+            f"{label}: sealed form coverage changed")
+    require(stored_checksum == OWSM_EXPECTED_CHECKSUM, f"{label}: sealed checksum changed")
 
     decoded_base = [decode_record(blob, base_offset + species * base_record_size) for species in range(base_count)]
     exception_records: dict[tuple[int, int], SpawnMetadata] = {}

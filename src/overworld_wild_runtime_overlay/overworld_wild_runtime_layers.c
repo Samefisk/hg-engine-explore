@@ -23,8 +23,6 @@ typedef struct OverworldWildRuntimeLayerService {
     OverworldWildBehaviorStackRuntime *boundRuntime;
     u32 privateRuntimeIdentity;
     OverworldWildRuntimeDeltaOperation oneOperation;
-    OverworldWildRuntimeApplicabilityInput oneApplicability;
-    OverworldWildRuntimeDeltaScratch scratch;
     u32 wrapLayerGenerations[OW_WILD_MAX_SPAWNS];
     u8 wrapLayerCounts[OW_WILD_MAX_SPAWNS];
     u8 preflightOnly;
@@ -36,7 +34,8 @@ static OverworldWildRuntimeLayerService sOverworldWildRuntimeLayerService;
 static void ExpireHiddenTimers(
     OverworldWildRuntimeTimer *timers,
     u8 count,
-    const OverworldWildRuntimeProvenance *provenance);
+    u16 winningOwnerId,
+    u16 winningInstanceKey);
 
 void OverworldWildRuntime_ClearSlotStorage(
     OverworldWildRuntimeSlotSidecar *slot)
@@ -136,18 +135,26 @@ static u32 EffectiveHash(const OverworldWildRuntimeEffectiveCache *cache)
             capabilityMask));
 }
 
-static u32 ProvenanceHash(const OverworldWildRuntimeProvenance *provenance)
+static u32 ResidentProvenanceHash(
+    const OverworldWildRuntimeResidentProvenance *provenance)
 {
     return HashBytes(0x4F575039u, &provenance->winningDefinitionId,
-        sizeof(*provenance) - offsetof(OverworldWildRuntimeProvenance,
-            winningDefinitionId));
+        sizeof(*provenance) - offsetof(
+            OverworldWildRuntimeResidentProvenance, winningDefinitionId));
+}
+
+static void StoreResidentProvenance(
+    OverworldWildRuntimeResidentProvenance *resident,
+    const OverworldWildRuntimeProvenance *provenance)
+{
+    memcpy(resident, (void *)provenance, sizeof(*resident));
 }
 
 static u32 CacheIdentity(
     const OverworldWildBehaviorStackRuntime *runtime,
     const OverworldWildRuntimeSlotSidecar *slot,
     const OverworldWildRuntimeEffectiveCache *effective,
-    const OverworldWildRuntimeProvenance *provenance,
+    u32 provenanceFreshnessGeneration,
     u32 privateRuntimeIdentity)
 {
     u32 identity = Mix(0x4F574339u,
@@ -164,7 +171,7 @@ static u32 CacheIdentity(
     identity = Mix(identity, effective->effectiveGeneration);
     identity = Mix(identity, effective->effectiveHash);
     identity = Mix(identity, effective->provenanceHash);
-    identity = Mix(identity, provenance->freshnessGeneration);
+    identity = Mix(identity, provenanceFreshnessGeneration);
     return identity != 0 ? identity : 1;
 }
 
@@ -175,7 +182,8 @@ static OverworldWildRuntimeStatus ValidateCacheKey(
     const OverworldWildRuntimeStaticCache *staticCache = &slot->staticCache;
     const OverworldWildRuntimeEffectiveCache *effective =
         &slot->effectiveCache;
-    const OverworldWildRuntimeProvenance *provenance = &slot->provenance;
+    const OverworldWildRuntimeResidentProvenance *provenance =
+        &slot->provenance;
     if (runtime == NULL || runtime->dataIncarnation == 0
         || slot->cacheIncarnation == 0)
         return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
@@ -210,11 +218,14 @@ static OverworldWildRuntimeStatus ValidateCacheKey(
         || provenance->effectiveGeneration != effective->effectiveGeneration
         || provenance->effectiveHash != effective->effectiveHash
         || provenance->freshnessGeneration == 0
-        || provenance->provenanceHash != ProvenanceHash(provenance)
+        || provenance->candidateCount
+            > OW_WILD_RUNTIME_MAX_PROVENANCE_CANDIDATES
+        || provenance->provenanceHash != ResidentProvenanceHash(provenance)
         || effective->provenanceHash != provenance->provenanceHash
         || effective->cacheIdentity != provenance->cacheIdentity
         || effective->cacheIdentity
-            != CacheIdentity(runtime, slot, effective, provenance,
+            != CacheIdentity(runtime, slot, effective,
+                provenance->freshnessGeneration,
                 sOverworldWildRuntimeLayerService.privateRuntimeIdentity))
         return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
     return OW_WILD_RUNTIME_STATUS_OK;
@@ -1460,6 +1471,7 @@ ComposeProspective(
 {
     OverworldWildRuntimeDefinition winnerDefinition;
     OverworldWildRuntimeResolvedNode winnerNode;
+    OverworldWildRuntimeResidentProvenance residentProvenance;
     OverworldWildRuntimeModifierWork modifiers[
         OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT
             + OW_WILD_RUNTIME_MAX_PROVENANCE_MODIFIERS];
@@ -1793,10 +1805,13 @@ ComposeProspective(
     provenanceOut->effectiveGeneration = effectiveOut->effectiveGeneration;
     provenanceOut->effectiveHash = effectiveOut->effectiveHash;
     provenanceOut->flags |= OW_WILD_RUNTIME_PROVENANCE_VALID;
-    provenanceOut->provenanceHash = ProvenanceHash(provenanceOut);
-    effectiveOut->provenanceHash = provenanceOut->provenanceHash;
+    StoreResidentProvenance(&residentProvenance, provenanceOut);
+    residentProvenance.provenanceHash =
+        ResidentProvenanceHash(&residentProvenance);
+    provenanceOut->provenanceHash = residentProvenance.provenanceHash;
+    effectiveOut->provenanceHash = residentProvenance.provenanceHash;
     effectiveOut->cacheIdentity = CacheIdentity(
-        runtime, slot, effectiveOut, provenanceOut,
+        runtime, slot, effectiveOut, provenanceOut->freshnessGeneration,
         prospectiveDataIncarnation != runtime->dataIncarnation
             ? OverworldWildRuntime_AdvanceNonzeroGeneration(
                 sOverworldWildRuntimeLayerService.privateRuntimeIdentity)
@@ -1883,8 +1898,8 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     u8 operationCount,
     OverworldWildRuntimeStackDeltaResult *result)
 {
-    OverworldWildRuntimeDeltaScratch *scratch =
-        &sOverworldWildRuntimeLayerService.scratch;
+    OverworldWildRuntimeDeltaScratch scratchStorage;
+    OverworldWildRuntimeDeltaScratch *scratch = &scratchStorage;
     OverworldWildRuntimeSlotSidecar *slot;
     OverworldWildRuntimeStatus status;
     OverworldWildRuntimeStaticCache prospectiveStatic;
@@ -2235,7 +2250,8 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     if (status != OW_WILD_RUNTIME_STATUS_OK) return Fail(result, status);
     if (!slot->presentationGate)
         ExpireHiddenTimers(prospectiveTimers, scratch->finalCount,
-            &prospectiveProvenance);
+            prospectiveProvenance.winningOwnerId,
+            prospectiveProvenance.winningInstanceKey);
     if (sOverworldWildRuntimeLayerService.preflightOnly)
         return OW_WILD_RUNTIME_STATUS_OK;
     if (rekey) {
@@ -2266,7 +2282,7 @@ static OverworldWildRuntimeStatus ApplyDeltaCore(
     slot->staticCache = prospectiveStatic;
     slot->cacheIncarnation = prospectiveEffective.cacheIncarnation;
     slot->effectiveCache = prospectiveEffective;
-    slot->provenance = prospectiveProvenance;
+    StoreResidentProvenance(&slot->provenance, &prospectiveProvenance);
     if (effectiveChanged)
         slot->effectiveGeneration = prospectiveEffective.effectiveGeneration;
     for (i = 0; i < operationCount; i++) {
@@ -2338,14 +2354,14 @@ static OverworldWildRuntimeStatus OneOperation(
     const OverworldWildRuntimeDeltaOperation *operation,
     OverworldWildRuntimeStackDeltaResult *result)
 {
+    OverworldWildRuntimeApplicabilityInput copiedApplicability;
     sOverworldWildRuntimeLayerService.oneOperation = *operation;
     if (applicability != NULL)
-        sOverworldWildRuntimeLayerService.oneApplicability = *applicability;
+        copiedApplicability = *applicability;
     else
-        memset(&sOverworldWildRuntimeLayerService.oneApplicability, 0,
-            sizeof(sOverworldWildRuntimeLayerService.oneApplicability));
+        memset(&copiedApplicability, 0, sizeof(copiedApplicability));
     return ApplyDeltaCore(runtime, slotIndex, expectedSlotGeneration,
-        &sOverworldWildRuntimeLayerService.oneApplicability,
+        &copiedApplicability,
         &sOverworldWildRuntimeLayerService.oneOperation, 1, result);
 }
 
@@ -2514,7 +2530,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_PrimeEffectiveCache(
     if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
     slot->staticCache = staticCache;
     slot->effectiveCache = effectiveCache;
-    slot->provenance = provenance;
+    StoreResidentProvenance(&slot->provenance, &provenance);
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
@@ -2583,14 +2599,50 @@ OverworldWildRuntimeStatus OverworldWildRuntime_GetProvenance(
     u32 expectedSlotGeneration,
     OverworldWildRuntimeProvenance *provenanceOut)
 {
+    const OverworldWildRuntimeSlotSidecar *slot;
+    const OverworldWildRuntimeResidentProvenance *resident;
+    OverworldWildRuntimeLayer layers[OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT];
+    OverworldWildRuntimeStaticCache staticCache;
+    OverworldWildRuntimeEffectiveCache effectiveCache;
     OverworldWildRuntimeStatus status;
+    BOOL changed;
+    u8 count;
+    u8 index;
     if (provenanceOut == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_HANDLE;
     status = ValidateCacheQuery(runtime, slotIndex, expectedSlotGeneration);
     if (status != OW_WILD_RUNTIME_STATUS_OK) {
         memset(provenanceOut, 0, sizeof(*provenanceOut));
         return status;
     }
-    *provenanceOut = runtime->slots[slotIndex].provenance;
+    slot = &runtime->slots[slotIndex];
+    count = slot->activeLayerCount;
+    if (count > OW_WILD_MAX_RUNTIME_LAYERS_PER_SLOT) {
+        memset(provenanceOut, 0, sizeof(*provenanceOut));
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    }
+    for (index = 0; index < count; index++)
+        ReadLayer(slot, index, &layers[index]);
+    status = ComposeProspective(runtime, slot, &slot->staticCache, layers,
+        count, slot->layerGeneration,
+        runtime->dataIncarnation, slot->cacheIncarnation, &staticCache,
+        &effectiveCache, provenanceOut, &changed);
+    if (status != OW_WILD_RUNTIME_STATUS_OK) {
+        memset(provenanceOut, 0, sizeof(*provenanceOut));
+        return status;
+    }
+    resident = &slot->provenance;
+    if (changed
+        || !BytesEqual(&provenanceOut->dataIncarnation,
+            &resident->dataIncarnation,
+            offsetof(OverworldWildRuntimeProvenance, candidateCount)
+                - offsetof(OverworldWildRuntimeProvenance,
+                    dataIncarnation))
+        || provenanceOut->candidateCount != resident->candidateCount) {
+        memset(provenanceOut, 0, sizeof(*provenanceOut));
+        return OW_WILD_RUNTIME_STATUS_INVALID_COMPOSITION;
+    }
+    memcpy(provenanceOut, (void *)resident,
+        offsetof(OverworldWildRuntimeProvenance, candidateCount));
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
@@ -2671,13 +2723,14 @@ OverworldWildRuntimeStatus OverworldWildRuntime_ValidateTimerQueryInternal(
 
 static BOOL ExpireHiddenTimer(
     OverworldWildRuntimeTimer *timer,
-    const OverworldWildRuntimeProvenance *provenance)
+    u16 winningOwnerId,
+    u16 winningInstanceKey)
 {
     if (!(timer->flags & OW_WILD_RUNTIME_TIMER_VALID)
         || timer->hiddenPolicy
             != OW_WILD_RUNTIME_HIDDEN_TIMER_EXPIRE_ON_HIDE
-        || (provenance->winningOwnerId == timer->ownerId
-            && provenance->winningInstanceKey == timer->instanceKey)
+        || (winningOwnerId == timer->ownerId
+            && winningInstanceKey == timer->instanceKey)
         || (timer->flags & OW_WILD_RUNTIME_TIMER_ZERO_PENDING))
         return FALSE;
     timer->remainingTicks = 0;
@@ -2688,11 +2741,12 @@ static BOOL ExpireHiddenTimer(
 static void ExpireHiddenTimers(
     OverworldWildRuntimeTimer *timers,
     u8 count,
-    const OverworldWildRuntimeProvenance *provenance)
+    u16 winningOwnerId,
+    u16 winningInstanceKey)
 {
     u8 i;
     for (i = 0; i < count; i++)
-        ExpireHiddenTimer(&timers[i], provenance);
+        ExpireHiddenTimer(&timers[i], winningOwnerId, winningInstanceKey);
 }
 
 #ifndef OW_WILD_RUNTIME_TIMER_EXTERNAL_SHARD
@@ -2731,7 +2785,8 @@ OverworldWildRuntimeStatus OverworldWildRuntime_SetTimerPresentationGate(
     slot->presentationGate = (u8)active;
     if (active) return OW_WILD_RUNTIME_STATUS_OK;
     ExpireHiddenTimers(slot->timerBank.timers, slot->activeLayerCount,
-        &slot->provenance);
+        slot->provenance.winningOwnerId,
+        slot->provenance.winningInstanceKey);
     return OW_WILD_RUNTIME_STATUS_OK;
 }
 
@@ -2771,7 +2826,9 @@ OverworldWildRuntimeStatus OverworldWildRuntime_TickCandidateTimers(
                 || timer->clock != clock
                 || (timer->flags & OW_WILD_RUNTIME_TIMER_ZERO_PENDING)
                 || timer->remainingTicks == 255) continue;
-            if (ExpireHiddenTimer(timer, &slot->provenance)) {
+            if (ExpireHiddenTimer(timer,
+                    slot->provenance.winningOwnerId,
+                    slot->provenance.winningInstanceKey)) {
                 result->changedTimerCount++;
                 continue;
             }

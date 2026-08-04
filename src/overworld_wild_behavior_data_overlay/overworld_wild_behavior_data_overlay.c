@@ -275,8 +275,11 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
     return FALSE;
 }
 
-static void *sOverworldWildSpawnMetadataBlob;
-static u32 sOverworldWildSpawnMetadataBlobSize;
+static OverworldWildSpawnMetadata sOverworldWildSpawnMetadataLastValue;
+static u16 sOverworldWildSpawnMetadataLastSpecies;
+static u8 sOverworldWildSpawnMetadataLastForm;
+static BOOL sOverworldWildSpawnMetadataValidated;
+static BOOL sOverworldWildSpawnMetadataLastValid;
 static BOOL sOverworldWildSpawnMetadataLoadAttempted;
 static void *sOverworldWildLevelUpLearnsetsNarc;
 static u32 sOverworldWildLevelUpLearnsetCache[MAX_LEVELUP_MOVES];
@@ -285,84 +288,34 @@ static u16 sOverworldWildLevelUpLearnsetCachedSpecies =
 static BOOL sOverworldWildLevelUpLearnsetOpenAttempted;
 static OverworldWildPersonalCacheState sOverworldWildPersonalCache;
 
-static u32 OverworldWildBehavior_SpawnMetadataChecksum(const u8 *blob, u32 size)
+static BOOL OverworldWildBehavior_ValidateSpawnMetadata(
+    void *narc,
+    u32 size)
 {
-    u32 checksum = 0;
-    u32 i;
+    OverworldWildSpawnMetadataBlobHeader header;
 
-    for (i = 0; i < size; i++) {
-        if (i < 32 || i >= 36) {
-            checksum += blob[i];
-        }
-    }
-    return checksum;
-}
-
-static BOOL OverworldWildBehavior_DecodeSpawnMetadata(void)
-{
-    const OverworldWildSpawnMetadataBlobHeader *header =
-        (const OverworldWildSpawnMetadataBlobHeader *)sOverworldWildSpawnMetadataBlob;
-    const OverworldWildSpawnMetadata *base;
-    const OverworldWildSpawnMetadataException *exceptions;
-    u32 baseSize;
-    u32 exceptionSize;
-    u32 previousKey = 0;
-    u32 i;
-
-    if (header == NULL
-        || sOverworldWildSpawnMetadataBlobSize < sizeof(*header)
-        || header->magic != OVERWORLD_WILD_SPAWN_METADATA_MAGIC
-        || header->version != OVERWORLD_WILD_SPAWN_METADATA_VERSION
-        || header->headerSize != sizeof(*header)
-        || header->totalSize != sOverworldWildSpawnMetadataBlobSize
-        || header->baseCount != MAX_MON_NUM + 1
-        || header->baseRecordSize != sizeof(OverworldWildSpawnMetadata)
-        || header->exceptionRecordSize != sizeof(OverworldWildSpawnMetadataException)
-        || header->formSpeciesBaseCount > header->baseCount
-        || header->flags != 0
-        || header->baseOffset != header->headerSize) {
+    if (narc == NULL
+        || size != OVERWORLD_WILD_SPAWN_METADATA_EXPECTED_SIZE)
         return FALSE;
-    }
-
-    baseSize = header->baseCount * sizeof(OverworldWildSpawnMetadata);
-    exceptionSize = header->exceptionCount * sizeof(OverworldWildSpawnMetadataException);
-    if (header->baseOffset > header->totalSize
-        || baseSize > header->totalSize - header->baseOffset
-        || header->exceptionsOffset != header->baseOffset + baseSize
-        || header->exceptionsOffset > header->totalSize
-        || exceptionSize > header->totalSize - header->exceptionsOffset
-        || header->totalSize != header->exceptionsOffset + exceptionSize
-        || header->checksum != OverworldWildBehavior_SpawnMetadataChecksum(
-            (const u8 *)header,
-            header->totalSize)) {
-        return FALSE;
-    }
-
-    base = (const OverworldWildSpawnMetadata *)((const u8 *)header + header->baseOffset);
-    for (i = 0; i < header->baseCount; i++) {
-        if (base[i].renderModePlusOne == 0
-            || base[i].renderModePlusOne > 64) {
-            return FALSE;
-        }
-    }
-
-    exceptions = (const OverworldWildSpawnMetadataException *)(
-        (const u8 *)header + header->exceptionsOffset);
-    for (i = 0; i < header->exceptionCount; i++) {
-        u32 key = ((u32)exceptions[i].species << 8) | exceptions[i].form;
-
-        if (exceptions[i].species >= header->baseCount
-            || exceptions[i].form == 0
-            || exceptions[i].form > OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM
-            || exceptions[i].reserved != 0
-            || exceptions[i].metadata.renderModePlusOne == 0
-            || exceptions[i].metadata.renderModePlusOne > 64
-            || (i != 0 && key <= previousKey)) {
-            return FALSE;
-        }
-        previousKey = key;
-    }
-    return TRUE;
+    NARC_ReadFromMember(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA,
+        0, sizeof(header), &header);
+    return header.magic == OVERWORLD_WILD_SPAWN_METADATA_MAGIC
+        && header.version == OVERWORLD_WILD_SPAWN_METADATA_VERSION
+        && header.headerSize == sizeof(header)
+        && header.totalSize == OVERWORLD_WILD_SPAWN_METADATA_EXPECTED_SIZE
+        && header.baseOffset == sizeof(header)
+        && header.baseCount == OVERWORLD_WILD_SPAWN_METADATA_BASE_COUNT
+        && header.baseRecordSize == sizeof(OverworldWildSpawnMetadata)
+        && header.exceptionsOffset
+            == OVERWORLD_WILD_SPAWN_METADATA_EXCEPTIONS_OFFSET
+        && header.exceptionCount
+            == OVERWORLD_WILD_SPAWN_METADATA_EXCEPTION_COUNT
+        && header.exceptionRecordSize
+            == sizeof(OverworldWildSpawnMetadataException)
+        && header.formSpeciesBaseCount
+            == OVERWORLD_WILD_SPAWN_METADATA_FORM_SPECIES_BASE_COUNT
+        && header.flags == 0
+        && header.checksum == OVERWORLD_WILD_SPAWN_METADATA_CHECKSUM;
 }
 
 static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)
@@ -371,32 +324,23 @@ static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)
     u32 size;
 
     if (sOverworldWildSpawnMetadataLoadAttempted) {
-        return sOverworldWildSpawnMetadataBlob != NULL;
+        return sOverworldWildSpawnMetadataValidated;
     }
     sOverworldWildSpawnMetadataLoadAttempted = TRUE;
     narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
     if (narc == NULL) {
         return FALSE;
     }
-    if (NARC_GetFileCount(narc) <= CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA) {
-        NARC_dtor(narc);
-        return FALSE;
-    }
-    size = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA);
-    if (size >= sizeof(OverworldWildSpawnMetadataBlobHeader)
-        && size <= OW_WILD_SPAWN_METADATA_MAX_BLOB_SIZE) {
-        sOverworldWildSpawnMetadataBlob = sys_AllocMemory(HEAPID_WORLD, size);
-    }
-    if (sOverworldWildSpawnMetadataBlob != NULL) {
-        NARC_ReadWholeMember(
-            narc,
-            CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA,
-            sOverworldWildSpawnMetadataBlob);
-        sOverworldWildSpawnMetadataBlobSize = size;
-    }
+    if (NARC_GetFileCount(narc) <= CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA)
+        size = 0;
+    else
+        size = NARC_GetMemberSize(narc,
+            CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA);
+    if (size == OVERWORLD_WILD_SPAWN_METADATA_EXPECTED_SIZE)
+        sOverworldWildSpawnMetadataValidated =
+            OverworldWildBehavior_ValidateSpawnMetadata(narc, size);
     NARC_dtor(narc);
-    if (sOverworldWildSpawnMetadataBlob == NULL
-        || !OverworldWildBehavior_DecodeSpawnMetadata()) {
+    if (!sOverworldWildSpawnMetadataValidated) {
         OverworldWildBehavior_CleanupSpawnMetadata();
         sOverworldWildSpawnMetadataLoadAttempted = TRUE;
         return FALSE;
@@ -587,9 +531,8 @@ static BOOL OverworldWildBehavior_TryGetSpawnMetadata(
     u8 form,
     OverworldWildSpawnMetadata *metadata)
 {
-    const OverworldWildSpawnMetadataBlobHeader *header;
-    const OverworldWildSpawnMetadata *base;
-    const OverworldWildSpawnMetadataException *exceptions;
+    OverworldWildSpawnMetadataException candidate;
+    void *narc;
     int low;
     int high;
 
@@ -600,39 +543,69 @@ static BOOL OverworldWildBehavior_TryGetSpawnMetadata(
         || !OverworldWildBehavior_LoadSpawnMetadata()) {
         return FALSE;
     }
-    header = (const OverworldWildSpawnMetadataBlobHeader *)sOverworldWildSpawnMetadataBlob;
-    if (form != 0 && species >= header->formSpeciesBaseCount) {
+    if (sOverworldWildSpawnMetadataLastValid
+        && sOverworldWildSpawnMetadataLastSpecies == species
+        && sOverworldWildSpawnMetadataLastForm == form) {
+        *metadata = sOverworldWildSpawnMetadataLastValue;
+        return TRUE;
+    }
+    if (form != 0
+        && species >= OVERWORLD_WILD_SPAWN_METADATA_FORM_SPECIES_BASE_COUNT) {
         return FALSE;
     }
-    base = (const OverworldWildSpawnMetadata *)((const u8 *)header + header->baseOffset);
-    exceptions = (const OverworldWildSpawnMetadataException *)(
-        (const u8 *)header + header->exceptionsOffset);
+    narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
+    if (narc == NULL) return FALSE;
     low = 0;
-    high = header->exceptionCount - 1;
+    high = OVERWORLD_WILD_SPAWN_METADATA_EXCEPTION_COUNT - 1;
     while (low <= high) {
         int middle = low + (high - low) / 2;
-        const OverworldWildSpawnMetadataException *candidate = &exceptions[middle];
-
-        if (candidate->species < species
-            || (candidate->species == species && candidate->form < form)) {
+        NARC_ReadFromMember(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA,
+            OVERWORLD_WILD_SPAWN_METADATA_EXCEPTIONS_OFFSET
+                + middle * sizeof(candidate),
+            sizeof(candidate), &candidate);
+        if (candidate.species < species
+            || (candidate.species == species && candidate.form < form)) {
             low = middle + 1;
-        } else if (candidate->species > species
-            || (candidate->species == species && candidate->form > form)) {
+        } else if (candidate.species > species
+            || (candidate.species == species && candidate.form > form)) {
             high = middle - 1;
         } else {
-            *metadata = candidate->metadata;
-            return TRUE;
+            if (candidate.species != species || candidate.form != form
+                || candidate.reserved != 0
+                || candidate.metadata.renderModePlusOne == 0
+                || candidate.metadata.renderModePlusOne > 64)
+                goto failure;
+            *metadata = candidate.metadata;
+            goto success;
         }
     }
-    *metadata = base[species];
+    NARC_ReadFromMember(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA,
+        sizeof(OverworldWildSpawnMetadataBlobHeader)
+            + species * sizeof(*metadata), sizeof(*metadata),
+        metadata);
+    if (metadata->renderModePlusOne == 0
+        || metadata->renderModePlusOne > 64)
+        goto failure;
+success:
+    NARC_dtor(narc);
+    sOverworldWildSpawnMetadataLastSpecies = species;
+    sOverworldWildSpawnMetadataLastForm = form;
+    sOverworldWildSpawnMetadataLastValue = *metadata;
+    sOverworldWildSpawnMetadataLastValid = TRUE;
     return TRUE;
+failure:
+    NARC_dtor(narc);
+    return FALSE;
 }
 
 static void OverworldWildBehavior_CleanupSpawnMetadata(void)
 {
-    sys_FreeMemoryEz(sOverworldWildSpawnMetadataBlob);
-    sOverworldWildSpawnMetadataBlob = NULL;
-    sOverworldWildSpawnMetadataBlobSize = 0;
+    memset(&sOverworldWildSpawnMetadataLastValue, 0,
+        sizeof(sOverworldWildSpawnMetadataLastValue));
+    sOverworldWildSpawnMetadataLastSpecies = 0;
+    sOverworldWildSpawnMetadataLastForm = 0;
+    sOverworldWildSpawnMetadataValidated = FALSE;
+    sOverworldWildSpawnMetadataLastValid = FALSE;
     sOverworldWildSpawnMetadataLoadAttempted = FALSE;
 }
 
