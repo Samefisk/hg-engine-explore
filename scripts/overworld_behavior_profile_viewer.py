@@ -411,7 +411,7 @@ def build_v40_state_profile_editor_data() -> dict:
         if not isinstance(name, str) or not name.strip() or not isinstance(tags, list):
             raise ParseError(f"V40 profile identity #{index} has invalid canonical metadata")
         registry_key = authored.get("registryKey", registry_key)
-        profiles.append({
+        profile = {
             "stableId": stable_id,
             "bodyId": body_id,
             "bodyRegistryKey": authored.get("bodyRegistryKey"),
@@ -426,7 +426,12 @@ def build_v40_state_profile_editor_data() -> dict:
                 for field_index, schema in enumerate(V40_STATE_FIELD_SCHEMA)
             },
             "backlinks": usages.get(stable_id, []),
-        })
+        }
+        if "promotionProvenance" in authored:
+            profile["promotionProvenance"] = copy.deepcopy(
+                authored["promotionProvenance"]
+            )
+        profiles.append(profile)
 
     all_controller_ids = [record[0] for record in controller_records]
     custom_roles = [

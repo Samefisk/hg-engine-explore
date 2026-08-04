@@ -15,6 +15,7 @@ from overworld_wild_behavior_model_v40 import (
     encode_model,
     intern_state_bodies,
     load_model,
+    merge_authored_metadata,
     read_inc,
     stable_history_digest,
     validate_model,
@@ -47,6 +48,60 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
         decoded = decode_blob(encoded, stable_id_history=self.model["stableIdHistory"])
         self.assertEqual(decoded, wire_projection(self.model))
         self.assertEqual(encode_model(decoded), encoded)
+
+    def test_promotion_provenance_is_validated_and_restored_as_metadata(self):
+        authored = copy.deepcopy(self.model)
+        node = authored["controllers"][0]["nodes"][0]
+        profile = next(
+            item for item in authored["stateProfiles"]
+            if item["stableId"] == node["profileId"]
+        )
+        promotion = {
+            "kind": "effective-stack-preview",
+            "sourceProfileId": profile["stableId"],
+            "sourceBodyId": profile["bodyId"],
+            "winningLayer": None,
+            "normalizations": [],
+            "fieldProvenance": {
+                field: {
+                    "kind": "base", "profileId": profile["stableId"],
+                    "nodeId": node["stableId"],
+                }
+                for field in profile["body"]["values"]
+            },
+        }
+        profile["promotionProvenance"] = promotion
+        validate_model(authored)
+        encoded = encode_model(authored)
+        self.assertEqual(encoded, self.committed_blob)
+        decoded = decode_blob(
+            encoded, stable_id_history=authored["stableIdHistory"],
+        )
+        self.assertNotIn("promotionProvenance", next(
+            item for item in decoded["stateProfiles"]
+            if item["stableId"] == profile["stableId"]
+        ))
+        self.assertEqual(merge_authored_metadata(decoded, authored), authored)
+
+        malformed = copy.deepcopy(authored)
+        malformed_profile = next(
+            item for item in malformed["stateProfiles"]
+            if item["stableId"] == profile["stableId"]
+        )
+        malformed_profile["promotionProvenance"]["fieldProvenance"].pop(
+            next(iter(profile["body"]["values"])),
+        )
+        with self.assertRaisesRegex(ModelError, "every state field"):
+            validate_model(malformed)
+
+        dangling = copy.deepcopy(authored)
+        dangling_profile = next(
+            item for item in dangling["stateProfiles"]
+            if item["stableId"] == profile["stableId"]
+        )
+        dangling_profile["promotionProvenance"]["sourceProfileId"] = 0xFFFF
+        with self.assertRaisesRegex(ModelError, "unknown stableId"):
+            validate_model(dangling)
 
     def test_real_blob_decodes_directly_with_explicit_history(self):
         decoded = decode_blob(

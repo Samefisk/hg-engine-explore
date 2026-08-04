@@ -65,6 +65,7 @@ SCALAR_KEYS = (
 POLICY_KEYS = ("spawnPolicyId", "populationPolicyId", "hookSetId")
 PROFILE_FIELDS = frozenset((
     "draftId", "stableId", "name", "descriptiveTags", "values", "templateProvenance",
+    "bodyMode", "bodyDraftId", "bodyRef", "promotionProvenance",
 ))
 CONTROLLER_FIELDS = frozenset((
     "draftId", "stableId", "name", "nodes", "scalarDefaults", "policyIds",
@@ -231,7 +232,6 @@ class _Allocator:
         self.draft_map: dict[str, int] = {}
         self.registry_by_draft: dict[str, str] = {}
         self.profile_body_by_draft: dict[str, tuple[int, str]] = {}
-        self.profile_body_signature_by_draft: dict[str, tuple[int, tuple[int, ...]]] = {}
         self.events: list[tuple[str, str]] = []
 
     def draft(self, draft_id: str, kind: str) -> int:
@@ -273,30 +273,27 @@ def _scan_allocations(
     model: dict[str, Any],
 ) -> None:
     # Parent then owned descendants is the stable, deterministic depth-first order.
-    bodies_by_signature = {
-        (
-            profile["body"]["provenanceKind"],
-            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
-        ): (profile["bodyId"], profile["bodyRegistryKey"])
-        for profile in sorted(model["stateProfiles"], key=lambda item: item["bodyId"], reverse=True)
-    }
     for index, raw in enumerate(changes["stateProfiles"]["create"]):
-        item = _object(raw, f"stateProfiles.create[{index}]")
-        draft = _draft_id(item.get("draftId"), f"stateProfiles.create[{index}].draftId")
+        path = f"stateProfiles.create[{index}]"
+        item = _object(raw, path)
+        draft = _draft_id(item.get("draftId"), f"{path}.draftId")
         allocator.draft(draft, "state-profile")
-        template = _object(item.get("templateProvenance"), f"stateProfiles.create[{index}].templateProvenance")
-        values = _object(item.get("values"), f"stateProfiles.create[{index}].values")
-        signature = (
-            _integer(template.get("kind"), f"stateProfiles.create[{index}].templateProvenance.kind", 7),
-            tuple(_integer(values.get(name), f"stateProfiles.create[{index}].values.{name}", 0xFF)
-                  for name in v40.STATE_FIELDS),
-        )
-        body = bodies_by_signature.get(signature)
-        if body is None:
-            body = allocator.owned("state-body")
-            bodies_by_signature[signature] = body
-        allocator.profile_body_by_draft[draft] = body
-        allocator.profile_body_signature_by_draft[draft] = signature
+        mode = item.get("bodyMode")
+        if mode not in ("shallow", "deep"):
+            raise _error(f"{path}.bodyMode must be shallow or deep")
+        if mode == "deep":
+            body_draft = _draft_id(item.get("bodyDraftId"), f"{path}.bodyDraftId")
+            body_id = allocator.draft(body_draft, "state-body")
+            allocator.profile_body_by_draft[draft] = (
+                body_id, _registry_for_draft(allocator, body_draft),
+            )
+            if item.get("bodyRef") is not None:
+                raise _error(f"{path}.bodyRef is only valid for a shallow body")
+        else:
+            if item.get("bodyDraftId") is not None:
+                raise _error(f"{path}.bodyDraftId is only valid for a deep body")
+            if item.get("bodyRef") is None:
+                raise _error(f"{path}.bodyRef is required for a shallow body")
 
     for operation in ("create", "update"):
         for index, raw in enumerate(changes["controllers"][operation]):
@@ -446,11 +443,103 @@ def _retire(key: str, retirements: list[str], seen: set[str]) -> None:
         retirements.append(key)
 
 
+def _promotion_provenance(
+    raw: Any, allocator: _Allocator, path: str,
+) -> dict[str, Any]:
+    item = _object(raw, path)
+    allowed = frozenset((
+        "kind", "sourceProfileId", "sourceBodyId", "winningLayer",
+        "normalizations", "fieldProvenance",
+    ))
+    _keys(item, allowed, allowed, path)
+    if item["kind"] != "effective-stack-preview":
+        raise _error(f"{path}.kind must be effective-stack-preview")
+    winning_raw = item["winningLayer"]
+    winning = None
+    if winning_raw is not None:
+        winning_item = _object(winning_raw, f"{path}.winningLayer")
+        winning_keys = frozenset(("definitionId", "ownerId", "instanceKey"))
+        _keys(winning_item, winning_keys, winning_keys, f"{path}.winningLayer")
+        winning = {
+            "definitionId": _resolve(
+                winning_item["definitionId"], allocator,
+                f"{path}.winningLayer.definitionId",
+            ),
+            "ownerId": _resolve(
+                winning_item["ownerId"], allocator,
+                f"{path}.winningLayer.ownerId",
+            ),
+            "instanceKey": _integer(
+                winning_item["instanceKey"],
+                f"{path}.winningLayer.instanceKey",
+            ),
+        }
+    normalizations = []
+    raw_normalizations = _array(item["normalizations"], f"{path}.normalizations")
+    if len(raw_normalizations) > len(v40.STATE_FIELDS):
+        raise _error(f"{path}.normalizations has too many entries")
+    for index, raw_normalization in enumerate(raw_normalizations):
+        normalization_path = f"{path}.normalizations[{index}]"
+        normalization = _object(raw_normalization, normalization_path)
+        keys = frozenset(("field", "rule", "before", "after"))
+        _keys(normalization, keys, keys, normalization_path)
+        if normalization["field"] not in v40.STATE_FIELDS:
+            raise _error(f"{normalization_path}.field is not a state field")
+        if normalization["rule"] not in (
+            "MAX_AT_LEAST_MIN", "DUPLICATE_SECONDARY_TILE",
+        ):
+            raise _error(f"{normalization_path}.rule is unknown")
+        normalizations.append({
+            "field": normalization["field"], "rule": normalization["rule"],
+            "before": _integer(normalization["before"], f"{normalization_path}.before", 0xFF),
+            "after": _integer(normalization["after"], f"{normalization_path}.after", 0xFF),
+        })
+    raw_fields = _object(item["fieldProvenance"], f"{path}.fieldProvenance")
+    if set(raw_fields) != set(v40.STATE_FIELDS):
+        raise _error(f"{path}.fieldProvenance must contain exactly the 28 state fields")
+    fields = {}
+    allowed_field_keys = frozenset((
+        "kind", "profileId", "nodeId", "definitionId", "ownerId", "instanceKey",
+    ))
+    for field in v40.STATE_FIELDS:
+        field_path = f"{path}.fieldProvenance.{field}"
+        record = _object(raw_fields[field], field_path)
+        _keys(record, allowed_field_keys, ("kind",), field_path)
+        if record["kind"] not in ("base", "override", "modifier"):
+            raise _error(f"{field_path}.kind is unknown")
+        output = {"kind": record["kind"]}
+        for key in ("profileId", "nodeId", "definitionId", "ownerId"):
+            if record.get(key) is not None:
+                output[key] = _resolve(record[key], allocator, f"{field_path}.{key}")
+        if record.get("instanceKey") is not None:
+            output["instanceKey"] = _integer(
+                record["instanceKey"], f"{field_path}.instanceKey",
+            )
+        if record["kind"] in ("base", "override") and not {
+                "profileId", "nodeId"}.issubset(output):
+            raise _error(f"{field_path} base/override provenance requires profileId and nodeId")
+        if record["kind"] == "modifier" and not {
+                "definitionId", "ownerId", "instanceKey"}.issubset(output):
+            raise _error(f"{field_path} modifier provenance requires definitionId, ownerId, and instanceKey")
+        fields[field] = output
+    return {
+        "kind": item["kind"],
+        "sourceProfileId": _resolve(
+            item["sourceProfileId"], allocator, f"{path}.sourceProfileId",
+        ),
+        "sourceBodyId": _resolve(
+            item["sourceBodyId"], allocator, f"{path}.sourceBodyId",
+        ),
+        "winningLayer": winning,
+        "normalizations": normalizations,
+        "fieldProvenance": fields,
+    }
+
+
 def _profile_record(
     item: dict[str, Any], creating: bool, existing: dict[str, Any] | None,
     allocator: _Allocator, provenance_by_kind: dict[int, int], path: str,
-    body_ref_counts: dict[int, int] | None = None,
-    bodies_by_signature: dict[tuple[int, tuple[int, ...]], tuple[int, str]] | None = None,
+    bodies_by_id: dict[int, tuple[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     required = ("name", "descriptiveTags", "values", "templateProvenance") if creating \
         else ("name", "descriptiveTags", "values")
@@ -463,7 +552,6 @@ def _profile_record(
     if creating:
         draft = identity  # type: ignore[assignment]
         stable_id = allocator.draft_map[draft]
-        body_id, body_key = allocator.profile_body_by_draft[draft]
         template = _object(item["templateProvenance"], f"{path}.templateProvenance")
         _keys(template, frozenset(("kind", "provenanceId")),
               ("kind", "provenanceId"), f"{path}.templateProvenance")
@@ -473,7 +561,19 @@ def _profile_record(
         )
         if provenance_kind not in provenance_by_kind or provenance_by_kind[provenance_kind] != provenance_id:
             raise _error(f"{path}.templateProvenance kind and semantic ID do not match")
-        return {
+        mode = item.get("bodyMode")
+        if mode == "deep":
+            body_id, body_key = allocator.profile_body_by_draft[draft]
+        elif mode == "shallow":
+            body_id = _resolve(item.get("bodyRef"), allocator, f"{path}.bodyRef")
+            if bodies_by_id is None or body_id not in bodies_by_id:
+                raise _error(f"{path}.bodyRef references an unknown state body")
+            body_key, shared_body = bodies_by_id[body_id]
+            if shared_body != {"provenanceKind": provenance_kind, "values": typed_values}:
+                raise _error(f"{path} shallow values/provenance must match the referenced body")
+        else:
+            raise _error(f"{path}.bodyMode must be shallow or deep")
+        result = {
             "stableId": stable_id, "bodyId": body_id,
             "registryKey": _registry_for_draft(allocator, draft), "bodyRegistryKey": body_key,
             "name": _name(item["name"], f"{path}.name"),
@@ -481,6 +581,12 @@ def _profile_record(
             "provenanceId": provenance_id, "sourceTags": {"tagA": 0, "tagB": 0},
             "body": {"provenanceKind": provenance_kind, "values": typed_values},
         }
+        if item.get("promotionProvenance") is not None:
+            result["promotionProvenance"] = _promotion_provenance(
+                item["promotionProvenance"], allocator,
+                f"{path}.promotionProvenance",
+            )
+        return result
     assert existing is not None
     if "templateProvenance" in item:
         template = _object(item["templateProvenance"], f"{path}.templateProvenance")
@@ -490,25 +596,29 @@ def _profile_record(
         }:
             raise _error(f"{path}.templateProvenance is read-only")
     result = copy.deepcopy(existing)
-    values_changed = typed_values != existing["body"]["values"]
-    signature = (
-        existing["body"]["provenanceKind"],
-        tuple(typed_values[name] for name in v40.STATE_FIELDS),
-    )
-    matching_body = bodies_by_signature.get(signature) if bodies_by_signature is not None else None
-    if values_changed and matching_body is not None:
-        result["bodyId"], result["bodyRegistryKey"] = matching_body
-    elif (values_changed and body_ref_counts is not None
-          and body_ref_counts.get(existing["bodyId"], 0) > 1):
-        result["bodyId"], result["bodyRegistryKey"] = allocator.owned("state-body")
-        if bodies_by_signature is not None:
-            bodies_by_signature[signature] = (
-                result["bodyId"], result["bodyRegistryKey"],
-            )
+    if item.get("bodyMode") not in (None, "shallow"):
+        raise _error(f"{path}.bodyMode may only be shallow when remapping a saved profile")
+    if item.get("bodyDraftId") is not None:
+        raise _error(f"{path}.bodyDraftId cannot replace the body of a saved profile")
+    if item.get("bodyRef") is not None:
+        body_id = _resolve(item["bodyRef"], allocator, f"{path}.bodyRef")
+        if bodies_by_id is None or body_id not in bodies_by_id:
+            raise _error(f"{path}.bodyRef references an unknown state body")
+        body_key, target_body = bodies_by_id[body_id]
+        if typed_values != target_body["values"]:
+            raise _error(f"{path}.values must match the remapped state body")
+        result["bodyId"], result["bodyRegistryKey"] = body_id, body_key
+        result["body"] = copy.deepcopy(target_body)
     if "name" in item:
         result["name"] = _name(item["name"], f"{path}.name")
     result["descriptiveTags"] = _tags(item["descriptiveTags"], f"{path}.descriptiveTags")
-    result["body"]["values"] = typed_values
+    if item.get("bodyRef") is None:
+        result["body"]["values"] = typed_values
+    if item.get("promotionProvenance") is not None:
+        result["promotionProvenance"] = _promotion_provenance(
+            item["promotionProvenance"], allocator,
+            f"{path}.promotionProvenance",
+        )
     return result
 
 
@@ -647,10 +757,6 @@ def _definition_record(
             result[key] = _integer(value, f"{path}.{key}", 0xFF)
         else:
             result[key] = _integer(value, f"{path}.{key}")
-    if existing is None and _has_generated_definition_metadata(result):
-        raise _error(
-            f"{path} cannot create generated tired/owner metadata outside importer regeneration"
-        )
     if existing is not None and _has_generated_definition_metadata(existing):
         existing_rule = _existing(
             existing["applicabilityId"], existing_applicability,
@@ -1151,76 +1257,69 @@ def _materialize(
     prior_body_keys = {
         profile["bodyId"]: profile["bodyRegistryKey"] for profile in profiles.values()
     }
-    body_ref_counts: dict[int, int] = {}
-    bodies_by_signature = {
-        (
-            profile["body"]["provenanceKind"],
-            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
-        ): (profile["bodyId"], profile["bodyRegistryKey"])
-        for profile in sorted(profiles.values(), key=lambda item: item["bodyId"], reverse=True)
+    bodies_by_id = {
+        profile["bodyId"]: (
+            profile["bodyRegistryKey"], copy.deepcopy(profile["body"]),
+        )
+        for profile in profiles.values()
     }
-    for profile in profiles.values():
-        body_ref_counts[profile["bodyId"]] = body_ref_counts.get(profile["bodyId"], 0) + 1
-    # New profiles already own their selected immutable bodies for the purpose
-    # of copy-on-write decisions, even though their records are materialized
-    # after updates. This prevents an update from mutating a body a create will use.
-    for draft, body in allocator.profile_body_by_draft.items():
-        body_id, body_key = body
-        signature = allocator.profile_body_signature_by_draft[draft]
-        body_ref_counts[body_id] = body_ref_counts.get(body_id, 0) + 1
-        bodies_by_signature.setdefault(signature, (body_id, body_key))
+    # Seed every same-transaction deep body before materializing profiles so a
+    # shallow alias may reference it regardless of create-array order.
+    for index, raw in enumerate(changes["stateProfiles"]["create"]):
+        path = f"stateProfiles.create[{index}]"
+        item = _object(raw, path)
+        if item.get("bodyMode") != "deep":
+            continue
+        profile_draft = _draft_id(item.get("draftId"), f"{path}.draftId")
+        body_id, body_key = allocator.profile_body_by_draft[profile_draft]
+        template = _object(item.get("templateProvenance"), f"{path}.templateProvenance")
+        values = _object(item.get("values"), f"{path}.values")
+        bodies_by_id[body_id] = (body_key, {
+            "provenanceKind": _integer(template.get("kind"), f"{path}.templateProvenance.kind", 7),
+            "values": {
+                name: _integer(values.get(name), f"{path}.values.{name}", 0xFF)
+                for name in v40.STATE_FIELDS
+            },
+        })
     for raw_id in changes["stateProfiles"]["remove"]:
         stable_id = _stable_id(raw_id, "stateProfiles.remove[]")
         record = _existing(stable_id, profiles, "stateProfiles.remove[]")
         _retire(record["registryKey"], retirements, retired)
-        body_ref_counts[record["bodyId"]] -= 1
         del profiles[stable_id]
+    edited_bodies: dict[int, dict[str, Any]] = {}
     for index, raw in enumerate(changes["stateProfiles"]["update"]):
         path = f"stateProfiles.update[{index}]"
         item = _object(raw, path)
         stable_id = _stable_id(item.get("stableId"), f"{path}.stableId")
         existing = _existing(stable_id, profiles, path)
-        old_signature = (
-            existing["body"]["provenanceKind"],
-            tuple(existing["body"]["values"][name] for name in v40.STATE_FIELDS),
-        )
         updated = _profile_record(
             item, False, existing, allocator,
-            provenance_by_kind, path, body_ref_counts, bodies_by_signature,
+            provenance_by_kind, path, bodies_by_id,
         )
-        new_signature = (
-            updated["body"]["provenanceKind"],
-            tuple(updated["body"]["values"][name] for name in v40.STATE_FIELDS),
-        )
-        body_ref_counts[existing["bodyId"]] -= 1
-        body_ref_counts[updated["bodyId"]] = body_ref_counts.get(updated["bodyId"], 0) + 1
-        if (existing["bodyId"] == updated["bodyId"] and old_signature != new_signature
-                and bodies_by_signature.get(old_signature, (None,))[0] == existing["bodyId"]):
-            del bodies_by_signature[old_signature]
-        bodies_by_signature[new_signature] = (
-            updated["bodyId"], updated["bodyRegistryKey"],
-        )
+        if item.get("bodyRef") is None and updated["body"] != existing["body"]:
+            body_id = existing["bodyId"]
+            prior_edit = edited_bodies.get(body_id)
+            if prior_edit is not None and prior_edit != updated["body"]:
+                raise _error(f"{path} conflicts with another edit to shared body {body_id}")
+            edited_bodies[body_id] = copy.deepcopy(updated["body"])
+            bodies_by_id[body_id] = (
+                existing["bodyRegistryKey"], copy.deepcopy(updated["body"]),
+            )
+            for alias in profiles.values():
+                if alias["bodyId"] == body_id:
+                    alias["body"] = copy.deepcopy(updated["body"])
         profiles[stable_id] = updated
     for index, raw in enumerate(changes["stateProfiles"]["create"]):
         path = f"stateProfiles.create[{index}]"
         item = _object(raw, path)
-        record = _profile_record(item, True, None, allocator, provenance_by_kind, path)
-        profiles[record["stableId"]] = record
-    body_groups: dict[tuple[int, tuple[int, ...]], list[dict[str, Any]]] = {}
-    for profile in profiles.values():
-        signature = (
-            profile["body"]["provenanceKind"],
-            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
+        record = _profile_record(
+            item, True, None, allocator, provenance_by_kind, path, bodies_by_id,
         )
-        body_groups.setdefault(signature, []).append(profile)
-    for group in body_groups.values():
-        representative = min(group, key=lambda profile: profile["bodyId"])
-        for profile in group:
-            if profile["bodyId"] != representative["bodyId"]:
-                _retire(profile["bodyRegistryKey"], retirements, retired)
-                profile["bodyId"] = representative["bodyId"]
-                profile["bodyRegistryKey"] = representative["bodyRegistryKey"]
-                profile["body"] = copy.deepcopy(representative["body"])
+        profiles[record["stableId"]] = record
+        bodies_by_id.setdefault(
+            record["bodyId"],
+            (record["bodyRegistryKey"], copy.deepcopy(record["body"])),
+        )
     used_body_ids = {profile["bodyId"] for profile in profiles.values()}
     for body_id, registry_key in prior_body_keys.items():
         if body_id not in used_body_ids:

@@ -132,7 +132,17 @@ function nextAvailableTransitionPriority(existingTransitions, candidate, minimum
   return null;
 }
 
-export function createCompleteStateDraft(fields, source = null, preferredName = "New state profile") {
+export function profileBodyRef(profile) {
+  return profile?.bodyDraftId ?? profile?.bodyRef ?? profile?.bodyId ?? null;
+}
+
+export function createCompleteStateDraft(
+  fields, source = null, preferredName = "New state profile", bodyMode = "deep",
+) {
+  if (!["shallow", "deep"].includes(bodyMode)) throw new TypeError("State duplication mode must be shallow or deep");
+  if (bodyMode === "shallow" && profileBodyRef(source) == null) {
+    throw new TypeError("Shallow state duplication requires a source body identity");
+  }
   const values = Object.fromEntries(fields.map((field) => [
     field.key,
     source?.values?.[field.key] ?? fieldDefault(field),
@@ -142,9 +152,14 @@ export function createCompleteStateDraft(fields, source = null, preferredName = 
       ? { kind: Number(source.bodyProvenance.kind), provenanceId: Number(source.provenanceId) }
       : null
   );
+  const profileDraftId = draftId();
   return {
-    draftId: draftId(),
+    draftId: profileDraftId,
     stableId: null,
+    bodyMode,
+    ...(bodyMode === "deep"
+      ? { bodyDraftId: `${profileDraftId}:body` }
+      : { bodyRef: profileBodyRef(source) }),
     name: String(preferredName || "New state profile").trim() || "New state profile",
     descriptiveTags: [...(source?.descriptiveTags || [])],
     values,
@@ -152,6 +167,100 @@ export function createCompleteStateDraft(fields, source = null, preferredName = 
     ...(templateProvenance ? { templateProvenance: clone(templateProvenance) } : {}),
     created: true,
   };
+}
+
+function normalizedEditorIdentity(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(value);
+  const text = String(value);
+  if (text.startsWith("draft:")) return text;
+  const match = /^(?:node|controller|state|profile):(\d+)$/.exec(text);
+  return match ? match[1] : /^\d+$/.test(text) ? String(Number(text)) : text;
+}
+
+function sameEditorIdentity(left, right) {
+  return normalizedEditorIdentity(left) === normalizedEditorIdentity(right);
+}
+
+export function createProfileMappingPreview({ model, controllerRef, nodeRef, profileRef } = {}) {
+  const controllers = model?.controllers || [];
+  const profiles = model?.stateProfiles || [];
+  const controller = controllers.find((item) => sameEditorIdentity(item.draftId ?? item.stableId, controllerRef));
+  const node = controller?.nodes?.find((item) => sameEditorIdentity(item.draftId ?? item.stableId, nodeRef));
+  const oldProfile = profiles.find((item) => sameEditorIdentity(item.draftId ?? item.stableId, nodeProfileRef(node)));
+  const newProfile = profiles.find((item) => sameEditorIdentity(item.draftId ?? item.stableId, profileRef));
+  const blockers = [];
+  if (!controller) blockers.push("Controller is missing.");
+  if (!node) blockers.push("Controller node is missing.");
+  if (!oldProfile) blockers.push("Current profile is missing.");
+  if (!newProfile) blockers.push("Target profile is missing.");
+  const backlinks = profiles.flatMap((profile) => (profile.backlinks || []));
+  const affected = node ? [{
+    controllerId: controller.draftId ?? controller.stableId,
+    nodeId: node.draftId ?? node.stableId,
+    semanticRoleId: Number(node.semanticRoleId),
+  }] : [];
+  return {
+    controllerRef: controller?.draftId ?? controller?.stableId ?? controllerRef,
+    nodeRef: node?.draftId ?? node?.stableId ?? nodeRef,
+    oldProfileRef: oldProfile?.draftId ?? oldProfile?.stableId ?? null,
+    oldBodyRef: profileBodyRef(oldProfile),
+    newProfileRef: newProfile?.draftId ?? newProfile?.stableId ?? null,
+    newBodyRef: profileBodyRef(newProfile),
+    relationship: profileBodyRef(oldProfile) != null && String(profileBodyRef(oldProfile)) === String(profileBodyRef(newProfile))
+      ? "shared" : "independent",
+    affected,
+    backlinks: backlinks.filter((item) => sameEditorIdentity(item.nodeId, nodeRef)),
+    blockers,
+  };
+}
+
+export function applyProfileMappingPreview(controller, preview) {
+  if (!preview || preview.blockers?.length) throw new TypeError("A blocker-free mapping preview is required");
+  if (!sameEditorIdentity(controller?.draftId ?? controller?.stableId, preview.controllerRef)) {
+    throw new TypeError("Mapping preview belongs to a different controller");
+  }
+  const result = clone(controller);
+  const node = result.nodes?.find((item) => sameEditorIdentity(item.draftId ?? item.stableId, preview.nodeRef));
+  if (!node) throw new TypeError("Mapping preview node no longer exists");
+  node.profileRef = preview.newProfileRef;
+  if ("profileStableId" in node) node.profileStableId = preview.newProfileRef;
+  return result;
+}
+
+export function createEffectiveStateDraft({ fields, promotion, profiles = [], preferredName = "" } = {}) {
+  if (!promotion?.values || !promotion?.source || !Array.isArray(fields) || !fields.length) throw new TypeError("A complete effective promotion is required");
+  const values = {};
+  for (const field of fields) {
+    if (!Object.hasOwn(promotion.values, field.key) || !Number.isInteger(Number(promotion.values[field.key]))) {
+      throw new TypeError(`Effective promotion is missing ${field.key}`);
+    }
+    values[field.key] = Number(promotion.values[field.key]);
+  }
+  if (Object.keys(promotion.values).length !== fields.length) throw new TypeError("Effective promotion contains non-state fields");
+  const sourceRef = promotion.source.sourceProfileId;
+  const source = profiles.find((item) => String(item.draftId ?? item.stableId) === String(sourceRef));
+  if (!source) throw new TypeError("Effective preview winning profile is unavailable");
+  const name = preferredName || `${source.name || "Effective state"} · effective snapshot`;
+  const promoted = createCompleteStateDraft(fields, source, name, "deep");
+  promoted.values = values;
+  promoted.descriptiveTags = [...new Set([...(source.descriptiveTags || []), "effective snapshot"])];
+  promoted.promotionProvenance = {
+    kind: "effective-stack-preview",
+    sourceProfileId: sourceRef,
+    sourceBodyId: profileBodyRef(source),
+    winningLayer: clone(promotion.source.winningLayer),
+    normalizations: clone(promotion.source.normalizations || []),
+    fieldProvenance: Object.fromEntries(fields.map(({ key }) => {
+      const provenance = promotion.source.fieldProvenance?.[key]?.provenance || {};
+      return [key, Object.fromEntries([
+        ["kind", provenance.kind], ["profileId", provenance.profileId],
+        ["nodeId", provenance.nodeId], ["definitionId", provenance.definitionId],
+        ["ownerId", provenance.ownerId], ["instanceKey", provenance.instanceKey],
+      ].filter(([, value]) => value !== undefined && value !== null))];
+    })),
+  };
+  return promoted;
 }
 
 export function createCompleteBehaviorSetDraft({
@@ -383,10 +492,45 @@ function nodeProfileRef(node) {
 
 export function createControllerDraft({
   source = null, profiles = [], transitions = [], policyDefaults = null,
-  transitionOrderStart = 0, behaviorModelAuthoring = null,
+  transitionOrderStart = 0, behaviorModelAuthoring = null, duplicationMode = "deep",
 } = {}) {
+  if (!["shallow", "deep"].includes(duplicationMode)) throw new TypeError("Controller duplication mode must be shallow or deep");
   const suppliedTransitionCount = transitions.length;
-  transitions = transitions.filter((transition) => !transitionIsReadOnly(transition));
+  const sourceControllerId = source?.draftId ?? source?.stableId ?? null;
+  const controllerBlockers = sourceControllerId == null
+    ? [] : (behaviorModelAuthoring?.controllerDeleteBlockers?.[String(sourceControllerId)] || []);
+  const controllerScope = (definition) => definition?.controllerId
+    ?? definition?.applicability?.controllerId
+    ?? (behaviorModelAuthoring?.applicability || []).find(
+      (item) => String(item.stableId) === String(definition?.applicabilityId),
+    )?.controllerId
+    ?? null;
+  const localTransitions = transitions.filter((transition) => controllerScope(transition.candidateDefinition) != null);
+  const generatedTransitions = localTransitions.filter((transition) => transitionIsReadOnly(transition)
+    && Number(transition.candidateDefinition?.kind) === 1);
+  const unsupportedTransitions = localTransitions.filter((transition) => Number(transition.candidateDefinition?.kind) !== 1);
+  const blockers = [];
+  if (duplicationMode === "shallow" && localTransitions.length) {
+    blockers.push(`${localTransitions.length} controller-local transition${localTransitions.length === 1 ? " requires" : "s require"} deep duplication.`);
+  }
+  if (controllerBlockers.length) {
+    const domains = [...new Set(controllerBlockers.map((item) => item.domain))].sort();
+    blockers.push(`${controllerBlockers.length} importer-owned backlink${controllerBlockers.length === 1 ? "" : "s"} in ${domains.join(", ")} require regeneration.`);
+  }
+  if (generatedTransitions.length) {
+    blockers.push(`${generatedTransitions.length} generated required-owner/tired-origin transition${generatedTransitions.length === 1 ? " requires" : "s require"} importer regeneration.`);
+  }
+  if (duplicationMode === "deep" && unsupportedTransitions.length) {
+    blockers.push(`${unsupportedTransitions.length} non-candidate transition row${unsupportedTransitions.length === 1 ? " is" : "s are"} not a cloneable controller state transition.`);
+  }
+  if (blockers.length) return {
+    controller: null, transitions: [], duplicationMode, blockers, identityMap: {},
+    closure: { generatedTransitionCount: generatedTransitions.length, sourceBacklinks: clone(controllerBlockers) },
+    omittedGeneratedTransitionCount: suppliedTransitionCount,
+  };
+  transitions = duplicationMode === "deep"
+    ? localTransitions.filter((transition) => Number(transition.candidateDefinition?.kind) === 1)
+    : [];
   const controllerDraftId = draftId();
   const profileId = profiles[0]?.draftId ?? profiles[0]?.stableId ?? null;
   const sourceNodes = source?.nodes?.length ? source.nodes : [{
@@ -394,19 +538,24 @@ export function createControllerDraft({
     base: true, optional: false, hidden: false,
   }];
   const nodeMap = new Map();
+  const identityMap = new Map();
+  if (sourceControllerId != null) identityMap.set(String(sourceControllerId), controllerDraftId);
   const nodes = sourceNodes.map((node, order) => {
     const copy = { ...clone(node), stableId: null, draftId: draftId(), controllerId: controllerDraftId, order };
-    [node.stableId, node.draftId, localNodeId(node)].filter(Boolean).forEach((id) => nodeMap.set(String(id), copy.draftId));
+    [node.stableId, node.draftId, localNodeId(node)].filter(Boolean).forEach((id) => {
+      nodeMap.set(String(id), copy.draftId);
+      identityMap.set(String(id), copy.draftId);
+    });
     return copy;
   });
   const transitionIdMap = new Map(transitions.map((transition) => [localTransitionId(transition), draftId()]));
   transitions.forEach((transition) => {
     if (transition.stableId) transitionIdMap.set(String(transition.stableId), transitionIdMap.get(localTransitionId(transition)));
     if (transition.draftId) transitionIdMap.set(String(transition.draftId), transitionIdMap.get(localTransitionId(transition)));
+    identityMap.set(String(transition.stableId ?? transition.draftId), transitionIdMap.get(localTransitionId(transition)));
   });
   const definitionMap = new Map();
   const applicabilityMap = new Map();
-  const sourceControllerId = source?.draftId ?? source?.stableId ?? null;
   for (const transition of transitions) {
     const sourceDefinition = transition.candidateDefinition || {};
     const definitionKey = String(transition.candidateDefinitionId ?? sourceDefinition.stableId ?? sourceDefinition.draftId);
@@ -414,6 +563,7 @@ export function createControllerDraft({
     const definition = clone(sourceDefinition);
     definition.stableId = null;
     definition.draftId = draftId();
+    identityMap.set(definitionKey, definition.draftId);
     definition.controllerId = controllerDraftId;
     const mappedNode = nodeMap.get(String(definition.nodeId)) || nodeMap.get(`node:${definition.nodeId}`);
     if (mappedNode) definition.nodeId = mappedNode;
@@ -433,6 +583,7 @@ export function createControllerDraft({
         const applicability = clone(sourceApplicability);
         applicability.stableId = null;
         applicability.draftId = draftId();
+        identityMap.set(String(applicabilityKey), applicability.draftId);
         applicability.controllerId = controllerDraftId;
         applicabilityMap.set(String(applicabilityKey), applicability);
       }
@@ -463,6 +614,12 @@ export function createControllerDraft({
     }));
     copy.actions = (copy.actions || []).map((action) => ({ ...action, stableId: null, draftId: draftId() }));
     copy.recoveryActions = (copy.recoveryActions || []).map((action) => ({ ...action, stableId: null, draftId: draftId() }));
+    for (const [sourceChild, child] of [
+      ...((transition.guards || []).map((item, index) => [item, copy.guards[index]])),
+      ...((transition.operations || []).map((item, index) => [item, copy.operations[index]])),
+      ...((transition.actions || []).map((item, index) => [item, copy.actions[index]])),
+      ...((transition.recoveryActions || []).map((item, index) => [item, copy.recoveryActions[index]])),
+    ]) identityMap.set(String(sourceChild.stableId ?? sourceChild.draftId), child.draftId);
     copy.created = true;
     return copy;
   });
@@ -484,6 +641,13 @@ export function createControllerDraft({
       created: true,
     },
     transitions: transitionCopies,
+    duplicationMode,
+    blockers,
+    identityMap: Object.fromEntries(identityMap),
+    closure: {
+      generatedTransitionCount: generatedTransitions.length,
+      sourceBacklinks: clone(controllerBlockers),
+    },
     omittedGeneratedTransitionCount: suppliedTransitionCount - transitions.length,
   };
 }
@@ -557,10 +721,10 @@ export function validateControllerDraft(controller, model, transitions = []) {
         || Number(transition.candidateDefinition?.priority) > 255) {
       errors.push({ path: `transitions.${id}.candidateDefinition.priority`, message: "Candidate priority must be 0–255." });
     }
-    if (Number(transition.candidateDefinition?.kind) !== 1) {
+    if (Number(transition.candidateDefinition?.kind) !== 1 && !transitionIsReadOnly(transition)) {
       errors.push({ path: `transitions.${id}.candidateDefinition.kind`, message: "Ordinary editor authoring supports state candidates only." });
     }
-    if (Number(transition.candidateDefinition?.channel) === 5) {
+    if (Number(transition.candidateDefinition?.channel) === 5 && !transitionIsReadOnly(transition)) {
       errors.push({ path: `transitions.${id}.candidateDefinition.channel`, message: "System Safety definitions are generated outside ordinary authoring." });
     }
     const exactNodeId = transition.candidateDefinition?.nodeId;
@@ -642,7 +806,16 @@ function compactProfile(profile, creating) {
     name: String(profile.name),
     descriptiveTags: [...(profile.descriptiveTags || [])],
     values: clone(profile.values || {}),
-    ...(creating ? { templateProvenance: clone(profile.templateProvenance) } : {}),
+    ...(profile.promotionProvenance ? { promotionProvenance: clone(profile.promotionProvenance) } : {}),
+    ...(creating ? {
+      templateProvenance: clone(profile.templateProvenance),
+      bodyMode: profile.bodyMode,
+      ...(profile.bodyMode === "deep"
+        ? { bodyDraftId: profile.bodyDraftId }
+        : { bodyRef: profile.bodyRef }),
+    } : profile.bodyRef != null && String(profile.bodyRef) !== String(profile.bodyId)
+      ? { bodyMode: "shallow", bodyRef: profile.bodyRef }
+      : {}),
   };
 }
 
@@ -854,6 +1027,7 @@ export function createProfilesController({
   let selectedTransitionId = String(state.selectedTransitionKey || "");
   let behaviorSetWizard = null;
   let controllerDeletePreview = null;
+  let profileMappingPreview = null;
 
   elements.profileKindFilter.innerHTML = `
     <option value="all">All states</option>
@@ -979,6 +1153,13 @@ export function createProfilesController({
     if (!profile || profile.created) return profile;
     if (!updates.has(profile.stableId)) updates.set(profile.stableId, clone(profile));
     return updates.get(profile.stableId);
+  }
+
+  function bodyAliases(profile) {
+    const bodyRef = profileBodyRef(profile);
+    return bodyRef == null ? [profile] : profiles().filter(
+      (candidate) => String(profileBodyRef(candidate)) === String(bodyRef),
+    );
   }
 
   function validationErrors() {
@@ -1114,7 +1295,7 @@ export function createProfilesController({
     if (mode === "controllers") return void renderControllerList();
     if (mode === "modifiers") return void renderModifierList();
     if (loading) {
-      list.innerHTML = `<div class="loading-card"><span></span><p>Loading V40 state profiles…</p></div>`;
+      list.innerHTML = `<div class="loading-card"><span></span><p>Loading V51 profile authoring…</p></div>`;
       return;
     }
     if (loadError) {
@@ -1516,12 +1697,14 @@ export function createProfilesController({
         <div><span class="eyebrow">One complete state</span><h2>${escapeHtml(profile.name)}</h2></div>
         <div class="v40-state-editor__actions">
           ${hasLocalDrafts ? `<button class="button" type="button" data-profile-action="reset-local">Discard local drafts</button>` : ""}
-          <button class="button" type="button" data-profile-action="duplicate">Duplicate state</button>
+          <button class="button" type="button" data-profile-action="duplicate-shallow">Duplicate shallow</button>
+          <button class="button" type="button" data-profile-action="duplicate-deep">Duplicate deep</button>
           <button class="button button--danger" type="button" data-profile-action="delete">Delete state</button>
         </div>
       </header>
       <section class="v40-state-identity" aria-labelledby="stateIdentityTitle">
         <div><span class="eyebrow" id="stateIdentityTitle">${profile.created ? "Draft identity" : "Stable identity"}</span><strong>${profile.created ? escapeHtml(profile.draftId) : `ID ${profile.stableId}`}</strong><small>${profile.created ? "Pending Global Save." : escapeHtml(profile.registryKey || "Runtime catalog identity")}</small></div>
+        <div><span class="eyebrow">State body</span><strong>${escapeHtml(profileBodyRef(profile) ?? "Pending")}</strong><small>${bodyAliases(profile).length > 1 ? `Shared by ${bodyAliases(profile).length} profiles; field edits update every alias.` : "Independent body; field edits affect only this profile."}</small></div>
         <label><span>Name</span><input type="text" value="${escapeHtml(profile.name)}" data-state-identity="name" aria-invalid="${nameError ? "true" : "false"}">${nameError ? `<small class="field-error">${escapeHtml(nameError.message)}</small>` : ""}</label>
         <label class="v40-state-tags"><span>Descriptive tags</span><input type="text" value="${escapeHtml(tagText)}" data-state-identity="descriptiveTags" placeholder="bird, air, relaxed"><small>Search and documentation only. Tags never select runtime behavior.</small></label>
       </section>
@@ -1799,7 +1982,8 @@ export function createProfilesController({
       </tr>`;
     }).join("");
     inspector.innerHTML = `<article class="profile-field-editor v40-controller-editor" data-selected-controller="${escapeHtml(controllerIdFor(controller))}">
-      <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed controller</span><h2>${escapeHtml(controller.name)}</h2><small>${controller.created ? escapeHtml(controller.draftId) : `Stable ID ${controller.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-controller-action="duplicate">Duplicate controller</button><button class="button button--danger" type="button" data-controller-action="delete">Delete controller</button></div></header>
+      <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed controller</span><h2>${escapeHtml(controller.name)}</h2><small>${controller.created ? escapeHtml(controller.draftId) : `Stable ID ${controller.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-controller-action="duplicate-shallow">Duplicate shallow</button><button class="button" type="button" data-controller-action="duplicate-deep">Duplicate deep</button><button class="button button--danger" type="button" data-controller-action="delete">Delete controller</button></div></header>
+      ${profileMappingPreview && String(profileMappingPreview.controllerRef) === String(controller.draftId || controller.stableId) ? `<aside class="v40-delete-preview" data-profile-mapping-preview><strong>Mapping preview</strong><p>Profile ${escapeHtml(profileMappingPreview.oldProfileRef)} / body ${escapeHtml(profileMappingPreview.oldBodyRef)} → profile ${escapeHtml(profileMappingPreview.newProfileRef)} / body ${escapeHtml(profileMappingPreview.newBodyRef)} (${escapeHtml(profileMappingPreview.relationship)}).</p><p>${profileMappingPreview.affected.length} controller node and ${profileMappingPreview.backlinks.length} authoritative backlink${profileMappingPreview.backlinks.length === 1 ? "" : "s"} affected.</p>${profileMappingPreview.blockers.length ? `<ul>${profileMappingPreview.blockers.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}<div><button type="button" data-profile-mapping-action="cancel">Cancel</button><button type="button" data-profile-mapping-action="apply" ${profileMappingPreview.blockers.length ? "disabled" : ""}>Apply mapping</button></div></aside>` : ""}
       ${errors.length || entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${errors.length + entityDiagnostics.length} model issue${errors.length + entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0]?.message || errors[0]?.message)}</span></aside>` : ""}
       <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label><div><span>Identity</span><strong>${controller.created ? escapeHtml(controller.draftId) : controller.stableId}</strong><small>${controller.created ? "Pending Global Save" : escapeHtml(controller.registryKey)}</small></div></section>
       <details class="pv2-field-section" open><summary><span><strong>Controller defaults</strong><small>Typed scalar defaults and stable policy references.</small></span></summary><div class="profile-fields">${scalarFields}${policyControls}</div></details>
@@ -1830,10 +2014,10 @@ export function createProfilesController({
     return true;
   }
 
-  function addProfile(source = null) {
+  function addProfile(source = null, bodyMode = "deep") {
     const preferred = source ? `${source.name} copy` : "New state profile";
     const draft = createCompleteStateDraft(
-      dataset.stateProfileFields, source || saved[0], ensureUniqueName(preferred),
+      dataset.stateProfileFields, source || saved[0], ensureUniqueName(preferred), bodyMode,
     );
     if (!source) {
       draft.name = ensureUniqueName(preferred);
@@ -1844,6 +2028,25 @@ export function createProfilesController({
     syncDirty();
     render();
     requestAnimationFrame(() => inspector.querySelector("[data-state-identity='name']")?.select());
+  }
+
+  function promoteEffectiveState(promotion) {
+    try {
+      const source = profiles().find((profile) => String(profile.draftId ?? profile.stableId)
+        === String(promotion?.source?.sourceProfileId));
+      const preferredName = ensureUniqueName(`${source?.name || "Effective state"} · effective snapshot`);
+      const draft = createEffectiveStateDraft({
+        fields: dataset.stateProfileFields, promotion, profiles: profiles(), preferredName,
+      });
+      created.push(draft);
+      selectedId = draft.draftId;
+      mode = "states";
+      syncDirty();
+      render();
+      setStatus(`${draft.name} created as an independent deep draft.`, "info");
+    } catch (error) {
+      setStatus(String(error?.message || error), "error");
+    }
   }
 
   function deleteSelectedProfile() {
@@ -1898,7 +2101,7 @@ export function createProfilesController({
     return `${base} ${suffix}`;
   }
 
-  function addController(source = null) {
+  function addController(source = null, duplicationMode = "deep") {
     // Shared transitions remain shared and gain the new controller through
     // membership. Only controller-scoped rows need an independent copy.
     const sourceTransitions = source
@@ -1909,7 +2112,12 @@ export function createProfilesController({
       policyDefaults: dataset.controllers?.[0]?.policyIds,
       transitionOrderStart: transitions().length,
       behaviorModelAuthoring: dataset.behaviorModelAuthoring,
+      duplicationMode,
     });
+    if (draft.blockers.length) {
+      setStatus(`Cannot ${duplicationMode}-duplicate ${source?.name || "controller"}: ${draft.blockers.join(" ")}`, "error");
+      return;
+    }
     draft.controller.name = uniqueControllerName(source ? `${source.name} copy` : "New controller");
     createdControllers.push(draft.controller);
     createdTransitions.push(...draft.transitions);
@@ -1921,7 +2129,6 @@ export function createProfilesController({
     selectedControllerId = draft.controller.draftId;
     syncDirty();
     render();
-    if (draft.omittedGeneratedTransitionCount) setStatus(`${draft.omittedGeneratedTransitionCount} generated transition row${draft.omittedGeneratedTransitionCount === 1 ? " was" : "s were"} omitted; regenerate that family through its system workflow.`, "info");
     requestAnimationFrame(() => inspector.querySelector("[data-controller-identity='name']")?.select());
   }
 
@@ -2099,14 +2306,14 @@ export function createProfilesController({
 
   function updateNode(nodeId, key, raw) {
     const selectedValue = selectedController();
-    const current = selectedValue?.nodes.find((item) => localNodeId(item) === nodeId);
+    const current = selectedValue?.nodes.find((item) => sameEditorIdentity(localNodeId(item), nodeId));
     if (!current) return;
     const value = key === "base" ? Boolean(raw)
       : key === "profileRef" && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
     if (key === "base" && current.base && value) return;
     if (key !== "base" && current[key] === value) return;
     const controller = editableController(selectedValue);
-    const node = controller?.nodes.find((item) => localNodeId(item) === nodeId);
+    const node = controller?.nodes.find((item) => sameEditorIdentity(localNodeId(item), nodeId));
     if (!node) return;
     if (key === "base") {
       controller.nodes.forEach((item) => { item.base = item === node; });
@@ -2126,6 +2333,26 @@ export function createProfilesController({
       }
     }
     syncDirty();
+  }
+
+  function requestProfileMapping(nodeId, raw) {
+    const controller = selectedController();
+    if (!controller) return;
+    profileMappingPreview = createProfileMappingPreview({
+      model: clientValidationModel(),
+      controllerRef: controller.draftId || controller.stableId,
+      nodeRef: nodeId,
+      profileRef: String(raw).startsWith("draft:") ? String(raw) : Number(raw),
+    });
+    renderInspector();
+  }
+
+  function applyProfileMapping() {
+    if (!profileMappingPreview || profileMappingPreview.blockers.length) return;
+    const preview = profileMappingPreview;
+    profileMappingPreview = null;
+    updateNode(preview.nodeRef, "profileRef", preview.newProfileRef);
+    renderInspector();
   }
 
   function nodeAction(nodeId, action) {
@@ -2667,8 +2894,10 @@ export function createProfilesController({
     const selectedValue = selected();
     const value = Number(raw);
     if (!selectedValue || selectedValue.values[key] === value) return;
-    const profile = editable(selectedValue);
-    profile.values[key] = value;
+    for (const alias of bodyAliases(selectedValue)) {
+      const profile = editable(alias);
+      profile.values[key] = value;
+    }
     syncDirty();
     renderList();
   }
@@ -2702,6 +2931,7 @@ export function createProfilesController({
     removedSpeciesAssignmentIds.clear();
     behaviorSetWizard = null;
     controllerDeletePreview = null;
+    profileMappingPreview = null;
     selectedId = previousStableId && saved.some((profile) => profile.stableId === previousStableId)
       ? `state:${previousStableId}`
       : (saved[0] ? `state:${saved[0].stableId}` : "");
@@ -2767,6 +2997,7 @@ export function createProfilesController({
         getDraft: () => state.v40BehaviorModelDraft,
         elements,
         setStatus,
+        onPromoteEffectiveState: promoteEffectiveState,
       });
       render();
     } catch (error) {
@@ -2785,6 +3016,13 @@ export function createProfilesController({
       return;
     }
     if (behaviorSetAction === "confirm") return void confirmBehaviorSetWizard();
+    const mappingAction = event.target.closest("[data-profile-mapping-action]")?.dataset.profileMappingAction;
+    if (mappingAction === "cancel") {
+      profileMappingPreview = null;
+      renderInspector();
+      return;
+    }
+    if (mappingAction === "apply") return void applyProfileMapping();
     const controllerDeleteAction = event.target.closest("[data-controller-delete-action]")?.dataset.controllerDeleteAction;
     if (controllerDeleteAction === "cancel") {
       controllerDeletePreview = null;
@@ -2804,11 +3042,13 @@ export function createProfilesController({
     if (action === "retry") return void load();
     if (action === "reset-local") return void resetLocalDrafts();
     if (action === "new") return void (mode === "controllers" ? addController() : mode === "modifiers" ? addModifier() : addProfile());
-    if (action === "duplicate") return void addProfile(selected());
+    if (action === "duplicate-shallow") return void addProfile(selected(), "shallow");
+    if (action === "duplicate-deep") return void addProfile(selected(), "deep");
     if (action === "delete") return void deleteSelectedProfile();
     const controllerActionName = event.target.closest("[data-controller-action]")?.dataset.controllerAction;
     if (controllerActionName === "new") return void addController();
-    if (controllerActionName === "duplicate") return void addController(selectedController());
+    if (controllerActionName === "duplicate-shallow") return void addController(selectedController(), "shallow");
+    if (controllerActionName === "duplicate-deep") return void addController(selectedController(), "deep");
     if (controllerActionName === "delete") return void requestControllerDeletion();
     if (controllerActionName === "add-node") return void addNode();
     if (controllerActionName === "add-transition") return void addTransition();
@@ -2843,7 +3083,7 @@ export function createProfilesController({
     else if (event.target.matches("[data-modifier-operation-field]")) updateModifierOperation(event.target.dataset.modifierOperationId, event.target.dataset.modifierOperationField, event.target.value);
     else if (event.target.matches("[data-controller-scalar]")) updateControllerValue("scalarDefaults", event.target.dataset.controllerScalar, event.target.value);
     else if (event.target.matches("[data-controller-policy]")) updateControllerValue("policyIds", event.target.dataset.controllerPolicy, event.target.value);
-    else if (event.target.matches("[data-node-field]") && event.target.dataset.nodeField !== "base") updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
+    else if (event.target.matches("[data-node-field]") && !["base", "profileRef"].includes(event.target.dataset.nodeField)) updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
     else if (event.target.matches("[data-transition-field]")) updateTransition(event.target.dataset.transitionId, event.target.dataset.transitionField, event.target.value);
     else if (event.target.matches("[data-definition-field]")) updateDefinition(event.target.dataset.transitionId, event.target.dataset.definitionField, event.target.value, event.target.checked);
     else if (event.target.matches("[data-applicability-field]")) updateApplicability(event.target.dataset.transitionId, event.target.dataset.applicabilityField, event.target.value);
@@ -2863,7 +3103,8 @@ export function createProfilesController({
       return;
     }
     if (event.target.matches("[data-node-field]")) {
-      updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
+      if (event.target.dataset.nodeField === "profileRef") requestProfileMapping(event.target.dataset.nodeId, event.target.value);
+      else updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
       renderInspector();
       return;
     }
@@ -2960,7 +3201,7 @@ export function createProfilesController({
       createdHookSets.splice(0); createdAssignmentActions.splice(0); removedAssignmentActionIds.clear();
       createdGenericAssignments.splice(0); genericAssignmentUpdates.clear(); removedGenericAssignmentIds.clear();
       createdSpeciesAssignments.splice(0); speciesAssignmentUpdates.clear(); removedSpeciesAssignmentIds.clear();
-      behaviorSetWizard = null; controllerDeletePreview = null;
+      behaviorSetWizard = null; controllerDeletePreview = null; profileMappingPreview = null;
       state.selectedProfileKey = selectedId;
       state.selectedControllerKey = selectedControllerId;
       syncDirty();

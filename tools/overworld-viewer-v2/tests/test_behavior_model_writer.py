@@ -40,6 +40,8 @@ def profile_payload(profile, *, draft_id=None, name=None):
     }
     if draft_id:
         result["draftId"] = draft_id
+        result["bodyMode"] = "deep"
+        result["bodyDraftId"] = f"{draft_id}:body"
         result["templateProvenance"] = {
             "kind": profile["body"]["provenanceKind"],
             "provenanceId": profile["provenanceId"],
@@ -47,6 +49,30 @@ def profile_payload(profile, *, draft_id=None, name=None):
     else:
         result["stableId"] = profile["stableId"]
     return result
+
+
+def promotion_payload(model, source_profile=None, source_node=None):
+    if source_node is None:
+        source_node = model["controllers"][0]["nodes"][0]
+    if source_profile is None:
+        source_profile = next(
+            item for item in model["stateProfiles"]
+            if item["stableId"] == source_node["profileId"]
+        )
+    return {
+        "kind": "effective-stack-preview",
+        "sourceProfileId": source_profile["stableId"],
+        "sourceBodyId": source_profile["bodyId"],
+        "winningLayer": None,
+        "normalizations": [],
+        "fieldProvenance": {
+            field: {
+                "kind": "base", "profileId": source_profile["stableId"],
+                "nodeId": source_node["stableId"],
+            }
+            for field in source_profile["body"]["values"]
+        },
+    }
 
 
 def node_payload(node, *, draft_id=None, profile_ref=None):
@@ -260,6 +286,28 @@ class BehaviorModelWriterTest(unittest.TestCase):
                 "generated candidate transitions and their children are read-only"):
             self.writer.apply_behavior_model_changes(self.workspace, {
                 "transitions": {"update": [update]},
+            })
+        self.assertEqual(self.bytes(), before)
+
+        generated_definition = next(
+            definition for definition in model["overrideDefinitions"]
+            if definition["stableId"] == generated_transition["definitionId"]
+        )
+        generated_rule = next(
+            rule for rule in model["applicability"]
+            if rule["stableId"] == generated_definition["applicabilityId"]
+        )
+        create = transition_payload(
+            generated_transition, generated_definition, generated_rule,
+            "draft:generated-transition", "draft:generated-definition",
+            applicability_identity="draft:generated-applicability",
+        )
+        create["order"] = len(model["transitions"])
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "cannot synthesize generated metadata"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "transitions": {"create": [create]},
             })
         self.assertEqual(self.bytes(), before)
 
@@ -902,12 +950,12 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
                 validate_wire(blob_path, self.workspace / HEADER_REL)
         saved = self.model()
         self.assertEqual(len(saved["controllers"]), 5)
-        self.assertEqual(len({profile["bodyId"] for profile in saved["stateProfiles"]}), 48)
+        self.assertEqual(len({profile["bodyId"] for profile in saved["stateProfiles"]}), 54)
         self.assertEqual(len(saved["stateProfiles"]), 64)
         self.assertGreater(sizes[0], baseline_size)
         self.assertGreater(sizes[1], sizes[0])
         self.assertLessEqual(sizes[1], 0x3000)
-        self.assertEqual(sizes, [11488, 11948])
+        self.assertEqual(sizes, [11584, 12140])
 
     def test_modifier_definition_create_update_delete_round_trip(self):
         model = self.model()
@@ -1036,12 +1084,13 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
             "controllers": {"create": [controller_draft]},
         })
         self.assertEqual(mapping["draft:node"], mapping["draft:controller"] + 1)
-        self.assertEqual(mapping["draft:controller"], mapping["draft:profile"] + 1)
+        self.assertEqual(mapping["draft:profile:body"], mapping["draft:profile"] + 1)
+        self.assertEqual(mapping["draft:controller"], mapping["draft:profile:body"] + 1)
         saved = self.model()
         profile = next(item for item in saved["stateProfiles"] if item["stableId"] == mapping["draft:profile"])
         controller = next(item for item in saved["controllers"] if item["stableId"] == mapping["draft:controller"])
         self.assertEqual(profile["name"], "Editor profile")
-        self.assertEqual(profile["bodyId"], model["stateProfiles"][0]["bodyId"])
+        self.assertEqual(profile["bodyId"], mapping["draft:profile:body"])
         self.assertEqual(controller["nodes"][0]["profileId"], mapping["draft:profile"])
         self.assertEqual(controller["nodes"][0]["stableId"], mapping["draft:node"])
 
@@ -1343,7 +1392,7 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
         })["draft:second"]
         self.assertGreater(second, first)
 
-    def test_shared_body_update_is_copy_on_write(self):
+    def test_shared_body_update_changes_every_alias(self):
         model = self.model()
         shared_id = next(
             body_id for body_id in {item["bodyId"] for item in model["stateProfiles"]}
@@ -1352,7 +1401,7 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
         left, right = [
             item for item in model["stateProfiles"] if item["bodyId"] == shared_id
         ][:2]
-        update = profile_payload(left, name="Copy-on-write profile")
+        update = profile_payload(left, name="Shared-body profile")
         update["values"]["speed"] = 2 if update["values"]["speed"] != 2 else 1
         self.writer.apply_behavior_model_changes(self.workspace, {
             "stateProfiles": {"update": [update]},
@@ -1360,79 +1409,30 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
         saved = self.model()
         updated = next(item for item in saved["stateProfiles"] if item["stableId"] == left["stableId"])
         untouched = next(item for item in saved["stateProfiles"] if item["stableId"] == right["stableId"])
-        self.assertNotEqual(updated["bodyId"], shared_id)
+        self.assertEqual(updated["bodyId"], shared_id)
         self.assertEqual(untouched["bodyId"], shared_id)
-        self.assertNotEqual(updated["body"]["values"], untouched["body"]["values"])
+        self.assertEqual(updated["body"]["values"], untouched["body"]["values"])
 
-    def test_body_split_rejoin_and_last_reference_retirement(self):
+    def test_explicit_deep_and_shallow_body_lifecycle(self):
         model = self.model()
         source = model["stateProfiles"][0]
-        existing_signatures = {
-            tuple(profile["body"]["values"][field] for field in self.writer.v40.STATE_FIELDS)
-            for profile in model["stateProfiles"]
-        }
-        unique_values = []
-        for movement_range in range(31, -1, -1):
-            values = copy.deepcopy(source["body"]["values"])
-            values["movementRange"] = movement_range
-            signature = tuple(values[field] for field in self.writer.v40.STATE_FIELDS)
-            if signature not in existing_signatures:
-                unique_values.append(values)
-                existing_signatures.add(signature)
-            if len(unique_values) == 2:
-                break
-        self.assertEqual(len(unique_values), 2)
-
         left = profile_payload(source, draft_id="draft:lifecycle-left", name="Lifecycle left")
         right = profile_payload(source, draft_id="draft:lifecycle-right", name="Lifecycle right")
-        left["values"] = copy.deepcopy(unique_values[0])
-        right["values"] = copy.deepcopy(unique_values[0])
+        right.pop("bodyDraftId")
+        right["bodyMode"] = "shallow"
+        right["bodyRef"] = "draft:lifecycle-left:body"
+        # Deliberately put the alias first: references are order independent.
         mapping = self.writer.apply_behavior_model_changes(self.workspace, {
-            "stateProfiles": {"create": [left, right]},
+            "stateProfiles": {"create": [right, left]},
         })
         saved = self.model()
         left_id, right_id = mapping["draft:lifecycle-left"], mapping["draft:lifecycle-right"]
         created_left = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
         created_right = next(item for item in saved["stateProfiles"] if item["stableId"] == right_id)
         self.assertEqual(created_left["bodyId"], created_right["bodyId"])
+        self.assertEqual(created_left["bodyId"], mapping["draft:lifecycle-left:body"])
         common_body_id = created_left["bodyId"]
         common_body_key = created_left["bodyRegistryKey"]
-
-        split = profile_payload(created_left, name="Lifecycle split")
-        split["values"] = copy.deepcopy(unique_values[1])
-        self.writer.apply_behavior_model_changes(self.workspace, {
-            "stateProfiles": {"update": [split]},
-        })
-        saved = self.model()
-        split_left = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
-        shared_right = next(item for item in saved["stateProfiles"] if item["stableId"] == right_id)
-        self.assertNotEqual(split_left["bodyId"], common_body_id)
-        self.assertEqual(shared_right["bodyId"], common_body_id)
-        split_body_key = split_left["bodyRegistryKey"]
-        allocations_before_rejoin = {
-            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
-            if event["kind"] == "allocate"
-        }
-
-        rejoin = profile_payload(split_left, name="Lifecycle rejoined")
-        rejoin["values"] = copy.deepcopy(shared_right["body"]["values"])
-        self.writer.apply_behavior_model_changes(self.workspace, {
-            "stateProfiles": {"update": [rejoin]},
-        })
-        saved = self.model()
-        rejoined = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
-        self.assertEqual(rejoined["bodyId"], common_body_id)
-        retired = {
-            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
-            if event["kind"] == "retire"
-        }
-        allocations_after_rejoin = {
-            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
-            if event["kind"] == "allocate"
-        }
-        self.assertEqual(allocations_after_rejoin, allocations_before_rejoin)
-        self.assertIn(split_body_key, retired)
-        self.assertNotIn(common_body_key, retired)
 
         self.writer.apply_behavior_model_changes(self.workspace, {
             "stateProfiles": {"remove": [left_id]},
@@ -1460,7 +1460,33 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
             item["bodyId"] for item in after_last_delete["stateProfiles"]
         })
 
-    def test_batch_body_reuse_updates_live_reference_counts(self):
+    def test_explicit_body_contract_rejects_invalid_modes_and_references(self):
+        source = self.model()["stateProfiles"][0]
+        missing_mode = profile_payload(source, draft_id="draft:missing-mode")
+        missing_mode.pop("bodyMode")
+        with self.assertRaisesRegex(self.writer.BehaviorModelWriteError, "bodyMode"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "stateProfiles": {"create": [missing_mode]},
+            })
+
+        shallow = profile_payload(source, draft_id="draft:unknown-body")
+        shallow.pop("bodyDraftId")
+        shallow.update({"bodyMode": "shallow", "bodyRef": 0xFFFF})
+        with self.assertRaisesRegex(self.writer.BehaviorModelWriteError, "unknown state body"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "stateProfiles": {"create": [shallow]},
+            })
+
+        remap = profile_payload(source)
+        target = next(item for item in self.model()["stateProfiles"]
+                      if item["bodyId"] != source["bodyId"])
+        remap.update({"bodyMode": "shallow", "bodyRef": target["bodyId"]})
+        with self.assertRaisesRegex(self.writer.BehaviorModelWriteError, "values must match"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "stateProfiles": {"update": [remap]},
+            })
+
+    def test_explicit_body_remap_does_not_depend_on_equal_values(self):
         model = self.model()
         body_counts = {
             body_id: sum(item["bodyId"] == body_id for item in model["stateProfiles"])
@@ -1476,26 +1502,12 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
             profiles[:2] for profiles in unique_by_provenance.values()
             if len(profiles) >= 2
         )
-        existing_signatures = {
-            tuple(profile["body"]["values"][field] for field in self.writer.v40.STATE_FIELDS)
-            for profile in model["stateProfiles"]
-        }
-        third_values = None
-        for movement_range in range(32, -1, -1):
-            candidate = copy.deepcopy(second["body"]["values"])
-            candidate["movementRange"] = movement_range
-            signature = tuple(candidate[field] for field in self.writer.v40.STATE_FIELDS)
-            if signature not in existing_signatures:
-                third_values = candidate
-                break
-        self.assertIsNotNone(third_values)
-
         first_update = profile_payload(first)
         first_update["values"] = copy.deepcopy(second["body"]["values"])
-        second_update = profile_payload(second)
-        second_update["values"] = third_values
+        first_update["bodyMode"] = "shallow"
+        first_update["bodyRef"] = second["bodyId"]
         self.writer.apply_behavior_model_changes(self.workspace, {
-            "stateProfiles": {"update": [first_update, second_update]},
+            "stateProfiles": {"update": [first_update]},
         })
         saved = self.model()
         saved_first = next(item for item in saved["stateProfiles"]
@@ -1504,8 +1516,88 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
                             if item["stableId"] == second["stableId"])
         self.assertEqual(saved_first["bodyId"], second["bodyId"])
         self.assertEqual(saved_first["body"]["values"], second["body"]["values"])
-        self.assertNotEqual(saved_second["bodyId"], second["bodyId"])
-        self.assertEqual(saved_second["body"]["values"], third_values)
+        self.assertEqual(saved_second["bodyId"], second["bodyId"])
+
+    def test_promotion_provenance_round_trips_without_entering_wire(self):
+        model = self.model()
+        source_node = model["controllers"][0]["nodes"][0]
+        source = next(
+            item for item in model["stateProfiles"]
+            if item["stableId"] == source_node["profileId"]
+        )
+        create = profile_payload(
+            source, draft_id="draft:promoted-profile", name="Promoted effective state",
+        )
+        create["promotionProvenance"] = promotion_payload(
+            model, source, source_node,
+        )
+        mapping = self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"create": [create]},
+        })
+        saved = self.model()
+        promoted = next(
+            item for item in saved["stateProfiles"]
+            if item["stableId"] == mapping["draft:promoted-profile"]
+        )
+        self.assertEqual(promoted["promotionProvenance"],
+                         create["promotionProvenance"])
+
+        blob = self.writer.v40.read_inc(self.workspace / INC_REL)
+        decoded = self.writer.v40.decode_blob(
+            blob, stable_id_history=saved["stableIdHistory"],
+        )
+        self.assertNotIn("promotionProvenance", next(
+            item for item in decoded["stateProfiles"]
+            if item["stableId"] == promoted["stableId"]
+        ))
+        self.assertEqual(
+            self.writer.v40.merge_authored_metadata(decoded, saved), saved,
+        )
+
+        rename = profile_payload(promoted, name="Promoted state reloaded")
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [rename]},
+        })
+        reloaded = self.model()
+        promoted = next(
+            item for item in reloaded["stateProfiles"]
+            if item["stableId"] == promoted["stableId"]
+        )
+        self.assertEqual(promoted["promotionProvenance"],
+                         create["promotionProvenance"])
+
+        viewer = load_viewer()
+        viewer.V40_BEHAVIOR_DATA_SOURCE = self.workspace / INC_REL
+        viewer.V40_BEHAVIOR_MODEL_SOURCE = self.workspace / MODEL_REL
+        editor = viewer.build_v40_state_profile_editor_data()
+        displayed = next(
+            item for item in editor["stateProfiles"]
+            if item["stableId"] == promoted["stableId"]
+        )
+        self.assertEqual(displayed["promotionProvenance"],
+                         create["promotionProvenance"])
+
+    def test_promotion_provenance_rejects_malformed_metadata_atomically(self):
+        model = self.model()
+        source = next(
+            item for item in model["stateProfiles"]
+            if item["stableId"] == model["controllers"][0]["nodes"][0]["profileId"]
+        )
+        create = profile_payload(
+            source, draft_id="draft:malformed-promotion", name="Malformed promotion",
+        )
+        create["promotionProvenance"] = promotion_payload(model)
+        create["promotionProvenance"]["fieldProvenance"].pop(
+            next(iter(source["body"]["values"])),
+        )
+        before = self.bytes()
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "fieldProvenance must contain exactly the 28 state fields"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "stateProfiles": {"create": [create]},
+            })
+        self.assertEqual(self.bytes(), before)
 
     def test_deep_cycles_and_definition_references_are_remapped(self):
         model = self.model()

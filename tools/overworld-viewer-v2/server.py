@@ -133,6 +133,14 @@ def build_behavior_model_editor_payload() -> dict[str, object]:
                 reference="fallbackControllerId",
             )
     payload["behaviorModelAuthoring"] = {
+        "formatVersion": 51,
+        "wireModelVersion": 40,
+        "capabilities": {
+            "explicitStateBodyOwnership": True,
+            "shallowDeepDuplication": True,
+            "mappingPreview": True,
+            "effectiveStatePromotion": True,
+        },
         "applicability": applicability_rows,
         "profileDeleteBlockers": profile_delete_blockers,
         "controllerDeleteBlockers": controller_delete_blockers,

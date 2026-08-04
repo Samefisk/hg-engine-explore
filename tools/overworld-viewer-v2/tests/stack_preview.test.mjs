@@ -3,6 +3,8 @@ import {
   STACK_PREVIEW_CODES,
   comparePrecedence,
   composeStackPreview,
+  createStackPreviewController,
+  extractEffectiveStateValues,
   materializePreviewModel,
   preserveStackPreviewSelection,
   resolveStackPreviewContext,
@@ -577,6 +579,144 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
     model: sequenceFixture(), context: { controllerRef: 1 },
     steps: Array.from({ length: STACK_SEQUENCE_LIMITS.steps + 1 }, () => ({ kind: "event", trigger: 1 })),
   }).errors[0].code, STACK_PREVIEW_CODES.LIMIT);
+}
+
+// Effective promotion extracts only the metadata-provided complete state after
+// modifier folding and normalization, without exposing adjacent runtime data.
+{
+  const model = fixture();
+  model.stateProfileFields.push(
+    { key: "hopMinDistance", label: "Hop min", type: "number", minimum: 0, maximum: 64 },
+    { key: "hopMaxDistance", label: "Hop max", type: "number", minimum: 0, maximum: 64 },
+  );
+  model.stateProfiles.forEach((item) => Object.assign(item.values, { hopMinDistance: 10, hopMaxDistance: 12 }));
+  const modifier = modifierDefinition(150);
+  model.overrideDefinitions.push(modifier);
+  model.applicability.push(applicability(modifier.applicabilityId));
+  model.modifierOperations.push({
+    stableId: 2150, definitionId: 150, operand: 7,
+    fieldNamespace: 1, fieldId: 3, operatorKind: 2, bound: 0, order: 0,
+  }, {
+    stableId: 2151, definitionId: 150, operand: 2,
+    fieldNamespace: 1, fieldId: 5, operatorKind: 1, bound: 0, order: 1,
+  });
+  const preview = compose(model, [layer(150, 201)]);
+  const before = structuredClone(preview);
+  const values = extractEffectiveStateValues(preview, model.stateProfileFields);
+  assert.equal(values.runtimeSpeed, 8);
+  assert.equal(values.hopMaxDistance, 10);
+  assert.deepEqual(Object.keys(values), model.stateProfileFields.map((field) => field.key));
+  values.runtimeSpeed = 63;
+  assert.deepEqual(preview, before);
+  assert.equal(Object.hasOwn(values, "controllerScalars"), false);
+  assert.equal(Object.hasOwn(values, "policies"), false);
+  assert.equal(Object.hasOwn(values, "layers"), false);
+}
+
+// Metadata defines the exact promoted shape, including the canonical 28-field
+// state body, and raw winning-profile values are never consulted.
+{
+  const stateFields = Array.from({ length: 28 }, (_, index) => ({ key: `field${index}`, type: "number" }));
+  const result = {
+    fields: Object.fromEntries(stateFields.map((field, index) => [field.key, { value: index + 100 }])),
+    identity: { controllerId: 1, nodeId: 2, profileId: 3, semanticRoleId: 4 },
+    controllerScalars: { ignored: { value: 91 } }, policies: { ignored: { value: 92 } },
+    rawWinningProfileValues: Object.fromEntries(stateFields.map((field) => [field.key, -1])),
+  };
+  assert.deepEqual(
+    extractEffectiveStateValues(result, stateFields),
+    Object.fromEntries(stateFields.map((field, index) => [field.key, index + 100])),
+  );
+}
+
+// Sequence promotion uses the last replayed snapshot, and comparisons always
+// select the final Draft snapshot rather than Saved.
+{
+  const model = sequenceFixture();
+  const replayed = runStackEventSequence({
+    model, context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: 9 }],
+  });
+  assert.equal(replayed.history[0].snapshot.fields.speed.value, 1);
+  assert.equal(extractEffectiveStateValues(replayed, model.stateProfileFields).speed, 3);
+  const compared = runStackEventSequence({
+    model, draft: { stateProfiles: { update: [{ ...profile(22, 17) }] } }, mode: "compare",
+    context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: 9 }],
+  });
+  assert.equal(compared.comparison.saved.result.fields.speed.value, 3);
+  assert.equal(compared.comparison.draft.result.fields.speed.value, 17);
+  assert.equal(extractEffectiveStateValues(compared, model.stateProfileFields).speed, 17);
+}
+
+// Missing, invalid, incomplete, and failed snapshots produce actionable
+// validation errors instead of partial state bodies.
+{
+  const metadata = [{ key: "first" }, { key: "second" }];
+  assert.throws(() => extractEffectiveStateValues(null, metadata), /completed stack preview/i);
+  assert.throws(() => extractEffectiveStateValues({ ok: false, result: null }, metadata), /resolve successfully/i);
+  assert.throws(() => extractEffectiveStateValues({ fields: { first: { value: 1 } } }, metadata), /missing state field second/i);
+  assert.throws(() => extractEffectiveStateValues({ fields: { first: { value: 1 }, second: { value: "2" } } }, metadata), /invalid value.*second/i);
+  assert.throws(() => extractEffectiveStateValues({ mode: "compare", comparison: { draft: null } }, metadata), /Draft side/i);
+}
+
+// The controller offers one promotion action only for a promotable result and
+// invokes the host once with a detached, deeply immutable payload.
+{
+  class FakeElement {
+    constructor() {
+      this.hidden = false;
+      this.innerHTML = "";
+      this.listeners = new Map();
+      this.classList = { add() {}, remove() {} };
+    }
+    addEventListener(kind, callback) { this.listeners.set(kind, callback); }
+    removeEventListener(kind) { this.listeners.delete(kind); }
+    dispatch(kind, target) { this.listeners.get(kind)?.({ target }); }
+    setAttribute() {}
+    closest() { return null; }
+  }
+  const workbench = new FakeElement();
+  const controls = new FakeElement();
+  const drawer = new FakeElement();
+  drawer.querySelector = (selector) => selector === ".resolver-drawer-controls" ? controls : null;
+  const resolution = new FakeElement();
+  const payloads = [];
+  const controller = createStackPreviewController({
+    model: sequenceFixture(), onPromoteEffectiveState: (payload) => payloads.push(payload),
+    elements: {
+      profileResolverDrawer: drawer, profileWorkbench: workbench,
+      openProfileResolver: new FakeElement(), closeProfileResolver: new FakeElement(),
+      profileResolution: resolution,
+    },
+  });
+  assert.ok(controller);
+  assert.match(resolution.innerHTML, /data-promote-effective-state/);
+  const target = { matches: (selector) => selector === "[data-promote-effective-state]" };
+  workbench.dispatch("click", target);
+  assert.equal(payloads.length, 1);
+  assert.equal(Object.isFrozen(payloads[0]), true);
+  assert.equal(Object.isFrozen(payloads[0].source.fieldProvenance), true);
+  assert.deepEqual(Object.keys(payloads[0].values), fields.map((field) => field.key));
+  assert.equal(payloads[0].source.sourceProfileId, 20);
+  assert.throws(() => { payloads[0].values.speed = 99; }, TypeError);
+  assert.equal(controller.result().result.fields.speed.value, 1);
+  controller.destroy();
+
+  const invalidModel = sequenceFixture();
+  invalidModel.stateProfiles[0].values.speed = 999;
+  const invalidDrawer = new FakeElement();
+  const invalidControls = new FakeElement();
+  invalidDrawer.querySelector = (selector) => selector === ".resolver-drawer-controls" ? invalidControls : null;
+  const invalidResolution = new FakeElement();
+  const invalidController = createStackPreviewController({
+    model: invalidModel, onPromoteEffectiveState() {},
+    elements: {
+      profileResolverDrawer: invalidDrawer, profileWorkbench: new FakeElement(),
+      openProfileResolver: new FakeElement(), closeProfileResolver: new FakeElement(),
+      profileResolution: invalidResolution,
+    },
+  });
+  assert.doesNotMatch(invalidResolution.innerHTML, /data-promote-effective-state/);
+  invalidController.destroy();
 }
 
 console.log("stack preview tests passed");

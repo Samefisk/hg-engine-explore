@@ -34,6 +34,95 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const ref = (entity) => entity?.draftId ?? entity?.stableId;
 const same = (left, right) => String(left) === String(right);
 
+function finalEffectiveSnapshot(preview) {
+  if (!preview || typeof preview !== "object") {
+    throw new TypeError("A completed stack preview is required to promote an effective state.");
+  }
+  if (preview.ok === false) {
+    throw new TypeError("The stack preview must resolve successfully before its effective state can be promoted.");
+  }
+  if (preview.mode === "compare" || preview.comparison) {
+    const draft = preview.comparison?.draft;
+    if (!draft || draft.ok === false) {
+      throw new TypeError("The Draft side of the stack comparison did not resolve successfully.");
+    }
+    const snapshot = draft.result?.fields ? draft.result : draft;
+    if (!snapshot?.fields) {
+      throw new TypeError("The Draft side of the stack comparison has no final effective snapshot.");
+    }
+    return snapshot;
+  }
+  const snapshot = preview.result?.fields ? preview.result : preview;
+  if (!snapshot?.fields) {
+    throw new TypeError("The stack preview has no final effective snapshot.");
+  }
+  return snapshot;
+}
+
+/** Extract only the complete state values from a resolved effective snapshot. */
+export function extractEffectiveStateValues(preview, stateFields) {
+  if (!Array.isArray(stateFields) || !stateFields.length) {
+    throw new TypeError("State-field metadata is required to promote an effective state.");
+  }
+  const snapshot = finalEffectiveSnapshot(preview);
+  const values = {};
+  const seen = new Set();
+  for (const [index, field] of stateFields.entries()) {
+    const key = field?.key;
+    if (typeof key !== "string" || !key.length) {
+      throw new TypeError(`State-field metadata at index ${index} has no valid key.`);
+    }
+    if (seen.has(key)) throw new TypeError(`State-field metadata contains duplicate key ${key}.`);
+    seen.add(key);
+    const record = snapshot.fields[key];
+    if (!record || !Object.hasOwn(record, "value")) {
+      throw new TypeError(`The final effective snapshot is missing state field ${key}.`);
+    }
+    const value = record.value;
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      throw new TypeError(`The final effective snapshot has an invalid value for state field ${key}.`);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.values(value).forEach(deepFreeze);
+  return Object.freeze(value);
+}
+
+function promotionPayload(preview, stateFields) {
+  const snapshot = finalEffectiveSnapshot(preview);
+  const values = extractEffectiveStateValues(preview, stateFields);
+  if (!snapshot.identity || snapshot.identity.profileId == null) {
+    throw new TypeError("The final effective snapshot has no source profile identity.");
+  }
+  const comparedDraft = preview.comparison?.draft;
+  const sourceContext = comparedDraft?.context ?? preview.context ?? null;
+  const fieldProvenance = Object.fromEntries(stateFields.map(({ key }) => [key, {
+    provenance: clone(snapshot.fields[key].provenance ?? null),
+    contributions: clone(snapshot.fields[key].contributions ?? []),
+    normalizations: clone(snapshot.fields[key].normalizations ?? []),
+  }]));
+  return deepFreeze(clone({
+    values,
+    source: {
+      kind: "effective-stack-preview",
+      mode: preview.mode || "result",
+      identity: snapshot.identity,
+      baseIdentity: snapshot.baseIdentity ?? null,
+      sourceProfileId: snapshot.identity.profileId,
+      winningLayer: snapshot.winningLayer ?? null,
+      normalizations: snapshot.normalizations ?? [],
+      fieldProvenance,
+      context: sourceContext,
+      dispatch: sourceContext?.dispatch ?? null,
+    },
+  }));
+}
+
 function issue(code, message, path = "") {
   return { code, message, path };
 }
@@ -955,7 +1044,9 @@ function escapeHtml(value) {
   })[character]);
 }
 
-export function createStackPreviewController({ model, getDraft = () => null, elements = {}, setStatus = () => {} } = {}) {
+export function createStackPreviewController({
+  model, getDraft = () => null, elements = {}, setStatus = () => {}, onPromoteEffectiveState = null,
+} = {}) {
   const drawer = elements.profileResolverDrawer;
   const workbench = elements.profileWorkbench;
   const open = elements.openProfileResolver;
@@ -976,6 +1067,7 @@ export function createStackPreviewController({ model, getDraft = () => null, ele
   let tickCount = 1;
   let tickPresentationGate = false;
   let destroyed = false;
+  let currentPromotion = null;
 
   function activeModel() {
     return mode === "saved" ? materializePreviewModel(model) : materializePreviewModel(model, getDraft());
@@ -1024,6 +1116,7 @@ export function createStackPreviewController({ model, getDraft = () => null, ele
   }
 
   function renderResult() {
+    currentPromotion = null;
     const preview = runStackEventSequence({
       model, draft: getDraft(), mode,
       context: { ...context, controllerRef }, initialLayers: layers, steps,
@@ -1033,6 +1126,13 @@ export function createStackPreviewController({ model, getDraft = () => null, ele
       return;
     }
     const result = preview.result;
+    if (typeof onPromoteEffectiveState === "function") {
+      try {
+        currentPromotion = promotionPayload(preview, model.stateProfileFields);
+      } catch (_error) {
+        currentPromotion = null;
+      }
+    }
     const layerRows = result.layers.map((layer) => `<tr><td>${escapeHtml(layer.definitionId)}</td><td>${escapeHtml(layer.ownerId)} / ${escapeHtml(layer.instanceKey)}</td><td><span class="stack-status stack-status--${escapeHtml(layer.visibility)}">${escapeHtml(layer.visibility)}</span></td><td>${escapeHtml(layer.timer.status)}${layer.timer.remainingTicks == null ? "" : ` · ${escapeHtml(layer.timer.remainingTicks)} / ${escapeHtml(layer.timer.armedDuration)}`}</td><td>${escapeHtml(layer.lifetime.map.label || layer.lifetime.map.value)} / ${escapeHtml(layer.lifetime.battle.label || layer.lifetime.battle.value)}</td></tr>`).join("");
     const fieldRows = Object.entries(result.fields).map(([key, item]) => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(item.value)}</td><td>${escapeHtml(item.provenance.kind)} · profile ${escapeHtml(item.provenance.profileId)}</td></tr>`).join("");
     const draftHistory = preview.history || [];
@@ -1050,7 +1150,7 @@ export function createStackPreviewController({ model, getDraft = () => null, ele
       return `<tr><td>${entry.index}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(stateSummary(entry.snapshot))}</td>${savedHistory[index] ? `<td>${escapeHtml(stateSummary(savedHistory[index].snapshot))}</td>` : ""}<td>${escapeHtml(entry.report?.status || entry.report?.kind || "resolved")}</td></tr>`;
     }).join("");
     const dispatch = preview.context?.dispatch;
-    resolution.innerHTML = `<header class="panel-heading"><span><small>Deterministic preview</small><strong>Effective state</strong></span><span class="result-chip">${preview.comparison ? (preview.comparison.changed ? "Changed" : "Same") : "Resolved"}</span></header><section class="stack-preview-result"><div class="stack-preview-identity"><span>Controller</span><strong>${escapeHtml(result.identity.controllerId)} · ${escapeHtml(dispatch?.kind || "explicit")}</strong><span>Node / profile / role</span><strong>${escapeHtml(result.identity.nodeId)} / ${escapeHtml(result.identity.profileId)} / ${escapeHtml(result.identity.semanticRoleId)}</strong></div><h3>Sequence</h3><table><thead><tr><th>#</th><th>Step</th><th>${preview.comparison ? "Draft" : "Effective"}</th>${preview.comparison ? "<th>Saved</th>" : ""}<th>Result</th></tr></thead><tbody>${timeline}</tbody></table><h3>Layers</h3><table><thead><tr><th>Definition</th><th>Owner / key</th><th>Status</th><th>Timer</th><th>Map / battle</th></tr></thead><tbody>${layerRows || `<tr><td colspan="5">Base state only</td></tr>`}</tbody></table><details><summary>Complete field provenance (${Object.keys(result.fields).length})</summary><table><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead><tbody>${fieldRows}</tbody></table></details><details><summary>Controller and policy provenance</summary><pre>${escapeHtml(JSON.stringify({ scalars: result.controllerScalars, policies: result.policies }, null, 2))}</pre></details></section>`;
+    resolution.innerHTML = `<header class="panel-heading"><span><small>Deterministic preview</small><strong>Effective state</strong></span><span>${currentPromotion ? `<button class="button" type="button" data-promote-effective-state>Effective → state</button>` : ""}<span class="result-chip">${preview.comparison ? (preview.comparison.changed ? "Changed" : "Same") : "Resolved"}</span></span></header><section class="stack-preview-result"><div class="stack-preview-identity"><span>Controller</span><strong>${escapeHtml(result.identity.controllerId)} · ${escapeHtml(dispatch?.kind || "explicit")}</strong><span>Node / profile / role</span><strong>${escapeHtml(result.identity.nodeId)} / ${escapeHtml(result.identity.profileId)} / ${escapeHtml(result.identity.semanticRoleId)}</strong></div><h3>Sequence</h3><table><thead><tr><th>#</th><th>Step</th><th>${preview.comparison ? "Draft" : "Effective"}</th>${preview.comparison ? "<th>Saved</th>" : ""}<th>Result</th></tr></thead><tbody>${timeline}</tbody></table><h3>Layers</h3><table><thead><tr><th>Definition</th><th>Owner / key</th><th>Status</th><th>Timer</th><th>Map / battle</th></tr></thead><tbody>${layerRows || `<tr><td colspan="5">Base state only</td></tr>`}</tbody></table><details><summary>Complete field provenance (${Object.keys(result.fields).length})</summary><table><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead><tbody>${fieldRows}</tbody></table></details><details><summary>Controller and policy provenance</summary><pre>${escapeHtml(JSON.stringify({ scalars: result.controllerScalars, policies: result.policies }, null, 2))}</pre></details></section>`;
   }
 
   function render() { renderControls(); renderResult(); }
@@ -1068,6 +1168,10 @@ export function createStackPreviewController({ model, getDraft = () => null, ele
   function onClick(event) {
     if (event.target === open) return void openDrawer();
     if (event.target === close) return void closeDrawer();
+    if (event.target.matches("[data-promote-effective-state]") && currentPromotion) {
+      onPromoteEffectiveState(currentPromotion);
+      return;
+    }
     if (event.target.matches("[data-stack-add]")) return void addLayer();
     if (event.target.matches("[data-stack-remove]")) { layers.splice(Number(event.target.dataset.stackRemove), 1); render(); }
     if (event.target.matches("[data-sequence-add-event]")) {

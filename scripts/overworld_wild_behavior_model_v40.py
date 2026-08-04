@@ -172,9 +172,70 @@ def _state_body_signature(profile: dict[str, Any]) -> tuple[int, tuple[int, ...]
     )
 
 
-def intern_state_bodies(model: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """Share exact immutable bodies while preserving every profile identity."""
+def _validate_promotion_provenance_shape(value: Any, label: str) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "kind", "sourceProfileId", "sourceBodyId", "winningLayer",
+        "normalizations", "fieldProvenance",
+    }:
+        raise ModelError(f"{label} has an invalid bounded shape")
+    if value["kind"] != "effective-stack-preview":
+        raise ModelError(f"{label}.kind is invalid")
+    for key in ("sourceProfileId", "sourceBodyId"):
+        if _integer(value[key], f"{label}.{key}") == 0:
+            raise ModelError(f"{label}.{key} cannot be zero")
+    winning = value["winningLayer"]
+    if winning is not None:
+        if not isinstance(winning, dict) or set(winning) != {
+                "definitionId", "ownerId", "instanceKey"}:
+            raise ModelError(f"{label}.winningLayer has an invalid bounded shape")
+        for key in ("definitionId", "ownerId", "instanceKey"):
+            _integer(winning[key], f"{label}.winningLayer.{key}")
+    normalizations = value["normalizations"]
+    if not isinstance(normalizations, list) or len(normalizations) > len(STATE_FIELDS):
+        raise ModelError(f"{label}.normalizations is invalid")
+    for index, record in enumerate(normalizations):
+        path = f"{label}.normalizations[{index}]"
+        if not isinstance(record, dict) or set(record) != {
+                "field", "rule", "before", "after"}:
+            raise ModelError(f"{path} has an invalid bounded shape")
+        if record["field"] not in STATE_FIELDS or record["rule"] not in {
+                "MAX_AT_LEAST_MIN", "DUPLICATE_SECONDARY_TILE"}:
+            raise ModelError(f"{path} has an invalid field/rule")
+        _integer(record["before"], f"{path}.before", 0xFF)
+        _integer(record["after"], f"{path}.after", 0xFF)
+    fields = value["fieldProvenance"]
+    if not isinstance(fields, dict) or set(fields) != set(STATE_FIELDS):
+        raise ModelError(f"{label}.fieldProvenance must contain every state field")
+    allowed = {"kind", "profileId", "nodeId", "definitionId", "ownerId", "instanceKey"}
+    for field, record in fields.items():
+        path = f"{label}.fieldProvenance.{field}"
+        if not isinstance(record, dict) or not set(record) <= allowed or "kind" not in record:
+            raise ModelError(f"{path} has an invalid bounded shape")
+        if record["kind"] not in {"base", "override", "modifier"}:
+            raise ModelError(f"{path}.kind is invalid")
+        for key in set(record) - {"kind"}:
+            _integer(record[key], f"{path}.{key}")
+        if record["kind"] in {"base", "override"} and not {
+                "profileId", "nodeId"} <= set(record):
+            raise ModelError(f"{path} is missing state source identities")
+        if record["kind"] == "modifier" and not {
+                "definitionId", "ownerId", "instanceKey"} <= set(record):
+            raise ModelError(f"{path} is missing modifier source identities")
+
+
+def intern_state_bodies(
+    model: dict[str, Any], *, allow_identity_collapse: bool = False,
+) -> tuple[dict[str, Any], int]:
+    """Optionally coalesce bodies for one-off imports, never ordinary authoring.
+
+    V51 authoring treats body identity as deliberate: equal values do not imply
+    shared ownership.  Callers performing a legacy import must opt in to the
+    destructive identity collapse explicitly.
+    """
     result = copy.deepcopy(model)
+    if not allow_identity_collapse:
+        validate_model(result)
+        return result, 0
     groups: dict[tuple[int, tuple[int, ...]], list[dict[str, Any]]] = {}
     for profile in result["stateProfiles"]:
         groups.setdefault(_state_body_signature(profile), []).append(profile)
@@ -428,6 +489,11 @@ def validate_model(model: dict[str, Any]) -> None:
             raise ModelError(f"shared state body {body_id} has conflicting records")
         bodies_by_id[body_id] = (body_key, body)
         body_ids.add(body_id)
+        if "promotionProvenance" in profile:
+            _validate_promotion_provenance_shape(
+                profile["promotionProvenance"],
+                f"profile {profile['stableId']}.promotionProvenance",
+            )
 
     controller_ids = _unique_ids(controllers, "controllers")
     node_ids: set[int] = set()
@@ -672,6 +738,39 @@ def validate_model(model: dict[str, Any]) -> None:
             raise ModelError(
                 f"profile {profile['stableId']} provenance is not a provenance semanticId"
             )
+        promotion = profile.get("promotionProvenance")
+        if promotion:
+            require_reference(
+                promotion["sourceProfileId"], profile_ids,
+                "promotion.sourceProfileId",
+            )
+            require_reference(
+                promotion["sourceBodyId"], body_ids,
+                "promotion.sourceBodyId",
+            )
+            winning = promotion["winningLayer"]
+            if winning:
+                require_reference(
+                    winning["definitionId"], definition_ids,
+                    "promotion.winningLayer.definitionId",
+                )
+                require_reference(
+                    winning["ownerId"], owner_ids,
+                    "promotion.winningLayer.ownerId",
+                )
+            for record in promotion["fieldProvenance"].values():
+                if "profileId" in record:
+                    require_reference(record["profileId"], profile_ids,
+                                      "promotion.field.profileId")
+                if "nodeId" in record:
+                    require_reference(record["nodeId"], node_ids,
+                                      "promotion.field.nodeId")
+                if "definitionId" in record:
+                    require_reference(record["definitionId"], definition_ids,
+                                      "promotion.field.definitionId")
+                if "ownerId" in record:
+                    require_reference(record["ownerId"], owner_ids,
+                                      "promotion.field.ownerId")
     for controller in controllers:
         require_reference(controller["spawnPolicyId"], spawn_ids, "controller.spawnPolicyId")
         require_reference(controller["populationPolicyId"], population_ids,
@@ -1706,7 +1805,7 @@ def merge_authored_metadata(
     """Restore canonical editor metadata that is intentionally absent on wire."""
     result = copy.deepcopy(wire_model)
     for section, fields in (
-        ("stateProfiles", ("name", "descriptiveTags")),
+        ("stateProfiles", ("name", "descriptiveTags", "promotionProvenance")),
         ("controllers", ("name",)),
         ("transitions", ("name",)),
         ("overrideDefinitions", ("name",)),

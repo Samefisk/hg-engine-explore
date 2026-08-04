@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import {
   createCompleteStateDraft,
+  createEffectiveStateDraft,
+  createProfileMappingPreview,
+  applyProfileMappingPreview,
+  profileBodyRef,
   createCompleteBehaviorSetDraft,
   createControllerDraft,
   createModifierDraft,
@@ -31,7 +35,7 @@ const compactDraft = compactBehaviorModelDraft({ stateProfiles: { create: [draft
 });
 assert.equal(behaviorModelChangeCount(compactDraft), 1);
 assert.deepEqual(Object.keys(compactDraft.stateProfiles.create[0]).sort(), [
-  "descriptiveTags", "draftId", "name", "templateProvenance", "values",
+  "bodyDraftId", "bodyMode", "descriptiveTags", "draftId", "name", "templateProvenance", "values",
 ].sort());
 
 const copy = createCompleteStateDraft(fields, {
@@ -43,6 +47,66 @@ assert.equal(copy.name, "Bird active copy");
 assert.equal("semanticRole" in copy, false);
 assert.deepEqual(copy.descriptiveTags, ["bird", "air"]);
 assert.deepEqual(copy.values, { behaviorKind: 1, hopMinDistance: 2, hopMaxDistance: 5 });
+const savedBody = { ...copy, stableId: 90, draftId: null, bodyId: 500 };
+delete savedBody.bodyDraftId;
+delete savedBody.bodyMode;
+savedBody.templateProvenance = { kind: 1, provenanceId: 36865 };
+savedBody.backlinks = [{ controllerId: 7, nodeId: 8, semanticRoleId: 1 }];
+const shallowCopy = createCompleteStateDraft(fields, savedBody, "Bird shared", "shallow");
+const deepCopy = createCompleteStateDraft(fields, savedBody, "Bird independent", "deep");
+assert.equal(profileBodyRef(shallowCopy), 500);
+assert.equal(shallowCopy.bodyDraftId, undefined);
+assert.match(deepCopy.bodyDraftId, /^draft:.*:body$/);
+assert.notEqual(profileBodyRef(deepCopy), profileBodyRef(savedBody));
+assert.deepEqual(compactBehaviorModelDraft({ stateProfiles: { create: [shallowCopy, deepCopy] } }, {
+  stateProfiles: [savedBody], controllers: [], transitionGraph: { transitions: [] },
+}).stateProfiles.create.map((item) => item.bodyMode), ["shallow", "deep"]);
+
+const mappingPreview = createProfileMappingPreview({
+  model: {
+    stateProfiles: [savedBody, shallowCopy, deepCopy],
+    controllers: [{ stableId: 7, nodes: [{ stableId: 8, profileStableId: 90, semanticRoleId: 1 }] }],
+  },
+  controllerRef: "controller:7", nodeRef: "node:8", profileRef: shallowCopy.draftId,
+});
+assert.equal(mappingPreview.relationship, "shared");
+assert.deepEqual(mappingPreview.blockers, []);
+assert.deepEqual(mappingPreview.affected, [{ controllerId: 7, nodeId: 8, semanticRoleId: 1 }]);
+assert.deepEqual(mappingPreview.backlinks, [{ controllerId: 7, nodeId: 8, semanticRoleId: 1 }]);
+const unmappedController = { stableId: 7, nodes: [{ stableId: 8, profileStableId: 90, semanticRoleId: 1 }] };
+const mappedController = applyProfileMappingPreview(unmappedController, mappingPreview);
+assert.equal(mappedController.nodes[0].profileRef, shallowCopy.draftId);
+assert.equal(unmappedController.nodes[0].profileStableId, 90);
+assert.equal(mappingPreview.oldProfileRef, 90);
+const resetPreview = createProfileMappingPreview({
+  model: { stateProfiles: [savedBody, shallowCopy, deepCopy], controllers: [unmappedController] },
+  controllerRef: "controller:7", nodeRef: "node:8", profileRef: shallowCopy.draftId,
+});
+assert.equal(resetPreview.oldProfileRef, 90);
+const promoted = createEffectiveStateDraft({
+  fields,
+  promotion: {
+    values: { behaviorKind: 2, hopMinDistance: 3, hopMaxDistance: 3 },
+    source: {
+      sourceProfileId: 90,
+      winningLayer: { definitionId: 4, ownerId: 5, instanceKey: 6 },
+      normalizations: [{ field: "hopMaxDistance", rule: "MAX_AT_LEAST_MIN", before: 2, after: 3 }],
+      fieldProvenance: Object.fromEntries(fields.map(({ key }) => [key, {
+        provenance: { kind: "base", profileId: 90, nodeId: 8 },
+      }])),
+    },
+  },
+  profiles: [savedBody],
+});
+assert.deepEqual(promoted.values, { behaviorKind: 2, hopMinDistance: 3, hopMaxDistance: 3 });
+assert.equal(promoted.bodyMode, "deep");
+assert.equal(promoted.promotionProvenance.sourceBodyId, 500);
+const compactPromotion = compactBehaviorModelDraft({ stateProfiles: { create: [promoted] } }, {
+  stateProfiles: [savedBody], controllers: [], transitionGraph: { transitions: [] },
+}).stateProfiles.create[0].promotionProvenance;
+assert.equal(compactPromotion.sourceProfileId, 90);
+assert.equal(compactPromotion.sourceBodyId, 500);
+assert.deepEqual(compactPromotion.fieldProvenance.behaviorKind, { kind: "base", profileId: 90, nodeId: 8 });
 
 const modifierFields = [
   ...fields,
@@ -282,7 +346,21 @@ assert.deepEqual(controllerCopy.transitions.map((item) => item.order), [20, 21])
 assert.equal(controllerCopy.transitions[0].candidateDefinitionId, controllerCopy.transitions[0].candidateDefinition.draftId);
 assert.deepEqual(controllerCopy.transitions[0].controllerIds, [controllerCopy.controller.draftId]);
 assert.equal(controllerCopy.transitions[0].guards[0].referenceId, controllerCopy.controller.nodes[0].draftId);
+assert.equal(controllerCopy.duplicationMode, "deep");
+assert.deepEqual(controllerCopy.blockers, []);
+assert.equal(controllerCopy.identityMap[String(controllerSource.stableId)], controllerCopy.controller.draftId);
+assert.equal(controllerCopy.identityMap[String(controllerSource.nodes[0].stableId)], controllerCopy.controller.nodes[0].draftId);
 assert.deepEqual(validateControllerDraft(controllerCopy.controller, controllerModel, controllerCopy.transitions), []);
+const shallowRefusal = createControllerDraft({
+  source: controllerSource,
+  profiles: controllerModel.stateProfiles,
+  transitions: [transitionSource],
+  behaviorModelAuthoring: controllerModel.behaviorModelAuthoring,
+  duplicationMode: "shallow",
+});
+assert.equal(shallowRefusal.transitions.length, 0);
+assert.equal(shallowRefusal.controller, null);
+assert.match(shallowRefusal.blockers.join(" "), /deep duplication/i);
 const generatedClone = createControllerDraft({
   source: controllerSource,
   profiles: controllerModel.stateProfiles,
@@ -294,8 +372,11 @@ const generatedClone = createControllerDraft({
     },
   }],
 });
+assert.equal(generatedClone.controller, null);
 assert.equal(generatedClone.transitions.length, 0);
 assert.equal(generatedClone.omittedGeneratedTransitionCount, 1);
+assert.match(generatedClone.blockers.join(" "), /importer regeneration/i);
+assert.deepEqual(generatedClone.identityMap, {});
 const unsupportedClone = createControllerDraft({
   source: controllerSource,
   profiles: controllerModel.stateProfiles,
@@ -305,7 +386,9 @@ const unsupportedClone = createControllerDraft({
   }],
 });
 assert.equal(unsupportedClone.transitions.length, 0);
+assert.equal(unsupportedClone.controller, null);
 assert.equal(unsupportedClone.omittedGeneratedTransitionCount, 1);
+assert.match(unsupportedClone.blockers.join(" "), /non-candidate transition/i);
 controllerCopy.controller.nodes.push({
   draftId: "draft:duplicate", semanticRoleId: 1, profileStableId: 8705, base: false,
 });
@@ -606,6 +689,31 @@ root.dispatch("click", {
     return selector === "[data-controller-id]" ? { dataset: { controllerId: "controller:12289" } } : null;
   },
 });
+const emptyMappingDraft = JSON.stringify(state.v40BehaviorModelDraft);
+root.dispatch("change", {
+  value: "8706",
+  dataset: { nodeId: "node:12545", nodeField: "profileRef" },
+  matches: (selector) => selector === "[data-node-field]",
+});
+assert.match(inspector.innerHTML, /Mapping preview/);
+assert.deepEqual(controller.commitPayload(), {});
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-profile-mapping-action]"
+      ? { dataset: { profileMappingAction: "apply" } }
+      : null;
+  },
+});
+const mappingPayload = controller.commitPayload().behaviorModel.controllers.update;
+assert.equal(mappingPayload.length, 1);
+assert.equal(mappingPayload[0].stableId, 12289);
+assert.equal(mappingPayload[0].nodes.find((node) => node.stableId === 12545).profileRef, 8706);
+assert.equal(state.v40BehaviorModelDraft.controllers.update[0].nodes
+  .find((node) => node.stableId === 12545).profileRef, 8706);
+root.dispatch("click", actionTarget("reset-local"));
+assert.equal(JSON.stringify(state.v40BehaviorModelDraft), emptyMappingDraft);
+assert.deepEqual(controller.commitPayload(), {});
+
 root.dispatch("click", {
   closest(selector) {
     return selector === "[data-transition-action]"
@@ -829,7 +937,7 @@ definitionInput("nodeId", state.v40BehaviorModelDraft.controllers.create[0].node
 assert.equal(controller.wholeGraphDiagnostics().some((item) => item.code === "DEFINITION_SELECTOR_INVALID"), true);
 assert.equal(controller.hasInvalid(), true);
 definitionInput("selectorKind", "1");
-root.dispatch("click", controllerActionTarget("duplicate"));
+root.dispatch("click", controllerActionTarget("duplicate-deep"));
 assert.equal(state.v40BehaviorModelDraft.controllers.create.length, 2);
 assert.notEqual(
   state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId,

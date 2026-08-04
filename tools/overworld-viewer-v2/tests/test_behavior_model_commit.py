@@ -107,6 +107,7 @@ class BehaviorModelCommitTest(unittest.TestCase):
         source_controller = model["controllers"][0]
         profile = {
             "draftId": "draft:profile", "name": "Saved profile",
+            "bodyMode": "deep", "bodyDraftId": "draft:profile-body",
             "descriptiveTags": ["bird", "saved"],
             "values": copy.deepcopy(source_profile["body"]["values"]),
             "templateProvenance": {
@@ -133,6 +134,7 @@ class BehaviorModelCommitTest(unittest.TestCase):
         }})
         mapping = result["domains"]["behaviorModel"]["draftIdMap"]
         self.assertEqual(result["draftIdMap"], mapping)
+        self.assertIn("draft:profile-body", mapping)
         self.assertEqual(result["changedDomains"], ["behaviorModel"])
         self.assertTrue(result["saved"])
         reloaded = self.model()
@@ -181,13 +183,14 @@ class BehaviorModelCommitTest(unittest.TestCase):
             })
         self.assertEqual(self.bodies(), before)
 
-    def test_controller_duplicate_omits_generated_wrapper_family(self):
+    def test_controller_deep_duplicate_refuses_importer_owned_closure_atomically(self):
         import server
 
         editor_model = server.build_behavior_model_editor_payload()
         script = r'''import fs from "node:fs";
 import {createControllerDraft, compactBehaviorModelDraft} from "./tools/overworld-viewer-v2/static/profiles.js";
 const model = JSON.parse(fs.readFileSync(0, "utf8"));
+const before = JSON.stringify(model);
 const source = model.controllers.find((controller) => model.transitionGraph.transitions.some((transition) =>
   transition.candidateDefinition?.controllerId === controller.stableId
   && transition.candidateDefinition?.applicability?.controllerId === controller.stableId));
@@ -196,11 +199,15 @@ const draft = createControllerDraft({source, profiles: model.stateProfiles, tran
   transitionOrderStart: model.transitionGraph.transitions.length,
   behaviorModelAuthoring: model.behaviorModelAuthoring});
 process.stdout.write(JSON.stringify({sourceControllerId: source.stableId,
-  controllerDraftId: draft.controller.draftId,
+  scopedCount: scoped.length,
+  controllerDraftId: draft.controller?.draftId ?? null,
+  blockers: draft.blockers,
   omittedGeneratedTransitionCount: draft.omittedGeneratedTransitionCount,
   definitionDraftIds: draft.transitions.map((item) => item.candidateDefinition.draftId),
   applicabilityDraftIds: draft.transitions.map((item) => item.candidateDefinition.applicability.draftId),
-  transaction: compactBehaviorModelDraft({controllers: {create: [draft.controller]}, transitions: {create: draft.transitions}}, model)}));'''
+  identityMap: draft.identityMap,
+  modelUnchanged: before === JSON.stringify(model),
+  transaction: draft.blockers.length ? null : compactBehaviorModelDraft({controllers: {create: [draft.controller]}, transitions: {create: draft.transitions}}, model)}));'''
         completed = subprocess.run(
             ["node", "--input-type=module", "-e", script], cwd=ROOT,
             input=json.dumps(editor_model), text=True, capture_output=True, check=True,
@@ -224,25 +231,17 @@ process.stdout.write(JSON.stringify({sourceControllerId: source.stableId,
                 str(authored["sourceControllerId"])
             ]
         } & {"overrides", "overrideDefinitions", "importRecipes", "tiredTranslations"})
-        self.assertGreater(authored["omittedGeneratedTransitionCount"], 0)
-        self.assertNotIn("transitions", authored["transaction"])
+        self.assertTrue(authored["blockers"])
+        self.assertRegex(" ".join(authored["blockers"]),
+                         r"importer-owned|importer regeneration")
+        self.assertIsNone(authored["controllerDraftId"])
+        self.assertIsNone(authored["transaction"])
+        self.assertEqual(authored["identityMap"], {})
         self.assertEqual(authored["definitionDraftIds"], [])
         self.assertEqual(authored["applicabilityDraftIds"], [])
-
-        before = self.model()
-        mapping = writer.apply_behavior_model_changes(self.workspace, authored["transaction"])
-        saved = self.model()
-        new_controller_id = mapping[authored["controllerDraftId"]]
-        duplicated = next(
-            row for row in saved["controllers"] if row["stableId"] == new_controller_id
-        )
-        submitted_nodes = authored["transaction"]["controllers"]["create"][0]["nodes"]
-        self.assertEqual(
-            [node["stableId"] for node in duplicated["nodes"]],
-            [mapping[node["draftId"]] for node in submitted_nodes],
-        )
-        self.assertEqual(saved["overrideDefinitions"], before["overrideDefinitions"])
-        self.assertEqual(saved["applicability"], before["applicability"])
+        self.assertEqual(authored["omittedGeneratedTransitionCount"],
+                         authored["scopedCount"])
+        self.assertTrue(authored["modelUnchanged"])
 
 if __name__ == "__main__":
     unittest.main()

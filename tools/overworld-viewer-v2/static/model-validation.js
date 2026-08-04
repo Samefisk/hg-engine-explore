@@ -16,6 +16,7 @@ export const VALIDATION_CODES = Object.freeze({
   IDENTITY_DUPLICATE: "IDENTITY_DUPLICATE",
   NAME: "NAME_REQUIRED",
   PROFILE_FIELDS: "PROFILE_FIELD_SET_INVALID",
+  PROFILE_PROVENANCE: "PROFILE_PROMOTION_PROVENANCE_INVALID",
   PROFILE_ROLE: "PROFILE_ROLE_OWNERSHIP_INVALID",
   FIELD_DOMAIN: "FIELD_DOMAIN_INVALID",
   WIRE_RANGE: "WIRE_RANGE_INVALID",
@@ -438,6 +439,15 @@ function modelDiagnostics(model) {
   const profileIds = new Set();
   const profileNames = new Set();
   const stateBodies = new Map();
+  const authoredBodies = new Map();
+  profiles.forEach((profile) => {
+    const bodyRef = profile?.bodyId ?? (profile?.bodyMode === "deep" ? profile?.bodyDraftId : null);
+    if (!present(bodyRef) || authoredBodies.has(String(bodyRef))) return;
+    authoredBodies.set(String(bodyRef), JSON.stringify({
+      kind: Number(profile?.bodyProvenance?.kind ?? profile?.templateProvenance?.kind),
+      values: profile?.values || {},
+    }));
+  });
   profiles.forEach((profile, index) => {
     const path = `stateProfiles.${index}`;
     const id = identity(profile, "stateProfile", path);
@@ -457,6 +467,31 @@ function modelDiagnostics(model) {
       if (!validateTypedValue(profile?.values?.[field.key], field)) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.values.${field.key}`, `${field.label || field.key} is outside its typed domain.`, "stateProfile", id));
     });
     if (Number(profile?.values?.hopMaxDistance) < Number(profile?.values?.hopMinDistance)) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.values.hopMaxDistance`, "Maximum hop distance cannot be below the minimum.", "stateProfile", id));
+    if (present(profile?.draftId)) {
+      if (!["shallow", "deep"].includes(profile?.bodyMode)) {
+        errors.push(diagnostic(VALIDATION_CODES.IDENTITY, `${path}.bodyMode`, "Draft state profile must choose shallow or deep body ownership.", "stateProfile", id));
+      } else if (profile.bodyMode === "deep") {
+        if (!String(profile?.bodyDraftId || "").startsWith("draft:") || present(profile?.bodyRef)) {
+          errors.push(diagnostic(VALIDATION_CODES.IDENTITY, `${path}.bodyDraftId`, "Deep state profile requires one draft body identity and no bodyRef.", "stateProfile", id));
+        } else {
+          const bodyKey = `draft:${profile.bodyDraftId}`;
+          if (globalIds.has(bodyKey)) errors.push(diagnostic(VALIDATION_CODES.IDENTITY_DUPLICATE, `${path}.bodyDraftId`, `Identity ${profile.bodyDraftId} is already owned by ${globalIds.get(bodyKey)}.`, "stateProfile", id));
+          else globalIds.set(bodyKey, `state body at ${path}`);
+        }
+      } else {
+        if (!present(profile?.bodyRef) || present(profile?.bodyDraftId) || !authoredBodies.has(String(profile?.bodyRef))) {
+          errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.bodyRef`, "Shallow state profile must reference an existing or same-transaction state body.", "stateProfile", id));
+        } else {
+          const own = JSON.stringify({
+            kind: Number(profile?.bodyProvenance?.kind ?? profile?.templateProvenance?.kind),
+            values: profile?.values || {},
+          });
+          if (authoredBodies.get(String(profile.bodyRef)) !== own) {
+            errors.push(diagnostic(VALIDATION_CODES.IDENTITY_DUPLICATE, `${path}.bodyRef`, "Shallow state profile values must match its shared body.", "stateProfile", id));
+          }
+        }
+      }
+    }
     if (present(profile?.bodyId)) {
       unsigned(profile.bodyId, shortMax, `${path}.bodyId`, "stateProfile", id);
       if (Number(profile.bodyId) === 0) errors.push(diagnostic(VALIDATION_CODES.IDENTITY, `${path}.bodyId`, "State body identity zero is reserved.", "stateProfile", id));
@@ -640,6 +675,91 @@ function modelDiagnostics(model) {
   });
 
   const definitionsById = new Map(definitions.map((definition) => [String(ref(definition)), definition]));
+  const promotionKeys = [
+    "kind", "sourceProfileId", "sourceBodyId", "winningLayer",
+    "normalizations", "fieldProvenance",
+  ];
+  const fieldProvenanceKeys = new Set([
+    "kind", "profileId", "nodeId", "definitionId", "ownerId", "instanceKey",
+  ]);
+  const exactKeys = (value, expected) => Boolean(value) && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === expected.length
+    && expected.every((key) => Object.hasOwn(value, key));
+  profiles.forEach((profile, profileIndex) => {
+    if (!present(profile?.promotionProvenance)) return;
+    const promotion = profile.promotionProvenance;
+    const id = ref(profile);
+    const path = `stateProfiles.${profileIndex}.promotionProvenance`;
+    const invalid = (child, message) => errors.push(diagnostic(
+      VALIDATION_CODES.PROFILE_PROVENANCE, `${path}${child ? `.${child}` : ""}`,
+      message, "stateProfile", id,
+    ));
+    if (!exactKeys(promotion, promotionKeys)) {
+      invalid("", "Promotion provenance must use the complete bounded metadata shape.");
+      return;
+    }
+    if (promotion.kind !== "effective-stack-preview") invalid("kind", "Promotion provenance kind is invalid.");
+    requireRef(promotion.sourceProfileId, profileIds, `${path}.sourceProfileId`, "stateProfile", id, "Source profile");
+    requireRef(promotion.sourceBodyId, new Set(authoredBodies.keys()), `${path}.sourceBodyId`, "stateProfile", id, "Source body");
+    const winning = promotion.winningLayer;
+    if (winning !== null) {
+      const winningKeys = ["definitionId", "ownerId", "instanceKey"];
+      if (!exactKeys(winning, winningKeys)) {
+        invalid("winningLayer", "Winning-layer provenance must contain definition, owner, and instance identities.");
+      } else {
+        requireRef(winning.definitionId, definitionIds, `${path}.winningLayer.definitionId`, "stateProfile", id, "Winning definition");
+        requireRef(winning.ownerId, ownerIds, `${path}.winningLayer.ownerId`, "stateProfile", id, "Winning owner");
+        unsigned(winning.instanceKey, shortMax, `${path}.winningLayer.instanceKey`, "stateProfile", id);
+      }
+    }
+    if (!Array.isArray(promotion.normalizations) || promotion.normalizations.length > fields.length) {
+      invalid("normalizations", `Promotion provenance may contain at most ${fields.length} normalizations.`);
+    } else {
+      promotion.normalizations.forEach((normalization, index) => {
+        const normalizationPath = `normalizations.${index}`;
+        if (!exactKeys(normalization, ["field", "rule", "before", "after"])) {
+          invalid(normalizationPath, "Normalization provenance has an invalid bounded shape.");
+          return;
+        }
+        if (!fieldKeys.includes(normalization.field)
+            || !["MAX_AT_LEAST_MIN", "DUPLICATE_SECONDARY_TILE"].includes(normalization.rule)) {
+          invalid(normalizationPath, "Normalization field or rule is invalid.");
+        }
+        unsigned(normalization.before, byteMax, `${path}.${normalizationPath}.before`, "stateProfile", id);
+        unsigned(normalization.after, byteMax, `${path}.${normalizationPath}.after`, "stateProfile", id);
+      });
+    }
+    const provenance = promotion.fieldProvenance;
+    if (!provenance || typeof provenance !== "object" || Array.isArray(provenance)
+        || Object.keys(provenance).length !== fields.length
+        || fieldKeys.some((key) => !Object.hasOwn(provenance, key))) {
+      invalid("fieldProvenance", "Promotion provenance must identify the source of every state field.");
+      return;
+    }
+    fields.forEach(({ key }) => {
+      const source = provenance[key];
+      const sourcePath = `fieldProvenance.${key}`;
+      if (!source || typeof source !== "object" || Array.isArray(source)
+          || !Object.hasOwn(source, "kind")
+          || Object.keys(source).some((field) => !fieldProvenanceKeys.has(field))) {
+        invalid(sourcePath, "Field provenance has an invalid bounded shape.");
+        return;
+      }
+      if (!["base", "override", "modifier"].includes(source.kind)) {
+        invalid(`${sourcePath}.kind`, "Field provenance kind is invalid.");
+        return;
+      }
+      if (["base", "override"].includes(source.kind)) {
+        requireRef(source.profileId, profileIds, `${path}.${sourcePath}.profileId`, "stateProfile", id, "Field source profile");
+        requireRef(source.nodeId, nodeIds, `${path}.${sourcePath}.nodeId`, "stateProfile", id, "Field source node");
+      } else {
+        requireRef(source.definitionId, definitionIds, `${path}.${sourcePath}.definitionId`, "stateProfile", id, "Field source definition");
+        requireRef(source.ownerId, ownerIds, `${path}.${sourcePath}.ownerId`, "stateProfile", id, "Field source owner");
+        unsigned(source.instanceKey, shortMax, `${path}.${sourcePath}.instanceKey`, "stateProfile", id);
+      }
+    });
+  });
   const modifierOperationsByDefinition = new Map();
   asArray(model?.modifierOperations).forEach((operation, index) => {
     const path = `modifierOperations.${index}`;

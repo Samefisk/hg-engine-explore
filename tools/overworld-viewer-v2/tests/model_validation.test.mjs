@@ -85,6 +85,32 @@ function expectCode(mutate, code) {
 // The complete saved V40 shape is clean and names/tags remain role-independent metadata.
 assert.deepEqual(validateBehaviorModel(fixture()), []);
 
+function addPromotion(model) {
+  model.stateProfiles[0].promotionProvenance = {
+    kind: "effective-stack-preview",
+    sourceProfileId: 10,
+    sourceBodyId: 11,
+    winningLayer: { definitionId: 50, ownerId: 60, instanceKey: 50 },
+    normalizations: [],
+    fieldProvenance: Object.fromEntries(fields.map(({ key }) => [
+      key, { kind: "base", profileId: 10, nodeId: 30 },
+    ])),
+  };
+}
+{
+  const model = fixture();
+  addPromotion(model);
+  assert.deepEqual(validateBehaviorModel(model), []);
+}
+expectCode((model) => {
+  addPromotion(model);
+  delete model.stateProfiles[0].promotionProvenance.fieldProvenance.field2;
+}, VALIDATION_CODES.PROFILE_PROVENANCE);
+expectCode((model) => {
+  addPromotion(model);
+  model.stateProfiles[0].promotionProvenance.sourceBodyId = 999;
+}, VALIDATION_CODES.REFERENCE);
+
 function addModifier(model, overrides = {}, operationOverrides = {}) {
   const definition = {
     stableId: 90, name: "Speed modifier", applicabilityId: 91,
