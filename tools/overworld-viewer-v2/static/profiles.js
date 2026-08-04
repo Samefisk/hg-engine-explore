@@ -1030,21 +1030,12 @@ export function createProfilesController({
   let profileMappingPreview = null;
 
   elements.profileKindFilter.innerHTML = `
-    <option value="all">All states</option>
-    <option value="saved">Saved states</option>
+    <option value="all">All profiles</option>
+    <option value="saved">Saved only</option>
     <option value="draft">New drafts</option>`;
-  const deckControls = root.querySelector?.("[data-profile-deck-mode]")?.parentElement;
-  if (deckControls && !deckControls.querySelector("[data-profile-deck-mode='modifiers']")) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.profileDeckMode = "modifiers";
-    button.setAttribute("aria-pressed", "false");
-    button.textContent = "Modifiers";
-    deckControls.append(button);
-  }
-  elements.openProfileResolver.hidden = true;
+  elements.openProfileResolver.hidden = false;
   elements.profileResolverDrawer.hidden = true;
-  root.classList.add("profile-controller-ready", "pv2", "v40-state-profiles");
+  root.classList.add("profile-controller-ready", "pv2", "profile-deck-ready");
 
   function idFor(profile) {
     return profile.draftId || `state:${profile.stableId}`;
@@ -1286,16 +1277,14 @@ export function createProfilesController({
       if (filter === "saved" && profile.created) return false;
       if (filter === "draft" && !profile.created) return false;
       if (!query) return true;
-      return [profile.name, profile.stableId, ...(profile.descriptiveTags || [])]
+      return [profile.name, profile.stableId, profile.draftId, profile.registryKey, ...(profile.descriptiveTags || [])]
         .some((value) => String(value ?? "").toLowerCase().includes(query));
     });
   }
 
   function renderList() {
-    if (mode === "controllers") return void renderControllerList();
-    if (mode === "modifiers") return void renderModifierList();
     if (loading) {
-      list.innerHTML = `<div class="loading-card"><span></span><p>Loading V51 profile authoring…</p></div>`;
+      list.innerHTML = `<div class="loading-card"><span></span><p>Loading profile deck…</p></div>`;
       return;
     }
     if (loadError) {
@@ -1303,66 +1292,43 @@ export function createProfilesController({
       return;
     }
     const visible = visibleProfiles();
-    list.innerHTML = `<section class="profile-group v40-profile-group" aria-labelledby="v40ProfilesTitle">
-      <header><span><i aria-hidden="true">S</i><strong id="v40ProfilesTitle">Complete states</strong></span><small>${visible.length}</small></header>
-      <ul class="profile-list">${visible.map((profile) => `
-        <li class="pv2-profile-row ${selectedId === idFor(profile) ? "is-active" : ""} ${isChanged(profile) ? "is-changed" : ""}">
-          <button class="pv2-profile-select" type="button" data-profile-id="${escapeHtml(idFor(profile))}">
-            <strong>${escapeHtml(profile.name)}${diagnosticsFor("stateProfile", profile).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("stateProfile", profile).length} validation issues">${diagnosticsFor("stateProfile", profile).length}</span>` : ""}</strong>
-            <small>${profile.created ? "Local, unpersisted draft" : `ID ${profile.stableId} · Body ${profile.bodyId}`}</small>
-          </button>
-        </li>`).join("") || `<li class="empty-state empty-state--small"><p>No state profiles match this filter.</p></li>`}
-      </ul>
-    </section>`;
-  }
-
-  function renderModifierList() {
-    if (loading || loadError) {
-      list.innerHTML = loading
-        ? `<div class="loading-card"><span></span><p>Loading V40 modifiers…</p></div>`
-        : `<div class="shell-error-state" role="alert"><strong>Modifiers unavailable</strong><p>${escapeHtml(loadError)}</p><button class="button" type="button" data-profile-action="retry">Retry</button></div>`;
-      return;
-    }
     const query = search.trim().toLowerCase();
-    const visible = modifiers().filter((modifier) => {
+    const visibleModifiers = modifiers().filter((modifier) => {
       if (filter === "saved" && modifier.created) return false;
       if (filter === "draft" && !modifier.created) return false;
-      return !query || [modifier.name, modifier.stableId, modifier.registryKey]
+      return !query || [modifier.name, modifier.stableId, modifier.draftId, modifier.registryKey]
         .some((value) => String(value ?? "").toLowerCase().includes(query));
     });
-    list.innerHTML = `<section class="profile-group v40-profile-group" aria-labelledby="v40ModifiersTitle">
-      <header><span><i aria-hidden="true">M</i><strong id="v40ModifiersTitle">Runtime modifiers</strong></span><small>${visible.length}</small></header>
-      <ul class="profile-list">${visible.map((modifier) => `<li class="pv2-profile-row ${selectedId === modifierIdFor(modifier) ? "is-active" : ""} ${modifier.created || modifierUpdates.has(modifier.stableId) ? "is-changed" : ""}"><button class="pv2-profile-select" type="button" data-modifier-id="${escapeHtml(modifierIdFor(modifier))}"><strong>${escapeHtml(modifier.name)}${diagnosticsFor("overrideDefinition", modifier).length ? `<span class="v40-diagnostic-badge">${diagnosticsFor("overrideDefinition", modifier).length}</span>` : ""}</strong><small>${modifier.created ? "Local, unpersisted draft" : `ID ${modifier.stableId}`} · ${(modifier.operations || []).length} operation${(modifier.operations || []).length === 1 ? "" : "s"}</small></button></li>`).join("") || `<li class="empty-state empty-state--small"><p>No modifiers match this filter.</p></li>`}</ul>
-    </section>`;
-  }
-
-  function renderControllerList() {
-    if (loading) {
-      list.innerHTML = `<div class="loading-card"><span></span><p>Loading V40 controllers…</p></div>`;
-      return;
-    }
-    if (loadError) {
-      list.innerHTML = `<div class="shell-error-state" role="alert"><strong>Controllers unavailable</strong><p>${escapeHtml(loadError)}</p><button class="button" type="button" data-profile-action="retry">Retry</button></div>`;
-      return;
-    }
-    const query = search.trim().toLowerCase();
-    const visible = controllers().filter((controller) => {
+    const visibleControllers = controllers().filter((controller) => {
       if (filter === "saved" && controller.created) return false;
       if (filter === "draft" && !controller.created) return false;
-      return !query || [controller.name, controller.stableId, controller.registryKey]
+      return !query || [controller.name, controller.stableId, controller.draftId, controller.registryKey]
         .some((value) => String(value ?? "").toLowerCase().includes(query));
     });
-    list.innerHTML = `<section class="profile-group v40-profile-group" aria-labelledby="v40ControllersTitle">
-      <header><span><i aria-hidden="true">C</i><strong id="v40ControllersTitle">Controllers</strong></span><small>${visible.length}</small></header>
-      <ul class="profile-list">${visible.map((controller) => `
-        <li class="pv2-profile-row ${selectedControllerId === controllerIdFor(controller) ? "is-active" : ""} ${controller.created || controllerUpdates.has(controller.stableId) ? "is-changed" : ""}">
-          <button class="pv2-profile-select" type="button" data-controller-id="${escapeHtml(controllerIdFor(controller))}">
-            <strong>${escapeHtml(controller.name)}${diagnosticsFor("controller", controller).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("controller", controller).length} validation issues">${diagnosticsFor("controller", controller).length}</span>` : ""}</strong>
-            <small>${controller.created ? "Local, unpersisted draft" : `ID ${controller.stableId}`} · ${controller.nodes.length} nodes</small>
+    const stateRow = (profile) => {
+      const role = profile.bodyProvenance?.label || profile.descriptiveTags?.[0] || "Complete behavior";
+      return `<li class="profile-row pv2-profile-row ${mode === "states" && selectedId === idFor(profile) ? "is-active is-selected" : ""} ${isChanged(profile) ? "is-changed" : ""}">
+          <button class="profile-select pv2-profile-select" type="button" data-profile-id="${escapeHtml(idFor(profile))}">
+            <strong>${escapeHtml(profile.name)}${diagnosticsFor("stateProfile", profile).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("stateProfile", profile).length} validation issues">${diagnosticsFor("stateProfile", profile).length}</span>` : ""}</strong>
+            <small>${profile.created ? "New complete profile" : `Complete profile · ${escapeHtml(role)}`}</small>
           </button>
-        </li>`).join("") || `<li class="empty-state empty-state--small"><p>No controllers match this filter.</p></li>`}
-      </ul>
-    </section>`;
+        </li>`;
+    };
+    const modifierRow = (modifier) => `<li class="profile-row pv2-profile-row override-profile ${mode === "modifiers" && selectedId === modifierIdFor(modifier) ? "is-active is-selected" : ""} ${modifier.created || modifierUpdates.has(modifier.stableId) ? "is-changed" : ""}"><button class="profile-select pv2-profile-select" type="button" data-modifier-id="${escapeHtml(modifierIdFor(modifier))}"><strong>${escapeHtml(modifier.name)}${diagnosticsFor("overrideDefinition", modifier).length ? `<span class="v40-diagnostic-badge">${diagnosticsFor("overrideDefinition", modifier).length}</span>` : ""}</strong><small>${modifier.created ? "New override profile" : `${(modifier.operations || []).length} field change${(modifier.operations || []).length === 1 ? "" : "s"}`}</small></button></li>`;
+    const controllerRow = (controller) => `<li class="profile-row pv2-profile-row controller-profile ${mode === "controllers" && selectedControllerId === controllerIdFor(controller) ? "is-active is-selected" : ""} ${controller.created || controllerUpdates.has(controller.stableId) ? "is-changed" : ""}"><button class="profile-select pv2-profile-select" type="button" data-controller-id="${escapeHtml(controllerIdFor(controller))}"><strong>${escapeHtml(controller.name)}${diagnosticsFor("controller", controller).length ? `<span class="v40-diagnostic-badge" aria-label="${diagnosticsFor("controller", controller).length} validation issues">${diagnosticsFor("controller", controller).length}</span>` : ""}</strong><small>${controller.created ? "New controller" : `${controller.nodes.length} state${controller.nodes.length === 1 ? "" : "s"} · ${controllerTransitions(controller).length} transition${controllerTransitions(controller).length === 1 ? "" : "s"}`}</small></button></li>`;
+    list.innerHTML = `
+      <section class="profile-group profile-group--base pv2-library-group" aria-labelledby="completeProfilesTitle">
+        <header><span><i aria-hidden="true">P</i><strong id="completeProfilesTitle">Complete profiles</strong></span><small>${visible.length}</small></header>
+        <ul class="profile-list">${visible.map(stateRow).join("") || `<li class="empty-state empty-state--small"><p>No complete profiles match this filter.</p></li>`}</ul>
+      </section>
+      <section class="profile-group profile-group--overrides pv2-library-group" aria-labelledby="overrideProfilesTitle">
+        <header><span><i aria-hidden="true">O</i><strong id="overrideProfilesTitle">Override profiles</strong></span><small>${visibleModifiers.length}</small></header>
+        <ul class="profile-list">${visibleModifiers.map(modifierRow).join("") || `<li class="empty-state empty-state--small"><p>No override profiles match this filter.</p></li>`}</ul>
+      </section>
+      <section class="profile-group profile-group--controllers pv2-library-group" aria-labelledby="controllersTitle">
+        <header><span><i aria-hidden="true">C</i><strong id="controllersTitle">Controllers</strong></span><small>${visibleControllers.length}</small></header>
+        <ul class="profile-list">${visibleControllers.map(controllerRow).join("") || `<li class="empty-state empty-state--small"><p>No controllers match this filter.</p></li>`}</ul>
+      </section>`;
   }
 
   function optionHtml(field, current) {
@@ -1678,7 +1644,7 @@ export function createProfilesController({
     if (mode === "modifiers") return void renderModifierInspector();
     const profile = selected();
     if (!profile) {
-      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a complete state</h2><p>Each profile is one runnable state. Create one or draft a complete state/controller graph.</p><div class="v40-empty-actions"><button type="button" data-profile-action="new">Create state profile</button><button type="button" data-behavior-set-action="open">Complete Behavior Set…</button></div></div>`;
+      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a profile</h2><p>Choose a complete profile, override profile, or controller from the deck.</p><div class="v40-empty-actions"><button type="button" data-profile-action="new">Create complete profile</button><button type="button" data-behavior-set-action="open">Create complete set…</button></div></div>`;
       return;
     }
     const nameError = validationErrors().find((error) => error.profileId === idFor(profile) && error.path === "name");
@@ -1686,31 +1652,34 @@ export function createProfilesController({
     const tagText = (profile.descriptiveTags || []).join(", ");
     const groups = dataset.groups.map((group, index) => {
       const fields = dataset.stateProfileFields.filter((field) => field.group === group.key);
-      return `<details class="pv2-field-section v40-field-group" ${index < 4 ? "open" : ""}>
-        <summary><span><strong>${escapeHtml(group.label)}</strong><small>${escapeHtml(GROUP_HELP[group.key] || "")}</small></span><b>${fields.length}</b></summary>
+      return `<details class="field-section pv2-field-section" ${index < 4 ? "open" : ""}>
+        <summary><span><strong>${escapeHtml(group.label)}</strong><small>${escapeHtml(GROUP_HELP[group.key] || "")}</small></span><em>${fields.length}</em></summary>
         <div class="profile-fields">${fields.map((field) => fieldHtml(profile, field)).join("")}</div>
       </details>`;
     }).join("");
     const hasLocalDrafts = created.length > 0 || updates.size > 0 || removedProfileIds.size > 0;
-    inspector.innerHTML = `<article class="profile-field-editor v40-state-editor" data-selected-profile="${escapeHtml(idFor(profile))}">
-      <header class="v40-state-editor__heading">
-        <div><span class="eyebrow">One complete state</span><h2>${escapeHtml(profile.name)}</h2></div>
-        <div class="v40-state-editor__actions">
-          ${hasLocalDrafts ? `<button class="button" type="button" data-profile-action="reset-local">Discard local drafts</button>` : ""}
-          <button class="button" type="button" data-profile-action="duplicate-shallow">Duplicate shallow</button>
-          <button class="button" type="button" data-profile-action="duplicate-deep">Duplicate deep</button>
-          <button class="button button--danger" type="button" data-profile-action="delete">Delete state</button>
-        </div>
+    const originLabel = profile.bodyProvenance?.label || "Complete behavior";
+    inspector.innerHTML = `<article class="classic-profile-inspector" data-selected-profile="${escapeHtml(idFor(profile))}">
+      <header class="inspector-header v2-inspector-header pv2-editor-head">
+        <div class="pv2-editor-identity"><div class="pv2-editor-title-copy"><p class="eyebrow">Complete profile</p><h2>${escapeHtml(profile.name)}</h2><p>${profile.created ? "New profile · saved with Global Save" : escapeHtml(originLabel)}</p></div></div>
+        <div class="inspector-actions pv2-editor-actions"><details class="profile-tool-menu"><summary class="icon-button" aria-label="More profile actions">•••</summary><div>
+          ${hasLocalDrafts ? `<button type="button" data-profile-action="reset-local">Discard local changes</button>` : ""}
+          <button type="button" data-profile-action="duplicate-shallow">Duplicate, keep shared values</button>
+          <button type="button" data-profile-action="duplicate-deep">Duplicate independently</button>
+          <button class="is-danger" type="button" data-profile-action="delete">Delete profile</button>
+        </div></details></div>
       </header>
-      <section class="v40-state-identity" aria-labelledby="stateIdentityTitle">
-        <div><span class="eyebrow" id="stateIdentityTitle">${profile.created ? "Draft identity" : "Stable identity"}</span><strong>${profile.created ? escapeHtml(profile.draftId) : `ID ${profile.stableId}`}</strong><small>${profile.created ? "Pending Global Save." : escapeHtml(profile.registryKey || "Runtime catalog identity")}</small></div>
-        <div><span class="eyebrow">State body</span><strong>${escapeHtml(profileBodyRef(profile) ?? "Pending")}</strong><small>${bodyAliases(profile).length > 1 ? `Shared by ${bodyAliases(profile).length} profiles; field edits update every alias.` : "Independent body; field edits affect only this profile."}</small></div>
-        <label><span>Name</span><input type="text" value="${escapeHtml(profile.name)}" data-state-identity="name" aria-invalid="${nameError ? "true" : "false"}">${nameError ? `<small class="field-error">${escapeHtml(nameError.message)}</small>` : ""}</label>
-        <label class="v40-state-tags"><span>Descriptive tags</span><input type="text" value="${escapeHtml(tagText)}" data-state-identity="descriptiveTags" placeholder="bird, air, relaxed"><small>Search and documentation only. Tags never select runtime behavior.</small></label>
-      </section>
       ${entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${entityDiagnostics.length} model issue${entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0].message)}</span></aside>` : ""}
       ${profile.backlinks?.length ? `<aside class="v40-backlinks"><strong>Used by ${profile.backlinks.length} controller node${profile.backlinks.length === 1 ? "" : "s"}</strong><span>${profile.backlinks.map((item) => `Controller ${item.controllerId} / Node ${item.nodeId}`).join(" · ")}</span></aside>` : ""}
-      ${groups}
+      <details class="field-section pv2-field-section profile-details-section" open>
+        <summary><span><strong>Profile details</strong><small>Name and searchable labels.</small></span><em>2</em></summary>
+        <div class="profile-fields profile-details-fields">
+          <label class="v40-state-field"><span><strong>Name</strong></span><input type="text" value="${escapeHtml(profile.name)}" data-state-identity="name" aria-invalid="${nameError ? "true" : "false"}">${nameError ? `<small class="field-error">${escapeHtml(nameError.message)}</small>` : ""}</label>
+          <label class="v40-state-field"><span><strong>Tags</strong><small>For search and notes.</small></span><input type="text" value="${escapeHtml(tagText)}" data-state-identity="descriptiveTags" placeholder="bird, air, relaxed"></label>
+        </div>
+      </details>
+      <section class="profile-field-editor pv2-fields" aria-labelledby="profileValuesTitle"><header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="profileValuesTitle">Profile values</h3></div><span>${dataset.stateProfileFields.length} fields</span></header>${groups}</section>
+      <details class="field-section pv2-field-section profile-technical-details"><summary><span><strong>Technical details</strong><small>Identity and value-sharing information.</small></span><em>ⓘ</em></summary><dl class="v40-generated-metadata"><div><dt>Profile</dt><dd>${profile.created ? escapeHtml(profile.draftId) : escapeHtml(profile.stableId)}</dd></div><div><dt>Value set</dt><dd>${escapeHtml(profileBodyRef(profile) ?? "Pending")}</dd></div><div><dt>Sharing</dt><dd>${bodyAliases(profile).length > 1 ? `Shared by ${bodyAliases(profile).length} profiles` : "Independent"}</dd></div><div><dt>Catalog key</dt><dd>${escapeHtml(profile.registryKey || "Pending")}</dd></div></dl></details>
     </article>`;
   }
 
@@ -1724,7 +1693,7 @@ export function createProfilesController({
   function renderModifierInspector() {
     const modifier = selectedModifier();
     if (!modifier) {
-      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a modifier</h2><p>Modifiers are partial typed patches folded over the winning complete state.</p><div class="v40-empty-actions"><button type="button" data-modifier-action="new">Create modifier</button></div></div>`;
+      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select an override profile</h2><p>Override profiles adjust selected values after a complete profile has been chosen.</p><div class="v40-empty-actions"><button type="button" data-modifier-action="new">Create override profile</button></div></div>`;
       return;
     }
     const applicability = modifier.applicability || {};
@@ -1745,11 +1714,11 @@ export function createProfilesController({
     }).join("");
     const controllerOptions = controllers().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
     const profileOptions = profiles().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
-    inspector.innerHTML = `<article class="profile-field-editor v40-modifier-editor" data-selected-modifier="${escapeHtml(modifierIdFor(modifier))}">
-      <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed runtime modifier</span><h2>${escapeHtml(modifier.name)}</h2><small>${modifier.created ? escapeHtml(modifier.draftId) : `Stable ID ${modifier.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-modifier-action="duplicate">Duplicate modifier</button><button class="button button--danger" type="button" data-modifier-action="delete">Delete modifier</button></div></header>
+    inspector.innerHTML = `<article class="classic-profile-inspector" data-selected-modifier="${escapeHtml(modifierIdFor(modifier))}">
+      <header class="inspector-header v2-inspector-header pv2-editor-head"><div class="pv2-editor-identity"><div class="pv2-editor-title-copy"><p class="eyebrow">Override profile</p><h2>${escapeHtml(modifier.name)}</h2><p>${modifier.created ? "New override · saved with Global Save" : `${modifier.operations.length} field change${modifier.operations.length === 1 ? "" : "s"}`}</p></div></div><div class="inspector-actions pv2-editor-actions"><details class="profile-tool-menu"><summary class="icon-button" aria-label="More override profile actions">•••</summary><div><button type="button" data-modifier-action="duplicate">Duplicate</button><button class="is-danger" type="button" data-modifier-action="delete">Delete override profile</button></div></details></div></header>
       ${diagnostics.length ? `<aside class="v40-validation"><strong>${diagnostics.length} model issue${diagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(diagnostics[0].message)}</span></aside>` : ""}
-      <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(modifier.name)}" data-modifier-field="name"></label><div><span>Identity</span><strong>${escapeHtml(modifier.draftId || modifier.stableId)}</strong><small>Kind: Modifier · no state identity</small></div></section>
-      <details class="pv2-field-section" open><summary><span><strong>Precedence and lifetime</strong><small>Folded in ascending channel, priority, definition, owner, and instance order.</small></span></summary><div class="v40-author-grid">
+      <details class="field-section pv2-field-section profile-details-section" open><summary><span><strong>Profile details</strong><small>Name and application order.</small></span><em>5</em></summary><div class="v40-author-grid">
+        <label>Name <input type="text" value="${escapeHtml(modifier.name)}" data-modifier-field="name"></label>
         <label>Channel <select data-modifier-field="channel">${selectOptions(optionRecords("channel").filter((item) => item.value >= 1 && item.value <= 4), modifier.channel)}</select></label>
         <label>Priority <input type="number" min="0" max="255" value="${Number(modifier.priority)}" data-modifier-field="priority"></label>
         <label>Map lifetime <select data-modifier-field="mapLifetime">${selectOptions(optionRecords("lifetime"), modifier.mapLifetime)}</select></label>
@@ -1757,13 +1726,14 @@ export function createProfilesController({
         <label><input type="checkbox" data-modifier-field="allowMultipleOwners" ${Number(modifier.allowMultipleOwners) ? "checked" : ""}> Allow multiple owners</label>
         <label><input type="checkbox" data-modifier-field="allowMultipleInstancesPerOwner" ${Number(modifier.allowMultipleInstancesPerOwner) ? "checked" : ""}> Allow multiple instances per owner</label>
       </div></details>
-      <details class="pv2-field-section" open><summary><span><strong>Applicability</strong><small>Evaluated after the state winner is selected.</small></span></summary><div class="v40-author-grid">
+      <details class="field-section pv2-field-section" open><summary><span><strong>When it applies</strong><small>Choose where this override profile can take effect.</small></span><em>4</em></summary><div class="v40-author-grid">
         <label>Controller <select data-modifier-applicability-field="controllerId">${nullableOptions(controllerOptions, applicability.controllerId, "Any controller")}</select></label>
         <label>Winning profile <select data-modifier-applicability-field="profileId">${nullableOptions(profileOptions, applicability.profileId, "Any profile")}</select></label>
         <label>Winning role <select data-modifier-applicability-field="minimum">${nullableOptions(dataset.semanticRoles || [], applicability.minimum, "Any role")}</select></label>
         <label>Immutable group mask <input type="number" min="0" max="4294967295" value="${Number(applicability.groupMask ?? 0xFFFFFFFF)}" data-modifier-applicability-field="groupMask"></label>
       </div></details>
-      <section class="v40-controller-section"><header><div><span class="eyebrow">Partial patch</span><h3>Modifier operations</h3></div><button type="button" data-modifier-operation-action="add" ${modifier.operations.length >= 16 ? "disabled" : ""}>Add operation</button></header><div class="v40-author-rows">${operationRows}</div></section>
+      <section class="profile-field-editor pv2-fields v40-controller-section"><header><div><span class="eyebrow">Field editor</span><h3>Overridden values</h3></div><button type="button" data-modifier-operation-action="add" ${modifier.operations.length >= 16 ? "disabled" : ""}>Add value</button></header><div class="v40-author-rows">${operationRows}</div></section>
+      <details class="field-section pv2-field-section profile-technical-details"><summary><span><strong>Technical details</strong><small>Catalog identity.</small></span><em>ⓘ</em></summary><dl class="v40-generated-metadata"><div><dt>Override profile</dt><dd>${escapeHtml(modifier.draftId || modifier.stableId)}</dd></div><div><dt>Catalog key</dt><dd>${escapeHtml(modifier.registryKey || "Pending")}</dd></div></dl></details>
     </article>`;
   }
 
@@ -1915,7 +1885,7 @@ export function createProfilesController({
   function renderControllerInspector() {
     const controller = selectedController();
     if (!controller) {
-      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a controller</h2><p>Controllers bind complete state profiles to unique semantic nodes and own their transition roster.</p><div class="v40-empty-actions"><button type="button" data-controller-action="new">Create controller</button><button type="button" data-behavior-set-action="open">Complete Behavior Set…</button></div></div>`;
+      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a controller</h2><p>Controllers connect complete profiles and define when the Pokémon moves between them.</p><div class="v40-empty-actions"><button type="button" data-controller-action="new">Create controller</button><button type="button" data-behavior-set-action="open">Create complete set…</button></div></div>`;
       return;
     }
     if (String(controllerDeletePreview?.controllerRef) === String(controller.draftId || controller.stableId)) {
@@ -1981,32 +1951,31 @@ export function createProfilesController({
         <td class="v40-row-actions"><button type="button" data-transition-action="up" data-transition-id="${escapeHtml(transitionId)}" ${upDisabled ? "disabled" : ""} aria-label="Move transition up">↑</button><button type="button" data-transition-action="down" data-transition-id="${escapeHtml(transitionId)}" ${downDisabled ? "disabled" : ""} aria-label="Move transition down">↓</button><button type="button" data-transition-action="remove" data-transition-id="${escapeHtml(transitionId)}" ${disabled}>Remove</button></td>
       </tr>`;
     }).join("");
-    inspector.innerHTML = `<article class="profile-field-editor v40-controller-editor" data-selected-controller="${escapeHtml(controllerIdFor(controller))}">
-      <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed controller</span><h2>${escapeHtml(controller.name)}</h2><small>${controller.created ? escapeHtml(controller.draftId) : `Stable ID ${controller.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-controller-action="duplicate-shallow">Duplicate shallow</button><button class="button" type="button" data-controller-action="duplicate-deep">Duplicate deep</button><button class="button button--danger" type="button" data-controller-action="delete">Delete controller</button></div></header>
+    inspector.innerHTML = `<article class="classic-profile-inspector" data-selected-controller="${escapeHtml(controllerIdFor(controller))}">
+      <header class="inspector-header v2-inspector-header pv2-editor-head"><div class="pv2-editor-identity"><div class="pv2-editor-title-copy"><p class="eyebrow">Controller</p><h2>${escapeHtml(controller.name)}</h2><p>${controller.created ? "New controller · saved with Global Save" : `${controller.nodes.length} state${controller.nodes.length === 1 ? "" : "s"} · ${localTransitions.length} transition${localTransitions.length === 1 ? "" : "s"}`}</p></div></div><div class="inspector-actions pv2-editor-actions"><details class="profile-tool-menu"><summary class="icon-button" aria-label="More controller actions">•••</summary><div><button type="button" data-controller-action="duplicate-shallow">Duplicate, share profiles</button><button type="button" data-controller-action="duplicate-deep">Duplicate independently</button><button class="is-danger" type="button" data-controller-action="delete">Delete controller</button></div></details></div></header>
       ${profileMappingPreview && String(profileMappingPreview.controllerRef) === String(controller.draftId || controller.stableId) ? `<aside class="v40-delete-preview" data-profile-mapping-preview><strong>Mapping preview</strong><p>Profile ${escapeHtml(profileMappingPreview.oldProfileRef)} / body ${escapeHtml(profileMappingPreview.oldBodyRef)} → profile ${escapeHtml(profileMappingPreview.newProfileRef)} / body ${escapeHtml(profileMappingPreview.newBodyRef)} (${escapeHtml(profileMappingPreview.relationship)}).</p><p>${profileMappingPreview.affected.length} controller node and ${profileMappingPreview.backlinks.length} authoritative backlink${profileMappingPreview.backlinks.length === 1 ? "" : "s"} affected.</p>${profileMappingPreview.blockers.length ? `<ul>${profileMappingPreview.blockers.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}<div><button type="button" data-profile-mapping-action="cancel">Cancel</button><button type="button" data-profile-mapping-action="apply" ${profileMappingPreview.blockers.length ? "disabled" : ""}>Apply mapping</button></div></aside>` : ""}
       ${errors.length || entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${errors.length + entityDiagnostics.length} model issue${errors.length + entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0]?.message || errors[0]?.message)}</span></aside>` : ""}
-      <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label><div><span>Identity</span><strong>${controller.created ? escapeHtml(controller.draftId) : controller.stableId}</strong><small>${controller.created ? "Pending Global Save" : escapeHtml(controller.registryKey)}</small></div></section>
-      <details class="pv2-field-section" open><summary><span><strong>Controller defaults</strong><small>Typed scalar defaults and stable policy references.</small></span></summary><div class="profile-fields">${scalarFields}${policyControls}</div></details>
-      <section class="v40-controller-section"><header><div><span class="eyebrow">State roster</span><h3>Bound nodes</h3></div><button type="button" data-controller-action="add-node">Add node</button></header><div class="v40-table-scroll"><table class="v40-controller-table"><thead><tr><th>Base</th><th>Node ID</th><th>Semantic role</th><th>Bound profile</th><th>Order</th></tr></thead><tbody>${nodeRows}</tbody></table></div></section>
-      <section class="v40-controller-section"><header><div><span class="eyebrow">Authoritative graph</span><h3>Transitions</h3></div><button type="button" data-controller-action="add-transition">Add transition</button></header><div class="v40-table-scroll"><table class="v40-controller-table v40-transition-table"><thead><tr><th>Row ID</th><th>Event</th><th>From roles</th><th>Definition</th><th>Owner</th><th>Priority</th><th>Order</th></tr></thead><tbody>${transitionRows || `<tr><td colspan="7">No transitions.</td></tr>`}</tbody></table></div></section>
+      <details class="field-section pv2-field-section profile-details-section" open><summary><span><strong>Controller details</strong><small>Name, defaults, and shared policies.</small></span><em>${(dataset.controllerScalarFields || []).length + 4}</em></summary><div class="profile-fields"><label class="v40-state-field"><span><strong>Name</strong></span><input type="text" value="${escapeHtml(controller.name)}" data-controller-identity="name"></label>${scalarFields}${policyControls}</div></details>
+      <section class="profile-field-editor pv2-fields v40-controller-section"><header><div><span class="eyebrow">Profile roster</span><h3>States</h3></div><button type="button" data-controller-action="add-node">Add state</button></header><div class="v40-table-scroll"><table class="v40-controller-table"><thead><tr><th>Base</th><th>Entry</th><th>Role</th><th>Complete profile</th><th>Order</th></tr></thead><tbody>${nodeRows}</tbody></table></div></section>
+      <section class="profile-field-editor pv2-fields v40-controller-section"><header><div><span class="eyebrow">Behavior flow</span><h3>Transitions</h3></div><button type="button" data-controller-action="add-transition">Add transition</button></header><div class="v40-table-scroll"><table class="v40-controller-table v40-transition-table"><thead><tr><th>Entry</th><th>Event</th><th>From roles</th><th>Destination rule</th><th>Owner</th><th>Priority</th><th>Order</th></tr></thead><tbody>${transitionRows || `<tr><td colspan="7">No transitions.</td></tr>`}</tbody></table></div></section>
       ${renderTransitionAuthoring(localTransitions.find((transition) => localTransitionId(transition) === selectedTransitionId), controller)}
+      <details class="field-section pv2-field-section profile-technical-details"><summary><span><strong>Technical details</strong><small>Catalog identity.</small></span><em>ⓘ</em></summary><dl class="v40-generated-metadata"><div><dt>Controller</dt><dd>${controller.created ? escapeHtml(controller.draftId) : escapeHtml(controller.stableId)}</dd></div><div><dt>Catalog key</dt><dd>${escapeHtml(controller.registryKey || "Pending")}</dd></div></dl></details>
     </article>`;
   }
 
   function render() {
     root.classList.toggle?.("v40-controller-mode", mode === "controllers");
     root.classList.toggle?.("v40-modifier-mode", mode === "modifiers");
-    root.querySelectorAll?.("[data-profile-deck-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.profileDeckMode === mode)));
     const title = root.querySelector?.("#profileLibraryTitle");
-    if (title) title.textContent = mode === "controllers" ? "Controllers" : mode === "modifiers" ? "Modifiers" : "State profiles";
-    const createButton = root.querySelector?.("[data-action='new-profile']");
-    if (createButton) createButton.setAttribute("aria-label", mode === "controllers" ? "Create controller" : mode === "modifiers" ? "Create modifier" : "Create state profile");
+    if (title) title.textContent = "Profile deck";
     renderList();
     renderInspector();
   }
 
   function selectProfile(id, { report = true } = {}) {
     if (!profiles().some((profile) => idFor(profile) === id)) return false;
+    mode = "states";
+    state.profileDeckMode = mode;
     selectedId = id;
     state.selectedProfileKey = id;
     render();
@@ -2024,6 +1993,8 @@ export function createProfilesController({
       draft.descriptiveTags = [];
     }
     created.push(draft);
+    mode = "states";
+    state.profileDeckMode = mode;
     selectedId = draft.draftId;
     syncDirty();
     render();
@@ -2085,6 +2056,8 @@ export function createProfilesController({
 
   function selectController(id, { report = true } = {}) {
     if (!controllers().some((controller) => controllerIdFor(controller) === id)) return false;
+    mode = "controllers";
+    state.profileDeckMode = mode;
     selectedControllerId = id;
     state.selectedControllerKey = id;
     render();
@@ -2126,6 +2099,8 @@ export function createProfilesController({
       ...draft.controller.transitionIds,
       ...sharedTransitions.map((transition) => transition.draftId || transition.stableId),
     ];
+    mode = "controllers";
+    state.profileDeckMode = mode;
     selectedControllerId = draft.controller.draftId;
     syncDirty();
     render();
@@ -2734,18 +2709,6 @@ export function createProfilesController({
   function setMode(nextMode) {
     if (!["states", "controllers", "modifiers"].includes(nextMode) || mode === nextMode) return;
     mode = nextMode;
-    filter = "all";
-    elements.profileKindFilter.innerHTML = nextMode === "controllers" ? `
-      <option value="all">All controllers</option>
-      <option value="saved">Saved controllers</option>
-      <option value="draft">New drafts</option>` : nextMode === "modifiers" ? `
-      <option value="all">All modifiers</option>
-      <option value="saved">Saved modifiers</option>
-      <option value="draft">New drafts</option>` : `
-      <option value="all">All states</option>
-      <option value="saved">Saved states</option>
-      <option value="draft">New drafts</option>`;
-    elements.profileKindFilter.value = filter;
     if (mode === "modifiers" && !selectedModifier()) selectedId = modifiers()[0] ? modifierIdFor(modifiers()[0]) : "";
     if (mode === "states" && !selected()) selectedId = profiles()[0] ? idFor(profiles()[0]) : "";
     state.profileDeckMode = mode;
@@ -2754,6 +2717,8 @@ export function createProfilesController({
 
   function selectModifier(id, { report = true } = {}) {
     if (!modifiers().some((modifier) => modifierIdFor(modifier) === id)) return false;
+    mode = "modifiers";
+    state.profileDeckMode = mode;
     selectedId = id;
     state.selectedProfileKey = id;
     render();
@@ -2783,6 +2748,8 @@ export function createProfilesController({
       }));
     }
     createdModifiers.push(draft);
+    mode = "modifiers";
+    state.profileDeckMode = mode;
     selectedId = draft.draftId;
     syncDirty();
     render();
@@ -3041,7 +3008,7 @@ export function createProfilesController({
     const action = event.target.closest("[data-profile-action]")?.dataset.profileAction;
     if (action === "retry") return void load();
     if (action === "reset-local") return void resetLocalDrafts();
-    if (action === "new") return void (mode === "controllers" ? addController() : mode === "modifiers" ? addModifier() : addProfile());
+    if (action === "new") return void addProfile();
     if (action === "duplicate-shallow") return void addProfile(selected(), "shallow");
     if (action === "duplicate-deep") return void addProfile(selected(), "deep");
     if (action === "delete") return void deleteSelectedProfile();
@@ -3064,7 +3031,7 @@ export function createProfilesController({
     if (transitionButton) return void transitionAction(transitionButton.dataset.transitionId, transitionButton.dataset.transitionAction);
     const childButton = event.target.closest("[data-child-action]");
     if (childButton) return void childAction(childButton.dataset.transitionId, childButton.dataset.childKind, childButton.dataset.childId, childButton.dataset.childAction);
-    if (event.target.closest("[data-action='new-profile']")) return void (mode === "controllers" ? addController() : mode === "modifiers" ? addModifier() : addProfile());
+    if (event.target.closest("[data-action='new-profile']")) return void addProfile();
   }
 
   function onInput(event) {

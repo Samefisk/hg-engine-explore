@@ -7483,3 +7483,78 @@ td select {
     box-shadow: none;
   }
 }
+
+/* New profile entities presented inside the established Profile Deck shell. */
+.profile-deck-ready .profile-workbench {
+  grid-template-columns: minmax(235px, 270px) minmax(480px, 1fr);
+}
+
+.profile-deck-ready .profile-group--controllers > header i {
+  border-color: #8c8f97;
+  background: #e1e2e5;
+  color: #4d5159;
+}
+
+.profile-deck-ready .controller-profile {
+  border-left: 3px solid #747983;
+}
+
+.profile-deck-ready .profile-row.override-profile {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-deck-ready .profile-row.override-profile > .pv2-profile-select {
+  grid-column: 1;
+}
+
+.profile-deck-ready .profile-create-menu > div {
+  min-width: 190px;
+}
+
+.classic-profile-inspector {
+  min-width: 0;
+  padding-bottom: 10px;
+}
+
+.classic-profile-inspector > .v40-validation,
+.classic-profile-inspector > .v40-backlinks,
+.classic-profile-inspector > .v40-delete-preview {
+  margin: 9px 9px 0;
+}
+
+.classic-profile-inspector > .profile-field-editor,
+.classic-profile-inspector > .field-section,
+.classic-profile-inspector > .v40-transition-author {
+  margin: 9px;
+}
+
+.classic-profile-inspector .profile-details-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.classic-profile-inspector .profile-technical-details .v40-generated-metadata {
+  margin: 9px;
+}
+
+.classic-profile-inspector .v40-controller-section {
+  padding: 0;
+}
+
+.classic-profile-inspector .v40-controller-section > header {
+  margin-bottom: 0;
+}
+
+.classic-profile-inspector .v40-controller-section .v40-table-scroll,
+.classic-profile-inspector .v40-controller-section .v40-author-rows {
+  margin: 9px;
+}
+
+@media (max-width: 900px) {
+  .profile-deck-ready .profile-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .classic-profile-inspector .profile-details-fields {
+    grid-template-columns: 1fr;
+  }
+}

@@ -208,6 +208,17 @@
       "profileId": 0,
       "registryKey": "applicability:18",
       "stableId": 61715
+    },
+    {
+      "controllerId": 0,
+      "flags": 0,
+      "groupMask": 4294967295,
+      "kind": 1,
+      "maximum": 0,
+      "minimum": 0,
+      "profileId": 0,
+      "registryKey": "editor:applicability:61972",
+      "stableId": 61972
     }
   ],
   "assignmentActions": [
@@ -844,8 +855,20 @@
       "stableId": 61452
     }
   ],
-  "modifierOperations": [],
   "modelVersion": 40,
+  "modifierOperations": [
+    {
+      "bound": 0,
+      "definitionId": 61971,
+      "fieldId": 3,
+      "fieldNamespace": 1,
+      "operand": 1,
+      "operatorKind": 1,
+      "order": 0,
+      "registryKey": "editor:modifier-operation:61973",
+      "stableId": 61973
+    }
+  ],
   "overrideDefinitions": [
     {
       "allowMultipleInstancesPerOwner": 0,
@@ -1435,6 +1458,38 @@
       "timerSource": 1,
       "timerValue": 4,
       "tiredOriginKind": 3
+    },
+    {
+      "allowMultipleInstancesPerOwner": 0,
+      "allowMultipleOwners": 0,
+      "applicabilityId": 61972,
+      "authoredTiredBound": 0,
+      "battleLifetime": 1,
+      "channel": 2,
+      "controllerId": 0,
+      "flags": 0,
+      "hasRequiredOwnerId": 0,
+      "hasTiredOriginKind": 0,
+      "hiddenTimerPolicy": 0,
+      "kind": 2,
+      "mapLifetime": 1,
+      "name": "New modifier",
+      "nameId": 61971,
+      "nodeId": 0,
+      "priority": 100,
+      "recoveryPolicy": 0,
+      "recoveryTransitionId": 0,
+      "registryKey": "editor:override-definition:61971",
+      "requiredOwnerId": 0,
+      "reserved0": 0,
+      "reserved1": 0,
+      "selectorKind": 0,
+      "semanticRoleId": 0,
+      "stableId": 61971,
+      "timerClock": 0,
+      "timerSource": 0,
+      "timerValue": 0,
+      "tiredOriginKind": 0
     }
   ],
   "overrides": [
@@ -7331,10 +7386,31 @@
         "kind": "retire",
         "previousSha256": "571aca09681ca65291388e5128200777cc6fdc85fae5c694cb6edef60c32abf4",
         "registryKey": "authored-body:override-10:controller-2:chill"
+      },
+      {
+        "eventSha256": "de390b731c184a354dc23dc3ff3bb72ad8998ca2cb666d5ee11455ac88bb7736",
+        "kind": "allocate",
+        "previousSha256": "23e8055ee48ae5fd3d2d04216d6bf153f52365d3cee1d69318919b03e10a9e86",
+        "registryKey": "editor:override-definition:61971",
+        "stableId": 61971
+      },
+      {
+        "eventSha256": "7a3551988c496d97b4dff5522645bdda3f9de477ae27c46bf26d9f8fc67ada67",
+        "kind": "allocate",
+        "previousSha256": "de390b731c184a354dc23dc3ff3bb72ad8998ca2cb666d5ee11455ac88bb7736",
+        "registryKey": "editor:applicability:61972",
+        "stableId": 61972
+      },
+      {
+        "eventSha256": "75a1aa528a3fc163dcc7631a9ddac98cbbeb226595c539aa57c0a10ba7c29932",
+        "kind": "allocate",
+        "previousSha256": "7a3551988c496d97b4dff5522645bdda3f9de477ae27c46bf26d9f8fc67ada67",
+        "registryKey": "editor:modifier-operation:61973",
+        "stableId": 61973
       }
     ],
-    "historySha256": "23e8055ee48ae5fd3d2d04216d6bf153f52365d3cee1d69318919b03e10a9e86",
-    "nextUnallocatedId": 61971,
+    "historySha256": "75a1aa528a3fc163dcc7631a9ddac98cbbeb226595c539aa57c0a10ba7c29932",
+    "nextUnallocatedId": 61974,
     "schema": 3,
     "tombstones": [
       "applicability:19",

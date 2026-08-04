@@ -158,45 +158,49 @@
         <div id="profileWorkbench" class="profile-workbench">
           <aside class="panel library-panel" aria-labelledby="profileLibraryTitle">
             <header class="panel-heading">
-              <span><small>V51 authoring · V40 wire</small><strong id="profileLibraryTitle">State profiles</strong></span>
+              <span><small>Library</small><strong id="profileLibraryTitle">Profile deck</strong></span>
               <div class="panel-heading-actions">
-                <details class="profile-tool-menu" hidden>
+                <details class="profile-tool-menu">
                   <summary class="icon-button" aria-label="More profile tools">•••</summary>
                   <div>
-                    <button id="openProfileResolver" type="button" data-action="open-context-resolver" aria-controls="profileResolverDrawer" aria-expanded="false">Preview stack…</button>
+                    <button id="openProfileResolver" type="button" data-action="open-context-resolver" aria-controls="profileResolverDrawer" aria-expanded="false">Preview profile stack…</button>
+                    <button type="button" data-action="complete-behavior-set">Create complete set…</button>
                   </div>
                 </details>
-                <button type="button" data-action="complete-behavior-set">Complete set…</button>
-                <button class="icon-button" type="button" data-action="new-profile" aria-label="Create profile">+</button>
+                <details class="profile-tool-menu profile-create-menu">
+                  <summary class="icon-button" aria-label="Create in Profile Deck">+</summary>
+                  <div>
+                    <button type="button" data-profile-action="new">Complete profile</button>
+                    <button type="button" data-modifier-action="new">Override profile</button>
+                    <button type="button" data-controller-action="new">Controller</button>
+                    <button type="button" data-behavior-set-action="open">Complete set…</button>
+                  </div>
+                </details>
               </div>
             </header>
-            <nav class="v40-deck-switch" aria-label="Profile Deck library">
-              <button type="button" data-profile-deck-mode="states" aria-pressed="true">State Profiles</button>
-              <button type="button" data-profile-deck-mode="controllers" aria-pressed="false">Controllers</button>
-            </nav>
             <div class="library-tools">
               <label class="search-field" for="profileSearch">
                 <span class="sr-only">Search profiles</span>
-                <input id="profileSearch" type="search" placeholder="Search name or Pokémon" autocomplete="off">
+                <input id="profileSearch" type="search" placeholder="Search profiles and IDs" autocomplete="off">
               </label>
               <label class="sr-only" for="profileKindFilter">Profile kind</label>
               <select id="profileKindFilter" class="kind-filter">
-                <option value="all">All states</option>
-                <option value="saved">Saved states</option>
+                <option value="all">All profiles</option>
+                <option value="saved">Saved only</option>
                 <option value="draft">New drafts</option>
               </select>
             </div>
 
             <div id="profileLibrary" class="profile-library">
-              <div class="loading-card"><span></span><p>Loading V51 profile authoring…</p></div>
+              <div class="loading-card"><span></span><p>Loading profile deck…</p></div>
             </div>
           </aside>
 
           <section id="profileInspector" class="panel inspector-panel" aria-label="Profile inspector">
             <div class="empty-state">
               <span class="empty-state__glyph" aria-hidden="true">◇</span>
-              <h2>Select a complete state</h2>
-              <p>Each state profile is one runnable behavior record with no chill, active, or tired tabs.</p>
+              <h2>Select a profile</h2>
+              <p>Choose a complete profile, override profile, or controller from the deck.</p>
             </div>
           </section>
 

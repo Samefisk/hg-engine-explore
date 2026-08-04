@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   createCompleteStateDraft,
   createEffectiveStateDraft,
@@ -15,6 +16,26 @@ import {
   validateControllerDraft,
   v40ProfileDeckCapability,
 } from "../static/profiles.js";
+
+const profileDeckHtml = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+const profileDeckSource = readFileSync(new URL("../static/profiles.js", import.meta.url), "utf8");
+assert.match(profileDeckHtml, /<small>Library<\/small><strong id="profileLibraryTitle">Profile deck<\/strong>/);
+assert.doesNotMatch(profileDeckHtml, /data-profile-deck-mode/);
+assert.match(profileDeckHtml, /data-profile-action="new">Complete profile/);
+assert.match(profileDeckHtml, /data-modifier-action="new">Override profile/);
+assert.match(profileDeckHtml, /data-controller-action="new">Controller/);
+assert.match(profileDeckHtml, /data-action="complete-behavior-set">Create complete set/);
+assert.match(profileDeckHtml, /id="openProfileResolver"[^>]+>Preview profile stack/);
+assert.match(profileDeckHtml, /placeholder="Search profiles and IDs"/);
+assert.match(profileDeckSource, /Complete profiles/);
+assert.match(profileDeckSource, /Override profiles/);
+assert.match(profileDeckSource, /profile-group--controllers/);
+assert.match(profileDeckSource, /classic-profile-inspector/);
+assert.match(profileDeckSource, /data-profile-action="duplicate-shallow"/);
+assert.match(profileDeckSource, /data-profile-action="duplicate-deep"/);
+assert.match(profileDeckSource, /data-modifier-operation-action="add"/);
+assert.match(profileDeckSource, /data-controller-action="add-transition"/);
+console.log("Classic Profile Deck presentation contracts passed");
 
 const fields = [
   { key: "behaviorKind", label: "Behavior", type: "enum", options: [
@@ -458,6 +479,7 @@ globalThis.requestAnimationFrame = (callback) => callback();
 const root = new FakeElement();
 const profileSearch = new FakeElement();
 const profileKindFilter = new FakeElement();
+const profileLibrary = new FakeElement();
 const inspector = new FakeElement();
 const state = {};
 let shellMarkDirtyCalls = 0;
@@ -558,7 +580,7 @@ const controller = createProfilesController({
   setStatus: (message, kind) => { statuses.push({ message, kind }); },
   elements: {
     profilesView: root,
-    profileLibrary: new FakeElement(),
+    profileLibrary,
     profileInspector: inspector,
     profileKindFilter,
     openProfileResolver: new FakeElement(),
@@ -578,6 +600,37 @@ const actionTarget = (action) => ({
     return null;
   },
 });
+const controllerActionTarget = (controllerAction) => ({
+  closest(selector) {
+    if (selector === "[data-controller-action]") return { dataset: { controllerAction } };
+    return null;
+  },
+});
+const modifierActionTarget = (modifierAction) => ({
+  closest(selector) {
+    if (selector === "[data-modifier-action]") return { dataset: { modifierAction } };
+    return null;
+  },
+});
+const deckModeTarget = (profileDeckMode) => ({
+  closest(selector) {
+    if (selector === "[data-profile-deck-mode]") return { dataset: { profileDeckMode } };
+    return null;
+  },
+});
+
+profileSearch.value = "12289";
+root.dispatch("input", profileSearch);
+assert.match(profileLibrary.innerHTML, /Controller 1/);
+profileSearch.value = "authored-profile:class-0:active";
+root.dispatch("input", profileSearch);
+assert.match(profileLibrary.innerHTML, /Bird active/);
+profileSearch.value = "8705";
+root.dispatch("input", profileSearch);
+assert.match(profileLibrary.innerHTML, /Bird calm/);
+profileSearch.value = "";
+root.dispatch("input", profileSearch);
+
 root.dispatch("click", actionTarget("new"));
 root.dispatch("input", {
   value: "Bird relaxed",
