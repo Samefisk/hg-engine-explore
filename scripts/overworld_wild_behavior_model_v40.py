@@ -20,11 +20,15 @@ from typing import Any, Iterable
 
 try:
     from overworld_wild_behavior_v40_field_metadata import (
+        numeric_bounds,
+        operator_allowed,
         scalar_value_valid,
         state_body_values_valid,
     )
 except ModuleNotFoundError:
     from scripts.overworld_wild_behavior_v40_field_metadata import (
+        numeric_bounds,
+        operator_allowed,
         scalar_value_valid,
         state_body_values_valid,
     )
@@ -37,7 +41,7 @@ DEFAULT_HEADER = ROOT / "include" / "overworld_wild_behavior_data.h"
 
 MAGIC = 0x4F574244
 VERSION = 40
-HEADER_SIZE = 208
+HEADER_SIZE = 216
 CHECKSUM_OFFSET = 16
 HARD_CAP = 0x3000
 PINNED_STABLE_HISTORY_CHECKPOINT_SHA256 = (
@@ -67,6 +71,7 @@ SECTIONS = (
     ("overrideMembers", 2), ("overrideActions", 12),
     ("spawnPolicies", 12), ("populationPolicies", 10),
     ("hookSets", 8), ("owners", 6), ("overrideDefinitions", 36),
+    ("modifierOperations", 11),
     ("transitions", 24), ("transitionGuards", 12),
     ("transitionOperations", 18), ("transitionActions", 10),
     ("recoveryActions", 8), ("importRecipes", 24),
@@ -112,6 +117,9 @@ RECORD_SCHEMAS = {
         "timerValue", "hasTiredOriginKind", "tiredOriginKind",
         "hasRequiredOwnerId", "allowMultipleOwners", "allowMultipleInstancesPerOwner",
         "authoredTiredBound", "flags", "reserved0", "reserved1")),
+    "modifierOperations": _record_schema("<HHh5B", (
+        "stableId", "definitionId", "operand", "fieldNamespace", "fieldId",
+        "operatorKind", "bound", "order")),
     "importRecipes": _record_schema("<10H4B", (
         "stableId", "ownerId", "controllerId", "nodeId", "profileId",
         "recoveryTransitionId", "sourceOverrideId", "actionStart", "actionCount",
@@ -360,6 +368,7 @@ def _all_records(model: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
     for key in (
         "genericAssignments", "speciesAssignments", "spawnPolicies",
         "populationPolicies", "hookSets", "owners", "overrideDefinitions",
+        "modifierOperations",
         "importRecipes", "applicability", "tiredTranslations", "semanticIds",
     ):
         for record in model[key]:
@@ -381,6 +390,7 @@ def validate_model(model: dict[str, Any]) -> None:
         "speciesAssignments", "overrides", "assignmentActions",
         "spawnPolicies", "populationPolicies", "hookSets", "owners",
         "overrideDefinitions", "transitions", "importRecipes",
+        "modifierOperations",
         "applicability", "tiredTranslations", "semanticIds",
     )
     for domain in required_arrays:
@@ -745,13 +755,11 @@ def validate_model(model: dict[str, Any]) -> None:
         ):
             if _integer(definition.get(name), f"definition.{name}", 1) not in (0, 1):
                 raise ModelError(f"definition.{name} must be boolean")
-        if definition["kind"] != 1:
-            raise ModelError(
-                "ordinary modifier definitions are unsupported by the compact graph"
-            )
+        if definition["kind"] not in (1, 2):
+            raise ModelError("definition kind is outside its closed domain")
         if not 0 <= definition["channel"] <= 5:
             raise ModelError("definition channel is outside its closed domain")
-        if definition["selectorKind"] not in (1, 2):
+        if (definition["kind"] == 1 and definition["selectorKind"] not in (1, 2)):
             raise ModelError("definition selector kind is outside its closed domain")
         if definition["mapLifetime"] not in (1, 2, 3):
             raise ModelError("definition map lifetime is outside its closed domain")
@@ -823,7 +831,25 @@ def validate_model(model: dict[str, Any]) -> None:
                          or definition["nodeId"] == 0
                          or definition["flags"] != 1)):
                 raise ModelError("generated exact tired definition is missing fallback data")
-        if definition["selectorKind"] == 2:
+        if definition["kind"] == 2:
+            if (not 1 <= definition["channel"] <= 4
+                    or definition["controllerId"] != 0 or definition["nodeId"] != 0
+                    or definition["selectorKind"] != 0
+                    or definition["semanticRoleId"] != 0
+                    or definition["requiredOwnerId"] != 0
+                    or definition["recoveryTransitionId"] != 0
+                    or definition["timerClock"] != 0
+                    or definition["timerSource"] != 0
+                    or definition["hiddenTimerPolicy"] != 0
+                    or definition["recoveryPolicy"] != 0
+                    or definition["timerValue"] != 0
+                    or definition["hasTiredOriginKind"] != 0
+                    or definition["tiredOriginKind"] != 0
+                    or definition["hasRequiredOwnerId"] != 0
+                    or definition["authoredTiredBound"] != 0
+                    or definition["flags"] != 0):
+                raise ModelError("modifier definition carries candidate or generated metadata")
+        elif definition["selectorKind"] == 2:
             if (definition["controllerId"] != 0 or definition["nodeId"] != 0
                     or not 1 <= definition["semanticRoleId"] <= 7):
                 raise ModelError("semantic definition selector is noncanonical")
@@ -841,6 +867,65 @@ def validate_model(model: dict[str, Any]) -> None:
                           "definition.recoveryTransitionId", optional=True)
         require_reference(definition["applicabilityId"], applicability_ids,
                           "definition.applicabilityId")
+    modifier_operations_by_definition: dict[int, list[dict[str, Any]]] = {
+        stable_id: [] for stable_id in definition_ids
+    }
+    for operation in model["modifierOperations"]:
+        definition_id = _integer(
+            operation.get("definitionId"), "modifierOperation.definitionId"
+        )
+        require_reference(
+            definition_id, definition_ids, "modifierOperation.definitionId"
+        )
+        namespace = _integer(
+            operation.get("fieldNamespace"),
+            "modifierOperation.fieldNamespace", 0xFF,
+        )
+        field = _integer(operation.get("fieldId"), "modifierOperation.fieldId", 0xFF)
+        operator = _integer(
+            operation.get("operatorKind"), "modifierOperation.operatorKind", 0xFF
+        )
+        bound = _integer(operation.get("bound"), "modifierOperation.bound", 0xFF)
+        order = _integer(operation.get("order"), "modifierOperation.order", 0xFF)
+        operand = operation.get("operand")
+        if (isinstance(operand, bool) or not isinstance(operand, int)
+                or not -0x8000 <= operand <= 0x7FFF):
+            raise ModelError("modifierOperation.operand must be a signed 16-bit integer")
+        kind = {1: 4, 2: 5}.get(namespace)
+        if (kind is None or not operator_allowed(kind, field, operator)):
+            raise ModelError("modifier operation namespace/field/operator is unsupported")
+        if operator in (2, 5, 6):
+            if operator == 2 and bound != 0:
+                raise ModelError("plain relative modifier operation cannot carry a bound")
+            if operator in (5, 6) and not scalar_value_valid(kind, field, bound):
+                raise ModelError("compound modifier bound is outside the field domain")
+        else:
+            if bound != 0 or not scalar_value_valid(kind, field, operand):
+                raise ModelError("exact modifier operand/bound is outside the field domain")
+        modifier_operations_by_definition[definition_id].append(operation)
+    for definition_id, operations in modifier_operations_by_definition.items():
+        definition = definitions_by_id[definition_id]
+        if definition["kind"] == 1:
+            if operations:
+                raise ModelError("state-candidate definition cannot own modifier operations")
+            continue
+        if not 1 <= len(operations) <= 16:
+            raise ModelError("modifier definition must own 1..16 operations")
+        orders = [operation["order"] for operation in operations]
+        if sorted(orders) != list(range(len(operations))):
+            raise ModelError("modifier operation order must be one contiguous sequence")
+        lower_bounds: set[tuple[int, int]] = set()
+        upper_bounds: set[tuple[int, int]] = set()
+        for operation in operations:
+            field_key = (operation["fieldNamespace"], operation["fieldId"])
+            if operation["operatorKind"] == 3:
+                lower_bounds.add(field_key)
+            elif operation["operatorKind"] == 4:
+                upper_bounds.add(field_key)
+        if lower_bounds & upper_bounds:
+            raise ModelError(
+                "modifier definition cannot combine AT_LEAST and AT_MOST on one field"
+            )
     for transition in model["transitions"]:
         for name in ("definitionId", "ownerId", "order", "dispatchPriority"):
             _integer(transition.get(name), f"transition.{name}")
@@ -1545,8 +1630,17 @@ def _flatten_model(model: dict[str, Any]) -> dict[str, list[bytes]]:
             continue
         # Semantic IDs are grouped by kind/value on wire; every other
         # top-level record family uses ascending stable ID order.
-        records = (sorted(model[section], key=lambda record: (record["kind"], record["value"]))
-                   if section == "semanticIds" else _sorted(model[section]))
+        if section == "semanticIds":
+            records = sorted(model[section], key=lambda record: (record["kind"], record["value"]))
+        elif section == "modifierOperations":
+            records = sorted(
+                model[section],
+                key=lambda record: (
+                    record["definitionId"], record["order"], record["stableId"]
+                ),
+            )
+        else:
+            records = _sorted(model[section])
         for record in records:
             output[section].append(_pack_named(record, section, codec, fields))
 
@@ -1615,6 +1709,7 @@ def merge_authored_metadata(
         ("stateProfiles", ("name", "descriptiveTags")),
         ("controllers", ("name",)),
         ("transitions", ("name",)),
+        ("overrideDefinitions", ("name",)),
     ):
         authored = {record["stableId"]: record for record in authored_model[section]}
         projected = {record["stableId"]: record for record in result[section]}
@@ -1651,6 +1746,7 @@ HEADER_COUNT_DEFINES = {
     "OWBD_POPULATION_POLICY_COUNT": "populationPolicies",
     "OWBD_HOOK_SET_COUNT": "hookSets",
     "OWBD_OVERRIDE_DEFINITION_COUNT": "overrideDefinitions",
+    "OWBD_MODIFIER_OPERATION_COUNT": "modifierOperations",
     "OWBD_OVERRIDE_SOURCE_COUNT": "overrideSources",
     "OWBD_OVERRIDE_ACTION_COUNT": "overrideActions",
     "OWBD_OWNER_COUNT": "owners",

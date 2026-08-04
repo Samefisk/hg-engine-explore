@@ -907,7 +907,115 @@ process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
         self.assertGreater(sizes[0], baseline_size)
         self.assertGreater(sizes[1], sizes[0])
         self.assertLessEqual(sizes[1], 0x3000)
-        self.assertEqual(sizes, [11480, 11940])
+        self.assertEqual(sizes, [11488, 11948])
+
+    def test_modifier_definition_create_update_delete_round_trip(self):
+        model = self.model()
+        controller_id = model["controllers"][0]["stableId"]
+        profile_id = model["stateProfiles"][0]["stableId"]
+        modifier = {
+            "draftId": "draft:modifier", "name": "Rain movement",
+            "controllerId": None, "nodeId": None, "requiredOwnerId": None,
+            "recoveryTransitionId": None,
+            "applicabilityId": "draft:modifier-app", "priority": 42,
+            "kind": 2, "channel": 2, "selectorKind": 0,
+            "semanticRoleId": 0, "mapLifetime": 1, "battleLifetime": 1,
+            "timerClock": 0, "timerSource": 0, "hiddenTimerPolicy": 0,
+            "recoveryPolicy": 0, "timerValue": 0,
+            "hasTiredOriginKind": 0, "tiredOriginKind": 0,
+            "hasRequiredOwnerId": 0, "allowMultipleOwners": 1,
+            "allowMultipleInstancesPerOwner": 1, "authoredTiredBound": 0,
+            "flags": 0, "reserved0": 0, "reserved1": 0,
+            "applicability": {
+                "draftId": "draft:modifier-app", "name": "Rain active scope",
+                "kind": 15, "groupMask": 0xFFFFFFFF,
+                "controllerId": controller_id, "profileId": profile_id,
+                "minimum": 2, "maximum": 0, "flags": 0,
+            },
+            "operations": [
+                {"draftId": "draft:modifier-op-set", "fieldNamespace": 1,
+                 "definitionId": "draft:modifier",
+                 "fieldId": 3, "operatorKind": 1, "operand": 4,
+                 "bound": 0, "order": 0},
+                {"draftId": "draft:modifier-op-add", "fieldNamespace": 2,
+                 "definitionId": "draft:modifier",
+                 "fieldId": 7, "operatorKind": 5, "operand": -3,
+                 "bound": 1, "order": 1},
+            ],
+        }
+        before = {path: (self.workspace / path).read_bytes() for path in MANAGED}
+        for channel in (0, 5):
+            invalid = copy.deepcopy(modifier)
+            invalid["channel"] = channel
+            with self.subTest(channel=channel), self.assertRaises(self.writer.v40.ModelError):
+                self.writer.apply_behavior_model_changes(
+                    self.workspace,
+                    {"modelVersion": 40, "modifiers": {"create": [invalid]}},
+                )
+            self.assertEqual(
+                {path: (self.workspace / path).read_bytes() for path in MANAGED},
+                before,
+            )
+        mapping = self.writer.apply_behavior_model_changes(
+            self.workspace, {"modelVersion": 40, "modifiers": {"create": [modifier]}}
+        )
+        self.assertEqual(set(mapping), {
+            "draft:modifier", "draft:modifier-app",
+            "draft:modifier-op-set", "draft:modifier-op-add",
+        })
+        saved = self.model()
+        definition_id = mapping["draft:modifier"]
+        definition = next(item for item in saved["overrideDefinitions"]
+                          if item["stableId"] == definition_id)
+        self.assertEqual((definition["kind"], definition["name"]), (2, "Rain movement"))
+        operations = sorted(
+            (item for item in saved["modifierOperations"]
+             if item["definitionId"] == definition_id),
+            key=lambda item: item["order"],
+        )
+        self.assertEqual([item["operatorKind"] for item in operations], [1, 5])
+
+        update = {
+            key: copy.deepcopy(value) for key, value in definition.items()
+            if key not in {"registryKey", "nameId"}
+        }
+        update["name"] = "Rain movement tuned"
+        rule = next(item for item in saved["applicability"]
+                    if item["stableId"] == definition["applicabilityId"])
+        update["applicability"] = {
+            **{key: copy.deepcopy(value) for key, value in rule.items()
+               if key not in {"registryKey"}},
+            "name": "Rain active scope",
+        }
+        update["operations"] = [
+            {**{key: value for key, value in operations[1].items()
+                if key != "registryKey"}, "order": 0},
+            {**{key: value for key, value in operations[0].items()
+                if key != "registryKey"}, "order": 1,
+             "operand": 3},
+        ]
+        self.writer.apply_behavior_model_changes(
+            self.workspace, {"modelVersion": 40, "modifiers": {"update": [update]}}
+        )
+        saved = self.model()
+        definition = next(item for item in saved["overrideDefinitions"]
+                          if item["stableId"] == definition_id)
+        operations = sorted(
+            (item for item in saved["modifierOperations"]
+             if item["definitionId"] == definition_id),
+            key=lambda item: item["order"],
+        )
+        self.assertEqual(definition["name"], "Rain movement tuned")
+        self.assertEqual([(item["operatorKind"], item["operand"]) for item in operations],
+                         [(5, -3), (1, 3)])
+
+        self.writer.apply_behavior_model_changes(
+            self.workspace, {"modelVersion": 40, "modifiers": {"remove": [definition_id]}}
+        )
+        saved = self.model()
+        self.assertNotIn(definition_id, {item["stableId"] for item in saved["overrideDefinitions"]})
+        self.assertFalse(any(item["definitionId"] == definition_id
+                             for item in saved["modifierOperations"]))
 
     def test_multi_entity_create_allocates_parent_then_owned_descendants(self):
         model = self.model()

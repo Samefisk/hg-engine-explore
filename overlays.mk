@@ -226,7 +226,6 @@ $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_CopyValidatedSpawnConfiguration \
 		--keep-symbol=OverworldWildRuntime_MatchesPendingTimerExpiry \
 		--keep-symbol=OverworldWildRuntime_CopyResolvedCachedNode \
-		--keep-symbol=OverworldWildRuntime_CopyInstalledModifierOperations \
 		--keep-symbol=OverworldWildRuntime_AcquireInstalledTransitionCatalog \
 		$< $@
 

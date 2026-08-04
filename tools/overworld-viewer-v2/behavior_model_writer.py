@@ -54,7 +54,7 @@ DIRECT_DOMAIN_FIELDS = {
 }
 READ_ONLY_DOMAIN_KEYS = frozenset(("owners", "importRecipes", "tiredTranslations"))
 DOMAIN_KEYS = frozenset((
-    "stateProfiles", "controllers", "transitions", *DIRECT_DOMAIN_FIELDS,
+    "stateProfiles", "controllers", "transitions", "modifiers", *DIRECT_DOMAIN_FIELDS,
     *READ_ONLY_DOMAIN_KEYS,
 ))
 DELTA_KEYS = frozenset(("create", "update", "remove"))
@@ -96,6 +96,11 @@ APPLICABILITY_AUTHORED_FIELDS = (
 APPLICABILITY_FIELDS = frozenset((
     "draftId", "stableId", "name", *APPLICABILITY_AUTHORED_FIELDS,
 ))
+MODIFIER_OPERATION_FIELDS = frozenset((
+    "draftId", "stableId", "definitionId", "operand", "fieldNamespace", "fieldId",
+    "operatorKind", "bound", "order",
+))
+MODIFIER_FIELDS = DEFINITION_FIELDS | {"operations"}
 CHILD_FIELDS = {
     "guards": frozenset(("draftId", "stableId", "kind", "negate", "payload", "referenceId")),
     "operations": frozenset((
@@ -345,6 +350,30 @@ def _scan_allocations(
                     if kind == "draft":
                         allocator.draft(identity, child_key.removesuffix("s"))  # type: ignore[arg-type]
 
+    for operation in ("create", "update"):
+        for index, raw in enumerate(changes["modifiers"][operation]):
+            path = f"modifiers.{operation}[{index}]"
+            item = _object(raw, path)
+            creating = operation == "create"
+            if creating:
+                allocator.draft(
+                    _draft_id(item.get("draftId"), f"{path}.draftId"),
+                    "override-definition",
+                )
+            applicability = _object(item.get("applicability"), f"{path}.applicability")
+            if applicability.get("stableId") is None:
+                allocator.draft(
+                    _draft_id(applicability.get("draftId"), f"{path}.applicability.draftId"),
+                    "applicability",
+                )
+            for operation_index, raw_operation in enumerate(
+                    _array(item.get("operations"), f"{path}.operations")):
+                identity_kind, identity = _nested_identity(
+                    raw_operation, creating, f"{path}.operations[{operation_index}]"
+                )
+                if identity_kind == "draft":
+                    allocator.draft(identity, "modifier-operation")  # type: ignore[arg-type]
+
     direct_kinds = {
         "spawnPolicies": "spawn-policy",
         "populationPolicies": "population-policy",
@@ -476,7 +505,8 @@ def _profile_record(
             bodies_by_signature[signature] = (
                 result["bodyId"], result["bodyRegistryKey"],
             )
-    result["name"] = _name(item["name"], f"{path}.name")
+    if "name" in item:
+        result["name"] = _name(item["name"], f"{path}.name")
     result["descriptiveTags"] = _tags(item["descriptiveTags"], f"{path}.descriptiveTags")
     result["body"]["values"] = typed_values
     return result
@@ -597,6 +627,8 @@ def _definition_record(
             raise _error(f"{path} cannot mix stable and draft identity")
         existing = _existing(stable_id, existing_definitions, path)
         result = copy.deepcopy(existing)
+    if "name" in item:
+        result["name"] = _name(item["name"], f"{path}.name")
     applicability = _applicability_record(
         _object(item["applicability"], f"{path}.applicability"), allocator,
         existing_applicability, f"{path}.applicability",
@@ -631,6 +663,124 @@ def _definition_record(
             f"{path} cannot synthesize generated metadata on an ordinary wrapper"
         )
     return result, applicability
+
+
+def _modifier_operation_record(
+    item: dict[str, Any], creating_parent: bool,
+    old_operations: dict[int, dict[str, Any]], allocator: _Allocator,
+    definition_id: int, path: str,
+) -> dict[str, Any]:
+    _keys(
+        item, MODIFIER_OPERATION_FIELDS,
+        MODIFIER_OPERATION_FIELDS - {"draftId", "stableId"}, path,
+    )
+    identity_kind, identity = _nested_identity(item, creating_parent, path)
+    if identity_kind == "draft":
+        stable_id = allocator.draft_map[identity]  # type: ignore[index]
+        result = {
+            "stableId": stable_id,
+            "registryKey": _registry_for_draft(allocator, identity),  # type: ignore[arg-type]
+        }
+    else:
+        result = copy.deepcopy(_existing(identity, old_operations, path))  # type: ignore[arg-type]
+    operand = item["operand"]
+    if isinstance(operand, bool) or not isinstance(operand, int) or not -0x8000 <= operand <= 0x7FFF:
+        raise _error(f"{path}.operand must be a signed 16-bit integer")
+    result.update({
+        "definitionId": definition_id,
+        "operand": operand,
+        "fieldNamespace": _integer(item["fieldNamespace"], f"{path}.fieldNamespace", 0xFF),
+        "fieldId": _integer(item["fieldId"], f"{path}.fieldId", 0xFF),
+        "operatorKind": _integer(item["operatorKind"], f"{path}.operatorKind", 0xFF),
+        "bound": _integer(item["bound"], f"{path}.bound", 0xFF),
+        "order": _integer(item["order"], f"{path}.order", 0xFF),
+    })
+    if _resolve(item["definitionId"], allocator, f"{path}.definitionId") != definition_id:
+        raise _error(f"{path}.definitionId does not match its owning modifier")
+    return result
+
+
+def _materialize_modifiers(
+    result: dict[str, Any], changes: dict[str, dict[str, list[Any]]],
+    allocator: _Allocator, transitions: dict[int, dict[str, Any]],
+    definitions: dict[int, dict[str, Any]], applicability: dict[int, dict[str, Any]],
+    retirements: list[str], retired: set[str],
+) -> None:
+    operations = _index(result["modifierOperations"], "modifier operations")
+
+    referenced = {transition["definitionId"] for transition in transitions.values()}
+    for transition in transitions.values():
+        for operation in transition["operations"]:
+            referenced.update(value for value in (
+                operation["definitionId"], operation["replacementDefinitionId"],
+                operation["instanceKey"],
+            ) if value)
+    for raw_id in changes["modifiers"]["remove"]:
+        stable_id = _stable_id(raw_id, "modifiers.remove[]")
+        definition = _existing(stable_id, definitions, "modifiers.remove[]")
+        if definition["kind"] != 2:
+            raise _error("modifiers.remove[] may remove only modifier definitions")
+        if stable_id in referenced:
+            raise _error(
+                f"modifier {stable_id} still has transition/operation backlinks; "
+                "remove or replace them in the same transaction"
+            )
+        _retire(definition["registryKey"], retirements, retired)
+        for operation_id, operation in list(operations.items()):
+            if operation["definitionId"] == stable_id:
+                _retire(operation["registryKey"], retirements, retired)
+                del operations[operation_id]
+        del definitions[stable_id]
+
+    for change_kind in ("update", "create"):
+        for index, raw in enumerate(changes["modifiers"][change_kind]):
+            path = f"modifiers.{change_kind}[{index}]"
+            item = _object(raw, path)
+            _keys(item, MODIFIER_FIELDS, DEFINITION_AUTHORED_FIELDS + ("operations",), path)
+            creating = change_kind == "create"
+            stable_id = (
+                allocator.draft_map[_draft_id(item.get("draftId"), f"{path}.draftId")]
+                if creating else _stable_id(item.get("stableId"), f"{path}.stableId")
+            )
+            previous = None if creating else _existing(stable_id, definitions, path)
+            if previous is not None and previous["kind"] != 2:
+                raise _error(f"{path} may update only a modifier definition")
+            definition_item = {key: value for key, value in item.items() if key != "operations"}
+            definition, rule = _definition_record(
+                definition_item, allocator, definitions, applicability, path
+            )
+            if definition["kind"] != 2:
+                raise _error(f"{path}.kind must be modifier (2)")
+            old_operations = {
+                operation_id: operation for operation_id, operation in operations.items()
+                if operation["definitionId"] == stable_id
+            }
+            authored_operations = [
+                _modifier_operation_record(
+                    _object(operation, f"{path}.operations[{operation_index}]"),
+                    creating, old_operations, allocator, stable_id,
+                    f"{path}.operations[{operation_index}]",
+                )
+                for operation_index, operation in enumerate(
+                    _array(item["operations"], f"{path}.operations")
+                )
+            ]
+            kept = {operation["stableId"] for operation in authored_operations}
+            for operation_id, operation in old_operations.items():
+                if operation_id not in kept:
+                    _retire(operation["registryKey"], retirements, retired)
+                    del operations[operation_id]
+            for operation in authored_operations:
+                operations[operation["stableId"]] = operation
+            definitions[stable_id] = definition
+            applicability[rule["stableId"]] = rule
+
+    result["modifierOperations"] = sorted(
+        operations.values(),
+        key=lambda operation: (
+            operation["definitionId"], operation["order"], operation["stableId"]
+        ),
+    )
 
 
 def _child_record(
@@ -1125,6 +1275,10 @@ def _materialize(
             )
     definitions.update(definition_updates)
     applicability.update(applicability_updates)
+    _materialize_modifiers(
+        result, changes, allocator, transitions, definitions, applicability,
+        retirements, retired,
+    )
     result["overrideDefinitions"] = list(definitions.values())
     result["applicability"] = list(applicability.values())
     _materialize_direct_domains(
@@ -1146,6 +1300,9 @@ def _materialize(
                 ) if value in definitions
             )
     referenced_definitions.update(item["definitionId"] for item in result["tiredTranslations"])
+    referenced_definitions.update(
+        item["definitionId"] for item in result["modifierOperations"]
+    )
     for stable_id, definition in list(definitions.items()):
         if stable_id not in referenced_definitions:
             _retire(definition["registryKey"], retirements, retired)

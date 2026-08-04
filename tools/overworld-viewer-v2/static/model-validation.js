@@ -4,6 +4,7 @@ const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.strin
 const ref = (entity) => entity?.draftId ?? entity?.stableId;
 const same = (left, right) => String(left) === String(right);
 const present = (value) => value !== null && value !== undefined && value !== "";
+const nonzeroRef = (value) => present(value) && Number(value) !== 0;
 const asArray = (value) => Array.isArray(value) ? value : [];
 
 export const VALIDATION_CODES = Object.freeze({
@@ -39,7 +40,10 @@ export const VALIDATION_CODES = Object.freeze({
   OWNER_REQUIRED: "OWNER_REQUIRED_MISMATCH",
   OWNER_MULTIPLICITY: "OWNER_MULTIPLICITY_CONFLICT",
   INSTANCE_MULTIPLICITY: "INSTANCE_MULTIPLICITY_CONFLICT",
-  PREVIEW_UNSUPPORTED: "MODIFIER_PREVIEW_UNSUPPORTED",
+  MODIFIER_DOMAIN: "MODIFIER_OPERATION_INVALID",
+  MODIFIER_COUNT: "MODIFIER_OPERATION_COUNT_INVALID",
+  MODIFIER_OWNERSHIP: "MODIFIER_OPERATION_OWNERSHIP_INVALID",
+  MODIFIER_CONFLICT: "MODIFIER_FIELD_PRECEDENCE_CONFLICT",
 });
 
 const DEFAULT_SCHEMA = Object.freeze({
@@ -67,6 +71,42 @@ function schemaFor(model) {
     childCountMaximums: { ...DEFAULT_SCHEMA.childCountMaximums, ...(supplied.childCountMaximums || {}) },
     domains: { ...DEFAULT_SCHEMA.domains, ...(supplied.domains || {}) },
   };
+}
+
+const MODIFIER_NUMERIC_FIELDS = Object.freeze({
+  1: new Set([3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 24, 25]),
+  2: new Set([3, 4, 6, 7]),
+});
+
+function modifierField(model, namespace, fieldId) {
+  if (namespace === 1 && fieldId >= 1 && fieldId <= 27) {
+    return asArray(model?.stateProfileFields)[fieldId] || null;
+  }
+  if (namespace === 2 && fieldId >= 1 && fieldId <= 7) {
+    return asArray(model?.controllerScalarFields)[fieldId - 1] || null;
+  }
+  return null;
+}
+
+function modifierScalarValid(field, value) {
+  return Number.isInteger(value) && Boolean(field) && validateTypedValue(value, field);
+}
+
+function modifierProjection(model) {
+  const rules = new Map(asArray(model?.applicability).map((item) => [String(ref(item)), item]));
+  const operations = new Map();
+  asArray(model?.modifierOperations).forEach((operation) => {
+    const key = String(operation?.definitionId);
+    (operations.get(key) || operations.set(key, []).get(key)).push(clone(operation));
+  });
+  return asArray(model?.overrideDefinitions)
+    .filter((definition) => Number(definition?.kind) === 2)
+    .map((definition) => ({
+      ...clone(definition),
+      applicability: clone(rules.get(String(definition?.applicabilityId))),
+      operations: (operations.get(String(ref(definition))) || [])
+        .sort((left, right) => Number(left?.order) - Number(right?.order)),
+    }));
 }
 
 function diagnostic(code, path, message, entityType = "model", entityId = "model", severity = "error") {
@@ -152,6 +192,43 @@ export function materializeDraftGraph(savedModel, draft = null) {
     model.overrideDefinitions = [...definitions.values()];
     model.applicability = [...applicability.values()];
   }
+  if (draft.modifiers) {
+    const merged = mergedEntities(modifierProjection(model), draft.modifiers);
+    const retiredDefinitionIds = new Set(
+      asArray(model.overrideDefinitions)
+        .filter((definition) => Number(definition?.kind) === 2)
+        .map((definition) => String(ref(definition))),
+    );
+    const retiredApplicabilityIds = new Set(
+      asArray(model.overrideDefinitions)
+        .filter((definition) => Number(definition?.kind) === 2)
+        .map((definition) => String(definition?.applicabilityId)),
+    );
+    model.overrideDefinitions = asArray(model.overrideDefinitions)
+      .filter((definition) => !retiredDefinitionIds.has(String(ref(definition))));
+    model.applicability = asArray(model.applicability)
+      .filter((rule) => !retiredApplicabilityIds.has(String(ref(rule))));
+    model.modifierOperations = asArray(model.modifierOperations)
+      .filter((operation) => !retiredDefinitionIds.has(String(operation?.definitionId)));
+    for (const modifier of merged) {
+      const definition = clone(modifier);
+      const authoredRule = definition.applicability;
+      const authoredOperations = asArray(definition.operations);
+      delete definition.applicability;
+      delete definition.operations;
+      model.overrideDefinitions.push(definition);
+      if (authoredRule) model.applicability.push("kind" in authoredRule ? {
+        ...clone(authoredRule),
+        flags: Number(authoredRule.kind),
+        immutableContextMask: Number(authoredRule.groupMask),
+        effectiveProfileId: authoredRule.profileId || null,
+        semanticRoleId: authoredRule.minimum || null,
+      } : clone(authoredRule));
+      model.modifierOperations.push(...authoredOperations.map((operation, order) => ({
+        ...clone(operation), definitionId: ref(definition), order,
+      })));
+    }
+  }
   if (draft.policyCatalog && typeof draft.policyCatalog === "object") {
     model.policyCatalog ||= {};
     for (const key of ["spawnPolicies", "populationPolicies", "hookSets"]) {
@@ -201,12 +278,12 @@ function validateDelta(savedModel, draft) {
     errors.push(diagnostic(VALIDATION_CODES.MODEL_VERSION, "draft.modelVersion", "Draft modelVersion must remain 40.", "draft", "draft"));
   }
   const supported = new Set([
-    "stateProfiles", "controllers", "transitions",
+    "stateProfiles", "controllers", "transitions", "modifiers",
     "spawnPolicies", "populationPolicies", "hookSets",
     "genericAssignments", "speciesAssignments", "assignmentActions",
     "overrides",
   ]);
-  const recognized = new Set([...supported, "owners", "importRecipes", "tiredTranslations", "overrideDefinitions", "applicability", "customRoles", "semanticRoles", "policyCatalog"]);
+  const recognized = new Set([...supported, "owners", "importRecipes", "tiredTranslations", "overrideDefinitions", "modifierOperations", "applicability", "customRoles", "semanticRoles", "policyCatalog"]);
   for (const key of Object.keys(draft).filter((key) => key !== "modelVersion")) {
     if (!recognized.has(key)) {
       errors.push(diagnostic(VALIDATION_CODES.DRAFT_TRANSACTION, `draft.${key}`, `Unknown draft transaction domain ${key}.`, "draft", "draft"));
@@ -217,6 +294,7 @@ function validateDelta(savedModel, draft) {
   const savedDomains = {
     stateProfiles: asArray(savedModel?.stateProfiles), controllers: asArray(savedModel?.controllers),
     transitions: asArray(savedModel?.transitionGraph?.transitions), owners: asArray(savedModel?.owners),
+    modifiers: modifierProjection(savedModel),
     spawnPolicies: asArray(savedModel?.policyCatalog?.spawnPolicies),
     populationPolicies: asArray(savedModel?.policyCatalog?.populationPolicies),
     hookSets: asArray(savedModel?.policyCatalog?.hookSets),
@@ -226,7 +304,7 @@ function validateDelta(savedModel, draft) {
     overrides: asArray(savedModel?.overrides),
     importRecipes: asArray(savedModel?.importRecipes),
     tiredTranslations: asArray(savedModel?.tiredTranslations),
-    overrideDefinitions: asArray(savedModel?.overrideDefinitions), applicability: asArray(savedModel?.applicability),
+    overrideDefinitions: asArray(savedModel?.overrideDefinitions), modifierOperations: asArray(savedModel?.modifierOperations), applicability: asArray(savedModel?.applicability),
     customRoles: asArray(savedModel?.customRoles), semanticRoles: asArray(savedModel?.semanticRoles),
   };
   for (const key of Object.keys(savedDomains)) {
@@ -516,10 +594,16 @@ function modelDiagnostics(model) {
     requireRef(definition?.applicabilityId, applicabilityIds, `${path}.applicabilityId`, "overrideDefinition", id, "Applicability");
     domain(definition?.kind, schema.domains.definitionKind, `${path}.kind`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_DOMAIN);
     domain(definition?.channel, schema.domains.channel, `${path}.channel`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_DOMAIN);
-    domain(definition?.selectorKind, schema.domains.selectorKind, `${path}.selectorKind`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
+    const modifier = Number(definition?.kind) === 2;
+    if (!modifier) domain(definition?.selectorKind, schema.domains.selectorKind, `${path}.selectorKind`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
     unsigned(definition?.priority, byteMax, `${path}.priority`, "overrideDefinition", id);
     for (const key of ["timerValue", "hasTiredOriginKind", "tiredOriginKind", "hasRequiredOwnerId", "allowMultipleOwners", "allowMultipleInstancesPerOwner", "authoredTiredBound", "flags", "reserved0", "reserved1"]) unsigned(definition?.[key] ?? 0, byteMax, `${path}.${key}`, "overrideDefinition", id);
-    if (Number(definition?.selectorKind) === 1) {
+    if (modifier) {
+      if (![1, 2, 3, 4].includes(Number(definition?.channel))) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_DOMAIN, `${path}.channel`, "Ordinary runtime modifiers must use Controller State, Temporary Effect, Scripted Force, or Possession.", "overrideDefinition", id));
+      for (const key of ["controllerId", "nodeId", "selectorKind", "semanticRoleId", "requiredOwnerId", "recoveryTransitionId", "timerClock", "timerSource", "hiddenTimerPolicy", "recoveryPolicy", "timerValue", "hasTiredOriginKind", "tiredOriginKind", "hasRequiredOwnerId", "authoredTiredBound", "flags", "reserved0", "reserved1"]) {
+        if (!zero(definition?.[key])) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_DOMAIN, `${path}.${key}`, "Modifier definitions cannot carry candidate, timer, recovery, or generated-wrapper metadata.", "overrideDefinition", id));
+      }
+    } else if (Number(definition?.selectorKind) === 1) {
       requireRef(definition?.nodeId, nodeIds, `${path}.nodeId`, "overrideDefinition", id, "Exact node");
       if (Number(definition?.semanticRoleId || 0) !== 0) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.semanticRoleId`, "Exact selectors must not also select a semantic role.", "overrideDefinition", id));
       const node = nodesById.get(String(definition?.nodeId));
@@ -531,7 +615,7 @@ function modelDiagnostics(model) {
       if (present(definition?.nodeId)) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.nodeId`, "Semantic selectors cannot also select an exact node.", "overrideDefinition", id));
       domain(definition?.semanticRoleId, semanticRoles.size ? [...semanticRoles] : schema.domains.semanticRole, `${path}.semanticRoleId`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
     }
-    const generatedDefinition = Number(definition?.hasTiredOriginKind) !== 0 || Number(definition?.hasRequiredOwnerId) !== 0;
+    const generatedDefinition = !modifier && (Number(definition?.hasTiredOriginKind) !== 0 || Number(definition?.hasRequiredOwnerId) !== 0);
     const expectedSelectorFlags = generatedDefinition && Number(definition?.selectorKind) === 1 ? 1 : 0;
     if (Number(definition?.flags) !== expectedSelectorFlags) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.flags`, `Definition flags must be ${expectedSelectorFlags} for this selector kind.`, "overrideDefinition", id));
     if (![0, 1].includes(Number(definition?.hasTiredOriginKind))
@@ -542,17 +626,73 @@ function modelDiagnostics(model) {
     const scopedController = definition?.controllerId
       ?? definition?.applicability?.controllerId
       ?? applicabilityById.get(String(definition?.applicabilityId))?.controllerId;
-    if (present(scopedController)) requireRef(scopedController, controllerIds, `${path}.controllerId`, "overrideDefinition", id, "Controller");
+    if (nonzeroRef(scopedController)) requireRef(scopedController, controllerIds, `${path}.controllerId`, "overrideDefinition", id, "Controller");
     domain(definition?.mapLifetime, schema.domains.lifetime, `${path}.mapLifetime`, "overrideDefinition", id, VALIDATION_CODES.LIFETIME);
     domain(definition?.battleLifetime, schema.domains.lifetime, `${path}.battleLifetime`, "overrideDefinition", id, VALIDATION_CODES.LIFETIME);
-    domain(definition?.timerClock, schema.domains.timerClock, `${path}.timerClock`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
-    domain(definition?.timerSource, schema.domains.timerSource, `${path}.timerSource`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
-    domain(definition?.hiddenTimerPolicy, schema.domains.hiddenTimerPolicy, `${path}.hiddenTimerPolicy`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
-    domain(definition?.recoveryPolicy, schema.domains.recoveryPolicy, `${path}.recoveryPolicy`, "overrideDefinition", id, VALIDATION_CODES.RECOVERY);
+    domain(definition?.timerClock ?? 0, schema.domains.timerClock, `${path}.timerClock`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
+    domain(definition?.timerSource ?? 0, schema.domains.timerSource, `${path}.timerSource`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
+    domain(definition?.hiddenTimerPolicy ?? 0, schema.domains.hiddenTimerPolicy, `${path}.hiddenTimerPolicy`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
+    domain(definition?.recoveryPolicy ?? 0, schema.domains.recoveryPolicy, `${path}.recoveryPolicy`, "overrideDefinition", id, VALIDATION_CODES.RECOVERY);
     if (Number(definition?.timerClock) === 0 && (Number(definition?.timerSource) !== 0 || Number(definition?.timerValue) !== 0 || Number(definition?.hiddenTimerPolicy) !== 0)) errors.push(diagnostic(VALIDATION_CODES.TIMER, path, "A definition without a timer clock must clear timer source, value, and hidden policy.", "overrideDefinition", id));
     if (Number(definition?.timerClock) !== 0 && (Number(definition?.timerSource) === 0 || Number(definition?.timerValue) === 0 || Number(definition?.hiddenTimerPolicy) === 0)) errors.push(diagnostic(VALIDATION_CODES.TIMER, path, "An active timer requires a non-zero source, value, and hidden-state policy.", "overrideDefinition", id));
-    if (Boolean(Number(definition?.hasRequiredOwnerId)) !== present(definition?.requiredOwnerId)) errors.push(diagnostic(VALIDATION_CODES.OWNER_REQUIRED, `${path}.requiredOwnerId`, "Required-owner flag and reference must agree.", "overrideDefinition", id));
-    if (present(definition?.requiredOwnerId)) requireRef(definition.requiredOwnerId, ownerIds, `${path}.requiredOwnerId`, "overrideDefinition", id, "Required owner");
+    if (Boolean(Number(definition?.hasRequiredOwnerId)) !== nonzeroRef(definition?.requiredOwnerId)) errors.push(diagnostic(VALIDATION_CODES.OWNER_REQUIRED, `${path}.requiredOwnerId`, "Required-owner flag and reference must agree.", "overrideDefinition", id));
+    if (nonzeroRef(definition?.requiredOwnerId)) requireRef(definition.requiredOwnerId, ownerIds, `${path}.requiredOwnerId`, "overrideDefinition", id, "Required owner");
+  });
+
+  const definitionsById = new Map(definitions.map((definition) => [String(ref(definition)), definition]));
+  const modifierOperationsByDefinition = new Map();
+  asArray(model?.modifierOperations).forEach((operation, index) => {
+    const path = `modifierOperations.${index}`;
+    const id = identity(operation, "modifierOperation", path);
+    const definitionId = operation?.definitionId;
+    const definition = definitionsById.get(String(definitionId));
+    requireRef(definitionId, definitionIds, `${path}.definitionId`, "modifierOperation", id, "Modifier definition");
+    if (definition && Number(definition.kind) !== 2) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_OWNERSHIP, `${path}.definitionId`, "Only a modifier definition may own modifier operations.", "modifierOperation", id));
+    const namespace = Number(operation?.fieldNamespace);
+    const fieldId = Number(operation?.fieldId);
+    const operator = Number(operation?.operatorKind);
+    const field = modifierField(model, namespace, fieldId);
+    if (![1, 2].includes(namespace) || !field) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.fieldId`, "Modifier target must be one runtime-addressable state or controller field; behaviorKind is not addressable.", "modifierOperation", id));
+    domain(operator, [1, 2, 3, 4, 5, 6], `${path}.operatorKind`, "modifierOperation", id, VALIDATION_CODES.MODIFIER_DOMAIN);
+    const numeric = Boolean(MODIFIER_NUMERIC_FIELDS[namespace]?.has(fieldId));
+    if (!numeric && operator !== 1) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.operatorKind`, "Enum, boolean, mask, and ID fields support SET only.", "modifierOperation", id));
+    const operand = operation?.operand;
+    if (!Number.isInteger(operand) || operand < -0x8000 || operand > 0x7FFF) {
+      errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.operand`, "Modifier operand must be a signed 16-bit integer.", "modifierOperation", id));
+    } else if (![2, 5, 6].includes(operator) && !modifierScalarValid(field, operand)) {
+      errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.operand`, "Exact modifier operands must be members of the target field's typed domain.", "modifierOperation", id));
+    }
+    unsigned(operation?.bound, byteMax, `${path}.bound`, "modifierOperation", id);
+    if (operator < 5 && Number(operation?.bound) !== 0) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.bound`, "Only compound relative operators may carry a bound.", "modifierOperation", id));
+    if (operator >= 5 && !modifierScalarValid(field, Number(operation?.bound))) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.bound`, "Compound modifier bounds must be members of the target field's typed domain.", "modifierOperation", id));
+    if (!Number.isInteger(operation?.order) || operation.order < 0 || operation.order > 15) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.order`, "Modifier operation order must fit 0..15.", "modifierOperation", id));
+    const owned = modifierOperationsByDefinition.get(String(definitionId)) || [];
+    owned.push(operation);
+    modifierOperationsByDefinition.set(String(definitionId), owned);
+  });
+  definitions.forEach((definition, index) => {
+    const operations = modifierOperationsByDefinition.get(String(ref(definition))) || [];
+    const path = `${index < rootDefinitions.length ? "overrideDefinitions" : "embeddedDefinitions"}.${index < rootDefinitions.length ? index : index - rootDefinitions.length}`;
+    if (Number(definition?.kind) !== 2) {
+      if (operations.length) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_OWNERSHIP, path, "State-candidate definitions cannot own modifier operations.", "overrideDefinition", ref(definition)));
+      return;
+    }
+    if (operations.length < 1 || operations.length > 16) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_COUNT, `${path}.operations`, "A modifier definition must own 1..16 operations.", "overrideDefinition", ref(definition)));
+    const orders = operations.map((operation) => Number(operation?.order)).sort((left, right) => left - right);
+    if (orders.length && orders.some((value, order) => value !== order)) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.operations`, "Modifier operation order must be one unique contiguous 0-based sequence.", "overrideDefinition", ref(definition)));
+    const lower = new Set(operations.filter((operation) => Number(operation?.operatorKind) === 3).map((operation) => `${operation.fieldNamespace}:${operation.fieldId}`));
+    const upper = new Set(operations.filter((operation) => Number(operation?.operatorKind) === 4).map((operation) => `${operation.fieldNamespace}:${operation.fieldId}`));
+    for (const fieldKey of lower) if (upper.has(fieldKey)) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_DOMAIN, `${path}.operations`, `One modifier cannot combine AT_LEAST and AT_MOST for field ${fieldKey}.`, "overrideDefinition", ref(definition)));
+  });
+  const modifierDefinitions = definitions.filter((definition) => Number(definition?.kind) === 2);
+  modifierDefinitions.forEach((right, rightIndex) => {
+    const rightFields = new Set((modifierOperationsByDefinition.get(String(ref(right))) || []).map((operation) => `${operation.fieldNamespace}:${operation.fieldId}`));
+    for (let leftIndex = 0; leftIndex < rightIndex; leftIndex += 1) {
+      const left = modifierDefinitions[leftIndex];
+      if (Number(left?.channel) !== Number(right?.channel) || Number(left?.priority) !== Number(right?.priority)) continue;
+      const overlap = (modifierOperationsByDefinition.get(String(ref(left))) || []).find((operation) => rightFields.has(`${operation.fieldNamespace}:${operation.fieldId}`));
+      if (overlap) errors.push(diagnostic(VALIDATION_CODES.MODIFIER_CONFLICT, `overrideDefinitions.${rootDefinitions.indexOf(right)}.priority`, `Modifier ${String(ref(right))} shares channel, priority, and field ${overlap.fieldNamespace}:${overlap.fieldId} with modifier ${String(ref(left))}; stable IDs decide write order.`, "overrideDefinition", ref(right), "warning"));
+    }
   });
 
   const transitions = asArray(model?.transitionGraph?.transitions);
@@ -560,7 +700,6 @@ function modelDiagnostics(model) {
   const transitionOrders = new Set();
   transitions.forEach((transition, index) => { const id = identity(transition, "transition", `transitionGraph.transitions.${index}`); if (id !== null) transitionIds.add(String(id)); });
   const transitionsById = new Map(transitions.map((transition) => [String(ref(transition)), transition]));
-  const definitionsById = new Map(definitions.map((definition) => [String(ref(definition)), definition]));
   const ownerAuthorized = (definitionRef, ownerRef) => {
     const definition = definitionsById.get(String(definitionRef));
     return Boolean(definition) && (!Number(definition.hasRequiredOwnerId) || same(definition.requiredOwnerId, ownerRef));
@@ -571,10 +710,10 @@ function modelDiagnostics(model) {
       const resolves = requireRef(definition?.recoveryTransitionId, transitionIds, `${path}.recoveryTransitionId`, "overrideDefinition", id, "Recovery transition");
       const recovery = resolves ? transitionsById.get(String(definition.recoveryTransitionId)) : null;
       if (recovery && !same(recovery.candidateDefinitionId, id)) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition must route the same candidate definition.", "overrideDefinition", id));
-      if (recovery && present(definition?.requiredOwnerId) && !same(recovery.ownerId, definition.requiredOwnerId)) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition owner must match the definition's required owner.", "overrideDefinition", id));
+      if (recovery && nonzeroRef(definition?.requiredOwnerId) && !same(recovery.ownerId, definition.requiredOwnerId)) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition owner must match the definition's required owner.", "overrideDefinition", id));
       if (recovery && !asArray(recovery.operations).some((operation) => [3, 4].includes(Number(operation.kind)) && same(operation.definitionId, id) && same(operation.ownerId, recovery.ownerId))) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition must remove the same candidate and owner.", "overrideDefinition", id));
     }
-    else if (present(definition?.recoveryTransitionId)) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition requires route-transition policy.", "overrideDefinition", id));
+    else if (nonzeroRef(definition?.recoveryTransitionId)) errors.push(diagnostic(VALIDATION_CODES.RECOVERY, `${path}.recoveryTransitionId`, "Recovery transition requires route-transition policy.", "overrideDefinition", id));
   });
 
   const childGlobalIds = new Set();
@@ -790,6 +929,9 @@ export function validateStackInput(model, { controllerRef, layers = [], immutabl
     if (String(layer?.definitionId || "").startsWith("draft:")) errors.push(diagnostic(VALIDATION_CODES.DRAFT_REFERENCE, `${path}.definitionId`, "Unallocated draft definitions have no runtime precedence key.", "stackLayer", index));
     if (String(layer?.ownerId || "").startsWith("draft:")) errors.push(diagnostic(VALIDATION_CODES.DRAFT_REFERENCE, `${path}.ownerId`, "Unallocated draft owners have no runtime precedence key.", "stackLayer", index));
     if (definition) referencedGraphEntities.add(`overrideDefinition:${String(ref(definition))}`);
+    if (Number(definition?.kind) === 2) asArray(model?.modifierOperations)
+      .filter((operation) => same(operation?.definitionId, ref(definition)))
+      .forEach((operation) => referencedGraphEntities.add(`modifierOperation:${String(ref(operation))}`));
     if (!definition) errors.push(diagnostic(String(layer?.definitionId).startsWith("draft:") ? VALIDATION_CODES.DRAFT_REFERENCE : VALIDATION_CODES.REFERENCE, `${path}.definitionId`, "Layer definition does not exist.", "stackLayer", index));
     if (!owner) errors.push(diagnostic(String(layer?.ownerId).startsWith("draft:") ? VALIDATION_CODES.DRAFT_REFERENCE : VALIDATION_CODES.REFERENCE, `${path}.ownerId`, "Layer owner does not exist.", "stackLayer", index));
     if (definition && !applicability.has(String(definition.applicabilityId))) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.applicabilityId`, "Definition applicability does not exist.", "stackLayer", index));
@@ -806,11 +948,10 @@ export function validateStackInput(model, { controllerRef, layers = [], immutabl
     if (definition && !definition.allowMultipleInstancesPerOwner && siblings.some((item) => same(item.ownerId, layer?.ownerId) && item.instanceKey !== instanceKey)) errors.push(diagnostic(VALIDATION_CODES.INSTANCE_MULTIPLICITY, path, "Definition does not allow multiple instances for one owner.", "stackLayer", index));
     siblings.push({ ownerId: layer?.ownerId, instanceKey });
     perDefinition.set(String(layer?.definitionId), siblings);
-    if (Number(definition?.kind) === 2) errors.push(diagnostic(VALIDATION_CODES.PREVIEW_UNSUPPORTED, `${path}.definitionId`, "Modifier definitions require the runtime modifier engine.", "stackLayer", index));
     const scopedController = definition?.controllerId ?? applicability.get(String(definition?.applicabilityId))?.controllerId;
-    if (definition && controller && present(scopedController) && !same(scopedController, ref(controller))) return;
-    if (definition && controller && Number(definition.selectorKind) === 1 && !asArray(controller.nodes).some((node) => same(ref(node), definition.nodeId))) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.selector`, "Exact selector does not resolve in the selected controller.", "stackLayer", index));
-    if (definition && controller && Number(definition.selectorKind) === 2) {
+    if (definition && controller && nonzeroRef(scopedController) && !same(scopedController, ref(controller))) return;
+    if (definition && Number(definition.kind) === 1 && controller && Number(definition.selectorKind) === 1 && !asArray(controller.nodes).some((node) => same(ref(node), definition.nodeId))) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.selector`, "Exact selector does not resolve in the selected controller.", "stackLayer", index));
+    if (definition && Number(definition.kind) === 1 && controller && Number(definition.selectorKind) === 2) {
       const matches = asArray(controller.nodes).filter((node) => Number(node.semanticRoleId) === Number(definition.semanticRoleId));
       if (matches.length !== 1) errors.push(diagnostic(matches.length ? VALIDATION_CODES.SELECTOR_DUPLICATE : VALIDATION_CODES.REFERENCE, `${path}.selector`, "Semantic selector must resolve exactly once in the selected controller.", "stackLayer", index));
     }
@@ -819,7 +960,7 @@ export function validateStackInput(model, { controllerRef, layers = [], immutabl
   // entities that this preview can actually resolve. The validator is pure,
   // so this never changes the preview model or its caller's draft.
   for (const item of modelDiagnostics(model || {})) {
-    if (referencedGraphEntities.has(`${item.entityType}:${item.entityId}`)) errors.push(item);
+    if (item.severity !== "warning" && referencedGraphEntities.has(`${item.entityType}:${item.entityId}`)) errors.push(item);
   }
   return stableDiagnostics(errors);
 }

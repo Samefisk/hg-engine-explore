@@ -844,6 +844,7 @@
       "stableId": 61452
     }
   ],
+  "modifierOperations": [],
   "modelVersion": 40,
   "overrideDefinitions": [
     {
@@ -12734,8 +12735,8 @@
   "wire": {
     "flags": 6,
     "hardCap": 12288,
-    "headerSize": 208,
+    "headerSize": 216,
     "magic": 1331118660,
-    "schemaFingerprint": 1549778775
+    "schemaFingerprint": 2485242445
   }
 }

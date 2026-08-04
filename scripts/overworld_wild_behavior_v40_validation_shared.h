@@ -15,12 +15,15 @@ typedef struct OwbdSectionSpec {
 #if defined(OWBD_VALIDATION_DEFINE_RESIDENT_HELPERS)
 #define OWBD_RESIDENT_DATA __attribute__((section(".owbd_resident_tables"), used))
 #define OWBD_RESIDENT_CODE __attribute__((section(".owbd_resident_helpers"), noinline, used))
+#define OWBD_RESIDENT_MODIFIER_CODE __attribute__((section(".owbd_resident_modifier_helper"), noinline, used))
 #elif defined(OWBD_VALIDATION_USE_RESIDENT_HELPERS)
 #define OWBD_RESIDENT_DATA extern
 #define OWBD_RESIDENT_CODE extern
+#define OWBD_RESIDENT_MODIFIER_CODE extern
 #else
 #define OWBD_RESIDENT_DATA static
 #define OWBD_RESIDENT_CODE static
+#define OWBD_RESIDENT_MODIFIER_CODE static
 #endif
 
 enum {
@@ -28,7 +31,8 @@ enum {
     OWBD_S_GENERIC_ASSIGN, OWBD_S_SPECIES_ASSIGN,
     OWBD_S_OVERRIDE, OWBD_S_MEMBER, OWBD_S_OVERRIDE_ACTION,
     OWBD_S_SPAWN, OWBD_S_POPULATION, OWBD_S_HOOK, OWBD_S_OWNER,
-    OWBD_S_DEFINITION, OWBD_S_TRANSITION, OWBD_S_GUARD, OWBD_S_OPERATION,
+    OWBD_S_DEFINITION, OWBD_S_MODIFIER_OPERATION,
+    OWBD_S_TRANSITION, OWBD_S_GUARD, OWBD_S_OPERATION,
     OWBD_S_TRANSITION_ACTION, OWBD_S_RECOVERY, OWBD_S_IMPORT,
     OWBD_S_APPLICABILITY, OWBD_S_TIRED_TRANSLATION, OWBD_S_SEMANTIC_ID,
     OWBD_S_COUNT
@@ -45,7 +49,8 @@ OWBD_RESIDENT_DATA const OwbdSectionSpec sOwbdSpecs[OWBD_S_COUNT] = {
     { 2, OWBD_OVERRIDE_MEMBER_COUNT }, { 12, OWBD_OVERRIDE_ACTION_COUNT },
     { 12, OWBD_SPAWN_POLICY_COUNT }, { 10, OWBD_POPULATION_POLICY_COUNT },
     { 8, OWBD_HOOK_SET_COUNT }, { 6, OWBD_OWNER_COUNT },
-    { 36, OWBD_OVERRIDE_DEFINITION_COUNT }, { 24, OWBD_TRANSITION_COUNT },
+    { 36, OWBD_OVERRIDE_DEFINITION_COUNT },
+    { 11, OWBD_MODIFIER_OPERATION_COUNT }, { 24, OWBD_TRANSITION_COUNT },
     { 12, OWBD_TRANSITION_GUARD_COUNT }, { 18, OWBD_TRANSITION_OPERATION_COUNT },
     { 10, OWBD_TRANSITION_ACTION_COUNT }, { 8, OWBD_RECOVERY_ACTION_COUNT },
     { 24, OWBD_IMPORT_RECIPE_COUNT }, { 16, OWBD_APPLICABILITY_COUNT },
@@ -59,7 +64,7 @@ typedef struct OwbdSharedContext {
     OwbdReadCallback read;
     void *readContext;
     u32 size;
-    u8 header[208];
+    u8 header[216];
     u16 *ids;
     u16 idCount;
     u16 idBase[OWBD_S_COUNT];
@@ -268,16 +273,16 @@ OWBD_RESIDENT_CODE BOOL OwbdStaticValueValid(u8 kind, u8 field, u8 value)
 {
     if (kind == 5) {
         if (field == 1) return value <= 2;
-        if (field == 2) return value <= 10 || value == 0xFF;
-        if (field == 3 || field == 7) return value <= 64;
-        if (field == 4) return value <= 64;
+        if (field == 2) return (u8)(value + 1) <= 11;
+        if (field == 3 || field == 4 || field == 7) return value <= 64;
         if (field == 5) return value <= 5;
         return value <= 100;
     }
     if (kind == 7) return field == 1 ? value <= 3 : field == 2 ? value <= 16
         : field == 3 || field == 4 ? value >= 1 && value <= 8 : value <= 64;
     if (kind == 9) return value <= 10;
-    if (field == 2 && value == 7) value = 0xFF;
+    if ((kind == 4 && field == 3 && value == 0)
+        || (field == 2 && value == 7)) value = 0xFF;
     if ((u8)(field - 6) <= 1 && value > 5 && value < 15) value = 0xFF;
     return field >= 1 && field <= 27 && value <= sOwbdStateValueMax[field];
 }
@@ -286,7 +291,7 @@ OWBD_RESIDENT_CODE BOOL OwbdStaticValueValid(u8 kind, u8 field, u8 value)
 #if defined(OWBD_VALIDATION_USE_RESIDENT_HELPERS)
 BOOL OwbdModifierPayloadValid(u8 kind, u8 field, u8 op, s8 delta, u8 bound);
 #else
-OWBD_RESIDENT_CODE BOOL OwbdModifierPayloadValid(u8 kind, u8 field, u8 op, s8 delta, u8 bound)
+OWBD_RESIDENT_MODIFIER_CODE BOOL OwbdModifierPayloadValid(u8 kind, u8 field, u8 op, s8 delta, u8 bound)
 {
     int index = kind == 4 ? 0 : kind == 5 ? 1 : kind == 7 ? 2 : kind == 9 ? 3 : -1;
     BOOL numeric;
@@ -781,11 +786,12 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
     for (i = 0; i < OwbdCount(ctx, OWBD_S_HOOK); i++) { u8 r[8]; if (!OwbdReadRecord(ctx, OWBD_S_HOOK, i, r) || OwbdLe16(r + 2) != OwbdLe16(r) || r[4] > 1 || r[5] > 1 || r[6] > 1 || r[5] != r[6] || (r[4] && r[5]) || r[7]) return FALSE; }
     for (i = 0; i < OwbdCount(ctx, OWBD_S_OWNER); i++) { u8 r[6]; if (!OwbdReadRecord(ctx, OWBD_S_OWNER, i, r) || OwbdLe16(r + 2) != OwbdLe16(r) || r[4] > 1 || r[5]) return FALSE; }
     for (i = 0; i < OwbdCount(ctx, OWBD_S_DEFINITION); i++) {
-        u8 r[36]; u16 controller, node, owner, recovery, applicability; BOOL applicationMatches = FALSE;
+        u8 r[36]; u16 controller, node, owner, recovery, applicability;
+        BOOL applicationMatches = FALSE;
         if (!OwbdReadRecord(ctx, OWBD_S_DEFINITION, i, r) || OwbdLe16(r + 2) != OwbdLe16(r)
             || !(applicability = OwbdLe16(r + 12)) || !OwbdHasId(ctx, OWBD_S_APPLICABILITY, applicability)
             || OwbdLe16(r + 14) > 0xFF
-            || r[16] < 1 || r[16] > 2 || r[17] > 5 || r[18] < 1 || r[18] > 2
+            || r[16] < 1 || r[16] > 2 || r[17] > 5
             || r[20] < 1 || r[20] > 3 || r[21] < 1 || r[21] > 3 || r[22] > 2 || r[23] > 3
             || r[24] > 3 || r[25] > 1 || r[27] > 1 || r[29] > 1 || r[30] > 1
             || r[31] > 1 || r[32] > 1 || r[33] > 1 || r[34] || r[35]) return FALSE;
@@ -794,9 +800,41 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
         if ((r[29] != 0) != (owner != 0)
             || (owner && !OwbdReferenceOwner(ctx, owner))) return FALSE;
         if ((r[27] != 0) != (r[28] != 0)) return FALSE;
-        if (r[18] == 2) {
+        if (r[16] == OWBD_OVERRIDE_KIND_MODIFIER) {
+            int operationCount = 0;
+            u16 operationOrderMask = 0;
+            if (r[17] < OWBD_CHANNEL_CONTROLLER_STATE
+                || r[17] > OWBD_CHANNEL_POSSESSION
+                || controller || node || owner || recovery || r[18] || r[19]
+                || r[22] || r[23] || r[24] || r[25] || r[26]
+                || r[27] || r[28] || r[29] || r[32] || r[33])
+                return FALSE;
+            for (j = 0; j < OwbdCount(ctx, OWBD_S_MODIFIER_OPERATION); j++) {
+                u8 operation[11];
+                if (!OwbdReadRecord(ctx, OWBD_S_MODIFIER_OPERATION, j, operation))
+                    return FALSE;
+                if (OwbdLe16(operation + 2) == OwbdLe16(r)) {
+                    if (operation[10] >= 16) return FALSE;
+                    operationOrderMask |= (u16)(1u << operation[10]);
+                    operationCount++;
+                }
+            }
+            if (operationCount < 1 || operationCount > 16
+                || operationOrderMask != (u16)((1u << operationCount) - 1u))
+                return FALSE;
+        } else if (r[18] == 2) {
+            for (j = 0; j < OwbdCount(ctx, OWBD_S_MODIFIER_OPERATION); j++) {
+                u8 operation[11];
+                if (!OwbdReadRecord(ctx, OWBD_S_MODIFIER_OPERATION, j, operation)
+                    || OwbdLe16(operation + 2) == OwbdLe16(r)) return FALSE;
+            }
             if (controller || node || r[19] < 1 || r[19] > 7) return FALSE;
         } else {
+            for (j = 0; j < OwbdCount(ctx, OWBD_S_MODIFIER_OPERATION); j++) {
+                u8 operation[11];
+                if (!OwbdReadRecord(ctx, OWBD_S_MODIFIER_OPERATION, j, operation)
+                    || OwbdLe16(operation + 2) == OwbdLe16(r)) return FALSE;
+            }
             BOOL nodeMatches = FALSE;
             if (!OwbdHasId(ctx, OWBD_S_CONTROLLER, controller) || !OwbdHasId(ctx, OWBD_S_NODE, node) || r[19]) return FALSE;
             for (j = 0; j < OwbdCount(ctx, OWBD_S_NODE); j++) { u8 n[12]; if (!OwbdReadRecord(ctx, OWBD_S_NODE, j, n)) return FALSE; if (OwbdLe16(n) == node && OwbdLe16(n + 2) == controller) nodeMatches = TRUE; }
@@ -813,7 +851,8 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
                 && (r[16] != 1 || !(OwbdLe16(a + 2) & 12))
                 && (!(OwbdLe16(a + 2) & 2) || !controller
                     || OwbdLe16(a + 8) == controller)
-                && (r[18] == 2 || !(OwbdLe16(a + 2) & 2)
+                && (r[16] == OWBD_OVERRIDE_KIND_MODIFIER || r[18] == 2
+                    || !(OwbdLe16(a + 2) & 2)
                     || OwbdLe16(a + 8) == controller)) applicationMatches = TRUE;
         }
         if (!applicationMatches) return FALSE;
@@ -827,6 +866,54 @@ static BOOL OwbdValidateRecords(OwbdSharedContext *ctx)
             }
             if (!backlink) return FALSE;
         }
+    }
+    for (i = 0; i < OwbdCount(ctx, OWBD_S_MODIFIER_OPERATION); i++) {
+        u8 r[11]; u16 definition, rawOperand; signed short operand;
+        u8 namespaceKind, field, op, bound, order;
+        int definitionMatches = 0, priorOrderMatches = 0;
+        BOOL numeric;
+        if (!OwbdReadRecord(ctx, OWBD_S_MODIFIER_OPERATION, i, r)) return FALSE;
+        definition = OwbdLe16(r + 2); rawOperand = OwbdLe16(r + 4);
+        operand = (signed short)rawOperand;
+        namespaceKind = r[6] == 1 ? 4 : r[6] == 2 ? 5 : 0;
+        field = r[7]; op = r[8]; bound = r[9]; order = r[10];
+        if (!namespaceKind || !OwbdHasId(ctx, OWBD_S_DEFINITION, definition)
+            || field == 0 || field > (namespaceKind == 4 ? 27 : 7)
+            || op < OWBD_OPERATOR_SET || op > OWBD_OPERATOR_ADD_AT_MOST)
+            return FALSE;
+        numeric = (sOwbdNumericFieldMasks[namespaceKind == 4 ? 0 : 1]
+            & (1u << field)) != 0;
+        if (!numeric && op != OWBD_OPERATOR_SET) return FALSE;
+        if (op == OWBD_OPERATOR_ADD) {
+            if (bound) return FALSE;
+        } else if (op >= OWBD_OPERATOR_ADD_AT_LEAST) {
+            if (!numeric || !OwbdStaticValueValid(namespaceKind, field, bound))
+                return FALSE;
+        } else if (bound || rawOperand > 0xFF
+            || !OwbdStaticValueValid(namespaceKind, field, (u8)operand)) {
+            return FALSE;
+        }
+        for (j = 0; j < OwbdCount(ctx, OWBD_S_DEFINITION); j++) {
+            u8 d[36];
+            if (!OwbdReadRecord(ctx, OWBD_S_DEFINITION, j, d)) return FALSE;
+            if (OwbdLe16(d) == definition && d[16] == OWBD_OVERRIDE_KIND_MODIFIER)
+                definitionMatches++;
+        }
+        for (j = 0; j < OwbdCount(ctx, OWBD_S_MODIFIER_OPERATION); j++) {
+            u8 other[11];
+            if (!OwbdReadRecord(ctx, OWBD_S_MODIFIER_OPERATION, j, other))
+                return FALSE;
+            if (OwbdLe16(other + 2) != definition) continue;
+            if (other[10] == order) priorOrderMatches++;
+            if (j < i && other[6] == r[6] && other[7] == field
+                && ((other[8] == OWBD_OPERATOR_AT_LEAST
+                        && op == OWBD_OPERATOR_AT_MOST)
+                    || (other[8] == OWBD_OPERATOR_AT_MOST
+                        && op == OWBD_OPERATOR_AT_LEAST)))
+                return FALSE;
+        }
+        if (definitionMatches != 1 || priorOrderMatches != 1 || order >= 16)
+            return FALSE;
     }
     {
         u16 guardCursor = 0, operationCursor = 0, actionCursor = 0, recoveryCursor = 0;
@@ -994,6 +1081,7 @@ static BOOL OwbdValidateStream(OwbdReadCallback read, void *readContext, u32 siz
 
 #undef OWBD_RESIDENT_DATA
 #undef OWBD_RESIDENT_CODE
+#undef OWBD_RESIDENT_MODIFIER_CODE
         || OwbdLe32(ctx.header + 20) != OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT
 #ifndef OWBD_VALIDATION_EXTERNAL_INTEGRITY
         || !OwbdChecksum(&ctx, workspace)
@@ -1036,7 +1124,7 @@ static BOOL OwbdValidateStream(OwbdReadCallback read, void *readContext, u32 siz
 static BOOL OwbdValidateBaselineStream(OwbdReadCallback read, void *readContext,
     u32 size, void *workspace, u32 workspaceSize)
 {
-    u8 header[208];
+    u8 header[216];
     int section;
     if (size != OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE
         || !read(readContext, 0, sizeof(header), header)

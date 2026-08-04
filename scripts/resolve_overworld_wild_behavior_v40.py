@@ -62,7 +62,8 @@ SECTION_SPECS = (
     ("overrideSources", 28), ("overrideMembers", 2),
     ("overrideActions", 12), ("spawnPolicies", 12),
     ("populationPolicies", 10), ("hookSets", 8), ("owners", 6),
-    ("overrideDefinitions", 36), ("transitions", 24),
+    ("overrideDefinitions", 36), ("modifierOperations", 11),
+    ("transitions", 24),
     ("transitionGuards", 12), ("transitionOperations", 18),
     ("transitionActions", 10), ("recoveryActions", 8),
     ("importRecipes", 24), ("applicability", 16),
@@ -73,7 +74,7 @@ SECTION_SPECS = (
 class Graph:
     def __init__(self, blob, source, path):
         self.blob, self.path, self.sections = blob, path, {}
-        cursor = 208
+        cursor = 216
         for index, (name, expected_stride) in enumerate(SECTION_SPECS):
             offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
             if offset != cursor or stride != expected_stride or count > (len(blob) - offset) // stride:
@@ -277,7 +278,8 @@ def validate_graph_closure(graph, live_ids, body_roles, identities, semantic,
          has_origin, origin, has_owner, multiple_owners, multiple_instances,
          authored_bound, flags, reserved0, reserved1) = definition
         generated = bool(has_origin or has_owner)
-        if (kind != 1 or not 0 <= channel <= 5 or selector not in (1, 2)
+        if (kind not in (1, 2) or not 0 <= channel <= 5
+                or not ((kind == 1 and selector in (1, 2)) or (kind == 2 and selector == 0))
                 or map_lifetime not in (1, 2, 3) or battle_lifetime not in (1, 2, 3)
                 or timer_clock not in (0, 1, 2) or timer_source not in (0, 1, 2, 3)
                 or hidden_timer not in (0, 1, 2, 3) or recovery_policy not in (0, 1)
@@ -295,7 +297,13 @@ def validate_graph_closure(graph, live_ids, body_roles, identities, semantic,
                 or (not generated and (channel == 5 or authored_bound or flags))
                 or (generated and flags != (1 if selector == 1 else 0))):
             raise ValueError(f"{path}: independent definition domain/reference mismatch")
-        if selector == 2:
+        if kind == 2:
+            if (not 1 <= channel <= 4 or controller or node or owner or recovery or role
+                    or timer_clock or timer_source or hidden_timer or recovery_policy
+                    or timer_value or has_origin or origin or has_owner
+                    or authored_bound or flags):
+                raise ValueError(f"{path}: independent modifier definition payload mismatch")
+        elif selector == 2:
             if controller or node or not 1 <= role <= 7:
                 raise ValueError(f"{path}: independent semantic definition selector mismatch")
         elif (not controller or node not in nodes or nodes[node][1] != controller or role):
@@ -308,6 +316,32 @@ def validate_graph_closure(graph, live_ids, body_roles, identities, semantic,
         applicability_claims[application] += 1
     if any(claim != 1 for claim in applicability_claims.values()):
         raise ValueError(f"{path}: independent applicability ownership mismatch")
+
+    modifier_by_definition = {stable: [] for stable in definitions}
+    for record in graph.records("modifierOperations", "<HHh5B"):
+        stable, definition_id, operand, namespace, field, operator, bound, order = record
+        kind = {1: 4, 2: 5}.get(namespace)
+        if (definition_id not in definitions or kind is None
+                or not operator_allowed(kind, field, operator)
+                or (operator in SIGNED_DELTA_OPERATORS
+                    and ((operator == 2 and bound)
+                         or (operator != 2 and not scalar_value_valid(kind, field, bound))))
+                or (operator not in SIGNED_DELTA_OPERATORS
+                    and (bound or not scalar_value_valid(kind, field, operand)))):
+            raise ValueError(f"{path}: independent modifier operation mismatch")
+        modifier_by_definition[definition_id].append(record)
+    for definition_id, records in modifier_by_definition.items():
+        if definitions[definition_id][8] == 1:
+            if records:
+                raise ValueError(f"{path}: state candidate owns modifier operations")
+            continue
+        if (not 1 <= len(records) <= 16
+                or sorted(record[7] for record in records) != list(range(len(records)))):
+            raise ValueError(f"{path}: modifier operation order/count mismatch")
+        lower = {(record[3], record[4]) for record in records if record[5] == 3}
+        upper = {(record[3], record[4]) for record in records if record[5] == 4}
+        if lower & upper:
+            raise ValueError(f"{path}: modifier minimum/maximum conflict")
 
     guards = {record[0]: record for record in graph.records("transitionGuards", "<HH4BHH")}
     operations = {record[0]: record for record in graph.records("transitionOperations", "<7H4B")}
@@ -512,14 +546,14 @@ def validate_direct_cutover_records(graph):
 
 def validate_wire(path, source):
     blob = path.read_bytes()
-    if len(blob) < 208 or len(blob) > 0x3000:
+    if len(blob) < 216 or len(blob) > 0x3000:
         raise ValueError(f"{path}: independent size/cap mismatch")
     magic, version, header_size, size, flags, checksum, fingerprint = struct.unpack_from("<IHHIIII", blob)
     defines = {name: int(value, 0) for name, value in re.findall(
         r"^\s*#\s*define\s+(OVERWORLD_WILD_BEHAVIOR_DATA_(?:CHECKSUM|SCHEMA_FINGERPRINT))\s+(0[xX][0-9A-Fa-f]+|[0-9]+)(?:u)?\b",
         source.read_text(), re.MULTILINE)}
     scratch = bytearray(blob); scratch[16:20] = bytes(4)
-    if (magic, version, header_size, size, flags) != (0x4F574244, 40, 208, len(blob), 6) \
+    if (magic, version, header_size, size, flags) != (0x4F574244, 40, 216, len(blob), 6) \
             or checksum != defines["OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM"] \
             or fingerprint != defines["OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT"] \
             or checksum != binascii.crc32(scratch) & 0xFFFFFFFF:

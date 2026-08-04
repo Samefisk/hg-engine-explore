@@ -16,7 +16,7 @@ from overworld_wild_behavior_v40_field_metadata import (
 )
 
 MAGIC = 0x4F574244
-HEADER_SIZE = 208
+HEADER_SIZE = 216
 CHECKSUM_OFFSET = 16
 SECTION_SPECS = (
     ("stateBodies", "OWBD_STATE_BODY_COUNT", 32),
@@ -33,6 +33,7 @@ SECTION_SPECS = (
     ("hookSets", "OWBD_HOOK_SET_COUNT", 8),
     ("owners", "OWBD_OWNER_COUNT", 6),
     ("overrideDefinitions", "OWBD_OVERRIDE_DEFINITION_COUNT", 36),
+    ("modifierOperations", "OWBD_MODIFIER_OPERATION_COUNT", 11),
     ("transitions", "OWBD_TRANSITION_COUNT", 24),
     ("transitionGuards", "OWBD_TRANSITION_GUARD_COUNT", 12),
     ("transitionOperations", "OWBD_TRANSITION_OPERATION_COUNT", 18),
@@ -360,7 +361,8 @@ def validate_v40_owbd(path: Path, source: Path) -> None:
          recovery_policy, timer, has_origin, origin, has_owner, allow_owners, allow_instances,
          authored_bound, flags_value, reserved0, reserved1) = tags
         require(name == stable and applicability in applications and priority <= 0xFF
-                and kind in (1, 2) and channel <= 5 and selector in (1, 2)
+                and kind in (1, 2) and channel <= 5
+                and ((kind == 1 and selector in (1, 2)) or (kind == 2 and selector == 0))
                 and map_life in (1, 2, 3) and battle_life in (1, 2, 3) and clock <= 2
                 and source_kind <= 3 and hidden <= 3 and recovery_policy <= 1 and has_origin <= 1
                 and has_owner <= 1 and allow_owners <= 1 and allow_instances <= 1 and authored_bound <= 1
@@ -371,7 +373,12 @@ def validate_v40_owbd(path: Path, source: Path) -> None:
                 f"{path}: definition {stable} required-owner tag noncanonical")
         require(kind != 1 or not (applications[applicability][0] & (4 | 8)),
                 f"{path}: state candidate {stable} self-gates on mutable output")
-        if selector == 2:
+        if kind == 2:
+            require(1 <= channel <= 4 and controller == node == owner == recovery == role == 0
+                    and clock == source_kind == hidden == recovery_policy == timer == 0
+                    and has_origin == origin == has_owner == authored_bound == flags_value == 0,
+                    f"{path}: modifier definition {stable} carries candidate/generated metadata")
+        elif selector == 2:
             require(controller == node == 0 and 1 <= role <= 7,
                     f"{path}: semantic definition {stable} selector payload invalid")
         else:
@@ -395,13 +402,42 @@ def validate_v40_owbd(path: Path, source: Path) -> None:
             require(False, f"{path}: generated stamina owner authorization missing")
         elif recovery:
             require(recovery in ids["transitions"], f"{path}: definition {stable} recovery dangling")
-        if selector == 1:
+        if kind == 1 and selector == 1:
             require(bool(flags_value) == bool(origin) and authored_bound == 0,
                     f"{path}: exact tired wrapper flags invalid")
         definitions[stable] = record
     application_claims = [record[6] for record in definitions.values()]
     require(set(application_claims) == set(applications) and len(application_claims) == len(set(application_claims)),
             f"{path}: applicability records are orphaned or multiply claimed")
+
+    modifier_operations = graph.records("modifierOperations", "<HHh5B")
+    modifier_by_definition = {definition: [] for definition in definitions}
+    for record in modifier_operations:
+        stable, definition, operand, namespace, field, operator, bound, order = record
+        require(definition in definitions, f"{path}: modifier operation {stable} backlink is dangling")
+        kind = {1: 4, 2: 5}.get(namespace)
+        require(kind is not None and operator_allowed(kind, field, operator),
+                f"{path}: modifier operation {stable} field/operator is unsupported")
+        if operator in SIGNED_DELTA_OPERATORS:
+            require((operator != 2 or bound == 0)
+                    and (operator == 2 or scalar_value_valid(kind, field, bound)),
+                    f"{path}: modifier operation {stable} relative bound is invalid")
+        else:
+            require(bound == 0 and scalar_value_valid(kind, field, operand),
+                    f"{path}: modifier operation {stable} exact operand is invalid")
+        modifier_by_definition[definition].append(record)
+    for definition, records in modifier_by_definition.items():
+        definition_kind = definitions[definition][8]
+        if definition_kind == 1:
+            require(not records, f"{path}: candidate definition {definition} owns modifier operations")
+            continue
+        require(1 <= len(records) <= 16
+                and sorted(record[7] for record in records) == list(range(len(records))),
+                f"{path}: modifier definition {definition} operation order/count is invalid")
+        at_least = {(record[3], record[4]) for record in records if record[5] == 3}
+        at_most = {(record[3], record[4]) for record in records if record[5] == 4}
+        require(not at_least & at_most,
+                f"{path}: modifier definition {definition} combines minimum and maximum")
 
     transitions = graph.records("transitions", "<9H4BH")
     guards = graph.records("transitionGuards", "<HH4BHH")

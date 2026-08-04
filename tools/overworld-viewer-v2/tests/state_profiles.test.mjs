@@ -3,6 +3,7 @@ import {
   createCompleteStateDraft,
   createCompleteBehaviorSetDraft,
   createControllerDraft,
+  createModifierDraft,
   createProfilesController,
   compactBehaviorModelDraft,
   behaviorModelChangeCount,
@@ -42,6 +43,22 @@ assert.equal(copy.name, "Bird active copy");
 assert.equal("semanticRole" in copy, false);
 assert.deepEqual(copy.descriptiveTags, ["bird", "air"]);
 assert.deepEqual(copy.values, { behaviorKind: 1, hopMinDistance: 2, hopMaxDistance: 5 });
+
+const modifierFields = [
+  ...fields,
+  { key: "speed", label: "Speed", type: "number", minimum: 1, maximum: 4 },
+];
+const modifier = createModifierDraft({ name: "Bird active speed", stateFields: modifierFields });
+assert.equal(modifier.kind, 2);
+assert.equal(modifier.selectorKind, 0);
+assert.equal(modifier.operations.length, 1);
+assert.equal(modifier.operations[0].operand, 1);
+const compactModifierDraft = compactBehaviorModelDraft({ modifiers: { create: [modifier] } }, {
+  stateProfiles: [], controllers: [], modifierDefinitions: [], transitionGraph: { transitions: [] },
+});
+assert.equal(behaviorModelChangeCount(compactModifierDraft), 1);
+assert.equal(compactModifierDraft.modifiers.create[0].operations[0].definitionId, modifier.draftId);
+assert.equal(compactModifierDraft.modifiers.create[0].applicability.draftId, modifier.applicability.draftId);
 
 copy.values.hopMaxDistance = 1;
 assert.equal(validateCompleteStateProfile(copy, fields).at(-1).path, "values.hopMaxDistance");

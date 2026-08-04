@@ -53,6 +53,45 @@ function fieldDefault(field) {
   return Number(field.options?.[0]?.value) || 0;
 }
 
+const MODIFIER_NUMERIC_FIELDS = Object.freeze({
+  1: new Set([3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 24, 25]),
+  2: new Set([3, 4, 6, 7]),
+});
+
+export function createModifierDraft({ name = "New modifier", stateFields = [], controllerFields = [] } = {}) {
+  const definitionId = draftId();
+  const applicabilityId = draftId();
+  const defaultFieldId = stateFields.length > 3 ? 3 : 1;
+  const useStateField = stateFields.length > 1;
+  const targetField = useStateField
+    ? stateFields[defaultFieldId]
+    : controllerFields[Math.min(3, Math.max(1, controllerFields.length)) - 1];
+  return {
+    draftId: definitionId, stableId: null, name,
+    applicabilityId,
+    applicability: {
+      draftId: applicabilityId, stableId: null, name: `${name} applicability`,
+      kind: 1, groupMask: 0xFFFFFFFF, controllerId: null,
+      profileId: null, minimum: 0, maximum: 0, flags: 0,
+    },
+    controllerId: 0, nodeId: 0, requiredOwnerId: 0,
+    recoveryTransitionId: 0, priority: 100, kind: 2, channel: 2,
+    selectorKind: 0, semanticRoleId: 0, mapLifetime: 1, battleLifetime: 1,
+    timerClock: 0, timerSource: 0, hiddenTimerPolicy: 0, recoveryPolicy: 0,
+    timerValue: 0, hasTiredOriginKind: 0, tiredOriginKind: 0,
+    hasRequiredOwnerId: 0, allowMultipleOwners: 0,
+    allowMultipleInstancesPerOwner: 0, authoredTiredBound: 0,
+    flags: 0, reserved0: 0, reserved1: 0,
+    operations: [{
+      draftId: draftId(), stableId: null, definitionId, operand: targetField ? fieldDefault(targetField) : 0,
+      fieldNamespace: useStateField ? 1 : 2,
+      fieldId: useStateField ? defaultFieldId : Math.min(3, Math.max(1, controllerFields.length)),
+      operatorKind: 1, bound: 0, order: 0,
+    }],
+    created: true,
+  };
+}
+
 export function transitionIsReadOnly(transition) {
   const definition = transition?.candidateDefinition || {};
   return Number(definition.hasTiredOriginKind) !== 0
@@ -692,6 +731,24 @@ function compactDirect(item, fields) {
   return { ...authoredIdentity(item), ...pickFields(item, fields) };
 }
 
+function compactModifier(modifier) {
+  return {
+    ...authoredIdentity(modifier), name: String(modifier.name),
+    ...pickFields(modifier, DEFINITION_AUTHORED_FIELDS),
+    applicability: {
+      ...authoredIdentity(modifier.applicability),
+      name: String(modifier.applicability?.name || `${modifier.name} applicability`),
+      ...pickFields(modifier.applicability, ["kind", "groupMask", "controllerId", "profileId", "minimum", "maximum", "flags"]),
+    },
+    operations: (modifier.operations || []).map((operation, order) => ({
+      ...authoredIdentity(operation), definitionId: modifier.draftId || modifier.stableId,
+      operand: Number(operation.operand), fieldNamespace: Number(operation.fieldNamespace),
+      fieldId: Number(operation.fieldId), operatorKind: Number(operation.operatorKind),
+      bound: Number(operation.bound), order,
+    })),
+  };
+}
+
 function sameAuthored(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -703,6 +760,7 @@ export function compactBehaviorModelDraft(draft, model) {
     stateProfiles: [(item, creating) => compactProfile(item, creating), model?.stateProfiles || []],
     controllers: [(item) => compactController(item), model?.controllers || []],
     transitions: [(item) => compactTransition(item, model), model?.transitionGraph?.transitions || []],
+    modifiers: [(item) => compactModifier(item), model?.modifierDefinitions || []],
     spawnPolicies: [(item) => compactDirect(item, [
       "provenanceId", "spawnState", "destination", "minimumDistance",
       "maximumDistance", "spawnHopTime", "flags",
@@ -732,7 +790,7 @@ export function compactBehaviorModelDraft(draft, model) {
 }
 
 export function behaviorModelChangeCount(transaction) {
-  return ["stateProfiles", "controllers", "transitions", "spawnPolicies", "populationPolicies", "hookSets", "assignmentActions", "genericAssignments", "speciesAssignments"].reduce(
+  return ["stateProfiles", "controllers", "transitions", "modifiers", "spawnPolicies", "populationPolicies", "hookSets", "assignmentActions", "genericAssignments", "speciesAssignments"].reduce(
     (total, domain) => total + ["create", "update", "remove"].reduce(
       (domainTotal, operation) => domainTotal + (transaction?.[domain]?.[operation]?.length || 0), 0,
     ), 0,
@@ -754,6 +812,7 @@ export function createProfilesController({
   let saved = [];
   let savedControllers = [];
   let savedTransitions = [];
+  let savedModifiers = [];
   let savedGenericAssignments = [];
   let savedSpeciesAssignments = [];
   let savedAssignmentActions = [];
@@ -762,7 +821,7 @@ export function createProfilesController({
   let selectedId = String(state.selectedProfileKey || "");
   let search = "";
   let filter = "all";
-  let mode = state.profileDeckMode === "controllers" ? "controllers" : "states";
+  let mode = ["states", "controllers", "modifiers"].includes(state.profileDeckMode) ? state.profileDeckMode : "states";
   let destroyed = false;
   let stackPreviewController = null;
   let graphDiagnostics = [];
@@ -777,6 +836,9 @@ export function createProfilesController({
   const transitionUpdates = new Map();
   const createdTransitions = [];
   const removedTransitionIds = new Set();
+  const modifierUpdates = new Map();
+  const createdModifiers = [];
+  const removedModifierIds = new Set();
   const createdSpawnPolicies = [];
   const createdPopulationPolicies = [];
   const createdHookSets = [];
@@ -797,6 +859,15 @@ export function createProfilesController({
     <option value="all">All states</option>
     <option value="saved">Saved states</option>
     <option value="draft">New drafts</option>`;
+  const deckControls = root.querySelector?.("[data-profile-deck-mode]")?.parentElement;
+  if (deckControls && !deckControls.querySelector("[data-profile-deck-mode='modifiers']")) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.profileDeckMode = "modifiers";
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = "Modifiers";
+    deckControls.append(button);
+  }
   elements.openProfileResolver.hidden = true;
   elements.profileResolverDrawer.hidden = true;
   root.classList.add("profile-controller-ready", "pv2", "v40-state-profiles");
@@ -869,6 +940,28 @@ export function createProfilesController({
     return transitionUpdates.get(transition.stableId);
   }
 
+  function modifierIdFor(modifier) {
+    return modifier?.draftId || `modifier:${modifier?.stableId}`;
+  }
+
+  function modifiers() {
+    return [
+      ...savedModifiers.filter((modifier) => !removedModifierIds.has(modifier.stableId))
+        .map((modifier) => modifierUpdates.get(modifier.stableId) || modifier),
+      ...createdModifiers,
+    ];
+  }
+
+  function selectedModifier() {
+    return modifiers().find((modifier) => modifierIdFor(modifier) === selectedId) || null;
+  }
+
+  function editableModifier(modifier) {
+    if (!modifier || modifier.created || modifier.draftId) return modifier;
+    if (!modifierUpdates.has(modifier.stableId)) modifierUpdates.set(modifier.stableId, clone(modifier));
+    return modifierUpdates.get(modifier.stableId);
+  }
+
   function ensureUniqueName(preferred) {
     const names = new Set(profiles().map((profile) => profile.name.trim().toLowerCase()));
     const base = String(preferred || "New state profile").trim() || "New state profile";
@@ -938,7 +1031,7 @@ export function createProfilesController({
     } catch (error) {
       writerValidationError = String(error?.message || error);
       const draft = state.v40BehaviorModelDraft || {};
-      const count = ["stateProfiles", "controllers", "transitions", "spawnPolicies", "populationPolicies", "hookSets", "assignmentActions", "genericAssignments", "speciesAssignments"].reduce(
+      const count = ["stateProfiles", "controllers", "transitions", "modifiers", "spawnPolicies", "populationPolicies", "hookSets", "assignmentActions", "genericAssignments", "speciesAssignments"].reduce(
         (total, domain) => total + ["create", "update", "remove"].reduce(
           (subtotal, operation) => subtotal + (draft?.[domain]?.[operation]?.length || 0), 0,
         ), 0,
@@ -977,6 +1070,11 @@ export function createProfilesController({
         update: [...transitionUpdates.values()].map(clone),
         remove: [...removedTransitionIds],
       },
+      modifiers: {
+        create: createdModifiers.map(clone),
+        update: [...modifierUpdates.values()].map(clone),
+        remove: [...removedModifierIds],
+      },
       spawnPolicies: { create: createdSpawnPolicies.map(clone) },
       populationPolicies: { create: createdPopulationPolicies.map(clone) },
       hookSets: { create: createdHookSets.map(clone) },
@@ -1014,6 +1112,7 @@ export function createProfilesController({
 
   function renderList() {
     if (mode === "controllers") return void renderControllerList();
+    if (mode === "modifiers") return void renderModifierList();
     if (loading) {
       list.innerHTML = `<div class="loading-card"><span></span><p>Loading V40 state profiles…</p></div>`;
       return;
@@ -1033,6 +1132,26 @@ export function createProfilesController({
           </button>
         </li>`).join("") || `<li class="empty-state empty-state--small"><p>No state profiles match this filter.</p></li>`}
       </ul>
+    </section>`;
+  }
+
+  function renderModifierList() {
+    if (loading || loadError) {
+      list.innerHTML = loading
+        ? `<div class="loading-card"><span></span><p>Loading V40 modifiers…</p></div>`
+        : `<div class="shell-error-state" role="alert"><strong>Modifiers unavailable</strong><p>${escapeHtml(loadError)}</p><button class="button" type="button" data-profile-action="retry">Retry</button></div>`;
+      return;
+    }
+    const query = search.trim().toLowerCase();
+    const visible = modifiers().filter((modifier) => {
+      if (filter === "saved" && modifier.created) return false;
+      if (filter === "draft" && !modifier.created) return false;
+      return !query || [modifier.name, modifier.stableId, modifier.registryKey]
+        .some((value) => String(value ?? "").toLowerCase().includes(query));
+    });
+    list.innerHTML = `<section class="profile-group v40-profile-group" aria-labelledby="v40ModifiersTitle">
+      <header><span><i aria-hidden="true">M</i><strong id="v40ModifiersTitle">Runtime modifiers</strong></span><small>${visible.length}</small></header>
+      <ul class="profile-list">${visible.map((modifier) => `<li class="pv2-profile-row ${selectedId === modifierIdFor(modifier) ? "is-active" : ""} ${modifier.created || modifierUpdates.has(modifier.stableId) ? "is-changed" : ""}"><button class="pv2-profile-select" type="button" data-modifier-id="${escapeHtml(modifierIdFor(modifier))}"><strong>${escapeHtml(modifier.name)}${diagnosticsFor("overrideDefinition", modifier).length ? `<span class="v40-diagnostic-badge">${diagnosticsFor("overrideDefinition", modifier).length}</span>` : ""}</strong><small>${modifier.created ? "Local, unpersisted draft" : `ID ${modifier.stableId}`} · ${(modifier.operations || []).length} operation${(modifier.operations || []).length === 1 ? "" : "s"}</small></button></li>`).join("") || `<li class="empty-state empty-state--small"><p>No modifiers match this filter.</p></li>`}</ul>
     </section>`;
   }
 
@@ -1375,6 +1494,7 @@ export function createProfilesController({
   function renderInspector() {
     if (behaviorSetWizard) return void renderBehaviorSetWizard();
     if (mode === "controllers") return void renderControllerInspector();
+    if (mode === "modifiers") return void renderModifierInspector();
     const profile = selected();
     if (!profile) {
       inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a complete state</h2><p>Each profile is one runnable state. Create one or draft a complete state/controller graph.</p><div class="v40-empty-actions"><button type="button" data-profile-action="new">Create state profile</button><button type="button" data-behavior-set-action="open">Complete Behavior Set…</button></div></div>`;
@@ -1408,6 +1528,59 @@ export function createProfilesController({
       ${entityDiagnostics.length ? `<aside class="v40-validation" role="status"><strong>${entityDiagnostics.length} model issue${entityDiagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(entityDiagnostics[0].message)}</span></aside>` : ""}
       ${profile.backlinks?.length ? `<aside class="v40-backlinks"><strong>Used by ${profile.backlinks.length} controller node${profile.backlinks.length === 1 ? "" : "s"}</strong><span>${profile.backlinks.map((item) => `Controller ${item.controllerId} / Node ${item.nodeId}`).join(" · ")}</span></aside>` : ""}
       ${groups}
+    </article>`;
+  }
+
+  function modifierFieldOptions(namespace, current) {
+    const fields = Number(namespace) === 1
+      ? (dataset.stateProfileFields || []).slice(1).map((field, index) => ({ value: index + 1, label: field.label || field.key }))
+      : (dataset.controllerScalarFields || []).slice(0, 7).map((field, index) => ({ value: index + 1, label: field.label || field.key }));
+    return selectOptions(fields, current);
+  }
+
+  function renderModifierInspector() {
+    const modifier = selectedModifier();
+    if (!modifier) {
+      inspector.innerHTML = `<div class="empty-state"><span class="empty-state__glyph" aria-hidden="true">◇</span><h2>Select a modifier</h2><p>Modifiers are partial typed patches folded over the winning complete state.</p><div class="v40-empty-actions"><button type="button" data-modifier-action="new">Create modifier</button></div></div>`;
+      return;
+    }
+    const applicability = modifier.applicability || {};
+    const diagnostics = diagnosticsFor("overrideDefinition", modifier);
+    const operationRows = (modifier.operations || []).map((operation, index) => {
+      const operationId = operation.draftId || `modifier-operation:${operation.stableId}`;
+      const numeric = MODIFIER_NUMERIC_FIELDS[Number(operation.fieldNamespace)]?.has(Number(operation.fieldId));
+      const operators = [[1, "SET"], [2, "ADD"], [3, "AT LEAST"], [4, "AT MOST"], [5, "ADD AT LEAST"], [6, "ADD AT MOST"]]
+        .filter(([value]) => numeric || value === 1).map(([value, label]) => ({ value, label }));
+      return `<div class="v40-author-row v40-author-row--wide" data-modifier-operation="${escapeHtml(operationId)}">
+        <label>Target <select data-modifier-operation-field="fieldNamespace" data-modifier-operation-id="${escapeHtml(operationId)}"><option value="1" ${Number(operation.fieldNamespace) === 1 ? "selected" : ""}>State</option><option value="2" ${Number(operation.fieldNamespace) === 2 ? "selected" : ""}>Controller</option></select></label>
+        <label>Field <select data-modifier-operation-field="fieldId" data-modifier-operation-id="${escapeHtml(operationId)}">${modifierFieldOptions(operation.fieldNamespace, operation.fieldId)}</select></label>
+        <label>Operator <select data-modifier-operation-field="operatorKind" data-modifier-operation-id="${escapeHtml(operationId)}">${selectOptions(operators, operation.operatorKind)}</select></label>
+        <label>Operand <input type="number" min="-32768" max="32767" value="${Number(operation.operand)}" data-modifier-operation-field="operand" data-modifier-operation-id="${escapeHtml(operationId)}"></label>
+        <label>Bound <input type="number" min="0" max="255" value="${Number(operation.bound)}" data-modifier-operation-field="bound" data-modifier-operation-id="${escapeHtml(operationId)}" ${Number(operation.operatorKind) < 5 ? "disabled" : ""}></label>
+        <span class="v40-row-actions"><button type="button" data-modifier-operation-action="up" data-modifier-operation-id="${escapeHtml(operationId)}" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-modifier-operation-action="down" data-modifier-operation-id="${escapeHtml(operationId)}" ${index === modifier.operations.length - 1 ? "disabled" : ""}>↓</button><button type="button" data-modifier-operation-action="remove" data-modifier-operation-id="${escapeHtml(operationId)}" ${modifier.operations.length === 1 ? "disabled" : ""}>Remove</button></span>
+      </div>`;
+    }).join("");
+    const controllerOptions = controllers().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
+    const profileOptions = profiles().map((item) => ({ value: item.draftId || item.stableId, label: item.name }));
+    inspector.innerHTML = `<article class="profile-field-editor v40-modifier-editor" data-selected-modifier="${escapeHtml(modifierIdFor(modifier))}">
+      <header class="v40-state-editor__heading"><div><span class="eyebrow">Typed runtime modifier</span><h2>${escapeHtml(modifier.name)}</h2><small>${modifier.created ? escapeHtml(modifier.draftId) : `Stable ID ${modifier.stableId}`}</small></div><div class="v40-state-editor__actions"><button class="button" type="button" data-modifier-action="duplicate">Duplicate modifier</button><button class="button button--danger" type="button" data-modifier-action="delete">Delete modifier</button></div></header>
+      ${diagnostics.length ? `<aside class="v40-validation"><strong>${diagnostics.length} model issue${diagnostics.length === 1 ? "" : "s"}</strong><span>${escapeHtml(diagnostics[0].message)}</span></aside>` : ""}
+      <section class="v40-controller-identity"><label><span>Name</span><input type="text" value="${escapeHtml(modifier.name)}" data-modifier-field="name"></label><div><span>Identity</span><strong>${escapeHtml(modifier.draftId || modifier.stableId)}</strong><small>Kind: Modifier · no state identity</small></div></section>
+      <details class="pv2-field-section" open><summary><span><strong>Precedence and lifetime</strong><small>Folded in ascending channel, priority, definition, owner, and instance order.</small></span></summary><div class="v40-author-grid">
+        <label>Channel <select data-modifier-field="channel">${selectOptions(optionRecords("channel").filter((item) => item.value >= 1 && item.value <= 4), modifier.channel)}</select></label>
+        <label>Priority <input type="number" min="0" max="255" value="${Number(modifier.priority)}" data-modifier-field="priority"></label>
+        <label>Map lifetime <select data-modifier-field="mapLifetime">${selectOptions(optionRecords("lifetime"), modifier.mapLifetime)}</select></label>
+        <label>Battle lifetime <select data-modifier-field="battleLifetime">${selectOptions(optionRecords("lifetime"), modifier.battleLifetime)}</select></label>
+        <label><input type="checkbox" data-modifier-field="allowMultipleOwners" ${Number(modifier.allowMultipleOwners) ? "checked" : ""}> Allow multiple owners</label>
+        <label><input type="checkbox" data-modifier-field="allowMultipleInstancesPerOwner" ${Number(modifier.allowMultipleInstancesPerOwner) ? "checked" : ""}> Allow multiple instances per owner</label>
+      </div></details>
+      <details class="pv2-field-section" open><summary><span><strong>Applicability</strong><small>Evaluated after the state winner is selected.</small></span></summary><div class="v40-author-grid">
+        <label>Controller <select data-modifier-applicability-field="controllerId">${nullableOptions(controllerOptions, applicability.controllerId, "Any controller")}</select></label>
+        <label>Winning profile <select data-modifier-applicability-field="profileId">${nullableOptions(profileOptions, applicability.profileId, "Any profile")}</select></label>
+        <label>Winning role <select data-modifier-applicability-field="minimum">${nullableOptions(dataset.semanticRoles || [], applicability.minimum, "Any role")}</select></label>
+        <label>Immutable group mask <input type="number" min="0" max="4294967295" value="${Number(applicability.groupMask ?? 0xFFFFFFFF)}" data-modifier-applicability-field="groupMask"></label>
+      </div></details>
+      <section class="v40-controller-section"><header><div><span class="eyebrow">Partial patch</span><h3>Modifier operations</h3></div><button type="button" data-modifier-operation-action="add" ${modifier.operations.length >= 16 ? "disabled" : ""}>Add operation</button></header><div class="v40-author-rows">${operationRows}</div></section>
     </article>`;
   }
 
@@ -1638,11 +1811,12 @@ export function createProfilesController({
 
   function render() {
     root.classList.toggle?.("v40-controller-mode", mode === "controllers");
+    root.classList.toggle?.("v40-modifier-mode", mode === "modifiers");
     root.querySelectorAll?.("[data-profile-deck-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.profileDeckMode === mode)));
     const title = root.querySelector?.("#profileLibraryTitle");
-    if (title) title.textContent = mode === "controllers" ? "Controllers" : "State profiles";
+    if (title) title.textContent = mode === "controllers" ? "Controllers" : mode === "modifiers" ? "Modifiers" : "State profiles";
     const createButton = root.querySelector?.("[data-action='new-profile']");
-    if (createButton) createButton.setAttribute("aria-label", mode === "controllers" ? "Create controller" : "Create state profile");
+    if (createButton) createButton.setAttribute("aria-label", mode === "controllers" ? "Create controller" : mode === "modifiers" ? "Create modifier" : "Create state profile");
     renderList();
     renderInspector();
   }
@@ -2331,18 +2505,146 @@ export function createProfilesController({
   }
 
   function setMode(nextMode) {
-    if (!["states", "controllers"].includes(nextMode) || mode === nextMode) return;
+    if (!["states", "controllers", "modifiers"].includes(nextMode) || mode === nextMode) return;
     mode = nextMode;
     filter = "all";
     elements.profileKindFilter.innerHTML = nextMode === "controllers" ? `
       <option value="all">All controllers</option>
       <option value="saved">Saved controllers</option>
+      <option value="draft">New drafts</option>` : nextMode === "modifiers" ? `
+      <option value="all">All modifiers</option>
+      <option value="saved">Saved modifiers</option>
       <option value="draft">New drafts</option>` : `
       <option value="all">All states</option>
       <option value="saved">Saved states</option>
       <option value="draft">New drafts</option>`;
     elements.profileKindFilter.value = filter;
+    if (mode === "modifiers" && !selectedModifier()) selectedId = modifiers()[0] ? modifierIdFor(modifiers()[0]) : "";
+    if (mode === "states" && !selected()) selectedId = profiles()[0] ? idFor(profiles()[0]) : "";
     state.profileDeckMode = mode;
+    render();
+  }
+
+  function selectModifier(id, { report = true } = {}) {
+    if (!modifiers().some((modifier) => modifierIdFor(modifier) === id)) return false;
+    selectedId = id;
+    state.selectedProfileKey = id;
+    render();
+    if (report) reportSelection({ view: "profiles", selection: id, label: selectedModifier()?.name || "" });
+    return true;
+  }
+
+  function uniqueModifierName(preferred) {
+    const names = new Set(modifiers().map((modifier) => String(modifier.name).trim().toLowerCase()));
+    const base = String(preferred || "New modifier").trim() || "New modifier";
+    if (!names.has(base.toLowerCase())) return base;
+    let suffix = 2;
+    while (names.has(`${base} ${suffix}`.toLowerCase())) suffix += 1;
+    return `${base} ${suffix}`;
+  }
+
+  function addModifier(source = null) {
+    const draft = createModifierDraft({
+      name: uniqueModifierName(source ? `${source.name} copy` : "New modifier"),
+      stateFields: dataset.stateProfileFields, controllerFields: dataset.controllerScalarFields,
+    });
+    if (source) {
+      for (const key of ["priority", "channel", "mapLifetime", "battleLifetime", "allowMultipleOwners", "allowMultipleInstancesPerOwner"]) draft[key] = Number(source[key]);
+      draft.applicability = { ...clone(source.applicability), stableId: null, draftId: draft.applicabilityId, name: `${draft.name} applicability` };
+      draft.operations = (source.operations || []).map((operation, order) => ({
+        ...clone(operation), stableId: null, draftId: draftId(), definitionId: draft.draftId, order,
+      }));
+    }
+    createdModifiers.push(draft);
+    selectedId = draft.draftId;
+    syncDirty();
+    render();
+    requestAnimationFrame(() => inspector.querySelector("[data-modifier-field='name']")?.select());
+  }
+
+  function updateModifierField(key, raw, checked = false) {
+    const source = selectedModifier();
+    if (!source) return;
+    const modifier = editableModifier(source);
+    modifier[key] = key === "name" ? String(raw)
+      : ["allowMultipleOwners", "allowMultipleInstancesPerOwner"].includes(key) ? (checked ? 1 : 0)
+        : Number(raw);
+    syncDirty();
+    if (key === "name") renderList();
+  }
+
+  function updateModifierApplicability(key, raw) {
+    const source = selectedModifier();
+    if (!source) return;
+    const modifier = editableModifier(source);
+    const reference = ["controllerId", "profileId"].includes(key);
+    modifier.applicability[key] = reference && (raw === "" || String(raw) === "0") ? null
+      : reference && String(raw).startsWith("draft:") ? String(raw) : Number(raw);
+    const rule = modifier.applicability;
+    rule.kind = 1 | (rule.controllerId ? 2 : 0) | (rule.profileId ? 4 : 0) | (Number(rule.minimum) ? 8 : 0);
+    syncDirty();
+  }
+
+  function modifierOperationById(modifier, id) {
+    return (modifier?.operations || []).find((operation) => String(operation.draftId || `modifier-operation:${operation.stableId}`) === String(id));
+  }
+
+  function updateModifierOperation(id, key, raw) {
+    const modifier = editableModifier(selectedModifier());
+    const operation = modifierOperationById(modifier, id);
+    if (!operation) return;
+    operation[key] = Number(raw);
+    if (key === "fieldNamespace") {
+      operation.fieldId = Number(raw) === 1 ? 3 : 3;
+      operation.operatorKind = 1;
+      operation.bound = 0;
+    }
+    if (key === "fieldId" && !MODIFIER_NUMERIC_FIELDS[Number(operation.fieldNamespace)]?.has(Number(operation.fieldId))) {
+      operation.operatorKind = 1;
+      operation.bound = 0;
+    }
+    if (key === "operatorKind" && Number(raw) < 5) operation.bound = 0;
+    syncDirty();
+  }
+
+  function modifierOperationAction(id, action) {
+    const modifier = editableModifier(selectedModifier());
+    if (!modifier) return;
+    if (action === "add" && modifier.operations.length < 16) {
+      modifier.operations.push({
+        draftId: draftId(), stableId: null, definitionId: modifier.draftId || modifier.stableId,
+        operand: 1, fieldNamespace: 1, fieldId: 3, operatorKind: 1, bound: 0,
+        order: modifier.operations.length,
+      });
+    } else {
+      const index = modifier.operations.findIndex((operation) => String(operation.draftId || `modifier-operation:${operation.stableId}`) === String(id));
+      if (index < 0) return;
+      if (action === "remove" && modifier.operations.length > 1) modifier.operations.splice(index, 1);
+      else if (action === "up" && index > 0) [modifier.operations[index - 1], modifier.operations[index]] = [modifier.operations[index], modifier.operations[index - 1]];
+      else if (action === "down" && index < modifier.operations.length - 1) [modifier.operations[index], modifier.operations[index + 1]] = [modifier.operations[index + 1], modifier.operations[index]];
+    }
+    modifier.operations.forEach((operation, order) => { operation.order = order; });
+    syncDirty();
+    renderInspector();
+  }
+
+  function deleteSelectedModifier() {
+    const modifier = selectedModifier();
+    if (!modifier) return;
+    const definitionId = modifier.draftId || modifier.stableId;
+    const backlinks = transitions().flatMap((transition) => (transition.operations || [])
+      .filter((operation) => [operation.definitionId, operation.replacementDefinitionId, operation.instanceKey].some((value) => String(value) === String(definitionId))));
+    if (backlinks.length) {
+      setStatus(`Cannot delete ${modifier.name}: ${backlinks.length} transition operation backlink${backlinks.length === 1 ? " remains" : "s remain"}.`, "error");
+      return;
+    }
+    if (modifier.created) createdModifiers.splice(createdModifiers.indexOf(modifier), 1);
+    else {
+      modifierUpdates.delete(modifier.stableId);
+      removedModifierIds.add(modifier.stableId);
+    }
+    selectedId = modifiers()[0] ? modifierIdFor(modifiers()[0]) : "";
+    syncDirty();
     render();
   }
 
@@ -2383,6 +2685,9 @@ export function createProfilesController({
     transitionUpdates.clear();
     createdTransitions.splice(0);
     removedTransitionIds.clear();
+    modifierUpdates.clear();
+    createdModifiers.splice(0);
+    removedModifierIds.clear();
     createdSpawnPolicies.splice(0);
     createdPopulationPolicies.splice(0);
     createdHookSets.splice(0);
@@ -2420,13 +2725,33 @@ export function createProfilesController({
           || !Array.isArray(dataset.applicability) || Number(dataset.stackPreview?.capacity) !== 8) {
         throw new Error("The server did not return an OWBD v40 behavior model.");
       }
+      const modifierOperationsByDefinition = new Map();
+      (dataset.modifierOperations || []).forEach((operation) => {
+        const key = String(operation.definitionId);
+        const owned = modifierOperationsByDefinition.get(key) || [];
+        owned.push(clone(operation));
+        modifierOperationsByDefinition.set(key, owned);
+      });
+      dataset.modifierDefinitions = dataset.overrideDefinitions
+        .filter((definition) => Number(definition.kind) === 2)
+        .map((definition) => ({
+          ...clone(definition),
+          applicability: clone(authoredApplicabilityFor(definition)),
+          operations: (modifierOperationsByDefinition.get(String(definition.stableId)) || [])
+            .sort((left, right) => Number(left.order) - Number(right.order)),
+        }));
       saved = dataset.stateProfiles.map(clone);
       savedControllers = dataset.controllers.map(clone);
       savedTransitions = dataset.transitionGraph.transitions.map(clone);
+      savedModifiers = dataset.modifierDefinitions.map(clone);
       savedGenericAssignments = (dataset.genericAssignments || []).map(clone);
       savedSpeciesAssignments = (dataset.speciesAssignments || []).map(clone);
       savedAssignmentActions = (dataset.assignmentActions || []).map(clone);
-      if (!selectedId || !profiles().some((profile) => idFor(profile) === selectedId)) {
+      if (mode === "modifiers") {
+        if (!selectedId || !modifiers().some((modifier) => modifierIdFor(modifier) === selectedId)) {
+          selectedId = modifiers()[0] ? modifierIdFor(modifiers()[0]) : "";
+        }
+      } else if (!selectedId || !profiles().some((profile) => idFor(profile) === selectedId)) {
         selectedId = profiles()[0] ? idFor(profiles()[0]) : "";
       }
       if (!selectedControllerId || !controllers().some((controller) => controllerIdFor(controller) === selectedControllerId)) {
@@ -2471,12 +2796,14 @@ export function createProfilesController({
     if (modeButton) return void setMode(modeButton.dataset.profileDeckMode);
     const controllerSelect = event.target.closest("[data-controller-id]");
     if (controllerSelect) return void selectController(controllerSelect.dataset.controllerId);
+    const modifierSelect = event.target.closest("[data-modifier-id]");
+    if (modifierSelect) return void selectModifier(modifierSelect.dataset.modifierId);
     const select = event.target.closest("[data-profile-id]");
     if (select) return void selectProfile(select.dataset.profileId);
     const action = event.target.closest("[data-profile-action]")?.dataset.profileAction;
     if (action === "retry") return void load();
     if (action === "reset-local") return void resetLocalDrafts();
-    if (action === "new") return void (mode === "controllers" ? addController() : addProfile());
+    if (action === "new") return void (mode === "controllers" ? addController() : mode === "modifiers" ? addModifier() : addProfile());
     if (action === "duplicate") return void addProfile(selected());
     if (action === "delete") return void deleteSelectedProfile();
     const controllerActionName = event.target.closest("[data-controller-action]")?.dataset.controllerAction;
@@ -2485,13 +2812,19 @@ export function createProfilesController({
     if (controllerActionName === "delete") return void requestControllerDeletion();
     if (controllerActionName === "add-node") return void addNode();
     if (controllerActionName === "add-transition") return void addTransition();
+    const modifierAction = event.target.closest("[data-modifier-action]")?.dataset.modifierAction;
+    if (modifierAction === "new") return void addModifier();
+    if (modifierAction === "duplicate") return void addModifier(selectedModifier());
+    if (modifierAction === "delete") return void deleteSelectedModifier();
+    const modifierOperationButton = event.target.closest("[data-modifier-operation-action]");
+    if (modifierOperationButton) return void modifierOperationAction(modifierOperationButton.dataset.modifierOperationId, modifierOperationButton.dataset.modifierOperationAction);
     const nodeButton = event.target.closest("[data-node-action]");
     if (nodeButton) return void nodeAction(nodeButton.dataset.nodeId, nodeButton.dataset.nodeAction);
     const transitionButton = event.target.closest("[data-transition-action]");
     if (transitionButton) return void transitionAction(transitionButton.dataset.transitionId, transitionButton.dataset.transitionAction);
     const childButton = event.target.closest("[data-child-action]");
     if (childButton) return void childAction(childButton.dataset.transitionId, childButton.dataset.childKind, childButton.dataset.childId, childButton.dataset.childAction);
-    if (event.target.closest("[data-action='new-profile']")) return void (mode === "controllers" ? addController() : addProfile());
+    if (event.target.closest("[data-action='new-profile']")) return void (mode === "controllers" ? addController() : mode === "modifiers" ? addModifier() : addProfile());
   }
 
   function onInput(event) {
@@ -2505,6 +2838,9 @@ export function createProfilesController({
       return;
     }
     if (event.target.matches("[data-controller-identity]")) updateControllerValue("identity", event.target.dataset.controllerIdentity, event.target.value);
+    else if (event.target.matches("[data-modifier-field]")) updateModifierField(event.target.dataset.modifierField, event.target.value, event.target.checked);
+    else if (event.target.matches("[data-modifier-applicability-field]")) updateModifierApplicability(event.target.dataset.modifierApplicabilityField, event.target.value);
+    else if (event.target.matches("[data-modifier-operation-field]")) updateModifierOperation(event.target.dataset.modifierOperationId, event.target.dataset.modifierOperationField, event.target.value);
     else if (event.target.matches("[data-controller-scalar]")) updateControllerValue("scalarDefaults", event.target.dataset.controllerScalar, event.target.value);
     else if (event.target.matches("[data-controller-policy]")) updateControllerValue("policyIds", event.target.dataset.controllerPolicy, event.target.value);
     else if (event.target.matches("[data-node-field]") && event.target.dataset.nodeField !== "base") updateNode(event.target.dataset.nodeId, event.target.dataset.nodeField, event.target.value);
@@ -2538,6 +2874,21 @@ export function createProfilesController({
     }
     if (event.target.matches("[data-controller-identity]")) {
       updateControllerValue("identity", event.target.dataset.controllerIdentity, event.target.value);
+      renderInspector();
+      return;
+    }
+    if (event.target.matches("[data-modifier-field]")) {
+      updateModifierField(event.target.dataset.modifierField, event.target.value, event.target.checked);
+      renderInspector();
+      return;
+    }
+    if (event.target.matches("[data-modifier-applicability-field]")) {
+      updateModifierApplicability(event.target.dataset.modifierApplicabilityField, event.target.value);
+      renderInspector();
+      return;
+    }
+    if (event.target.matches("[data-modifier-operation-field]")) {
+      updateModifierOperation(event.target.dataset.modifierOperationId, event.target.dataset.modifierOperationField, event.target.value);
       renderInspector();
       return;
     }
@@ -2598,12 +2949,13 @@ export function createProfilesController({
     },
     clearCommitted: (result = {}) => {
       const mapping = result?.domains?.behaviorModel?.draftIdMap || result?.draftIdMap || {};
-      if (mapping[selectedId]) selectedId = `state:${mapping[selectedId]}`;
+      if (mapping[selectedId]) selectedId = mode === "modifiers" ? `modifier:${mapping[selectedId]}` : `state:${mapping[selectedId]}`;
       if (mapping[selectedControllerId]) selectedControllerId = `controller:${mapping[selectedControllerId]}`;
       if (mapping[selectedTransitionId]) selectedTransitionId = `transition:${mapping[selectedTransitionId]}`;
       updates.clear(); created.splice(0); removedProfileIds.clear();
       controllerUpdates.clear(); createdControllers.splice(0); removedControllerIds.clear();
       transitionUpdates.clear(); createdTransitions.splice(0); removedTransitionIds.clear();
+      modifierUpdates.clear(); createdModifiers.splice(0); removedModifierIds.clear();
       createdSpawnPolicies.splice(0); createdPopulationPolicies.splice(0);
       createdHookSets.splice(0); createdAssignmentActions.splice(0); removedAssignmentActionIds.clear();
       createdGenericAssignments.splice(0); genericAssignmentUpdates.clear(); removedGenericAssignmentIds.clear();
@@ -2618,10 +2970,14 @@ export function createProfilesController({
     refreshPreservingDrafts: () => load(),
     navigationContext: () => mode === "controllers"
       ? ({ selection: selectedControllerId, label: selectedController()?.name || "" })
-      : ({ selection: selectedId, label: selected()?.name || "" }),
-    restoreSelection: (id) => String(id).startsWith("controller:") || String(id).startsWith("draft:") && controllers().some((controller) => controllerIdFor(controller) === id)
+      : mode === "modifiers"
+        ? ({ selection: selectedId, label: selectedModifier()?.name || "" })
+        : ({ selection: selectedId, label: selected()?.name || "" }),
+    restoreSelection: (id) => String(id).startsWith("controller:") || (String(id).startsWith("draft:") && controllers().some((controller) => controllerIdFor(controller) === id))
       ? (setMode("controllers"), selectController(id, { report: false }))
-      : (setMode("states"), selectProfile(id, { report: false })),
+      : String(id).startsWith("modifier:") || (String(id).startsWith("draft:") && modifiers().some((modifier) => modifierIdFor(modifier) === id))
+        ? (setMode("modifiers"), selectModifier(id, { report: false }))
+        : (setMode("states"), selectProfile(id, { report: false })),
     behaviorModelDraft: () => clone(state.v40BehaviorModelDraft),
     wholeGraphDiagnostics: () => clone(graphDiagnostics),
     localValidationErrors: () => clone([

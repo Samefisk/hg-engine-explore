@@ -10,6 +10,7 @@ import unittest
 
 from overworld_wild_behavior_model_v40 import (
     ModelError,
+    append_stable_history_events,
     decode_blob,
     encode_model,
     intern_state_bodies,
@@ -21,10 +22,10 @@ from overworld_wild_behavior_model_v40 import (
 )
 
 
-GOLDEN_BASELINE_SIZE = 11020
-GOLDEN_BASELINE_CHECKSUM = 0x5A16E64D
-GOLDEN_BASELINE_FINGERPRINT = 0x5C5FBF57
-GOLDEN_BASELINE_SHA256 = "db3a56f9089059ab0e7efcd3e0b56f2b5cbee0a0cc0eeea416afad4d54acaa0b"
+GOLDEN_BASELINE_SIZE = 11028
+GOLDEN_BASELINE_CHECKSUM = 0xCD843F3E
+GOLDEN_BASELINE_FINGERPRINT = 0x9421CA4D
+GOLDEN_BASELINE_SHA256 = "6523a0018887426d26fcc4e1f17541f5f375b968028a29d3ad4787db96515c95"
 
 
 class OverworldWildBehaviorModelV40Test(unittest.TestCase):
@@ -63,7 +64,7 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
         for key in (
             "stateProfiles", "controllers", "genericAssignments", "speciesAssignments",
             "overrides", "spawnPolicies", "populationPolicies", "hookSets", "owners",
-            "overrideDefinitions", "transitions", "importRecipes", "applicability",
+            "overrideDefinitions", "modifierOperations", "transitions", "importRecipes", "applicability",
             "tiredTranslations", "semanticIds",
         ):
             reordered[key].reverse()
@@ -325,16 +326,85 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
         with self.assertRaisesRegex(ModelError, "ambiguous dispatch overlap"):
             validate_model(global_scope)
 
-    def test_unsupported_ordinary_definition_forms_are_rejected(self):
-        modifier = copy.deepcopy(self.model)
-        modifier["overrideDefinitions"][0]["kind"] = 2
-        with self.assertRaisesRegex(ModelError, "modifier definitions are unsupported"):
-            validate_model(modifier)
-
+    def test_ordinary_system_safety_definition_is_rejected(self):
         system_safety = copy.deepcopy(self.model)
         system_safety["overrideDefinitions"][0]["channel"] = 5
         with self.assertRaisesRegex(ModelError, "ordinary definitions cannot use System Safety"):
             validate_model(system_safety)
+
+    def _modifier_model(self, operations):
+        model = copy.deepcopy(self.model)
+        definition = model["overrideDefinitions"][0]
+        definition.update({
+            "kind": 2, "controllerId": 0, "nodeId": 0,
+            "selectorKind": 0, "semanticRoleId": 0,
+        })
+        records = []
+        for order, operation in enumerate(operations):
+            key = f"editor:modifier-operation:test-{order}"
+            model["stableIdHistory"], allocated = append_stable_history_events(
+                model["stableIdHistory"], [("allocate", key)]
+            )
+            records.append({
+                "stableId": allocated[key], "registryKey": key,
+                "definitionId": definition["stableId"], "order": order,
+                **operation,
+            })
+        model["modifierOperations"] = records
+        return model
+
+    def test_modifier_operations_round_trip_in_explicit_order(self):
+        model = self._modifier_model([
+            {"fieldNamespace": 1, "fieldId": 3, "operatorKind": 1,
+             "operand": 4, "bound": 0},
+            {"fieldNamespace": 1, "fieldId": 3, "operatorKind": 6,
+             "operand": 2, "bound": 4},
+        ])
+        validate_model(model)
+        encoded = encode_model(model)
+        decoded = decode_blob(encoded, stable_id_history=model["stableIdHistory"])
+        self.assertEqual([item["order"] for item in decoded["modifierOperations"]], [0, 1])
+        self.assertEqual(encode_model(decoded), encoded)
+
+    def test_modifier_operation_contract_rejects_malformed_relations(self):
+        valid = self._modifier_model([{
+            "fieldNamespace": 1, "fieldId": 3, "operatorKind": 2,
+            "operand": -32768, "bound": 0,
+        }])
+        validate_model(valid)
+        for channel, message in ((0, "modifier definition carries"),
+                                 (5, "System Safety")):
+            invalid_channel = copy.deepcopy(valid)
+            invalid_channel["overrideDefinitions"][0]["channel"] = channel
+            with self.subTest(channel=channel), self.assertRaisesRegex(ModelError, message):
+                validate_model(invalid_channel)
+        cases = []
+        candidate_payload = copy.deepcopy(valid)
+        candidate_payload["overrideDefinitions"][0].update({
+            "kind": 1, "selectorKind": 2, "semanticRoleId": 2,
+        })
+        cases.append((candidate_payload, "state-candidate definition"))
+        empty = self._modifier_model([])
+        cases.append((empty, "must own 1..16"))
+        behavior_kind = copy.deepcopy(valid); behavior_kind["modifierOperations"][0]["fieldId"] = 28
+        cases.append((behavior_kind, "unsupported"))
+        invalid_enum = copy.deepcopy(valid)
+        invalid_enum["modifierOperations"][0].update({"fieldId": 1, "operatorKind": 1, "operand": 9})
+        cases.append((invalid_enum, "outside the field domain"))
+        conflicting = self._modifier_model([
+            {"fieldNamespace": 2, "fieldId": 7, "operatorKind": 3, "operand": 1, "bound": 0},
+            {"fieldNamespace": 2, "fieldId": 7, "operatorKind": 4, "operand": 63, "bound": 0},
+        ])
+        cases.append((conflicting, "AT_LEAST and AT_MOST"))
+        too_many = self._modifier_model([
+            {"fieldNamespace": 1, "fieldId": 3, "operatorKind": 2,
+             "operand": index, "bound": 0}
+            for index in range(17)
+        ])
+        cases.append((too_many, "must own 1..16"))
+        for model, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ModelError, message):
+                validate_model(model)
 
     def test_generated_owner_and_origin_metadata_is_closed(self):
         bad_pair = copy.deepcopy(self.model)

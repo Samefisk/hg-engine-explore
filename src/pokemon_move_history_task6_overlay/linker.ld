@@ -147,6 +147,12 @@ SECTIONS {
                 KEEP(*(.owbd_resident_tables))
                 . = ALIGN(4);
                 KEEP(*(.owbd_resident_helpers))
+                ASSERT(. <= ORIGIN(rom) + 0xC30,
+                    "behavior scalar helpers overlap frozen modifier validator ABI");
+                . = ORIGIN(rom) + 0xC30;
+                KEEP(*(.owbd_resident_modifier_helper))
+                ASSERT(OwbdModifierPayloadValid == ORIGIN(rom) + 0xC30,
+                    "behavior modifier validator ABI moved");
                 . = ALIGN(4);
                 ASSERT(. <= ORIGIN(rom) + 0xCC0,
                     "behavior support helpers overlap frozen loader ABI");

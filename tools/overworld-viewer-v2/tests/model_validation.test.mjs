@@ -85,6 +85,46 @@ function expectCode(mutate, code) {
 // The complete saved V40 shape is clean and names/tags remain role-independent metadata.
 assert.deepEqual(validateBehaviorModel(fixture()), []);
 
+function addModifier(model, overrides = {}, operationOverrides = {}) {
+  const definition = {
+    stableId: 90, name: "Speed modifier", applicabilityId: 91,
+    controllerId: 0, nodeId: 0, requiredOwnerId: 0, recoveryTransitionId: 0,
+    priority: 100, kind: 2, channel: 2, selectorKind: 0, semanticRoleId: 0,
+    mapLifetime: 1, battleLifetime: 1, timerClock: 0, timerSource: 0,
+    hiddenTimerPolicy: 0, recoveryPolicy: 0, timerValue: 0,
+    hasTiredOriginKind: 0, tiredOriginKind: 0, hasRequiredOwnerId: 0,
+    allowMultipleOwners: 0, allowMultipleInstancesPerOwner: 0,
+    authoredTiredBound: 0, flags: 0, reserved0: 0, reserved1: 0,
+    ...overrides,
+  };
+  model.overrideDefinitions.push(definition);
+  model.applicability.push({ stableId: 91, name: "Modifier rule", flags: 1, immutableContextMask: 0xFFFFFFFF, controllerId: null, effectiveProfileId: null, semanticRoleId: null });
+  model.modifierOperations = [{
+    stableId: 92, definitionId: 90, operand: 5, fieldNamespace: 1,
+    fieldId: 3, operatorKind: 1, bound: 0, order: 0,
+    ...operationOverrides,
+  }];
+  return definition;
+}
+
+// Modifiers are canonical zero-state definitions with owned, ordered typed operations.
+{
+  const model = fixture();
+  addModifier(model);
+  assert.deepEqual(validateBehaviorModel(model), []);
+}
+expectCode((model) => { addModifier(model); model.modifierOperations = []; }, VALIDATION_CODES.MODIFIER_COUNT);
+expectCode((model) => { addModifier(model, {}, { definitionId: 50 }); }, VALIDATION_CODES.MODIFIER_OWNERSHIP);
+expectCode((model) => { addModifier(model, {}, { fieldId: 0 }); }, VALIDATION_CODES.MODIFIER_DOMAIN);
+expectCode((model) => { addModifier(model, {}, { fieldId: 1, operatorKind: 2 }); }, VALIDATION_CODES.MODIFIER_DOMAIN);
+expectCode((model) => { addModifier(model, {}, { operand: 32768 }); }, VALIDATION_CODES.MODIFIER_DOMAIN);
+expectCode((model) => { addModifier(model, {}, { bound: 1 }); }, VALIDATION_CODES.MODIFIER_DOMAIN);
+expectCode((model) => { addModifier(model, {}, { order: 1 }); }, VALIDATION_CODES.MODIFIER_DOMAIN);
+expectCode((model) => {
+  addModifier(model, {}, { operatorKind: 3 });
+  model.modifierOperations.push({ ...copy(model.modifierOperations[0]), stableId: 93, operatorKind: 4, order: 1 });
+}, VALIDATION_CODES.MODIFIER_DOMAIN);
+
 // Identity and complete, role-independent profile families.
 expectCode((model) => { model.owners[0].stableId = 10; }, VALIDATION_CODES.IDENTITY_DUPLICATE);
 {

@@ -1072,7 +1072,6 @@ def main() -> int:
             "OverworldWildRuntime_ResolveRetainedStaticCache",
             "OverworldWildRuntime_CopyValidatedSpawnConfiguration",
             "OverworldWildRuntime_MatchesPendingTimerExpiry",
-            "OverworldWildRuntime_CopyInstalledModifierOperations",
             "OverworldWildRuntime_AcquireInstalledTransitionCatalog",
         ))
     if args.overlay == 158:

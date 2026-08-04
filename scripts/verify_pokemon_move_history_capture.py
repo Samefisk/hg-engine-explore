@@ -80,7 +80,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
     "overlays.mk":
-        "35f6353086d5b393f2b5c4d177cda02722ce8090805f41ac37391a23c894e897",
+        "90d1c6677f6a8eea5291c5899faf7f984947a50bad99716c4e65bd9e85b72177",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

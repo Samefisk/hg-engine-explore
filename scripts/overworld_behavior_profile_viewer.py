@@ -156,7 +156,8 @@ V40_SECTION_SPECS = (
     ("genericAssignments", 20), ("speciesAssignments", 8),
     ("overrideSources", 28), ("overrideMembers", 2), ("overrideActions", 12),
     ("spawnPolicies", 12), ("populationPolicies", 10), ("hookSets", 8),
-    ("owners", 6), ("overrideDefinitions", 36), ("transitions", 24),
+    ("owners", 6), ("overrideDefinitions", 36), ("modifierOperations", 11),
+    ("transitions", 24),
     ("transitionGuards", 12), ("transitionOperations", 18),
     ("transitionActions", 10), ("recoveryActions", 8), ("importRecipes", 24),
     ("applicability", 16), ("tiredTranslations", 24), ("semanticIds", 8),
@@ -275,7 +276,7 @@ def _v40_section(blob: bytes, name: str) -> tuple[int, int, int]:
         raise ParseError(f"unknown V40 section: {name}") from exc
     offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
     expected_stride = V40_SECTION_SPECS[index][1]
-    if stride != expected_stride or offset < 208 or offset + count * stride > len(blob):
+    if stride != expected_stride or offset < 216 or offset + count * stride > len(blob):
         raise ParseError(f"V40 {name} section is invalid")
     return offset, count, stride
 
@@ -332,10 +333,10 @@ def build_v40_state_profile_editor_data() -> dict:
 
     byte_values = re.findall(r"\b0x([0-9A-Fa-f]{2})\b", V40_BEHAVIOR_DATA_SOURCE.read_text())
     blob = bytes(int(value, 16) for value in byte_values)
-    if len(blob) < 208:
+    if len(blob) < 216:
         raise ParseError("V40 behavior catalog is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
-    if (magic, version, header_size, blob_size) != (0x4F574244, 40, 208, len(blob)):
+    if (magic, version, header_size, blob_size) != (0x4F574244, 40, 216, len(blob)):
         raise ParseError("V40 behavior catalog header is invalid")
 
     authored_model = json.loads(V40_BEHAVIOR_MODEL_SOURCE.read_text())
@@ -345,6 +346,9 @@ def build_v40_state_profile_editor_data() -> dict:
     authored_profiles = {record["stableId"]: record for record in authored_model["stateProfiles"]}
     authored_controllers = {record["stableId"]: record for record in authored_model["controllers"]}
     authored_transitions = {record["stableId"]: record for record in authored_model["transitions"]}
+    authored_definitions = {
+        record["stableId"]: record for record in authored_model["overrideDefinitions"]
+    }
 
     body_offset, body_count, body_stride = _v40_section(blob, "stateBodies")
     identity_offset, identity_count, identity_stride = _v40_section(blob, "profileIdentities")
@@ -502,7 +506,11 @@ def build_v40_state_profile_editor_data() -> dict:
         if definition["hasRequiredOwnerId"] and definition["requiredOwnerId"] not in owner_ids:
             raise ParseError(f"V40 override definition #{index} references an unknown owner")
         definition.update({
-            "name": registry_keys.get(definition["stableId"], f"Definition {definition['stableId']}"),
+            "name": authored_definitions.get(definition["stableId"], {}).get(
+                "name", registry_keys.get(
+                    definition["stableId"], f"Definition {definition['stableId']}"
+                )
+            ),
             "kindLabel": V40_OVERRIDE_KIND_LABELS.get(definition["kind"], f"Kind {definition['kind']}"),
             "channelLabel": V40_CHANNEL_LABELS.get(definition["channel"], f"Channel {definition['channel']}"),
             "selectorLabel": V40_SELECTOR_KIND_LABELS.get(definition["selectorKind"], f"Selector {definition['selectorKind']}"),
@@ -516,6 +524,21 @@ def build_v40_state_profile_editor_data() -> dict:
             "applicability": applicability[definition["applicabilityId"]],
         })
         definitions[record[0]] = definition
+
+    modifier_operations = []
+    for record in _v40_records(blob, "modifierOperations", "<HHh5B"):
+        (stable_id, definition_id, operand, field_namespace, field_id,
+         operator_kind, bound, order) = record
+        modifier_operations.append({
+            "stableId": stable_id,
+            "definitionId": definition_id,
+            "operand": operand,
+            "fieldNamespace": field_namespace,
+            "fieldId": field_id,
+            "operatorKind": operator_kind,
+            "bound": bound,
+            "order": order,
+        })
 
     guard_records = _v40_records(blob, "transitionGuards", "<HH4BHH")
     operation_records = _v40_records(blob, "transitionOperations", "<7H4B")
@@ -714,6 +737,12 @@ def build_v40_state_profile_editor_data() -> dict:
         "customRoles": custom_roles,
         "owners": sorted(owners, key=lambda owner: owner["stableId"]),
         "overrideDefinitions": sorted(definitions.values(), key=lambda definition: definition["stableId"]),
+        "modifierOperations": sorted(
+            modifier_operations,
+            key=lambda operation: (
+                operation["definitionId"], operation["order"], operation["stableId"]
+            ),
+        ),
         "applicability": sorted(applicability.values(), key=lambda rule: rule["stableId"]),
         "stackPreview": {
             "capacity": 8,

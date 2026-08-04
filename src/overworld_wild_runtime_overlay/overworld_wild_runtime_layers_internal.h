@@ -179,11 +179,6 @@ BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     const OverworldWildRuntimeStaticCache *cache,
     const OverworldWildRuntimeDefinition *definition,
     OverworldWildRuntimeResolvedNode *nodeOut);
-BOOL OverworldWildRuntime_CopyInstalledModifierOperations(
-    u16 definitionId,
-    OverworldWildRuntimeModifierOperation *operationsOut,
-    u8 capacity,
-    u8 *operationCountOut);
 
 /* Exact Task-5 v40 scalar-domain implementation, resident once in overlay
  * 155 and imported into overlay 158 through a package-verified typed shard. */

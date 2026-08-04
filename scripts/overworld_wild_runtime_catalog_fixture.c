@@ -275,6 +275,17 @@ typedef struct __attribute__((packed)) OverworldWildTiredTranslationRecord {
     u16 reserved;
 } OverworldWildTiredTranslationRecord;
 
+typedef struct __attribute__((packed)) OverworldWildModifierOperationRecord {
+    u16 stableId;
+    u16 definitionId;
+    int16_t operand;
+    u8 fieldNamespace;
+    u8 fieldId;
+    u8 operatorKind;
+    u8 bound;
+    u8 order;
+} OverworldWildModifierOperationRecord;
+
 typedef struct __attribute__((packed)) OverworldWildBehaviorDataBlobHeader {
     u32 magic;
     u16 version;
@@ -297,6 +308,7 @@ typedef struct __attribute__((packed)) OverworldWildBehaviorDataBlobHeader {
     OverworldWildBlobSection hookSets;
     OverworldWildBlobSection owners;
     OverworldWildBlobSection overrideDefinitions;
+    OverworldWildBlobSection modifierOperations;
     OverworldWildBlobSection transitions;
     OverworldWildBlobSection transitionGuards;
     OverworldWildBlobSection transitionOperations;
@@ -462,15 +474,7 @@ typedef struct OverworldWildRuntimeEffectiveCache {
     u8 semanticRole;
 } OverworldWildRuntimeEffectiveCache;
 
-typedef struct OverworldWildRuntimeModifierOperation {
-    signed short operand;
-    u8 fieldNamespace;
-    u8 fieldId;
-    u8 operatorKind;
-    u8 bound;
-} OverworldWildRuntimeModifierOperation;
-
-_Static_assert(sizeof(OverworldWildBehaviorDataBlobHeader) == 208,
+_Static_assert(sizeof(OverworldWildBehaviorDataBlobHeader) == 216,
     "v40 header ABI");
 _Static_assert(sizeof(OverworldWildOverrideDefinitionRecord) == 36,
     "v40 definition ABI");
@@ -508,6 +512,7 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_POPULATION_POLICY_COUNT 6
 #define OWBD_HOOK_SET_COUNT 3
 #define OWBD_OVERRIDE_DEFINITION_COUNT 19
+#define OWBD_MODIFIER_OPERATION_COUNT 0
 #define OWBD_OVERRIDE_SOURCE_COUNT 11
 #define OWBD_OVERRIDE_ACTION_COUNT 207
 #define OWBD_OWNER_COUNT 10
@@ -522,14 +527,20 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_ROLE_TIRED 3
 #define OWBD_OPERATOR_SET 1
 #define OWBD_OPERATOR_ADD 2
+#define OWBD_OPERATOR_AT_LEAST 3
+#define OWBD_OPERATOR_AT_MOST 4
 #define OWBD_OPERATOR_ADD_AT_LEAST 5
+#define OWBD_OPERATOR_ADD_AT_MOST 6
 #define OWBD_SELECTOR_EXACT 1
 #define OWBD_SELECTOR_SEMANTIC_ROLE 2
 #define OWBD_CHANNEL_TEMPORARY_EFFECT 2
+#define OWBD_CHANNEL_CONTROLLER_STATE 1
+#define OWBD_CHANNEL_POSSESSION 4
 #define OWBD_MAP_LIFETIME_PRESERVE_LOGICAL 2
 #define OWBD_BATTLE_LIFETIME_CLEAR 1
 #define OWBD_DEFINITION_STATE_CANDIDATE 1
 #define OWBD_DEFINITION_MODIFIER 2
+#define OWBD_OVERRIDE_KIND_MODIFIER OWBD_DEFINITION_MODIFIER
 #define OWBD_NODE_FLAG_OPTIONAL 2
 #define OWBD_NODE_FLAG_HIDDEN 4
 #define OWBD_CANDIDATE_TIMER_SET 1
@@ -547,12 +558,12 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_ACTION_START_POST_TIRED_COOLDOWN 4
 #define OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT 2
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11020u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11028u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE 0x3000u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
-#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x5A16E64Du
-#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x5C5FBF57u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0xCD843F3Eu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x9421CA4Du
 #define OWBD_BLOB_FLAG_NAMES_ARE_HASHES (1u << 1)
 #define OWBD_BLOB_FLAG_AUTHORED_SOURCE (1u << 2)
 #define OWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM
@@ -576,13 +587,32 @@ static BOOL FixtureCatalogRead(
     return TRUE;
 }
 
+static u32 FixtureCrc32(const u8 *bytes, u32 size)
+{
+    u32 crc = 0xFFFFFFFFu;
+    u32 byteIndex;
+    for (byteIndex = 0; byteIndex < size; byteIndex++) {
+        u8 bit;
+        crc ^= bytes[byteIndex];
+        for (bit = 0; bit < 8; bit++)
+            crc = (crc >> 1) ^ (0xEDB88320u & (u32)-(int)(crc & 1));
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+static void FixtureResealCatalog(u8 *blob, u32 size)
+{
+    OverworldWildBehaviorDataBlobHeader *header = (void *)blob;
+    header->checksum = 0;
+    header->checksum = FixtureCrc32(blob, size);
+}
+
 BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     const OverworldWildRuntimeStaticCache *cache,
     const OverworldWildRuntimeDefinition *definition,
     OverworldWildRuntimeResolvedNode *nodeOut);
 
 #define OW_WILD_RUNTIME_ACCESSOR_HOST_TEST
-#define OW_WILD_RUNTIME_DISABLE_TRANSITION_VIEW
 #include "../src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
 
 static int sChecks;
@@ -622,7 +652,7 @@ int main(int argc, char **argv)
     u16 index;
     BOOL sawAuthored = FALSE, sawFallback = FALSE;
 
-    require(argc == 2, "expected one validated-v40 path");
+    require(argc == 2 || argc == 3, "expected canonical and optional modifier-v40 paths");
     file = fopen(argv[1], "rb");
     require(file != NULL, "validated-v40 file did not open");
     require(fseek(file, 0, SEEK_END) == 0, "validated-v40 seek failed");
@@ -771,8 +801,6 @@ int main(int argc, char **argv)
         OverworldWildRuntimeStaticCache modifiedCache;
         OverworldWildRuntimeSpawnConfiguration copiedConfiguration;
         OverworldWildRuntimeResolvedNode node;
-        OverworldWildRuntimeModifierOperation operation;
-        u8 operationCount = 0xFF;
 
         memset(&staticContext, 0, sizeof(staticContext));
         staticContext.species = 56;
@@ -1240,11 +1268,6 @@ int main(int argc, char **argv)
                 &second, &actual, &node)
                 && node.nodeId != 0 && node.profileId != 0,
             "production candidate node/profile copy-out failed");
-        require(OverworldWildRuntime_CopyInstalledModifierOperations(
-                actual.stableId, &operation, 1, &operationCount)
-                && operationCount == 0,
-            "state-only v40 catalog exposed invented modifier payloads");
-
         /* Species 92 is a production member of source 0.  Its controller's
          * calm node is rebound while the base remains authored, and shipped
          * role-scoped scalar actions fold into the rebound copied body. */
@@ -1334,9 +1357,102 @@ int main(int argc, char **argv)
                 && candidate == 0,
             "missing production translation was not canonical");
     }
+    if (argc == 3) {
+        OverworldWildModifierOperationRecord *speedSet = NULL;
+        OverworldWildStateBodyRecord *body;
+        u16 modifierId = 0;
+        int16_t savedOperand;
+        u8 savedOperatorKind;
+        u8 savedBound;
+        u8 savedSpeed;
+
+        sOverworldWildValidatedV40 = NULL;
+        free(blob);
+        file = fopen(argv[2], "rb");
+        require(file != NULL && fseek(file, 0, SEEK_END) == 0,
+            "modifier-v40 file did not open/seek");
+        size = ftell(file);
+        require(size >= (long)sizeof(OverworldWildBehaviorDataBlobHeader)
+                && size <= OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE
+                && fseek(file, 0, SEEK_SET) == 0,
+            "modifier-v40 size/rewind failed");
+        blob = malloc((size_t)size);
+        require(blob != NULL
+                && fread(blob, 1, (size_t)size, file) == (size_t)size
+                && fclose(file) == 0,
+            "modifier-v40 read failed");
+        catalogReader.data = blob; catalogReader.size = (u32)size;
+        require(OwbdValidateStream(FixtureCatalogRead, &catalogReader, (u32)size,
+                validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "authored modifier catalog failed shared validation");
+        header = (void *)blob;
+        definitions = (const void *)(blob + header->overrideDefinitions.offset);
+        for (index = 0; index < header->overrideDefinitions.count; index++)
+            if (definitions[index].kind == OWBD_DEFINITION_MODIFIER)
+                modifierId = definitions[index].stableId;
+        require(modifierId != 0 && header->modifierOperations.count == 2,
+            "authored modifier definition/operation relation missing");
+        for (index = 0; index < header->modifierOperations.count; index++) {
+            OverworldWildModifierOperationRecord *operation =
+                &((OverworldWildModifierOperationRecord *)(blob
+                    + header->modifierOperations.offset))[index];
+            if (operation->definitionId == modifierId
+                && operation->fieldNamespace == 1
+                && operation->fieldId == 3
+                && operation->operatorKind == OWBD_OPERATOR_SET)
+                speedSet = operation;
+        }
+        require(speedSet != NULL && speedSet->operand == 4,
+            "authored speed SET operation is absent");
+        savedOperand = speedSet->operand;
+        speedSet->operand = 0;
+        FixtureResealCatalog(blob, (u32)size);
+        require(!OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "shared C validator accepted modifier speed SET zero");
+        speedSet->operand = savedOperand;
+        FixtureResealCatalog(blob, (u32)size);
+        require(OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "restored modifier catalog did not revalidate");
+
+        savedOperatorKind = speedSet->operatorKind;
+        savedBound = speedSet->bound;
+        speedSet->operatorKind = OWBD_OPERATOR_ADD_AT_LEAST;
+        speedSet->bound = 0;
+        FixtureResealCatalog(blob, (u32)size);
+        require(!OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "shared C validator accepted modifier speed compound bound zero");
+        speedSet->operatorKind = savedOperatorKind;
+        speedSet->bound = savedBound;
+        FixtureResealCatalog(blob, (u32)size);
+        require(OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "restored compound-bound modifier catalog did not revalidate");
+
+        body = (void *)(blob + header->stateBodies.offset);
+        savedSpeed = body->values[3];
+        body->values[3] = 0;
+        FixtureResealCatalog(blob, (u32)size);
+        require(!OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "shared C validator accepted state-body speed zero");
+        body->values[3] = savedSpeed;
+        FixtureResealCatalog(blob, (u32)size);
+        require(OwbdValidateStream(FixtureCatalogRead, &catalogReader,
+                (u32)size, validationWorkspace,
+                OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE),
+            "restored state-body catalog did not revalidate");
+    }
     printf("runtime catalog host fixture: %d checks; definitions=%u translations=%u\n",
-        sChecks, header->overrideDefinitions.count,
-        header->tiredTranslations.count);
+        sChecks, header->overrideDefinitions.count, header->tiredTranslations.count);
     sOverworldWildValidatedV40 = NULL;
     free(validationWorkspace);
     free(blob);

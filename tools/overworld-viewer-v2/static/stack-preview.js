@@ -17,7 +17,7 @@ export const STACK_PREVIEW_CODES = Object.freeze({
   DUPLICATE_IDENTITY: "LAYER_IDENTITY_DUPLICATE",
   DANGLING: "REFERENCE_DANGLING",
   AMBIGUOUS: "SELECTOR_AMBIGUOUS",
-  MODIFIER: "MODIFIER_PREVIEW_UNSUPPORTED",
+  MODIFIER: "MODIFIER_OPERATION_INVALID",
   DRAFT: "DRAFT_REFERENCE_INVALID",
   GRAPH: "EVENT_GRAPH_INVALID",
   STEP: "EVENT_STEP_INVALID",
@@ -98,6 +98,71 @@ function timerStatus(definition, isWinner) {
   return ({ 1: "paused-while-hidden", 2: "running-while-hidden", 3: "expires-on-hide" })[
     Number(definition.hiddenTimerPolicy)
   ] || "inactive-while-hidden";
+}
+
+function fieldDomain(field) {
+  if (!field) return null;
+  if (field.type === "number" || field.type === "mask") {
+    return { minimum: Number(field.minimum), maximum: Number(field.maximum), values: null };
+  }
+  const values = (field.options || []).map((option) => Number(option.value));
+  return values.length ? { minimum: Math.min(...values), maximum: Math.max(...values), values: new Set(values) } : null;
+}
+
+function modifierTarget(model, fields, controllerScalars, operation) {
+  const namespace = Number(operation.fieldNamespace);
+  const fieldId = Number(operation.fieldId);
+  if (namespace === 1) {
+    const metadata = model.stateProfileFields?.[fieldId];
+    return metadata ? { metadata, record: fields[metadata.key] } : null;
+  }
+  if (namespace === 2) {
+    const metadata = model.controllerScalarFields?.[fieldId - 1];
+    return metadata ? { metadata, record: controllerScalars[metadata.key] } : null;
+  }
+  return null;
+}
+
+function applyModifierOperation(model, fields, controllerScalars, layer, operation) {
+  const target = modifierTarget(model, fields, controllerScalars, operation);
+  const domain = fieldDomain(target?.metadata);
+  if (!target?.record || !domain) return false;
+  const before = Number(target.record.value);
+  const operand = Number(operation.operand);
+  let after = before;
+  switch (Number(operation.operatorKind)) {
+  case 1: after = operand; break;
+  case 2: after = before + operand; break;
+  case 3: after = Math.max(before, operand); break;
+  case 4: after = Math.min(before, operand); break;
+  case 5: after = Math.max(before + operand, Number(operation.bound)); break;
+  case 6: after = Math.min(before + operand, Number(operation.bound)); break;
+  default: return false;
+  }
+  if (domain.values) {
+    if (!domain.values.has(after)) return false;
+  } else after = Math.max(domain.minimum, Math.min(domain.maximum, after));
+  const contribution = {
+    kind: "modifier", definitionId: layer.definitionStableId,
+    ownerId: layer.ownerId, instanceKey: layer.instanceKey,
+    operationId: ref(operation), fieldNamespace: Number(operation.fieldNamespace),
+    fieldId: Number(operation.fieldId), operatorKind: Number(operation.operatorKind),
+    operand, bound: Number(operation.bound), before, after,
+  };
+  target.record.value = after;
+  (target.record.contributions ||= []).push(clone(contribution));
+  target.record.provenance = contribution;
+  return true;
+}
+
+function modifierApplies(rule, controller, identity, immutableContextMask) {
+  const scopedController = rule?.controllerId;
+  const requiredMask = Number(rule?.immutableContextMask ?? rule?.groupMask ?? 0xFFFFFFFF) >>> 0;
+  const actualMask = Number(immutableContextMask) >>> 0;
+  return (!scopedController || same(scopedController, ref(controller)))
+    && (requiredMask === 0xFFFFFFFF || (actualMask & requiredMask) === requiredMask)
+    && (!rule?.effectiveProfileId && !rule?.profileId || same(rule.effectiveProfileId ?? rule.profileId, identity.profileId))
+    && (!rule?.semanticRoleId && !rule?.minimum || Number(rule.semanticRoleId ?? rule.minimum) === Number(identity.semanticRoleId));
 }
 
 function composeOne(model, { controllerRef, layers = [], immutableContextMask = 0xFFFFFFFF } = {}) {
@@ -198,10 +263,6 @@ function composeOne(model, { controllerRef, layers = [], immutableContextMask = 
     }
     siblings.push({ ownerId: source.ownerId, instanceKey });
     layersByDefinition.set(String(ref(definition)), siblings);
-    if (Number(definition.kind) === 2) {
-      errors.push(issue(STACK_PREVIEW_CODES.MODIFIER, "Modifier definitions require the runtime modifier engine and are not approximated by this preview.", `${path}.definitionId`));
-      return;
-    }
     const rule = applicability.get(String(definition.applicabilityId));
     if (!rule) {
       errors.push(issue(STACK_PREVIEW_CODES.DANGLING, "Definition references an applicability rule that does not exist.", `${path}.applicabilityId`));
@@ -209,14 +270,16 @@ function composeOne(model, { controllerRef, layers = [], immutableContextMask = 
     }
     const scopedController = definition.controllerId ?? rule.controllerId;
     let applicable = !scopedController || same(scopedController, ref(controller));
-    const requiredMask = Number(rule.immutableContextMask) >>> 0;
+    const requiredMask = Number(rule.immutableContextMask ?? rule.groupMask ?? 0xFFFFFFFF) >>> 0;
     const actualMask = Number(immutableContextMask) >>> 0;
     applicable = applicable && (requiredMask === 0xFFFFFFFF || (actualMask & requiredMask) === requiredMask);
-    const resolved = applicable ? resolvedNode(model, controller, definition, errors, path) : null;
-    if (applicable && !resolved && !errors.some((error) => error.path.startsWith(path))) applicable = false;
+    const candidate = Number(definition.kind) === 1;
+    const resolved = candidate && applicable ? resolvedNode(model, controller, definition, errors, path) : null;
+    if (candidate && applicable && !resolved && !errors.some((error) => error.path.startsWith(path))) applicable = false;
     normalized.push({
       definitionStableId: ref(definition), definition, ownerId: ref(owner), owner,
-      instanceKey, applicable, node: resolved?.node || null, profile: resolved?.profile || null,
+      instanceKey, kind: candidate ? "candidate" : "modifier", applicable,
+      node: resolved?.node || null, profile: resolved?.profile || null, rule,
       precedence: {
         channel: Number(definition.channel), priority: Number(definition.priority),
         definitionStableId: Number(ref(definition)), ownerId: Number(ref(owner)), instanceKey,
@@ -225,8 +288,9 @@ function composeOne(model, { controllerRef, layers = [], immutableContextMask = 
   });
 
   if (errors.length) return { ok: false, errors, result: null };
-  const applicable = normalized.filter((layer) => layer.applicable).sort((left, right) => comparePrecedence(left.precedence, right.precedence));
-  const winner = applicable.at(-1) || null;
+  const applicableCandidates = normalized.filter((layer) => layer.kind === "candidate" && layer.applicable)
+    .sort((left, right) => comparePrecedence(left.precedence, right.precedence));
+  const winner = applicableCandidates.at(-1) || null;
   const effectiveNode = winner?.node || baseNode;
   const effectiveProfile = winner?.profile || baseProfile;
   const identity = {
@@ -246,28 +310,68 @@ function composeOne(model, { controllerRef, layers = [], immutableContextMask = 
   const policies = Object.fromEntries(Object.entries(controller.policyIds || {}).map(([key, value]) => [
     key, { value, provenance: { kind: "controller-base", controllerId: ref(controller) } },
   ]));
+  const modifierOperations = new Map();
+  (model.modifierOperations || []).forEach((operation) => {
+    const key = String(operation.definitionId);
+    const owned = modifierOperations.get(key) || [];
+    owned.push(operation);
+    modifierOperations.set(key, owned);
+  });
+  const applicableModifiers = normalized.filter((layer) => layer.kind === "modifier")
+    .map((layer) => ({
+      ...layer,
+      applicable: layer.applicable && modifierApplies(layer.rule, controller, identity, immutableContextMask),
+    }))
+    .sort((left, right) => comparePrecedence(left.precedence, right.precedence));
+  for (const layer of applicableModifiers.filter((item) => item.applicable)) {
+    const operations = (modifierOperations.get(String(layer.definitionStableId)) || [])
+      .slice().sort((left, right) => Number(left.order) - Number(right.order));
+    for (const operation of operations) {
+      if (!applyModifierOperation(model, fields, controllerScalars, layer, operation)) {
+        return { ok: false, errors: [issue(STACK_PREVIEW_CODES.MODIFIER, "Modifier operation could not be applied to its typed field.", `modifierOperations.${String(ref(operation))}`)], result: null };
+      }
+    }
+  }
+  const normalizations = [];
+  if (fields.hopMinDistance && fields.hopMaxDistance && Number(fields.hopMaxDistance.value) < Number(fields.hopMinDistance.value)) {
+    const before = Number(fields.hopMaxDistance.value);
+    fields.hopMaxDistance.value = Number(fields.hopMinDistance.value);
+    normalizations.push({ field: "hopMaxDistance", rule: "MAX_AT_LEAST_MIN", before, after: fields.hopMaxDistance.value });
+  }
+  if (fields.allowedTile && fields.allowedTile2 && Number(fields.allowedTile.value) === Number(fields.allowedTile2.value) && Number(fields.allowedTile2.value) !== 15) {
+    const before = Number(fields.allowedTile2.value);
+    fields.allowedTile2.value = 15;
+    normalizations.push({ field: "allowedTile2", rule: "DUPLICATE_SECONDARY_TILE", before, after: 15 });
+  }
+  normalizations.forEach((item) => {
+    (fields[item.field].normalizations ||= []).push(clone(item));
+  });
   const layerResults = normalized.map((layer) => {
     const isWinner = winner === layer;
+    const foldedModifier = layer.kind === "modifier"
+      ? applicableModifiers.find((item) => item === layer || (same(item.definitionStableId, layer.definitionStableId) && same(item.ownerId, layer.ownerId) && Number(item.instanceKey) === Number(layer.instanceKey)))
+      : null;
+    const layerApplicable = foldedModifier ? foldedModifier.applicable : layer.applicable;
     return {
       definitionId: layer.definitionStableId, ownerId: layer.ownerId, instanceKey: layer.instanceKey,
       identity: layer.node && layer.profile ? {
         controllerId: ref(controller), nodeId: ref(layer.node), profileId: ref(layer.profile),
         semanticRoleId: Number(layer.node.semanticRoleId),
       } : null,
-      applicable: layer.applicable, winner: isWinner,
-      visibility: !layer.applicable ? "not-applicable" : isWinner ? "winner" : "hidden",
+      kind: layer.kind, applicable: layerApplicable, winner: isWinner,
+      visibility: !layerApplicable ? "not-applicable" : layer.kind === "modifier" ? "applied" : isWinner ? "winner" : "hidden",
       precedence: clone(layer.precedence),
       lifetime: {
         map: { value: Number(layer.definition.mapLifetime), label: layer.definition.mapLifetimeLabel },
         battle: { value: Number(layer.definition.battleLifetime), label: layer.definition.battleLifetimeLabel },
       },
-      timer: {
+      timer: layer.kind === "modifier" ? { status: "inactive", clock: 0, source: 0, value: 0, hiddenPolicy: 0 } : {
         status: timerStatus(layer.definition, isWinner),
         clock: Number(layer.definition.timerClock), clockLabel: layer.definition.timerClockLabel,
         source: Number(layer.definition.timerSource), sourceLabel: layer.definition.timerSourceLabel,
         value: Number(layer.definition.timerValue), hiddenPolicy: Number(layer.definition.hiddenTimerPolicy),
       },
-      recovery: {
+      recovery: layer.kind === "modifier" ? { policy: 0, transitionId: null } : {
         policy: Number(layer.definition.recoveryPolicy), label: layer.definition.recoveryPolicyLabel,
         transitionId: layer.definition.recoveryTransitionId || null,
       },
@@ -279,8 +383,9 @@ function composeOne(model, { controllerRef, layers = [], immutableContextMask = 
         controllerId: ref(controller), nodeId: ref(baseNode), profileId: ref(baseProfile),
         semanticRoleId: Number(baseNode.semanticRoleId),
       },
-      fields, controllerScalars, policies, layers: layerResults,
-      canonicalOrder: applicable.map((layer) => ({
+      fields, controllerScalars, policies, layers: layerResults, normalizations,
+      canonicalOrder: [...applicableCandidates, ...applicableModifiers.filter((layer) => layer.applicable)]
+        .sort((left, right) => comparePrecedence(left.precedence, right.precedence)).map((layer) => ({
         definitionId: layer.definitionStableId, ownerId: layer.ownerId, instanceKey: layer.instanceKey,
       })),
       winningLayer: winner ? { definitionId: winner.definitionStableId, ownerId: winner.ownerId, instanceKey: winner.instanceKey } : null,
@@ -397,6 +502,7 @@ function sequenceGraphErrors(model) {
   const errors = [];
   if (model.validationSchema) {
     for (const diagnostic of validateBehaviorModel(model)) {
+      if (diagnostic.severity === "warning") continue;
       errors.push(issue(diagnostic.code || STACK_PREVIEW_CODES.GRAPH, diagnostic.message, diagnostic.path));
     }
     if (errors.length) return errors;

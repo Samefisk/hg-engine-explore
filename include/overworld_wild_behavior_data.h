@@ -17,10 +17,10 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11020u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11028u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE 0x3000u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x5A16E64Du
-#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x5C5FBF57u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0xCD843F3Eu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x9421CA4Du
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_ENTRY_ADDR 0x023C0400u
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_OVERLAY_END_ADDR 0x023C2160u
@@ -65,6 +65,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OWBD_POPULATION_POLICY_COUNT 6
 #define OWBD_HOOK_SET_COUNT 3
 #define OWBD_OVERRIDE_DEFINITION_COUNT 19
+#define OWBD_MODIFIER_OPERATION_COUNT 0
 #define OWBD_OVERRIDE_SOURCE_COUNT 11
 #define OWBD_OVERRIDE_ACTION_COUNT 207
 #define OWBD_OWNER_COUNT 10
@@ -674,6 +675,17 @@ typedef struct OWBD_PACKED OverworldWildOverrideDefinitionRecord {
     u8 reserved1;
 } OverworldWildOverrideDefinitionRecord;
 
+typedef struct OWBD_PACKED OverworldWildModifierOperationRecord {
+    u16 stableId;
+    u16 definitionId;
+    signed short operand;
+    u8 fieldNamespace;
+    u8 fieldId;
+    u8 operatorKind;
+    u8 bound;
+    u8 order;
+} OverworldWildModifierOperationRecord;
+
 typedef struct OWBD_PACKED OverworldWildOwnerRecord {
     u16 stableId;
     u16 nameId;
@@ -802,6 +814,7 @@ typedef struct OWBD_PACKED OverworldWildBehaviorDataBlobHeader {
     OverworldWildBlobSection hookSets;
     OverworldWildBlobSection owners;
     OverworldWildBlobSection overrideDefinitions;
+    OverworldWildBlobSection modifierOperations;
     OverworldWildBlobSection transitions;
     OverworldWildBlobSection transitionGuards;
     OverworldWildBlobSection transitionOperations;
@@ -841,6 +854,8 @@ typedef char OverworldWildHookSetRecordSizeMustRemain8Bytes[
     sizeof(OverworldWildHookSetRecord) == 8 ? 1 : -1];
 typedef char OverworldWildOverrideDefinitionRecordSizeMustRemain36Bytes[
     sizeof(OverworldWildOverrideDefinitionRecord) == 36 ? 1 : -1];
+typedef char OverworldWildModifierOperationRecordSizeMustRemain11Bytes[
+    sizeof(OverworldWildModifierOperationRecord) == 11 ? 1 : -1];
 typedef char OverworldWildTransitionRecordSizeMustRemain24Bytes[
     sizeof(OverworldWildTransitionRecord) == 24 ? 1 : -1];
 typedef char OverworldWildTransitionGuardRecordSizeMustRemain12Bytes[
@@ -861,8 +876,8 @@ typedef char OverworldWildTiredTranslationRecordSizeMustRemain24Bytes[
     sizeof(OverworldWildTiredTranslationRecord) == 24 ? 1 : -1];
 typedef char OverworldWildSemanticIdRecordSizeMustRemain8Bytes[
     sizeof(OverworldWildSemanticIdRecord) == 8 ? 1 : -1];
-typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain208Bytes[
-    sizeof(OverworldWildBehaviorDataBlobHeader) == 208 ? 1 : -1];
+typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain216Bytes[
+    sizeof(OverworldWildBehaviorDataBlobHeader) == 216 ? 1 : -1];
 typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
     u16 version;

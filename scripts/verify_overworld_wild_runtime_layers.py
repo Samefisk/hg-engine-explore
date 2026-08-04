@@ -185,13 +185,13 @@ def verify_oracle_status_trace(fixture_output: str) -> int:
                 == (invalid_modifier, 1, 0, invalid_modifier, invalid_modifier),
             "C/Task-5/Task-6 scalar-domain trace differs")
     wide_match = re.search(
-        r"TASK6_RUNTIME_S16 add33=(\d+) min=(\d+) max=(\d+) conflict=(\d+)",
+        r"TASK6_RUNTIME_S16 add33=(\d+) min=(\d+) max=(\d+)",
         fixture_output,
     )
     require(wide_match is not None
             and tuple(map(int, wide_match.groups()))
-                == (4, 0, 64, invalid_modifier),
-            "C/Task-6 s16 saturation/conflicting-bound trace differs")
+                == (4, 0, 64),
+            "C/Task-6 s16 saturation trace differs")
     return len(trace) + 6
 
 
@@ -1524,6 +1524,9 @@ def verify_source_contracts() -> None:
         "production canonical static composition rejected NULL input",
         "production stamina trigger projection was not unique/exact",
         "production stamina identity-only timer projection differs",
+        "shared C validator accepted modifier speed SET zero",
+        "shared C validator accepted modifier speed compound bound zero",
+        "shared C validator accepted state-body speed zero",
     ):
         require(token in catalog_fixture,
                 f"production catalog projection fixture is absent: {token}")
@@ -1653,6 +1656,33 @@ def run_catalog_fixture() -> str:
             "validated v40 fixture is absent; regenerate source artifacts first")
     with tempfile.TemporaryDirectory(prefix="ow-runtime-catalog-") as directory:
         binary = Path(directory) / "fixture"
+        modifier_catalog = Path(directory) / "modifier-catalog.bin"
+        import overworld_wild_behavior_model_v40 as v40
+        modifier_model = v40.load_model()
+        modifier_definition = modifier_model["overrideDefinitions"][0]
+        modifier_definition.update({
+            "kind": 2, "controllerId": 0, "nodeId": 0,
+            "selectorKind": 0, "semanticRoleId": 0,
+        })
+        operation_keys = (
+            "fixture:modifier-operation:set-speed",
+            "fixture:modifier-operation:add-stamina",
+        )
+        modifier_model["stableIdHistory"], allocated = v40.append_stable_history_events(
+            modifier_model["stableIdHistory"],
+            [("allocate", key) for key in operation_keys],
+        )
+        modifier_model["modifierOperations"] = [
+            {"stableId": allocated[operation_keys[0]], "registryKey": operation_keys[0],
+             "definitionId": modifier_definition["stableId"], "operand": 4,
+             "fieldNamespace": 1, "fieldId": 3, "operatorKind": 1,
+             "bound": 0, "order": 0},
+            {"stableId": allocated[operation_keys[1]], "registryKey": operation_keys[1],
+             "definitionId": modifier_definition["stableId"], "operand": -3,
+             "fieldNamespace": 2, "fieldId": 7, "operatorKind": 5,
+             "bound": 1, "order": 1},
+        ]
+        modifier_catalog.write_bytes(v40.encode_model(modifier_model))
         subprocess.run([
             compiler,
             "-std=c11",
@@ -1666,11 +1696,11 @@ def run_catalog_fixture() -> str:
             str(binary),
         ], cwd=ROOT, check=True)
         completed = subprocess.run(
-            [str(binary), str(VALIDATED_V40)], cwd=ROOT, check=True,
+            [str(binary), str(VALIDATED_V40), str(modifier_catalog)], cwd=ROOT, check=True,
             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
     expected_summary = (
-        "runtime catalog host fixture: 193 checks; definitions=19 translations=18"
+        "runtime catalog host fixture: 204 checks; definitions=19 translations=18"
     )
     require(completed.stdout.strip() == expected_summary,
             "production catalog fixture summary changed: "
@@ -1900,8 +1930,7 @@ def run_arm_stack_budget_gate() -> str:
     spawn_static_branch = chain(
         "OverworldWildRuntime_CopyInstalledStaticCache")
     spawn_composition_branch = chain(
-        "ComposeProspective", "ApplyModifierWork",
-        "OverworldWildRuntime_CopyInstalledModifierOperations")
+        "ComposeProspective", "ApplyModifierWork")
     prime_peak = chain("OverworldWildRuntime_PrimeEffectiveCache") + max(
         spawn_static_branch, spawn_composition_branch)
     spawn_branches = {
@@ -1940,7 +1969,6 @@ def run_arm_stack_budget_gate() -> str:
         "OverworldWildRuntime_ApplyStackDelta",
         "ApplyDeltaCore", "ApplyDeltaCoreWithWorkspace",
         "ComposeProspective", "ApplyModifierWork",
-        "OverworldWildRuntime_CopyInstalledModifierOperations",
     )
     budget = 2048
     reserve = 256

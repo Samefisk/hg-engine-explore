@@ -1370,7 +1370,11 @@ ApplyModifierWork(
     const OverworldWildRuntimeModifierWork *work,
     const OverworldWildRuntimeStaticModifierContribution *staticContribution)
 {
-    OverworldWildRuntimeModifierOperation operations[16];
+    const OverworldWildBehaviorDataBlobHeader *header;
+    const OverworldWildModifierOperationRecord *records;
+    OverworldWildBlobSection section;
+    OverworldWildRuntimeModifierOperation operation;
+    u16 recordIndex;
     u8 operationCount = 0;
     u8 operationIndex;
     BOOL applies = ModifierApplies(&work->definition, staticCache, effective);
@@ -1395,35 +1399,33 @@ ApplyModifierWork(
     } else {
         provenance->flags |= OW_WILD_RUNTIME_PROVENANCE_TRUNCATED_MODIFIERS;
     }
-    if (!OverworldWildRuntime_CopyInstalledModifierOperations(
-            work->definition.stableId, operations,
-            sizeof(operations) / sizeof(operations[0]), &operationCount))
-        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
-    for (operationIndex = 0; operationIndex < operationCount;
-            operationIndex++) {
-        u8 otherIndex;
-        for (otherIndex = (u8)(operationIndex + 1);
-                otherIndex < operationCount; otherIndex++) {
-            if (operations[operationIndex].fieldNamespace
-                    != operations[otherIndex].fieldNamespace
-                || operations[operationIndex].fieldId
-                    != operations[otherIndex].fieldId) continue;
-            if ((operations[operationIndex].operatorKind
-                        == OW_WILD_RUNTIME_OPERATOR_AT_LEAST
-                    && operations[otherIndex].operatorKind
-                        == OW_WILD_RUNTIME_OPERATOR_AT_MOST)
-                || (operations[operationIndex].operatorKind
-                        == OW_WILD_RUNTIME_OPERATOR_AT_MOST
-                    && operations[otherIndex].operatorKind
-                        == OW_WILD_RUNTIME_OPERATOR_AT_LEAST))
-                return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
-        }
+    header = OverworldWildRuntime_AcquireInstalledTransitionCatalog();
+    if (header == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+    memcpy(&section, (void *)&header->modifierOperations, sizeof(section));
+    records = (const void *)((const u8 *)header + section.offset);
+    for (recordIndex = 0; recordIndex < section.count; recordIndex++) {
+        if (records[recordIndex].definitionId == work->definition.stableId)
+            operationCount++;
     }
+    if (operationCount == 0)
+        return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
     if (!applies) return OW_WILD_RUNTIME_STATUS_OK;
     for (operationIndex = 0; operationIndex < operationCount;
             operationIndex++) {
-        OverworldWildRuntimeStatus status = ApplyModifierOperation(
-            effective, provenance, work, &operations[operationIndex]);
+        const OverworldWildModifierOperationRecord *record = NULL;
+        OverworldWildRuntimeStatus status;
+        for (recordIndex = 0; recordIndex < section.count; recordIndex++) {
+            if (records[recordIndex].definitionId
+                        == work->definition.stableId
+                    && records[recordIndex].order == operationIndex) {
+                record = &records[recordIndex];
+                break;
+            }
+        }
+        if (record == NULL) return OW_WILD_RUNTIME_STATUS_INVALID_MODIFIER;
+        memcpy(&operation, (void *)&record->operand, sizeof(operation));
+        status = ApplyModifierOperation(
+            effective, provenance, work, &operation);
         if (status != OW_WILD_RUNTIME_STATUS_OK) return status;
     }
     return OW_WILD_RUNTIME_STATUS_OK;

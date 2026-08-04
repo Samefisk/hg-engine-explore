@@ -10,7 +10,7 @@ import {
   STACK_SEQUENCE_LIMITS,
 } from "../static/stack-preview.js";
 
-const fields = ["behaviorKind", "speed", "movementRange"].map((key) => ({
+const fields = ["behaviorKind", "speed", "movementRange", "runtimeSpeed"].map((key) => ({
   key, label: key, type: "number", minimum: 0, maximum: 64,
 }));
 const profile = (stableId, value) => ({ stableId, name: `Profile ${stableId}`, values: Object.fromEntries(fields.map((field) => [field.key, value])) });
@@ -27,13 +27,24 @@ const definition = (stableId, nodeId, overrides = {}) => ({
   timerValue: 0, hiddenTimerPolicy: 0, recoveryPolicy: 0, recoveryPolicyLabel: "None",
   recoveryTransitionId: null, ...overrides,
 });
+const modifierDefinition = (stableId, overrides = {}) => ({
+  stableId, applicabilityId: stableId + 1000, kind: 2, channel: 2, priority: 10,
+  selectorKind: 0, nodeId: 0, semanticRoleId: 0, controllerId: 0,
+  hasRequiredOwnerId: 0, requiredOwnerId: 0,
+  hasTiredOriginKind: 0, tiredOriginKind: 0, flags: 0,
+  allowMultipleOwners: 1, allowMultipleInstancesPerOwner: 1,
+  mapLifetime: 1, battleLifetime: 1, timerClock: 0, timerSource: 0,
+  timerValue: 0, hiddenTimerPolicy: 0, recoveryPolicy: 0,
+  recoveryTransitionId: 0, authoredTiredBound: 0, reserved0: 0, reserved1: 0,
+  ...overrides,
+});
 
 function fixture() {
   const definitions = [definition(101, 12), definition(102, 13), definition(103, 14)];
   return {
     modelVersion: 40,
     stateProfileFields: fields,
-    controllerScalarFields: [{ key: "stamina" }],
+    controllerScalarFields: [{ key: "stamina", label: "Stamina", type: "number", minimum: 0, maximum: 64 }],
     stateProfiles: [profile(20, 1), profile(21, 2), profile(22, 3), profile(23, 4)],
     controllers: [{
       stableId: 1, name: "Bird", scalarDefaults: { stamina: 20 }, policyIds: { spawnPolicyId: 7 },
@@ -42,6 +53,7 @@ function fixture() {
     owners: [{ stableId: 201 }, { stableId: 202 }, { stableId: 203 }],
     applicability: definitions.map((item) => applicability(item.applicabilityId)),
     overrideDefinitions: definitions,
+    modifierOperations: [],
     stackPreview: { capacity: 8 },
   };
 }
@@ -229,8 +241,51 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   model.overrideDefinitions[0].nodeId = 999;
   assert.equal(compose(model, [layer(101)]).errors[0].code, STACK_PREVIEW_CODES.DANGLING);
   model.overrideDefinitions[0].nodeId = 12;
-  model.overrideDefinitions[0].kind = 2;
-  assert.equal(compose(model, [layer(101)]).errors[0].code, STACK_PREVIEW_CODES.MODIFIER);
+}
+
+// Modifiers fold after candidate selection in canonical precedence order, and
+// removing a middle modifier affects only that modifier's contribution.
+{
+  const model = fixture();
+  const modifiers = [
+    modifierDefinition(150, { priority: 10 }),
+    modifierDefinition(151, { priority: 20 }),
+    modifierDefinition(152, { priority: 30 }),
+  ];
+  model.overrideDefinitions.push(...modifiers);
+  model.applicability.push(...modifiers.map((item) => applicability(item.applicabilityId)));
+  model.modifierOperations.push(
+    { stableId: 2150, definitionId: 150, operand: 2, fieldNamespace: 1, fieldId: 3, operatorKind: 2, bound: 0, order: 0 },
+    { stableId: 2151, definitionId: 151, operand: 3, fieldNamespace: 1, fieldId: 3, operatorKind: 2, bound: 0, order: 0 },
+    { stableId: 2152, definitionId: 152, operand: 4, fieldNamespace: 1, fieldId: 3, operatorKind: 2, bound: 0, order: 0 },
+  );
+  const allLayers = [layer(103, 203), layer(150, 201), layer(151, 202), layer(152, 203, 1)];
+  const forward = compose(model, allLayers);
+  const reverse = compose(model, [...allLayers].reverse());
+  assert.equal(forward.ok, true);
+  assert.equal(forward.result.fields.runtimeSpeed.value, 13);
+  assert.equal(forward.result.fields.runtimeSpeed.contributions.length, 3);
+  assert.equal(forward.result.fields.runtimeSpeed.provenance.definitionId, 152);
+  assert.deepEqual(forward.result.canonicalOrder, reverse.result.canonicalOrder);
+  assert.equal(compose(model, allLayers.filter((item) => item.definitionId !== 151)).result.fields.runtimeSpeed.value, 10);
+}
+
+// Applicability is evaluated against the winning identity, and modifiers can
+// independently target controller scalar fields.
+{
+  const model = fixture();
+  const modifier = modifierDefinition(150);
+  model.overrideDefinitions.push(modifier);
+  model.applicability.push({ ...applicability(1150), effectiveProfileId: 23, semanticRoleId: 4, flags: 13 });
+  model.modifierOperations.push({ stableId: 2151, definitionId: 150, operand: 30, fieldNamespace: 2, fieldId: 1, operatorKind: 1, bound: 0, order: 0 });
+  const applied = compose(model, [layer(103, 203), layer(150, 201)]);
+  assert.equal(applied.ok, true);
+  assert.equal(applied.result.controllerScalars.stamina.value, 30);
+  assert.equal(applied.result.layers.find((item) => item.definitionId === 150).visibility, "applied");
+  const skipped = compose(model, [layer(150, 201)]);
+  assert.equal(skipped.ok, true);
+  assert.equal(skipped.result.controllerScalars.stamina.value, 20);
+  assert.equal(skipped.result.layers.find((item) => item.definitionId === 150).visibility, "not-applicable");
 }
 
 // Timer, hidden, recovery, and lifetime statuses follow the winning candidate.

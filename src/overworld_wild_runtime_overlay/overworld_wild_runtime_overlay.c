@@ -1187,23 +1187,6 @@ BOOL OverworldWildRuntime_CopyResolvedCachedNode(
     return TRUE;
 }
 
-BOOL OverworldWildRuntime_CopyInstalledModifierOperations(
-    u16 definitionId,
-    OverworldWildRuntimeModifierOperation *operationsOut,
-    u8 capacity,
-    u8 *operationCountOut)
-{
-    OverworldWildRuntimeDefinition definition;
-    (void)operationsOut;
-    (void)capacity;
-    if (operationCountOut == NULL) return FALSE;
-    *operationCountOut = 0;
-    if (!OverworldWildRuntime_CopyInstalledDefinition(definitionId, &definition))
-        return FALSE;
-    /* The frozen v40 catalog has no definition-to-modifier payload edge. */
-    return definition.kind != OW_WILD_RUNTIME_DEFINITION_MODIFIER;
-}
-
 #if defined(OW_WILD_RUNTIME_HOST_TEST) \
     || defined(OW_WILD_RUNTIME_ACCESSOR_HOST_TEST)
 u8 OverworldWildRuntime_CountInstalledTiredTranslations(
