@@ -60,6 +60,17 @@ Actively use agents and push them to the max. Default to helper-agent parallelis
 - Never clear an active helper agent that is still producing needed results.
 - If no helper agents were used for a non-trivial task, explicitly explain why in the final response; silence means the agent missed this instruction.
 
+## Review Language and Scope
+
+Treat routine code reviews as software-quality reviews. Keep findings focused on correctness, reliability, maintainability, compatibility, data integrity, and concrete user impact.
+
+- Use neutral, project-specific language such as “unexpected input,” “invalid state,” “boundary condition,” “unintended behavior,” or “missing validation” when those terms accurately describe the issue.
+- Do not introduce offensive-security framing, speculate about malicious use, or provide abuse scenarios, bypass instructions, weaponization details, or step-by-step misuse guidance during an ordinary code review.
+- When a finding touches security, describe the concrete defect, affected behavior, severity, and recommended remediation concisely. Include only the technical detail needed to understand and fix it.
+- Reserve terms such as “exploit,” “attack vector,” “payload,” “privilege escalation,” and similar security terminology for cases where they are technically necessary and the user has explicitly requested an authorized security assessment.
+- Never disguise or omit a genuine security issue merely to avoid security terminology. Report it accurately, but keep the explanation defensive, remediation-oriented, and non-operational.
+- Do not broaden a normal review into penetration testing, threat modeling, adversarial analysis, or vulnerability research unless the user explicitly requests that scope.
+
 ## Git Overhead Control
 
 Keep git hygiene targeted instead of ritualized.
