@@ -410,6 +410,7 @@ def build_v40_state_profile_editor_data() -> dict:
         profiles.append({
             "stableId": stable_id,
             "bodyId": body_id,
+            "bodyRegistryKey": authored.get("bodyRegistryKey"),
             "name": name,
             "bodyProvenance": {"kind": role, "label": role_label},
             "descriptiveTags": tags,

@@ -30,6 +30,15 @@ def record(blob, name, index=0):
     return offset + index * stride
 
 
+def record_by_stable_id(blob, name, stable_id):
+    offset, count, stride = section(blob, name)
+    for index in range(count):
+        location = offset + index * stride
+        if struct.unpack_from("<H", blob, location)[0] == stable_id:
+            return location
+    raise ValueError(f"fixture has no {name} record 0x{stable_id:04X}")
+
+
 def seal(blob):
     blob[CHECKSUM_OFFSET:CHECKSUM_OFFSET + 4] = b"\0" * 4
     checksum = binascii.crc32(blob) & 0xFFFFFFFF
@@ -43,6 +52,18 @@ def put8(section_name, relative, value, index=0):
 
 def put16(section_name, relative, value, index=0):
     return lambda blob: struct.pack_into("<H", blob, record(blob, section_name, index) + relative, value)
+
+
+def duplicate_import_key(blob):
+    source = record(blob, "importRecipes", 0)
+    destination = record(blob, "importRecipes", 3)
+    blob[destination + 2:destination + 24] = blob[source + 2:source + 24]
+
+
+def duplicate_tired_translation_key(blob):
+    source = record(blob, "tiredTranslations", 0)
+    destination = record(blob, "tiredTranslations", 1)
+    blob[destination + 2:destination + 24] = blob[source + 2:source + 24]
 
 
 def correlated_spawn(blob):
@@ -254,9 +275,10 @@ def corpus(valid, count=5000):
         ("section-offset-overlap", lambda b: struct.pack_into("<I", b, 24 + SECTION["profileIdentities"] * 8,
                                                                section(b, "stateBodies")[0])),
         ("section-count", lambda b: struct.pack_into("<H", b, 24 + SECTION["owners"] * 8 + 4, 9)),
+        ("missing-generated-import-key", duplicate_import_key),
+        ("missing-tired-translation-key", duplicate_tired_translation_key),
         ("section-stride", lambda b: struct.pack_into("<H", b, 24 + SECTION["overrideActions"] * 8 + 6, 10)),
         ("body-kind-zero", put8("stateBodies", 4, 0)),
-        ("body-derived", put8("stateBodies", 26, 1)),
         ("body-role-zero", put8("stateBodies", 2, 0)),
         ("body-count", put8("stateBodies", 3, 27)),
         ("body-boolean", put8("stateBodies", 12, 2)),
@@ -272,8 +294,6 @@ def corpus(valid, count=5000):
         ("candidate-timer-at-least", lambda b: mutate_timer_action(b, 3, 4)),
         ("candidate-timer-active-node", candidate_timer_targets_active_node),
         ("bound-override-profile-zero-behavior", bound_override_profile_has_zero_behavior),
-        ("node-profile-role", put16("controllerNodes", 4, 0x2202)),
-        ("node-active-optional", put8("controllerNodes", 9, 2, 1)),
         ("node-flags-unknown", put8("controllerNodes", 9, 0x80)),
         ("node-padding", put16("controllerNodes", 10, 1)),
         ("controller-alert-state", put8("controllers", 14, 3)),
@@ -310,7 +330,6 @@ def corpus(valid, count=5000):
         ("spawn-state", put8("spawnPolicies", 6, 4)),
         ("spawn-flags", put8("spawnPolicies", 11, 1)),
         ("population-group-zero", put16("populationPolicies", 4, 0)),
-        ("population-provenance", put16("populationPolicies", 6, 0x9002)),
         ("population-limit", put8("populationPolicies", 8, 13)),
         ("transition-slice", put16("transitions", 14, 0, 1)),
         ("transition-trigger", put8("transitions", 18, 0)),
@@ -356,6 +375,108 @@ def corpus(valid, count=5000):
     return cases
 
 
+def ordinary_recovery_corpus(valid):
+    definition_offset, definition_count, definition_stride = section(
+        valid, "overrideDefinitions")
+    definition = None
+    for index in range(definition_count):
+        candidate = definition_offset + index * definition_stride
+        if (valid[candidate + 18] == 1 and valid[candidate + 22] != 0
+                and valid[candidate + 27] == 0
+                and valid[candidate + 29] == 0):
+            definition = candidate
+            break
+    if definition is None:
+        raise ValueError("variable fixture has no ordinary exact timed definition")
+    definition_id = struct.unpack_from("<H", valid, definition)[0]
+    transition_id = struct.unpack_from("<H", valid, definition + 10)[0]
+    transition = record_by_stable_id(valid, "transitions", transition_id)
+    guard_start = struct.unpack_from("<H", valid, transition + 6)[0]
+    operation_start = struct.unpack_from("<H", valid, transition + 10)[0]
+    action_start = struct.unpack_from("<H", valid, transition + 14)[0]
+    recovery_start = valid[transition + 20]
+    guard = record(valid, "transitionGuards", guard_start)
+    operation = record(valid, "transitionOperations", operation_start)
+    first_action = record(valid, "transitionActions", action_start)
+    second_action = record(valid, "transitionActions", action_start + 1)
+    recovery = record(valid, "recoveryActions", recovery_start)
+
+    def mutate16(location, value):
+        return lambda blob: struct.pack_into("<H", blob, location, value)
+
+    mutations = {
+        "ordinary-definition-recovery": mutate16(definition + 10, 0),
+        "ordinary-definition-timer-source": lambda blob: blob.__setitem__(
+            definition + 23, 1),
+        "ordinary-transition-definition": mutate16(
+            transition + 2, definition_id + 1),
+        "ordinary-transition-trigger": lambda blob: blob.__setitem__(
+            transition + 18, 2),
+        "ordinary-transition-role-mask": lambda blob: blob.__setitem__(
+            transition + 19, 1),
+        "ordinary-transition-guard-count": mutate16(transition + 8, 0),
+        "ordinary-transition-operation-count": mutate16(transition + 12, 0),
+        "ordinary-transition-action-count": mutate16(transition + 16, 1),
+        "ordinary-transition-recovery-count": lambda blob: blob.__setitem__(
+            transition + 21, 0),
+        "ordinary-guard-kind": lambda blob: blob.__setitem__(guard + 4, 1),
+        "ordinary-operation-kind": lambda blob: blob.__setitem__(
+            operation + 14, 4),
+        "ordinary-operation-owner": mutate16(operation + 6, 0x8102),
+        "ordinary-first-action": lambda blob: blob.__setitem__(
+            first_action + 5, 1),
+        "ordinary-second-action": lambda blob: blob.__setitem__(
+            second_action + 5, 3),
+        "ordinary-recovery-owner": mutate16(recovery + 4, 0x8102),
+        "ordinary-recovery-kind": lambda blob: blob.__setitem__(
+            recovery + 6, 1),
+    }
+    cases = {}
+    for label, mutation in mutations.items():
+        blob = bytearray(valid)
+        mutation(blob)
+        seal(blob)
+        cases[label] = bytes(blob)
+    return cases
+
+
+def variable_owner_catalog(valid):
+    blob = bytearray(valid)
+    owner_offset, owner_count, owner_stride = section(blob, "owners")
+    if owner_stride != 6:
+        raise ValueError("variable owner fixture has unexpected stride")
+    insertion = owner_offset + owner_count * owner_stride
+    new_owner = 0x8F00
+    blob[insertion:insertion] = struct.pack("<HHBB", new_owner, new_owner, 0, 0) + b"\0\0"
+    struct.pack_into("<H", blob, 24 + SECTION["owners"] * 8 + 4,
+                     owner_count + 1)
+    for section_index in range(SECTION["owners"] + 1, len(SECTION_SPECS)):
+        offset_location = 24 + section_index * 8
+        struct.pack_into("<I", blob, offset_location,
+                         struct.unpack_from("<I", blob, offset_location)[0] + 8)
+    struct.pack_into("<I", blob, 8, len(blob))
+
+    definition_offset, definition_count, definition_stride = section(
+        blob, "overrideDefinitions")
+    for index in range(definition_count):
+        definition = definition_offset + index * definition_stride
+        if (blob[definition + 18] == 1 and blob[definition + 22] != 0
+                and blob[definition + 27] == 0
+                and blob[definition + 29] == 0):
+            transition_id = struct.unpack_from("<H", blob, definition + 10)[0]
+            transition = record_by_stable_id(blob, "transitions", transition_id)
+            operation = record(
+                blob, "transitionOperations",
+                struct.unpack_from("<H", blob, transition + 10)[0])
+            recovery = record(blob, "recoveryActions", blob[transition + 20])
+            struct.pack_into("<H", blob, transition + 4, new_owner)
+            struct.pack_into("<H", blob, operation + 6, new_owner)
+            struct.pack_into("<H", blob, recovery + 4, new_owner)
+            seal(blob)
+            return bytes(blob)
+    raise ValueError("variable owner fixture has no ordinary timed recovery")
+
+
 def accepted_corpus(valid):
     """Standalone schema-valid changes whose semantic effect belongs to replay."""
     mutations = {
@@ -396,6 +517,7 @@ def main():
     parser.add_argument("--blob", type=Path, required=True)
     parser.add_argument("--source", type=Path, default=Path("include/overworld_wild_behavior_data.h"))
     parser.add_argument("--target-validator", type=Path)
+    parser.add_argument("--variable-blob", type=Path)
     parser.add_argument("--count", type=int, default=5000)
     args = parser.parse_args()
     valid = args.blob.read_bytes()
@@ -444,8 +566,27 @@ def main():
             target_valid = subprocess.run([target, path], check=False).returncode == 0
             if host_valid != target_valid or host_valid:
                 raise SystemExit(f"validator parity failure: {name}: host={host_valid} target={target_valid}")
+        ordinary_count = 0
+        if args.variable_blob is not None:
+            variable = args.variable_blob.read_bytes()
+            variable_path = tmp / "variable-valid.bin"
+            variable_path.write_bytes(variable)
+            if subprocess.run([target, variable_path], check=False).returncode != 0:
+                raise SystemExit("production validator rejected variable catalog")
+            variable_owner_path = tmp / "variable-owner-valid.bin"
+            variable_owner_path.write_bytes(variable_owner_catalog(variable))
+            if subprocess.run([target, variable_owner_path], check=False).returncode != 0:
+                raise SystemExit("production validator rejected variable owner catalog")
+            for name, blob in ordinary_recovery_corpus(variable).items():
+                path = tmp / f"{name}.bin"
+                path.write_bytes(blob)
+                if subprocess.run([target, path], check=False).returncode == 0:
+                    raise SystemExit(
+                        f"production validator accepted malformed {name}")
+                ordinary_count += 1
     print(f"validator parity: valid catalog + {len(accepted_corpus(valid))} structured variants accepted; "
           f"{args.count} deterministic malformed mutations rejected identically; "
+          f"{ordinary_count} ordinary recovery mutations rejected; "
           f"{len(OPERATOR_CASES)} typed operator executions cover all six operators")
 
 

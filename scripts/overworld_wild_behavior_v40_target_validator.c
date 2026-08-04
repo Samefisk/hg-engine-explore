@@ -9,6 +9,8 @@ typedef int BOOL;
 #define FALSE 0
 
 #include "../include/overworld_wild_behavior_data.h"
+#define OWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM
+#define OWBD_VALIDATION_ENABLE_BASELINE_ASSERTIONS
 #include "overworld_wild_behavior_v40_validation_shared.h"
 
 #include <stdio.h>
@@ -77,6 +79,7 @@ int main(int argc, char **argv)
     u8 *data, *workspace;
     long size;
     BOOL valid;
+    BOOL baseline = FALSE;
     OwbdMemoryReader reader;
     if (argc == 8 && !strcmp(argv[1], "--operator")) {
         int result = OwbdApplyOperatorForConformance(
@@ -86,14 +89,22 @@ int main(int argc, char **argv)
         printf("%d\n", result);
         return 0;
     }
+    if (argc == 3 && !strcmp(argv[1], "--baseline")) {
+        baseline = TRUE;
+        argv++;
+        argc--;
+    }
     if (argc != 2 || (file = fopen(argv[1], "rb")) == NULL) return 2;
     fseek(file, 0, SEEK_END); size = ftell(file); rewind(file);
     data = malloc((size_t)size);
     workspace = malloc(OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
     if (!data || !workspace || fread(data, 1, (size_t)size, file) != (size_t)size) return 2;
     fclose(file); reader.data = data; reader.size = (u32)size;
-    valid = OwbdValidateStream(OwbdMemoryRead, &reader, (u32)size, workspace,
-                               OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
+    valid = baseline
+        ? OwbdValidateBaselineStream(OwbdMemoryRead, &reader, (u32)size,
+            workspace, OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE)
+        : OwbdValidateStream(OwbdMemoryRead, &reader, (u32)size, workspace,
+            OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE);
     free(workspace); free(data);
     return valid ? 0 : 1;
 }

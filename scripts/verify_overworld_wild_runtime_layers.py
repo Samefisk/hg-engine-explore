@@ -1010,11 +1010,11 @@ def verify_source_contracts() -> None:
             "shared Task-5 v40 scalar domain helpers are absent")
     for token in (
         ".type sOwbdStateValueMax, %object",
-        ".set sOwbdStateValueMax, 0x023BDEAE",
+        ".set sOwbdStateValueMax, 0x023BDE80",
         ".type sOwbdNumericFieldMasks, %object",
-        ".set sOwbdNumericFieldMasks, 0x023BDECC",
+        ".set sOwbdNumericFieldMasks, 0x023BDE9C",
         ".type OwbdStaticValueValid, %function",
-        ".thumb_set OwbdStaticValueValid, 0x023BDF8D",
+        ".thumb_set OwbdStaticValueValid, 0x023BDF8F",
         ".type OwbdModifierPayloadValid, %function",
         ".thumb_set OwbdModifierPayloadValid, 0x023BE031",
     ):

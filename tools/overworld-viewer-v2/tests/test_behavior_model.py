@@ -50,10 +50,19 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
         self.assertEqual(len(self.data["stateProfiles"]), 58)
         stable_ids = [profile["stableId"] for profile in self.data["stateProfiles"]]
         self.assertEqual(len(stable_ids), len(set(stable_ids)))
+        bodies = {}
         for profile in self.data["stateProfiles"]:
             self.assertEqual(set(profile["values"]), {
                 field["key"] for field in self.data["stateProfileFields"]
             })
+            self.assertTrue(profile["bodyRegistryKey"])
+            signature = (
+                profile["bodyRegistryKey"], profile["bodyProvenance"]["kind"],
+                tuple(profile["values"][field["key"]]
+                      for field in self.data["stateProfileFields"]),
+            )
+            self.assertEqual(bodies.setdefault(profile["bodyId"], signature), signature)
+        self.assertLess(len(bodies), len(self.data["stateProfiles"]))
 
     def test_profiles_do_not_own_semantic_roles(self):
         profile = self.data["stateProfiles"][0]

@@ -17,6 +17,7 @@ typedef int BOOL;
 
 #define TYPES_H
 #include "../include/overworld_wild_behavior_data.h"
+#define OWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM
 #define OWBD_VALIDATION_NO_PROJECTION_BUILDER
 #include "overworld_wild_behavior_v40_validation_shared.h"
 
@@ -357,6 +358,20 @@ static OverworldWildOverrideDefinitionRecord *fixture_override_definition(
         if (record->stableId == stableId) return record;
     }
     require(FALSE, "generated v40 override definition is absent");
+    return NULL;
+}
+
+static OverworldWildApplicabilityRecord *fixture_applicability_record(
+    u16 stableId)
+{
+    OverworldWildBehaviorDataBlobHeader *header = fixture_installed_header();
+    u16 index;
+    for (index = 0; index < header->applicability.count; index++) {
+        OverworldWildApplicabilityRecord *record = fixture_section_record(
+            &header->applicability, index, sizeof(*record));
+        if (record->stableId == stableId) return record;
+    }
+    require(FALSE, "generated v40 applicability is absent");
     return NULL;
 }
 
@@ -780,76 +795,48 @@ static BOOL copy_task11_production_definition(
     u16 definitionId,
     OverworldWildRuntimeDefinition *definitionOut)
 {
-    u16 ownerId = 0;
-    u8 origin = 0;
-    u8 selector = OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE;
-    u8 role = OWBD_ROLE_TIRED;
-    u16 controllerId = 0;
-    u16 nodeId = 0;
+    OverworldWildOverrideDefinitionRecord *serialized;
+    OverworldWildApplicabilityRecord *applicability;
     u8 flags = OW_WILD_RUNTIME_DEFINITION_FLAG_RUNTIME_ELIGIBLE;
-
-    if (definitionId >= TASK11_DEF_CALM_OWNER_8102
-        && definitionId <= TASK11_DEF_CALM_OWNER_8104) {
-        *definitionOut = make_definition(definitionId,
-            OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
-            OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE,
-            OWBD_ROLE_ATTENTIVE, 0, 0, flags);
-        definitionOut->mapLifetime = 2;
-        definitionOut->channel = 1;
-        definitionOut->priority = 200;
-        return TRUE;
-    } else if (definitionId == TASK11_DEF_STAMINA) ownerId = 0x8105;
-    else if (definitionId == TASK11_DEF_FLED_SEMANTIC) {
-        ownerId = 0x8107;
-        origin = OWBD_TIRED_ORIGIN_FLED;
-    } else if (definitionId == TASK11_DEF_RAM_SEMANTIC) {
-        ownerId = 0x8106;
-        origin = OWBD_TIRED_ORIGIN_RAM_CRASH;
-    } else if (definitionId == TASK11_DEF_THROW_SEMANTIC) {
-        ownerId = 0x8108;
-        origin = OWBD_TIRED_ORIGIN_THROW_RECOVERY;
-    } else if (definitionId == TASK11_DEF_FLED_EXACT) {
-        ownerId = 0x8107;
-        origin = OWBD_TIRED_ORIGIN_FLED;
-        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
-    } else if (definitionId == TASK11_DEF_RAM_EXACT) {
-        ownerId = 0x8106;
-        origin = OWBD_TIRED_ORIGIN_RAM_CRASH;
-        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
-    } else if (definitionId == TASK11_DEF_THROW_EXACT) {
-        ownerId = 0x8108;
-        origin = OWBD_TIRED_ORIGIN_THROW_RECOVERY;
-        selector = OW_WILD_RUNTIME_SELECTOR_EXACT;
-    } else if (definitionId == TASK11_DEF_FORCED_SLEEP) {
-        *definitionOut = make_definition(definitionId,
-            OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
-            OW_WILD_RUNTIME_SELECTOR_SEMANTIC_ROLE,
-            OWBD_ROLE_ASLEEP, 0, 0,
-            flags | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_INSTANCES);
-        definitionOut->mapLifetime = 2;
-        definitionOut->channel = 2;
-        definitionOut->priority = 200;
-        return TRUE;
-    } else {
-        memset(definitionOut, 0, sizeof(*definitionOut));
-        return FALSE;
-    }
-    flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER;
-    if (origin != 0)
+    serialized = fixture_override_definition(definitionId);
+    applicability = fixture_applicability_record(
+        serialized->applicabilityId);
+    if (serialized->hasTiredOriginKind)
         flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_TIRED_ORIGIN;
-    if (selector == OW_WILD_RUNTIME_SELECTOR_EXACT) {
-        controllerId = 0x3001;
-        nodeId = 0x3107;
-        role = 0;
-    }
-    *definitionOut = make_definition(definitionId,
-        OW_WILD_RUNTIME_DEFINITION_STATE_CANDIDATE,
-        selector, role, controllerId, nodeId, flags);
-    definitionOut->requiredOwnerId = ownerId;
-    definitionOut->tiredOriginKind = origin;
-    definitionOut->mapLifetime = 2;
-    definitionOut->channel = 2;
-    definitionOut->priority = 100;
+    if (serialized->hasRequiredOwnerId)
+        flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER;
+    if (serialized->allowMultipleOwners)
+        flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS;
+    if (serialized->allowMultipleInstancesPerOwner)
+        flags |= OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_INSTANCES;
+    memset(definitionOut, 0, sizeof(*definitionOut));
+    definitionOut->immutableContextMask =
+        applicability->immutableContextMask;
+    definitionOut->stableId = serialized->stableId;
+    definitionOut->controllerId = serialized->controllerId != 0
+        ? serialized->controllerId
+        : applicability->flags & OWBD_APPLICABILITY_CONTROLLER
+            ? applicability->controllerId : 0;
+    definitionOut->nodeId = serialized->nodeId;
+    definitionOut->requiredOwnerId = serialized->requiredOwnerId;
+    definitionOut->effectiveProfileId = applicability->effectiveProfileId;
+    definitionOut->kind = serialized->kind;
+    definitionOut->selectorKind = serialized->selectorKind;
+    definitionOut->semanticRole = serialized->semanticRole;
+    definitionOut->tiredOriginKind = serialized->tiredOriginKind;
+    definitionOut->flags = flags;
+    definitionOut->mapLifetime = serialized->mapLifetime;
+    definitionOut->battleLifetime = serialized->battleLifetime;
+    definitionOut->applicabilitySemanticRole = applicability->semanticRole;
+    definitionOut->channel = serialized->channel;
+    definitionOut->priority = (u8)serialized->priority;
+    if (!((definitionId >= TASK11_DEF_CALM_OWNER_8102
+                && definitionId <= TASK11_DEF_THROW_SEMANTIC)
+            || definitionId == TASK11_DEF_FORCED_SLEEP
+            || definitionId == TASK11_DEF_FLED_EXACT
+            || definitionId == TASK11_DEF_RAM_EXACT
+            || definitionId == TASK11_DEF_THROW_EXACT))
+        definitionOut->flags = 0;
     return TRUE;
 }
 #endif
@@ -4326,6 +4313,7 @@ static void test_task11_substrate(
     };
     OverworldWildRuntimeTimerTickResult tick;
     OverworldWildRuntimeTimerRecoveryResult recovery;
+    OverworldWildRuntimeRecoveryPlan recoveryPlan;
     OverworldWildRuntimeTimerExpiry expiry;
     union FixtureInstalledCatalogStorage catalogBefore;
     u32 oldSlotGeneration;
@@ -4365,6 +4353,36 @@ static void test_task11_substrate(
     require(fixture_installed_header()->checksum
             == catalogBefore.alignment.checksum,
         "fixture catalog CRC reseal diverged from generated bytes");
+    sFixtureInstalledStorage = catalogBefore;
+    {
+        OverworldWildOverrideDefinitionRecord *definition =
+            fixture_override_definition(TASK11_DEF_FLED_EXACT);
+        OverworldWildTransitionRecord *transition =
+            fixture_transition(TASK11_TRANSITION_FLED_EXACT);
+        OverworldWildRecoveryActionRecord *recoveryAction =
+            fixture_recovery_action(TASK11_TRANSITION_FLED_EXACT);
+        memset(&expiry, 0, sizeof(expiry));
+        definition->requiredOwnerId = 0;
+        definition->hasTiredOriginKind = FALSE;
+        definition->tiredOriginKind = 0;
+        definition->hasRequiredOwnerId = FALSE;
+        definition->timerSource = OWBD_TIMER_SOURCE_CANDIDATE_FOLD;
+        definition->flags = 0;
+        transition->fromRoleMask = 0x7F;
+        recoveryAction->kind =
+            OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT;
+        expiry.definitionId = definition->stableId;
+        expiry.ownerId = transition->ownerId;
+        expiry.recoveryTransitionId = transition->stableId;
+        require(ValidateRecoveryCatalogClosure(&expiry, &recoveryPlan)
+                && recoveryPlan.route
+                    == OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF
+                && recoveryPlan.actionFlags
+                    == (OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                        | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN)
+                && recoveryPlan.calmResetOwnerCount == 0,
+            "ordinary exact authored timer recovery closure was rejected");
+    }
     sFixtureInstalledStorage = catalogBefore;
     for (mutationIndex = 0; mutationIndex < 2; mutationIndex++) {
         const u16 *definitionIds = mutationIndex == 0
@@ -5418,6 +5436,7 @@ static void test_task11_transition_dispatcher(void)
     OverworldWildRuntimeTransitionEvent event;
     OverworldWildRuntimeTransitionEvent oldReplayEvent;
     OverworldWildRuntimeTransitionResult result;
+    OverworldWildRuntimeStatus routeStatus;
     OverworldWildRuntimeStackDeltaResult delta;
     OverworldWildRuntimeTimerTickResult tick;
     OverworldWildRuntimeTimerExpiry expiry = {0};
@@ -5542,17 +5561,28 @@ static void test_task11_transition_dispatcher(void)
                 ? OWBD_TRIGGER_HELP_CALL_APPLY
                 : OWBD_TRIGGER_AGGRO_APPLY;
             before = runtime;
-            require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
-                    runtime.slots[0].slotGeneration, &event, &result)
-                    == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+            routeStatus = OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result);
+            if (routeStatus != OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE)
+                fprintf(stderr,
+                    "mismatched route index=%u trigger=%u route=%u status=%u transition=0x%04X controller=0x%04X\n",
+                    index, event.trigger, event.systemRoute, routeStatus,
+                    result.transitionId,
+                    runtime.slots[0].effectiveCache.controllerId);
+            require(routeStatus == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
                     && !memcmp(&runtime, &before, sizeof(runtime)),
                 "SYSTEM_ROUTE guard accepted mismatched live evidence");
             prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
             memset(&event, 0, sizeof(event));
             event.trigger = event.systemRoute = systemRoutes[index];
-            require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
-                    runtime.slots[0].slotGeneration, &event, &result)
-                    != OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE,
+            routeStatus = OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result);
+            if (routeStatus == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE)
+                fprintf(stderr,
+                    "matching route index=%u trigger=%u status=%u controller=0x%04X\n",
+                    index, event.trigger, routeStatus,
+                    runtime.slots[0].effectiveCache.controllerId);
+            require(routeStatus != OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE,
                 "SYSTEM_ROUTE guard rejected its exact live evidence");
         }
     }
@@ -5592,6 +5622,25 @@ static void test_task11_transition_dispatcher(void)
     event.replayExpiry = expiry;
     event.flags = OW_WILD_RUNTIME_TRANSITION_EVENT_REPLAY;
     oldReplayEvent = event;
+    catalogBefore = sFixtureInstalledStorage;
+    {
+        OverworldWildOverrideDefinitionRecord *replayDefinition =
+            fixture_override_definition(expiry.definitionId);
+        OverworldWildApplicabilityRecord *replayApplicability =
+            fixture_applicability_record(
+                replayDefinition->applicabilityId);
+        replayApplicability->flags |= OWBD_APPLICABILITY_CONTROLLER;
+        replayApplicability->controllerId = resolved.controllerId == 0x3001
+            ? 0x3002 : 0x3001;
+        before = runtime;
+        require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result)
+                == OW_WILD_RUNTIME_STATUS_NOT_APPLICABLE
+                && !result.ok && !result.mutated
+                && !memcmp(&runtime, &before, sizeof(runtime)),
+            "replay transition ignored mismatched controller scope");
+    }
+    sFixtureInstalledStorage = catalogBefore;
     before = runtime;
     event.replayExpiry.timerGeneration++;
     require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
@@ -5672,6 +5721,42 @@ static void test_task11_transition_dispatcher(void)
             == OW_WILD_RUNTIME_STATUS_CAPACITY_EXCEEDED
             && !result.ok && !memcmp(&runtime, &before, sizeof(runtime)),
         "failed catalog transition published a partial delta");
+
+    catalogBefore = sFixtureInstalledStorage;
+    {
+        OverworldWildTransitionRecord *globalTransition =
+            fixture_transition(TASK11_TRANSITION_AGGRO_APPLY);
+        OverworldWildTransitionRecord *scopedTransition =
+            fixture_transition(TASK11_TRANSITION_HELP_CALL_APPLY);
+        OverworldWildOverrideDefinitionRecord *scopedDefinition =
+            fixture_override_definition(0x7003);
+        OverworldWildApplicabilityRecord *scopedApplicability =
+            fixture_applicability_record(scopedDefinition->applicabilityId);
+        scopedTransition->trigger = OWBD_TRIGGER_AGGRO_APPLY;
+        scopedTransition->dispatchPriority =
+            (u16)(globalTransition->dispatchPriority - 1);
+        scopedApplicability->flags |= OWBD_APPLICABILITY_CONTROLLER;
+        scopedApplicability->controllerId = resolved.controllerId;
+        prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+        memset(&event, 0, sizeof(event));
+        event.trigger = event.systemRoute = OWBD_TRIGGER_AGGRO_APPLY;
+        require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result)
+                == OW_WILD_RUNTIME_STATUS_OK
+                && result.transitionId == TASK11_TRANSITION_AGGRO_APPLY,
+            "lower-priority controller-scoped row displaced global row");
+        scopedTransition->dispatchPriority =
+            (u16)(globalTransition->dispatchPriority + 1);
+        scopedApplicability->controllerId = resolved.controllerId == 0x3001
+            ? 0x3002 : 0x3001;
+        prepare_task11_runtime(&runtime, 0, &activeContext, &resolved);
+        require(OverworldWildRuntime_DispatchTransition(&runtime, 0,
+                runtime.slots[0].slotGeneration, &event, &result)
+                == OW_WILD_RUNTIME_STATUS_OK
+                && result.transitionId == TASK11_TRANSITION_AGGRO_APPLY,
+            "nonmatching controller-scoped row entered priority selection");
+    }
+    sFixtureInstalledStorage = catalogBefore;
 
     catalogBefore = sFixtureInstalledStorage;
     fixture_transition(TASK11_TRANSITION_HELP_CALL_APPLY)->trigger =

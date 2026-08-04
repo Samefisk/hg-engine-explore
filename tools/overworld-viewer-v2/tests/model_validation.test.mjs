@@ -43,7 +43,11 @@ function fixture() {
       childCountMaximums: { guards: 65535, operations: 65535, actions: 65535, recoveryActions: 255 },
     },
     stateProfileFields: fields,
-    stateProfiles: [{ stableId: 10, bodyId: 11, name: "Calm", descriptiveTags: ["bird"], values: copy(values) }],
+    stateProfiles: [{
+      stableId: 10, bodyId: 11, bodyRegistryKey: "state-body:calm",
+      bodyProvenance: { kind: 1, label: "Calm" }, name: "Calm",
+      descriptiveTags: ["bird"], values: copy(values),
+    }],
     semanticRoles: Array.from({ length: 7 }, (_, index) => ({ value: index + 1, label: `Role ${index + 1}` })),
     customRoles: [{ stableId: 40, value: 1, name: "Perch" }],
     controllerScalarFields: [{ key: "stamina", label: "Stamina", type: "number", minimum: 0, maximum: 64 }],
@@ -83,6 +87,20 @@ assert.deepEqual(validateBehaviorModel(fixture()), []);
 
 // Identity and complete, role-independent profile families.
 expectCode((model) => { model.owners[0].stableId = 10; }, VALIDATION_CODES.IDENTITY_DUPLICATE);
+{
+  const model = fixture();
+  model.stateProfiles.push({ ...copy(model.stateProfiles[0]), stableId: 12, name: "Shared calm" });
+  assert.deepEqual(validateBehaviorModel(model), []);
+}
+expectCode((model) => {
+  model.stateProfiles.push({ ...copy(model.stateProfiles[0]), stableId: 12, name: "Conflicting body", values: { ...copy(model.stateProfiles[0].values), field2: 1 } });
+}, VALIDATION_CODES.IDENTITY_DUPLICATE);
+expectCode((model) => {
+  model.stateProfiles.push({ ...copy(model.stateProfiles[0]), stableId: 12, name: "Conflicting provenance", bodyProvenance: { kind: 2, label: "Active" } });
+}, VALIDATION_CODES.IDENTITY_DUPLICATE);
+expectCode((model) => {
+  model.stateProfiles.push({ ...copy(model.stateProfiles[0]), stableId: 12, name: "Conflicting registry", bodyRegistryKey: "state-body:other" });
+}, VALIDATION_CODES.IDENTITY_DUPLICATE);
 expectCode((model) => { delete model.stateProfiles[0].values.field2; }, VALIDATION_CODES.PROFILE_FIELDS);
 expectCode((model) => { model.stateProfiles[0].semanticRoleId = 1; }, VALIDATION_CODES.PROFILE_ROLE);
 expectCode((model) => { model.stateProfiles[0].values.field2 = 256; }, VALIDATION_CODES.FIELD_DOMAIN);

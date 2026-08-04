@@ -225,6 +225,8 @@ class _Allocator:
         self.next_id = model["stableIdHistory"]["nextUnallocatedId"]
         self.draft_map: dict[str, int] = {}
         self.registry_by_draft: dict[str, str] = {}
+        self.profile_body_by_draft: dict[str, tuple[int, str]] = {}
+        self.profile_body_signature_by_draft: dict[str, tuple[int, tuple[int, ...]]] = {}
         self.events: list[tuple[str, str]] = []
 
     def draft(self, draft_id: str, kind: str) -> int:
@@ -261,13 +263,35 @@ def _nested_identity(entity: Any, creating_parent: bool, path: str) -> tuple[str
     return "stable", _stable_id(item["stableId"], f"{path}.stableId")
 
 
-def _scan_allocations(changes: dict[str, dict[str, list[Any]]], allocator: _Allocator) -> None:
+def _scan_allocations(
+    changes: dict[str, dict[str, list[Any]]], allocator: _Allocator,
+    model: dict[str, Any],
+) -> None:
     # Parent then owned descendants is the stable, deterministic depth-first order.
+    bodies_by_signature = {
+        (
+            profile["body"]["provenanceKind"],
+            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
+        ): (profile["bodyId"], profile["bodyRegistryKey"])
+        for profile in sorted(model["stateProfiles"], key=lambda item: item["bodyId"], reverse=True)
+    }
     for index, raw in enumerate(changes["stateProfiles"]["create"]):
         item = _object(raw, f"stateProfiles.create[{index}]")
         draft = _draft_id(item.get("draftId"), f"stateProfiles.create[{index}].draftId")
         allocator.draft(draft, "state-profile")
-        allocator.owned("state-body")
+        template = _object(item.get("templateProvenance"), f"stateProfiles.create[{index}].templateProvenance")
+        values = _object(item.get("values"), f"stateProfiles.create[{index}].values")
+        signature = (
+            _integer(template.get("kind"), f"stateProfiles.create[{index}].templateProvenance.kind", 7),
+            tuple(_integer(values.get(name), f"stateProfiles.create[{index}].values.{name}", 0xFF)
+                  for name in v40.STATE_FIELDS),
+        )
+        body = bodies_by_signature.get(signature)
+        if body is None:
+            body = allocator.owned("state-body")
+            bodies_by_signature[signature] = body
+        allocator.profile_body_by_draft[draft] = body
+        allocator.profile_body_signature_by_draft[draft] = signature
 
     for operation in ("create", "update"):
         for index, raw in enumerate(changes["controllers"][operation]):
@@ -396,6 +420,8 @@ def _retire(key: str, retirements: list[str], seen: set[str]) -> None:
 def _profile_record(
     item: dict[str, Any], creating: bool, existing: dict[str, Any] | None,
     allocator: _Allocator, provenance_by_kind: dict[int, int], path: str,
+    body_ref_counts: dict[int, int] | None = None,
+    bodies_by_signature: dict[tuple[int, tuple[int, ...]], tuple[int, str]] | None = None,
 ) -> dict[str, Any]:
     required = ("name", "descriptiveTags", "values", "templateProvenance") if creating \
         else ("name", "descriptiveTags", "values")
@@ -408,8 +434,7 @@ def _profile_record(
     if creating:
         draft = identity  # type: ignore[assignment]
         stable_id = allocator.draft_map[draft]
-        body_id = stable_id + 1
-        body_key = f"editor:state-body:{body_id}"
+        body_id, body_key = allocator.profile_body_by_draft[draft]
         template = _object(item["templateProvenance"], f"{path}.templateProvenance")
         _keys(template, frozenset(("kind", "provenanceId")),
               ("kind", "provenanceId"), f"{path}.templateProvenance")
@@ -436,6 +461,21 @@ def _profile_record(
         }:
             raise _error(f"{path}.templateProvenance is read-only")
     result = copy.deepcopy(existing)
+    values_changed = typed_values != existing["body"]["values"]
+    signature = (
+        existing["body"]["provenanceKind"],
+        tuple(typed_values[name] for name in v40.STATE_FIELDS),
+    )
+    matching_body = bodies_by_signature.get(signature) if bodies_by_signature is not None else None
+    if values_changed and matching_body is not None:
+        result["bodyId"], result["bodyRegistryKey"] = matching_body
+    elif (values_changed and body_ref_counts is not None
+          and body_ref_counts.get(existing["bodyId"], 0) > 1):
+        result["bodyId"], result["bodyRegistryKey"] = allocator.owned("state-body")
+        if bodies_by_signature is not None:
+            bodies_by_signature[signature] = (
+                result["bodyId"], result["bodyRegistryKey"],
+            )
     result["name"] = _name(item["name"], f"{path}.name")
     result["descriptiveTags"] = _tags(item["descriptiveTags"], f"{path}.descriptiveTags")
     result["body"]["values"] = typed_values
@@ -949,7 +989,7 @@ def _materialize(
 ) -> tuple[dict[str, Any], dict[str, int]]:
     result = copy.deepcopy(model)
     allocator = _Allocator(result)
-    _scan_allocations(changes, allocator)
+    _scan_allocations(changes, allocator, result)
     retirements: list[str] = []
     retired: set[str] = set()
 
@@ -958,24 +998,83 @@ def _materialize(
         if record["kind"] == 1
     }
     profiles = _index(result["stateProfiles"], "state profiles")
+    prior_body_keys = {
+        profile["bodyId"]: profile["bodyRegistryKey"] for profile in profiles.values()
+    }
+    body_ref_counts: dict[int, int] = {}
+    bodies_by_signature = {
+        (
+            profile["body"]["provenanceKind"],
+            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
+        ): (profile["bodyId"], profile["bodyRegistryKey"])
+        for profile in sorted(profiles.values(), key=lambda item: item["bodyId"], reverse=True)
+    }
+    for profile in profiles.values():
+        body_ref_counts[profile["bodyId"]] = body_ref_counts.get(profile["bodyId"], 0) + 1
+    # New profiles already own their selected immutable bodies for the purpose
+    # of copy-on-write decisions, even though their records are materialized
+    # after updates. This prevents an update from mutating a body a create will use.
+    for draft, body in allocator.profile_body_by_draft.items():
+        body_id, body_key = body
+        signature = allocator.profile_body_signature_by_draft[draft]
+        body_ref_counts[body_id] = body_ref_counts.get(body_id, 0) + 1
+        bodies_by_signature.setdefault(signature, (body_id, body_key))
     for raw_id in changes["stateProfiles"]["remove"]:
         stable_id = _stable_id(raw_id, "stateProfiles.remove[]")
         record = _existing(stable_id, profiles, "stateProfiles.remove[]")
         _retire(record["registryKey"], retirements, retired)
-        _retire(record["bodyRegistryKey"], retirements, retired)
+        body_ref_counts[record["bodyId"]] -= 1
         del profiles[stable_id]
     for index, raw in enumerate(changes["stateProfiles"]["update"]):
         path = f"stateProfiles.update[{index}]"
         item = _object(raw, path)
         stable_id = _stable_id(item.get("stableId"), f"{path}.stableId")
-        profiles[stable_id] = _profile_record(
-            item, False, _existing(stable_id, profiles, path), allocator, provenance_by_kind, path
+        existing = _existing(stable_id, profiles, path)
+        old_signature = (
+            existing["body"]["provenanceKind"],
+            tuple(existing["body"]["values"][name] for name in v40.STATE_FIELDS),
         )
+        updated = _profile_record(
+            item, False, existing, allocator,
+            provenance_by_kind, path, body_ref_counts, bodies_by_signature,
+        )
+        new_signature = (
+            updated["body"]["provenanceKind"],
+            tuple(updated["body"]["values"][name] for name in v40.STATE_FIELDS),
+        )
+        body_ref_counts[existing["bodyId"]] -= 1
+        body_ref_counts[updated["bodyId"]] = body_ref_counts.get(updated["bodyId"], 0) + 1
+        if (existing["bodyId"] == updated["bodyId"] and old_signature != new_signature
+                and bodies_by_signature.get(old_signature, (None,))[0] == existing["bodyId"]):
+            del bodies_by_signature[old_signature]
+        bodies_by_signature[new_signature] = (
+            updated["bodyId"], updated["bodyRegistryKey"],
+        )
+        profiles[stable_id] = updated
     for index, raw in enumerate(changes["stateProfiles"]["create"]):
         path = f"stateProfiles.create[{index}]"
         item = _object(raw, path)
         record = _profile_record(item, True, None, allocator, provenance_by_kind, path)
         profiles[record["stableId"]] = record
+    body_groups: dict[tuple[int, tuple[int, ...]], list[dict[str, Any]]] = {}
+    for profile in profiles.values():
+        signature = (
+            profile["body"]["provenanceKind"],
+            tuple(profile["body"]["values"][name] for name in v40.STATE_FIELDS),
+        )
+        body_groups.setdefault(signature, []).append(profile)
+    for group in body_groups.values():
+        representative = min(group, key=lambda profile: profile["bodyId"])
+        for profile in group:
+            if profile["bodyId"] != representative["bodyId"]:
+                _retire(profile["bodyRegistryKey"], retirements, retired)
+                profile["bodyId"] = representative["bodyId"]
+                profile["bodyRegistryKey"] = representative["bodyRegistryKey"]
+                profile["body"] = copy.deepcopy(representative["body"])
+    used_body_ids = {profile["bodyId"] for profile in profiles.values()}
+    for body_id, registry_key in prior_body_keys.items():
+        if body_id not in used_body_ids:
+            _retire(registry_key, retirements, retired)
     result["stateProfiles"] = list(profiles.values())
 
     controllers = _index(result["controllers"], "controllers")

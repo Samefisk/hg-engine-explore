@@ -23,9 +23,9 @@ CONFIG = {
 }
 
 TASK5_SCALAR_SYMBOLS = {
-    "sOwbdStateValueMax": (0x023BDEAE, "OBJECT"),
-    "sOwbdNumericFieldMasks": (0x023BDECC, "OBJECT"),
-    "OwbdStaticValueValid": (0x023BDF8D, "FUNC"),
+    "sOwbdStateValueMax": (0x023BDE80, "OBJECT"),
+    "sOwbdNumericFieldMasks": (0x023BDE9C, "OBJECT"),
+    "OwbdStaticValueValid": (0x023BDF8F, "FUNC"),
     "OwbdModifierPayloadValid": (0x023BE031, "FUNC"),
 }
 
@@ -50,6 +50,7 @@ TIMER_LAYER_IMPORT_APIS = (
 )
 TIMER_CATALOG_IMPORT_APIS = (
     "OverworldWildRuntime_AcquireInstalledTransitionCatalog",
+    "OverworldWildRuntime_CopyInstalledDefinition",
     "OverworldWildRuntime_MatchesPendingTimerExpiry",
 )
 TIMER_PUBLIC_APIS = (

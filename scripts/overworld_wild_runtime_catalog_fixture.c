@@ -499,7 +499,7 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
 #define OWBD_OVERRIDE_MEMBER_COUNT 155
-#define OWBD_STATE_BODY_COUNT 58
+#define OWBD_STATE_BODY_COUNT 48
 #define OWBD_PROFILE_IDENTITY_COUNT 58
 #define OWBD_CONTROLLER_COUNT 3
 #define OWBD_CONTROLLER_NODE_COUNT 21
@@ -525,6 +525,9 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_OPERATOR_ADD_AT_LEAST 5
 #define OWBD_SELECTOR_EXACT 1
 #define OWBD_SELECTOR_SEMANTIC_ROLE 2
+#define OWBD_CHANNEL_TEMPORARY_EFFECT 2
+#define OWBD_MAP_LIFETIME_PRESERVE_LOGICAL 2
+#define OWBD_BATTLE_LIFETIME_CLEAR 1
 #define OWBD_DEFINITION_STATE_CANDIDATE 1
 #define OWBD_DEFINITION_MODIFIER 2
 #define OWBD_NODE_FLAG_OPTIONAL 2
@@ -533,14 +536,26 @@ _Static_assert(sizeof(OverworldWildRuntimeStaticCache) == 552,
 #define OWBD_CANDIDATE_TIMER_ADD 2
 #define OWBD_CANDIDATE_TIMER_ADD_MIN -32
 #define OWBD_CANDIDATE_TIMER_ADD_MAX 32
+#define OWBD_TRIGGER_TIRED_EXPIRED 3
+#define OWBD_GUARD_OWNER_PRESENT 4
+#define OWBD_GUARD_OWNER_ABSENT 5
+#define OWBD_GUARD_CANDIDATE_TIMER_EXPIRED 6
+#define OWBD_TRANSITION_REMOVE_REQUIRED 3
+#define OWBD_BUSY_REJECT 1
+#define OWBD_ACTION_PHASE_EXIT 2
+#define OWBD_ACTION_RESET_TIRED_COUNTER 2
+#define OWBD_ACTION_START_POST_TIRED_COOLDOWN 4
+#define OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT 2
 #define OVERWORLD_WILD_BEHAVIOR_VALIDATOR_WORKSPACE_SIZE 0x1600u
-#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11340u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE 11020u
+#define OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE 0x3000u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244u
 #define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 40
-#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x64D0FC6Eu
+#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM 0x5A16E64Du
 #define OVERWORLD_WILD_BEHAVIOR_DATA_SCHEMA_FINGERPRINT 0x5C5FBF57u
 #define OWBD_BLOB_FLAG_NAMES_ARE_HASHES (1u << 1)
 #define OWBD_BLOB_FLAG_AUTHORED_SOURCE (1u << 2)
+#define OWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM
 #define OWBD_VALIDATION_NO_PROJECTION_BUILDER
 #include "overworld_wild_behavior_v40_validation_shared.h"
 
@@ -612,7 +627,9 @@ int main(int argc, char **argv)
     require(file != NULL, "validated-v40 file did not open");
     require(fseek(file, 0, SEEK_END) == 0, "validated-v40 seek failed");
     size = ftell(file);
-    require(size == 11340, "validated-v40 size changed");
+    require(size >= (long)sizeof(OverworldWildBehaviorDataBlobHeader)
+            && size <= OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE,
+        "validated-v40 size is outside the runtime envelope");
     require(fseek(file, 0, SEEK_SET) == 0, "validated-v40 rewind failed");
     blob = malloc((size_t)size);
     require(blob != NULL, "fixture allocation failed");

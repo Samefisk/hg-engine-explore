@@ -12,6 +12,7 @@ from overworld_wild_behavior_model_v40 import (
     ModelError,
     decode_blob,
     encode_model,
+    intern_state_bodies,
     load_model,
     read_inc,
     stable_history_digest,
@@ -20,10 +21,10 @@ from overworld_wild_behavior_model_v40 import (
 )
 
 
-EXPECTED_SIZE = 11340
-EXPECTED_CHECKSUM = 0x64D0FC6E
-EXPECTED_FINGERPRINT = 0x5C5FBF57
-EXPECTED_SHA256 = "e4ec32da7c5622c3c992e343907b2268b69099afe3ba942b79d9f8e10c02930f"
+GOLDEN_BASELINE_SIZE = 11020
+GOLDEN_BASELINE_CHECKSUM = 0x5A16E64D
+GOLDEN_BASELINE_FINGERPRINT = 0x5C5FBF57
+GOLDEN_BASELINE_SHA256 = "db3a56f9089059ab0e7efcd3e0b56f2b5cbee0a0cc0eeea416afad4d54acaa0b"
 
 
 class OverworldWildBehaviorModelV40Test(unittest.TestCase):
@@ -32,13 +33,13 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
         cls.model = load_model()
         cls.committed_blob = read_inc()
 
-    def test_canonical_migration_is_byte_identical(self):
+    def test_golden_baseline_migration_is_byte_identical(self):
         encoded = encode_model(self.model)
         self.assertEqual(encoded, self.committed_blob)
-        self.assertEqual(len(encoded), EXPECTED_SIZE)
-        self.assertEqual(struct.unpack_from("<I", encoded, 16)[0], EXPECTED_CHECKSUM)
-        self.assertEqual(struct.unpack_from("<I", encoded, 20)[0], EXPECTED_FINGERPRINT)
-        self.assertEqual(hashlib.sha256(encoded).hexdigest(), EXPECTED_SHA256)
+        self.assertEqual(len(encoded), GOLDEN_BASELINE_SIZE)
+        self.assertEqual(struct.unpack_from("<I", encoded, 16)[0], GOLDEN_BASELINE_CHECKSUM)
+        self.assertEqual(struct.unpack_from("<I", encoded, 20)[0], GOLDEN_BASELINE_FINGERPRINT)
+        self.assertEqual(hashlib.sha256(encoded).hexdigest(), GOLDEN_BASELINE_SHA256)
 
     def test_codec_round_trips_in_both_directions(self):
         encoded = encode_model(self.model)
@@ -76,6 +77,25 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
         for controller in self.model["controllers"]:
             self.assertEqual(sum(bool(node["base"]) for node in controller["nodes"]), 1)
             self.assertTrue(all(node["semanticRoleId"] for node in controller["nodes"]))
+
+    def test_exact_state_bodies_are_interned_without_merging_profiles(self):
+        self.assertEqual(len(self.model["stateProfiles"]), 58)
+        self.assertEqual(len({item["bodyId"] for item in self.model["stateProfiles"]}), 48)
+        reinterned, retired = intern_state_bodies(self.model)
+        self.assertEqual(retired, 0)
+        self.assertEqual(reinterned, self.model)
+
+        conflicting = copy.deepcopy(self.model)
+        shared_id = next(
+            body_id for body_id in {item["bodyId"] for item in conflicting["stateProfiles"]}
+            if sum(item["bodyId"] == body_id for item in conflicting["stateProfiles"]) > 1
+        )
+        duplicate = [
+            item for item in conflicting["stateProfiles"] if item["bodyId"] == shared_id
+        ][1]
+        duplicate["body"]["values"]["speed"] ^= 1
+        with self.assertRaisesRegex(ModelError, "shared state body.*conflicting"):
+            validate_model(conflicting)
 
     def test_history_and_tombstones_are_sealed(self):
         history = self.model["stableIdHistory"]
@@ -180,7 +200,7 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
 
         cross_kind_profile = copy.deepcopy(self.model)
         cross_kind_profile["stateProfiles"][0]["provenanceId"] = semantic[(2, 1)]
-        with self.assertRaisesRegex(ModelError, "provenance does not match"):
+        with self.assertRaisesRegex(ModelError, "not a provenance semanticId"):
             validate_model(cross_kind_profile)
 
         cross_kind_custom = copy.deepcopy(self.model)

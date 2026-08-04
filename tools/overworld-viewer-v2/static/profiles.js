@@ -255,7 +255,9 @@ export function createCompleteBehaviorSetDraft({
     transition({
       name: `${setName} · Exhaustion`, definition: tiredDefinition,
       ownerId: exhaustionOwnerId, event: trigger(1), order: 1,
-      guards: [child({ kind: 1, negate: false, payload: 0, referenceId: null })],
+      guards: [child({
+        kind: 8, negate: false, payload: trigger(1), referenceId: null,
+      })],
       operations: [child({
         definitionId: tiredDefinition.draftId, ownerId: exhaustionOwnerId,
         replacementDefinitionId: null, policyId: null,

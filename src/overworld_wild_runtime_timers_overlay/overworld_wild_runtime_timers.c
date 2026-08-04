@@ -334,7 +334,8 @@ static BOOL CopyCatalogHeader(OverworldWildBehaviorDataBlobHeader *headerOut)
         || headerOut->magic != OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
         || headerOut->version != OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
         || headerOut->headerSize != sizeof(*headerOut)
-        || headerOut->blobSize != OVERWORLD_WILD_BEHAVIOR_DATA_EXPECTED_SIZE)
+        || headerOut->blobSize < sizeof(*headerOut)
+        || headerOut->blobSize > OVERWORLD_WILD_BEHAVIOR_DATA_MAX_SIZE)
         return FALSE;
     return TRUE;
 }
@@ -956,6 +957,7 @@ OverworldWildRuntimeStatus OverworldWildRuntime_DispatchTransition(
     const OverworldWildTransitionActionRecord *actions;
     OverworldWildRuntimeStackDeltaRequest request;
     OverworldWildRuntimeEffectiveCache effective;
+    OverworldWildRuntimeDefinition candidateDefinition;
     const OverworldWildTransitionRecord *transition = NULL;
     OverworldWildRuntimeStatus status;
     u16 index;
@@ -1002,6 +1004,13 @@ OverworldWildRuntimeStatus OverworldWildRuntime_DispatchTransition(
             || ((event->flags & OW_WILD_RUNTIME_TRANSITION_EVENT_REPLAY)
                 && candidate->stableId
                     != event->replayExpiry.recoveryTransitionId))
+            continue;
+        if (!OverworldWildRuntime_CopyInstalledDefinition(
+                candidate->candidateDefinitionId, &candidateDefinition))
+            return FinishTransition(result,
+                OW_WILD_RUNTIME_STATUS_INVALID_STATIC_DATA, FALSE);
+        if (candidateDefinition.controllerId != 0
+            && candidateDefinition.controllerId != effective.controllerId)
             continue;
         if (transition == NULL
             || candidate->dispatchPriority > transition->dispatchPriority) {
@@ -1379,6 +1388,7 @@ static BOOL ValidateRecoveryCatalogClosure(
     u8 expectedActionCount;
     u8 expectedFromRoleMask;
     u8 expectedRoute;
+    BOOL ordinaryExactRecovery = FALSE;
     BOOL found = FALSE;
     memset(planOut, 0, sizeof(*planOut));
     if (!CopyCatalogHeader(&header)) return FALSE;
@@ -1423,7 +1433,9 @@ static BOOL ValidateRecoveryCatalogClosure(
         || (!definition.hasTiredOriginKind
             && definition.tiredOriginKind != 0)
         || definition.flags
-            != (definition.selectorKind == OWBD_SELECTOR_EXACT ? 1 : 0)
+            != (definition.selectorKind == OWBD_SELECTOR_EXACT
+                    && (definition.hasTiredOriginKind
+                        || definition.hasRequiredOwnerId) ? 1 : 0)
         || definition.reserved0 != 0
         || definition.reserved1 != 0
         || (definition.hasRequiredOwnerId
@@ -1501,6 +1513,28 @@ static BOOL ValidateRecoveryCatalogClosure(
             return FALSE;
         expectedRoute = OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF;
         expectedActionCount = 1;
+        expectedFromRoleMask = 0x7F;
+    } else if (definition.selectorKind == OWBD_SELECTOR_EXACT
+        && definition.controllerId != 0 && definition.nodeId != 0
+        && definition.semanticRole == 0
+        && definition.channel == OWBD_CHANNEL_TEMPORARY_EFFECT
+        && definition.mapLifetime == OWBD_MAP_LIFETIME_PRESERVE_LOGICAL
+        && definition.battleLifetime == OWBD_BATTLE_LIFETIME_CLEAR
+        && definition.timerClock == OWBD_TIMER_CLOCK_FRAME
+        && definition.timerSource == OWBD_TIMER_SOURCE_CANDIDATE_FOLD
+        && definition.hiddenTimerPolicy
+            == OWBD_HIDDEN_TIMER_PAUSE_WHILE_HIDDEN
+        && definition.timerValue != 0
+        && !definition.hasTiredOriginKind
+        && !definition.hasRequiredOwnerId
+        && definition.requiredOwnerId == 0
+        && !definition.allowMultipleOwners
+        && !definition.allowMultipleInstancesPerOwner
+        && !definition.authoredTiredBound
+        && definition.flags == 0) {
+        ordinaryExactRecovery = TRUE;
+        expectedRoute = OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF;
+        expectedActionCount = 2;
         expectedFromRoleMask = 0x7F;
     } else {
         return FALSE;
@@ -1590,7 +1624,10 @@ static BOOL ValidateRecoveryCatalogClosure(
         || recovery.ownerId != expiry->ownerId || !recovery.required)
         return FALSE;
     if (expectedRoute == OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF
-        && recovery.kind == OWBD_RECOVERY_ACTION_REMOVE_SELF
+        && (recovery.kind == OWBD_RECOVERY_ACTION_REMOVE_SELF
+            || (ordinaryExactRecovery
+                && recovery.kind
+                    == OWBD_RECOVERY_ACTION_REMOVE_OWNER_IF_PRESENT))
         && planOut->calmResetOwnerCount == 0)
         planOut->route = OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF;
     else if (expectedRoute
@@ -1662,6 +1699,21 @@ static BOOL CopyRecoveryPlan(
         && expiry->ownerId == 0x810A) {
         planOut->actionFlags =
             OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER;
+        planOut->route = OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF;
+        return TRUE;
+    }
+    if (!hasOrigin
+        && definition.selectorKind == OW_WILD_RUNTIME_SELECTOR_EXACT
+        && definition.controllerId != 0 && definition.nodeId != 0
+        && definition.semanticRole == 0 && definition.requiredOwnerId == 0
+        && (definition.flags
+            & (OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER
+                | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_OWNERS
+                | OW_WILD_RUNTIME_DEFINITION_FLAG_MULTIPLE_INSTANCES)) == 0
+        && definition.channel == OWBD_CHANNEL_TEMPORARY_EFFECT) {
+        planOut->actionFlags =
+            OW_WILD_RUNTIME_RECOVERY_ACTION_RESET_TIRED_COUNTER
+                | OW_WILD_RUNTIME_RECOVERY_ACTION_START_POST_TIRED_COOLDOWN;
         planOut->route = OW_WILD_RUNTIME_TIMER_RECOVERY_REMOVE_SELF;
         return TRUE;
     }

@@ -723,7 +723,7 @@ const graph = createCompleteBehaviorSetDraft({
   hookSetTemplate: model.policyCatalog.hookSets[0],
   awarenessOwnerId: model.owners[0].stableId,
   exhaustionOwnerId: model.owners[1].stableId,
-  triggerIds: [1, 3, 4],
+  triggerIds: model.transitionGraph.triggerOptions.slice(0, 3).map((item) => item.value),
   transitionOrderStart: model.transitionGraph.transitions.length,
   stateName: "Frontend complete set",
   controllerName: "Frontend complete controller",
@@ -750,6 +750,7 @@ process.stdout.write(JSON.stringify({transaction, ids: {
   hook: graph.hookSet.draftId,
   assignmentAction: graph.assignmentAction.draftId,
   assignment: graph.assignment.draftId,
+  transitions: graph.transitions.map((item) => item.draftId),
   activeDefinition: graph.transitions[0].candidateDefinition.draftId,
   tiredDefinition: graph.transitions[1].candidateDefinition.draftId,
 }}));'''
@@ -773,6 +774,40 @@ process.stdout.write(JSON.stringify({transaction, ids: {
         self.assertEqual(controller["spawnPolicyId"], mapping[ids["spawn"]])
         self.assertEqual(controller["populationPolicyId"], mapping[ids["population"]])
         self.assertEqual(controller["hookSetId"], mapping[ids["hook"]])
+
+        authored_transitions = [
+            next(item for item in saved["transitions"]
+                 if item["stableId"] == mapping[draft_id])
+            for draft_id in ids["transitions"]
+        ]
+        self.assertEqual([item["trigger"] for item in authored_transitions], [1, 2, 3])
+        exhaustion = authored_transitions[1]
+        self.assertEqual(
+            [(guard["kind"], guard["payload"], guard["referenceId"])
+             for guard in exhaustion["guards"]],
+            [(8, 2, 0)],
+        )
+        recovery = authored_transitions[2]
+        self.assertEqual(recovery["definitionId"], mapping[ids["tiredDefinition"]])
+        self.assertEqual(
+            [(guard["kind"], guard["payload"], guard["referenceId"])
+             for guard in recovery["guards"]],
+            [(6, 3, 0)],
+        )
+        self.assertEqual(
+            [(operation["kind"], operation["definitionId"], operation["required"])
+             for operation in recovery["operations"]],
+            [(3, mapping[ids["tiredDefinition"]], 1)],
+        )
+        self.assertEqual(
+            [(action["phase"], action["kind"]) for action in recovery["actions"]],
+            [(2, 2), (2, 4)],
+        )
+        self.assertEqual(
+            [(action["ownerId"], action["kind"], action["required"])
+             for action in recovery["recoveryActions"]],
+            [(recovery["ownerId"], 2, 1)],
+        )
 
         definition_ids = {
             mapping[ids["activeDefinition"]], mapping[ids["tiredDefinition"]]
@@ -807,6 +842,73 @@ process.stdout.write(JSON.stringify({transaction, ids: {
             controller["stableId"],
         )
 
+    def test_two_frontend_complete_sets_fit_across_sequential_saves_and_resolve(self):
+        viewer = load_viewer()
+        viewer.V40_BEHAVIOR_DATA_SOURCE = self.workspace / INC_REL
+        viewer.V40_BEHAVIOR_MODEL_SOURCE = self.workspace / MODEL_REL
+        baseline_size = len(self.writer.v40.read_inc(self.workspace / INC_REL))
+        script = r'''import fs from "node:fs";
+import {createCompleteBehaviorSetDraft, compactBehaviorModelDraft} from "./tools/overworld-viewer-v2/static/profiles.js";
+const {model, suffix} = JSON.parse(fs.readFileSync(0, "utf8"));
+const profiles = new Map(model.stateProfiles.map((item) => [String(item.stableId), item]));
+const source = model.controllers[0];
+const roleTemplates = Object.fromEntries([["calm", 1], ["active", 2], ["tired", 3]].map(([name, role]) => {
+  const node = source.nodes.find((item) => Number(item.semanticRoleId) === role);
+  return [name, profiles.get(String(node.profileStableId))];
+}));
+const graph = createCompleteBehaviorSetDraft({
+  fields: model.stateProfileFields, templateProfile: roleTemplates.calm, roleTemplates,
+  existingTransitions: model.transitionGraph.transitions, policyDefaults: source.policyIds,
+  spawnPolicyTemplate: model.policyCatalog.spawnPolicies[0],
+  populationPolicyTemplate: model.policyCatalog.populationPolicies[0],
+  hookSetTemplate: model.policyCatalog.hookSets[0],
+  awarenessOwnerId: model.owners[0].stableId, exhaustionOwnerId: model.owners[1].stableId,
+  triggerIds: model.transitionGraph.triggerOptions.slice(0, 3).map((item) => item.value),
+  transitionOrderStart: model.transitionGraph.transitions.length,
+  stateName: `Capacity set ${suffix}`, controllerName: `Capacity controller ${suffix}`,
+  assignment: {kind: "match", dispatchPriority: 0x6000 + suffix, match: {
+    groupMask: 1 << suffix, species: 1000 + suffix, terrain: 255,
+    minimumLevel: 0, maximumLevel: 0, shiny: 255, behaviorClass: 255,
+  }},
+});
+process.stdout.write(JSON.stringify(compactBehaviorModelDraft({
+  stateProfiles: {create: graph.profiles}, controllers: {create: [graph.controller]},
+  transitions: {create: graph.transitions}, spawnPolicies: {create: [graph.spawnPolicy]},
+  populationPolicies: {create: [graph.populationPolicy]}, hookSets: {create: [graph.hookSet]},
+  assignmentActions: {create: [graph.assignmentAction]},
+  genericAssignments: {create: [graph.assignment]},
+}, model)));'''
+        sizes = []
+        for suffix in (1, 2):
+            editor_model = viewer.build_v40_state_profile_editor_data()
+            completed = subprocess.run(
+                ["node", "--input-type=module", "-e", script], cwd=ROOT,
+                input=json.dumps({"model": editor_model, "suffix": suffix}),
+                text=True, capture_output=True, check=True,
+            )
+            self.writer.apply_behavior_model_changes(
+                self.workspace, json.loads(completed.stdout)
+            )
+            blob = self.writer.v40.read_inc(self.workspace / INC_REL)
+            reparsed = self.writer.v40.decode_blob(
+                blob, stable_id_history=self.model()["stableIdHistory"],
+            )
+            self.assertEqual(self.writer.v40.encode_model(reparsed), blob)
+            sizes.append(len(blob))
+            from scripts.resolve_overworld_wild_behavior_v40 import validate_wire
+            with tempfile.TemporaryDirectory() as directory:
+                blob_path = Path(directory) / "catalog.bin"
+                blob_path.write_bytes(blob)
+                validate_wire(blob_path, self.workspace / HEADER_REL)
+        saved = self.model()
+        self.assertEqual(len(saved["controllers"]), 5)
+        self.assertEqual(len({profile["bodyId"] for profile in saved["stateProfiles"]}), 48)
+        self.assertEqual(len(saved["stateProfiles"]), 64)
+        self.assertGreater(sizes[0], baseline_size)
+        self.assertGreater(sizes[1], sizes[0])
+        self.assertLessEqual(sizes[1], 0x3000)
+        self.assertEqual(sizes, [11480, 11940])
+
     def test_multi_entity_create_allocates_parent_then_owned_descendants(self):
         model = self.model()
         profile_draft = profile_payload(
@@ -826,12 +928,12 @@ process.stdout.write(JSON.stringify({transaction, ids: {
             "controllers": {"create": [controller_draft]},
         })
         self.assertEqual(mapping["draft:node"], mapping["draft:controller"] + 1)
-        self.assertEqual(mapping["draft:controller"], mapping["draft:profile"] + 2)
+        self.assertEqual(mapping["draft:controller"], mapping["draft:profile"] + 1)
         saved = self.model()
         profile = next(item for item in saved["stateProfiles"] if item["stableId"] == mapping["draft:profile"])
         controller = next(item for item in saved["controllers"] if item["stableId"] == mapping["draft:controller"])
         self.assertEqual(profile["name"], "Editor profile")
-        self.assertEqual(profile["bodyId"], mapping["draft:profile"] + 1)
+        self.assertEqual(profile["bodyId"], model["stateProfiles"][0]["bodyId"])
         self.assertEqual(controller["nodes"][0]["profileId"], mapping["draft:profile"])
         self.assertEqual(controller["nodes"][0]["stableId"], mapping["draft:node"])
 
@@ -1114,8 +1216,9 @@ process.stdout.write(JSON.stringify({transaction, ids: {
         self.assertIn(second["draft:new-definition"], definition_ids)
         self.assertIn(second["draft:new-applicability"], applicability_ids)
 
-    def test_delete_tombstones_owned_body_and_never_reuses_ids(self):
+    def test_delete_tombstones_profile_but_preserves_shared_body(self):
         source = self.model()["stateProfiles"][0]
+        body_key = source["bodyRegistryKey"]
         first = self.writer.apply_behavior_model_changes(self.workspace, {
             "stateProfiles": {"create": [profile_payload(source, draft_id="draft:first")]},
         })["draft:first"]
@@ -1126,11 +1229,175 @@ process.stdout.write(JSON.stringify({transaction, ids: {
         allocations = deleted["stableIdHistory"]["extensions"]
         retired = [event["registryKey"] for event in allocations if event["kind"] == "retire"]
         self.assertIn(f"editor:state-profile:{first}", retired)
-        self.assertIn(f"editor:state-body:{first + 1}", retired)
+        self.assertNotIn(body_key, retired)
         second = self.writer.apply_behavior_model_changes(self.workspace, {
             "stateProfiles": {"create": [profile_payload(source, draft_id="draft:second")]},
         })["draft:second"]
-        self.assertGreater(second, first + 1)
+        self.assertGreater(second, first)
+
+    def test_shared_body_update_is_copy_on_write(self):
+        model = self.model()
+        shared_id = next(
+            body_id for body_id in {item["bodyId"] for item in model["stateProfiles"]}
+            if sum(item["bodyId"] == body_id for item in model["stateProfiles"]) > 1
+        )
+        left, right = [
+            item for item in model["stateProfiles"] if item["bodyId"] == shared_id
+        ][:2]
+        update = profile_payload(left, name="Copy-on-write profile")
+        update["values"]["speed"] = 2 if update["values"]["speed"] != 2 else 1
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [update]},
+        })
+        saved = self.model()
+        updated = next(item for item in saved["stateProfiles"] if item["stableId"] == left["stableId"])
+        untouched = next(item for item in saved["stateProfiles"] if item["stableId"] == right["stableId"])
+        self.assertNotEqual(updated["bodyId"], shared_id)
+        self.assertEqual(untouched["bodyId"], shared_id)
+        self.assertNotEqual(updated["body"]["values"], untouched["body"]["values"])
+
+    def test_body_split_rejoin_and_last_reference_retirement(self):
+        model = self.model()
+        source = model["stateProfiles"][0]
+        existing_signatures = {
+            tuple(profile["body"]["values"][field] for field in self.writer.v40.STATE_FIELDS)
+            for profile in model["stateProfiles"]
+        }
+        unique_values = []
+        for movement_range in range(31, -1, -1):
+            values = copy.deepcopy(source["body"]["values"])
+            values["movementRange"] = movement_range
+            signature = tuple(values[field] for field in self.writer.v40.STATE_FIELDS)
+            if signature not in existing_signatures:
+                unique_values.append(values)
+                existing_signatures.add(signature)
+            if len(unique_values) == 2:
+                break
+        self.assertEqual(len(unique_values), 2)
+
+        left = profile_payload(source, draft_id="draft:lifecycle-left", name="Lifecycle left")
+        right = profile_payload(source, draft_id="draft:lifecycle-right", name="Lifecycle right")
+        left["values"] = copy.deepcopy(unique_values[0])
+        right["values"] = copy.deepcopy(unique_values[0])
+        mapping = self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"create": [left, right]},
+        })
+        saved = self.model()
+        left_id, right_id = mapping["draft:lifecycle-left"], mapping["draft:lifecycle-right"]
+        created_left = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
+        created_right = next(item for item in saved["stateProfiles"] if item["stableId"] == right_id)
+        self.assertEqual(created_left["bodyId"], created_right["bodyId"])
+        common_body_id = created_left["bodyId"]
+        common_body_key = created_left["bodyRegistryKey"]
+
+        split = profile_payload(created_left, name="Lifecycle split")
+        split["values"] = copy.deepcopy(unique_values[1])
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [split]},
+        })
+        saved = self.model()
+        split_left = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
+        shared_right = next(item for item in saved["stateProfiles"] if item["stableId"] == right_id)
+        self.assertNotEqual(split_left["bodyId"], common_body_id)
+        self.assertEqual(shared_right["bodyId"], common_body_id)
+        split_body_key = split_left["bodyRegistryKey"]
+        allocations_before_rejoin = {
+            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
+            if event["kind"] == "allocate"
+        }
+
+        rejoin = profile_payload(split_left, name="Lifecycle rejoined")
+        rejoin["values"] = copy.deepcopy(shared_right["body"]["values"])
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [rejoin]},
+        })
+        saved = self.model()
+        rejoined = next(item for item in saved["stateProfiles"] if item["stableId"] == left_id)
+        self.assertEqual(rejoined["bodyId"], common_body_id)
+        retired = {
+            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
+            if event["kind"] == "retire"
+        }
+        allocations_after_rejoin = {
+            event["registryKey"] for event in saved["stableIdHistory"]["extensions"]
+            if event["kind"] == "allocate"
+        }
+        self.assertEqual(allocations_after_rejoin, allocations_before_rejoin)
+        self.assertIn(split_body_key, retired)
+        self.assertNotIn(common_body_key, retired)
+
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"remove": [left_id]},
+        })
+        after_first_delete = self.model()
+        retired = {
+            event["registryKey"] for event in after_first_delete["stableIdHistory"]["extensions"]
+            if event["kind"] == "retire"
+        }
+        self.assertNotIn(common_body_key, retired)
+        self.assertIn(common_body_id, {
+            item["bodyId"] for item in after_first_delete["stateProfiles"]
+        })
+
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"remove": [right_id]},
+        })
+        after_last_delete = self.model()
+        retired = {
+            event["registryKey"] for event in after_last_delete["stableIdHistory"]["extensions"]
+            if event["kind"] == "retire"
+        }
+        self.assertIn(common_body_key, retired)
+        self.assertNotIn(common_body_id, {
+            item["bodyId"] for item in after_last_delete["stateProfiles"]
+        })
+
+    def test_batch_body_reuse_updates_live_reference_counts(self):
+        model = self.model()
+        body_counts = {
+            body_id: sum(item["bodyId"] == body_id for item in model["stateProfiles"])
+            for body_id in {item["bodyId"] for item in model["stateProfiles"]}
+        }
+        unique_by_provenance = {}
+        for profile in model["stateProfiles"]:
+            if body_counts[profile["bodyId"]] == 1:
+                unique_by_provenance.setdefault(
+                    profile["body"]["provenanceKind"], [],
+                ).append(profile)
+        first, second = next(
+            profiles[:2] for profiles in unique_by_provenance.values()
+            if len(profiles) >= 2
+        )
+        existing_signatures = {
+            tuple(profile["body"]["values"][field] for field in self.writer.v40.STATE_FIELDS)
+            for profile in model["stateProfiles"]
+        }
+        third_values = None
+        for movement_range in range(32, -1, -1):
+            candidate = copy.deepcopy(second["body"]["values"])
+            candidate["movementRange"] = movement_range
+            signature = tuple(candidate[field] for field in self.writer.v40.STATE_FIELDS)
+            if signature not in existing_signatures:
+                third_values = candidate
+                break
+        self.assertIsNotNone(third_values)
+
+        first_update = profile_payload(first)
+        first_update["values"] = copy.deepcopy(second["body"]["values"])
+        second_update = profile_payload(second)
+        second_update["values"] = third_values
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [first_update, second_update]},
+        })
+        saved = self.model()
+        saved_first = next(item for item in saved["stateProfiles"]
+                           if item["stableId"] == first["stableId"])
+        saved_second = next(item for item in saved["stateProfiles"]
+                            if item["stableId"] == second["stableId"])
+        self.assertEqual(saved_first["bodyId"], second["bodyId"])
+        self.assertEqual(saved_first["body"]["values"], second["body"]["values"])
+        self.assertNotEqual(saved_second["bodyId"], second["bodyId"])
+        self.assertEqual(saved_second["body"]["values"], third_values)
 
     def test_deep_cycles_and_definition_references_are_remapped(self):
         model = self.model()
@@ -1188,7 +1455,7 @@ process.stdout.write(JSON.stringify({transaction, ids: {
 
     def test_hard_cap_and_invalid_payload_leave_all_files_unchanged(self):
         source = self.model()["stateProfiles"][0]
-        creates = [profile_payload(source, draft_id=f"draft:overflow-{index}") for index in range(30)]
+        creates = [profile_payload(source, draft_id=f"draft:overflow-{index}") for index in range(200)]
         before = self.bytes()
         with self.assertRaises(self.writer.v40.ModelError):
             self.writer.apply_behavior_model_changes(self.workspace, {

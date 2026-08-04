@@ -156,6 +156,40 @@ def canonical_json_bytes(value: Any) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
 
 
+def _state_body_signature(profile: dict[str, Any]) -> tuple[int, tuple[int, ...]]:
+    body = profile["body"]
+    return (
+        body["provenanceKind"],
+        tuple(body["values"][name] for name in STATE_FIELDS),
+    )
+
+
+def intern_state_bodies(model: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """Share exact immutable bodies while preserving every profile identity."""
+    result = copy.deepcopy(model)
+    groups: dict[tuple[int, tuple[int, ...]], list[dict[str, Any]]] = {}
+    for profile in result["stateProfiles"]:
+        groups.setdefault(_state_body_signature(profile), []).append(profile)
+    retirements: dict[int, str] = {}
+    for profiles in groups.values():
+        representative = min(profiles, key=lambda item: item["bodyId"])
+        body_id = representative["bodyId"]
+        body_key = representative["bodyRegistryKey"]
+        for profile in profiles:
+            if profile["bodyId"] != body_id:
+                retirements[profile["bodyId"]] = profile["bodyRegistryKey"]
+            profile["bodyId"] = body_id
+            profile["bodyRegistryKey"] = body_key
+            profile["body"] = copy.deepcopy(representative["body"])
+    if retirements:
+        result["stableIdHistory"], _ = append_stable_history_events(
+            result["stableIdHistory"],
+            [("retire", retirements[stable_id]) for stable_id in sorted(retirements)],
+        )
+    validate_model(result)
+    return result, len(retirements)
+
+
 def stable_history_digest(history: dict[str, Any]) -> str:
     payload = {
         "schema": history.get("schema"),
@@ -358,13 +392,13 @@ def validate_model(model: dict[str, Any]) -> None:
     profile_ids = _unique_ids(profiles, "stateProfiles")
     profiles_by_id = {profile["stableId"]: profile for profile in profiles}
     body_ids: set[int] = set()
+    bodies_by_id: dict[int, tuple[str, dict[str, Any]]] = {}
     for profile in profiles:
         if "semanticRole" in profile or "semanticRoleId" in profile:
             raise ModelError("semantic roles belong to controller nodes, not profiles")
         body_id = _integer(profile.get("bodyId"), "profile.bodyId")
-        if body_id == 0 or body_id in body_ids:
-            raise ModelError(f"profile bodyId {body_id} is zero or duplicated")
-        body_ids.add(body_id)
+        if body_id == 0:
+            raise ModelError("profile bodyId zero is reserved")
         body = profile.get("body")
         if not isinstance(body, dict) or set(body.get("values", {})) != set(STATE_FIELDS):
             raise ModelError(f"profile {profile['stableId']} must own one complete 28-field body")
@@ -378,6 +412,12 @@ def validate_model(model: dict[str, Any]) -> None:
         body_values = bytes(body["values"][name] for name in STATE_FIELDS)
         if not state_body_values_valid(body_values):
             raise ModelError(f"profile {profile['stableId']} body violates its closed typed domains")
+        body_key = profile.get("bodyRegistryKey")
+        prior = bodies_by_id.get(body_id)
+        if prior is not None and prior != (body_key, body):
+            raise ModelError(f"shared state body {body_id} has conflicting records")
+        bodies_by_id[body_id] = (body_key, body)
+        body_ids.add(body_id)
 
     controller_ids = _unique_ids(controllers, "controllers")
     node_ids: set[int] = set()
@@ -558,12 +598,11 @@ def validate_model(model: dict[str, Any]) -> None:
                 f"{label} stableId {record['stableId']} does not match its live registryKey"
             )
         live_registry_keys.add(registry_key)
-    for profile in profiles:
-        body_key = profile.get("bodyRegistryKey")
-        if (not isinstance(body_key, str) or allocations.get(body_key) != profile["bodyId"]
+    for body_id, (body_key, _body) in bodies_by_id.items():
+        if (not isinstance(body_key, str) or allocations.get(body_key) != body_id
                 or body_key in tombstones):
             raise ModelError(
-                f"state body {profile['bodyId']} does not match its live registryKey"
+                f"state body {body_id} does not match its live registryKey"
             )
         live_registry_keys.add(body_key)
     if "reservedRegistryKeys" in history:
@@ -619,10 +658,9 @@ def validate_model(model: dict[str, Any]) -> None:
             raise ModelError(f"{label} references unknown stableId {value}")
 
     for profile in profiles:
-        expected = (1, profile["body"]["provenanceKind"])
-        if semantic_by_id.get(profile["provenanceId"]) != expected:
+        if semantic_by_id.get(profile["provenanceId"], (0, 0))[0] != 1:
             raise ModelError(
-                f"profile {profile['stableId']} provenance does not match body provenance kind"
+                f"profile {profile['stableId']} provenance is not a provenance semanticId"
             )
     for controller in controllers:
         require_reference(controller["spawnPolicyId"], spawn_ids, "controller.spawnPolicyId")
@@ -1159,7 +1197,6 @@ def _validate_static_action(
         profile = profiles_by_id.get(third)
         valid = (first in controller_ids and node is not None and node[0] == first
                  and profile is not None
-                 and profile["body"]["provenanceKind"] == node[1]["semanticRoleId"]
                  and profile["body"]["values"]["behaviorKind"] != 0 and fourth == 0)
     elif kind == 3:
         node = nodes_by_id.get(second)
@@ -1250,7 +1287,7 @@ def decode_blob(blob: bytes, *, stable_id_history: dict[str, Any] | None = None)
     used_bodies: set[int] = set()
     for raw in sections["profileIdentities"]:
         stable_id, body_id, provenance_id, tag_a, tag_b = struct.unpack("<HHHBB", raw)
-        if body_id not in bodies or body_id in used_bodies:
+        if body_id not in bodies:
             raise ModelError(f"profile {stable_id} has an invalid body reference")
         used_bodies.add(body_id)
         identity_registry_key = registry_key(stable_id)
@@ -1259,12 +1296,13 @@ def decode_blob(blob: bytes, *, stable_id_history: dict[str, Any] | None = None)
         )
         profiles.append({
             "stableId": stable_id, "bodyId": body_id, "provenanceId": provenance_id,
-            "sourceTags": {"tagA": tag_a, "tagB": tag_b}, "body": bodies[body_id],
+            "sourceTags": {"tagA": tag_a, "tagB": tag_b},
+            "body": copy.deepcopy(bodies[body_id]),
             "name": name, "descriptiveTags": tags, "registryKey": identity_registry_key,
             "bodyRegistryKey": registry_key(body_id),
         })
     if used_bodies != set(bodies):
-        raise ModelError("every state body must be owned by exactly one profile")
+        raise ModelError("every state body must be referenced by at least one profile")
 
     node_records = [NODE_STRUCT.unpack(raw) for raw in sections["controllerNodes"]]
     claimed_nodes = [False] * len(node_records)
@@ -1436,10 +1474,16 @@ def _flatten_model(model: dict[str, Any]) -> dict[str, list[bytes]]:
     validate_model(model)
     output: dict[str, list[bytes]] = {name: [] for name, _ in SECTIONS}
     profiles = _sorted(model["stateProfiles"])
-    for profile in sorted(profiles, key=lambda item: item["bodyId"]):
-        values = bytes(profile["body"]["values"][name] for name in STATE_FIELDS)
-        output["stateBodies"].append(struct.pack("<HBB28s", profile["bodyId"],
-                                                  profile["body"]["provenanceKind"], len(values), values))
+    bodies: dict[int, dict[str, Any]] = {}
+    for profile in profiles:
+        prior = bodies.setdefault(profile["bodyId"], profile["body"])
+        if prior != profile["body"]:
+            raise ModelError(f"shared state body {profile['bodyId']} has conflicting records")
+    for body_id, body in sorted(bodies.items()):
+        values = bytes(body["values"][name] for name in STATE_FIELDS)
+        output["stateBodies"].append(struct.pack(
+            "<HBB28s", body_id, body["provenanceKind"], len(values), values,
+        ))
     for profile in profiles:
         tags = profile["sourceTags"]
         output["profileIdentities"].append(struct.pack("<HHHBB", profile["stableId"],
@@ -1659,6 +1703,7 @@ def read_inc(path: Path = DEFAULT_OUTPUT) -> bytes:
 __all__ = [
     "DEFAULT_HEADER", "DEFAULT_MODEL", "DEFAULT_OUTPUT", "HARD_CAP", "ModelError",
     "append_stable_history_events", "canonical_json_bytes", "decode_blob", "encode_model",
+    "intern_state_bodies",
     "load_model", "read_inc",
     "merge_authored_metadata", "render_header", "render_inc", "section_counts", "stable_history_digest",
     "validate_model", "wire_projection",

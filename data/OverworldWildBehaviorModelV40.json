@@ -7270,9 +7270,69 @@
         "kind": "checkpoint",
         "previousSha256": "24ad20902f6efa7ef7f3164dd9ff9d84cf5ef1725141a32eb6a3ed2712074a83",
         "version": 1
+      },
+      {
+        "eventSha256": "e03cc25a69242dec80acb93487c67ccf58172af58254db27bbfac944c8f49e16",
+        "kind": "retire",
+        "previousSha256": "e460674ae4181f270a2430acdeb00e51dab5263f4749eae12543d0f1ae06e445",
+        "registryKey": "authored-body:override-0:controller-0:active"
+      },
+      {
+        "eventSha256": "d076b64e76ca2f8abfc1eae0698213ce4694431f89eea21886f302437701c6c1",
+        "kind": "retire",
+        "previousSha256": "e03cc25a69242dec80acb93487c67ccf58172af58254db27bbfac944c8f49e16",
+        "registryKey": "authored-body:override-0:controller-1:active"
+      },
+      {
+        "eventSha256": "c6547b843ab7009c33446a002e870fbffa9c286492bd3d3cd98bda0194d4b52c",
+        "kind": "retire",
+        "previousSha256": "d076b64e76ca2f8abfc1eae0698213ce4694431f89eea21886f302437701c6c1",
+        "registryKey": "authored-body:override-6:controller-0:active"
+      },
+      {
+        "eventSha256": "8f5f8caf57351558f180e7ad82079821d6b41c59ce891f16d7fb9752ad22b265",
+        "kind": "retire",
+        "previousSha256": "c6547b843ab7009c33446a002e870fbffa9c286492bd3d3cd98bda0194d4b52c",
+        "registryKey": "authored-body:override-6:controller-1:active"
+      },
+      {
+        "eventSha256": "9a0a1f6a51acfa336f446f474deaee38656498bdc700d77230624e9f6c565a47",
+        "kind": "retire",
+        "previousSha256": "8f5f8caf57351558f180e7ad82079821d6b41c59ce891f16d7fb9752ad22b265",
+        "registryKey": "authored-body:override-6:controller-2:active"
+      },
+      {
+        "eventSha256": "c90702dc0a46fd365dbfd20d92f3945a346bb66050c3ecbc632e044fe4fbb62b",
+        "kind": "retire",
+        "previousSha256": "9a0a1f6a51acfa336f446f474deaee38656498bdc700d77230624e9f6c565a47",
+        "registryKey": "authored-body:override-7:controller-1:tired"
+      },
+      {
+        "eventSha256": "97f312ae7dec5f02b014affd353d8ecb0bb1f039197fd9d6c4a1522ec2ebf651",
+        "kind": "retire",
+        "previousSha256": "c90702dc0a46fd365dbfd20d92f3945a346bb66050c3ecbc632e044fe4fbb62b",
+        "registryKey": "authored-body:override-8:controller-0:tired"
+      },
+      {
+        "eventSha256": "d24cf703f729b348410f81c538b3ac210270498cdb3d4269d5697dad210baab8",
+        "kind": "retire",
+        "previousSha256": "97f312ae7dec5f02b014affd353d8ecb0bb1f039197fd9d6c4a1522ec2ebf651",
+        "registryKey": "authored-body:override-10:controller-0:chill"
+      },
+      {
+        "eventSha256": "571aca09681ca65291388e5128200777cc6fdc85fae5c694cb6edef60c32abf4",
+        "kind": "retire",
+        "previousSha256": "d24cf703f729b348410f81c538b3ac210270498cdb3d4269d5697dad210baab8",
+        "registryKey": "authored-body:override-10:controller-1:chill"
+      },
+      {
+        "eventSha256": "23e8055ee48ae5fd3d2d04216d6bf153f52365d3cee1d69318919b03e10a9e86",
+        "kind": "retire",
+        "previousSha256": "571aca09681ca65291388e5128200777cc6fdc85fae5c694cb6edef60c32abf4",
+        "registryKey": "authored-body:override-10:controller-2:chill"
       }
     ],
-    "historySha256": "e460674ae4181f270a2430acdeb00e51dab5263f4749eae12543d0f1ae06e445",
+    "historySha256": "23e8055ee48ae5fd3d2d04216d6bf153f52365d3cee1d69318919b03e10a9e86",
     "nextUnallocatedId": 61971,
     "schema": 3,
     "tombstones": [
@@ -8737,8 +8797,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4865,
-      "bodyRegistryKey": "authored-body:override-0:controller-0:active",
+      "bodyId": 4610,
+      "bodyRegistryKey": "authored-body:class-0:active",
       "descriptiveTags": [
         "override 0",
         "controller 0",
@@ -8787,8 +8847,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4866,
-      "bodyRegistryKey": "authored-body:override-0:controller-1:active",
+      "bodyId": 4613,
+      "bodyRegistryKey": "authored-body:class-1:active",
       "descriptiveTags": [
         "override 0",
         "controller 1",
@@ -9187,8 +9247,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4874,
-      "bodyRegistryKey": "authored-body:override-6:controller-0:active",
+      "bodyId": 4610,
+      "bodyRegistryKey": "authored-body:class-0:active",
       "descriptiveTags": [
         "override 6",
         "controller 0",
@@ -9237,8 +9297,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4875,
-      "bodyRegistryKey": "authored-body:override-6:controller-1:active",
+      "bodyId": 4613,
+      "bodyRegistryKey": "authored-body:class-1:active",
       "descriptiveTags": [
         "override 6",
         "controller 1",
@@ -9287,8 +9347,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4876,
-      "bodyRegistryKey": "authored-body:override-6:controller-2:active",
+      "bodyId": 4867,
+      "bodyRegistryKey": "authored-body:override-0:controller-2:active",
       "descriptiveTags": [
         "override 6",
         "controller 2",
@@ -9687,8 +9747,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4884,
-      "bodyRegistryKey": "authored-body:override-7:controller-1:tired",
+      "bodyId": 4614,
+      "bodyRegistryKey": "authored-body:class-1:tired",
       "descriptiveTags": [
         "override 7",
         "controller 1",
@@ -10087,8 +10147,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4892,
-      "bodyRegistryKey": "authored-body:override-8:controller-0:tired",
+      "bodyId": 4611,
+      "bodyRegistryKey": "authored-body:class-0:tired",
       "descriptiveTags": [
         "override 8",
         "controller 0",
@@ -10387,8 +10447,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4898,
-      "bodyRegistryKey": "authored-body:override-10:controller-0:chill",
+      "bodyId": 4868,
+      "bodyRegistryKey": "authored-body:override-1:controller-0:chill",
       "descriptiveTags": [
         "override 10",
         "controller 0",
@@ -10437,8 +10497,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4899,
-      "bodyRegistryKey": "authored-body:override-10:controller-1:chill",
+      "bodyId": 4869,
+      "bodyRegistryKey": "authored-body:override-1:controller-1:chill",
       "descriptiveTags": [
         "override 10",
         "controller 1",
@@ -10487,8 +10547,8 @@
           "teleportTime": 9
         }
       },
-      "bodyId": 4900,
-      "bodyRegistryKey": "authored-body:override-10:controller-2:chill",
+      "bodyId": 4870,
+      "bodyRegistryKey": "authored-body:override-1:controller-2:chill",
       "descriptiveTags": [
         "override 10",
         "controller 2",
@@ -10888,9 +10948,9 @@
           "stableId": 49153
         }
       ],
+      "order": 0,
       "ownerId": 33026,
       "recoveryActions": [],
-      "order": 0,
       "registryKey": "transition:0",
       "stableId": 40961,
       "trigger": 1
@@ -10936,9 +10996,9 @@
           "stableId": 49154
         }
       ],
+      "order": 1,
       "ownerId": 33029,
       "recoveryActions": [],
-      "order": 1,
       "registryKey": "transition:1",
       "stableId": 40962,
       "trigger": 2
@@ -11031,6 +11091,7 @@
           "stableId": 49158
         }
       ],
+      "order": 2,
       "ownerId": 33029,
       "recoveryActions": [
         {
@@ -11041,7 +11102,6 @@
           "stableId": 57345
         }
       ],
-      "order": 2,
       "registryKey": "transition:2",
       "stableId": 40963,
       "trigger": 3
@@ -11087,9 +11147,9 @@
           "stableId": 49159
         }
       ],
+      "order": 3,
       "ownerId": 33031,
       "recoveryActions": [],
-      "order": 3,
       "registryKey": "transition:3",
       "stableId": 40964,
       "trigger": 6
@@ -11143,6 +11203,7 @@
           "stableId": 49160
         }
       ],
+      "order": 4,
       "ownerId": 33031,
       "recoveryActions": [
         {
@@ -11153,7 +11214,6 @@
           "stableId": 57346
         }
       ],
-      "order": 4,
       "registryKey": "transition:4",
       "stableId": 40965,
       "trigger": 3
@@ -11199,9 +11259,9 @@
           "stableId": 49161
         }
       ],
+      "order": 5,
       "ownerId": 33030,
       "recoveryActions": [],
-      "order": 5,
       "registryKey": "transition:5",
       "stableId": 40966,
       "trigger": 7
@@ -11294,6 +11354,7 @@
           "stableId": 49165
         }
       ],
+      "order": 6,
       "ownerId": 33030,
       "recoveryActions": [
         {
@@ -11304,7 +11365,6 @@
           "stableId": 57347
         }
       ],
-      "order": 6,
       "registryKey": "transition:6",
       "stableId": 40967,
       "trigger": 3
@@ -11350,9 +11410,9 @@
           "stableId": 49166
         }
       ],
+      "order": 7,
       "ownerId": 33032,
       "recoveryActions": [],
-      "order": 7,
       "registryKey": "transition:7",
       "stableId": 40968,
       "trigger": 8
@@ -11445,6 +11505,7 @@
           "stableId": 49170
         }
       ],
+      "order": 8,
       "ownerId": 33032,
       "recoveryActions": [
         {
@@ -11455,7 +11516,6 @@
           "stableId": 57348
         }
       ],
-      "order": 8,
       "registryKey": "transition:8",
       "stableId": 40969,
       "trigger": 3
@@ -11501,9 +11561,9 @@
           "stableId": 49171
         }
       ],
+      "order": 9,
       "ownerId": 33033,
       "recoveryActions": [],
-      "order": 9,
       "registryKey": "transition:9",
       "stableId": 40970,
       "trigger": 4
@@ -11549,9 +11609,9 @@
           "stableId": 49172
         }
       ],
+      "order": 10,
       "ownerId": 33033,
       "recoveryActions": [],
-      "order": 10,
       "registryKey": "transition:10",
       "stableId": 40971,
       "trigger": 5
@@ -11597,9 +11657,9 @@
           "stableId": 49173
         }
       ],
+      "order": 11,
       "ownerId": 33027,
       "recoveryActions": [],
-      "order": 11,
       "registryKey": "transition:11",
       "stableId": 40972,
       "trigger": 9
@@ -11645,9 +11705,9 @@
           "stableId": 49174
         }
       ],
+      "order": 12,
       "ownerId": 33028,
       "recoveryActions": [],
-      "order": 12,
       "registryKey": "transition:12",
       "stableId": 40973,
       "trigger": 10
@@ -11693,9 +11753,9 @@
           "stableId": 49175
         }
       ],
+      "order": 13,
       "ownerId": 33034,
       "recoveryActions": [],
-      "order": 13,
       "registryKey": "transition:13",
       "stableId": 40974,
       "trigger": 11
@@ -11741,6 +11801,7 @@
           "stableId": 49176
         }
       ],
+      "order": 14,
       "ownerId": 33034,
       "recoveryActions": [
         {
@@ -11751,7 +11812,6 @@
           "stableId": 57349
         }
       ],
-      "order": 14,
       "registryKey": "transition:14",
       "stableId": 40975,
       "trigger": 3
@@ -11797,9 +11857,9 @@
           "stableId": 49177
         }
       ],
+      "order": 15,
       "ownerId": 33035,
       "recoveryActions": [],
-      "order": 15,
       "registryKey": "transition:15",
       "stableId": 40976,
       "trigger": 12
@@ -11845,6 +11905,7 @@
           "stableId": 49178
         }
       ],
+      "order": 16,
       "ownerId": 33035,
       "recoveryActions": [
         {
@@ -11855,7 +11916,6 @@
           "stableId": 57350
         }
       ],
-      "order": 16,
       "registryKey": "transition:16",
       "stableId": 40977,
       "trigger": 13
@@ -11909,6 +11969,7 @@
           "stableId": 49179
         }
       ],
+      "order": 17,
       "ownerId": 33031,
       "recoveryActions": [
         {
@@ -11919,7 +11980,6 @@
           "stableId": 57351
         }
       ],
-      "order": 17,
       "registryKey": "transition:17",
       "stableId": 40978,
       "trigger": 3
@@ -11973,6 +12033,7 @@
           "stableId": 49180
         }
       ],
+      "order": 18,
       "ownerId": 33031,
       "recoveryActions": [
         {
@@ -11983,7 +12044,6 @@
           "stableId": 57352
         }
       ],
-      "order": 18,
       "registryKey": "transition:18",
       "stableId": 40979,
       "trigger": 3
@@ -12037,6 +12097,7 @@
           "stableId": 49181
         }
       ],
+      "order": 19,
       "ownerId": 33031,
       "recoveryActions": [
         {
@@ -12047,7 +12108,6 @@
           "stableId": 57353
         }
       ],
-      "order": 19,
       "registryKey": "transition:19",
       "stableId": 40980,
       "trigger": 3
@@ -12140,6 +12200,7 @@
           "stableId": 49199
         }
       ],
+      "order": 20,
       "ownerId": 33030,
       "recoveryActions": [
         {
@@ -12150,7 +12211,6 @@
           "stableId": 57354
         }
       ],
-      "order": 20,
       "registryKey": "transition:20",
       "stableId": 40981,
       "trigger": 3
@@ -12243,6 +12303,7 @@
           "stableId": 49202
         }
       ],
+      "order": 21,
       "ownerId": 33030,
       "recoveryActions": [
         {
@@ -12253,7 +12314,6 @@
           "stableId": 57355
         }
       ],
-      "order": 21,
       "registryKey": "transition:21",
       "stableId": 40982,
       "trigger": 3
@@ -12346,6 +12406,7 @@
           "stableId": 49205
         }
       ],
+      "order": 22,
       "ownerId": 33030,
       "recoveryActions": [
         {
@@ -12356,7 +12417,6 @@
           "stableId": 57356
         }
       ],
-      "order": 22,
       "registryKey": "transition:22",
       "stableId": 40983,
       "trigger": 3
@@ -12449,6 +12509,7 @@
           "stableId": 49208
         }
       ],
+      "order": 23,
       "ownerId": 33032,
       "recoveryActions": [
         {
@@ -12459,7 +12520,6 @@
           "stableId": 57357
         }
       ],
-      "order": 23,
       "registryKey": "transition:23",
       "stableId": 40984,
       "trigger": 3
@@ -12552,6 +12612,7 @@
           "stableId": 49211
         }
       ],
+      "order": 24,
       "ownerId": 33032,
       "recoveryActions": [
         {
@@ -12562,7 +12623,6 @@
           "stableId": 57358
         }
       ],
-      "order": 24,
       "registryKey": "transition:24",
       "stableId": 40985,
       "trigger": 3
@@ -12655,6 +12715,7 @@
           "stableId": 49214
         }
       ],
+      "order": 25,
       "ownerId": 33032,
       "recoveryActions": [
         {
@@ -12665,7 +12726,6 @@
           "stableId": 57359
         }
       ],
-      "order": 25,
       "registryKey": "transition:25",
       "stableId": 40986,
       "trigger": 3

@@ -12,12 +12,16 @@ import struct
 import tempfile
 from pathlib import Path
 
-from overworld_wild_behavior_v40_field_metadata import (
-    SIGNED_DELTA_OPERATORS,
-    numeric_bounds,
-    operator_allowed,
-    scalar_value_valid,
-)
+try:
+    from overworld_wild_behavior_v40_field_metadata import (
+        SIGNED_DELTA_OPERATORS, numeric_bounds, operator_allowed,
+        scalar_value_valid, state_body_values_valid,
+    )
+except ModuleNotFoundError:
+    from scripts.overworld_wild_behavior_v40_field_metadata import (
+        SIGNED_DELTA_OPERATORS, numeric_bounds, operator_allowed,
+        scalar_value_valid, state_body_values_valid,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_MODEL = ROOT / "data" / "OverworldWildBehaviorModelV40.json"
@@ -52,19 +56,17 @@ PROFILE_FIELDS = (
 )
 DEAD_DIAGNOSTIC_FIELDS = {"profileId"}
 SECTION_SPECS = (
-    ("stateBodies", 58, 32), ("profileIdentities", 58, 8),
-    ("controllers", 3, 24), ("controllerNodes", 21, 12),
-    ("genericAssignments", 2, 20),
-    ("speciesAssignments", 113, 8), ("overrideSources", 11, 28),
-    ("overrideMembers", 155, 2), ("overrideActions", 207, 12),
-    ("spawnPolicies", 3, 12), ("populationPolicies", 6, 10),
-    ("hookSets", 3, 8), ("owners", 10, 6),
-    ("overrideDefinitions", 19, 36), ("transitions", 26, 24),
-    ("transitionGuards", 26, 12), ("transitionOperations", 53, 18),
-    ("transitionActions", 41, 10), ("recoveryActions", 15, 8),
-    ("importRecipes", 12, 24), ("applicability", 19, 16),
-    ("tiredTranslations", 18, 24),
-    ("semanticIds", 16, 8),
+    ("stateBodies", 32), ("profileIdentities", 8),
+    ("controllers", 24), ("controllerNodes", 12),
+    ("genericAssignments", 20), ("speciesAssignments", 8),
+    ("overrideSources", 28), ("overrideMembers", 2),
+    ("overrideActions", 12), ("spawnPolicies", 12),
+    ("populationPolicies", 10), ("hookSets", 8), ("owners", 6),
+    ("overrideDefinitions", 36), ("transitions", 24),
+    ("transitionGuards", 12), ("transitionOperations", 18),
+    ("transitionActions", 10), ("recoveryActions", 8),
+    ("importRecipes", 24), ("applicability", 16),
+    ("tiredTranslations", 24), ("semanticIds", 8),
 )
 
 
@@ -72,9 +74,9 @@ class Graph:
     def __init__(self, blob, source, path):
         self.blob, self.path, self.sections = blob, path, {}
         cursor = 208
-        for index, (name, expected_count, expected_stride) in enumerate(SECTION_SPECS):
+        for index, (name, expected_stride) in enumerate(SECTION_SPECS):
             offset, count, stride = struct.unpack_from("<IHH", blob, 24 + index * 8)
-            if (offset, count, stride) != (cursor, expected_count, expected_stride):
+            if offset != cursor or stride != expected_stride or count > (len(blob) - offset) // stride:
                 raise ValueError(f"{path}: independent directory mismatch for {name}")
             cursor += count * stride
             aligned = (cursor + 3) & ~3
@@ -88,6 +90,336 @@ class Graph:
         offset, count, stride = self.sections[name]
         if struct.calcsize(fmt) != stride: raise ValueError(f"{self.path}: independent decoder stride")
         return [struct.unpack_from(fmt, self.blob, offset + index * stride) for index in range(count)]
+
+
+def _wire_match_valid(raw):
+    group, species, terrain, minimum, maximum, shiny, behavior_class, reserved = \
+        struct.unpack("<IH6B", raw)
+    return (reserved == 0 and terrain in (0, 1, 2, 3, 0xFF)
+            and (not minimum or not maximum or minimum <= maximum)
+            and shiny in (0, 1, 0xFF)
+            and behavior_class in (0, 1, 2, 3, 0xFD, 0xFF))
+
+
+def _wire_modifier_valid(kind, payload):
+    field, operator, delta_byte, bound, role_mask, reserved = payload[:6]
+    controller = struct.unpack_from("<H", payload, 6)[0]
+    field_ranges = {4: (1, 27), 5: (1, 7), 7: (1, 5), 9: (1, 1)}
+    minimum, maximum = field_ranges[kind]
+    numeric_masks = {4: 0x031FFE18, 5: 0x000000D8, 7: 0x00000038, 9: 0x00000002}
+    if (not minimum <= field <= maximum or (kind == 4 and field == 22)
+            or reserved or not 1 <= operator <= 6):
+        return False
+    if kind == 4:
+        if not role_mask or role_mask & ~7:
+            return False
+    elif role_mask or controller:
+        return False
+    numeric = bool(numeric_masks[kind] & (1 << field))
+    if not numeric and operator != 1:
+        return False
+    if operator < 5 and bound:
+        return False
+    delta = delta_byte - 0x100 if delta_byte >= 0x80 else delta_byte
+    if operator == 2 or operator >= 5:
+        if not -32 <= delta <= 32:
+            return False
+    elif not scalar_value_valid(kind, field, delta_byte):
+        return False
+    return operator < 5 or scalar_value_valid(kind, field, bound)
+
+
+def validate_graph_closure(graph, live_ids, body_roles, identities, semantic,
+                           controller_ids, nodes):
+    """Validate variable-size authored graph closure without baseline identities/counts."""
+    path = graph.path
+    semantic_pairs = set()
+    semantic_domains = {
+        1: frozenset(range(1, 8)),
+        2: frozenset(range(1, 4)),
+        3: frozenset((1, 2, 3, 6, 7, 11)),
+    }
+    for stable, kind, value, reserved0, reserved1 in semantic.values():
+        if (kind, value) in semantic_pairs or value not in semantic_domains.get(kind, ()) \
+                or reserved0 or reserved1:
+            raise ValueError(f"{path}: independent semantic identity mismatch")
+        semantic_pairs.add((kind, value))
+
+    controllers = graph.records("controllers", "<7H10B")
+    controller_records = {record[0]: record for record in controllers}
+    for controller in controllers:
+        stable, name, start, count = controller[:4]
+        local = list(nodes.values())[start:start + count]
+        selectors = {(record[4], record[3]) for record in local}
+        if (stable != name or len(local) != count or len(selectors) != count):
+            raise ValueError(f"{path}: independent controller identity/selector mismatch")
+    for stable, controller, profile, custom, role, flags, reserved in nodes.values():
+        if (flags & ~7 or (role == 7) != bool(custom)
+                or (custom and semantic.get(custom, (0, 0))[1] != 2)):
+            raise ValueError(f"{path}: independent controller node selector mismatch")
+
+    actions = graph.records("overrideActions", "<HBB8s")
+    assignment_count = 0
+    while assignment_count < len(actions) and actions[assignment_count][1] == 1:
+        assignment_count += 1
+    if any(record[1] == 1 for record in actions[assignment_count:]):
+        raise ValueError(f"{path}: independent assignment action prefix mismatch")
+    for stable, kind, flags, payload in actions[:assignment_count]:
+        controller, zero0, zero1, zero2 = struct.unpack("<4H", payload)
+        if kind != 1 or flags or controller not in controller_ids or zero0 or zero1 or zero2:
+            raise ValueError(f"{path}: independent assignment action mismatch")
+
+    seen_species = set()
+    for stable, raw, action_index, priority, reserved in \
+            graph.records("genericAssignments", "<H12sHHH"):
+        if (not _wire_match_valid(raw) or action_index >= assignment_count
+                or reserved):
+            raise ValueError(f"{path}: independent generic assignment mismatch")
+    for stable, species, action_index, priority in \
+            graph.records("speciesAssignments", "<4H"):
+        if (not species or species in seen_species or action_index >= assignment_count
+                ):
+            raise ValueError(f"{path}: independent species assignment mismatch")
+        seen_species.add(species)
+
+    spawn = {record[0]: record for record in graph.records("spawnPolicies", "<3H6B")}
+    population = {record[0]: record for record in graph.records("populationPolicies", "<4H2B")}
+    hooks = {record[0]: record for record in graph.records("hookSets", "<2H4B")}
+    override_ids = {record[0] for record in graph.records("overrideSources", "<HH12s4HBBH")}
+    for record in spawn.values():
+        if semantic.get(record[2], (0, 0))[1] != 1:
+            raise ValueError(f"{path}: independent spawn provenance mismatch")
+    for record in population.values():
+        if (semantic.get(record[2], (0, 0))[1] != 3
+                or (semantic.get(record[3], (0, 0))[1] != 1
+                    and record[3] not in override_ids)):
+            raise ValueError(f"{path}: independent population semantic/provenance mismatch")
+
+    member_cursor = 0
+    action_cursor = assignment_count
+    override_slices = {}
+    override_orders = set()
+    override_records = graph.records("overrideSources", "<HH12s4HBBH")
+    members = [record[0] for record in graph.records("overrideMembers", "<H")]
+    for (stable, name, raw, member_start, member_count, action_start,
+         action_count, target, order, priority) in override_records:
+        local_members = members[member_start:member_start + member_count]
+        if (stable != name or not _wire_match_valid(raw)
+                or member_start != member_cursor or action_start != action_cursor
+                or len(local_members) != member_count or len(set(local_members)) != member_count
+                or any(not member for member in local_members)
+                or target not in (0, 1, 2) or (target == 1 and not member_count)
+                or order in override_orders):
+            raise ValueError(f"{path}: independent override source/slice mismatch")
+        override_orders.add(order)
+        override_slices[stable] = (action_start, action_count)
+        member_cursor += member_count
+        action_cursor += action_count
+    if (member_cursor != len(members) or action_cursor != len(actions) \
+            or override_orders != set(range(1, len(override_records) + 1))):
+        raise ValueError(f"{path}: independent unclaimed override slice")
+
+    profile_values = {
+        stable: graph_record[3]
+        for stable, body, provenance, tag_a, tag_b in identities.values()
+        for graph_record in graph.records("stateBodies", "<HBB28s")
+        if graph_record[0] == body
+    }
+    for stable, kind, flags, payload in actions[assignment_count:]:
+        first, second, third, fourth = struct.unpack("<4H", payload)
+        valid = not flags and 2 <= kind <= 11
+        if valid and kind == 2:
+            valid = (first in controller_ids and second in nodes
+                     and nodes[second][1] == first and third in identities
+                     and profile_values[third][0] != 0 and fourth == 0)
+        elif valid and kind == 3:
+            valid = (first in controller_ids and second in nodes
+                     and nodes[second][1] == first and not nodes[second][5] & 1
+                     and third == 0 and fourth == 0)
+        elif valid and kind in (4, 5, 7, 9):
+            valid = _wire_modifier_valid(kind, payload)
+            if kind == 4:
+                target_controller = struct.unpack_from("<H", payload, 6)[0]
+                valid = valid and (not target_controller or target_controller in controller_ids)
+        elif valid and kind in (6, 8, 10):
+            targets = {6: spawn, 8: population, 10: hooks}[kind]
+            valid = first in targets and second == third == fourth == 0
+        elif valid and kind == 11:
+            operator, delta = payload[4], payload[5] - (0x100 if payload[5] >= 0x80 else 0)
+            valid = (first in controller_ids and second in nodes and nodes[second][1] == first
+                     and nodes[second][4] == 3 and not nodes[second][5] & 1
+                     and payload[6:] == b"\0\0" and (operator == 1 or operator == 2 and -32 <= delta <= 32))
+        if not valid:
+            raise ValueError(f"{path}: independent static override action mismatch")
+
+    owners = {record[0]: record for record in graph.records("owners", "<2H2B")}
+    for stable, name, kind, flags in owners.values():
+        if stable != name or kind != 1 or flags:
+            raise ValueError(f"{path}: independent owner mismatch")
+    definitions = {record[0]: record for record in graph.records("overrideDefinitions", "<8H20B")}
+    applicability = {record[0]: record for record in graph.records("applicability", "<HHIHHBBH")}
+    transitions = {record[0]: record for record in graph.records("transitions", "<9H4BH")}
+    applicability_claims = {stable: 0 for stable in applicability}
+    for stable, kind, group, controller, profile, minimum, maximum, flags in applicability.values():
+        if (not kind or kind & ~0xF or flags or maximum
+                or ((kind & 1) == 0) != (group == 0)
+                or ((kind & 2) == 0) != (controller == 0)
+                or ((kind & 4) == 0) != (profile == 0)
+                or ((kind & 8) and not 1 <= minimum <= 7)
+                or (not kind & 8 and minimum)
+                or (controller and controller not in controller_ids)
+                or (profile and profile not in identities)):
+            raise ValueError(f"{path}: independent applicability mismatch")
+    for definition in definitions.values():
+        (stable, name, controller, node, owner, recovery, application, priority,
+         kind, channel, selector, role, map_lifetime, battle_lifetime,
+         timer_clock, timer_source, hidden_timer, recovery_policy, timer_value,
+         has_origin, origin, has_owner, multiple_owners, multiple_instances,
+         authored_bound, flags, reserved0, reserved1) = definition
+        generated = bool(has_origin or has_owner)
+        if (kind != 1 or not 0 <= channel <= 5 or selector not in (1, 2)
+                or map_lifetime not in (1, 2, 3) or battle_lifetime not in (1, 2, 3)
+                or timer_clock not in (0, 1, 2) or timer_source not in (0, 1, 2, 3)
+                or hidden_timer not in (0, 1, 2, 3) or recovery_policy not in (0, 1)
+                or any(value not in (0, 1) for value in (has_origin, has_owner,
+                                                        multiple_owners, multiple_instances,
+                                                        authored_bound))
+                or reserved0 or reserved1 or application not in applicability
+                or (owner and owner not in owners) or (recovery and recovery not in transitions)
+                or has_origin != int(origin != 0) or has_owner != int(owner != 0)
+                or (has_origin and (origin not in (1, 2, 3) or not has_owner))
+                or ((timer_source != 0) != (timer_clock != 0))
+                or ((timer_value != 0) != (timer_clock != 0))
+                or (hidden_timer and not timer_clock)
+                or ((recovery_policy != 0) != (recovery != 0))
+                or (not generated and (channel == 5 or authored_bound or flags))
+                or (generated and flags != (1 if selector == 1 else 0))):
+            raise ValueError(f"{path}: independent definition domain/reference mismatch")
+        if selector == 2:
+            if controller or node or not 1 <= role <= 7:
+                raise ValueError(f"{path}: independent semantic definition selector mismatch")
+        elif (not controller or node not in nodes or nodes[node][1] != controller or role):
+            raise ValueError(f"{path}: independent exact definition selector mismatch")
+        rule = applicability[application]
+        if kind == 1 and rule[1] & 0xC:
+            raise ValueError(f"{path}: independent definition applicability mismatch")
+        if selector == 1 and rule[3] != controller:
+            raise ValueError(f"{path}: independent exact definition scope mismatch")
+        applicability_claims[application] += 1
+    if any(claim != 1 for claim in applicability_claims.values()):
+        raise ValueError(f"{path}: independent applicability ownership mismatch")
+
+    guards = {record[0]: record for record in graph.records("transitionGuards", "<HH4BHH")}
+    operations = {record[0]: record for record in graph.records("transitionOperations", "<7H4B")}
+    transition_actions = {record[0]: record for record in graph.records("transitionActions", "<HHBBHH")}
+    recoveries = {record[0]: record for record in graph.records("recoveryActions", "<HHHBB")}
+    for transition in transitions.values():
+        stable, definition_id, owner_id = transition[:3]
+        required_owner = definitions[definition_id][4]
+        if required_owner and owner_id != required_owner:
+            raise ValueError(f"{path}: independent transition owner mismatch")
+    for stable, transition, kind, negate, payload, flags, reference, reserved in guards.values():
+        valid = (transition in transitions and 1 <= kind <= 8 and negate in (0, 1)
+                 and not flags and not reserved)
+        valid = valid and (
+            (kind == 1 and not payload and not reference)
+            or (kind == 2 and 1 <= payload <= 7 and not reference)
+            or (kind == 3 and not payload and reference in nodes)
+            or (kind in (4, 5) and not payload and reference in owners)
+            or (kind == 6 and 1 <= payload <= 3 and not reference)
+            or (kind == 7 and payload <= 100 and not reference)
+            or (kind == 8 and 1 <= payload <= 13 and not reference))
+        if not valid:
+            raise ValueError(f"{path}: independent transition guard reference mismatch")
+    for (stable, transition, definition_id, owner, replacement, policy, instance,
+         kind, busy, required, flags) in operations.values():
+        valid = (transition in transitions and 1 <= kind <= 6 and busy in (1, 2)
+                 and required in (0, 1) and not flags
+                 and (not definition_id or definition_id in definitions)
+                 and (not replacement or replacement in definitions)
+                 and (not owner or owner in owners) and (not policy or policy in live_ids)
+                 and (not instance or instance in live_ids)
+                 and ((kind <= 5 and owner in owners) or (kind == 6 and not owner)))
+        if valid and kind <= 4:
+            for candidate in ((definition_id, replacement) if kind == 2 else (definition_id,)):
+                valid = valid and bool(candidate)
+                if candidate and definitions[candidate][4]:
+                    valid = valid and owner == definitions[candidate][4]
+        valid = valid and (
+            (kind == 1 and bool(definition_id) and not replacement and not policy
+             and instance == definition_id and not required)
+            or (kind == 2 and bool(definition_id) and bool(replacement) and not policy
+                and instance == definition_id and not required)
+            or (kind == 3 and bool(definition_id) and not replacement and not policy
+                and not instance and required == 1)
+            or (kind == 4 and bool(definition_id) and not replacement and not policy
+                and not instance and not required)
+            or (kind == 5 and not definition_id and bool(owner) and not replacement
+                and not policy and not instance and not required)
+            or (kind == 6 and not definition_id and not owner and not replacement
+                and bool(policy) and not instance and not required)
+        )
+        if not valid:
+            raise ValueError(f"{path}: independent transition operation reference mismatch")
+    for stable, transition, phase, kind, reference, payload in transition_actions.values():
+        if transition not in transitions or not 1 <= phase <= 4 or not 1 <= kind <= 8 \
+                or reference or payload:
+            raise ValueError(f"{path}: independent transition action mismatch")
+    for stable, transition, owner, kind, required in recoveries.values():
+        if (transition not in transitions or owner not in owners or not 1 <= kind <= 4
+                or required not in (0, 1) or owner != transitions[transition][2]):
+            raise ValueError(f"{path}: independent recovery action mismatch")
+
+    imports = graph.records("importRecipes", "<10H4B")
+    for (stable, owner, controller, node, profile, recovery, source, action_start,
+         action_count, reserved, role, lifetime, contextual, flags) in imports:
+        expected_slice = (0, 0) if not source else override_slices.get(source)
+        if (owner not in owners or (controller and controller not in controller_ids)
+                or (node and (node not in nodes or nodes[node][1] != controller
+                              or nodes[node][2] != profile))
+                or profile not in identities or (recovery and recovery not in transitions)
+                or (source and source not in override_slices)
+                or expected_slice != (action_start, action_count)
+                or not 1 <= role <= 7 or lifetime not in (1, 2, 3)
+                or contextual not in (0, 1) or flags
+                or reserved != (0 if contextual else 0xFFFF)):
+            raise ValueError(f"{path}: independent import closure mismatch")
+
+    for item in graph.records("tiredTranslations", "<HBB6H4B2H"):
+        (stable, origin, authored, controller, profile, definition_id, recovery,
+         fallback_controller, fallback_node, remove_candidate, remove_calm,
+         cooldown, required, flags, reserved) = item
+        definition = definitions.get(definition_id)
+        if (origin not in (1, 2, 3) or authored not in (0, 1)
+                or controller not in controller_ids or profile not in identities
+                or definition is None or recovery not in transitions
+                or remove_candidate != 1 or remove_calm != 1 or cooldown != 2
+                or required != 1 or flags or reserved
+                or definition[19] != 1 or definition[20] != origin
+                or definition[21] != 1 or definition[5] != recovery):
+            raise ValueError(f"{path}: independent tired translation closure mismatch")
+        if authored:
+            valid = not fallback_controller and not fallback_node and definition[10] == 2
+        else:
+            valid = (fallback_controller == controller and fallback_node in nodes
+                     and nodes[fallback_node][1] == controller
+                     and nodes[fallback_node][2] == profile
+                     and definition[10] == 1 and definition[2] == controller
+                     and definition[3] == fallback_node)
+        if not valid:
+            raise ValueError(f"{path}: independent tired fallback mismatch")
+
+    dispatch = []
+    for transition in transitions.values():
+        definition = definitions[transition[1]]
+        application = applicability[definition[6]]
+        dispatch.append((transition, definition[2] or application[3]))
+    for index, (left, left_controller) in enumerate(dispatch):
+        for right, right_controller in dispatch[index + 1:]:
+            if (left[13] == right[13] and left[9] == right[9] and left[10] & right[10]
+                    and (not left_controller or not right_controller
+                         or left_controller == right_controller)):
+                raise ValueError(f"{path}: independent ambiguous transition dispatch")
 
 
 def validate_direct_cutover_records(graph):
@@ -112,15 +444,21 @@ def validate_direct_cutover_records(graph):
         if stable != name or help_call > 1 or pickup_entry > 1 or pickup_loop != pickup_entry \
                 or (help_call and pickup_entry) or flags:
             raise ValueError(f"{path}: direct-cutover hook configuration mismatch")
-    for index, controller in enumerate(controllers):
+    node_cursor = 0
+    for controller in controllers:
         stable, name, node_start, node_count, spawn_id, population_id, hook_id = controller[:7]
-        if stable != name or node_start != index * 7 or node_count != 7 \
+        local_nodes = nodes[node_start:node_start + node_count]
+        if stable != name or node_start != node_cursor or not node_count \
                 or spawn_id not in spawn or population_id not in population or hook_id not in hooks \
                 or controller[15:] != (0, 0) \
                 or any(not scalar_value_valid(5, field, value)
                        for field, value in enumerate(controller[7:14], 1)) \
-                or any(node[1] != stable for node in nodes[node_start:node_start + node_count]):
+                or len(local_nodes) != node_count or any(node[1] != stable for node in local_nodes) \
+                or sum(bool(node[5] & 1) for node in local_nodes) != 1:
             raise ValueError(f"{path}: direct-cutover controller/configuration binding mismatch")
+        node_cursor += node_count
+    if node_cursor != len(nodes):
+        raise ValueError(f"{path}: unclaimed controller nodes")
 
     definitions = {record[0]: record for record in graph.records("overrideDefinitions", "<8H20B")}
     owners = {record[0]: record for record in graph.records("owners", "<2H2B")}
@@ -134,7 +472,7 @@ def validate_direct_cutover_records(graph):
          operation_count, action_start, action_count, trigger, from_roles,
          recovery_start, recovery_count, priority) = transition
         if definition not in definitions or owner not in owners or not 1 <= trigger <= 13 \
-                or not from_roles or from_roles & ~0x7F or not priority \
+                or not from_roles or from_roles & ~0x7F \
                 or [guard_start, operation_start, action_start, recovery_start] != cursors:
             raise ValueError(f"{path}: direct-cutover transition header/slice mismatch")
         transition_guards = guards[guard_start:guard_start + guard_count]
@@ -161,15 +499,11 @@ def validate_direct_cutover_records(graph):
                 raise ValueError(f"{path}: direct-cutover transition action mismatch")
         for recovery in transition_recoveries:
             if recovery[1] != stable or recovery[2] not in owners \
-                    or recovery[3] not in (1, 2) or recovery[4] != 1:
+                    or not 1 <= recovery[3] <= 4 or recovery[4] not in (0, 1):
                 raise ValueError(f"{path}: direct-cutover recovery action mismatch")
         if trigger == 2 and not any(guard[2] == 8 and guard[4] == trigger
                                     for guard in transition_guards):
             raise ValueError(f"{path}: stamina transition lacks exact system-route evidence")
-        if transition_index >= 17 and (trigger != 3 or from_roles != 0x40 \
-                or guard_count != 1 or transition_guards[0][2:5] != (6, 0, 3) \
-                or action_count != 2 or recovery_count != 1):
-            raise ValueError(f"{path}: exact tired cutover transition topology mismatch")
         cursors = [guard_start + guard_count, operation_start + operation_count,
                    action_start + action_count, recovery_start + recovery_count]
     if cursors != [len(guards), len(operations), len(actions), len(recoveries)]:
@@ -178,7 +512,8 @@ def validate_direct_cutover_records(graph):
 
 def validate_wire(path, source):
     blob = path.read_bytes()
-    if len(blob) != 11340: raise ValueError(f"{path}: independent exact size mismatch")
+    if len(blob) < 208 or len(blob) > 0x3000:
+        raise ValueError(f"{path}: independent size/cap mismatch")
     magic, version, header_size, size, flags, checksum, fingerprint = struct.unpack_from("<IHHIIII", blob)
     defines = {name: int(value, 0) for name, value in re.findall(
         r"^\s*#\s*define\s+(OVERWORLD_WILD_BEHAVIOR_DATA_(?:CHECKSUM|SCHEMA_FINGERPRINT))\s+(0[xX][0-9A-Fa-f]+|[0-9]+)(?:u)?\b",
@@ -191,54 +526,38 @@ def validate_wire(path, source):
         raise ValueError(f"{path}: independent header/checksum mismatch")
     graph = Graph(blob, source, path)
     seen = set()
-    for name, _, stride in SECTION_SPECS:
+    for name, stride in SECTION_SPECS:
         if name == "overrideMembers": continue
         for record in graph.records(name, "<H" + "x" * (stride - 2)):
             if not record[0] or record[0] in seen: raise ValueError(f"{path}: independent stable-ID collision")
             seen.add(record[0])
     body_roles = {}
     for stable, role, count, values in graph.records("stateBodies", "<HBB28s"):
-        if count != 28 or values[22] != int(role == 2 and values[0] == 3 and values[2] != 1):
-            raise ValueError(f"{path}: independent derived state-body invariant mismatch")
+        if count != 28 or not 1 <= role <= 7 or not state_body_values_valid(values):
+            raise ValueError(f"{path}: independent state-body invariant mismatch")
         body_roles[stable] = role
     identities = {record[0]: record for record in graph.records("profileIdentities", "<HHHBB")}
     semantic = {record[0]: record for record in graph.records("semanticIds", "<HBBHH")}
-    if any(semantic[record[2]][1:3] != (1, body_roles[record[1]]) for record in identities.values()):
-        raise ValueError(f"{path}: independent profile provenance/body-role mismatch")
-    controller_ordinals = {record[0]: index + 1 for index, record in enumerate(
-        graph.records("controllers", "<7H10B"))}
+    if (any(record[1] not in body_roles or record[2] not in semantic
+            or semantic[record[2]][1] != 1 for record in identities.values())
+            or set(body_roles) != {record[1] for record in identities.values()}):
+        raise ValueError(f"{path}: independent profile body/provenance reference mismatch")
+    controller_ids = {record[0] for record in graph.records("controllers", "<7H10B")}
     node_records = graph.records("controllerNodes", "<4HBBH")
     nodes = {record[0]: record for record in node_records}
     for stable, controller, profile, custom, role, node_flags, reserved in node_records:
-        tag_a, tag_b = identities[profile][3:5]
-        expected_tag = {4: 13, 5: 14, 6: 12, 7: 15}.get(role)
-        if expected_tag is not None and (tag_a, tag_b) != (
-                expected_tag, 0 if role == 5 else controller_ordinals[controller]):
-            raise ValueError(f"{path}: independent contextual node tag mismatch")
+        if controller not in controller_ids or profile not in identities or not 1 <= role <= 7 or reserved:
+            raise ValueError(f"{path}: independent controller node reference mismatch")
     for (stable, owner, controller, node, profile, recovery, source_id, action_start,
          action_count, truth, role, lifetime, import_flags, reserved) in \
             graph.records("importRecipes", "<10H4B"):
-        if import_flags == 0:
-            node_record = nodes[node]
-            tag_a, tag_b = identities[profile][3:5]
-            if (node_record[1], node_record[2], node_record[4]) != (controller, profile, role) \
-                    or (tag_a, tag_b) != ({4: 13, 5: 14, 6: 12}[role],
-                                          0 if role == 5 else controller_ordinals[controller]):
-                raise ValueError(f"{path}: independent contextual import mismatch")
-            expected_owner, expected_recovery, expected_lifetime, expected_source = {
-                4: (0x810A, 0xA00F, 2, 0x500A),
-                5: (0x8109, 0, 1, 0),
-                6: (0x810B, 0xA011, 3, 0x500B),
-            }[role]
-            if owner != expected_owner:
-                raise ValueError(f"{path}: independent contextual import owner mismatch")
-            if recovery != expected_recovery:
-                raise ValueError(f"{path}: independent contextual import recovery mismatch")
-            if lifetime != expected_lifetime:
-                raise ValueError(f"{path}: independent contextual import lifetime mismatch")
-            if source_id != expected_source:
-                raise ValueError(f"{path}: independent contextual import source mismatch")
+        if profile not in identities or (controller and controller not in controller_ids) \
+                or (node and node not in nodes) or not 1 <= role <= 7:
+            raise ValueError(f"{path}: independent import reference mismatch")
     validate_direct_cutover_records(graph)
+    validate_graph_closure(
+        graph, seen, body_roles, identities, semantic, controller_ids, nodes,
+    )
     return graph
 
 
@@ -682,6 +1001,21 @@ def verify_snapshot_freshness(event_digest):
 
 
 def verify(blob, source, model_path=CANONICAL_MODEL, check_snapshot_digest=True, report=True):
+    """Production structural verification for any valid authored V40 catalog."""
+    graph = validate_wire(blob, source)
+    if report:
+        print(
+            f"independent authored-graph structure: {len(graph.blob)} bytes; "
+            f"{graph.sections['profileIdentities'][1]} profiles; "
+            f"{graph.sections['controllers'][1]} controllers; "
+            f"{graph.sections['transitions'][1]} transitions"
+        )
+    return graph
+
+
+def verify_golden_baseline(
+    blob, source, model_path=CANONICAL_MODEL, check_snapshot_digest=True, report=True,
+):
     graph = validate_wire(blob, source)
     model = json.loads(model_path.read_text())
     if (model.get("schema") != "overworld-wild-behavior-model-v40"
@@ -786,7 +1120,6 @@ def verify_mutation_detection(blob, source, model_path):
     body_offset, _, _ = base_graph.sections["stateBodies"]
     body = bytearray(original); body[body_offset + 4 + 3] += 1; fixtures.append(("state-body", body))
     value = bytearray(original); value[action_offset + state_action * stride + 6] ^= 1; fixtures.append(("typed-value", value))
-    derived = bytearray(original); derived[body_offset + 4 + 22] ^= 1; fixtures.append(("derived-field", derived))
     definition_offset, _, definition_stride = base_graph.sections["overrideDefinitions"]
     priority = bytearray(original); priority[definition_offset + 14] ^= 1; fixtures.append(("definition-priority", priority))
     multiplicity = bytearray(original); multiplicity[definition_offset + 30] ^= 1; fixtures.append(("definition-multiplicity", multiplicity))
@@ -810,11 +1143,6 @@ def verify_mutation_detection(blob, source, model_path):
     owner = bytearray(original); owner[owner_offset + 4] = 0; fixtures.append(("owner-taxonomy", owner))
     import_offset, _, import_stride = base_graph.sections["importRecipes"]
     node_offset, _, node_stride = base_graph.sections["controllerNodes"]
-    contextual = bytearray(original)
-    replacement_profile = struct.unpack_from("<H", original, import_offset + 4 * import_stride + 8)[0]
-    struct.pack_into("<H", contextual, import_offset + import_stride + 8, replacement_profile)
-    struct.pack_into("<H", contextual, node_offset + 4 * node_stride + 4, replacement_profile)
-    fixtures.append(("contextual-import-profile", contextual))
     channel = bytearray(original); channel[definition_offset + 17] = 2; fixtures.append(("definition-channel", channel))
     map_life = bytearray(original); map_life[definition_offset + 20] = 1; fixtures.append(("definition-map-lifetime", map_life))
     timer_source = bytearray(original); timer_source[definition_offset + 3 * definition_stride + 23] = 1
@@ -832,32 +1160,27 @@ def verify_mutation_detection(blob, source, model_path):
     struct.pack_into("<H", population_groups, population_offset + 4, group1)
     struct.pack_into("<H", population_groups, population_offset + population_stride + 4, group0)
     fixtures.append(("population-group-provenance", population_groups))
-    identity_offset, _, identity_stride = base_graph.sections["profileIdentities"]
-    provenance = bytearray(original); struct.pack_into("<H", provenance, identity_offset + 4, 0x9002)
-    fixtures.append(("identity-provenance-role", provenance))
     active_optional = bytearray(original); active_optional[node_offset + node_stride + 9] = 2
     fixtures.append(("active-optional-flag", active_optional))
     expected_errors = {
         "role-mask": "field chillSpeed", "state-body": "field chillSpeed",
-        "typed-value": "field attentiveSpeed", "derived-field": "derived state-body invariant",
-        "exact-selector-discriminant": "typed import/tired/transition execution fixture",
+        "typed-value": "field attentiveSpeed",
+        "exact-selector-discriminant": "definition domain/reference mismatch",
+        "applicability": "applicability mismatch",
         "transition-operation": "direct-cutover transition operation mismatch",
-        "import-lifetime": "contextual import lifetime mismatch",
-        "contextual-import-profile": "contextual node tag mismatch",
-        "carried-owner": "contextual import owner mismatch",
-        "carried-recovery": "contextual import recovery mismatch",
+        "import-lifetime": "typed import/tired/transition execution fixture",
+        "carried-owner": "typed import/tired/transition execution fixture",
+        "carried-recovery": "typed import/tired/transition execution fixture",
+        "owner-taxonomy": "owner mismatch",
         "population-group-provenance": "population policy differs from canonical authored model",
-        "identity-provenance-role": "profile provenance/body-role mismatch",
     }
     expected_outcomes = {
         "definition-priority": (0x7002, 0x7003, 0x7001),
         "definition-multiplicity": (1, True),
-        "applicability": 0,
         "transition-from-role": (2, (False,), 0),
         "transition-dispatch-priority": 0x2001,
         "transition-guard": (1, 0, True),
         "transition-busy": (False, (2,)),
-        "owner-taxonomy": 0,
         "definition-channel": (2,),
         "definition-map-lifetime": (1, 1, 0, 0, 0, 0, 0),
         "stamina-timer-source": 1,
@@ -878,7 +1201,10 @@ def verify_mutation_detection(blob, source, model_path):
                 r"(#define OVERWORLD_WILD_BEHAVIOR_DATA_CHECKSUM )0x[0-9A-Fa-f]+u",
                 rf"\g<1>0x{checksum:08X}u", source.read_text()))
             try:
-                verify(mutated, mutated_source, model_path, check_snapshot_digest=False, report=False)
+                verify_golden_baseline(
+                    mutated, mutated_source, model_path,
+                    check_snapshot_digest=False, report=False,
+                )
             except ValueError as error:
                 expected = expected_errors.get(label)
                 if expected is None or expected not in str(error):
@@ -901,10 +1227,15 @@ def main():
     parser.add_argument("--blob", type=Path, required=True)
     parser.add_argument("--source", type=Path, default=ROOT / "include" / "overworld_wild_behavior_data.h")
     parser.add_argument("--model", type=Path, default=CANONICAL_MODEL)
+    parser.add_argument("--golden-baseline", action="store_true")
     parser.add_argument("--mutation-self-test", action="store_true")
     args = parser.parse_args()
     verify(args.blob, args.source, args.model)
+    if args.golden_baseline:
+        verify_golden_baseline(args.blob, args.source, args.model)
     if args.mutation_self_test:
+        if not args.golden_baseline:
+            raise ValueError("mutation self-test requires --golden-baseline")
         verify_mutation_detection(args.blob, args.source, args.model)
 
 

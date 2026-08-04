@@ -359,6 +359,7 @@ function modelDiagnostics(model) {
   const profiles = asArray(model?.stateProfiles);
   const profileIds = new Set();
   const profileNames = new Set();
+  const stateBodies = new Map();
   profiles.forEach((profile, index) => {
     const path = `stateProfiles.${index}`;
     const id = identity(profile, "stateProfile", path);
@@ -380,9 +381,26 @@ function modelDiagnostics(model) {
     if (Number(profile?.values?.hopMaxDistance) < Number(profile?.values?.hopMinDistance)) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.values.hopMaxDistance`, "Maximum hop distance cannot be below the minimum.", "stateProfile", id));
     if (present(profile?.bodyId)) {
       unsigned(profile.bodyId, shortMax, `${path}.bodyId`, "stateProfile", id);
+      if (Number(profile.bodyId) === 0) errors.push(diagnostic(VALIDATION_CODES.IDENTITY, `${path}.bodyId`, "State body identity zero is reserved.", "stateProfile", id));
       const bodyKey = `stable:${profile.bodyId}`;
-      if (globalIds.has(bodyKey)) errors.push(diagnostic(VALIDATION_CODES.IDENTITY_DUPLICATE, `${path}.bodyId`, `State body identity ${profile.bodyId} collides with ${globalIds.get(bodyKey)}.`, "stateProfile", id));
-      else globalIds.set(bodyKey, `state body at ${path}`);
+      const bodyRegistryKey = String(profile?.bodyRegistryKey || "");
+      const provenanceKind = Number(profile?.bodyProvenance?.kind);
+      if (!bodyRegistryKey || !Number.isInteger(provenanceKind) || provenanceKind < 1 || provenanceKind > 7) {
+        errors.push(diagnostic(VALIDATION_CODES.IDENTITY, `${path}.bodyId`, "Persisted state bodies require immutable registry and provenance metadata.", "stateProfile", id));
+      }
+      const signature = JSON.stringify([
+        bodyRegistryKey,
+        provenanceKind,
+        fieldKeys.map((key) => profile?.values?.[key]),
+      ]);
+      if (stateBodies.has(bodyKey)) {
+        if (stateBodies.get(bodyKey) !== signature) errors.push(diagnostic(VALIDATION_CODES.IDENTITY_DUPLICATE, `${path}.bodyId`, `State body identity ${profile.bodyId} has conflicting immutable data.`, "stateProfile", id));
+      } else if (globalIds.has(bodyKey)) {
+        errors.push(diagnostic(VALIDATION_CODES.IDENTITY_DUPLICATE, `${path}.bodyId`, `State body identity ${profile.bodyId} collides with ${globalIds.get(bodyKey)}.`, "stateProfile", id));
+      } else {
+        stateBodies.set(bodyKey, signature);
+        globalIds.set(bodyKey, `state body at ${path}`);
+      }
     }
   });
 

@@ -16,6 +16,7 @@ typedef int BOOL;
 #define TYPES_H
 
 #include "../include/overworld_wild_behavior_data.h"
+#define OWBD_VALIDATION_TEST_ALLOW_DYNAMIC_CHECKSUM
 #define OWBD_VALIDATION_NO_PROJECTION_BUILDER
 #include "overworld_wild_behavior_v40_validation_shared.h"
 #include "../src/overworld_wild_spawns_overlay/overworld_wild_runtime_sidecars.h"
