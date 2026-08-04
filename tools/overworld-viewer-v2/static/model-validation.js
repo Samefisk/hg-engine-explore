@@ -25,6 +25,7 @@ export const VALIDATION_CODES = Object.freeze({
   SELECTOR_DUPLICATE: "SELECTOR_DUPLICATE",
   CONTROLLER_POLICY: "CONTROLLER_POLICY_INVALID",
   TRANSITION_SCOPE: "TRANSITION_SCOPE_INVALID",
+  TRANSITION_AMBIGUOUS: "TRANSITION_DISPATCH_AMBIGUOUS",
   CHILD_COUNT: "TRANSITION_CHILD_COUNT_INVALID",
   CHILD_DOMAIN: "TRANSITION_CHILD_INVALID",
   DEFINITION_SELECTOR: "DEFINITION_SELECTOR_INVALID",
@@ -157,6 +158,36 @@ export function materializeDraftGraph(savedModel, draft = null) {
       if (draft.policyCatalog[key]) model.policyCatalog[key] = mergedEntities(model.policyCatalog[key], draft.policyCatalog[key]);
     }
   }
+  for (const key of ["spawnPolicies", "populationPolicies", "hookSets"]) {
+    if (!draft[key]) continue;
+    model.policyCatalog ||= {};
+    model.policyCatalog[key] = mergedEntities(model.policyCatalog[key], draft[key]);
+  }
+  for (const key of ["genericAssignments", "speciesAssignments", "assignmentActions", "overrides", "importRecipes", "tiredTranslations"]) {
+    if (draft[key]) model[key] = mergedEntities(model[key], draft[key]);
+  }
+  // Controller membership is a projection of candidate scope, not authored
+  // transaction state. Rebuild it after every draft merge so adding/removing a
+  // controller does not require rewriting every global transition row.
+  const controllerRefs = asArray(model.controllers).map(ref);
+  const materializedTransitions = asArray(model.transitionGraph?.transitions);
+  const applicabilityById = new Map(asArray(model.applicability).map((rule) => [String(ref(rule)), rule]));
+  materializedTransitions.sort((left, right) => Number(left?.order) - Number(right?.order));
+  materializedTransitions.forEach((transition, order) => { transition.order = order; });
+  materializedTransitions.forEach((transition) => {
+    const definition = transition?.candidateDefinition;
+    const scopedController = definition?.controllerId
+      ?? definition?.applicability?.controllerId
+      ?? applicabilityById.get(String(definition?.applicabilityId))?.controllerId;
+    transition.controllerIds = present(scopedController)
+      ? [scopedController]
+      : [...controllerRefs];
+  });
+  asArray(model.controllers).forEach((controller) => {
+    controller.transitionIds = materializedTransitions
+      .filter((transition) => asArray(transition.controllerIds).some((value) => same(value, ref(controller))))
+      .map(ref);
+  });
   return model;
 }
 
@@ -169,18 +200,32 @@ function validateDelta(savedModel, draft) {
   if (present(draft.modelVersion) && Number(draft.modelVersion) !== 40) {
     errors.push(diagnostic(VALIDATION_CODES.MODEL_VERSION, "draft.modelVersion", "Draft modelVersion must remain 40.", "draft", "draft"));
   }
-  const supported = new Set(["stateProfiles", "controllers", "transitions"]);
-  const recognized = new Set([...supported, "owners", "overrideDefinitions", "applicability", "customRoles", "semanticRoles", "policyCatalog"]);
+  const supported = new Set([
+    "stateProfiles", "controllers", "transitions",
+    "spawnPolicies", "populationPolicies", "hookSets",
+    "genericAssignments", "speciesAssignments", "assignmentActions",
+    "overrides",
+  ]);
+  const recognized = new Set([...supported, "owners", "importRecipes", "tiredTranslations", "overrideDefinitions", "applicability", "customRoles", "semanticRoles", "policyCatalog"]);
   for (const key of Object.keys(draft).filter((key) => key !== "modelVersion")) {
     if (!recognized.has(key)) {
       errors.push(diagnostic(VALIDATION_CODES.DRAFT_TRANSACTION, `draft.${key}`, `Unknown draft transaction domain ${key}.`, "draft", "draft"));
-    } else if (!supported.has(key)) {
+    } else if (!supported.has(key) && ["create", "update", "remove"].some((operation) => asArray(draft[key]?.[operation]).length)) {
       errors.push(diagnostic(VALIDATION_CODES.REPRESENTATION, `draft.${key}`, `${key} authoring is not supported by the current atomic writer.`, "draft", "draft"));
     }
   }
   const savedDomains = {
     stateProfiles: asArray(savedModel?.stateProfiles), controllers: asArray(savedModel?.controllers),
     transitions: asArray(savedModel?.transitionGraph?.transitions), owners: asArray(savedModel?.owners),
+    spawnPolicies: asArray(savedModel?.policyCatalog?.spawnPolicies),
+    populationPolicies: asArray(savedModel?.policyCatalog?.populationPolicies),
+    hookSets: asArray(savedModel?.policyCatalog?.hookSets),
+    genericAssignments: asArray(savedModel?.genericAssignments),
+    speciesAssignments: asArray(savedModel?.speciesAssignments),
+    assignmentActions: asArray(savedModel?.assignmentActions),
+    overrides: asArray(savedModel?.overrides),
+    importRecipes: asArray(savedModel?.importRecipes),
+    tiredTranslations: asArray(savedModel?.tiredTranslations),
     overrideDefinitions: asArray(savedModel?.overrideDefinitions), applicability: asArray(savedModel?.applicability),
     customRoles: asArray(savedModel?.customRoles), semanticRoles: asArray(savedModel?.semanticRoles),
   };
@@ -351,8 +396,21 @@ function modelDiagnostics(model) {
   const policyIds = new Set();
   const policyKinds = { spawnPolicyId: "spawnPolicies", populationPolicyId: "populationPolicies", hookSetId: "hookSets" };
   Object.values(policyKinds).forEach((key) => asArray(model?.policyCatalog?.[key]).forEach((policy, index) => {
-    const id = identity(policy, key, `policyCatalog.${key}.${index}`);
+    const path = `policyCatalog.${key}.${index}`;
+    const id = identity(policy, key, path);
     if (id !== null) policyIds.add(String(id));
+    if (key === "spawnPolicies" && (present(policy?.draftId) || "spawnState" in (policy || {}))) {
+      unsigned(policy?.provenanceId, shortMax, `${path}.provenanceId`, key, id);
+      for (const field of ["spawnState", "destination", "minimumDistance", "maximumDistance", "spawnHopTime", "flags"]) unsigned(policy?.[field], byteMax, `${path}.${field}`, key, id);
+      if (Number(policy?.maximumDistance) < Number(policy?.minimumDistance)) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.maximumDistance`, "Maximum spawn distance cannot be below the minimum.", key, id));
+    } else if (key === "populationPolicies" && (present(policy?.draftId) || "populationGroupId" in (policy || {}))) {
+      unsigned(policy?.populationGroupId, shortMax, `${path}.populationGroupId`, key, id);
+      unsigned(policy?.provenanceId, shortMax, `${path}.provenanceId`, key, id);
+      unsigned(policy?.limit, byteMax, `${path}.limit`, key, id);
+      unsigned(policy?.flags, byteMax, `${path}.flags`, key, id);
+    } else if (key === "hookSets" && (present(policy?.draftId) || "helpCallInvocation" in (policy || {}))) {
+      for (const field of ["helpCallInvocation", "pickupThrowEntry", "pickupThrowActiveLoop", "flags"]) unsigned(policy?.[field], byteMax, `${path}.${field}`, key, id);
+    }
   }));
 
   const controllers = asArray(model?.controllers);
@@ -410,10 +468,11 @@ function modelDiagnostics(model) {
   owners.forEach((owner, index) => { const id = identity(owner, "owner", `owners.${index}`); if (id !== null) ownerIds.add(String(id)); });
   const applicability = asArray(model?.applicability);
   const applicabilityIds = new Set();
+  const applicabilityById = new Map();
   applicability.forEach((rule, index) => {
     const path = `applicability.${index}`;
     const id = identity(rule, "applicability", path);
-    if (id !== null) applicabilityIds.add(String(id));
+    if (id !== null) { applicabilityIds.add(String(id)); applicabilityById.set(String(id), rule); }
     unsigned(rule?.flags, shortMax, `${path}.flags`, "applicability", id);
     unsigned(rule?.immutableContextMask, wordMax, `${path}.immutableContextMask`, "applicability", id);
     if (present(rule?.controllerId)) requireRef(rule.controllerId, controllerIds, `${path}.controllerId`, "applicability", id, "Controller");
@@ -440,25 +499,32 @@ function modelDiagnostics(model) {
     domain(definition?.kind, schema.domains.definitionKind, `${path}.kind`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_DOMAIN);
     domain(definition?.channel, schema.domains.channel, `${path}.channel`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_DOMAIN);
     domain(definition?.selectorKind, schema.domains.selectorKind, `${path}.selectorKind`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
-    unsigned(definition?.priority, shortMax, `${path}.priority`, "overrideDefinition", id);
+    unsigned(definition?.priority, byteMax, `${path}.priority`, "overrideDefinition", id);
     for (const key of ["timerValue", "hasTiredOriginKind", "tiredOriginKind", "hasRequiredOwnerId", "allowMultipleOwners", "allowMultipleInstancesPerOwner", "authoredTiredBound", "flags", "reserved0", "reserved1"]) unsigned(definition?.[key] ?? 0, byteMax, `${path}.${key}`, "overrideDefinition", id);
     if (Number(definition?.selectorKind) === 1) {
       requireRef(definition?.nodeId, nodeIds, `${path}.nodeId`, "overrideDefinition", id, "Exact node");
       if (Number(definition?.semanticRoleId || 0) !== 0) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.semanticRoleId`, "Exact selectors must not also select a semantic role.", "overrideDefinition", id));
       const node = nodesById.get(String(definition?.nodeId));
-      if (present(definition?.controllerId) && node && !same(definition.controllerId, node.controllerId)) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.controllerId`, "Exact selector controller and node ownership disagree.", "overrideDefinition", id));
+      const scopedController = definition?.controllerId
+        ?? definition?.applicability?.controllerId
+        ?? applicabilityById.get(String(definition?.applicabilityId))?.controllerId;
+      if (present(scopedController) && node && !same(scopedController, node.controllerId)) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.controllerId`, "Exact selector controller and node ownership disagree.", "overrideDefinition", id));
     } else if (Number(definition?.selectorKind) === 2) {
       if (present(definition?.nodeId)) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.nodeId`, "Semantic selectors cannot also select an exact node.", "overrideDefinition", id));
       domain(definition?.semanticRoleId, semanticRoles.size ? [...semanticRoles] : schema.domains.semanticRole, `${path}.semanticRoleId`, "overrideDefinition", id, VALIDATION_CODES.DEFINITION_SELECTOR);
     }
-    const expectedSelectorFlags = Number(definition?.selectorKind) === 1 ? 1 : 0;
+    const generatedDefinition = Number(definition?.hasTiredOriginKind) !== 0 || Number(definition?.hasRequiredOwnerId) !== 0;
+    const expectedSelectorFlags = generatedDefinition && Number(definition?.selectorKind) === 1 ? 1 : 0;
     if (Number(definition?.flags) !== expectedSelectorFlags) errors.push(diagnostic(VALIDATION_CODES.DEFINITION_SELECTOR, `${path}.flags`, `Definition flags must be ${expectedSelectorFlags} for this selector kind.`, "overrideDefinition", id));
     if (![0, 1].includes(Number(definition?.hasTiredOriginKind))
         || (!Number(definition?.hasTiredOriginKind) && Number(definition?.tiredOriginKind) !== 0)
         || (Number(definition?.hasTiredOriginKind) && ![1, 2, 3].includes(Number(definition?.tiredOriginKind)))) {
       errors.push(diagnostic(VALIDATION_CODES.DEFINITION_DOMAIN, `${path}.tiredOriginKind`, "Tired-origin presence and kind must agree; enabled kinds are 1–3.", "overrideDefinition", id));
     }
-    if (present(definition?.controllerId)) requireRef(definition.controllerId, controllerIds, `${path}.controllerId`, "overrideDefinition", id, "Controller");
+    const scopedController = definition?.controllerId
+      ?? definition?.applicability?.controllerId
+      ?? applicabilityById.get(String(definition?.applicabilityId))?.controllerId;
+    if (present(scopedController)) requireRef(scopedController, controllerIds, `${path}.controllerId`, "overrideDefinition", id, "Controller");
     domain(definition?.mapLifetime, schema.domains.lifetime, `${path}.mapLifetime`, "overrideDefinition", id, VALIDATION_CODES.LIFETIME);
     domain(definition?.battleLifetime, schema.domains.lifetime, `${path}.battleLifetime`, "overrideDefinition", id, VALIDATION_CODES.LIFETIME);
     domain(definition?.timerClock, schema.domains.timerClock, `${path}.timerClock`, "overrideDefinition", id, VALIDATION_CODES.TIMER);
@@ -510,7 +576,10 @@ function modelDiagnostics(model) {
     domain(transition?.trigger, triggerDomain, `${path}.trigger`, "transition", id, VALIDATION_CODES.CHILD_DOMAIN);
     if (!Number.isInteger(transition?.fromRoleMask) || transition.fromRoleMask < 1 || transition.fromRoleMask > 0x7F) errors.push(diagnostic(VALIDATION_CODES.CHILD_DOMAIN, `${path}.fromRoleMask`, "Transition from-role mask must select roles 1–7.", "transition", id));
     unsigned(transition?.dispatchPriority, shortMax, `${path}.dispatchPriority`, "transition", id);
-    const expectedScope = definition?.controllerId ? [String(definition.controllerId)] : [...controllerIds].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+    const scopedController = definition?.controllerId
+      ?? definition?.applicability?.controllerId
+      ?? applicabilityById.get(String(definition?.applicabilityId))?.controllerId;
+    const expectedScope = scopedController ? [String(scopedController)] : [...controllerIds].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     const actualScope = [...new Set(asArray(transition?.controllerIds).map(String))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     if (expectedScope.length !== actualScope.length || expectedScope.some((value, scopeIndex) => value !== actualScope[scopeIndex])) errors.push(diagnostic(VALIDATION_CODES.TRANSITION_SCOPE, `${path}.controllerIds`, "Transition membership must exactly match candidate-definition scope.", "transition", id));
     if (definition?.nodeId && !actualScope.includes(String(nodesById.get(String(definition.nodeId))?.controllerId))) errors.push(diagnostic(VALIDATION_CODES.TRANSITION_SCOPE, `${path}.candidateDefinition.nodeId`, "Exact selector node is outside the transition controller scope.", "transition", id));
@@ -586,11 +655,71 @@ function modelDiagnostics(model) {
     }
   });
 
+  // Dispatch is unique within every controller/role/event scope. Equal
+  // priorities are valid only when controller scopes or source-role masks are
+  // truly disjoint.
+  for (let rightIndex = 0; rightIndex < transitions.length; rightIndex += 1) {
+    const right = transitions[rightIndex];
+    const rightScope = asArray(right?.controllerIds).map(String);
+    for (let leftIndex = 0; leftIndex < rightIndex; leftIndex += 1) {
+      const left = transitions[leftIndex];
+      if (Number(left?.trigger) !== Number(right?.trigger)
+          || Number(left?.dispatchPriority) !== Number(right?.dispatchPriority)
+          || !(Number(left?.fromRoleMask) & Number(right?.fromRoleMask))) continue;
+      const leftScope = asArray(left?.controllerIds).map(String);
+      const scopesOverlap = !leftScope.length || !rightScope.length
+        || leftScope.some((value) => rightScope.includes(value));
+      if (!scopesOverlap) continue;
+      errors.push(diagnostic(
+        VALIDATION_CODES.TRANSITION_AMBIGUOUS,
+        `transitionGraph.transitions.${rightIndex}.dispatchPriority`,
+        `Transition dispatch overlaps ${String(ref(left))} at the same event, role, controller, and priority.`,
+        "transition", ref(right),
+      ));
+    }
+  }
+
   controllers.forEach((controller, index) => {
     const expected = transitions.filter((transition) => asArray(transition?.controllerIds).some((value) => same(value, ref(controller)))).map((transition) => String(ref(transition))).sort();
     const actual = [...new Set(asArray(controller?.transitionIds).map(String))].sort();
     if (expected.length !== actual.length || expected.some((value, itemIndex) => value !== actual[itemIndex])) errors.push(diagnostic(VALIDATION_CODES.TRANSITION_SCOPE, `controllers.${index}.transitionIds`, "Controller transition roster must match graph membership.", "controller", ref(controller)));
   });
+
+  const assignmentActions = asArray(model?.assignmentActions);
+  const assignmentActionRefs = new Set();
+  assignmentActions.forEach((action, index) => {
+    const path = `assignmentActions.${index}`;
+    const id = identity(action, "assignmentActions", path);
+    if (id !== null) assignmentActionRefs.add(String(id));
+    if (Number(action?.kind) !== 1) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.kind`, "Complete-set assignment actions must use ASSIGN_CONTROLLER kind 1.", "assignmentActions", id));
+    if (Number(action?.flags) !== 0) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.flags`, "Assignment action flags are reserved and must be zero.", "assignmentActions", id));
+    const controllerRef = Array.isArray(action?.payload) && action.payload.length >= 2
+      ? Number(action.payload[0]) | (Number(action.payload[1]) << 8)
+      : action?.payload?.controllerRef;
+    requireRef(controllerRef, controllerIds, `${path}.payload.controllerRef`, "assignmentActions", id, "Controller");
+  });
+  const validateAssignment = (assignment, index, kind) => {
+    const path = `${kind}.${index}`;
+    const id = identity(assignment, kind, path);
+    const actionRef = assignment?.controllerIndex;
+    const numericIndex = Number(actionRef);
+    const resolves = String(actionRef).startsWith("draft:")
+      ? assignmentActionRefs.has(String(actionRef))
+      : Number.isInteger(numericIndex) && numericIndex >= 0 && numericIndex < assignmentActions.length;
+    if (!resolves) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.controllerIndex`, "Assignment action reference does not resolve.", kind, id));
+    unsigned(assignment?.dispatchPriority, shortMax, `${path}.dispatchPriority`, kind, id);
+    if (kind === "speciesAssignments") {
+      if (!Number.isInteger(assignment?.species) || assignment.species < 1 || assignment.species > shortMax) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.species`, "Species assignment requires species 1–65535.", kind, id));
+      return;
+    }
+    const match = assignment?.match || {};
+    unsigned(match.groupMask, wordMax, `${path}.match.groupMask`, kind, id);
+    unsigned(match.species, shortMax, `${path}.match.species`, kind, id);
+    for (const field of ["terrain", "minimumLevel", "maximumLevel", "shiny", "behaviorClass"]) unsigned(match[field], byteMax, `${path}.match.${field}`, kind, id);
+    if (Number(match.maximumLevel) && Number(match.maximumLevel) < Number(match.minimumLevel)) errors.push(diagnostic(VALIDATION_CODES.FIELD_DOMAIN, `${path}.match.maximumLevel`, "Maximum assignment level cannot be below the minimum.", kind, id));
+  };
+  asArray(model?.genericAssignments).forEach((assignment, index) => validateAssignment(assignment, index, "genericAssignments"));
+  asArray(model?.speciesAssignments).forEach((assignment, index) => validateAssignment(assignment, index, "speciesAssignments"));
 
   return errors;
 }
@@ -633,7 +762,7 @@ export function validateStackInput(model, { controllerRef, layers = [], immutabl
   if (!Number.isInteger(immutableContextMask) || immutableContextMask < 0 || immutableContextMask > Number(schema.unsigned.word)) errors.push(diagnostic(VALIDATION_CODES.WIRE_RANGE, "immutableContextMask", "Immutable context mask must be an unsigned 32-bit integer.", "stack", "stack"));
   const definitions = new Map(asArray(model?.overrideDefinitions).map((item) => [String(ref(item)), item]));
   const owners = new Map(asArray(model?.owners).map((item) => [String(ref(item)), item]));
-  const applicability = new Set(asArray(model?.applicability).map((item) => String(ref(item))));
+  const applicability = new Map(asArray(model?.applicability).map((item) => [String(ref(item)), item]));
   const layerIdentities = new Set();
   const perDefinition = new Map();
   asArray(layers).forEach((layer, index) => {
@@ -660,7 +789,8 @@ export function validateStackInput(model, { controllerRef, layers = [], immutabl
     siblings.push({ ownerId: layer?.ownerId, instanceKey });
     perDefinition.set(String(layer?.definitionId), siblings);
     if (Number(definition?.kind) === 2) errors.push(diagnostic(VALIDATION_CODES.PREVIEW_UNSUPPORTED, `${path}.definitionId`, "Modifier definitions require the runtime modifier engine.", "stackLayer", index));
-    if (definition && controller && present(definition.controllerId) && !same(definition.controllerId, ref(controller))) return;
+    const scopedController = definition?.controllerId ?? applicability.get(String(definition?.applicabilityId))?.controllerId;
+    if (definition && controller && present(scopedController) && !same(scopedController, ref(controller))) return;
     if (definition && controller && Number(definition.selectorKind) === 1 && !asArray(controller.nodes).some((node) => same(ref(node), definition.nodeId))) errors.push(diagnostic(VALIDATION_CODES.REFERENCE, `${path}.selector`, "Exact selector does not resolve in the selected controller.", "stackLayer", index));
     if (definition && controller && Number(definition.selectorKind) === 2) {
       const matches = asArray(controller.nodes).filter((node) => Number(node.semanticRoleId) === Number(definition.semanticRoleId));

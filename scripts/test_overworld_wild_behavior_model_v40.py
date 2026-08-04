@@ -236,7 +236,7 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
             validate_model(population_cross_kind)
 
         population_wrong_override = copy.deepcopy(self.model)
-        population_wrong_override["populationPolicies"][3]["provenanceId"] = 0x5003
+        population_wrong_override["populationPolicies"][3]["provenanceId"] = 0xFFFF
         with self.assertRaisesRegex(ModelError, "wrong provenance"):
             validate_model(population_wrong_override)
 
@@ -252,6 +252,124 @@ class OverworldWildBehaviorModelV40Test(unittest.TestCase):
             duplicate["controllers"][0]["nodes"][0]["customRoleId"]
         with self.assertRaisesRegex(ModelError, "duplicate semantic selector"):
             validate_model(duplicate)
+
+    def test_candidate_priority_is_an_exact_u8_domain(self):
+        for invalid in (256, -1, True, "100"):
+            with self.subTest(priority=invalid):
+                damaged = copy.deepcopy(self.model)
+                damaged["overrideDefinitions"][0]["priority"] = invalid
+                with self.assertRaisesRegex(ModelError, "definition.priority"):
+                    validate_model(damaged)
+
+    def test_transition_dispatch_domains_reject_only_intersecting_scopes(self):
+        scoped = copy.deepcopy(self.model)
+        left, right = scoped["transitions"][:2]
+        right["dispatchPriority"] = left["dispatchPriority"]
+        right["trigger"] = left["trigger"]
+        right["fromRoleMask"] = left["fromRoleMask"]
+        definitions = {
+            record["stableId"]: record for record in scoped["overrideDefinitions"]
+        }
+        applicability = {
+            record["stableId"]: record for record in scoped["applicability"]
+        }
+        controller_ids = [record["stableId"] for record in scoped["controllers"]]
+        left_rule = applicability[definitions[left["definitionId"]]["applicabilityId"]]
+        right_rule = applicability[definitions[right["definitionId"]]["applicabilityId"]]
+        left_rule.update({"kind": left_rule["kind"] | 2,
+                          "controllerId": controller_ids[0]})
+        right_rule.update({"kind": right_rule["kind"] | 2,
+                           "controllerId": controller_ids[1]})
+
+        # Equal-priority rows are deterministic when their controller scopes
+        # cannot apply to the same runtime composition.
+        validate_model(scoped)
+
+        same_controller = copy.deepcopy(scoped)
+        same_applicability = {
+            record["stableId"]: record
+            for record in same_controller["applicability"]
+        }
+        same_applicability[right_rule["stableId"]]["controllerId"] = controller_ids[0]
+        with self.assertRaisesRegex(ModelError, "ambiguous dispatch overlap"):
+            validate_model(same_controller)
+
+        global_scope = copy.deepcopy(scoped)
+        global_applicability = {
+            record["stableId"]: record for record in global_scope["applicability"]
+        }
+        global_applicability[left_rule["stableId"]].update({
+            "kind": left_rule["kind"] & ~2,
+            "controllerId": 0,
+        })
+        with self.assertRaisesRegex(ModelError, "ambiguous dispatch overlap"):
+            validate_model(global_scope)
+
+    def test_unsupported_ordinary_definition_forms_are_rejected(self):
+        modifier = copy.deepcopy(self.model)
+        modifier["overrideDefinitions"][0]["kind"] = 2
+        with self.assertRaisesRegex(ModelError, "modifier definitions are unsupported"):
+            validate_model(modifier)
+
+        system_safety = copy.deepcopy(self.model)
+        system_safety["overrideDefinitions"][0]["channel"] = 5
+        with self.assertRaisesRegex(ModelError, "ordinary definitions cannot use System Safety"):
+            validate_model(system_safety)
+
+    def test_generated_owner_and_origin_metadata_is_closed(self):
+        bad_pair = copy.deepcopy(self.model)
+        bad_pair["overrideDefinitions"][0]["hasTiredOriginKind"] = 1
+        with self.assertRaisesRegex(ModelError, "tired-origin tag/value pair"):
+            validate_model(bad_pair)
+
+        wrong_owner = copy.deepcopy(self.model)
+        generated = next(
+            item for item in wrong_owner["overrideDefinitions"]
+            if item["tiredOriginKind"] == 1
+        )
+        generated["requiredOwnerId"] = next(
+            item["stableId"] for item in wrong_owner["owners"]
+            if item["registryKey"] == "owner:5"
+        )
+        with self.assertRaisesRegex(ModelError, "frozen owner/origin metadata"):
+            validate_model(wrong_owner)
+
+        wrong_translation = copy.deepcopy(self.model)
+        translation = wrong_translation["tiredTranslations"][0]
+        translation["definitionId"] = next(
+            item["stableId"] for item in wrong_translation["overrideDefinitions"]
+            if item["tiredOriginKind"] == 2
+        )
+        with self.assertRaisesRegex(ModelError, "does not match generated origin"):
+            validate_model(wrong_translation)
+
+    def test_complete_graph_domains_are_validated(self):
+        assignment = copy.deepcopy(self.model)
+        assignment["genericAssignments"][0]["controllerIndex"] = len(
+            assignment["assignmentActions"]
+        )
+        with self.assertRaisesRegex(ModelError, "assignment-action index"):
+            validate_model(assignment)
+
+        hook = copy.deepcopy(self.model)
+        hook["hookSets"][0]["pickupThrowEntry"] = 1
+        with self.assertRaisesRegex(ModelError, "hook set"):
+            validate_model(hook)
+
+        static_action = copy.deepcopy(self.model)
+        static_action["overrides"][0]["actions"][0]["payload"][2:4] = [0xFF, 0xFF]
+        with self.assertRaisesRegex(ModelError, "static override action"):
+            validate_model(static_action)
+
+        applicability = copy.deepcopy(self.model)
+        applicability["applicability"][0]["kind"] |= 2
+        with self.assertRaisesRegex(ModelError, "applicability record"):
+            validate_model(applicability)
+
+        owner = copy.deepcopy(self.model)
+        owner["owners"][0]["kind"] = 0
+        with self.assertRaisesRegex(ModelError, "system-owned"):
+            validate_model(owner)
 
 
 if __name__ == "__main__":

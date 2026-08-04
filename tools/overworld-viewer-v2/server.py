@@ -91,9 +91,51 @@ def build_behavior_model_editor_payload() -> dict[str, object]:
                 "stableId": row.get("stableId"),
                 "registryKey": row.get("registryKey", ""),
             })
+    controller_delete_blockers: dict[str, list[dict[str, object]]] = {}
+
+    def add_controller_blocker(controller_id: object, domain: str,
+                               row: dict[str, object], **extra: object) -> None:
+        if not controller_id:
+            return
+        controller_delete_blockers.setdefault(str(controller_id), []).append({
+            "domain": domain,
+            "stableId": row.get("stableId"),
+            "registryKey": row.get("registryKey", ""),
+            **extra,
+        })
+
+    for override in authored.get("overrides", []):
+        for action in override.get("actions", []):
+            payload_bytes = action.get("payload", [])
+            if not isinstance(payload_bytes, list) or len(payload_bytes) != 8:
+                continue
+            kind = action.get("kind")
+            offset = 6 if kind == 4 else 0 if kind in (2, 3, 11) else None
+            if offset is None:
+                continue
+            controller_id = payload_bytes[offset] | (payload_bytes[offset + 1] << 8)
+            add_controller_blocker(
+                controller_id, "overrides", override,
+                actionStableId=action.get("stableId"),
+            )
+    generated_definition_ids = {
+        row.get("stableId") for row in authored.get("overrideDefinitions", [])
+        if row.get("hasTiredOriginKind") or row.get("hasRequiredOwnerId")
+    }
+    for row in authored.get("overrideDefinitions", []):
+        if row.get("stableId") in generated_definition_ids:
+            add_controller_blocker(row.get("controllerId"), "overrideDefinitions", row)
+    for domain in ("importRecipes", "tiredTranslations"):
+        for row in authored.get(domain, []):
+            add_controller_blocker(row.get("controllerId"), domain, row)
+            add_controller_blocker(
+                row.get("fallbackControllerId"), domain, row,
+                reference="fallbackControllerId",
+            )
     payload["behaviorModelAuthoring"] = {
         "applicability": applicability_rows,
         "profileDeleteBlockers": profile_delete_blockers,
+        "controllerDeleteBlockers": controller_delete_blockers,
     }
     return payload
 

@@ -336,8 +336,14 @@ function contextMatch(match = {}, context = {}) {
 
 function assignmentController(model, assignment) {
   if (assignment?.controllerId != null) return assignment.controllerId;
-  const index = Number(assignment?.controllerIndex);
-  return Number.isInteger(index) ? ref(model.controllers?.[index]) : null;
+  const actionRef = assignment?.controllerIndex;
+  const action = String(actionRef).startsWith("draft:")
+    ? (model.assignmentActions || []).find((item) => String(ref(item)) === String(actionRef))
+    : model.assignmentActions?.[Number(actionRef)];
+  if (action?.payload && !Array.isArray(action.payload)) return action.payload.controllerRef ?? null;
+  return Array.isArray(action?.payload) && action.payload.length >= 2
+    ? Number(action.payload[0]) | (Number(action.payload[1]) << 8)
+    : null;
 }
 
 /** Resolve the immutable entity selection exactly once before sequence replay. */

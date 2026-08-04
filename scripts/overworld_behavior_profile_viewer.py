@@ -528,7 +528,14 @@ def build_v40_state_profile_editor_data() -> dict:
         definition = definitions.get(definition_id)
         if definition is None:
             raise ParseError(f"V40 transition {stable_id} has an unknown candidate definition")
-        controller_ids = [definition["controllerId"]] if definition["controllerId"] else list(all_controller_ids)
+        effective_controller_id = (
+            definition["controllerId"]
+            or definition["applicability"]["controllerId"]
+        )
+        controller_ids = (
+            [effective_controller_id]
+            if effective_controller_id else list(all_controller_ids)
+        )
         authored = authored_transitions.get(stable_id)
         if authored is None or authored.get("definitionId") != definition_id:
             raise ParseError(f"V40 transition {stable_id} differs from canonical metadata")
@@ -604,12 +611,32 @@ def build_v40_state_profile_editor_data() -> dict:
             ],
         })
 
+    wire_override_actions = _v40_records(blob, "overrideActions", "<HBB8s")
+    canonical_assignment_actions = authored_model.get("assignmentActions", [])
+    if len(canonical_assignment_actions) > len(wire_override_actions):
+        raise ParseError("V40 assignment actions escape the shared action section")
+    assignment_actions = [
+        {
+            "stableId": stable_id, "kind": kind, "flags": flags,
+            "payload": list(payload),
+        }
+        for stable_id, kind, flags, payload in wire_override_actions[
+            :len(canonical_assignment_actions)
+        ]
+    ]
+    canonical_assignment_projection = [
+        {key: record[key] for key in ("stableId", "kind", "flags", "payload")}
+        for record in canonical_assignment_actions
+    ]
+    if assignment_actions != canonical_assignment_projection:
+        raise ParseError("V40 assignment actions differ from canonical metadata")
+
     generic_assignments = []
     for index, record in enumerate(_v40_records(blob, "genericAssignments", "<HIH5BxHH2x")):
         (stable_id, group_mask, species, terrain, minimum_level, maximum_level,
          shiny, behavior_class, controller_index, dispatch_priority) = record
-        if controller_index >= len(controllers):
-            raise ParseError(f"V40 generic assignment #{index} has an unknown controller index")
+        if controller_index >= len(assignment_actions):
+            raise ParseError(f"V40 generic assignment #{index} has an unknown action index")
         generic_assignments.append({
             "stableId": stable_id,
             "controllerIndex": controller_index,
@@ -628,8 +655,8 @@ def build_v40_state_profile_editor_data() -> dict:
     for index, (stable_id, species, controller_index, dispatch_priority) in enumerate(
         _v40_records(blob, "speciesAssignments", "<4H")
     ):
-        if controller_index >= len(controllers):
-            raise ParseError(f"V40 species assignment #{index} has an unknown controller index")
+        if controller_index >= len(assignment_actions):
+            raise ParseError(f"V40 species assignment #{index} has an unknown action index")
         species_assignments.append({
             "stableId": stable_id,
             "species": species,
@@ -675,6 +702,7 @@ def build_v40_state_profile_editor_data() -> dict:
         "stateProfiles": sorted(profiles, key=lambda profile: profile["stableId"]),
         "stateProfileFields": _v40_state_field_metadata(),
         "controllers": controllers,
+        "assignmentActions": assignment_actions,
         "genericAssignments": generic_assignments,
         "speciesAssignments": species_assignments,
         "controllerScalarFields": _v40_typed_field_metadata(V40_CONTROLLER_SCALAR_SCHEMA),

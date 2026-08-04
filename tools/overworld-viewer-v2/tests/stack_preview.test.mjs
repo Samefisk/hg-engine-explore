@@ -20,7 +20,7 @@ const definition = (stableId, nodeId, overrides = {}) => ({
   stableId, applicabilityId: stableId + 1000, kind: 1, channel: 2, priority: 10,
   selectorKind: 1, nodeId, semanticRoleId: 0, controllerId: null,
   hasRequiredOwnerId: 0, requiredOwnerId: null,
-  hasTiredOriginKind: 0, tiredOriginKind: 0, flags: 1,
+  hasTiredOriginKind: 0, tiredOriginKind: 0, flags: 0,
   allowMultipleOwners: 1, allowMultipleInstancesPerOwner: 1,
   mapLifetime: 1, mapLifetimeLabel: "Clear", battleLifetime: 2, battleLifetimeLabel: "Preserve logical",
   timerClock: 0, timerClockLabel: "None", timerSource: 0, timerSourceLabel: "None",
@@ -78,6 +78,40 @@ function sequenceFixture() {
     ],
   };
   return model;
+}
+
+// Baseline-style global rows coexist with controller-scoped Complete Set rows.
+// Each event selects the new controller's higher-priority row, ignores an
+// equal-priority row scoped to another controller, and remains unique.
+{
+  const model = fixture();
+  model.controllers.push({
+    ...structuredClone(model.controllers[0]), stableId: 2, name: "Other controller",
+    nodes: model.controllers[0].nodes.map((item) => ({ ...item, stableId: item.stableId + 20 })),
+  });
+  const definitions = [101, 102, 103];
+  const owners = [201, 202, 203];
+  const rows = [];
+  [1, 2, 3].forEach((event, index) => {
+    rows.push(transition(510 + index, event, definitions[index], owners[index], [
+      operation(610 + index, 1, definitions[index], owners[index]),
+    ], [], { order: rows.length, controllerIds: [1], dispatchPriority: 9000 }));
+    rows.push(transition(520 + index, event, definitions[index], owners[index], [
+      operation(620 + index, 1, definitions[index], owners[index]),
+    ], [], { order: rows.length, controllerIds: [2], dispatchPriority: 9000 }));
+    rows.push(transition(530 + index, event, definitions[index], owners[index], [
+      operation(630 + index, 1, definitions[index], owners[index]),
+    ], [], { order: rows.length, controllerIds: [1, 2], dispatchPriority: 8192 }));
+  });
+  model.transitionGraph = {
+    triggerOptions: [1, 2, 3].map((value) => ({ value, label: `Event ${value}` })),
+    transitions: rows,
+  };
+  for (const [index, event] of [1, 2, 3].entries()) {
+    const result = runStackEventSequence({ model, context: { controllerRef: 1 }, steps: [{ kind: "event", trigger: event }] });
+    assert.equal(result.ok, true);
+    assert.equal(result.history[1].report.transitionId, 510 + index);
+  }
 }
 
 const layer = (definitionId, ownerId = 201, instanceKey = 0) => ({ definitionId, ownerId, instanceKey });
@@ -177,9 +211,11 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   assert.equal(compose(model, [layer(101, 999)]).errors[0].code, STACK_PREVIEW_CODES.OWNER);
   model.overrideDefinitions[0].hasRequiredOwnerId = 1;
   model.overrideDefinitions[0].requiredOwnerId = 202;
+  model.overrideDefinitions[0].flags = 1;
   assert.equal(compose(model, [layer(101, 201)]).errors[0].code, STACK_PREVIEW_CODES.REQUIRED_OWNER);
   model.overrideDefinitions[0].hasRequiredOwnerId = 0;
   model.overrideDefinitions[0].requiredOwnerId = null;
+  model.overrideDefinitions[0].flags = 0;
   model.overrideDefinitions[0].allowMultipleOwners = 0;
   assert.equal(compose(model, [layer(101, 201), layer(101, 202)]).errors[0].code, STACK_PREVIEW_CODES.MULTIPLE_OWNERS);
   model.overrideDefinitions[0].allowMultipleOwners = 1;
@@ -268,6 +304,10 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
     ...model.controllers[0], stableId: 2, name: "Species controller",
     nodes: model.controllers[0].nodes.map((item) => ({ ...item, stableId: item.stableId + 100 })),
   });
+  model.assignmentActions = [
+    { stableId: 700, kind: 1, flags: 0, payload: [1, 0, 0, 0, 0, 0, 0, 0] },
+    { stableId: 701, kind: 1, flags: 0, payload: [2, 0, 0, 0, 0, 0, 0, 0] },
+  ];
   model.genericAssignments = [{ stableId: 800, dispatchPriority: 10, controllerIndex: 0, match: { groupMask: 1, terrain: 0xFF, shiny: 0xFF, behaviorClass: 0xFF } }];
   model.speciesAssignments = [{ stableId: 801, dispatchPriority: 20, controllerIndex: 1, species: 25 }];
   assert.equal(resolveStackPreviewContext(model, { species: 25, groupMask: 1 }).controllerRef, 2);
@@ -350,6 +390,7 @@ const compose = (model, layers, extra = {}) => composeStackPreview({ model, cont
   assert.equal(result.result.layers[0].definitionId, 102);
   model.overrideDefinitions[0].hasRequiredOwnerId = 1;
   model.overrideDefinitions[0].requiredOwnerId = 201;
+  model.overrideDefinitions[0].flags = 1;
   result = runStackEventSequence({
     model, context: { controllerRef: 1 }, initialLayers: [layer(101, 201)],
     steps: [{ kind: "event", trigger: 10 }],

@@ -2,6 +2,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 VIEWER = ROOT / "scripts" / "overworld_behavior_profile_viewer.py"
 FIELD_METADATA = ROOT / "scripts" / "overworld_wild_behavior_v40_field_metadata.py"
+CODEC = ROOT / "scripts" / "overworld_wild_behavior_model_v40.py"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def load_viewer():
@@ -21,6 +25,14 @@ def load_viewer():
 
 def load_field_metadata():
     spec = importlib.util.spec_from_file_location("_v40_editor_test_fields", FIELD_METADATA)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_codec():
+    spec = importlib.util.spec_from_file_location("_v40_editor_test_codec", CODEC)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -108,6 +120,45 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
         self.assertEqual(scoped["candidateDefinition"]["semanticRoleId"], 0)
         self.assertTrue(all(len(controller["transitionIds"]) == 20 for controller in self.data["controllers"]))
 
+    def test_applicability_only_controller_scope_drives_endpoint_rosters(self):
+        codec = load_codec()
+        model = codec.load_model()
+        transition = model["transitions"][0]
+        definition = next(
+            item for item in model["overrideDefinitions"]
+            if item["stableId"] == transition["definitionId"]
+        )
+        self.assertEqual(definition["controllerId"], 0)
+        rule = next(
+            item for item in model["applicability"]
+            if item["stableId"] == definition["applicabilityId"]
+        )
+        controller_id = model["controllers"][0]["stableId"]
+        rule.update({"kind": rule["kind"] | 2, "controllerId": controller_id})
+        blob = codec.encode_model(model)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_path = root / "model.json"
+            data_path = root / "data.inc"
+            model_path.write_text(json.dumps(model))
+            data_path.write_text(codec.render_inc(blob))
+            viewer = load_viewer()
+            viewer.V40_BEHAVIOR_MODEL_SOURCE = model_path
+            viewer.V40_BEHAVIOR_DATA_SOURCE = data_path
+            scoped = viewer.build_v40_state_profile_editor_data()
+
+        endpoint_transition = next(
+            item for item in scoped["transitionGraph"]["transitions"]
+            if item["stableId"] == transition["stableId"]
+        )
+        self.assertEqual(endpoint_transition["controllerIds"], [controller_id])
+        owners = [
+            controller["stableId"] for controller in scoped["controllers"]
+            if transition["stableId"] in controller["transitionIds"]
+        ]
+        self.assertEqual(owners, [controller_id])
+
     def test_stack_preview_catalog_preserves_exact_v40_definitions(self):
         self.assertEqual(len(self.data["owners"]), 10)
         self.assertEqual(len(self.data["overrideDefinitions"]), 19)
@@ -139,6 +190,7 @@ class BehaviorModelEditorDataTest(unittest.TestCase):
                 self.assertIn(key, definition)
 
     def test_stack_preview_resolves_species_priority_from_endpoint_payload(self):
+        self.assertEqual(len(self.data["assignmentActions"]), 3)
         self.assertEqual(len(self.data["genericAssignments"]), 2)
         self.assertEqual(len(self.data["speciesAssignments"]), 113)
         selected = next(item for item in self.data["speciesAssignments"]
@@ -163,8 +215,9 @@ process.stdout.write(JSON.stringify(resolved));
             check=True,
         )
         resolved = json.loads(process.stdout)
-        self.assertEqual(resolved["controllerRef"],
-                         self.data["controllers"][selected["controllerIndex"]]["stableId"])
+        action = self.data["assignmentActions"][selected["controllerIndex"]]
+        controller_id = int.from_bytes(bytes(action["payload"][:2]), "little")
+        self.assertEqual(resolved["controllerRef"], controller_id)
         self.assertEqual(resolved["dispatch"], {
             "kind": "species",
             "assignmentId": selected["stableId"],

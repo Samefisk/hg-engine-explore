@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   createCompleteStateDraft,
+  createCompleteBehaviorSetDraft,
   createControllerDraft,
   createProfilesController,
   compactBehaviorModelDraft,
@@ -11,7 +12,9 @@ import {
 } from "../static/profiles.js";
 
 const fields = [
-  { key: "behaviorKind", label: "Behavior", type: "enum", options: [{ value: 1, label: "Idle" }] },
+  { key: "behaviorKind", label: "Behavior", type: "enum", options: [
+    { value: 1, label: "Idle" }, { value: 2, label: "Chase" }, { value: 10, label: "Tired Emote" },
+  ] },
   { key: "hopMinDistance", label: "Minimum hop distance", type: "number", minimum: 0, maximum: 12 },
   { key: "hopMaxDistance", label: "Maximum hop distance", type: "number", minimum: 0, maximum: 12 },
 ];
@@ -48,25 +51,118 @@ console.log("V40 state-profile editor unit checks passed");
 const controllerModel = {
   stateProfiles: [{ stableId: 8705, name: "Bird calm" }],
   semanticRoles: [
-    { value: 1, label: "Calm" }, { value: 2, label: "Active" },
+    { value: 1, label: "Calm" }, { value: 2, label: "Active" }, { value: 3, label: "Tired" },
     { value: 7, label: "Custom", custom: true },
   ],
   customRoles: [{ stableId: 37377, name: "Custom role 1" }],
   policyCatalog: {
-    spawnPolicies: [{ stableId: 16385, name: "Spawn policy" }],
-    populationPolicies: [{ stableId: 16641, name: "Population policy" }],
-    hookSets: [{ stableId: 16897, name: "Hook set" }],
+    spawnPolicies: [{
+      stableId: 16380, name: "Decoy spawn policy", provenanceId: 1,
+      spawnState: 0, destination: 0, minimumDistance: 0, maximumDistance: 0,
+      spawnHopTime: 0, flags: 0,
+    }, {
+      stableId: 16385, name: "Spawn policy", provenanceId: 36865,
+      spawnState: 3, destination: 0, minimumDistance: 1, maximumDistance: 5,
+      spawnHopTime: 4, flags: 0,
+    }],
+    populationPolicies: [{
+      stableId: 16640, name: "Decoy population policy", populationGroupId: 1,
+      provenanceId: 1, limit: 1, flags: 0,
+    }, {
+      stableId: 16641, name: "Population policy", populationGroupId: 17665,
+      provenanceId: 36865, limit: 0, flags: 0,
+    }],
+    hookSets: [{
+      stableId: 16896, name: "Decoy hook set", helpCallInvocation: 9,
+      pickupThrowEntry: 9, pickupThrowActiveLoop: 9, flags: 0,
+    }, {
+      stableId: 16897, name: "Hook set", helpCallInvocation: 0,
+      pickupThrowEntry: 0, pickupThrowActiveLoop: 0, flags: 0,
+    }],
   },
   controllerScalarFields: [
-    { key: "alertState", label: "Alert state", type: "enum", options: [{ value: 0, label: "None" }] },
+    { key: "alertState", label: "Alert state", type: "number", minimum: 0, maximum: 255 },
+    { key: "stamina", label: "Stamina", type: "number", minimum: 0, maximum: 64 },
+    { key: "restTime", label: "Rest time", type: "number", minimum: 0, maximum: 255 },
   ],
   transitionGraph: { triggerOptions: [{ value: 1, label: "Detection" }] },
 };
+const behaviorSetDraft = createCompleteBehaviorSetDraft({
+  fields,
+  templateProfile: copy,
+  roleTemplates: {
+    calm: copy,
+    active: { ...copy, stableId: 8706, values: { ...copy.values, behaviorKind: 2 } },
+    tired: { ...copy, stableId: 8707, values: { ...copy.values, behaviorKind: 10 } },
+  },
+  policyDefaults: { spawnPolicyId: 16385, populationPolicyId: 16641, hookSetId: 16897 },
+  controllerTemplate: {
+    scalarDefaults: { alertState: 1, stamina: 24, restTime: 32 },
+    policyIds: { spawnPolicyId: 16385, populationPolicyId: 16641, hookSetId: 16897 },
+  },
+  spawnPolicyTemplate: {
+    provenanceId: 36865, spawnState: 3, destination: 0,
+    minimumDistance: 1, maximumDistance: 5, spawnHopTime: 4, flags: 0,
+  },
+  populationPolicyTemplate: {
+    populationGroupId: 17665, provenanceId: 36865, limit: 0, flags: 0,
+  },
+  hookSetTemplate: {
+    helpCallInvocation: 0, pickupThrowEntry: 0, pickupThrowActiveLoop: 0, flags: 0,
+  },
+  awarenessOwnerId: 33026,
+  exhaustionOwnerId: 33029,
+  triggerIds: [1, 2, 3],
+  existingTransitions: [1, 2, 3].map((event, index) => ({
+    stableId: 40000 + index, trigger: event, fromRoleMask: 0x7F,
+    dispatchPriority: 8192, controllerIds: [12289],
+    candidateDefinition: { controllerId: null },
+  })),
+  transitionOrderStart: 20,
+  stateName: "Bird behavior",
+  controllerName: "Bird behavior controller",
+  assignment: { kind: "species", species: 25, dispatchPriority: 7 },
+});
+assert.equal(behaviorSetDraft.profiles.length, 3);
+assert.deepEqual(behaviorSetDraft.profiles.map((profile) => profile.values.behaviorKind), [1, 2, 10]);
+assert.deepEqual(behaviorSetDraft.profiles.map((profile) => profile.name), [
+  "Bird behavior · Calm", "Bird behavior · Active", "Bird behavior · Tired",
+]);
+assert.equal(new Set(behaviorSetDraft.profiles.map((profile) => profile.draftId)).size, 3);
+assert.deepEqual(behaviorSetDraft.controller.nodes.map((node) => node.semanticRoleId), [1, 2, 3]);
+assert.deepEqual(behaviorSetDraft.controller.scalarDefaults, { alertState: 1, stamina: 24, restTime: 32 });
+assert.deepEqual(behaviorSetDraft.transitions.map((transition) => transition.dispatchPriority), [8193, 8193, 8193]);
+assert.equal(behaviorSetDraft.priorityAllocationError, "");
+assert.deepEqual(
+  behaviorSetDraft.controller.nodes.map((node) => node.profileRef),
+  behaviorSetDraft.profiles.map((profile) => profile.draftId),
+);
+assert.equal(behaviorSetDraft.transitions.length, 3);
+assert.deepEqual(behaviorSetDraft.transitions.map((transition) => transition.order), [20, 21, 22]);
+assert.equal(new Set(behaviorSetDraft.transitions.map((transition) => transition.candidateDefinitionId)).size, 2);
+assert.equal(
+  behaviorSetDraft.transitions[1].candidateDefinition.recoveryTransitionId,
+  behaviorSetDraft.transitions[2].draftId,
+);
+assert.deepEqual([
+  behaviorSetDraft.transitions[1].candidateDefinition.hasRequiredOwnerId,
+  behaviorSetDraft.transitions[1].candidateDefinition.requiredOwnerId,
+  behaviorSetDraft.transitions[1].candidateDefinition.hasTiredOriginKind,
+  behaviorSetDraft.transitions[1].candidateDefinition.tiredOriginKind,
+], [0, null, 0, 0]);
+assert.match(behaviorSetDraft.spawnPolicy.draftId, /^draft:/);
+assert.match(behaviorSetDraft.populationPolicy.draftId, /^draft:/);
+assert.deepEqual(
+  [behaviorSetDraft.assignment.kind, behaviorSetDraft.assignment.species, behaviorSetDraft.assignment.controllerIndex],
+  ["species", 25, behaviorSetDraft.assignmentAction.draftId],
+);
+assert.deepEqual(behaviorSetDraft.assignmentAction.payload, { controllerRef: behaviorSetDraft.controller.draftId });
+assert.equal(behaviorSetDraft.controller.policyIds.hookSetId, behaviorSetDraft.hookSet.draftId);
 const controllerSource = {
   stableId: 12289,
   name: "Bird controller",
   nodes: [{ stableId: 12545, semanticRoleId: 1, profileStableId: 8705, base: true }],
-  scalarDefaults: { alertState: 0 },
+  scalarDefaults: { alertState: 3, stamina: 24, restTime: 32 },
   policyIds: { spawnPolicyId: 16385, populationPolicyId: 16641, hookSetId: 16897 },
   transitionIds: [40961, 40962],
 };
@@ -76,6 +172,11 @@ const transitionSource = {
   controllerIds: [12289],
   candidateDefinition: {
     stableId: 28673, controllerId: 12289, nodeId: 12545, applicabilityId: 61697,
+    kind: 1, channel: 1, priority: 200,
+    selectorKind: 1, semanticRoleId: 0,
+    hasTiredOriginKind: 0, tiredOriginKind: 0,
+    hasRequiredOwnerId: 0, requiredOwnerId: 0,
+    authoredTiredBound: 0,
     applicability: { stableId: 61697, name: "Controller scope", flags: 2, immutableContextMask: 0xFFFFFFFF, controllerId: 12289, effectiveProfileId: null, semanticRoleId: null },
   },
   candidateDefinitionId: 28673,
@@ -90,20 +191,42 @@ const sharedTransitionSource = {
   ...structuredClone(transitionSource),
   stableId: 40962,
   order: 1,
+  dispatchPriority: 8191,
   controllerIds: [12289],
   candidateDefinitionId: 28674,
   candidateDefinition: {
     ...structuredClone(transitionSource.candidateDefinition),
-    stableId: 28674, controllerId: null, nodeId: null,
+    stableId: 28674, controllerId: null, nodeId: null, applicabilityId: 61698,
+    applicability: { stableId: 61698, name: "Global scope", controllerId: null },
   },
   guards: [{ stableId: 45058, kind: 1, referenceId: null }],
 };
 const secondScopedTransitionSource = {
   ...structuredClone(transitionSource), stableId: 40963, order: 2,
 };
+const generatedTransitionSource = {
+  ...structuredClone(transitionSource), stableId: 40964, order: 2,
+  dispatchPriority: 8190, ownerId: 33025,
+  candidateDefinitionId: 28675,
+  candidateDefinition: {
+    ...structuredClone(transitionSource.candidateDefinition),
+    stableId: 28675, applicabilityId: 61699, hasRequiredOwnerId: 1,
+    requiredOwnerId: 33025, flags: 1,
+    applicability: { stableId: 61699, name: "Generated controller scope", controllerId: 12289 },
+  },
+  guards: [{ stableId: 45060, kind: 1, negate: false, payload: 0, referenceId: null }],
+  operations: [{
+    stableId: 45061, definitionId: 28675, ownerId: 33025,
+    replacementDefinitionId: null, policyId: null, instanceKey: 28675,
+    kind: 1, busyPolicy: 1, required: false,
+  }],
+  actions: [], recoveryActions: [],
+};
 controllerModel.transitionGraph.transitions = [transitionSource, sharedTransitionSource];
 controllerModel.behaviorModelAuthoring = { applicability: [
   { stableId: 61697, kind: 1, groupMask: 0xFFFFFFFF, controllerId: 12289, profileId: 0, minimum: 0, maximum: 0, flags: 2 },
+  { stableId: 61698, kind: 1, groupMask: 0xFFFFFFFF, controllerId: null, profileId: 0, minimum: 0, maximum: 0, flags: 0 },
+  { stableId: 61699, kind: 3, groupMask: 0xFFFFFFFF, controllerId: 12289, profileId: 0, minimum: 0, maximum: 0, flags: 0 },
 ], profileDeleteBlockers: { 8705: [{ domain: "importRecipes", stableId: 60001 }] } };
 const reordered = [structuredClone(transitionSource), structuredClone(sharedTransitionSource)];
 [reordered[0].order, reordered[1].order] = [reordered[1].order, reordered[0].order];
@@ -143,6 +266,29 @@ assert.equal(controllerCopy.transitions[0].candidateDefinitionId, controllerCopy
 assert.deepEqual(controllerCopy.transitions[0].controllerIds, [controllerCopy.controller.draftId]);
 assert.equal(controllerCopy.transitions[0].guards[0].referenceId, controllerCopy.controller.nodes[0].draftId);
 assert.deepEqual(validateControllerDraft(controllerCopy.controller, controllerModel, controllerCopy.transitions), []);
+const generatedClone = createControllerDraft({
+  source: controllerSource,
+  profiles: controllerModel.stateProfiles,
+  transitions: [{
+    ...structuredClone(transitionSource),
+    candidateDefinition: {
+      ...structuredClone(transitionSource.candidateDefinition),
+      hasRequiredOwnerId: 1, requiredOwnerId: 33029,
+    },
+  }],
+});
+assert.equal(generatedClone.transitions.length, 0);
+assert.equal(generatedClone.omittedGeneratedTransitionCount, 1);
+const unsupportedClone = createControllerDraft({
+  source: controllerSource,
+  profiles: controllerModel.stateProfiles,
+  transitions: [{
+    ...structuredClone(transitionSource),
+    candidateDefinition: { ...structuredClone(transitionSource.candidateDefinition), kind: 2 },
+  }],
+});
+assert.equal(unsupportedClone.transitions.length, 0);
+assert.equal(unsupportedClone.omittedGeneratedTransitionCount, 1);
 controllerCopy.controller.nodes.push({
   draftId: "draft:duplicate", semanticRoleId: 1, profileStableId: 8705, base: false,
 });
@@ -232,6 +378,26 @@ const controller = createProfilesController({
         values: { behaviorKind: 1, hopMinDistance: 0, hopMaxDistance: 0 },
         backlinks: [],
       }, {
+        stableId: 8707,
+        bodyId: 4611,
+        name: "Bird active",
+        descriptiveTags: ["bird", "active"],
+        registryKey: "authored-profile:class-0:active",
+        provenanceId: 36865,
+        bodyProvenance: { kind: 1, label: "Active" },
+        values: { behaviorKind: 2, hopMinDistance: 0, hopMaxDistance: 0 },
+        backlinks: [],
+      }, {
+        stableId: 8708,
+        bodyId: 4612,
+        name: "Bird tired",
+        descriptiveTags: ["bird", "tired"],
+        registryKey: "authored-profile:class-0:tired",
+        provenanceId: 36865,
+        bodyProvenance: { kind: 1, label: "Tired" },
+        values: { behaviorKind: 10, hopMinDistance: 0, hopMaxDistance: 0 },
+        backlinks: [],
+      }, {
         stableId: 8706,
         bodyId: 4610,
         name: "Unused state",
@@ -247,17 +413,43 @@ const controller = createProfilesController({
         { key: "behavior", label: "Behavior" },
         { key: "hop", label: "Hop" },
       ],
-      controllers: [controllerSource],
+      controllers: [{
+        ...controllerSource,
+        transitionIds: [40961, 40962, 40964],
+        nodes: [
+          ...controllerSource.nodes,
+          { stableId: 12546, semanticRoleId: 2, profileStableId: 8707, base: false },
+          { stableId: 12547, semanticRoleId: 3, profileStableId: 8708, base: false },
+        ],
+      }],
       owners: [{ stableId: 33025, name: "Owner 0" }],
-      overrideDefinitions: [transitionSource.candidateDefinition],
-      applicability: [{ stableId: transitionSource.candidateDefinition.applicabilityId || 61697 }],
+      overrideDefinitions: [transitionSource.candidateDefinition, sharedTransitionSource.candidateDefinition, generatedTransitionSource.candidateDefinition],
+      applicability: [{
+        stableId: 61697, flags: 3, immutableContextMask: 0xFFFFFFFF,
+        controllerId: 12289, effectiveProfileId: null, semanticRoleId: null,
+      }, {
+        stableId: 61698, flags: 1, immutableContextMask: 0xFFFFFFFF,
+        controllerId: null, effectiveProfileId: null, semanticRoleId: null,
+      }, {
+        stableId: 61699, flags: 3, immutableContextMask: 0xFFFFFFFF,
+        controllerId: 12289, effectiveProfileId: null, semanticRoleId: null,
+      }],
       stackPreview: { capacity: 8 },
       controllerScalarFields: controllerModel.controllerScalarFields,
       semanticRoles: controllerModel.semanticRoles,
       customRoles: controllerModel.customRoles,
       policyCatalog: controllerModel.policyCatalog,
+      assignmentActions: [{
+        stableId: 21505, kind: 1, flags: 0,
+        payload: [1, 48, 0, 0, 0, 0, 0, 0],
+      }],
+      genericAssignments: [{
+        stableId: 21249, controllerIndex: 0, dispatchPriority: 10,
+        match: { groupMask: 1, species: 0, terrain: 255, minimumLevel: 0, maximumLevel: 0, shiny: 255, behaviorClass: 255 },
+      }],
+      speciesAssignments: [{ stableId: 21250, species: 25, controllerIndex: 0, dispatchPriority: 11 }],
       transitionGraph: {
-        transitions: [transitionSource, sharedTransitionSource],
+        transitions: [transitionSource, sharedTransitionSource, generatedTransitionSource],
         triggerOptions: controllerModel.transitionGraph.triggerOptions,
       },
       behaviorModelAuthoring: controllerModel.behaviorModelAuthoring,
@@ -277,7 +469,7 @@ const controller = createProfilesController({
 });
 
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(state.v40BehaviorModel.stateProfiles.length, 2);
+assert.equal(state.v40BehaviorModel.stateProfiles.length, 4);
 
 const actionTarget = (action) => ({
   closest(selector) {
@@ -314,7 +506,7 @@ assert.deepEqual(controller.commitPayload(), {});
 
 root.dispatch("click", actionTarget("delete"));
 assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, []);
-assert.match(statuses.at(-1).message, /importRecipes/);
+assert.match(statuses.at(-1).message, /controller node/);
 root.dispatch("click", {
   closest(selector) {
     return selector === "[data-profile-id]" ? { dataset: { profileId: "state:8706" } } : null;
@@ -325,19 +517,137 @@ assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, [8706]);
 root.dispatch("click", actionTarget("reset-local"));
 assert.deepEqual(state.v40BehaviorModelDraft.stateProfiles.remove, []);
 
+const behaviorSetActionTarget = (behaviorSetAction) => ({
+  closest(selector) {
+    return selector === "[data-behavior-set-action]" ? { dataset: { behaviorSetAction } } : null;
+  },
+});
+const behaviorSetInput = (field, value) => root.dispatch("input", {
+  value,
+  dataset: { behaviorSetField: field },
+  matches: (selector) => selector === "[data-behavior-set-field]",
+});
+root.dispatch("click", behaviorSetActionTarget("open"));
+assert.match(inspector.innerHTML, /Calm complete state/);
+assert.match(inspector.innerHTML, /Active · Tired/);
+assert.match(inspector.innerHTML, /Awareness · Exhaustion · Recovery/);
+assert.match(inspector.innerHTML, /No assignment will be created/);
+behaviorSetInput("assignmentKind", "species");
+assert.match(inspector.innerHTML, /Assignment priority must be explicitly set/);
+behaviorSetInput("assignmentPriority", "7");
+behaviorSetInput("species", "25");
+assert.match(inspector.innerHTML, /already has an explicit controller assignment/);
+behaviorSetInput("species", "26");
+root.dispatch("click", behaviorSetActionTarget("confirm"));
+assert.equal(state.v40BehaviorModelDraft.stateProfiles.create.length, 3);
+assert.equal(state.v40BehaviorModelDraft.controllers.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.controllers.create[0].nodes.length, 3);
+assert.equal(state.v40BehaviorModelDraft.transitions.create.length, 3);
+assert.equal(state.v40BehaviorModelDraft.spawnPolicies.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.populationPolicies.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.hookSets.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.assignmentActions.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.speciesAssignments.create.length, 1);
+assert.equal(state.v40BehaviorModelDraft.genericAssignments.create.length, 0);
+const completeSetPayload = controller.commitPayload().behaviorModel;
+assert.deepEqual(completeSetPayload.controllers.create[0].scalarDefaults, { alertState: 3, stamina: 24, restTime: 32 });
+assert.equal(completeSetPayload.spawnPolicies.create[0].spawnState, 3);
+assert.equal(completeSetPayload.populationPolicies.create[0].populationGroupId, 17665);
+assert.equal(completeSetPayload.hookSets.create[0].helpCallInvocation, 0);
+assert.equal(completeSetPayload.transitions.update, undefined);
+assert.equal(behaviorModelChangeCount(completeSetPayload), 12);
+assert.equal(completeSetPayload.speciesAssignments.create[0].controllerIndex, completeSetPayload.assignmentActions.create[0].draftId);
+assert.deepEqual(completeSetPayload.assignmentActions.create[0].payload, {
+  controllerRef: completeSetPayload.controllers.create[0].draftId,
+});
+assert.equal("controllerId" in completeSetPayload.speciesAssignments.create[0], false);
+const tiredPayloadDefinitions = completeSetPayload.transitions.create
+  .map((transition) => transition.candidateDefinition)
+  .filter((definition) => Number(definition.channel) === 2);
+assert.equal(tiredPayloadDefinitions.length, 2);
+assert.equal(tiredPayloadDefinitions.every((definition) => Number(definition.hasRequiredOwnerId) === 0
+  && definition.requiredOwnerId === null && Number(definition.hasTiredOriginKind) === 0
+  && Number(definition.tiredOriginKind) === 0), true);
+for (const policyRef of Object.values(completeSetPayload.controllers.create[0].policyIds)) {
+  assert.match(inspector.innerHTML, new RegExp(`option value="${policyRef}" selected`));
+}
+assert.deepEqual(
+  controller.wholeGraphDiagnostics().filter((item) => String(item.entityId).startsWith("draft:")),
+  [],
+);
+root.dispatch("click", actionTarget("reset-local"));
+assert.deepEqual(controller.commitPayload(), {});
+
 root.dispatch("click", {
   closest(selector) {
     return selector === "[data-profile-deck-mode]" ? { dataset: { profileDeckMode: "controllers" } } : null;
   },
 });
 assert.equal(state.profileDeckMode, "controllers");
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-controller-id]" ? { dataset: { controllerId: "controller:12289" } } : null;
+  },
+});
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-transition-action]"
+      ? { dataset: { transitionAction: "author", transitionId: "transition:40964" } }
+      : null;
+  },
+});
+assert.match(inspector.innerHTML, /Read-only transition row/);
+const generatedBefore = structuredClone(state.v40BehaviorModelDraft.transitions);
+root.dispatch("input", {
+  value: "2", dataset: { transitionId: "transition:40964", transitionField: "trigger" },
+  matches: (selector) => selector === "[data-transition-field]",
+});
+root.dispatch("input", {
+  value: "99", dataset: { transitionId: "transition:40964", definitionField: "priority" },
+  matches: (selector) => selector === "[data-definition-field]",
+});
+root.dispatch("input", {
+  value: "255", dataset: { transitionId: "transition:40964", applicabilityField: "groupMask" },
+  matches: (selector) => selector === "[data-applicability-field]",
+});
+root.dispatch("input", {
+  value: "2", dataset: { transitionId: "transition:40964", childKind: "guards", childId: "guard:45060", childField: "kind" },
+  matches: (selector) => selector === "[data-child-field]",
+});
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-transition-action]"
+      ? { dataset: { transitionAction: "remove", transitionId: "transition:40964" } }
+      : null;
+  },
+});
+assert.deepEqual(state.v40BehaviorModelDraft.transitions, generatedBefore);
+assert.match(statuses.at(-1).message, /wholly read-only/);
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-transition-action]"
+      ? { dataset: { transitionAction: "down", transitionId: "transition:40962" } }
+      : null;
+  },
+});
+assert.deepEqual(state.v40BehaviorModelDraft.transitions, generatedBefore);
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-transition-action]"
+      ? { dataset: { transitionAction: "remove", transitionId: "transition:40961" } }
+      : null;
+  },
+});
+assert.deepEqual(state.v40BehaviorModelDraft.transitions.remove, [40961]);
+assert.equal(state.v40BehaviorModelDraft.transitions.update.some((item) => item.stableId === 40964), false);
+assert.equal(controller.commitPayload().behaviorModel.transitions.update?.some((item) => item.stableId === 40964) || false, false);
+root.dispatch("click", actionTarget("reset-local"));
 root.dispatch("click", actionTarget("new"));
 assert.equal(state.v40BehaviorModelDraft.controllers.create.length, 1);
 assert.match(state.v40BehaviorModelDraft.controllers.create[0].draftId, /^draft:/);
 assert.equal(state.v40BehaviorModelDraft.controllers.create[0].nodes.filter((node) => node.base).length, 1);
 const firstControllerDraftId = state.v40BehaviorModelDraft.controllers.create[0].draftId;
-const expandedShared = state.v40BehaviorModelDraft.transitions.update.find((transition) => transition.stableId === 40962);
-assert.deepEqual(expandedShared.controllerIds, [12289, firstControllerDraftId]);
+assert.equal(state.v40BehaviorModelDraft.transitions.update.some((transition) => transition.stableId === 40962), false);
 root.dispatch("input", {
   value: "Bird controller draft",
   dataset: { controllerIdentity: "name" },
@@ -381,7 +691,7 @@ const createdTransitionId = state.v40BehaviorModelDraft.transitions.create[0].dr
 assert.deepEqual([
   state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.selectorKind,
   state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.flags,
-], [1, 1]);
+], [1, 0]);
 const definitionInput = (field, value, checked = false) => root.dispatch("input", {
   value, checked,
   dataset: { transitionId: createdTransitionId, definitionField: field },
@@ -393,18 +703,35 @@ const applicabilityInput = (field, value) => root.dispatch("input", {
   matches: (selector) => selector === "[data-applicability-field]",
 });
 for (const [field, value, checked] of [
-  ["name", "Authored candidate"], ["kind", "2"], ["kind", "1"],
-  ["channel", "3"], ["priority", "321"], ["controllerId", firstControllerDraftId],
+  ["name", "Authored candidate"], ["channel", "3"], ["priority", "255"], ["controllerId", firstControllerDraftId],
   ["selectorKind", "2"], ["semanticRoleId", "2"], ["selectorKind", "1"],
   ["nodeId", state.v40BehaviorModelDraft.controllers.create[0].nodes[0].draftId],
-  ["requiredOwnerId", "33026"], ["mapLifetime", "1"], ["battleLifetime", "2"],
+  ["mapLifetime", "1"], ["battleLifetime", "2"],
   ["timerClock", "1"], ["timerSource", "2"], ["timerValue", "5"],
   ["hiddenTimerPolicy", "2"], ["recoveryPolicy", "1"],
   ["recoveryTransitionId", createdTransitionId], ["recoveryPolicy", "0"],
-  ["tiredOriginKind", "2"], ["hasTiredOriginKind", "on", false],
   ["allowMultipleOwners", "on", true], ["allowMultipleInstancesPerOwner", "on", true],
-  ["authoredTiredBound", "on", true],
 ]) definitionInput(field, value, checked);
+definitionInput("kind", "2");
+assert.equal(state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.kind, 1);
+assert.match(statuses.at(-1).message, /Modifier/);
+definitionInput("channel", "5");
+assert.equal(state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.channel, 3);
+assert.match(statuses.at(-1).message, /System Safety/);
+definitionInput("priority", "256");
+assert.equal(state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.priority, 255);
+assert.match(statuses.at(-1).message, /0–255/);
+definitionInput("requiredOwnerId", "33026");
+definitionInput("tiredOriginKind", "2");
+definitionInput("hasTiredOriginKind", "on", true);
+definitionInput("authoredTiredBound", "on", true);
+assert.deepEqual([
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.requiredOwnerId,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.hasTiredOriginKind,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.tiredOriginKind,
+  state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.authoredTiredBound,
+], [0, 0, 0, 0]);
+assert.match(statuses.at(-1).message, /read-only/);
 definitionInput("selectorKind", "2");
 assert.deepEqual([
   state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.nodeId,
@@ -414,7 +741,7 @@ definitionInput("selectorKind", "1");
 assert.deepEqual([
   state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.semanticRoleId,
   state.v40BehaviorModelDraft.transitions.create[0].candidateDefinition.flags,
-], [0, 1]);
+], [0, 0]);
 for (const [field, value] of [
   ["name", "Authored applicability"], ["kind", "3"], ["groupMask", "255"],
   ["controllerId", firstControllerDraftId], ["profileId", "8705"],
@@ -459,14 +786,14 @@ childInput("recoveryActions", authoredRecovery, "kind", "2");
 childInput("recoveryActions", authoredRecovery, "required", "on", false);
 childInput("recoveryActions", authoredRecovery, "required", "on", true);
 assert.equal(authoredTransition.candidateDefinition.channel, 3);
-assert.equal(authoredTransition.candidateDefinition.priority, 321);
+assert.equal(authoredTransition.candidateDefinition.priority, 255);
 assert.deepEqual(
   [authoredTransition.candidateDefinition.timerClock, authoredTransition.candidateDefinition.timerSource,
     authoredTransition.candidateDefinition.timerValue, authoredTransition.candidateDefinition.hiddenTimerPolicy],
   [1, 2, 5, 2],
 );
 assert.equal(authoredTransition.candidateDefinition.allowMultipleOwners, 1);
-assert.equal(authoredTransition.candidateDefinition.flags, 1);
+assert.equal(authoredTransition.candidateDefinition.flags, 0);
 assert.deepEqual([authoredTransition.candidateDefinition.hasTiredOriginKind, authoredTransition.candidateDefinition.tiredOriginKind], [0, 0]);
 assert.equal(authoredTransition.candidateDefinition.applicability.groupMask, 255);
 assert.deepEqual(["guards", "operations", "actions", "recoveryActions"].map((kind) => authoredTransition[kind].at(-1).draftId.startsWith("draft:")), [true, true, true, true]);
@@ -512,6 +839,39 @@ assert.equal(controller.hasChanges(), false);
 assert.deepEqual(controller.commitPayload(), {});
 assert.equal(controller.navigationContext().selection, "controller:62001");
 assert.equal(shellMarkDirtyCalls, callsBeforeRefresh + 1);
+
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-controller-id]" ? { dataset: { controllerId: "controller:12289" } } : null;
+  },
+});
+root.dispatch("click", controllerActionTarget("delete"));
+assert.deepEqual(state.v40BehaviorModelDraft.controllers.remove, []);
+assert.match(inspector.innerHTML, /No draft changes have been made yet/);
+assert.match(inspector.innerHTML, /explicitly removes 2 assignment backlinks/);
+root.dispatch("click", {
+  closest(selector) {
+    return selector === "[data-controller-delete-action]"
+      ? { dataset: { controllerDeleteAction: "confirm" } }
+      : null;
+  },
+});
+assert.deepEqual(state.v40BehaviorModelDraft.controllers.remove, [12289]);
+assert.deepEqual(state.v40BehaviorModelDraft.genericAssignments.remove, [21249]);
+assert.deepEqual(state.v40BehaviorModelDraft.speciesAssignments.remove, [21250]);
+assert.deepEqual(state.v40BehaviorModelDraft.assignmentActions.remove, [21505]);
+assert.equal(state.v40BehaviorModelDraft.transitions.remove.includes(40961), true);
+
+// Duplicate checks use the materialized transaction, so removing a saved
+// species assignment and replacing it atomically is valid.
+root.dispatch("click", behaviorSetActionTarget("open"));
+behaviorSetInput("assignmentKind", "species");
+behaviorSetInput("assignmentPriority", "7");
+behaviorSetInput("species", "25");
+assert.doesNotMatch(inspector.innerHTML, /already has an explicit controller assignment/);
+root.dispatch("click", behaviorSetActionTarget("confirm"));
+assert.equal(state.v40BehaviorModelDraft.speciesAssignments.create.at(-1).species, 25);
+assert.deepEqual(state.v40BehaviorModelDraft.speciesAssignments.remove, [21250]);
 
 controller.destroy();
 console.log("V40 local-draft shell integration checks passed");

@@ -11,6 +11,7 @@ import copy
 import json
 import os
 import re
+import struct
 import sys
 import tempfile
 from pathlib import Path
@@ -33,7 +34,29 @@ INC_PATH = Path("data/OverworldWildBehaviorDataV40.generated.inc")
 HEADER_PATH = Path("include/overworld_wild_behavior_data.h")
 MANAGED_PATHS = (MODEL_PATH, INC_PATH, HEADER_PATH)
 
-DOMAIN_KEYS = frozenset(("stateProfiles", "controllers", "transitions"))
+DIRECT_DOMAIN_FIELDS = {
+    "spawnPolicies": (
+        "provenanceId", "spawnState", "destination", "minimumDistance",
+        "maximumDistance", "spawnHopTime", "flags",
+    ),
+    "populationPolicies": (
+        "populationGroupId", "provenanceId", "limit", "flags",
+    ),
+    "hookSets": (
+        "helpCallInvocation", "pickupThrowEntry", "pickupThrowActiveLoop", "flags",
+    ),
+    "genericAssignments": ("match", "controllerIndex", "dispatchPriority"),
+    "speciesAssignments": ("species", "controllerIndex", "dispatchPriority"),
+    "assignmentActions": ("kind", "flags", "payload"),
+    "overrides": (
+        "match", "members", "actions", "targetMode", "order", "dispatchPriority",
+    ),
+}
+READ_ONLY_DOMAIN_KEYS = frozenset(("owners", "importRecipes", "tiredTranslations"))
+DOMAIN_KEYS = frozenset((
+    "stateProfiles", "controllers", "transitions", *DIRECT_DOMAIN_FIELDS,
+    *READ_ONLY_DOMAIN_KEYS,
+))
 DELTA_KEYS = frozenset(("create", "update", "remove"))
 SCALAR_KEYS = (
     "alertState", "alertEmote", "alertTime", "alertness",
@@ -82,7 +105,20 @@ CHILD_FIELDS = {
     "actions": frozenset(("draftId", "stableId", "phase", "kind", "referenceId", "payload")),
     "recoveryActions": frozenset(("draftId", "stableId", "ownerId", "kind", "required")),
 }
+DIRECT_REFERENCE_FIELDS = {
+    "spawnPolicies": frozenset(("provenanceId",)),
+    "populationPolicies": frozenset(("populationGroupId", "provenanceId")),
+}
 DRAFT_RE = re.compile(r"^draft:[^\s]{1,160}$")
+
+
+def _has_generated_definition_metadata(definition: dict[str, Any]) -> bool:
+    return bool(
+        definition.get("hasTiredOriginKind")
+        or definition.get("tiredOriginKind")
+        or definition.get("hasRequiredOwnerId")
+        or definition.get("requiredOwnerId")
+    )
 
 
 def _error(message: str) -> BehaviorModelWriteError:
@@ -177,6 +213,10 @@ def _parse_payload(payload: Any) -> dict[str, dict[str, list[Any]]]:
         result[domain] = {
             key: _array(delta.get(key, []), f"payload.{domain}.{key}") for key in DELTA_KEYS
         }
+        if domain in READ_ONLY_DOMAIN_KEYS and any(result[domain].values()):
+            raise _error(
+                f"payload.{domain} is generated/read-only outside complete importer regeneration"
+            )
     return result
 
 
@@ -280,6 +320,38 @@ def _scan_allocations(changes: dict[str, dict[str, list[Any]]], allocator: _Allo
                     )
                     if kind == "draft":
                         allocator.draft(identity, child_key.removesuffix("s"))  # type: ignore[arg-type]
+
+    direct_kinds = {
+        "spawnPolicies": "spawn-policy",
+        "populationPolicies": "population-policy",
+        "hookSets": "hook-set",
+        "genericAssignments": "generic-assignment",
+        "speciesAssignments": "species-assignment",
+        "assignmentActions": "assignment-action",
+        "overrides": "static-override",
+    }
+    for domain, kind_name in direct_kinds.items():
+        for index, raw in enumerate(changes[domain]["create"]):
+            path = f"{domain}.create[{index}]"
+            item = _object(raw, path)
+            allocator.draft(
+                _draft_id(item.get("draftId"), f"{path}.draftId"), kind_name
+            )
+        if domain == "overrides":
+            for operation in ("create", "update"):
+                for index, raw in enumerate(changes[domain][operation]):
+                    path = f"{domain}.{operation}[{index}]"
+                    item = _object(raw, path)
+                    creating = operation == "create"
+                    for action_index, action in enumerate(
+                            _array(item.get("actions"), f"{path}.actions")):
+                        identity_kind, identity = _nested_identity(
+                            action, creating, f"{path}.actions[{action_index}]"
+                        )
+                        if identity_kind == "draft":
+                            allocator.draft(
+                                identity, "static-override-action"  # type: ignore[arg-type]
+                            )
 
 
 def _resolve(value: Any, allocator: _Allocator, path: str, *, optional: bool = False) -> int:
@@ -388,6 +460,9 @@ def _node_record(
         flags, reserved = previous.get("flags", 0), previous.get("reserved", 0)
     role = _integer(item["semanticRoleId"], f"{path}.semanticRoleId", 7)
     custom = _resolve(item["customRoleId"], allocator, f"{path}.customRoleId", optional=True)
+    for flag in ("base", "optional", "hidden"):
+        if not isinstance(item[flag], bool):
+            raise _error(f"{path}.{flag} must be boolean")
     return {
         "stableId": stable_id, "registryKey": registry_key,
         "profileId": _resolve(item["profileRef"], allocator, f"{path}.profileRef"),
@@ -468,6 +543,7 @@ def _definition_record(
     existing_applicability: dict[int, dict[str, Any]], path: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     _keys(item, DEFINITION_FIELDS, DEFINITION_AUTHORED_FIELDS, path)
+    existing: dict[str, Any] | None = None
     if item.get("stableId") is None:
         draft = _draft_id(item.get("draftId"), f"{path}.draftId")
         stable_id = allocator.draft_map[draft]
@@ -479,7 +555,8 @@ def _definition_record(
         stable_id = _stable_id(item["stableId"], f"{path}.stableId")
         if item.get("draftId") is not None:
             raise _error(f"{path} cannot mix stable and draft identity")
-        result = copy.deepcopy(_existing(stable_id, existing_definitions, path))
+        existing = _existing(stable_id, existing_definitions, path)
+        result = copy.deepcopy(existing)
     applicability = _applicability_record(
         _object(item["applicability"], f"{path}.applicability"), allocator,
         existing_applicability, f"{path}.applicability",
@@ -487,7 +564,7 @@ def _definition_record(
     if _resolve(item["applicabilityId"], allocator, f"{path}.applicabilityId") != applicability["stableId"]:
         raise _error(f"{path}.applicabilityId does not match its embedded applicability")
     optional_refs = {"controllerId", "nodeId", "requiredOwnerId", "recoveryTransitionId"}
-    byte_fields = set(DEFINITION_AUTHORED_FIELDS[8:])
+    byte_fields = {"priority", "kind", "channel", *DEFINITION_AUTHORED_FIELDS[8:]}
     for key in DEFINITION_AUTHORED_FIELDS:
         value = item[key]
         if key in optional_refs:
@@ -498,6 +575,21 @@ def _definition_record(
             result[key] = _integer(value, f"{path}.{key}", 0xFF)
         else:
             result[key] = _integer(value, f"{path}.{key}")
+    if existing is None and _has_generated_definition_metadata(result):
+        raise _error(
+            f"{path} cannot create generated tired/owner metadata outside importer regeneration"
+        )
+    if existing is not None and _has_generated_definition_metadata(existing):
+        existing_rule = _existing(
+            existing["applicabilityId"], existing_applicability,
+            f"{path}.applicability",
+        )
+        if result != existing or applicability != existing_rule:
+            raise _error(f"{path} generated candidate wrapper is read-only")
+    elif _has_generated_definition_metadata(result):
+        raise _error(
+            f"{path} cannot synthesize generated metadata on an ordinary wrapper"
+        )
     return result, applicability
 
 
@@ -526,7 +618,9 @@ def _child_record(
         elif key in ("ownerId",) and kind == "recoveryActions":
             result[key] = _resolve(item[key], allocator, f"{path}.{key}")
         elif key in bool_fields:
-            result[key] = int(bool(item[key]))
+            if not isinstance(item[key], bool):
+                raise _error(f"{path}.{key} must be boolean")
+            result[key] = int(item[key])
         else:
             maximum = 0xFF if key in ("kind", "busyPolicy", "phase") or (kind == "guards" and key == "payload") else 0xFFFF
             result[key] = _integer(item[key], f"{path}.{key}", maximum)
@@ -570,7 +664,10 @@ def _transition_record(
     # controllerIds is a derived scope check, never a separately persisted relation.
     controller_ids = [_resolve(value, allocator, f"{path}.controllerIds[{index}]")
                       for index, value in enumerate(_array(item["controllerIds"], f"{path}.controllerIds"))]
-    expected_scope = [definition["controllerId"]] if definition["controllerId"] else None
+    effective_controller_id = (
+        definition["controllerId"] or applicability_record["controllerId"]
+    )
+    expected_scope = [effective_controller_id] if effective_controller_id else None
     if expected_scope is not None and controller_ids != expected_scope:
         raise _error(f"{path}.controllerIds conflicts with its candidate-definition scope")
 
@@ -606,6 +703,245 @@ def _transition_record(
         **children,
     })
     return result
+
+
+def _static_override_action_record(
+    item: dict[str, Any], creating_parent: bool,
+    existing_actions: dict[int, dict[str, Any]], allocator: _Allocator,
+    path: str,
+) -> dict[str, Any]:
+    fields = frozenset(("draftId", "stableId", "kind", "flags", "payload"))
+    _keys(item, fields, ("kind", "flags", "payload"), path)
+    identity_kind, identity = _nested_identity(item, creating_parent, path)
+    if identity_kind == "draft":
+        stable_id = allocator.draft_map[identity]  # type: ignore[index]
+        result = {
+            "stableId": stable_id,
+            "registryKey": _registry_for_draft(allocator, identity),  # type: ignore[arg-type]
+        }
+    else:
+        result = copy.deepcopy(
+            _existing(identity, existing_actions, path)  # type: ignore[arg-type]
+        )
+    kind = _integer(item["kind"], f"{path}.kind", 0xFF)
+    payload = item["payload"]
+    result.update({
+        "kind": kind,
+        "flags": copy.deepcopy(item["flags"]),
+        "payload": (
+            _typed_static_action_payload(kind, payload, allocator, f"{path}.payload")
+            if isinstance(payload, dict) else copy.deepcopy(payload)
+        ),
+    })
+    return result
+
+
+def _typed_static_action_payload(
+    kind: int, payload: Any, allocator: _Allocator, path: str,
+) -> list[int]:
+    item = _object(payload, path)
+
+    def exact(fields: tuple[str, ...]) -> None:
+        _keys(item, frozenset(fields), fields, path)
+
+    def reference(field: str, *, optional: bool = False) -> int:
+        return _resolve(item[field], allocator, f"{path}.{field}", optional=optional)
+
+    def byte(field: str) -> int:
+        return _integer(item[field], f"{path}.{field}", 0xFF)
+
+    def signed_byte(field: str) -> int:
+        value = item[field]
+        if isinstance(value, bool) or not isinstance(value, int) or not -128 <= value <= 127:
+            raise _error(f"{path}.{field} must be a signed byte")
+        return value & 0xFF
+
+    if kind == 2:
+        exact(("controllerRef", "nodeRef", "profileRef"))
+        raw = struct.pack(
+            "<4H", reference("controllerRef"), reference("nodeRef"),
+            reference("profileRef"), 0,
+        )
+    elif kind == 3:
+        exact(("controllerRef", "nodeRef"))
+        raw = struct.pack("<4H", reference("controllerRef"), reference("nodeRef"), 0, 0)
+    elif kind == 4:
+        exact(("field", "operator", "delta", "bound", "roleMask", "controllerRef"))
+        operator = byte("operator")
+        delta = signed_byte("delta") if operator in (2, 5, 6) else byte("delta")
+        raw = bytes((
+            byte("field"), operator, delta, byte("bound"),
+            byte("roleMask"), 0,
+        )) + struct.pack("<H", reference("controllerRef", optional=True))
+    elif kind in (5, 7, 9):
+        exact(("field", "operator", "delta", "bound"))
+        operator = byte("operator")
+        delta = signed_byte("delta") if operator in (2, 5, 6) else byte("delta")
+        raw = bytes((
+            byte("field"), operator, delta, byte("bound"),
+            0, 0, 0, 0,
+        ))
+    elif kind in (6, 8, 10):
+        field = {6: "spawnPolicyRef", 8: "populationPolicyRef", 10: "hookSetRef"}[kind]
+        exact((field,))
+        raw = struct.pack("<4H", reference(field), 0, 0, 0)
+    elif kind == 11:
+        exact(("controllerRef", "nodeRef", "operator", "value"))
+        operator = byte("operator")
+        value = signed_byte("value") if operator == 2 else byte("value")
+        raw = struct.pack(
+            "<2H", reference("controllerRef"), reference("nodeRef")
+        ) + bytes((operator, value, 0, 0))
+    else:
+        raise _error(f"{path} has no typed representation for static action kind {kind}")
+    return list(raw)
+
+
+def _direct_record(
+    domain: str, item: dict[str, Any], creating: bool,
+    existing: dict[str, Any] | None, allocator: _Allocator, path: str,
+    retirements: list[str], retired: set[str],
+) -> dict[str, Any]:
+    authored_fields = DIRECT_DOMAIN_FIELDS[domain]
+    allowed = frozenset(("draftId", "stableId", *authored_fields))
+    _keys(item, allowed, authored_fields, path)
+    identity = _identity(item, creating, path)
+    if creating:
+        draft = identity  # type: ignore[assignment]
+        stable_id = allocator.draft_map[draft]
+        result = {
+            "stableId": stable_id,
+            "registryKey": _registry_for_draft(allocator, draft),
+        }
+        if domain in {"spawnPolicies", "populationPolicies", "hookSets", "overrides"}:
+            result["nameId"] = stable_id
+    else:
+        assert existing is not None
+        result = copy.deepcopy(existing)
+
+    references = DIRECT_REFERENCE_FIELDS.get(domain, frozenset())
+    for field in authored_fields:
+        if field == "actions" and domain == "overrides":
+            old_actions = (
+                _index(existing["actions"], "static override actions")
+                if existing else {}
+            )
+            actions = [
+                _static_override_action_record(
+                    _object(action, f"{path}.actions[{index}]"), creating,
+                    old_actions, allocator, f"{path}.actions[{index}]",
+                )
+                for index, action in enumerate(_array(item[field], f"{path}.actions"))
+            ]
+            kept = {action["stableId"] for action in actions}
+            for stable_id, action in old_actions.items():
+                if stable_id not in kept:
+                    _retire(action["registryKey"], retirements, retired)
+            result[field] = actions
+        elif (domain == "assignmentActions" and field == "payload"
+              and isinstance(item[field], dict)):
+            typed = _object(item[field], f"{path}.payload")
+            _keys(typed, frozenset(("controllerRef",)), ("controllerRef",),
+                  f"{path}.payload")
+            if item["kind"] != 1:
+                raise _error(f"{path}.payload.controllerRef is only valid for assignment actions")
+            controller_id = _resolve(
+                typed["controllerRef"], allocator, f"{path}.payload.controllerRef"
+            )
+            result[field] = list(controller_id.to_bytes(2, "little") + b"\0" * 6)
+        elif (domain in ("genericAssignments", "speciesAssignments")
+              and field == "controllerIndex" and isinstance(item[field], str)):
+            result[field] = (
+                "assignment-action-ref",
+                _resolve(item[field], allocator, f"{path}.controllerIndex"),
+            )
+        elif field in references:
+            result[field] = _resolve(
+                item[field], allocator, f"{path}.{field}",
+            )
+        else:
+            result[field] = copy.deepcopy(item[field])
+    return result
+
+
+def _materialize_direct_domains(
+    result: dict[str, Any], changes: dict[str, dict[str, list[Any]]],
+    allocator: _Allocator, retirements: list[str], retired: set[str],
+) -> None:
+    prior_action_ids = [
+        action["stableId"] for action in result["assignmentActions"]
+    ]
+    for domain in DIRECT_DOMAIN_FIELDS:
+        records = _index(result[domain], domain)
+        for raw_id in changes[domain]["remove"]:
+            stable_id = _stable_id(raw_id, f"{domain}.remove[]")
+            record = _existing(stable_id, records, f"{domain}.remove[]")
+            _retire(record["registryKey"], retirements, retired)
+            if domain == "overrides":
+                for action in record["actions"]:
+                    _retire(action["registryKey"], retirements, retired)
+            del records[stable_id]
+        for operation in ("update", "create"):
+            for index, raw in enumerate(changes[domain][operation]):
+                path = f"{domain}.{operation}[{index}]"
+                item = _object(raw, path)
+                creating = operation == "create"
+                stable_id = (
+                    allocator.draft_map[
+                        _draft_id(item.get("draftId"), f"{path}.draftId")
+                    ]
+                    if creating
+                    else _stable_id(item.get("stableId"), f"{path}.stableId")
+                )
+                previous = None if creating else _existing(stable_id, records, path)
+                records[stable_id] = _direct_record(
+                    domain, item, creating, previous, allocator, path,
+                    retirements, retired,
+                )
+        result[domain] = sorted(
+            records.values(), key=lambda record: record["stableId"]
+        )
+    action_indices = {
+        action["stableId"]: index
+        for index, action in enumerate(result["assignmentActions"])
+    }
+    for domain in ("genericAssignments", "speciesAssignments"):
+        for record in result[domain]:
+            reference = record["controllerIndex"]
+            if isinstance(reference, tuple):
+                action_id = reference[1]
+            else:
+                try:
+                    action_id = prior_action_ids[reference]
+                except (IndexError, TypeError) as error:
+                    raise _error(
+                        f"{domain} references an unknown prior assignment-action index"
+                    ) from error
+            try:
+                record["controllerIndex"] = action_indices[action_id]
+            except KeyError as error:
+                raise _error(
+                    f"{domain} still references a removed assignment action"
+                ) from error
+
+
+def _reindex_import_action_slices(result: dict[str, Any]) -> None:
+    cursor = len(result["assignmentActions"])
+    slices: dict[int, tuple[int, int]] = {}
+    for override in sorted(result["overrides"], key=lambda record: record["stableId"]):
+        slices[override["stableId"]] = (cursor, len(override["actions"]))
+        cursor += len(override["actions"])
+    for recipe in result["importRecipes"]:
+        if recipe["sourceOverrideId"] == 0:
+            recipe["actionStart"] = 0
+            recipe["actionCount"] = 0
+        else:
+            try:
+                recipe["actionStart"], recipe["actionCount"] = slices[
+                    recipe["sourceOverrideId"]
+                ]
+            except KeyError as error:
+                raise _error("import recipe references an unknown source override") from error
 
 
 def _materialize(
@@ -690,6 +1026,12 @@ def _materialize(
             )
     definitions.update(definition_updates)
     applicability.update(applicability_updates)
+    result["overrideDefinitions"] = list(definitions.values())
+    result["applicability"] = list(applicability.values())
+    _materialize_direct_domains(
+        result, changes, allocator, retirements, retired
+    )
+    _reindex_import_action_slices(result)
 
     # Candidate definitions and applicability records are graph-owned.  Retire
     # them only after their final transition/operation/static backlink is gone.
@@ -733,6 +1075,100 @@ def _materialize(
         if allocated.get(registry_key) != allocator.draft_map[draft]:
             raise _error("stable ID history allocation order changed unexpectedly")
     return result, dict(allocator.draft_map)
+
+
+def _generated_definition_backlinks(
+    model: dict[str, Any], generated_ids: set[int]
+) -> set[tuple[str, int, str, int]]:
+    backlinks: set[tuple[str, int, str, int]] = set()
+    for transition in model["transitions"]:
+        if transition["definitionId"] in generated_ids:
+            backlinks.add((
+                "transition", transition["stableId"], "definitionId",
+                transition["definitionId"],
+            ))
+        for operation in transition["operations"]:
+            for field in ("definitionId", "replacementDefinitionId", "instanceKey"):
+                if operation[field] in generated_ids:
+                    backlinks.add((
+                        "operation", operation["stableId"], field, operation[field],
+                    ))
+    for translation in model["tiredTranslations"]:
+        if translation["definitionId"] in generated_ids:
+            backlinks.add((
+                "tiredTranslation", translation["stableId"], "definitionId",
+                translation["definitionId"],
+            ))
+    return backlinks
+
+
+def _enforce_generated_editor_boundary(
+    before: dict[str, Any], after: dict[str, Any]
+) -> None:
+    before_definitions = {
+        definition["stableId"]: definition
+        for definition in before["overrideDefinitions"]
+        if _has_generated_definition_metadata(definition)
+    }
+    after_definitions = {
+        definition["stableId"]: definition
+        for definition in after["overrideDefinitions"]
+        if _has_generated_definition_metadata(definition)
+    }
+    if before_definitions != after_definitions:
+        raise _error(
+            "generated candidate wrappers cannot be created, changed, or deleted "
+            "outside importer regeneration"
+        )
+    generated_ids = set(before_definitions)
+    def generated_transitions(model: dict[str, Any]) -> tuple[list[int], dict[int, dict[str, Any]]]:
+        ordered = [
+            transition for transition in sorted(
+                model["transitions"], key=lambda item: item["order"]
+            )
+            if transition["definitionId"] in generated_ids
+        ]
+        records = {}
+        for transition in ordered:
+            semantic = copy.deepcopy(transition)
+            semantic.pop("order", None)
+            records[transition["stableId"]] = semantic
+        return [transition["stableId"] for transition in ordered], records
+
+    if generated_transitions(before) != generated_transitions(after):
+        raise _error(
+            "generated candidate transitions and their children are read-only "
+            "outside importer regeneration"
+        )
+    before_rules = {
+        rule["stableId"]: rule for rule in before["applicability"]
+        if rule["stableId"] in {
+            definition["applicabilityId"] for definition in before_definitions.values()
+        }
+    }
+    after_rules = {
+        rule["stableId"]: rule for rule in after["applicability"]
+        if rule["stableId"] in before_rules
+    }
+    if before_rules != after_rules:
+        raise _error("generated candidate applicability is read-only")
+    if (_generated_definition_backlinks(before, generated_ids)
+            != _generated_definition_backlinks(after, generated_ids)):
+        raise _error(
+            "generated candidate wrapper references cannot be added, removed, or redirected"
+        )
+    for domain in READ_ONLY_DOMAIN_KEYS:
+        before_records = copy.deepcopy(before[domain])
+        after_records = copy.deepcopy(after[domain])
+        if domain == "importRecipes":
+            for records in (before_records, after_records):
+                for record in records:
+                    record.pop("actionStart", None)
+                    record.pop("actionCount", None)
+        if before_records != after_records:
+            raise _error(
+                f"{domain} is generated/read-only outside importer regeneration"
+            )
 
 
 def _render_files(root: Path, model: dict[str, Any]) -> dict[Path, bytes]:
@@ -827,7 +1263,31 @@ def apply_behavior_model_changes(
     model = v40.load_model(workspace / MODEL_PATH)
     if not any(changes[domain][operation] for domain in DOMAIN_KEYS for operation in DELTA_KEYS):
         return {}
+    generated_definition_ids = {
+        definition["stableId"] for definition in model["overrideDefinitions"]
+        if _has_generated_definition_metadata(definition)
+    }
+    generated_transition_ids = {
+        transition["stableId"] for transition in model["transitions"]
+        if transition["definitionId"] in generated_definition_ids
+    }
+    changed_generated_ids = set()
+    for raw_id in changes["transitions"]["remove"]:
+        stable_id = _stable_id(raw_id, "transitions.remove[]")
+        if stable_id in generated_transition_ids:
+            changed_generated_ids.add(stable_id)
+    for index, raw in enumerate(changes["transitions"]["update"]):
+        item = _object(raw, f"transitions.update[{index}]")
+        stable_id = _stable_id(item.get("stableId"), f"transitions.update[{index}].stableId")
+        if stable_id in generated_transition_ids:
+            changed_generated_ids.add(stable_id)
+    if changed_generated_ids:
+        raise _error(
+            "generated candidate transitions and their children are read-only "
+            "outside importer regeneration"
+        )
     materialized, draft_map = _materialize(model, changes)
+    _enforce_generated_editor_boundary(model, materialized)
     rendered = _render_files(workspace, materialized)
     _replace_atomically(
         rendered, replace_func=_replace_func, before_replace=_before_replace

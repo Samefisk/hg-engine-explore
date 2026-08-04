@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,28 @@ def saved_transition_payload(model, transition, *, name):
     return result
 
 
+def direct_payload(writer, domain, record):
+    result = {"stableId": record["stableId"]}
+    for field in writer.DIRECT_DOMAIN_FIELDS[domain]:
+        if domain == "overrides" and field == "actions":
+            result[field] = [{
+                "stableId": action["stableId"],
+                "kind": action["kind"],
+                "flags": action["flags"],
+                "payload": copy.deepcopy(action["payload"]),
+            } for action in record[field]]
+        else:
+            result[field] = copy.deepcopy(record[field])
+    return result
+
+
+def direct_create_payload(writer, domain, record, draft_id):
+    result = direct_payload(writer, domain, record)
+    del result["stableId"]
+    result["draftId"] = draft_id
+    return result
+
+
 class BehaviorModelWriterTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -180,6 +203,609 @@ class BehaviorModelWriterTest(unittest.TestCase):
             self.workspace, {"modelVersion": 40}
         ), {})
         self.assertEqual(self.bytes(), before)
+
+    def test_all_authored_direct_domains_participate_in_one_transaction(self):
+        model = self.model()
+        updates = {
+            domain: {"update": [direct_payload(self.writer, domain, model[domain][0])]}
+            for domain in self.writer.DIRECT_DOMAIN_FIELDS
+        }
+        before = self.bytes()
+        self.assertEqual(
+            self.writer.apply_behavior_model_changes(self.workspace, updates), {}
+        )
+        self.assertEqual(self.model(), model)
+        after_noop = self.bytes()
+        self.assertEqual(after_noop[INC_REL], before[INC_REL])
+        self.assertEqual(after_noop[HEADER_REL], before[HEADER_REL])
+
+        spawn = direct_payload(self.writer, "spawnPolicies", model["spawnPolicies"][0])
+        spawn["spawnHopTime"] += 1
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "spawnPolicies": {"update": [spawn]},
+        })
+        saved = self.model()
+        changed = next(
+            item for item in saved["spawnPolicies"]
+            if item["stableId"] == spawn["stableId"]
+        )
+        self.assertEqual(changed["spawnHopTime"], spawn["spawnHopTime"])
+        self.assertNotEqual(self.bytes()[INC_REL], before[INC_REL])
+
+    def test_generated_graph_domains_are_read_only_and_atomic(self):
+        model = self.model()
+        before = self.bytes()
+        for domain in self.writer.READ_ONLY_DOMAIN_KEYS:
+            with self.subTest(domain=domain), self.assertRaisesRegex(
+                    self.writer.BehaviorModelWriteError, "generated/read-only"):
+                self.writer.apply_behavior_model_changes(self.workspace, {
+                    domain: {"remove": [model[domain][0]["stableId"]]},
+                })
+            self.assertEqual(self.bytes(), before)
+
+        generated_transition = next(
+            transition for transition in model["transitions"]
+            if next(
+                definition for definition in model["overrideDefinitions"]
+                if definition["stableId"] == transition["definitionId"]
+            )["hasRequiredOwnerId"]
+        )
+        update = saved_transition_payload(
+            model, generated_transition,
+            name=generated_transition.get("name", generated_transition["registryKey"]),
+        )
+        update["candidateDefinition"]["priority"] -= 1
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "generated candidate transitions and their children are read-only"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "transitions": {"update": [update]},
+            })
+        self.assertEqual(self.bytes(), before)
+
+        for label, mutate in (
+            ("trigger", lambda item: item.update({
+                "trigger": 13 if item["trigger"] != 13 else 12,
+            })),
+            ("child", lambda item: item["actions"][0].update({
+                "kind": 8 if item["actions"][0]["kind"] != 8 else 7,
+            })),
+        ):
+            with self.subTest(label=label):
+                update = saved_transition_payload(
+                    model, generated_transition,
+                    name=generated_transition.get(
+                        "name", generated_transition["registryKey"]
+                    ),
+                )
+                mutate(update)
+                with self.assertRaisesRegex(
+                        self.writer.BehaviorModelWriteError,
+                        "generated candidate transitions and their children are read-only"):
+                    self.writer.apply_behavior_model_changes(self.workspace, {
+                        "transitions": {"update": [update]},
+                    })
+                self.assertEqual(self.bytes(), before)
+
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "generated candidate transitions and their children are read-only"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "transitions": {"remove": [generated_transition["stableId"]]},
+            })
+        self.assertEqual(self.bytes(), before)
+
+    def test_ordinary_transition_deletion_may_renumber_generated_rows(self):
+        model = self.model()
+        generated_ids = {
+            definition["stableId"] for definition in model["overrideDefinitions"]
+            if definition["hasRequiredOwnerId"] or definition["hasTiredOriginKind"]
+        }
+        ordinary = model["transitions"][0]
+        self.assertNotIn(ordinary["definitionId"], generated_ids)
+        before_generated = {
+            transition["stableId"]: {
+                key: copy.deepcopy(value)
+                for key, value in transition.items() if key != "order"
+            }
+            for transition in model["transitions"]
+            if transition["definitionId"] in generated_ids
+        }
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "transitions": {"remove": [ordinary["stableId"]]},
+        })
+        saved = self.model()
+        self.assertNotIn(
+            ordinary["stableId"],
+            {transition["stableId"] for transition in saved["transitions"]},
+        )
+        after_generated = {
+            transition["stableId"]: {
+                key: copy.deepcopy(value)
+                for key, value in transition.items() if key != "order"
+            }
+            for transition in saved["transitions"]
+            if transition["definitionId"] in generated_ids
+        }
+        self.assertEqual(after_generated, before_generated)
+        self.assertEqual(
+            [transition["order"] for transition in saved["transitions"]],
+            list(range(len(saved["transitions"]))),
+        )
+
+    def test_candidate_priority_overflow_is_rejected_atomically(self):
+        model = self.model()
+        transition = model["transitions"][0]
+        update = saved_transition_payload(
+            model, transition,
+            name=transition.get("name", transition["registryKey"]),
+        )
+        update["candidateDefinition"]["priority"] = 256
+        before = self.bytes()
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError, "priority must be an integer in 0..255"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "transitions": {"update": [update]},
+            })
+        self.assertEqual(self.bytes(), before)
+
+    def test_assignment_action_delete_cannot_silently_retarget_indices(self):
+        model = self.model()
+        before = self.bytes()
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "still references a removed assignment action"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "assignmentActions": {
+                    "remove": [model["assignmentActions"][0]["stableId"]],
+                },
+            })
+        self.assertEqual(self.bytes(), before)
+
+    def test_assignment_indices_follow_actual_prior_action_order(self):
+        permuted = self.model()
+        permuted["assignmentActions"].reverse()
+        expected_targets = {
+            (domain, assignment["stableId"]): permuted["assignmentActions"][
+                assignment["controllerIndex"]
+            ]["stableId"]
+            for domain in ("genericAssignments", "speciesAssignments")
+            for assignment in permuted[domain]
+        }
+        blob = self.writer.v40.encode_model(permuted)
+        (self.workspace / MODEL_REL).write_bytes(
+            self.writer.v40.canonical_json_bytes(permuted)
+        )
+        (self.workspace / INC_REL).write_text(self.writer.v40.render_inc(blob))
+        header = (self.workspace / HEADER_REL).read_text()
+        (self.workspace / HEADER_REL).write_text(
+            self.writer.v40.render_header(permuted, blob, header)
+        )
+
+        profile = profile_payload(
+            permuted["stateProfiles"][0], name="Unrelated metadata update"
+        )
+        self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"update": [profile]},
+        })
+        saved = self.model()
+        for domain in ("genericAssignments", "speciesAssignments"):
+            for assignment in saved[domain]:
+                actual_action = saved["assignmentActions"][assignment["controllerIndex"]]
+                self.assertEqual(
+                    actual_action["stableId"],
+                    expected_targets[(domain, assignment["stableId"])],
+                )
+
+    def test_typed_static_actions_resolve_same_transaction_drafts(self):
+        model = self.model()
+        source_profile = model["stateProfiles"][0]
+        source_controller = model["controllers"][0]
+        profile = profile_payload(
+            source_profile, draft_id="draft:static-profile", name="Static target"
+        )
+        node = node_payload(
+            source_controller["nodes"][0], draft_id="draft:static-node",
+            profile_ref="draft:static-profile",
+        )
+        timer_node = node_payload(
+            source_controller["nodes"][2], draft_id="draft:static-timer-node",
+            profile_ref="draft:static-profile",
+        )
+        controller = controller_payload(
+            source_controller, draft_id="draft:static-controller",
+            nodes=[node, timer_node], name="Static action controller",
+        )
+        controller["policyIds"] = {
+            "spawnPolicyId": "draft:static-spawn",
+            "populationPolicyId": "draft:static-population",
+            "hookSetId": "draft:static-hook",
+        }
+        action_specs = [
+            ("draft:bind-node", 2, {
+                "controllerRef": "draft:static-controller",
+                "nodeRef": "draft:static-node",
+                "profileRef": "draft:static-profile",
+            }),
+            ("draft:unbind-node", 3, {
+                "controllerRef": "draft:static-controller",
+                "nodeRef": "draft:static-timer-node",
+            }),
+            ("draft:modify-state", 4, {
+                "field": 3, "operator": 2, "delta": 1, "bound": 0,
+                "roleMask": 1, "controllerRef": "draft:static-controller",
+            }),
+            ("draft:bind-spawn", 6, {"spawnPolicyRef": "draft:static-spawn"}),
+            ("draft:bind-population", 8, {
+                "populationPolicyRef": "draft:static-population",
+            }),
+            ("draft:bind-hook", 10, {"hookSetRef": "draft:static-hook"}),
+            ("draft:modify-timer", 11, {
+                "controllerRef": "draft:static-controller",
+                "nodeRef": "draft:static-timer-node",
+                "operator": 2, "value": 1,
+            }),
+        ]
+        override = {
+            "draftId": "draft:static-override",
+            "match": copy.deepcopy(model["overrides"][-1]["match"]),
+            "members": [], "targetMode": 0,
+            "order": len(model["overrides"]) + 1,
+            "dispatchPriority": 0x5000,
+            "actions": [{
+                "draftId": draft_id, "kind": kind, "flags": 0,
+                "payload": payload,
+            } for draft_id, kind, payload in action_specs],
+        }
+        mapping = self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"create": [profile]},
+            "controllers": {"create": [controller]},
+            "spawnPolicies": {"create": [direct_create_payload(
+                self.writer, "spawnPolicies", model["spawnPolicies"][0],
+                "draft:static-spawn",
+            )]},
+            "populationPolicies": {"create": [direct_create_payload(
+                self.writer, "populationPolicies", model["populationPolicies"][0],
+                "draft:static-population",
+            )]},
+            "hookSets": {"create": [direct_create_payload(
+                self.writer, "hookSets", model["hookSets"][0],
+                "draft:static-hook",
+            )]},
+            "overrides": {"create": [override]},
+        })
+        saved_override = next(
+            item for item in self.model()["overrides"]
+            if item["stableId"] == mapping["draft:static-override"]
+        )
+        words = {
+            action["kind"]: tuple(
+                int.from_bytes(bytes(action["payload"][offset:offset + 2]), "little")
+                for offset in range(0, 8, 2)
+            )
+            for action in saved_override["actions"]
+        }
+        self.assertEqual(words[2][:3], (
+            mapping["draft:static-controller"], mapping["draft:static-node"],
+            mapping["draft:static-profile"],
+        ))
+        self.assertEqual(words[3][:2], (
+            mapping["draft:static-controller"], mapping["draft:static-timer-node"],
+        ))
+        self.assertEqual(words[4][3], mapping["draft:static-controller"])
+        self.assertEqual(words[6][0], mapping["draft:static-spawn"])
+        self.assertEqual(words[8][0], mapping["draft:static-population"])
+        self.assertEqual(words[10][0], mapping["draft:static-hook"])
+        self.assertEqual(words[11][:2], (
+            mapping["draft:static-controller"], mapping["draft:static-timer-node"],
+        ))
+
+    def test_malformed_typed_static_payloads_are_rejected_atomically(self):
+        model = self.model()
+        source_override = model["overrides"][0]
+        controller = model["controllers"][0]
+        timer_node = next(
+            node for node in controller["nodes"]
+            if node["semanticRoleId"] == 3 and not node["base"]
+        )
+        cases = (
+            (4, {"field": 22, "operator": 1, "delta": 0, "bound": 0,
+                 "roleMask": 1, "controllerRef": controller["stableId"]}),
+            (4, {"field": 3, "operator": 7, "delta": 0, "bound": 0,
+                 "roleMask": 1, "controllerRef": controller["stableId"]}),
+            (11, {"controllerRef": controller["stableId"],
+                  "nodeRef": timer_node["stableId"], "operator": 2, "value": 33}),
+        )
+        before = self.bytes()
+        for kind, payload in cases:
+            with self.subTest(kind=kind, payload=payload), self.assertRaises(
+                    (self.writer.BehaviorModelWriteError, self.writer.v40.ModelError)):
+                override = direct_payload(self.writer, "overrides", source_override)
+                override["actions"][0].update({"kind": kind, "payload": payload})
+                self.writer.apply_behavior_model_changes(self.workspace, {
+                    "overrides": {"update": [override]},
+                })
+            self.assertEqual(self.bytes(), before)
+
+    def test_complete_behavior_set_and_explicit_assignment_save_atomically(self):
+        model = self.model()
+        source_controller = model["controllers"][0]
+        source_nodes = source_controller["nodes"][:3]
+        source_profiles = [
+            next(profile for profile in model["stateProfiles"]
+                 if profile["stableId"] == node["profileId"])
+            for node in source_nodes
+        ]
+        profile_drafts = [
+            profile_payload(profile, draft_id=f"draft:set-profile-{index}",
+                            name=f"Behavior set profile {index}")
+            for index, profile in enumerate(source_profiles)
+        ]
+        nodes = [
+            node_payload(
+                node, draft_id=f"draft:set-node-{index}",
+                profile_ref=f"draft:set-profile-{index}",
+            )
+            for index, node in enumerate(source_nodes)
+        ]
+        controller = controller_payload(
+            source_controller, draft_id="draft:set-controller", nodes=nodes,
+            name="Complete behavior set controller",
+        )
+        controller["policyIds"] = {
+            "spawnPolicyId": "draft:set-spawn",
+            "populationPolicyId": "draft:set-population",
+            "hookSetId": "draft:set-hooks",
+        }
+
+        source_transition = model["transitions"][0]
+        source_definition = copy.deepcopy(next(
+            item for item in model["overrideDefinitions"]
+            if item["stableId"] == source_transition["definitionId"]
+        ))
+        source_rule = copy.deepcopy(next(
+            item for item in model["applicability"]
+            if item["stableId"] == source_definition["applicabilityId"]
+        ))
+        active_operation = {
+            "draftId": "draft:set-active-operation",
+            "definitionId": "draft:set-active-definition",
+            "ownerId": source_transition["ownerId"],
+            "replacementDefinitionId": None, "policyId": None,
+            "instanceKey": "draft:set-active-definition",
+            "kind": 1, "busyPolicy": 1, "required": False,
+        }
+        awareness = transition_payload(
+            source_transition, source_definition, source_rule,
+            "draft:set-awareness", "draft:set-active-definition",
+            applicability_identity="draft:set-active-applicability",
+            operation=active_operation,
+        )
+        awareness.update({
+            "name": "Awareness", "controllerIds": ["draft:set-controller"],
+            "trigger": 1, "fromRoleMask": 1, "dispatchPriority": 0xC000,
+            "order": len(model["transitions"]),
+        })
+
+        tired_definition = copy.deepcopy(source_definition)
+        tired_definition.update({
+            "priority": 100, "channel": 2, "semanticRoleId": 3,
+            "mapLifetime": 2, "battleLifetime": 1,
+            "timerClock": 1, "timerSource": 1, "hiddenTimerPolicy": 1,
+            "recoveryPolicy": 1, "timerValue": 4,
+            "recoveryTransitionId": "draft:set-recovery",
+        })
+        tired_apply = {
+            "draftId": "draft:set-tired-operation",
+            "definitionId": "draft:set-tired-definition",
+            "ownerId": model["owners"][1]["stableId"],
+            "replacementDefinitionId": None, "policyId": None,
+            "instanceKey": "draft:set-tired-definition",
+            "kind": 1, "busyPolicy": 1, "required": False,
+        }
+        exhaustion = transition_payload(
+            source_transition, tired_definition, source_rule,
+            "draft:set-exhaustion", "draft:set-tired-definition",
+            applicability_identity="draft:set-tired-applicability",
+            operation=tired_apply,
+        )
+        exhaustion.update({
+            "name": "Exhaustion", "controllerIds": ["draft:set-controller"],
+            "ownerId": model["owners"][1]["stableId"],
+            "trigger": 3, "fromRoleMask": 2, "dispatchPriority": 0xC001,
+            "order": len(model["transitions"]) + 1,
+        })
+        tired_remove = {
+            "draftId": "draft:set-recovery-operation",
+            "definitionId": "draft:set-tired-definition",
+            "ownerId": model["owners"][1]["stableId"],
+            "replacementDefinitionId": None, "policyId": None,
+            "instanceKey": None, "kind": 3, "busyPolicy": 1,
+            "required": True,
+        }
+        recovery = transition_payload(
+            source_transition, tired_definition, source_rule,
+            "draft:set-recovery", "draft:set-tired-definition",
+            applicability_identity="draft:set-tired-applicability",
+            operation=tired_remove,
+        )
+        recovery.update({
+            "name": "Recovery", "controllerIds": ["draft:set-controller"],
+            "ownerId": model["owners"][1]["stableId"],
+            "trigger": 4, "fromRoleMask": 4, "dispatchPriority": 0xC002,
+            "order": len(model["transitions"]) + 2,
+            "recoveryActions": [{
+                "draftId": "draft:set-recovery-action",
+                "ownerId": model["owners"][1]["stableId"],
+                "kind": 1, "required": True,
+            }],
+        })
+
+        assignment_action = {
+            "draftId": "draft:set-assignment-action", "kind": 1, "flags": 0,
+            "payload": {"controllerRef": "draft:set-controller"},
+        }
+        assignment = direct_create_payload(
+            self.writer, "genericAssignments", model["genericAssignments"][0],
+            "draft:set-assignment",
+        )
+        assignment.update({
+            "controllerIndex": "draft:set-assignment-action",
+            "dispatchPriority": 0x5000,
+        })
+        mapping = self.writer.apply_behavior_model_changes(self.workspace, {
+            "stateProfiles": {"create": profile_drafts},
+            "controllers": {"create": [controller]},
+            "transitions": {"create": [awareness, exhaustion, recovery]},
+            "spawnPolicies": {"create": [direct_create_payload(
+                self.writer, "spawnPolicies", model["spawnPolicies"][0],
+                "draft:set-spawn",
+            )]},
+            "populationPolicies": {"create": [direct_create_payload(
+                self.writer, "populationPolicies", model["populationPolicies"][0],
+                "draft:set-population",
+            )]},
+            "hookSets": {"create": [direct_create_payload(
+                self.writer, "hookSets", model["hookSets"][0],
+                "draft:set-hooks",
+            )]},
+            "assignmentActions": {"create": [assignment_action]},
+            "genericAssignments": {"create": [assignment]},
+        })
+        saved = self.model()
+        saved_controller = next(
+            item for item in saved["controllers"]
+            if item["stableId"] == mapping["draft:set-controller"]
+        )
+        self.assertEqual(
+            [node["profileId"] for node in saved_controller["nodes"]],
+            [mapping[f"draft:set-profile-{index}"] for index in range(3)],
+        )
+        self.assertEqual(saved_controller["spawnPolicyId"], mapping["draft:set-spawn"])
+        saved_action_index = next(
+            index for index, item in enumerate(saved["assignmentActions"])
+            if item["stableId"] == mapping["draft:set-assignment-action"]
+        )
+        saved_assignment = next(
+            item for item in saved["genericAssignments"]
+            if item["stableId"] == mapping["draft:set-assignment"]
+        )
+        self.assertEqual(saved_assignment["controllerIndex"], saved_action_index)
+        saved_action = saved["assignmentActions"][saved_action_index]
+        self.assertEqual(
+            int.from_bytes(bytes(saved_action["payload"][:2]), "little"),
+            saved_controller["stableId"],
+        )
+        self.assertLess(len(self.writer.v40.read_inc(self.workspace / INC_REL)), 0x3000)
+
+    def test_real_complete_set_frontend_payload_persists_scoped_graph(self):
+        viewer = load_viewer()
+        viewer.V40_BEHAVIOR_DATA_SOURCE = self.workspace / INC_REL
+        viewer.V40_BEHAVIOR_MODEL_SOURCE = self.workspace / MODEL_REL
+        editor_model = viewer.build_v40_state_profile_editor_data()
+        script = r'''import fs from "node:fs";
+import {createCompleteBehaviorSetDraft, compactBehaviorModelDraft} from "./tools/overworld-viewer-v2/static/profiles.js";
+const model = JSON.parse(fs.readFileSync(0, "utf8"));
+const profiles = new Map(model.stateProfiles.map((item) => [String(item.stableId), item]));
+const source = model.controllers[0];
+const roleTemplates = Object.fromEntries([["calm", 1], ["active", 2], ["tired", 3]].map(([name, role]) => {
+  const node = source.nodes.find((item) => Number(item.semanticRoleId) === role);
+  return [name, profiles.get(String(node.profileStableId))];
+}));
+const graph = createCompleteBehaviorSetDraft({
+  fields: model.stateProfileFields,
+  templateProfile: roleTemplates.calm,
+  roleTemplates,
+  existingTransitions: model.transitionGraph.transitions,
+  policyDefaults: source.policyIds,
+  spawnPolicyTemplate: model.policyCatalog.spawnPolicies[0],
+  populationPolicyTemplate: model.policyCatalog.populationPolicies[0],
+  hookSetTemplate: model.policyCatalog.hookSets[0],
+  awarenessOwnerId: model.owners[0].stableId,
+  exhaustionOwnerId: model.owners[1].stableId,
+  triggerIds: [1, 3, 4],
+  transitionOrderStart: model.transitionGraph.transitions.length,
+  stateName: "Frontend complete set",
+  controllerName: "Frontend complete controller",
+  assignment: {kind: "match", dispatchPriority: 0x5000, match: {
+    groupMask: 1, species: 25, terrain: 255, minimumLevel: 0,
+    maximumLevel: 0, shiny: 255, behaviorClass: 255,
+  }},
+});
+const transaction = compactBehaviorModelDraft({
+  stateProfiles: {create: graph.profiles},
+  controllers: {create: [graph.controller]},
+  transitions: {create: graph.transitions},
+  spawnPolicies: {create: [graph.spawnPolicy]},
+  populationPolicies: {create: [graph.populationPolicy]},
+  hookSets: {create: [graph.hookSet]},
+  assignmentActions: {create: [graph.assignmentAction]},
+  genericAssignments: {create: [graph.assignment]},
+}, model);
+process.stdout.write(JSON.stringify({transaction, ids: {
+  controller: graph.controller.draftId,
+  profiles: graph.profiles.map((item) => item.draftId),
+  spawn: graph.spawnPolicy.draftId,
+  population: graph.populationPolicy.draftId,
+  hook: graph.hookSet.draftId,
+  assignmentAction: graph.assignmentAction.draftId,
+  assignment: graph.assignment.draftId,
+  activeDefinition: graph.transitions[0].candidateDefinition.draftId,
+  tiredDefinition: graph.transitions[1].candidateDefinition.draftId,
+}}));'''
+        completed = subprocess.run(
+            ["node", "--input-type=module", "-e", script], cwd=ROOT,
+            input=json.dumps(editor_model), text=True, capture_output=True, check=True,
+        )
+        authored = json.loads(completed.stdout)
+        mapping = self.writer.apply_behavior_model_changes(
+            self.workspace, authored["transaction"]
+        )
+        ids = authored["ids"]
+        saved = self.model()
+        controller = next(
+            item for item in saved["controllers"]
+            if item["stableId"] == mapping[ids["controller"]]
+        )
+        self.assertEqual([node["profileId"] for node in controller["nodes"]], [
+            mapping[draft] for draft in ids["profiles"]
+        ])
+        self.assertEqual(controller["spawnPolicyId"], mapping[ids["spawn"]])
+        self.assertEqual(controller["populationPolicyId"], mapping[ids["population"]])
+        self.assertEqual(controller["hookSetId"], mapping[ids["hook"]])
+
+        definition_ids = {
+            mapping[ids["activeDefinition"]], mapping[ids["tiredDefinition"]]
+        }
+        definitions = {
+            item["stableId"]: item for item in saved["overrideDefinitions"]
+            if item["stableId"] in definition_ids
+        }
+        self.assertEqual(set(definitions), definition_ids)
+        rules = {item["stableId"]: item for item in saved["applicability"]}
+        for definition in definitions.values():
+            self.assertEqual((definition["controllerId"], definition["hasTiredOriginKind"],
+                              definition["hasRequiredOwnerId"], definition["requiredOwnerId"]),
+                             (controller["stableId"], 0, 0, 0))
+            self.assertEqual(
+                (rules[definition["applicabilityId"]]["kind"],
+                 rules[definition["applicabilityId"]]["controllerId"]),
+                (3, controller["stableId"]),
+            )
+        action_id = mapping[ids["assignmentAction"]]
+        action_index = next(
+            index for index, item in enumerate(saved["assignmentActions"])
+            if item["stableId"] == action_id
+        )
+        assignment = next(
+            item for item in saved["genericAssignments"]
+            if item["stableId"] == mapping[ids["assignment"]]
+        )
+        self.assertEqual(assignment["controllerIndex"], action_index)
+        self.assertEqual(
+            int.from_bytes(bytes(saved["assignmentActions"][action_index]["payload"][:2]), "little"),
+            controller["stableId"],
+        )
 
     def test_multi_entity_create_allocates_parent_then_owned_descendants(self):
         model = self.model()
@@ -261,7 +887,16 @@ class BehaviorModelWriterTest(unittest.TestCase):
 
     def test_transition_reorder_survives_wire_and_reader_reload(self):
         model = self.model()
-        first, second = model["transitions"][:2]
+        generated_ids = {
+            item["stableId"] for item in model["overrideDefinitions"]
+            if item["hasRequiredOwnerId"] or item["hasTiredOriginKind"]
+        }
+        first, second = next(
+            (left, right)
+            for left, right in zip(model["transitions"], model["transitions"][1:])
+            if left["definitionId"] not in generated_ids
+            and right["definitionId"] not in generated_ids
+        )
         first_update = saved_transition_payload(
             model, first, name=first.get("name", first["registryKey"])
         )
@@ -275,20 +910,21 @@ class BehaviorModelWriterTest(unittest.TestCase):
         })
         saved = self.model()
         self.assertEqual({item["stableId"] for item in saved["transitions"]}, stable_ids)
-        self.assertEqual([item["stableId"] for item in saved["transitions"][:2]],
+        start = first["order"]
+        self.assertEqual([item["stableId"] for item in saved["transitions"][start:start + 2]],
                          [second["stableId"], first["stableId"]])
         self.assertEqual([item["order"] for item in saved["transitions"]],
                          list(range(len(saved["transitions"]))))
         blob = self.writer.v40.read_inc(self.workspace / INC_REL)
         decoded = self.writer.v40.decode_blob(blob, stable_id_history=saved["stableIdHistory"])
-        self.assertEqual([item["stableId"] for item in decoded["transitions"][:2]],
+        self.assertEqual([item["stableId"] for item in decoded["transitions"][start:start + 2]],
                          [second["stableId"], first["stableId"]])
         viewer = load_viewer()
         viewer.V40_BEHAVIOR_DATA_SOURCE = self.workspace / INC_REL
         viewer.V40_BEHAVIOR_MODEL_SOURCE = self.workspace / MODEL_REL
         reloaded = viewer.build_v40_state_profile_editor_data()
         self.assertEqual(
-            [item["stableId"] for item in reloaded["transitionGraph"]["transitions"][:2]],
+            [item["stableId"] for item in reloaded["transitionGraph"]["transitions"][start:start + 2]],
             [second["stableId"], first["stableId"]],
         )
 
@@ -321,13 +957,21 @@ class BehaviorModelWriterTest(unittest.TestCase):
                                         if item["stableId"] == source_transition["definitionId"]))
         rule = copy.deepcopy(next(item for item in model["applicability"]
                                   if item["stableId"] == definition["applicabilityId"]))
-        definition.update({"controllerId": "draft:local-controller", "nodeId": "draft:local-node"})
+        definition.update({
+            "controllerId": "draft:local-controller",
+            "nodeId": "draft:local-node",
+            "selectorKind": 1,
+            "semanticRoleId": 0,
+        })
         rule["controllerId"] = "draft:local-controller"
+        rule["kind"] |= 2
         transition = transition_payload(
             source_transition, definition, rule, "draft:local-transition", "draft:local-definition",
             applicability_identity="draft:local-applicability",
         )
         transition["controllerIds"] = ["draft:local-controller"]
+        transition["dispatchPriority"] = 0xC010
+        transition["order"] = len(model["transitions"])
         mapping = self.writer.apply_behavior_model_changes(self.workspace, {
             "controllers": {"create": [controller]},
             "transitions": {"create": [transition]},
@@ -341,6 +985,55 @@ class BehaviorModelWriterTest(unittest.TestCase):
         self.assertEqual(saved_definition["nodeId"], mapping["draft:local-node"])
         self.assertEqual(saved_definition["applicabilityId"], saved_rule["stableId"])
         self.assertEqual(saved_rule["controllerId"], mapping["draft:local-controller"])
+
+    def test_applicability_only_controller_scope_is_enforced(self):
+        model = self.model()
+        source_transition = model["transitions"][0]
+        definition = copy.deepcopy(next(
+            item for item in model["overrideDefinitions"]
+            if item["stableId"] == source_transition["definitionId"]
+        ))
+        self.assertEqual(definition["controllerId"], 0)
+        rule = copy.deepcopy(next(
+            item for item in model["applicability"]
+            if item["stableId"] == definition["applicabilityId"]
+        ))
+        controller_id = model["controllers"][0]["stableId"]
+        rule.update({"kind": rule["kind"] | 2, "controllerId": controller_id})
+        transition = transition_payload(
+            source_transition, definition, rule,
+            "draft:app-scoped-transition", "draft:app-scoped-definition",
+            applicability_identity="draft:app-scoped-applicability",
+        )
+        transition.update({
+            "controllerIds": [model["controllers"][1]["stableId"]],
+            "dispatchPriority": 0xC011,
+            "order": len(model["transitions"]),
+        })
+        before = self.bytes()
+        with self.assertRaisesRegex(
+                self.writer.BehaviorModelWriteError,
+                "controllerIds conflicts with its candidate-definition scope"):
+            self.writer.apply_behavior_model_changes(self.workspace, {
+                "transitions": {"create": [transition]},
+            })
+        self.assertEqual(self.bytes(), before)
+
+        transition["controllerIds"] = [controller_id]
+        mapping = self.writer.apply_behavior_model_changes(self.workspace, {
+            "transitions": {"create": [transition]},
+        })
+        saved = self.model()
+        saved_definition = next(
+            item for item in saved["overrideDefinitions"]
+            if item["stableId"] == mapping["draft:app-scoped-definition"]
+        )
+        saved_rule = next(
+            item for item in saved["applicability"]
+            if item["stableId"] == saved_definition["applicabilityId"]
+        )
+        self.assertEqual(saved_definition["controllerId"], 0)
+        self.assertEqual(saved_rule["controllerId"], controller_id)
 
     def test_shared_definition_and_applicability_retire_after_last_backlink(self):
         model = self.model()
@@ -358,6 +1051,10 @@ class BehaviorModelWriterTest(unittest.TestCase):
             source_transition, definition, rule, "draft:shared-right", "draft:shared-definition",
             applicability_identity="draft:shared-applicability",
         )
+        left["dispatchPriority"] = 0xC020
+        right["dispatchPriority"] = 0xC021
+        left["order"] = len(model["transitions"])
+        right["order"] = len(model["transitions"]) + 1
         mapping = self.writer.apply_behavior_model_changes(self.workspace, {
             "transitions": {"create": [left, right]},
         })
@@ -394,6 +1091,8 @@ class BehaviorModelWriterTest(unittest.TestCase):
             source, definition, rule, "draft:rebind-transition", "draft:old-definition",
             applicability_identity="draft:old-applicability",
         )
+        created["dispatchPriority"] = 0xC030
+        created["order"] = len(model["transitions"])
         first = self.writer.apply_behavior_model_changes(self.workspace, {
             "transitions": {"create": [created]},
         })
@@ -449,25 +1148,31 @@ class BehaviorModelWriterTest(unittest.TestCase):
         left_op = {
             "draftId": "draft:left-op", "definitionId": "draft:left-def",
             "ownerId": transition["ownerId"], "replacementDefinitionId": "draft:right-def",
-            "policyId": 0, "instanceKey": "draft:right-def", "kind": 1,
+            "policyId": 0, "instanceKey": "draft:left-def", "kind": 2,
             "busyPolicy": 1, "required": False,
         }
         right_op = {
             "draftId": "draft:right-op", "definitionId": "draft:right-def",
             "ownerId": transition["ownerId"], "replacementDefinitionId": "draft:left-def",
-            "policyId": 0, "instanceKey": "draft:left-def", "kind": 1,
+            "policyId": 0, "instanceKey": "draft:right-def", "kind": 2,
             "busyPolicy": 1, "required": False,
         }
         left = transition_payload(
             transition, definition, applicability, "draft:left", "draft:left-def",
-            operation=left_op
+            applicability_identity="draft:left-applicability", operation=left_op,
         )
         right = transition_payload(
             transition, definition, applicability, "draft:right", "draft:right-def",
-            operation=right_op
+            applicability_identity="draft:right-applicability", operation=right_op,
         )
+        left["dispatchPriority"] = 0xC040
+        right["dispatchPriority"] = 0xC041
+        left["order"] = len(model["transitions"])
+        right["order"] = len(model["transitions"]) + 1
         left["candidateDefinition"]["recoveryTransitionId"] = "draft:right"
         right["candidateDefinition"]["recoveryTransitionId"] = "draft:left"
+        left["candidateDefinition"]["recoveryPolicy"] = 1
+        right["candidateDefinition"]["recoveryPolicy"] = 1
         mapping = self.writer.apply_behavior_model_changes(self.workspace, {
             "transitions": {"create": [left, right]},
         })
@@ -478,7 +1183,8 @@ class BehaviorModelWriterTest(unittest.TestCase):
         self.assertEqual(definitions[left_saved["definitionId"]]["recoveryTransitionId"], right_saved["stableId"])
         self.assertEqual(definitions[right_saved["definitionId"]]["recoveryTransitionId"], left_saved["stableId"])
         self.assertEqual(left_saved["operations"][0]["replacementDefinitionId"], right_saved["definitionId"])
-        self.assertEqual(right_saved["operations"][0]["instanceKey"], left_saved["definitionId"])
+        self.assertEqual(right_saved["operations"][0]["replacementDefinitionId"], left_saved["definitionId"])
+        self.assertEqual(right_saved["operations"][0]["instanceKey"], right_saved["definitionId"])
 
     def test_hard_cap_and_invalid_payload_leave_all_files_unchanged(self):
         source = self.model()["stateProfiles"][0]

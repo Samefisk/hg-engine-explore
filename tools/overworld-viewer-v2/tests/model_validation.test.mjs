@@ -149,6 +149,57 @@ expectCode((model) => { model.transitionGraph.transitions[0].operations[0].defin
 expectCode((model) => { model.transitionGraph.transitions[0].dispatchPriority = 65536; }, VALIDATION_CODES.WIRE_RANGE);
 expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; }, VALIDATION_CODES.CHILD_COUNT);
 
+function addTransitionCopy(model, { controllerId, definitionId, applicabilityId = 61 }) {
+  const source = model.transitionGraph.transitions[0];
+  const definition = { ...copy(model.overrideDefinitions[0]), stableId: definitionId, controllerId, applicabilityId };
+  const transition = copy(source);
+  Object.assign(transition, {
+    stableId: 75, name: "Parallel dispatch", order: 1, controllerIds: [controllerId],
+    candidateDefinitionId: definitionId, candidateDefinition: copy(definition),
+  });
+  transition.guards[0].stableId = 76;
+  Object.assign(transition.operations[0], { stableId: 77, definitionId, instanceKey: definitionId });
+  transition.actions[0].stableId = 78;
+  transition.recoveryActions[0].stableId = 79;
+  model.overrideDefinitions.push(definition);
+  model.transitionGraph.transitions.push(transition);
+  return transition;
+}
+
+// Equal-priority dispatch is rejected only when event, role, and effective
+// controller scopes overlap.
+{
+  const model = fixture();
+  const duplicate = addTransitionCopy(model, { controllerId: 20, definitionId: 51 });
+  model.overrideDefinitions[0].controllerId = 20;
+  model.transitionGraph.transitions[0].candidateDefinition.controllerId = 20;
+  model.controllers[0].transitionIds.push(duplicate.stableId);
+  assert.equal(codes(validateBehaviorModel(model)).has(VALIDATION_CODES.TRANSITION_AMBIGUOUS), true);
+}
+{
+  const model = fixture();
+  model.overrideDefinitions[0].controllerId = 20;
+  model.transitionGraph.transitions[0].candidateDefinition.controllerId = 20;
+  model.controllers.push({
+    ...copy(model.controllers[0]), stableId: 21, name: "Other", baseNodeId: 31,
+    nodes: [{ ...copy(model.controllers[0].nodes[0]), stableId: 31, controllerId: 21 }], transitionIds: [75],
+  });
+  addTransitionCopy(model, { controllerId: 21, definitionId: 51 });
+  assert.deepEqual(validateBehaviorModel(model), []);
+}
+{
+  const model = fixture();
+  Object.assign(model.applicability[0], { controllerId: 20, flags: 3 });
+  model.controllers.push({
+    ...copy(model.controllers[0]), stableId: 21, name: "Other", baseNodeId: 31,
+    nodes: [{ ...copy(model.controllers[0].nodes[0]), stableId: 31, controllerId: 21 }], transitionIds: [75],
+  });
+  model.applicability.push({ ...copy(model.applicability[0]), stableId: 62, controllerId: 21 });
+  addTransitionCopy(model, { controllerId: null, definitionId: 51, applicabilityId: 62 });
+  model.transitionGraph.transitions[1].controllerIds = [21];
+  assert.deepEqual(validateBehaviorModel(model), []);
+}
+
 // Draft transactions are isolated copies and unsupported domains are explicit.
 {
   const saved = fixture();
@@ -160,7 +211,48 @@ expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; },
   assert.equal(validateBehaviorDraft(saved, draft).length, 0);
   const invalid = { stateProfiles: { create: [{ stableId: 90, name: "Bad", values: copy(values) }] } };
   assert.equal(codes(validateBehaviorDraft(saved, invalid)).has(VALIDATION_CODES.DRAFT_TRANSACTION), true);
-  assert.equal(codes(validateBehaviorDraft(saved, { owners: { create: [] } })).has(VALIDATION_CODES.REPRESENTATION), true);
+  assert.deepEqual(validateBehaviorDraft(saved, { owners: { create: [] } }), []);
+  assert.equal(codes(validateBehaviorDraft(saved, { owners: { create: [{ draftId: "draft:owner" }] } })).has(VALIDATION_CODES.REPRESENTATION), true);
+  assert.equal(codes(validateBehaviorDraft(saved, { importRecipes: { remove: [1] } })).has(VALIDATION_CODES.REPRESENTATION), true);
+  assert.equal(codes(validateBehaviorDraft(saved, { tiredTranslations: { remove: [1] } })).has(VALIDATION_CODES.REPRESENTATION), true);
+}
+
+// Direct writer domains used by Complete Behavior Set materialize and validate
+// in the same client-side graph as profiles/controllers/transitions.
+{
+  const saved = fixture();
+  const draft = {
+    modelVersion: 40,
+    spawnPolicies: { create: [{
+      draftId: "draft:spawn", stableId: null, provenanceId: 90,
+      spawnState: 3, destination: 0, minimumDistance: 1,
+      maximumDistance: 5, spawnHopTime: 4, flags: 0,
+    }] },
+    populationPolicies: { create: [{
+      draftId: "draft:population", stableId: null, populationGroupId: 91,
+      provenanceId: 90, limit: 4, flags: 0,
+    }] },
+    assignmentActions: { create: [{
+      draftId: "draft:assignment-action", stableId: null,
+      kind: 1, flags: 0, payload: { controllerRef: 20 },
+    }] },
+    genericAssignments: { create: [{
+      draftId: "draft:generic", stableId: null, controllerIndex: "draft:assignment-action",
+      dispatchPriority: 7,
+      match: { groupMask: 1, species: 0, terrain: 255, minimumLevel: 0, maximumLevel: 0, shiny: 255, behaviorClass: 255 },
+    }] },
+    speciesAssignments: { create: [{
+      draftId: "draft:species", stableId: null, controllerIndex: "draft:assignment-action",
+      dispatchPriority: 8, species: 25,
+    }] },
+  };
+  assert.deepEqual(validateBehaviorDraft(saved, draft), []);
+  const materialized = materializeDraftGraph(saved, draft);
+  assert.equal(materialized.policyCatalog.spawnPolicies.at(-1).draftId, "draft:spawn");
+  assert.equal(materialized.policyCatalog.populationPolicies.at(-1).draftId, "draft:population");
+  assert.equal(materialized.assignmentActions.at(-1).payload.controllerRef, 20);
+  assert.equal(materialized.genericAssignments.at(-1).controllerIndex, "draft:assignment-action");
+  assert.equal(materialized.speciesAssignments.at(-1).species, 25);
 }
 
 // Transition-owned definition and applicability edits replace their canonical
@@ -168,13 +260,16 @@ expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; },
 {
   const saved = fixture();
   const transition = copy(saved.transitionGraph.transitions[0]);
-  transition.candidateDefinition.priority = 321;
+  transition.candidateDefinition.priority = 255;
   transition.candidateDefinition.applicability = {
     stableId: 61, name: "Everywhere", kind: 1, groupMask: 0xFFFFFFFF,
     controllerId: null, profileId: null, minimum: 0, maximum: 0, flags: 0,
   };
   const valid = { modelVersion: 40, transitions: { update: [transition] } };
   assert.deepEqual(validateBehaviorDraft(saved, valid), []);
+  transition.candidateDefinition.priority = 256;
+  assert.equal(codes(validateBehaviorDraft(saved, valid)).has(VALIDATION_CODES.WIRE_RANGE), true);
+  transition.candidateDefinition.priority = 255;
   transition.candidateDefinition.requiredOwnerId = 999;
   assert.equal(codes(validateBehaviorDraft(saved, valid)).has(VALIDATION_CODES.REFERENCE), true);
   const conflict = copy(transition);
@@ -194,6 +289,7 @@ expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; },
   sibling.stableId = 75;
   sibling.name = "Shared sibling";
   sibling.order = 1;
+  sibling.dispatchPriority -= 1;
   sibling.guards[0].stableId = 76;
   sibling.operations[0].stableId = 77;
   sibling.actions[0].stableId = 78;
@@ -201,13 +297,13 @@ expectCode((model) => { model.validationSchema.childCountMaximums.guards = 0; },
   saved.transitionGraph.transitions.push(sibling);
   saved.controllers[0].transitionIds.push(75);
   const update = copy(saved.transitionGraph.transitions[0]);
-  update.candidateDefinition.priority = 654;
+  update.candidateDefinition.priority = 254;
   update.candidateDefinition.applicability = {
     stableId: 61, name: "Edited shared rule", kind: 1, groupMask: 255,
     controllerId: null, profileId: null, minimum: 0, maximum: 0, flags: 0,
   };
   const materialized = materializeDraftGraph(saved, { transitions: { update: [update] } });
-  assert.equal(materialized.overrideDefinitions.find((item) => item.stableId === 50).priority, 654);
+  assert.equal(materialized.overrideDefinitions.find((item) => item.stableId === 50).priority, 254);
   assert.equal(materialized.applicability.find((item) => item.stableId === 61).immutableContextMask, 255);
   assert.deepEqual(validateBehaviorDraft(saved, { transitions: { update: [update] } }), []);
 }
