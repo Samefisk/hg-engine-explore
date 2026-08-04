@@ -52,6 +52,8 @@ void OverworldWildRuntime_MarkResidentCold(
     runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
         runtime->dataIncarnation);
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        OverworldWildRuntimeStaticContext staticContext =
+            runtime->slots[slot].staticCache.staticContext;
         runtime->slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
@@ -61,6 +63,7 @@ void OverworldWildRuntime_MarkResidentCold(
             sizeof(runtime->slots[slot].effectiveCache));
         memset(&runtime->slots[slot].provenance, 0,
             sizeof(runtime->slots[slot].provenance));
+        runtime->slots[slot].staticCache.staticContext = staticContext;
     }
     runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
 }
@@ -514,6 +517,11 @@ int main(void)
             OW_WILD_RUNTIME_SLOT_LIFECYCLE_DESTRUCTIVELY_INVALIDATED);
     }
 
+    runtime.slots[3].staticCache.staticContext.groupFlags = 0x12345678u;
+    runtime.slots[3].staticCache.staticContext.species = 399;
+    runtime.slots[3].staticCache.staticContext.level = 37;
+    runtime.slots[3].staticCache.staticContext.terrain = 2;
+    runtime.slots[3].staticCache.staticContext.shiny = 1;
     before = runtime;
     OverworldWildRuntime_MarkResidentCold(&runtime);
     require(runtime.lifetimeState == OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD,
@@ -524,8 +532,13 @@ int main(void)
         before.slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 before.slots[slot].cacheIncarnation);
-        memset(&before.slots[slot].staticCache, 0,
-            sizeof(before.slots[slot].staticCache));
+        {
+            OverworldWildRuntimeStaticContext staticContext =
+                before.slots[slot].staticCache.staticContext;
+            memset(&before.slots[slot].staticCache, 0,
+                sizeof(before.slots[slot].staticCache));
+            before.slots[slot].staticCache.staticContext = staticContext;
+        }
         memset(&before.slots[slot].effectiveCache, 0,
             sizeof(before.slots[slot].effectiveCache));
         memset(&before.slots[slot].provenance, 0,

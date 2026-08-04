@@ -930,6 +930,23 @@ def verify_source_contracts() -> None:
     ):
         require(token in header, f"closed API/source assertion missing: {token}")
 
+    projection_flag_definitions = (
+        "#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL (1u << 0)",
+        "#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE (1u << 1)",
+        "#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM (1u << 2)",
+        "#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM (1u << 3)",
+    )
+    for token in projection_flag_definitions:
+        require(header.count(token) == 1,
+                f"shared movement projection flag differs: {token}")
+    projection_prototype = (
+        "u8 OverworldWildRuntime_GetMovementProjectionFlags(\n"
+        "    const OverworldWildRuntimeStaticCache *staticCache,\n"
+        "    const OverworldWildRuntimeEffectiveCache *effective);"
+    )
+    require(header.count(projection_prototype) == 1,
+            "movement projection helper prototype is missing or duplicated")
+
     declaration_start = header.index("/* Lifecycle-only binding.")
     declaration_end = header.index("static inline void OverworldWildRuntime_Activate")
     declarations = header[declaration_start:declaration_end]
@@ -1012,6 +1029,31 @@ def verify_source_contracts() -> None:
                 f"overlay157 retained-static API assertion missing: {token}")
     require("RuntimeCopyRetainedApplicability(" not in source,
             "overlay157 retained re-resolution rebuilt caller applicability")
+    projection_helper = function_body(
+        source, "u8 OverworldWildRuntime_GetMovementProjectionFlags(")
+    require_tokens = (
+        "u8 flags = 0;",
+        "u8 locomotion = effective->primitives[0];",
+        "effective->semanticRole == OWBD_ROLE_CALM",
+        "staticCache->spawnConfiguration.pickupThrowEntry != 0",
+        "effective->primitives[1] == OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
+        "locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
+        "locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL;",
+        "locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM;",
+        "effective->semanticRole == OWBD_ROLE_ATTENTIVE",
+        "flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM;",
+        "effective->capabilityMask & OW_WILD_RUNTIME_CAP_FRAME_WORK",
+        "flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE;",
+        "return flags;",
+    )
+    for token in require_tokens:
+        require(token in projection_helper,
+                f"movement projection helper semantic drift: {token}")
+    require(source.count(
+                "u8 OverworldWildRuntime_GetMovementProjectionFlags(") == 1,
+            "movement projection helper definition is missing or duplicated")
     require("overworld_wild_runtime_layers_internal.h" in source,
             "production runtime overlay does not bind the internal module")
     require("void OverworldWildRuntime_MarkResidentCold(" in source
@@ -1020,6 +1062,24 @@ def verify_source_contracts() -> None:
             and "static inline void OverworldWildRuntime_MarkResidentCold"
                 not in header,
             "resident cold lifecycle helper ownership drifted")
+    for label, body in (
+        ("production", function_body(source,
+            "void OverworldWildRuntime_MarkResidentCold(")),
+        ("host", function_body(implementation,
+            "void OverworldWildRuntime_MarkResidentCold(")),
+    ):
+        for token in (
+            "OverworldWildRuntimeStaticContext staticContext =",
+            "runtime->slots[slot].staticCache.staticContext;",
+            "offsetof(OverworldWildRuntimeSlotSidecar, staticCache)",
+            "runtime->slots[slot].staticCache.staticContext = staticContext;",
+        ):
+            require(token in body,
+                f"{label} resident-cold context retention missing: {token}")
+        require(body.index("staticCache.staticContext;")
+                < body.index("memset(")
+                < body.index("staticCache.staticContext = staticContext;"),
+                f"{label} resident-cold context save/clear/restore order drifted")
     for token in (
         "ORIGIN = 0x023CD000, LENGTH = 0xB000",
         "ASSERT(. <= ORIGIN(rom) + 0xAEC4,",
@@ -1117,6 +1177,7 @@ def verify_source_contracts() -> None:
         "--keep-symbol=OverworldWildRuntime_CopyValidatedSpawnConfiguration",
         "--keep-symbol=OverworldWildRuntime_CopyResolvedCachedNode",
         "--keep-symbol=OverworldWildRuntime_MarkResidentCold",
+        "--keep-symbol=OverworldWildRuntime_GetMovementProjectionFlags",
         "--task5-owner $(BUILD)/pokemon_move_history_task6_overlay_linked.o",
         "--lifecycle-consumer $(BUILD)/pokemon_move_history_task6_overlay_linked.o",
         "--lifecycle-object $(BUILD)/pokemon_move_history_task6_overlay/overworld_wild_behavior_support.o",
@@ -1157,6 +1218,13 @@ def verify_source_contracts() -> None:
             and "--keep-symbol=OverworldWildRuntime_ResolveRetainedStaticCache"
                 in catalog_carrier,
             "retained-static API is not owned by overlay157 catalog carrier")
+    require("--keep-symbol=OverworldWildRuntime_GetMovementProjectionFlags"
+            not in task8_carrier
+            and catalog_carrier.count(
+                "--keep-symbol=OverworldWildRuntime_GetMovementProjectionFlags")
+                == 1,
+            "movement projection helper is not exported exactly once by the "
+            "overlay157 catalog carrier")
     timer_api_names = (
         "OverworldWildRuntime_GetTimerCount",
         "OverworldWildRuntime_GetTimerByIndex",
@@ -1602,7 +1670,7 @@ def run_catalog_timer_fixture() -> str:
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
     expected_summary = (
-        "runtime catalog/timer host fixture: 3 checks; "
+        "runtime catalog/timer host fixture: 14 checks; "
         "stamina=0x7004 semantic=0x7005 transition=0xA005"
     )
     require(completed.stdout.strip() == expected_summary,

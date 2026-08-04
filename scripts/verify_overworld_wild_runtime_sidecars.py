@@ -285,9 +285,24 @@ def verify_private_layout(
     require_tokens(cleanup, "resident cleanup lifetime", (
         "offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)",
         "OverworldWildRuntime_MarkResidentCold(",
+        "memset(&runtime->movementHelpSpawnParentSlotPlusOne, 0,",
     ))
     require("sys_FreeMemoryEz(runtime);" not in cleanup,
             "resident cleanup frees the sidecar allocation")
+    prefix_clear = cleanup.index("memset(runtime, 0,")
+    runtime_clear = cleanup.index(
+        "memset(&runtime->movementHelpSpawnParentSlotPlusOne")
+    mark_cold = cleanup.index("OverworldWildRuntime_MarkResidentCold(")
+    require(cleanup.count("memset(") == 2
+            and "offsetof(OverworldWildOverlayRuntimeState,\n"
+                "                playerBallCatchValues));" in cleanup
+            and "offsetof(OverworldWildOverlayRuntimeState, behaviorStackRuntime)\n"
+                "                - offsetof(OverworldWildOverlayRuntimeState,\n"
+                "                    movementHelpSpawnParentSlotPlusOne));"
+                in cleanup
+            and prefix_clear < runtime_clear < mark_cold,
+            "resident cleanup does not preserve catch values, clear runtime "
+            "projection state, then cold-mark the retained behavior cache")
     ensure = function_body(source, "OverworldWildSpawns_EnsureRuntimeState")
     require_tokens(ensure, "resident activation lifetime", (
         "memset(runtime, 0, sizeof(*runtime));",
@@ -297,9 +312,37 @@ def verify_private_layout(
     ))
     require(ensure.count("OverworldWildRuntime_BindPrivateIdentity(") == 2,
             "private runtime identity is not bound on init and cold restart")
+    rebuild_call = ensure.index("OverworldWildSpawns_RebuildColdRuntime(state)")
+    require(rebuild_call
+            < ensure.index("OverworldWildRuntime_MarkResidentCold(", rebuild_call)
+            < ensure.index("return NULL;", rebuild_call),
+            "failed cold reconstruction remains externally accessible")
+    cold_mark = function_body(layers_source,
+        "OverworldWildRuntime_MarkResidentCold")
+    require_tokens(cold_mark, "retained immutable static context", (
+        "OverworldWildRuntimeStaticContext staticContext =",
+        "runtime->slots[slot].staticCache.staticContext;",
+        "offsetof(OverworldWildRuntimeSlotSidecar, staticCache)",
+        "runtime->slots[slot].staticCache.staticContext = staticContext;",
+    ))
+    require(cold_mark.index("staticCache.staticContext;")
+            < cold_mark.index("memset(")
+            < cold_mark.index("staticCache.staticContext = staticContext;"),
+            "resident-cold transition does not save, clear, then restore context")
 
 
 def verify_lifecycle_topology(source: str, helper: str) -> None:
+    projection = function_body(
+        source, "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior")
+    for mask in (
+        "movementFrameDrivenChillMask",
+        "movementFrameDrivenActiveMask",
+        "movementChillPhantomMask",
+        "movementActivePhantomMask",
+    ):
+        require(f"runtime->{mask} |= slotMask;" in projection
+                and f"runtime->{mask} &= ~slotMask;" in projection,
+                f"cold retry cannot converge both states of {mask}")
     reset = function_body(source, "OverworldWildSpawns_ResetSlotState")
     require_tokens(reset, "authoritative destructive reset", (
         "BOOL wasAssigned =",
@@ -315,6 +358,19 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     require(reset.index("OverworldWildRuntime_DestructivelyInvalidateSlot(")
             < reset.index("state->spawns[slot].active = FALSE;"),
             "destructive reset captures liveness after clearing the encounter")
+    for mask in (
+        "movementFrameDrivenChillMask",
+        "movementFrameDrivenActiveMask",
+        "movementChillPhantomMask",
+        "movementActivePhantomMask",
+    ):
+        clear = f"OW_WILD_RUNTIME(state)->{mask} &= ~slotMask;"
+        require(clear in reset
+                and reset.index("state->spawns[slot].active = FALSE;")
+                    < reset.index(clear),
+                f"inactive-slot publication does not clear {mask}")
+    require(source.count("state->spawns[slot].active = FALSE;") == 1,
+            "spawn inactivity is published outside the mask-clearing reset hub")
     cold_rebuild = function_body(source, "OverworldWildSpawns_RebuildColdRuntime")
     require_tokens(cold_rebuild, "cold orphan invalidation", (
         "runtimeSlot->lifecycleState",
@@ -322,6 +378,34 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
         "if (!state->spawns[slot].active)",
         "OverworldWildRuntime_DestructivelyInvalidateSlot(\n                stack, slot, TRUE);",
     ))
+    require_tokens(cold_rebuild, "retained-context cold reconstruction", (
+        "&runtimeSlot->staticCache.staticContext, NULL",
+        "OverworldWildRuntime_PrimeEffectiveCache(",
+        "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(\n"
+            "            state, slot, &runtimeSlot->effectiveCache);",
+        "return FALSE;",
+    ))
+    require("OverworldWildSpawns_BuildSpawnStaticContext(" not in cold_rebuild
+            and "OVERWORLD_WILD_SPAWN_METADATA_ENTRY" not in cold_rebuild
+            and "playerBallCatchValues" not in cold_rebuild
+            and "OverworldWildRuntime_GetEffectiveCache(" not in cold_rebuild
+            and cold_rebuild.count(
+                "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(") == 1,
+            "cold reconstruction recomputes immutable state or splits projection")
+    cold_prime = cold_rebuild.index(
+        "status = OverworldWildRuntime_PrimeEffectiveCache(")
+    cold_failure = cold_rebuild.index(
+        "if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT)", cold_prime)
+    cold_project = cold_rebuild.index(
+        "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(", cold_failure)
+    require(cold_rebuild.index("for (slot = 0;")
+            < cold_prime < cold_failure < cold_project
+            and "state, slot, &runtimeSlot->effectiveCache" in
+                cold_rebuild[cold_project:],
+            "cold reconstruction does not prime successfully before projecting "
+            "the rebuilt slot-effective cache")
+    require(cold_rebuild.count("for (slot = 0;") == 1,
+            "cold reconstruction split authoritative per-slot work across loops")
     require(source.count("OverworldWildRuntime_DestructivelyInvalidateSlot(") == 2,
             "destructive lifecycle routes differ from reset and cold-orphan repair")
 
@@ -458,6 +542,34 @@ def verify_lifecycle_topology(source: str, helper: str) -> None:
     preserve = map_change.index("if (mode == OW_WILD_LIFECYCLE_BATTLE_START")
     require("|| mode == OW_WILD_MAP_HEADER_CHANGE_PRESERVE" in map_change,
             "map-preserve policy no longer shares the bounded boundary path")
+    require_tokens(map_change, "boundary effective-cache projection", (
+        "status = OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(",
+        "if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT)",
+        "if (phase != 0 && state->spawns[slotIndex].active)",
+        "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(\n"
+            "                        state, slotIndex, &slot->effectiveCache);",
+    ))
+    boundary_remove = map_change.index(
+        "status = OverworldWildRuntime_RemoveBoundaryPolicySlotPhase(")
+    boundary_failure = map_change.index(
+        "if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT)", boundary_remove)
+    boundary_phase = map_change.index(
+        "if (phase != 0 && state->spawns[slotIndex].active)",
+        boundary_failure)
+    boundary_project = map_change.index(
+        "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(", boundary_phase)
+    battle_return = map_change.index(
+        "if (mode == OW_WILD_LIFECYCLE_BATTLE_START) return TRUE;",
+        boundary_project)
+    preserve_detach = map_change.index(
+        "OverworldWildSpawns_DetachAllMovementStateOnContextLoss(state, TRUE);",
+        battle_return)
+    require(map_change.count(
+                "OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(") == 1
+            and boundary_remove < boundary_failure < boundary_phase
+                < boundary_project < battle_return < preserve_detach,
+            "boundary removal does not project the successful final-phase "
+            "effective cache before battle return or map detach")
     canonicalize = map_change.index("if (mode == OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE)")
     require(preserve < canonicalize < discard,
             "non-destructive map-header paths no longer return before DISCARD")

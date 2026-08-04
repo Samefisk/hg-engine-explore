@@ -32,6 +32,16 @@
 #define OW_WILD_RUNTIME_CAP_JUMP_LEDGES (1u << 5)
 #define OW_WILD_RUNTIME_CAP_FRAME_WORK (1u << 6)
 
+#define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
+#define OW_WILD_BEHAVIOR_LOCOMOTION_RAM 5
+#define OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT 6
+#define OW_WILD_BEHAVIOR_TARGET_TREE_TOP 4
+
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL (1u << 0)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE (1u << 1)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM (1u << 2)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM (1u << 3)
+
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_RUNTIME_ELIGIBLE (1u << 0)
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_TIRED_ORIGIN (1u << 1)
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_REQUIRED_OWNER (1u << 2)
@@ -781,6 +791,9 @@ void OverworldWildRuntime_InitializeStorage(
     OverworldWildBehaviorStackRuntime *runtime);
 void OverworldWildRuntime_MarkResidentCold(
     OverworldWildBehaviorStackRuntime *runtime);
+u8 OverworldWildRuntime_GetMovementProjectionFlags(
+    const OverworldWildRuntimeStaticCache *staticCache,
+    const OverworldWildRuntimeEffectiveCache *effective);
 
 /* Lifecycle-only binding. Definitions and generated metadata are copied from
  * the installed validated v40 bundle through a private resident accessor. */

@@ -2924,6 +2924,7 @@ static void test_task9_composition_cache_and_provenance(
     OverworldWildRuntimeEffectiveCache copied;
     OverworldWildRuntimeProvenance provenance;
     OverworldWildRuntimeSlotSidecar bystander;
+    OverworldWildRuntimeStaticCache coldStaticCache;
     OverworldWildRuntimeStaticCache hostileConfiguration;
     OverworldWildRuntimeLayerHandle high;
     OverworldWildRuntimeLayerHandle low;
@@ -2950,10 +2951,6 @@ static void test_task9_composition_cache_and_provenance(
     u8 wideMaximum;
     u8 conflictStatus;
     u8 i;
-    u8 zeroCacheRegion[
-        offsetof(OverworldWildRuntimeSlotSidecar, provenance)
-            + sizeof(runtime.slots[0].provenance)
-            - offsetof(OverworldWildRuntimeSlotSidecar, staticCache)] = {0};
 
     prepare_runtime_unprimed(&runtime, 0);
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
@@ -3269,6 +3266,10 @@ static void test_task9_composition_cache_and_provenance(
 
     prepare_runtime_unprimed(&runtime, 0);
     staticContext = fixture_static_context();
+    staticContext.species = 399;
+    staticContext.level = 37;
+    staticContext.terrain = 2;
+    staticContext.shiny = 1;
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
             runtime.slots[0].slotGeneration, &staticContext, input)
             == OW_WILD_RUNTIME_STATUS_OK,
@@ -3425,14 +3426,20 @@ static void test_task9_composition_cache_and_provenance(
     firstCacheIdentity = runtime.slots[0].effectiveCache.cacheIdentity;
     firstDataIncarnation = runtime.dataIncarnation;
     firstSlotIncarnation = runtime.slots[0].cacheIncarnation;
+    memset(&coldStaticCache, 0, sizeof(coldStaticCache));
+    coldStaticCache.staticContext = runtime.slots[0].staticCache.staticContext;
     OverworldWildRuntime_MarkResidentCold(&runtime);
-    require(!memcmp((u8 *)&runtime.slots[0]
-                + offsetof(OverworldWildRuntimeSlotSidecar, staticCache),
-                zeroCacheRegion,
-                sizeof(zeroCacheRegion))
+    require(!memcmp(&runtime.slots[0].staticCache, &coldStaticCache,
+                sizeof(coldStaticCache))
+            && !memcmp(&runtime.slots[0].effectiveCache,
+                &(OverworldWildRuntimeEffectiveCache){0},
+                sizeof(runtime.slots[0].effectiveCache))
+            && !memcmp(&runtime.slots[0].provenance,
+                &(OverworldWildRuntimeResidentProvenance){0},
+                sizeof(runtime.slots[0].provenance))
             && runtime.dataIncarnation != firstDataIncarnation
             && runtime.slots[0].cacheIncarnation != firstSlotIncarnation,
-        "cold restart retained static/effective/provenance cache bytes");
+        "cold restart did not preserve only the immutable static context");
     before = runtime;
     require(OverworldWildRuntime_PrimeEffectiveCache(&runtime, 0,
             runtime.slots[0].slotGeneration, &staticContext, input)

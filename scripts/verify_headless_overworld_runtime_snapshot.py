@@ -141,6 +141,12 @@ def require_current_layout_contract(source: str) -> None:
 
 def main() -> int:
     checks = 0
+    defaults = MODULE.parse_args([])
+    require(
+        defaults.built_arm9 == ROOT / "base/arm9.bin",
+        "runtime snapshot default ARM9 is not the patched packaged image",
+    )
+    checks += 1
     source = (
         ROOT
         / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"

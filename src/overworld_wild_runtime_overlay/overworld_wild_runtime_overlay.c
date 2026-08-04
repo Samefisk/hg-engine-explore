@@ -14,6 +14,8 @@ void OverworldWildRuntime_MarkResidentCold(
     runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
         runtime->dataIncarnation);
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        OverworldWildRuntimeStaticContext staticContext =
+            runtime->slots[slot].staticCache.staticContext;
         runtime->slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
@@ -22,10 +24,40 @@ void OverworldWildRuntime_MarkResidentCold(
             offsetof(OverworldWildRuntimeSlotSidecar, provenance)
                 + sizeof(runtime->slots[slot].provenance)
                 - offsetof(OverworldWildRuntimeSlotSidecar, staticCache));
+        runtime->slots[slot].staticCache.staticContext = staticContext;
     }
     runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
 }
+#endif
 
+u8 OverworldWildRuntime_GetMovementProjectionFlags(
+    const OverworldWildRuntimeStaticCache *staticCache,
+    const OverworldWildRuntimeEffectiveCache *effective)
+{
+    u8 flags = 0;
+    u8 locomotion = effective->primitives[0];
+
+    if (effective->semanticRole == OWBD_ROLE_CALM) {
+        if (staticCache->spawnConfiguration.pickupThrowEntry != 0
+            || (effective->primitives[1] == OW_WILD_BEHAVIOR_TARGET_TREE_TOP
+                && locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP)
+            || locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RAM) {
+            flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL;
+        }
+        if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT) {
+            flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM;
+        }
+    } else if (effective->semanticRole == OWBD_ROLE_ATTENTIVE
+        && locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT) {
+        flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM;
+    }
+    if (effective->capabilityMask & OW_WILD_RUNTIME_CAP_FRAME_WORK) {
+        flags |= OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE;
+    }
+    return flags;
+}
+
+#ifndef OW_WILD_RUNTIME_ACCESSOR_HOST_TEST
 OverworldWildBehaviorLoadResult
     __attribute__((section(".overworld_wild_runtime_entry"), noinline, used))
 OverworldWildBehavior_LoadValidatedBundle(

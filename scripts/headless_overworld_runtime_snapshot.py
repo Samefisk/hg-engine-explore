@@ -27,7 +27,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HEADLESS = ROOT / "scripts/headless-overworld-test.py"
 LINKED = ROOT / "build/linked.o"
 SPAWNS_LINKED = ROOT / "build/overworld_wild_spawns_overlay_linked.o"
-BUILT_ARM9 = ROOT / "build/arm9.bin"
+# scripts/make.py preserves the pre-patch stock image under build/; NDSTOOL
+# packages the patched base/arm9.bin into test.nds.
+BUILT_ARM9 = ROOT / "base/arm9.bin"
 
 MAX_SLOTS = 10
 MAX_LAYERS = 8
@@ -886,7 +888,7 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=Path("build/overworld_wild_spawns_overlay_linked.o"),
     )
-    parser.add_argument("--built-arm9", type=Path, default=Path("build/arm9.bin"))
+    parser.add_argument("--built-arm9", type=Path, default=BUILT_ARM9)
     parser.add_argument("--headless-helper", type=Path, default=HEADLESS)
     parser.add_argument("--frame-budget", type=int)
     parser.add_argument("--action", action="append", default=[])

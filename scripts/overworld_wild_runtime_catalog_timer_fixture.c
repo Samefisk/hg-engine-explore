@@ -45,6 +45,67 @@ static void require(BOOL condition, const char *message)
     }
 }
 
+typedef struct FixtureMovementProjectionCase {
+    u8 semanticRole;
+    u8 locomotion;
+    u8 target;
+    u8 pickupThrowEntry;
+    u32 capabilityMask;
+    u8 expectedFlags;
+} FixtureMovementProjectionCase;
+
+static void verify_movement_projection_flags(void)
+{
+    static const FixtureMovementProjectionCase cases[] = {
+        { OWBD_ROLE_CALM, 0, 0, 0, 0, 0 },
+        { OWBD_ROLE_CALM, 0, 0, 1, 0,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL },
+        { OWBD_ROLE_CALM, OW_WILD_BEHAVIOR_LOCOMOTION_HOP,
+            OW_WILD_BEHAVIOR_TARGET_TREE_TOP, 0, 0,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL },
+        { OWBD_ROLE_CALM, OW_WILD_BEHAVIOR_LOCOMOTION_HOP, 0, 0, 0, 0 },
+        { OWBD_ROLE_CALM, OW_WILD_BEHAVIOR_LOCOMOTION_RAM, 0, 0, 0,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL },
+        { OWBD_ROLE_CALM, OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
+            0, 0, 0, OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM },
+        { OWBD_ROLE_ATTENTIVE,
+            OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT, 0, 0, 0,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM },
+        { OWBD_ROLE_ATTENTIVE, OW_WILD_BEHAVIOR_LOCOMOTION_RAM, 0, 1, 0, 0 },
+        { OWBD_ROLE_TIRED, OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
+            OW_WILD_BEHAVIOR_TARGET_TREE_TOP, 1,
+            OW_WILD_RUNTIME_CAP_FRAME_WORK,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE },
+        { OWBD_ROLE_CALM, OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
+            0, 1, OW_WILD_RUNTIME_CAP_FRAME_WORK,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL
+                | OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE
+                | OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM },
+        { OWBD_ROLE_ATTENTIVE,
+            OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT, 0, 0,
+            OW_WILD_RUNTIME_CAP_FRAME_WORK,
+            OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE
+                | OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM },
+    };
+    OverworldWildRuntimeStaticCache staticCache;
+    OverworldWildRuntimeEffectiveCache effective;
+    size_t i;
+
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        memset(&staticCache, 0, sizeof(staticCache));
+        memset(&effective, 0, sizeof(effective));
+        staticCache.spawnConfiguration.pickupThrowEntry =
+            cases[i].pickupThrowEntry;
+        effective.semanticRole = cases[i].semanticRole;
+        effective.primitives[0] = cases[i].locomotion;
+        effective.primitives[1] = cases[i].target;
+        effective.capabilityMask = cases[i].capabilityMask;
+        require(OverworldWildRuntime_GetMovementProjectionFlags(
+                    &staticCache, &effective) == cases[i].expectedFlags,
+            "production movement projection flags differ");
+    }
+}
+
 int main(void)
 {
     OverworldWildRuntimeStaticContext context;
@@ -56,6 +117,7 @@ int main(void)
     context.species = 56;
     context.groupFlags = 8;
     context.level = 1;
+    verify_movement_projection_flags();
 
     require(OverworldWildRuntime_CopyInstalledStaticComposition(
             &context, NULL, &composition)

@@ -1054,6 +1054,8 @@ def main() -> int:
         parts = line.split()
         if len(parts) >= 3: symbols[parts[-1]] = int(parts[0], 16)
     required = {"__text_start", "__text_end", "_end", "__end__", entry_name}
+    if args.overlay == 149:
+        required.add("OverworldWildRuntime_GetMovementProjectionFlags")
     if args.overlay == 156:
         required.add("OverworldWildBehaviorValidator_LoadCatalog")
     if args.overlay == 157:
@@ -1065,6 +1067,7 @@ def main() -> int:
             "OverworldWildRuntime_CopyInstalledDefinition",
             "OverworldWildRuntime_CopyInstalledCatalogIdentity",
             "OverworldWildRuntime_MarkResidentCold",
+            "OverworldWildRuntime_GetMovementProjectionFlags",
             "OverworldWildRuntime_ResolveRetainedStaticCache",
             "OverworldWildRuntime_CopyValidatedSpawnConfiguration",
             "OverworldWildRuntime_MatchesPendingTimerExpiry",

@@ -55,6 +55,17 @@ typedef int BOOL;
 #define OWBD_CANDIDATE_TIMER_ADD_CLAMP_MAX 64
 #define OWBD_ROLE_TIRED 3
 #define OWBD_ROLE_ASLEEP 4
+#define OWBD_ROLE_CALM 1
+#define OWBD_ROLE_ATTENTIVE 2
+#define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
+#define OW_WILD_BEHAVIOR_LOCOMOTION_RAM 5
+#define OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT 6
+#define OW_WILD_BEHAVIOR_TARGET_TREE_TOP 4
+#define OW_WILD_RUNTIME_CAP_FRAME_WORK (1u << 6)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL (1u << 0)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE (1u << 1)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM (1u << 2)
+#define OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM (1u << 3)
 
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_RUNTIME_ELIGIBLE (1u << 0)
 #define OW_WILD_RUNTIME_DEFINITION_FLAG_HAS_TIRED_ORIGIN (1u << 1)
@@ -441,6 +452,15 @@ typedef struct OverworldWildRuntimeStaticCache {
     OverworldWildRuntimeResolvedNode resolvedNodes[8];
     OverworldWildRuntimeStaticModifierContribution staticModifiers[8];
 } OverworldWildRuntimeStaticCache;
+
+/* The accessor translation unit now also owns the movement-projection helper.
+ * This catalog-only fixture does not exercise that helper, but supplies its
+ * narrow input surface so the actual accessor remains the compiled source. */
+typedef struct OverworldWildRuntimeEffectiveCache {
+    u32 capabilityMask;
+    u8 primitives[4];
+    u8 semanticRole;
+} OverworldWildRuntimeEffectiveCache;
 
 typedef struct OverworldWildRuntimeModifierOperation {
     signed short operand;

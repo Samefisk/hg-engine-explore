@@ -219,6 +219,7 @@ $(OVERWORLD_WILD_RUNTIME_CATALOG_SYMBOLS): \
 		--keep-symbol=OverworldWildRuntime_ResolveInstalledTimerDefinition \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledCatalogIdentity \
 		--keep-symbol=OverworldWildRuntime_MarkResidentCold \
+		--keep-symbol=OverworldWildRuntime_GetMovementProjectionFlags \
 		--keep-symbol=OverworldWildRuntime_CopyInstalledStaticCache \
 		--keep-symbol=OverworldWildRuntime_ResolveRetainedStaticCache \
 		--keep-symbol=OverworldWildRuntime_ValidateStaticCache \

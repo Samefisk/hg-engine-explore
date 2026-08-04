@@ -73,6 +73,8 @@ void OverworldWildRuntime_MarkResidentCold(
     runtime->dataIncarnation = OverworldWildRuntime_AdvanceNonzeroGeneration(
         runtime->dataIncarnation);
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
+        OverworldWildRuntimeStaticContext staticContext =
+            runtime->slots[slot].staticCache.staticContext;
         runtime->slots[slot].cacheIncarnation =
             OverworldWildRuntime_AdvanceNonzeroGeneration(
                 runtime->slots[slot].cacheIncarnation);
@@ -81,6 +83,7 @@ void OverworldWildRuntime_MarkResidentCold(
             offsetof(OverworldWildRuntimeSlotSidecar, provenance)
                 + sizeof(runtime->slots[slot].provenance)
                 - offsetof(OverworldWildRuntimeSlotSidecar, staticCache));
+        runtime->slots[slot].staticCache.staticContext = staticContext;
     }
     runtime->lifetimeState = OW_WILD_RUNTIME_LIFETIME_RESIDENT_COLD;
 }

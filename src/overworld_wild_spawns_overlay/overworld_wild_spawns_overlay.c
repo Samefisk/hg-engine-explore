@@ -443,17 +443,13 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_BEHAVIOR_ALERT_RANGE_TERRAIN_ONLY 5
 #define OW_WILD_BEHAVIOR_LOCOMOTION_NONE 0
 #define OW_WILD_BEHAVIOR_LOCOMOTION_WANDER 1
-#define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
 #define OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN 3
 #define OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN 4
-#define OW_WILD_BEHAVIOR_LOCOMOTION_RAM 5
-#define OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT 6
 #define OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP 7
 #define OW_WILD_BEHAVIOR_TARGET_NONE 0
 #define OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY 1
 #define OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER 2
 #define OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER 3
-#define OW_WILD_BEHAVIOR_TARGET_TREE_TOP 4
 #define OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT 5
 #define OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER 6
 #define OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER
@@ -850,6 +846,7 @@ static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverl
 static BOOL OverworldWildSpawns_CleanupResidentData(void)
 {
     OverworldWildSpawnState *state = sOverworldWildLastState;
+    OverworldWildOverlayRuntimeState *runtime;
     BOOL helperLoaded = IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER);
 
     if (sOverworldWildBehaviorOverlapState
@@ -878,8 +875,8 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
         return FALSE;
     }
     OverworldWildSpawns_CleanupPresentationBeforeUnload(state);
-    if (state != NULL && state->movementRuntimeState != NULL
-        && OW_WILD_RUNTIME(state)->throwState.targetMask != 0) {
+    runtime = state != NULL ? OW_WILD_RUNTIME(state) : NULL;
+    if (runtime != NULL && runtime->throwState.targetMask != 0) {
         return FALSE;
     }
     OverworldWildSpawns_CleanupResidentTasks();
@@ -891,8 +888,7 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
             NULL)) {
         return FALSE;
     }
-    if (state != NULL && state->movementRuntimeState != NULL) {
-        OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
+    if (runtime != NULL) {
         memset(runtime, 0,
             offsetof(OverworldWildOverlayRuntimeState,
                 playerBallCatchValues));
@@ -2771,37 +2767,29 @@ static BOOL OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(
     const OverworldWildRuntimeEffectiveCache *effective)
 {
     OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
+    u8 flags;
     u16 slotMask;
     if (effective == NULL)
         return FALSE;
+    flags = OverworldWildRuntime_GetMovementProjectionFlags(
+        &runtime->behaviorStackRuntime.slots[slot].staticCache, effective);
     slotMask = OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot);
-    if (effective->capabilityMask & OW_WILD_RUNTIME_CAP_FRAME_WORK)
-        runtime->movementFrameDrivenActiveMask |= slotMask;
-    else
-        runtime->movementFrameDrivenActiveMask &= ~slotMask;
-    if (effective->semanticRole == OWBD_ROLE_CALM
-        && (runtime->behaviorStackRuntime.slots[slot]
-                    .staticCache.spawnConfiguration.pickupThrowEntry != 0
-            || (OW_WILD_CURRENT_PRIMITIVE_TARGET(effective)
-                    == OW_WILD_BEHAVIOR_TARGET_TREE_TOP
-                && OW_WILD_CURRENT_PRIMITIVE_LOCOMOTION(effective)
-                    == OW_WILD_BEHAVIOR_LOCOMOTION_HOP)
-            || OW_WILD_CURRENT_PRIMITIVE_LOCOMOTION(effective)
-                == OW_WILD_BEHAVIOR_LOCOMOTION_RAM)) {
+    if (flags & OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL) {
         runtime->movementFrameDrivenChillMask |= slotMask;
     } else {
         runtime->movementFrameDrivenChillMask &= ~slotMask;
     }
-    if (effective->semanticRole == OWBD_ROLE_CALM
-        && OW_WILD_CURRENT_PRIMITIVE_LOCOMOTION(effective)
-            == OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT) {
+    if (flags & OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE) {
+        runtime->movementFrameDrivenActiveMask |= slotMask;
+    } else {
+        runtime->movementFrameDrivenActiveMask &= ~slotMask;
+    }
+    if (flags & OW_WILD_RUNTIME_MOVEMENT_PROJECTION_CHILL_PHANTOM) {
         runtime->movementChillPhantomMask |= slotMask;
     } else {
         runtime->movementChillPhantomMask &= ~slotMask;
     }
-    if (effective->semanticRole == OWBD_ROLE_ATTENTIVE
-        && OW_WILD_CURRENT_PRIMITIVE_LOCOMOTION(effective)
-            == OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT) {
+    if (flags & OW_WILD_RUNTIME_MOVEMENT_PROJECTION_ACTIVE_PHANTOM) {
         runtime->movementActivePhantomMask |= slotMask;
     } else {
         runtime->movementActivePhantomMask &= ~slotMask;
@@ -5480,6 +5468,10 @@ static BOOL OverworldWildSpawns_PrepareMapHeaderChange(
                     boundary, phase == 0);
                 if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
                     return FALSE;
+                }
+                if (phase != 0 && state->spawns[slotIndex].active) {
+                    (void)OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(
+                        state, slotIndex, &slot->effectiveCache);
                 }
             }
         }
@@ -15006,10 +14998,11 @@ static BOOL OverworldWildSpawns_RebuildColdRuntime(
         status = OverworldWildRuntime_PrimeEffectiveCache(
             stack, (u8)slot, runtimeSlot->slotGeneration,
             &runtimeSlot->staticCache.staticContext, NULL);
-        if (status != OW_WILD_RUNTIME_STATUS_OK
-            && status != OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
+        if (status > OW_WILD_RUNTIME_STATUS_IDEMPOTENT) {
             return FALSE;
         }
+        (void)OverworldWildSpawns_ProjectRuntimeEffectiveBehavior(
+            state, slot, &runtimeSlot->effectiveCache);
     }
     return TRUE;
 }
