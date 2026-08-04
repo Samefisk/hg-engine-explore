@@ -3,11 +3,33 @@
 Generated from `documentation/overworld_wild_movement_attempt_log.md` during consolidation.
 The original attempt sections are copied verbatim below. Attempts may appear in multiple topic files on purpose.
 
-## Quick Reference
+This file is a historical movement-experiment log, not the current profile data
+contract. Mentions below of one profile containing chill/active/tired fields,
+the default → class → variable-override resolver, or flattened override
+profiles describe the implementation at that attempt. They must not be used as
+current authoring or runtime guidance. The authoritative contract is
+`documentation/overworld_wild_stackable_state_profiles_architecture.md`.
 
-- Behavior hierarchy is default behavior -> behavior class override -> behavior variable override.
-- Profile data owns chill, alert, attentive, tired, rest, speed, stamina, range, and jump capability.
+## Current System Boundary
+
+- Each state profile owns one complete state. Chill/calm, attentive/active,
+  tired, carried, and custom meaning belongs to controller-local nodes rather
+  than multiple state tabs inside one profile.
+- Controller candidates select one winning complete state. Zero or more
+  independently owned, applicable modifiers then fold in explicit order over
+  that winner within the fixed per-slot capacity. Each slot allows eight total
+  active candidate/modifier layers, not eight modifiers in addition to candidates;
+  removing one layer recomposes from the remaining stack.
+- Presentation state is not behavior authority, and there is no flattened
+  profile compatibility reader or writer.
 - Shared targeting should account for moving player/follower trails when behavior intent depends on player position.
+
+## Historical Quick Reference for the Attempts Below
+
+- The older hierarchy was default behavior → behavior class override →
+  behavior variable override.
+- The older flattened profile owned chill, alert, attentive, tired, rest, speed,
+  stamina, range, and jump capability together.
 
 ## Included Attempts
 

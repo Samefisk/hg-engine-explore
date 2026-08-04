@@ -2,29 +2,29 @@
 
 ## Status
 
-Implemented on `feature/stackable-state-profiles`. This is the authoritative V40
-runtime, data, and editor contract.
+Implemented on `feature/stackable-state-profiles`. This is the authoritative
+V40 wire/runtime contract and V51 authoring contract.
 
 The one-time V39 derivation is retained below as historical rationale and parity
 evidence only. It is not a reader, writer, projection, or compatibility contract.
-Production and editor code read and write V40 directly; there is no legacy schema
-window and no behavior projection in NARC member 21.
+Production/runtime code reads V40. The editor/API authors the V51 contract, and
+Global Save emits canonical V40; there is no V39 schema window or behavior
+projection compatibility path in NARC member 21.
 
 ## Implemented Result
 
 - Each state profile is one complete state. Controllers and stackable override
   definitions select states and apply independently owned effects; removing one
   override recomposes from the remaining stack.
-- V40 is a single canonical, checked model. Its runtime bundle is 11,340 bytes,
-  including a fixed 208-byte section header, with catalog CRC `0x64D0FC6E` and
-  schema fingerprint `0x5C5FBF57`.
-- Removing the 3,416-byte projection/member-21 payload reduced the combined
-  runtime behavior bundle from 15,052 to 11,340 bytes: 3,712 bytes saved
-  (24.7%). The completed V39/projection cleanup removed 513,227 net tracked
-  bytes from the feature worktree.
-- The final physical overlay headroom is `0xC4` bytes for overlay 149 and
-  `0xA0` bytes for overlay 158. Overlay 158 reserves `0x80`, leaving a protected
-  usable margin of `0x20` bytes.
+- The V40 runtime blob is 11,028 bytes, including its fixed 216-byte section
+  header. The checked header publishes checksum `0xCD843F3E` and schema
+  fingerprint `0x9421CA4D`.
+- The retired combined V40-plus-projection baseline was 15,052 bytes. The
+  current single runtime blob is 4,024 bytes smaller (26.7%); no flattened
+  compatibility payload or NARC member-21 projection remains.
+- The accepted `test2600.nds` build has 196 bytes of physical headroom in
+  overlays 157, 159, and 149; 6,980 bytes in overlay 156; and 204 bytes in
+  overlay 158.
 
 ## Decision
 
@@ -95,7 +95,7 @@ identity and the three-state record shape.
 
 - This ADR does not freeze the visual layout of the profile editor.
 - This ADR does not promise that later schema versions will retain V40 byte
-  offsets; V40 itself has a fixed, validated 208-byte section header.
+  offsets; V40 itself has a fixed, validated 216-byte section header.
 - This ADR does not make arbitrary script callbacks authorable from data.
 - This ADR does not persist transient wild-Pokemon runtime layers in save data.
 - This ADR does not make presentation phases such as alert emotes into behavior states.
@@ -152,7 +152,7 @@ Legacy tired entry has one mandatory parity exception to optional-node behavior.
 
 Ordinary exhaustion uses an origin-specific portable wrapper with the existing semantic `TIRED` selector; initial apply is enabled only when the current controller has one bound authored `TIRED` node. Because the fallback role is `CUSTOM/FALLBACK_TIRED`, semantic resolution can never select it. No `AUTHORED_TIRED_OR_FALLBACK` selector kind exists in schema, serialization, validation, or editor data. Instead, each imperative legacy entry route—`FLED`, active-RAM wall crash, and successful throw recovery—generates two ordinary read-only wrappers: a portable semantic-`TIRED` wrapper and, for each eligible controller, a controller-local exact `(controllerStableId,fallbackNodeStableId)` wrapper. Route preflight resolves semantic `TIRED`; exactly one bound match selects the semantic wrapper, zero selects that controller's exact fallback wrapper, and ambiguity rejects without mutation. Generic semantic failure never triggers fallback outside these three route-owned selection algorithms.
 
-The stored tired-origin discriminator, not a controller-local wrapper or exact node ID, is the preserved logical identity. Each generated imperative wrapper and its runtime entry stores immutable `tiredOriginKind : u8` plus its exact required owner, whose closed mappings are frozen below; no caller/editor may override either field. During an authenticated retained controller change, stamina bypasses the origin discriminator and translation table entirely: its generated semantic wrapper retains required owner `stamina`, re-resolves `TIRED` in the destination, and is removed as `CONTEXT_NO_LONGER_APPLICABLE` only when destination authored tired is absent. The three imperative origins consult an internal generated translation table keyed by `(tiredOriginKind,destinationControllerStableId,authoredTiredBound)` and atomically remap the preserved entry only to a destination wrapper with the identical origin/required-owner family, preserving owner, instance key, entry/timer generations, remaining/zero-pending time, recovery policy, and both generated metadata pairs. This is retained-context revalidation, not serialized selector invention or public `Replace`. Because each serialized wrapper uses only an existing semantic or exact selector, ordinary validation/editor rules apply; generated metadata is read-only, and shallow/deep duplication copies fixed required system owner IDs and the discriminator unchanged while cloning/remapping controller-local fallback wrappers, backlinks, and translation targets. Thus stamina plus all three imperative tired origins survive compatible controller rebinding while fallback remains a non-semantic `CUSTOM/FALLBACK_TIRED` node.
+The stored tired-origin discriminator, not a controller-local wrapper or exact node ID, is the preserved logical identity. Each generated imperative wrapper and its runtime entry stores immutable `tiredOriginKind : u8` plus its exact required owner, whose closed mappings are frozen below; no caller/editor may override either field. During an authenticated retained controller change, stamina bypasses the origin discriminator and translation table entirely: its generated semantic wrapper retains required owner `stamina`, re-resolves `TIRED` in the destination, and is removed as `CONTEXT_NO_LONGER_APPLICABLE` only when destination authored tired is absent. The three imperative origins consult an internal generated translation table keyed by `(tiredOriginKind,destinationControllerStableId,authoredTiredBound)` and atomically remap the preserved entry only to a destination wrapper with the identical origin/required-owner family, preserving owner, instance key, entry/timer generations, remaining/zero-pending time, recovery policy, and both generated metadata pairs. This is retained-context revalidation, not serialized selector invention or public `Replace`. Because each serialized wrapper uses only an existing semantic or exact selector, ordinary validation/editor rules apply. Generated metadata is read-only, and ordinary shallow or deep controller duplication refuses a closure containing generated wrappers, importer-owned backlinks, or their translation targets; complete importer regeneration is the only operation allowed to clone and remap that family while preserving its fixed owner IDs and discriminator. Thus stamina plus all three imperative tired origins survive compatible controller rebinding while fallback remains a non-semantic `CUSTOM/FALLBACK_TIRED` node.
 
 ### Spawn policy
 
@@ -216,6 +216,15 @@ An override definition has a stable ID, kind, channel, priority, applicability f
 - **Modifier:** carries a typed partial patch. It does not declare or change state identity.
 
 This separation is mandatory. A modifier cannot change `behaviorKind` and a state candidate cannot carry extra field writes. If behavior kind must change, author a state profile and a state-candidate definition. If a rain, script, or status effect only changes speed or alertness, author a modifier.
+
+Modifiers are first-class V40 wire records, not editor-only previews. A modifier
+definition owns one through sixteen packed 11-byte operation records carrying
+stable operation ID, definition ID, signed operand, field namespace/ID,
+operator, bound, and explicit `order` (`0..15`). Order values are unique and
+contiguous within the definition, and runtime composition follows that order
+instead of physical record position. Ordinary modifier authoring may use
+`CONTROLLER_STATE` through `POSSESSION`; `STATIC_CONTEXT` is resolved from
+static actions and `SYSTEM_SAFETY` remains internal.
 
 State-candidate serialization contains optional tagged generated metadata `(hasTiredOriginKind:u8,tiredOriginKind:u8,hasRequiredOwnerId:u8,requiredOwnerId:u16)`. The closed `TiredOriginKind` enum is exactly `1=FLED`, `2=RAM_CRASH`, `3=THROW_RECOVERY`; an absent tag requires its value to be zero, and zero is not an enum/owner value. The immutable generated mappings are `FLED→battle-fled`, `RAM_CRASH→ram-crash`, and `THROW_RECOVERY→throw-recovery`, with both tags present. The generated stamina semantic-`TIRED` wrapper has the canonical absent origin pair and required owner `stamina`. All four generated tired families freeze `allowMultipleOwners=FALSE`, `allowMultipleInstancesPerOwner=FALSE`, and therefore `instanceKey=0`; owner authorization does not replace multiplicity validation. Every ordinary authored/shared/non-generated definition has both pairs canonically absent and remains unconstrained by required-owner authorization; its existing independently authored multiplicity rules still apply. The editor displays this generated metadata read-only and cannot add, remove, redirect, replace-reference, or change it outside complete importer regeneration.
 
@@ -1091,7 +1100,11 @@ The generated data validator and editor must reject:
 - Ambiguous batch operations addressing the same owner/instance key.
 - Duplicate transition IDs or non-deterministic dispatch priorities.
 - Duplicate static action IDs or static action tuples whose complete ordering key is equal.
-- Definitions retained by shallow controller duplication when they contain controller-local exact selectors, node/owner/action IDs, backlinks, or controller applicability; such definitions must be cloned/remapped or the operation must require deep copy.
+- Shallow controller duplication when controller-local definitions, selectors,
+  node/owner/action IDs, backlinks, or applicability would need remapping; an
+  ordinary authored closure must use deep copy. Importer-owned or generated
+  required-owner/tired-origin closures reject both editor modes and require
+  importer regeneration.
 
 The editor may warn rather than reject deterministic equal-priority conflicts,
 unreachable states, and missing recovery paths. Global Save blocks on material
@@ -1121,9 +1134,9 @@ The version-39 derivation was deterministic and initially one-to-one:
 - Overlapping matches all remain active. Controller assignment chooses one explicit winner; role bindings choose the last explicit priority; modifiers all fold ascending. Nothing relies on serialized order after migration.
 - `profileId` is not reused as a stable entity ID unless the migration can prove uniqueness and semantics; generated stable IDs are preferred.
 - Follower, picked-up, forced-asleep, phantom, canopy, RAM, playful, and aggressive families receive explicit parity fixtures.
-- The one-time derivation did not deduplicate apparently identical state profiles;
-  V40-native cleanup may now deduplicate only when stable identity and behavior
-  remain explicit.
+- The one-time importer may coalesce exactly identical bodies only through its
+  explicit identity-collapse mode. Ordinary V51 authoring never infers shared
+  ownership from equal values; authors choose shallow sharing or deep identity.
 
 The special imports are deterministic and bypass generic static matching only through these named recipes:
 
@@ -1150,46 +1163,85 @@ special-family side effects across contexts and event sequences.
 equality, using the taxonomy above. Runtime validation now targets only the
 canonical V40 model and blob.
 
-## Implemented V40 Editor Contract
+## Implemented V51 Authoring Contract over the V40 Wire
 
-The profile deck is now a one-state editor. A profile create or duplicate operation
-produces one complete typed state with no chill/active/tired tabs and no inherited
-values. Fields are grouped by behavior, locomotion, target, surfaces, speed/range,
-hop, teleport, RAM/chain, battle, and advanced capabilities. Descriptive tags and
-names are presentation/search metadata only.
+V51 is the editor/API format. It preserves the validated V40 runtime wire format:
+Global Save converts the V51 authoring transaction into one canonical V40 model,
+encodes the V40 blob, decodes it again, merges only approved authoring metadata,
+and requires semantic round-trip equality before replacing any file. V51 does
+not introduce a second runtime model or restore flattened-profile compatibility.
 
-The controller editor creates and duplicates typed controllers in the same V40
-draft graph. It exposes the controller-local node roster, semantic role, profile
-binding, base-node selection, scalar defaults, policies, transitions, guards,
-stack operations, transition actions, recovery actions, and the candidate
-definition's applicability, priority, multiplicity, lifetime, and timer fields.
-Adding a transition also creates its owned draft candidate definition and
-applicability record, so authors do not need to manage a second hidden state
-record manually.
+The Profile Deck has first-class **State Profiles**, **Controllers**, and
+**Modifiers** views:
+
+- A state profile is one complete typed state. There are no chill/active/tired
+  tabs or inherited runtime values. Names and descriptive tags remain
+  presentation/search metadata only.
+- A controller binds complete state profiles to controller-local nodes and
+  owns scalar defaults, policies, transitions, guards, atomic stack operations,
+  transition/recovery actions, and state-candidate applicability and lifetime.
+- A modifier definition is independently authorable runtime/editor data. It
+  owns applicability, channel, priority, multiplicity, map/battle lifetime, and
+  a contiguous explicit operation order. Its typed operations are folded after
+  the winning complete state without changing state identity.
+
+### Explicit body identity and duplication
+
+Profile identity and state-body identity are separate. V51 never merges equal
+bodies merely because their bytes happen to match:
+
+- **Shallow duplicate** creates a new profile identity that references the same
+  body ID. Editing any alias visibly edits all profiles sharing that body.
+- **Deep duplicate** creates both a new profile identity and a new body ID. It
+  remains independent even when its initial values equal the source.
+- Deleting or remapping a profile retires a body registry key only after the
+  prospective graph proves that no profile still references that body. Conflicting
+  edits to the same shared body in one transaction are rejected.
+
+Controller duplication has a different closure boundary. A shallow controller
+copy shares reusable references and is refused when controller-local transitions
+would need remapping. An ordinary authored deep copy clones the controller-local
+candidate closure and remaps its nodes, definitions, applicability, operations,
+actions, recovery actions, and backlinks. Both modes refuse importer-owned
+backlinks and generated required-owner/tired-origin families; those identities
+must be recreated by importer regeneration and are never silently omitted.
+
+Changing a controller node's profile binding first produces a mapping preview.
+The preview names the old/new profile and body IDs, says whether the bodies are
+shared or independent, and reports the affected node and authoritative backlinks.
+The graph changes only after explicit Apply; a blocked preview cannot apply, and
+Reset reverses profile-mapping changes already applied to the local draft.
+
+### Effective state promotion and preview
+
+The deterministic Stack Preview supports Saved, Draft, and Saved ↔ Draft modes.
+It resolves entity context once, selects the state-candidate winner by
+`(channel, priority, definitionStableId, ownerId, instanceKey)`, folds every
+applicable modifier in ascending explicit order, normalizes once, and displays
+effective fields plus winning, hidden, skipped, and contributing provenance. It
+also replays bounded transition-event sequences, including timers, expiry, and
+recovery batches, without writing files.
+
+**Effective → state** promotes the final successful preview result into a new
+independent deep state profile. Promotion copies exactly the complete normalized
+state fields, never controller or runtime-layer identity. Bounded authoring
+provenance records the source profile/body, winning layer when present,
+normalizations, and per-field base/override/modifier contributors. This
+`promotionProvenance`, together with names and descriptive tags, stays in the
+canonical authoring JSON and is deliberately absent from V40 runtime wire bytes.
 
 Draft identity is `draft:<uuid>` and never a display name or array index. Global
-Save validates the complete graph, allocates persistent stable IDs, returns the
-draft-to-persistent map, and atomically rewrites the canonical JSON, generated
-blob include, and checked constants header. A source-revision conflict or any
-validation/write/reparse failure leaves the saved model unchanged and preserves
-the editor draft for correction. There are no V39 save endpoints.
+Save validates the complete graph, allocates persistent stable IDs and body IDs,
+returns the draft-to-persistent map, and atomically rewrites the canonical JSON,
+generated blob include, and checked constants header. A source-revision conflict
+or any validation/write/reparse failure leaves the saved model unchanged and
+preserves the editor draft for correction. There are no V39 save endpoints.
 
-Deletion is reference-safe. The UI refuses state-profile deletion when the
-authoritative controller-node backlink index is missing or nonempty. The writer
-also validates the whole prospective graph, so controller, transition, owned
-definition/applicability, and other removals cannot commit with dangling
-backlinks. Reordering edits explicit order/priority values; it does not change
-stable identity.
-
-The deterministic client preview supports Saved, Draft, and Saved ↔ Draft modes.
-It resolves entity context once, orders state candidates by
-`(channel, priority, definitionStableId, ownerId, instanceKey)`, displays the
-winning and hidden layers with provenance, and replays bounded transition-event
-sequences. Frame/movement timers, hidden-timer policy, presentation clock gates,
-expiry, and recovery-transition batches are modeled without writing files.
-Modifier layers are deliberately rejected with `MODIFIER_PREVIEW_UNSUPPORTED`
-rather than approximated; authoritative modifier composition remains a runtime
-and validator responsibility.
+Deletion is reference-safe. The UI refuses state-profile deletion while an
+authoritative controller-node backlink remains. The writer validates the whole
+prospective graph, so controller, transition, owned definition/applicability,
+modifier, and body removals cannot commit with dangling references. Reordering
+edits explicit order/priority values; it never changes stable identity.
 
 ## Implemented Cross-Overlay ABI Gates
 
@@ -1223,19 +1275,65 @@ After authenticating an accepted target, fixed code sets both durable source-par
 
 Only the spawns consumer may atomically claim `PENDING→CLAIMED` for exact `(K,publicationSequence)`. It reauthenticates authoritative slot/encounter/object generations and attempts one atomic tired-expiry-plus-aggro-plus-active-step transaction. If required orchestration returns `BUSY`—including a published tired expiry that has not committed—the consumer conditionally restores `CLAIMED→PENDING` with identical key, sequence, and payload; the retry remains mandatory and no stack/timer/counter change commits. Success conditionally clears `CLAIMED→EMPTY` only after the whole transaction commits, then promotes any retry. Reauthentication mismatch conditionally clears only that exact primary cell/claim. It never clears the unkeyed legacy pending compatibility bit on mismatch and never clears, zeros, or advances `slotGenerationMirror`, `objectGenerationMirror`, authoritative encounter generation, the publication-sequence carrier, either durable aggro flag, or the retry owner; only authenticated success or destructive slot lifecycle owns those values. Permanent schema failure enters system-safety quarantine rather than dropping the request. The carrier contains no sidecar pointer or layer handle. Existing projectile-prefix `impactSlot` and `impactEncounterGeneration` remain dedicated to projectile/capture presentation validation and may not be repurposed as this carrier.
 
-## Final Implementation Measurements
+## 21-Task Completion Crosswalk
 
-- Canonical V40 runtime blob: 11,340 bytes, with a fixed 208-byte header.
-- Catalog CRC/checksum: `0x64D0FC6E`.
-- Schema fingerprint: `0x5C5FBF57`.
-- Removed projection/member-21 payload: 3,416 bytes.
-- Combined runtime behavior bundle: 15,052 → 11,340 bytes, saving 3,712
-  bytes (24.7%).
-- Net tracked legacy/projection cleanup: 513,227 bytes removed.
-- Overlay 149 physical headroom: `0xC4` bytes.
-- Overlay 158 physical headroom: `0xA0` bytes; with its `0x80` reserve, the
-  protected usable margin is `0x20` bytes.
+This is the audit trail for the original implementation plan. A checked item
+means the outcome exists in the branch and has commit-level evidence; later
+hardening commits are listed after the original task that they strengthen.
+
+| # | Completed outcome | Primary evidence |
+|---:|---|---|
+| 1 | ☑ One-state/stackable contract and parity oracle | `8896c8822` |
+| 2 | ☑ Executable stack reference model | `c80ce682c` |
+| 3 | ☑ Compact stable-ID V40 schema | `722dc39f3` |
+| 4 | ☑ Fixed-capacity per-slot runtime sidecars | `e3a7591df` |
+| 5 | ☑ Owner-safe atomic apply/remove/replace | `ee9c0c332` |
+| 6 | ☑ State-winner selection and modifier recomposition | `0ea36cdb0` |
+| 7 | ☑ Layer timers, expiry, and recovery policies | `43d902bb0` |
+| 8 | ☑ Production overworld runtime cut over to stack profiles | `c43be6e6a` |
+| 9 | ☑ One-complete-state Profile Deck editor | `b46c1cf1d` |
+| 10 | ☑ Typed controller/node editor | `b35fd2c9c` |
+| 11 | ☑ Possession and state transitions migrated | `f98449409` |
+| 12 | ☑ Deterministic saved/draft stack preview | `6862ec2d6` |
+| 13 | ☑ Canonical V40 encode/decode codec | `cdce627f9` |
+| 14 | ☑ Whole-graph model validation | `51f0bf733` |
+| 15 | ☑ Atomic behavior-model writer | `a33faf6e3` |
+| 16 | ☑ Atomic map/battle stack lifecycles | `5680f01c3` |
+| 17 | ☑ One all-or-nothing Global Save transaction | `3706adcec` |
+| 18 | ☑ Bounded runtime verification fixtures | `c4f1258b3` |
+| 19 | ☑ Flattened profile projection and compatibility endpoints removed | `c34fa2315`, `d831aacee` |
+| 20 | ☑ Presentation byte separated from behavior authority | `042a5e444` |
+| 21 | ☑ Complete authoring workflow and traceable editor contract | `77d89b728`, `673c5baa3` |
+
+Post-plan hardening completed the long-term authoring shape: cold reconstruction
+and stack-use fixes (`c2d5e161c`, `4d64c16d0`), full CRUD and generalized
+catalogs (`84321832e`, `4bdababda`), first-class modifier authoring/runtime fold
+(`a51bb4993`), and explicit shallow/deep duplication, mapping preview, and
+Effective → state promotion (`f3c51f977`).
+
+## Final Implementation and Verification Evidence
+
+- Canonical V40 runtime blob: 11,028 bytes with a fixed 216-byte header.
+- Checked header checksum: `0xCD843F3E`; schema fingerprint: `0x9421CA4D`.
+- Retired combined runtime-plus-projection baseline: 15,052 bytes. Current
+  footprint is 4,024 bytes smaller (26.7%), with no flattened compatibility
+  payload.
+- Accepted `test2600.nds` overlay measurements, expressed as raw bytes / physical
+  headroom: overlay 157 `6,588 / 196`; 156 `540 / 6,980`; 159 `3,772 / 196`;
+  149 `44,860 / 196`; and 158 `13,492 / 204`.
+- Focused verification passed: 25,419 runtime-layer checks, 204 catalog checks,
+  14 timer checks, 20/20 Python model/codec tests, 31/31 writer tests, all three
+  focused Node suites, and 5,000/5,000 malformed-parity cases plus structured
+  malformed variants. Full V2 Python discovery passed 51/51 tests (12 model,
+  5 commit, 31 writer, and 3 retired-HTTP tests).
+- The final managed build passed and copied `test2600.nds` to Delta. Only
+  documentation changed after the preceding authoring/UI build, so it preserved
+  the accepted runtime overlay sizes and hashes; no new walking run is claimed
+  for it.
+- The preceding exact-runtime build passed a 15,720-frame real-save
+  walking/spawn regression with the player and spawned Pokémon still visible and
+  the source save checksum unchanged.
 
 These are checked implementation facts, not rollout questions. Any later change
-to capacity, precedence, lifetime, ownership, composition, or serialized ABI must
-update this contract and its validators together.
+to capacity, precedence, lifetime, ownership, composition, authoring identity,
+or serialized ABI must update this contract and its validators together.

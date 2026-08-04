@@ -37,9 +37,10 @@ navigation; they do not prevent the remaining decks from loading.
   learnset, evolution, and asset sources used by the Pokémon data API.
 - **Route Deck** is available when encounter sources can be parsed. Profile
   headers, override assignments, and spawn-setting sources are optional.
-- **Profile Deck** loads from the canonical OWBD V40 JSON model and generated
-  data. It is available only when that graph parses and validates successfully;
-  it does not depend on the retired flattened-profile sources.
+- **Profile Deck** loads the V51 authoring view of the canonical OWBD model and
+  validates its V40 runtime representation. It is available only when that graph
+  parses and validates successfully; it does not depend on the retired
+  flattened-profile sources.
 - **Sound Deck and build utilities** remain capability-gated by their own
   source and tool requirements.
 
@@ -51,22 +52,31 @@ validated independently and do not require Profile Deck infrastructure.
 
 Keep `scripts/overworld_behavior_profile_viewer.py` beside the shared V2 server:
 it still provides route, spawn-setting, shared Pokémon-data, build, launcher,
-and audio services. Profile authoring uses the separate OWBD V40 endpoint and
-writer; the shared backend no longer exposes the flattened-profile editor.
+and audio services. Profile authoring uses the separate OWBD V51 endpoint and
+writer over the V40 wire model; the shared backend no longer exposes the
+flattened-profile editor.
 
 ## What V2 changes
 
 - Replaces the legacy information architecture with focused Profile, Route,
   and Sound decks plus a compact Utilities menu.
-- Splits Profile Deck into **State Profiles** and **Controllers**. The `+`
-  action creates the entity for the selected view, and new entities remain
-  local drafts until Global Save.
+- Splits Profile Deck into **State Profiles**, **Controllers**, and
+  **Modifiers**. The `+` action creates the entity for the selected view, and
+  new entities remain local drafts until Global Save.
 - Treats every state profile as one complete, runnable behavior state. Calm,
   attentive, tired, carried, and custom meanings belong to controller-local
   nodes and semantic roles instead of sub-states inside a profile.
 - Lets a controller bind complete profiles to a unique node roster with one
   required base node, typed scalar and policy defaults, and an authoritative
   transition roster.
+- Makes state-body identity explicit. A shallow profile duplicate shares its
+  body and exposes shared edits; a deep duplicate owns an independent body even
+  when the initial values match. A body is retired only after its last profile
+  reference disappears.
+- Offers shallow and deep controller duplication with explicit closure rules.
+  Deep copy remaps ordinary authored controller-local candidates and children;
+  importer-owned backlinks and generated required-owner/tired-origin families
+  are refused and must be regenerated, never silently omitted.
 - Authors each transition together with its trigger, source-role mask, guards,
   atomic operations, actions, recovery actions, applicability, and override
   definition. An override definition is either a state candidate that selects
@@ -77,24 +87,35 @@ writer; the shared backend no longer exposes the flattened-profile editor.
   then fold over that state in deterministic order. Removing any owner-addressed
   layer recomposes from the base and all remaining layers instead of applying an
   inverse patch.
+- Authors modifiers as first-class definitions with typed operations, explicit
+  operation order, applicability, channel/priority, multiplicity, and map/battle
+  lifetime policies. Modifier operations cannot change state identity.
 - Adds a Stack preview that can compare saved and drafted graphs, resolve the
   controller for an entity context, apply event sequences, and show layer
-  ownership, precedence, effective values, and validation failures before Save.
+  ownership, precedence, ordered modifier contributions, normalized effective
+  values, and validation failures before Save.
+- Adds controller-node mapping preview before changing a profile binding, and
+  **Effective → state** promotion from a successful final preview. Promotion
+  creates an independent deep state body and keeps bounded source/winner/field
+  provenance in authoring JSON only; those annotations do not enter V40 runtime
+  bytes.
 - Protects every source mutation with a deterministic content revision.
   Stale editors receive a conflict instead of silently overwriting newer work.
 - Verifies the source revision before and after workspace and behavior-model
   reads, retrying instead of pairing stale parsed data with a newer revision.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
-  across V40 state profiles, controllers, transitions and their override graph,
-  encounters, and spawn settings.
+  across V51-authored state profiles, bodies, controllers, transitions,
+  modifiers and their override graph, encounters, and spawn settings. The
+  transaction validates and round-trips the generated V40 runtime model before
+  replacing sources.
 - Rebuilds Route Deck around the proven encounter workflow: persisted
   per-source filters, semantic route/Pokémon/type search, method-grouped sprite
   actions, compact aggregate summaries, and contextual per-slot editing.
 - Keeps route-only encounters as one reversible route operation. Manual source
   edits first restore the complete stored baseline, and conflicting external
   source changes block restoration instead of being overwritten.
-- Blocks Save while the V40 behavior graph, slot values, forms, level ranges, or
-  global spawn-distance relationships are invalid.
+- Blocks Save while the behavior graph, shared-body edits, slot values, forms,
+  level ranges, or global spawn-distance relationships are invalid.
 - Holds the same cross-process workspace lock for the full ROM build, so a
   second V2 process cannot rewrite source files mid-build.
 - Snapshots every writable source and restores the complete snapshot if a
@@ -116,6 +137,11 @@ writer; the shared backend no longer exposes the flattened-profile editor.
 - `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
   same controller-base, state-candidate winner, ordered modifier fold, and
   owner-addressed recomposition contract in the game runtime.
+
+V51 is an authoring/API format, not a second runtime format. Global Save emits
+and validates the fixed V40 wire blob. Names, descriptive tags, duplication-mode
+inputs, and promotion provenance remain outside runtime wire bytes; the resulting
+stable profile/body identities and references are encoded in V40.
 
 The V2-only API surface is:
 
