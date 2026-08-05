@@ -1176,6 +1176,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overlay-table", type=Path, default=Path("base/overarm9.bin")
     )
+    parser.add_argument(
+        "--package-only",
+        action="store_true",
+        help="verify current linked and packaged artifacts without fixture suites",
+    )
     return parser.parse_args()
 
 
@@ -1227,34 +1232,41 @@ def main() -> None:
             hooks_source,
             linker_script,
         )
-        traversal_cases, move_cases = verify_semantics(num_boxes, max_moves)
-        adversarial_cases = verify_adversarial_fixtures(
-            storage_source,
-            config_source,
-            save_constants,
-            party_header,
-            arm9,
-            linker_script,
-            config_macros,
-            max_moves,
-        )
-        artifact_adversarial_cases = verify_artifact_adversarial_fixtures(
-            linked_elf,
-            symbols,
-            core,
-            packaged_overlay,
-            overlay_table,
-            arm9,
-            hooks_source,
-            linker_script,
-        )
-        print(
-            "PC storage AnyBox verification passed: "
-            f"active {num_boxes}-box/{max_moves}-move production config, "
-            f"{traversal_cases} traversal cases, {move_cases} move/PP-Up cases, "
-            f"{adversarial_cases} preprocessor/helper fixtures, and "
-            f"{artifact_adversarial_cases} linked/package mutation fixtures"
-        )
+        if args.package_only:
+            print(
+                "PC storage AnyBox package verification passed: "
+                f"active {num_boxes}-box/{max_moves}-move production config "
+                "and linked/package artifacts"
+            )
+        else:
+            traversal_cases, move_cases = verify_semantics(num_boxes, max_moves)
+            adversarial_cases = verify_adversarial_fixtures(
+                storage_source,
+                config_source,
+                save_constants,
+                party_header,
+                arm9,
+                linker_script,
+                config_macros,
+                max_moves,
+            )
+            artifact_adversarial_cases = verify_artifact_adversarial_fixtures(
+                linked_elf,
+                symbols,
+                core,
+                packaged_overlay,
+                overlay_table,
+                arm9,
+                hooks_source,
+                linker_script,
+            )
+            print(
+                "PC storage AnyBox verification passed: "
+                f"active {num_boxes}-box/{max_moves}-move production config, "
+                f"{traversal_cases} traversal cases, {move_cases} move/PP-Up cases, "
+                f"{adversarial_cases} preprocessor/helper fixtures, and "
+                f"{artifact_adversarial_cases} linked/package mutation fixtures"
+            )
     except VerificationError as error:
         raise SystemExit(f"PC storage AnyBox verification failed: {error}") from error
 

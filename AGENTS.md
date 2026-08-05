@@ -32,6 +32,14 @@ Builds and tests are opt-in unless the agent needs a build to validate its own w
 - When tests are requested, use the relevant test skill for this repo.
 - If a coding task finishes without an authorized build or test run, report that no build or tests were run because the keyword gate was not opened.
 
+## Papercut Log
+
+When you encounter a small, concrete friction in this repository's tools or workflow--such as a command that needed an avoidable retry, an undocumented setup step, stale generated state, a misleading error, a flaky helper, or a non-obvious path or working-directory requirement--append it directly to the repository root's `PAPERCUTS.md`. Use one Markdown bullet containing the UTC timestamp, `codex`, the current branch, and the observation. Preserve existing entries.
+
+Keep each entry to one or two sentences and record only something you directly observed. Never include secrets, tokens, private data, ROM-derived content, full command output, or personal absolute paths. Do not log ordinary feature bugs, expected failures, speculative improvements, duplicate incidents, or an issue already tracked elsewhere. Logging is not a substitute for fixing an in-scope problem, and it does not authorize builds or tests outside the existing keyword gates.
+
+`PAPERCUTS.md` is a local, git-ignored queue. Continue the requested task after logging. Review or fix the accumulated queue only when the user asks; a fresh Codex task can read the file and handle the queue without another model or a special review command. If the user asks to review the current task for papercuts, use the available task context and log only concrete incidents. Do not mine private transcript storage automatically.
+
 ## Local HeartGold Decompilation Reference
 
 When it is present, use `.codex-reference/pokeheartgold/` as the read-only vanilla HeartGold source reference for reverse-engineering and implementation work. It is a local, Git-excluded checkout of `pret/pokeheartgold`, and the local USA HeartGold ROM matches that project's expected SHA-1.

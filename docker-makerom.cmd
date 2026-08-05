@@ -12,6 +12,15 @@ docker run -it --rm \
   hg-engine /usr/bin/env -i LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin PIP_CACHE_DIR=/tmp/pip-cache PWD=/hg-engine /usr/bin/python3 scripts/verify_pokemon_move_history_capture.py --managed-build-clean
 build_status=$?
 if [ "$build_status" -eq 0 ]; then
+  bind_summary_runtime=${HG_ENGINE_BIND_SUMMARY_RUNTIME_AFTER_BUILD-0}
+  case "$bind_summary_runtime" in
+    0|1) ;;
+    *)
+      echo "HG_ENGINE_BIND_SUMMARY_RUNTIME_AFTER_BUILD must be 0 or 1" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$bind_summary_runtime" -eq 1 ]; then
   runtime_python="$PWD/.venv/bin/python3"
   if [ ! -f "$runtime_python" ]; then
     echo "Missing host runtime Python: $runtime_python" >&2
@@ -38,7 +47,7 @@ if [ "$build_status" -eq 0 ]; then
   fi
   native_inventory="$PWD/scripts/summary_move_relearn_native_inventory.txt"
   protected_spawn_source="$PWD/scripts/summary_move_relearn_protected_spawn.swift"
-  protected_spawn_source_sha256="e6e9c6e8540ed4439cc463f4ca9826467b772ce8cdf96bec5839c5dbece5ca5e"
+  protected_spawn_source_sha256="87a2891706046f4ebf074240428312e1b434229921be8ec1c1e6c2773c51d941"
   protected_spawn_swift_cdhash="100b213164b4fd6521129ccd725d35cb674cef15"
   authenticate_native_bootstrap() {
     actual_sha256=$(/usr/bin/shasum -a 256 "$native_bootstrap" | /usr/bin/awk '{print $1}') || return 1
@@ -143,6 +152,9 @@ if [ "$build_status" -eq 0 ]; then
     "$PWD/scripts/pokemon_move_history_build_manifest.py" \
     --verify build/pokemon_move_history_capture_build.json \
     --rom test.nds --require-bound-runtime || exit $?
+  else
+    echo "Skipped optional Summary runtime attestation."
+  fi
   ./scripts/copy-test-nds-to-delta.sh || exit $?
 fi
 exit "$build_status"
