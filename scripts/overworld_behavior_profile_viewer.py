@@ -194,7 +194,7 @@ MACRO_LABEL_CACHE_LOCK = threading.Lock()
 MACRO_LABEL_CACHE_MAX_CONTEXTS = 4
 MACRO_LABEL_CACHES: OrderedDict[int, tuple[dict[str, int], dict[tuple[str, int | None, str | None], str]]] = OrderedDict()
 
-PROFILE_FIELDS = [
+LEGACY_PROFILE_FIELDS = [
     "chillState",
     "alertState",
     "alertEmote",
@@ -269,6 +269,59 @@ PROFILE_FIELDS = [
     "chainPauseVariance",
 ]
 
+# Stored profile schema v41. Active and Tired no longer duplicate complete
+# behavior lanes; they select an override profile and consume that profile's
+# Chill lane. Keep this order synchronized with
+# OverworldWildBehaviorProfileData and its three override-mask words.
+PROFILE_FIELDS = [
+    "chillState",
+    "alertState",
+    "alertEmote",
+    "alertTime",
+    "alertness",
+    "stamina",
+    "restTime",
+    "chillSpeed",
+    "range",
+    "jumpLevel",
+    "profileId",
+    "spawnState",
+    "chillAction",
+    "chillTarget",
+    "alertRange",
+    "playerAdjacentDirectionMasks",
+    "alertChance",
+    "spawnDestination",
+    "battleTrigger",
+    "hopAllowNonCardinal",
+    "hopMinDistance",
+    "hopMaxDistance",
+    "hopPause",
+    "teleportTime",
+    "teleportPause",
+    "alertSpecialAction",
+    "overworldLimit",
+    "spawnDestinationMinDistance",
+    "spawnDestinationMaxDistance",
+    "ramAccelerationSteps",
+    "ramMaxSpeed",
+    "chainPauseAction",
+    "chillAllowedTerrainMask",
+    "chillAllowedTerrainOverrideMask",
+    "hopTime",
+    "chaseBoostDistance",
+    "chaseBoostSpeed",
+    "hopSpinSpeed",
+    "spawnHopTime",
+    "circleRadius",
+    "continueWhenArrived",
+    "avoidPreviousTile",
+    "chainMovementVariance",
+    "chainPauseVariance",
+    "activeProfile",
+    "tiredProfile",
+]
+
 MATCH_FIELDS = [
     "groupMask",
     "species",
@@ -288,7 +341,7 @@ FIELD_LABELS = {
     "attentiveState": "Behavior",
     "stamina": "Stamina",
     "tiredState": "Behavior",
-    "restTime": "Rest",
+    "restTime": "Rest time",
     "chillSpeed": "Speed",
     "attentiveSpeed": "Speed",
     "tiredSpeed": "Speed",
@@ -304,6 +357,7 @@ FIELD_LABELS = {
     "movementStyle": "Movement style",
     "alertChance": "Alert chance",
     "spawnDestination": "Spawn destination",
+    "battleTrigger": "Battle trigger",
     "attentiveBattle": "Battle Active",
     "specialAction": "Movement style",
     "hopAllowNonCardinal": "Allow non-cardinal",
@@ -325,7 +379,8 @@ FIELD_LABELS = {
     "ramMaxSpeed": "Chain pause",
     "chainPauseVariance": "Pause variance",
     "chainPauseAction": "Chain pause action",
-    "chillAllowedTile": "Allowed tile",
+    "chillAllowedTerrainMask": "Allowed terrains",
+    "chillAllowedTerrainOverrideMask": "Terrain override mask",
     "attentiveAllowedTile": "Allowed tile",
     "tiredAllowedTile": "Allowed tile",
     "chillAllowedTile2": "Allowed tile 2",
@@ -352,6 +407,13 @@ FIELD_LABELS = {
     "attentiveCircleRadius": "Circle radius",
     "attentiveContinueWhenArrived": "Continue when arrived",
     "attentiveAvoidPreviousTile": "Avoid previous tile",
+    "chaseBoostDistance": "Boost distance",
+    "chaseBoostSpeed": "Boost speed",
+    "circleRadius": "Circle radius",
+    "continueWhenArrived": "Continue when arrived",
+    "avoidPreviousTile": "Avoid previous tile",
+    "activeProfile": "Active override profile",
+    "tiredProfile": "Tired override profile",
 }
 
 FIELD_UNITS = {
@@ -397,6 +459,9 @@ FIELD_UNITS = {
     "tiredRamMaxSpeed": "speed",
     "restTime": "frames",
     "range": "tiles",
+    "chaseBoostDistance": "tiles",
+    "chaseBoostSpeed": "speed",
+    "circleRadius": "tiles",
 }
 
 PRIMITIVE_FIELDS = [
@@ -408,6 +473,8 @@ PRIMITIVE_FIELDS = [
     "attentiveLocomotion",
     "attentiveTarget",
     "activeReaction",
+    "tiredLocomotion",
+    "tiredTarget",
     "tiredReaction",
 ]
 
@@ -420,6 +487,8 @@ PRIMITIVE_FIELD_LABELS = {
     "attentiveLocomotion": "Active locomotion",
     "attentiveTarget": "Active target",
     "activeReaction": "Active reaction",
+    "tiredLocomotion": "Tired locomotion",
+    "tiredTarget": "Tired target",
     "tiredReaction": "Tired reaction",
 }
 
@@ -444,6 +513,7 @@ FIELD_PREFIXES = {
     "movementStyle": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "spawnDestination": "OW_WILD_SPAWN_DESTINATION_",
     "attentiveBattle": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
+    "battleTrigger": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
     "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chainPauseAction": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_",
     "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
@@ -451,6 +521,8 @@ FIELD_PREFIXES = {
     "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveContinueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveAvoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_",
+    "continueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
+    "avoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_",
     "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_",
     "spawnLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chillLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
@@ -460,6 +532,8 @@ FIELD_PREFIXES = {
     "attentiveLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "attentiveTarget": "OW_WILD_BEHAVIOR_TARGET_",
     "activeReaction": "OW_WILD_BEHAVIOR_REACTION_",
+    "tiredLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
+    "tiredTarget": "OW_WILD_BEHAVIOR_TARGET_",
     "tiredReaction": "OW_WILD_BEHAVIOR_REACTION_",
 }
 
@@ -525,12 +599,20 @@ CANONICAL_SECONDARY_ALLOWED_TILE_RAWS = [
     *CANONICAL_ALLOWED_TILE_RAWS,
 ]
 
+ALLOWED_TERRAIN_OPTIONS = [
+    ("land", "Land", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND"),
+    ("water", "Water", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER"),
+    ("canopy", "Canopy", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY"),
+    ("grass", "Grass", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS"),
+    ("player-front", "Player front", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT"),
+]
+
 CANONICAL_PROFILE_FIELD_RAWS = {
     "chillState": CANONICAL_BEHAVIOR_RAWS,
     "attentiveState": CANONICAL_BEHAVIOR_RAWS,
     "tiredState": CANONICAL_BEHAVIOR_RAWS,
     "chillAction": CANONICAL_MOVEMENT_STYLE_RAWS,
-    "chillTarget": CANONICAL_TARGET_RAWS,
+    "chillTarget": CANONICAL_ACTIVE_TARGET_RAWS,
     "movementStyle": CANONICAL_MOVEMENT_STYLE_RAWS,
     "targetSelector": CANONICAL_ACTIVE_TARGET_RAWS,
     "specialAction": CANONICAL_MOVEMENT_STYLE_RAWS,
@@ -546,6 +628,8 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "tiredHopAllowNonCardinal": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "attentiveContinueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "attentiveAvoidPreviousTile": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "continueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "avoidPreviousTile": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
 }
 
 PROFILE_OPTION_EXCLUDED_SUFFIXES = (
@@ -582,81 +666,53 @@ OVERRIDE1_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE": "alertEmote",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME": "alertTime",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS": "alertness",
-    "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_STATE": "attentiveState",
     "OW_WILD_BEHAVIOR_OVERRIDE_STAMINA": "stamina",
-    "OW_WILD_BEHAVIOR_OVERRIDE_TIRED_STATE": "tiredState",
     "OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME": "restTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE_NORMAL_SPEED": "chillSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE_MAX_SPEED": "attentiveSpeed",
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED": "chillSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_SPEED": "attentiveSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE_TIRED_SPEED": "tiredSpeed",
     "OW_WILD_BEHAVIOR_OVERRIDE_RANGE": "range",
     "OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL": "jumpLevel",
     "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID": "profileId",
     "OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE": "spawnState",
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION": "chillAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET": "chillTarget",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE": "alertRange",
-    "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_SELECTOR": "targetSelector",
-    "OW_WILD_BEHAVIOR_OVERRIDE_MOVEMENT_STYLE": "movementStyle",
+    "OW_WILD_BEHAVIOR_OVERRIDE_PLAYER_ADJACENT_DIRECTION_MASKS": "playerAdjacentDirectionMasks",
     "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE": "alertChance",
     "OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION": "spawnDestination",
-    "OW_WILD_BEHAVIOR_OVERRIDE_ATTENTIVE_BATTLE": "attentiveBattle",
-    "OW_WILD_BEHAVIOR_OVERRIDE_SPECIAL_ACTION": "specialAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER": "battleTrigger",
     "OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL": "hopAllowNonCardinal",
     "OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE": "hopMinDistance",
     "OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE": "hopMaxDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE_HOP_PAUSE": "hopPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE_TELEPORT_TIME": "teleportTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE_TELEPORT_PAUSE": "teleportPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE_ALERT_SPECIAL_ACTION": "alertSpecialAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT": "overworldLimit",
 }
 
 OVERRIDE2_FIELDS = {
-    "OW_WILD_BEHAVIOR_OVERRIDE2_HOP_PAUSE": "hopPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_TIME": "teleportTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_TELEPORT_PAUSE": "teleportPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_ALERT_SPECIAL_ACTION": "alertSpecialAction",
     "OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MIN_DISTANCE": "spawnDestinationMinDistance",
     "OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_DESTINATION_MAX_DISTANCE": "spawnDestinationMaxDistance",
     "OW_WILD_BEHAVIOR_OVERRIDE2_RAM_ACCELERATION_STEPS": "ramAccelerationSteps",
     "OW_WILD_BEHAVIOR_OVERRIDE2_RAM_MAX_SPEED": "ramMaxSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE": "chillAllowedTile",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE": "attentiveAllowedTile",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE": "tiredAllowedTile",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TILE_2": "chillAllowedTile2",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_ATTENTIVE_ALLOWED_TILE_2": "attentiveAllowedTile2",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_TIRED_ALLOWED_TILE_2": "tiredAllowedTile2",
-    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_TARGET": "chillTarget",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_PAUSE_ACTION": "chainPauseAction",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK": "chillAllowedTerrainMask",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK": "chillAllowedTerrainOverrideMask",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_HOP_TIME": "hopTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHASE_BOOST_DISTANCE": "chaseBoostDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CHASE_BOOST_SPEED": "chaseBoostSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_HOP_SPIN_SPEED": "hopSpinSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_HOP_TIME": "spawnHopTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CIRCLE_RADIUS": "circleRadius",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_CONTINUE_WHEN_ARRIVED": "continueWhenArrived",
+    "OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE": "avoidPreviousTile",
 }
 
 OVERRIDE3_FIELDS = {
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_ALLOW_NON_CARDINAL": "attentiveHopAllowNonCardinal",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MIN_DISTANCE": "attentiveHopMinDistance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_MAX_DISTANCE": "attentiveHopMaxDistance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_PAUSE": "attentiveHopPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_TIME": "attentiveTeleportTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_TELEPORT_PAUSE": "attentiveTeleportPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_ACCELERATION_STEPS": "attentiveRamAccelerationSteps",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_RAM_MAX_SPEED": "attentiveRamMaxSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_ALLOW_NON_CARDINAL": "tiredHopAllowNonCardinal",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MIN_DISTANCE": "tiredHopMinDistance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_MAX_DISTANCE": "tiredHopMaxDistance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_HOP_PAUSE": "tiredHopPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_TIME": "tiredTeleportTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_TELEPORT_PAUSE": "tiredTeleportPause",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_ACCELERATION_STEPS": "tiredRamAccelerationSteps",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_RAM_MAX_SPEED": "tiredRamMaxSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_OVERWORLD_LIMIT": "overworldLimit",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_TIME": "hopTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CHASE_BOOST_DISTANCE": "attentiveChaseBoostDistance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CHASE_BOOST_SPEED": "attentiveChaseBoostSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_SPIN_SPEED": "hopSpinSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_TIME": "spawnHopTime",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_HOP_SPIN_SPEED": "attentiveHopSpinSpeed",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CIRCLE_RADIUS": "attentiveCircleRadius",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_CONTINUE_WHEN_ARRIVED": "attentiveContinueWhenArrived",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_ATTENTIVE_AVOID_PREVIOUS_TILE": "attentiveAvoidPreviousTile",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION": "chainPauseAction",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE": "chainMovementVariance",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE": "chainPauseVariance",
-    "OW_WILD_BEHAVIOR_OVERRIDE3_PLAYER_ADJACENT_DIRECTION_MASKS": "playerAdjacentDirectionMasks",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE": "activeProfile",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE": "tiredProfile",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -908,12 +964,27 @@ NUMERIC_PROFILE_FIELDS = {
     "attentiveChaseBoostDistance",
     "attentiveChaseBoostSpeed",
     "attentiveCircleRadius",
+    "chaseBoostDistance",
+    "chaseBoostSpeed",
+    "circleRadius",
+    "chillAllowedTerrainMask",
+    "chillAllowedTerrainOverrideMask",
+    "activeProfile",
+    "tiredProfile",
 }
 
 # Override profiles may transform numeric byte fields produced by earlier
 # layers. Signed values adjust the stored byte, while /< and /> impose an
 # inclusive lower or upper bound respectively. Exact values remain unprefixed.
-RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(NUMERIC_PROFILE_FIELDS & set(OVERRIDE_SYMBOL_BY_FIELD))
+RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(
+    (NUMERIC_PROFILE_FIELDS & set(OVERRIDE_SYMBOL_BY_FIELD))
+    - {
+        "activeProfile",
+        "tiredProfile",
+        "chillAllowedTerrainMask",
+        "chillAllowedTerrainOverrideMask",
+    }
+)
 BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "chillSpeed",
     "attentiveSpeed",
@@ -940,8 +1011,11 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "attentiveChaseBoostDistance",
     "attentiveChaseBoostSpeed",
     "attentiveCircleRadius",
+    "chaseBoostDistance",
+    "chaseBoostSpeed",
+    "circleRadius",
 })
-MOVEMENT_SPEED_FIELDS = frozenset({"chillSpeed", "attentiveSpeed", "tiredSpeed"})
+MOVEMENT_SPEED_FIELDS = frozenset({"chillSpeed"})
 RELATIVE_OVERRIDE_DELTA_MIN = -127
 RELATIVE_OVERRIDE_DELTA_MAX = 127
 RELATIVE_OVERRIDE_RAW_RE = re.compile(r"^[+-]\d+$")
@@ -1028,6 +1102,13 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "attentiveChaseBoostDistance": 32,
     "attentiveChaseBoostSpeed": 4,
     "attentiveCircleRadius": 8,
+    "chaseBoostDistance": 32,
+    "chaseBoostSpeed": 4,
+    "circleRadius": 8,
+    "chillAllowedTerrainMask": 63,
+    "chillAllowedTerrainOverrideMask": 63,
+    "activeProfile": 255,
+    "tiredProfile": 255,
 }
 NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "chillSpeed": 1,
@@ -1605,6 +1686,30 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     if len(items) == 1 and clean_token(str(items[0])) == "0":
         return {
             field: make_value("0", field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(PROFILE_FIELDS) < len(items) <= len(LEGACY_PROFILE_FIELDS):
+        items = [*items, *(["0"] * (len(LEGACY_PROFILE_FIELDS) - len(items)))]
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(LEGACY_PROFILE_FIELDS)
+        }
+        migrated = {
+            field: legacy.get(field, "0")
+            for field in PROFILE_FIELDS
+        }
+        migrated.update({
+            "battleTrigger": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE",
+            "chaseBoostDistance": "0",
+            "chaseBoostSpeed": "0",
+            "circleRadius": "1",
+            "continueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_NO",
+            "avoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_NO",
+            "activeProfile": "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE",
+            "tiredProfile": "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED",
+        })
+        return {
+            field: make_value(migrated[field], field, macros)
             for field in PROFILE_FIELDS
         }
     if len(items) > len(PROFILE_FIELDS):
@@ -2202,6 +2307,8 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
         "attentiveLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "attentiveLocomotion", macros),
         "attentiveTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "attentiveTarget", macros),
         "activeReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "activeReaction", macros),
+        "tiredLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "tiredLocomotion", macros),
+        "tiredTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "tiredTarget", macros),
         "tiredReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "tiredReaction", macros),
     }
 
@@ -2236,37 +2343,36 @@ def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list]
         if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
             primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "chillTarget", macros)
 
-    primitives["attentiveLocomotion"] = copy.deepcopy(profile["movementStyle"])
-    primitives["attentiveTarget"] = copy.deepcopy(profile["targetSelector"])
-    active_behavior = numeric(profile["attentiveState"])
-    if active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
-        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
-        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
-    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
-        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_FLEE", "activeReaction", macros)
-        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER", "attentiveTarget", macros)
-    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
-        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_EMOTE", "activeReaction", macros)
-        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
-    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_RAM"):
-        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
-        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "attentiveTarget", macros)
-    elif active_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"):
-        primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
-        if numeric(primitives["attentiveTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["attentiveTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "attentiveTarget", macros)
     if (numeric(profile["alertness"]) or 0) != 0 and (numeric(profile["alertChance"]) or 0) != 0:
         alert = indexed_primitive(primitive_maps["alertPrimitivesByRange"], numeric(profile["alertRange"]))
         if alert:
             primitives["alertLogic"] = alert["alertLogic"]
             primitives["alertReaction"] = alert["alertReaction"]
 
-    if numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE"):
-        primitives["tiredReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_TIRED", "tiredReaction", macros)
+    active_profile = profile.get("_activeProfileData")
+    if active_profile:
+        active_primitives = resolve_primitives(active_profile, primitive_maps, macros)
+        primitives["attentiveLocomotion"] = active_primitives["chillLocomotion"]
+        primitives["attentiveTarget"] = active_primitives["chillTarget"]
+        active_state = numeric(active_profile["chillState"])
+        if active_state in {
+            macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"),
+            macros.get("OW_WILD_BEHAVIOR_KIND_RAM"),
+            macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"),
+        }:
+            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
+        elif active_state == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
+            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_FLEE", "activeReaction", macros)
+        elif active_state == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
+            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_EMOTE", "activeReaction", macros)
+
+    tired_profile = profile.get("_tiredProfileData")
+    if tired_profile:
+        tired_primitives = resolve_primitives(tired_profile, primitive_maps, macros)
+        primitives["tiredLocomotion"] = tired_primitives["chillLocomotion"]
+        primitives["tiredTarget"] = tired_primitives["chillTarget"]
+        if numeric(tired_profile["chillState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE"):
+            primitives["tiredReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_TIRED", "tiredReaction", macros)
 
     return primitives
 
@@ -2420,13 +2526,47 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
     relative_fields = set(override.get("relativeFields") or [])
     at_least_fields = set(override.get("atLeastFields") or [])
     at_most_fields = set(override.get("atMostFields") or [])
-    for bit in (
+    bits = (
         override["mask"]["bits"]
         + override.get("mask2", {"bits": []})["bits"]
         + override.get("mask3", {"bits": []})["bits"]
-    ):
+    )
+    active_fields = {bit.get("field") for bit in bits}
+    terrain_fields = {
+        "chillAllowedTerrainMask",
+        "chillAllowedTerrainOverrideMask",
+    }
+    if "chillAllowedTerrainOverrideMask" in active_fields:
+        before = profile["chillAllowedTerrainMask"]
+        before_mask = numeric(before) or 0
+        before_explicit = numeric(profile["chillAllowedTerrainOverrideMask"]) or 0
+        override_mask = numeric(override["profile"]["chillAllowedTerrainMask"]) or 0
+        explicit_mask = numeric(override["profile"]["chillAllowedTerrainOverrideMask"]) or 0
+        explicit_mask &= 0x3F
+        resolved = (before_mask & ~explicit_mask) | (override_mask & explicit_mask)
+        after = make_value(str(resolved & 0x3F), "chillAllowedTerrainMask", {})
+        profile["chillAllowedTerrainMask"] = after
+        profile["chillAllowedTerrainOverrideMask"] = make_value(
+            str((before_explicit | explicit_mask) & 0x3F),
+            "chillAllowedTerrainOverrideMask",
+            {},
+        )
+        if before_mask != resolved:
+            changes.append(
+                {
+                    "field": "chillAllowedTerrainMask",
+                    "label": FIELD_LABELS["chillAllowedTerrainMask"],
+                    "before": before,
+                    "after": after,
+                    "relative": False,
+                    "delta": None,
+                    "operator": "absolute",
+                    "operand": None,
+                }
+            )
+    for bit in bits:
         field = bit.get("field")
-        if not field:
+        if not field or field in terrain_fields:
             continue
         before = profile[field]
         after = copy.deepcopy(override["profile"][field])
@@ -2589,8 +2729,6 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
 
     for allow_field, min_field, max_field in (
         ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
-        ("attentiveHopAllowNonCardinal", "attentiveHopMinDistance", "attentiveHopMaxDistance"),
-        ("tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance"),
     ):
         if numeric(profile[allow_field]) not in {
             macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
@@ -2609,15 +2747,15 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
         set_field("spawnDestinationMaxDistance", "8")
     if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
         set_field("spawnDestinationMaxDistance", profile["spawnDestinationMinDistance"]["raw"])
-    if (numeric(profile["attentiveChaseBoostDistance"]) or 0) > 32:
-        set_field("attentiveChaseBoostDistance", "32")
-    if (numeric(profile["attentiveChaseBoostSpeed"]) or 0) > 4:
-        set_field("attentiveChaseBoostSpeed", "4")
-    if (numeric(profile["attentiveCircleRadius"]) or 0) > 8:
-        set_field("attentiveCircleRadius", "8")
+    if (numeric(profile["chaseBoostDistance"]) or 0) > 32:
+        set_field("chaseBoostDistance", "32")
+    if (numeric(profile["chaseBoostSpeed"]) or 0) > 4:
+        set_field("chaseBoostSpeed", "4")
+    if (numeric(profile["circleRadius"]) or 0) > 8:
+        set_field("circleRadius", "8")
     for bool_field in (
-        "attentiveContinueWhenArrived",
-        "attentiveAvoidPreviousTile",
+        "continueWhenArrived",
+        "avoidPreviousTile",
     ):
         if numeric(profile[bool_field]) not in {
             macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
@@ -2625,30 +2763,28 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
         }:
             set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_NO")
     if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
-        set_field("tiredState", "OW_WILD_BEHAVIOR_KIND_ASLEEP")
         set_field("stamina", "1")
         set_field("alertness", "0")
         set_field("alertChance", "0")
-    elif numeric(profile["tiredState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
-        set_field("stamina", "1")
-    if (
-        (
-            numeric(profile["attentiveState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
-            or numeric(profile["targetSelector"]) != macros.get("OW_WILD_BEHAVIOR_TARGET_NONE")
-            or numeric(profile["movementStyle"]) != macros.get("OW_WILD_BEHAVIOR_LOCOMOTION_NONE")
-            or numeric(profile["attentiveBattle"]) != macros.get("OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE")
-        )
-        and numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
-        and numeric(profile["stamina"]) == 0
-    ):
-        set_field("stamina", "1")
-    if (
-        numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE")
-        and numeric(profile["tiredState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP")
-        and numeric(profile["restTime"]) == 0
-    ):
-        set_field("restTime", "1")
     return changes
+
+
+def resolve_inherited_terrain_policy(profile: dict[str, dict], macros: dict[str, int]) -> None:
+    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3F)
+    default_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT", 1)
+    explicit_mask = (numeric(profile["chillAllowedTerrainOverrideMask"]) or 0) & all_mask
+    value_mask = numeric(profile["chillAllowedTerrainMask"]) or 0
+    resolved = (value_mask & explicit_mask) | (default_mask & ~explicit_mask)
+    profile["chillAllowedTerrainMask"] = make_value(
+        str(resolved & all_mask),
+        "chillAllowedTerrainMask",
+        macros,
+    )
+    profile["chillAllowedTerrainOverrideMask"] = make_value(
+        str(all_mask),
+        "chillAllowedTerrainOverrideMask",
+        macros,
+    )
 
 
 def parse_group_species(source: str, macros: dict[str, int]) -> dict[int, list[str]]:
@@ -4187,6 +4323,38 @@ def behavior_override_applies(context: dict, override: dict, macros: dict[str, i
     return any(numeric(member) == context["species"] for member in override.get("members", []))
 
 
+def resolve_referenced_profile_for_context(
+    context: dict,
+    class_profiles: list[dict[str, dict]],
+    variable_overrides: list[dict],
+    macros: dict[str, int],
+    reference: dict,
+) -> dict[str, dict] | None:
+    reference_index = numeric(reference)
+    if reference_index is None or reference_index < 0:
+        return None
+    selected_order = reference_index + 1
+    selected = next(
+        (override for override in variable_overrides if override["order"] == selected_order),
+        None,
+    )
+    if selected is None:
+        return None
+    class_index = context["behaviorClass"]
+    if class_index >= len(class_profiles):
+        class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
+    resolved = clone_profile(class_profiles[class_index])
+    resolve_inherited_terrain_policy(resolved, macros)
+    for override in variable_overrides:
+        if override["order"] == selected_order:
+            continue
+        if behavior_override_applies(context, override, macros):
+            merge_profile(resolved, override["behavior"])
+    merge_profile(resolved, selected["behavior"])
+    normalize_profile(resolved, macros)
+    return resolved
+
+
 def resolve_profile_for_context(
     context: dict,
     class_profiles: list[dict[str, dict]],
@@ -4197,6 +4365,7 @@ def resolve_profile_for_context(
     if class_index >= len(class_profiles):
         class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     profile = clone_profile(class_profiles[class_index])
+    resolve_inherited_terrain_policy(profile, macros)
     layers = [{"kind": "class", "label": f"Class profile #{class_index}", "changes": []}]
     variable_hits = []
     for override in variable_overrides:
@@ -4214,6 +4383,20 @@ def resolve_profile_for_context(
     normalizations = normalize_profile(profile, macros)
     if normalizations:
         layers.append({"kind": "normalization", "label": "Runtime fallback", "changes": normalizations})
+    profile["_activeProfileData"] = resolve_referenced_profile_for_context(
+        context,
+        class_profiles,
+        variable_overrides,
+        macros,
+        profile["activeProfile"],
+    )
+    profile["_tiredProfileData"] = resolve_referenced_profile_for_context(
+        context,
+        class_profiles,
+        variable_overrides,
+        macros,
+        profile["tiredProfile"],
+    )
     return profile, layers, variable_hits, normalizations
 
 
@@ -4651,7 +4834,11 @@ def build_data(
 
     for override in variable_overrides:
         order = override["order"]
-        runtime_owned_override = order - 1 == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -1)
+        runtime_owned_override = order - 1 in {
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -1),
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE", -1),
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", -1),
+        }
         override_name = override_profile_names.get(order, "")
         override_name = override_name or f"Override #{order}: {override['summary']}"
         matching_count = sum(
@@ -4698,12 +4885,35 @@ def build_data(
             }
         )
 
+    edit_options = build_edit_options(macros, class_profiles)
+    reference_options = []
+    for override in variable_overrides:
+        order = override["order"]
+        name = override_profile_names.get(order, "") or f"Override #{order}: {override['summary']}"
+        raw = str(order - 1)
+        if name == "Default Active":
+            raw = "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE"
+        elif name == "Default Tired":
+            raw = "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED"
+        reference_options.append({"raw": raw, "value": order - 1, "label": name})
+    edit_options["activeProfile"] = reference_options
+    edit_options["tiredProfile"] = reference_options
+
     return {
         "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "source": data_source_metadata(),
         "capabilities": capabilities,
         "profilesAvailable": True,
         "profileError": None,
+        "allowedTerrains": [
+            {
+                "key": key,
+                "label": label,
+                "raw": raw,
+                "bit": macros.get(raw, 0),
+            }
+            for key, label, raw in ALLOWED_TERRAIN_OPTIONS
+        ],
         "fields": [
             {"key": field, "label": FIELD_LABELS[field], "unit": FIELD_UNITS.get(field, "")}
             for field in PROFILE_FIELDS
@@ -4739,7 +4949,7 @@ def build_data(
             "terrains": terrain_labels,
             "destinations": destination_labels,
         },
-        "editOptions": build_edit_options(macros, class_profiles),
+        "editOptions": edit_options,
         "defaultClassIndex": default_class,
         "defaultProfile": profile_numeric_view(default_profile),
         "primitiveFields": [{"key": field, "label": PRIMITIVE_FIELD_LABELS[field]} for field in PRIMITIVE_FIELDS],
@@ -5349,19 +5559,21 @@ def write_behavior_data_source(raw_source: str, raw_header: str | None = None) -
     counts = behavior_blob_counts(raw_source)
     if raw_header is None:
         raw_header = BEHAVIOR_DATA_HEADER.read_text()
-    if "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON" in raw_header:
-        follower_orders = [
-            order
-            for order, name in parse_override_profile_entry_names(raw_source).items()
-            if name.casefold() == "follower pokemon"
-        ]
-        if len(follower_orders) != 1:
-            raise ParseError("runtime-owned Follower Pokemon override must exist exactly once")
-        raw_header = replace_define_value(
-            raw_header,
-            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON",
-            follower_orders[0] - 1,
-        )
+    profile_orders_by_name = {
+        name.casefold(): order
+        for order, name in parse_override_profile_entry_names(raw_source).items()
+    }
+    for symbol, profile_name in (
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", "Follower Pokemon"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE", "Default Active"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", "Default Tired"),
+    ):
+        if symbol not in raw_header:
+            continue
+        order = profile_orders_by_name.get(profile_name.casefold())
+        if order is None:
+            raise ParseError(f"runtime-owned {profile_name} override must exist exactly once")
+        raw_header = replace_define_value(raw_header, symbol, order - 1)
     BEHAVIOR_DATA_SOURCE.write_text(raw_source)
     BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(raw_header, counts))
     invalidate_data_cache()
@@ -5982,6 +6194,15 @@ def apply_profile_changes(body: bytes) -> dict:
         for class_index, field_changes in changes.items()
     }
 
+    override_profile_count = len(parse_behavior_override_profiles(behavior_source, macros))
+    for class_index, field_changes in changes.items():
+        for field in ("activeProfile", "tiredProfile"):
+            if field not in field_changes:
+                continue
+            reference = numeric_raw(field_changes[field], field, macros)
+            if reference is None or reference < 0 or reference >= override_profile_count:
+                raise ValueError(f"{field} reference is out of range: {field_changes[field]}")
+
     valid_options = valid_change_options(macros, class_profiles)
     for class_index, field_changes in changes.items():
         if class_index < 0 or class_index >= len(class_profiles):
@@ -6134,9 +6355,13 @@ def apply_profile_override_changes(body: bytes) -> dict:
     macros.update(terrain_values)
     macros.update(destination_values)
     valid_species = {entry["symbol"] for entry in parse_species(expressions, macros, species_order)}
-    runtime_owned_override_order = macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -2) + 1
-    if runtime_owned_override_order in removals or runtime_owned_override_order in renames:
-        raise ValueError("the runtime-owned Follower Pokemon override cannot be renamed or deleted")
+    runtime_owned_override_orders = {
+        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -2) + 1,
+        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE", -2) + 1,
+        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", -2) + 1,
+    }
+    if runtime_owned_override_orders.intersection(removals) or runtime_owned_override_orders.intersection(renames):
+        raise ValueError("runtime-owned Follower/Default state overrides cannot be renamed or deleted")
 
     class_profiles = [
         parse_profile(entry, macros)
@@ -6165,11 +6390,21 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 valid_options[field].add(canonical_profile_value_raw(value, field))
 
     def validate_override_fields(fields: dict[str, str], label: str) -> None:
+        terrain_value_present = bool(fields.get("chillAllowedTerrainMask"))
+        terrain_override_present = bool(fields.get("chillAllowedTerrainOverrideMask"))
+        if terrain_value_present != terrain_override_present:
+            raise ValueError(
+                f"{label} must update allowed terrain values and inheritance together"
+            )
         for field, raw in fields.items():
             if field not in PROFILE_FIELDS:
                 raise ValueError(f"invalid override field: {field}")
             if field not in OVERRIDE_SYMBOL_BY_FIELD:
                 raise ValueError(f"field cannot be used in override profiles: {field}")
+            if field in {"activeProfile", "tiredProfile"} and raw:
+                reference = numeric_raw(raw, field, macros)
+                if reference is None or reference < 0 or reference >= len(existing_overrides):
+                    raise ValueError(f"{label} has an out-of-range {field} reference: {raw}")
             if raw and is_numeric_override_operator_raw(field, raw):
                 compound = compound_override_parts(field, raw)
                 if compound is not None:
@@ -6365,6 +6600,55 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if not active:
             raise ValueError("at least one override profile is required; create a replacement before removing the last profile")
 
+        # Profile references are stored as zero-based override indices. Preserve
+        # their identity when profiles are reordered, and refuse a deletion that
+        # would leave a retained profile or base class pointing at nothing.
+        old_index_to_new = {
+            profile["originalOrder"] - 1: new_index
+            for new_index, profile in enumerate(active)
+        }
+
+        def remap_reference_raw(raw: str, label: str) -> str:
+            old_index = numeric_raw(raw, label, macros)
+            if old_index is None:
+                raise ValueError(f"{label} has an invalid profile reference: {raw}")
+            if old_index not in old_index_to_new:
+                raise ValueError(f"{label} references an override profile being removed")
+            # Named runtime references follow the rewritten header constants.
+            # Literal references need to follow the profile they named.
+            if re.fullmatch(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", raw.strip()):
+                return str(old_index_to_new[old_index])
+            return raw
+
+        for profile in active:
+            behavior = profile["behavior"]
+            fields = {
+                field: behavior["profile"][field]["raw"]
+                for field in behavior_override_field_keys(behavior)
+            }
+            changed_reference = False
+            for field in ("activeProfile", "tiredProfile"):
+                if field not in fields:
+                    continue
+                remapped = remap_reference_raw(
+                    fields[field],
+                    f"override {profile['originalOrder']} {field}",
+                )
+                changed_reference = changed_reference or remapped != fields[field]
+                fields[field] = remapped
+            if changed_reference:
+                profile["behavior"] = behavior_from_fields(fields)
+
+        class_profiles_changed = False
+        class_profile_raws = []
+        for class_index, class_profile in enumerate(class_profiles):
+            raws = raw_values(class_profile)
+            for field in ("activeProfile", "tiredProfile"):
+                remapped = remap_reference_raw(raws[field], f"class profile {class_index} {field}")
+                class_profiles_changed = class_profiles_changed or remapped != raws[field]
+                raws[field] = remapped
+            class_profile_raws.append(raws)
+
         names = [profile["name"].strip().lower() for profile in active if profile["name"].strip()]
         if len(names) != len(set(names)):
             raise ValueError("override profile names must be unique")
@@ -6411,6 +6695,17 @@ def apply_profile_override_changes(body: bytes) -> dict:
             (profile_span[0], profile_span[1], formatted_profiles),
             (member_span[0], member_span[1], formatted_members),
         ]
+        if class_profiles_changed:
+            class_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
+            class_indent = line_indent_before(raw_behavior_data, class_span[0])
+            class_entry_indent = class_indent + "    "
+            formatted_classes = ",\n".join(
+                format_profile_initializer(raws, class_entry_indent)
+                for raws in class_profile_raws
+            )
+            replacements.append(
+                (class_span[0], class_span[1], f"{{\n{formatted_classes}\n{class_indent}}}")
+            )
         updated_source = raw_behavior_data
         changed = False
         for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
@@ -15706,10 +16001,10 @@ HTML = r"""<!doctype html>
     };
     const PROFILE_FIELD_HINTS = {
       profileId: "Optional behavior-family label. Most profiles can leave this as Default.",
-      chillAllowedTile: "Tile type this Chill behavior may target.",
+      chillAllowedTerrainMask: "Per-terrain On/Off values for this Chill behavior.",
       attentiveAllowedTile: "Tile type this Active behavior may target.",
       tiredAllowedTile: "Tile type this Tired behavior may target.",
-      chillAllowedTile2: "Optional second tile type this Chill behavior may target.",
+      chillAllowedTerrainOverrideMask: "Terrains that are explicit instead of inherited.",
       attentiveAllowedTile2: "Optional second tile type this Active behavior may target.",
       tiredAllowedTile2: "Optional second tile type this Tired behavior may target.",
       hopTime: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
@@ -15764,8 +16059,8 @@ HTML = r"""<!doctype html>
       chillTarget: { label: "Chill target", shortLabel: "Target", category: "chill", subgroup: "Targeting", iconFamily: "condition" },
       chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillSpeed: { label: "Chill speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
-      chillAllowedTile: { label: "Allowed tile", shortLabel: "Tile", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
-      chillAllowedTile2: { label: "Second allowed tile", shortLabel: "Tile 2", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
+      chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
+      chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       hopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
       hopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
@@ -15875,8 +16170,8 @@ HTML = r"""<!doctype html>
           "chillTarget",
           "chillAction",
           "chillSpeed",
-          "chillAllowedTile",
-          "chillAllowedTile2",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
           "hopAllowNonCardinal",
           "hopMinDistance",
           "hopMaxDistance",
@@ -15888,6 +16183,15 @@ HTML = r"""<!doctype html>
           "ramAccelerationSteps",
           "ramMaxSpeed",
           "chainPauseAction",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "battleTrigger",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          ACTIVE_ACTION_SPECIAL_FIELD,
         ],
       },
       {
@@ -15910,52 +16214,14 @@ HTML = r"""<!doctype html>
         label: "Active",
         icon: "footstep",
         typeClass: "type-movement",
-        fields: [
-          "attentiveState",
-          "stamina",
-          "movementStyle",
-          "attentiveSpeed",
-          "attentiveAllowedTile",
-          "attentiveAllowedTile2",
-          "attentiveHopAllowNonCardinal",
-          "attentiveHopMinDistance",
-          "attentiveHopMaxDistance",
-          "attentiveHopPause",
-          "attentiveHopSpinSpeed",
-          "attentiveTeleportTime",
-          "attentiveTeleportPause",
-          "attentiveRamAccelerationSteps",
-          "attentiveRamMaxSpeed",
-          "targetSelector",
-          "attentiveCircleRadius",
-          "attentiveContinueWhenArrived",
-          ACTIVE_ACTION_SPECIAL_FIELD,
-          "attentiveBattle",
-          "attentiveChaseBoostDistance",
-          "attentiveChaseBoostSpeed",
-        ],
+        fields: ["stamina", "activeProfile"],
       },
       {
         key: "tired",
         label: "Tired",
         icon: "clock",
         typeClass: "type-flow",
-        fields: [
-          "tiredState",
-          "specialAction",
-          "tiredSpeed",
-          "tiredAllowedTile",
-          "tiredAllowedTile2",
-          "tiredHopAllowNonCardinal",
-          "tiredHopMinDistance",
-          "tiredHopMaxDistance",
-          "tiredHopPause",
-          "tiredTeleportTime",
-          "tiredTeleportPause",
-          "tiredRamAccelerationSteps",
-          "tiredRamMaxSpeed",
-          "restTime",
-        ],
+        fields: ["restTime", "tiredProfile"],
       },
       {
         key: "stats",
@@ -15976,7 +16242,8 @@ HTML = r"""<!doctype html>
       { key: "spawn", label: "Spawn", icon: "footstep", typeClass: "type-movement", fields: ["spawnLocomotion"] },
       { key: "chill", label: "Chill", icon: "leaf", typeClass: "type-grass", fields: ["chillLocomotion", "chillTarget"] },
       { key: "alert", label: "Alert", icon: "target", typeClass: "type-placement", fields: ["alertLogic", "alertReaction"] },
-      { key: "active", label: "Active", icon: "bolt", typeClass: "type-flow", fields: ["attentiveLocomotion", "attentiveTarget", "activeReaction", "tiredReaction"] },
+      { key: "active", label: "Active", icon: "bolt", typeClass: "type-flow", fields: ["attentiveLocomotion", "attentiveTarget", "activeReaction"] },
+      { key: "tired", label: "Tired", icon: "clock", typeClass: "type-flow", fields: ["tiredLocomotion", "tiredTarget", "tiredReaction"] },
     ];
     let collapsedSections = readCollapsedSections();
     let routeSpawnTypeFilters = readRouteSpawnTypeFilters();
@@ -17708,7 +17975,9 @@ HTML = r"""<!doctype html>
     function profileOptionForRaw(fieldKey, raw) {
       if (fieldKey === ALERT_RANGE_TYPE_FIELD) return alertRangeTypeOptionForRaw(raw);
       if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) return spawnDestinationTypeOptionForRaw(raw);
-      const option = profileOptionsForField(fieldKey).find(item => item.raw === raw) || null;
+      const option = profileOptionsForField(fieldKey).find(item =>
+        item.raw === raw || (Number.isFinite(item.value) && String(item.value) === String(raw))
+      ) || null;
       if (PROFILE_MOVEMENT_FIELDS.has(fieldKey)) {
         return option;
       }
@@ -17780,6 +18049,7 @@ HTML = r"""<!doctype html>
         const options = profileOptionsForField(fieldKey);
         const byRaw = new Map();
         const byRawLower = new Map();
+        const byValue = new Map();
         const byDisplayLower = new Map();
         const byLabelLower = new Map();
         options.forEach(option => {
@@ -17787,6 +18057,7 @@ HTML = r"""<!doctype html>
           const display = profileComboOptionDisplay(option, fieldKey);
           byRaw.set(option.raw, option);
           byRawLower.set(String(option.raw).toLowerCase(), option);
+          if (Number.isFinite(option.value)) byValue.set(String(option.value), option);
           const displayLower = String(display).toLowerCase();
           const rawDisplayLower = String(rawDisplay).toLowerCase();
           const labelLower = String(option.label).toLowerCase();
@@ -17794,7 +18065,7 @@ HTML = r"""<!doctype html>
           if (!byDisplayLower.has(rawDisplayLower)) byDisplayLower.set(rawDisplayLower, option);
           if (!byLabelLower.has(labelLower)) byLabelLower.set(labelLower, option);
         });
-        lookup.set(fieldKey, { byRaw, byRawLower, byDisplayLower, byLabelLower });
+        lookup.set(fieldKey, { byRaw, byRawLower, byValue, byDisplayLower, byLabelLower });
       });
       return lookup;
     }
@@ -18096,22 +18367,23 @@ HTML = r"""<!doctype html>
       },
     };
 
-    function profileEditMovementFields(item, fieldKey, speedFieldKey = null, suboptionKey = "chill") {
+    function profileEditMovementFields(item, fieldKey, speedFieldKey = null, suboptionKey = "chill", showInactiveUnset = false) {
       const originalRaw = item.profile[fieldKey]?.raw ?? "0";
       const raw = pendingProfileValue(item.index, fieldKey, originalRaw);
       const suboptionFields = PROFILE_MOVEMENT_SUBOPTION_FIELDS[suboptionKey] || PROFILE_MOVEMENT_SUBOPTION_FIELDS.chill;
       const inheritedOverride = isOverrideProfile(item) && !raw;
       const showsChainControls = inheritedOverride || (movementStyleUsesMovement(raw) && !movementStyleUsesRam(raw));
+      const showsSharedChainRamLabels = inheritedOverride || showInactiveUnset;
       const fields = [
         profileEditFieldItem(item, fieldKey),
       ];
-      if (speedFieldKey && (movementStyleUsesMovement(raw) || inheritedOverride)) {
+      if (speedFieldKey && (showInactiveUnset || movementStyleUsesMovement(raw) || inheritedOverride)) {
         fields.push(profileEditFieldItem(item, speedFieldKey, {
           className: "profile-suboption-field",
           hint: `${profileFieldLabel(fieldKey)} speed`,
         }));
       }
-      if (movementStyleUsesHop(raw) || inheritedOverride) {
+      if (showInactiveUnset || movementStyleUsesHop(raw) || inheritedOverride) {
         fields.push(
           profileEditFieldItem(item, suboptionFields.hopAllowNonCardinal, {
             className: "profile-suboption-field",
@@ -18140,21 +18412,21 @@ HTML = r"""<!doctype html>
           }),
         );
       }
-      if (showsChainControls) {
+      if (showInactiveUnset || showsChainControls) {
         fields.push(
           profileEditFieldItem(item, suboptionFields.chainHops, {
             className: "profile-suboption-field",
-            label: inheritedOverride ? "Chain moves / RAM steps" : "Chain moves",
-            shortLabel: inheritedOverride ? "Chain/RAM" : "Chain",
-            unit: inheritedOverride ? "" : "moves",
+            label: showsSharedChainRamLabels ? "Chain moves / RAM steps" : "Chain moves",
+            shortLabel: showsSharedChainRamLabels ? "Chain/RAM" : "Chain",
+            unit: showsSharedChainRamLabels ? "" : "moves",
             hint: "Consecutive completed movement steps before applying Chain pause. 0 disables chain pauses.",
             numberLimits: { min: 0, max: 32 },
           }),
           profileEditFieldItem(item, suboptionFields.chainHopPause, {
             className: "profile-suboption-field",
-            label: inheritedOverride ? "Chain pause / RAM max" : "Chain pause",
-            shortLabel: inheritedOverride ? "Pause/RAM" : "Pause",
-            unit: inheritedOverride ? "" : "ticks",
+            label: showsSharedChainRamLabels ? "Chain pause / RAM max" : "Chain pause",
+            shortLabel: showsSharedChainRamLabels ? "Pause/RAM" : "Pause",
+            unit: showsSharedChainRamLabels ? "" : "ticks",
             hint: "Ticks to wait after the Chain move count is reached. 0 keeps chaining without an extra pause.",
             numberLimits: { min: 0, max: 255 },
           }),
@@ -18164,7 +18436,7 @@ HTML = r"""<!doctype html>
           }),
         );
       }
-      if (movementStyleUsesPhantomTeleport(raw) || inheritedOverride) {
+      if (showInactiveUnset || movementStyleUsesPhantomTeleport(raw) || inheritedOverride) {
         fields.push(
           profileEditFieldItem(item, suboptionFields.teleportTime, {
             className: "profile-suboption-field",
@@ -18176,7 +18448,7 @@ HTML = r"""<!doctype html>
           }),
         );
       }
-      if (movementStyleUsesRam(raw) || inheritedOverride) {
+      if (!showInactiveUnset && (movementStyleUsesRam(raw) || inheritedOverride)) {
         fields.push(
           profileEditFieldItem(item, suboptionFields.ramAccelerationSteps, {
             className: "profile-suboption-field",
@@ -18196,8 +18468,8 @@ HTML = r"""<!doctype html>
       };
     }
 
-    function profileEditChillFields(item) {
-      const movementFields = profileEditMovementFields(item, "chillAction", "chillSpeed", "chill");
+    function profileEditChillFields(item, showInactiveUnsetMovement = false) {
+      const movementFields = profileEditMovementFields(item, "chillAction", "chillSpeed", "chill", showInactiveUnsetMovement);
       const chillRaw = pendingProfileValue(
         item.index,
         "chillState",
@@ -18216,16 +18488,27 @@ HTML = r"""<!doctype html>
         }));
       }
       if (usesAllowedTile) {
-        fields.push(profileEditFieldItem(item, "chillAllowedTile", {
+        fields.push(profileEditFieldItem(item, "chillAllowedTerrainMask", {
           className: "profile-suboption-field",
           hint: "Tile type this behavior may target",
         }));
-        fields.push(profileEditFieldItem(item, "chillAllowedTile2", {
+        fields.push(profileEditFieldItem(item, "chillAllowedTerrainOverrideMask", {
           className: "profile-suboption-field",
           hint: "Optional second tile type this behavior may target",
         }));
       }
       fields.push(...movementFields.items);
+      fields.push(profileFieldItem(ACTIVE_ACTION_SPECIAL_FIELD, profileEditScopedSpecialActionField(
+        item,
+        ACTIVE_ACTION_SPECIAL_FIELD,
+        profileFieldLabel(ACTIVE_ACTION_SPECIAL_FIELD),
+        "Special action used when this Chill profile is selected for Active state",
+      )));
+      [
+        "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
+        "circleRadius", "continueWhenArrived", "avoidPreviousTile",
+        "chainMovementVariance", "chainPauseVariance",
+      ].forEach(field => fields.push(profileEditFieldItem(item, field)));
       return {
         count: fields.length,
         items: fields,
@@ -18481,6 +18764,51 @@ HTML = r"""<!doctype html>
       `;
     }
 
+    function profileReferencedOverride(item, fieldKey) {
+      const originalRaw = item.profile[fieldKey]?.raw ?? "";
+      const raw = pendingProfileValue(item.index, fieldKey, originalRaw);
+      if (String(raw).trim() === "") return null;
+      const option = profileOptionForRaw(fieldKey, raw);
+      const expectedIndex = Number.isFinite(Number(raw)) ? Number(raw) : Number(option?.value);
+      const expectedOrder = expectedIndex + 1;
+      if (!Number.isFinite(expectedOrder)) return null;
+      return appData.classes.find(candidate =>
+        isOverrideProfile(candidate)
+        && profileOverrideOrders(candidate).some(order => Number(order) === expectedOrder)
+      ) || null;
+    }
+
+    function profileEditLinkedStateFields(item, fieldKey, stateLabel) {
+      const referenceField = profileEditFieldItem(item, fieldKey);
+      const stateValueField = fieldKey === "activeProfile" ? "stamina" : "restTime";
+      const stateValue = profileEditFieldItem(item, stateValueField, { subgroup: "State timing" });
+      const linkedItem = profileReferencedOverride(item, fieldKey);
+      if (!linkedItem) return { items: [stateValue, referenceField] };
+      const linkedChill = profileEditChillFields(linkedItem, true);
+      const linkedChillItems = linkedChill.items.filter(field =>
+        field.fieldKey !== "stamina" && field.fieldKey !== "restTime"
+      );
+      return {
+        items: [
+          stateValue,
+          referenceField,
+          {
+            fieldKey,
+            subgroup: "Linked Chill profile",
+            html: `
+              <div class="profile-linked-chill-editor" data-linked-profile-index="${esc(linkedItem.index)}">
+                <div class="profile-subgroup-head">
+                  <span class="profile-subgroup-title">${esc(stateLabel)} uses ${esc(profileDisplayName(linkedItem))} · Chill</span>
+                  <span class="profile-subgroup-count">${esc(linkedChillItems.length)}</span>
+                </div>
+                <div class="profile-architecture-fields">${linkedChillItems.map(field => field.html).join("")}</div>
+              </div>
+            `,
+          },
+        ],
+      };
+    }
+
     function profileEditFieldGroups(item) {
       const known = new Set();
       const groups = PROFILE_FIELD_GROUPS.map(group => {
@@ -18492,9 +18820,15 @@ HTML = r"""<!doctype html>
         const spawnFields = group.key === "spawn" ? profileEditSpawnFields(item) : null;
         const chillFields = group.key === "chill" ? profileEditChillFields(item) : null;
         const alertFields = group.key === "alert" ? profileEditAlertFields(item) : null;
-        const activeFields = group.key === "attentive" ? profileEditActiveFields(item) : null;
-        const tiredFields = group.key === "tired" ? profileEditTiredFields(item) : null;
-        const customFields = spawnFields || chillFields || alertFields || activeFields || tiredFields;
+        const activeFields = group.key === "attentive" && fields.includes("attentiveState") ? profileEditActiveFields(item) : null;
+        const tiredFields = group.key === "tired" && fields.includes("tiredState") ? profileEditTiredFields(item) : null;
+        const linkedActiveFields = group.key === "attentive" && fields.includes("activeProfile")
+          ? profileEditLinkedStateFields(item, "activeProfile", "Active")
+          : null;
+        const linkedTiredFields = group.key === "tired" && fields.includes("tiredProfile")
+          ? profileEditLinkedStateFields(item, "tiredProfile", "Tired")
+          : null;
+        const customFields = spawnFields || chillFields || alertFields || activeFields || tiredFields || linkedActiveFields || linkedTiredFields;
         const fieldItems = customFields?.items || fields.map(field => profileEditFieldItem(item, field));
         fieldItems.forEach(field => known.add(profileStoredFieldKey(field.fieldKey)));
         const sectionFields = fieldItems.map(field => field.fieldKey);
@@ -18659,7 +18993,7 @@ HTML = r"""<!doctype html>
       const chips = [
         ["shield", "type-test", "Family", profilePendingDisplay(item, "profileId")],
         ["target", "type-placement", "Spawn", profilePendingDisplay(item, "spawnState")],
-        ["speed", "type-movement", "Speed", `${profilePendingDisplay(item, "chillSpeed")} / ${profilePendingDisplay(item, "attentiveSpeed")} / ${profilePendingDisplay(item, "tiredSpeed")}`],
+        ["speed", "type-movement", "Chill speed", profilePendingDisplay(item, "chillSpeed")],
         ["ruler", "type-placement", "Range", profilePendingDisplay(item, "range")]
       ];
       return chips.map(([icon, typeClass, label, value]) => `
@@ -22062,13 +22396,16 @@ HTML = r"""<!doctype html>
       const lookup = profileOptionLookupByField.get(fieldKey);
       if (!lookup) return null;
       const lower = value.toLowerCase();
-      const preferred = preferredRaw ? lookup.byRaw.get(preferredRaw) : null;
+      const preferred = preferredRaw
+        ? lookup.byRaw.get(preferredRaw) || lookup.byValue.get(String(preferredRaw))
+        : null;
       if (preferred) {
         const preferredTerms = [
           preferred.raw,
           profileComboRawDisplay(preferred.raw),
           profileComboOptionDisplay(preferred, fieldKey),
           preferred.label,
+          preferred.value,
         ].map(item => String(item || "").trim().toLowerCase());
         if (preferredTerms.includes(lower)) {
           return preferred;
@@ -22076,6 +22413,7 @@ HTML = r"""<!doctype html>
       }
       return lookup.byRaw.get(value)
         || lookup.byRawLower.get(lower)
+        || lookup.byValue.get(value)
         || lookup.byDisplayLower.get(lower)
         || lookup.byLabelLower.get(lower)
         || null;

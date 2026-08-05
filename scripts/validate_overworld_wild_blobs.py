@@ -13,42 +13,38 @@ from typing import Optional
 
 OWBD_MAGIC = 0x4F574244
 OWBD_HEADER_SIZE = 52
-OWBD_PROFILE_SIZE = 72
+OWBD_PROFILE_SIZE = 46
 OWBD_CLASS_RULE_SIZE = 16
 OWBD_SPECIES_RULE_SIZE = 4
-OWBD_OVERRIDE_PROFILE_SIZE = 212
+OWBD_OVERRIDE_PROFILE_SIZE = 164
 OWBD_OVERRIDE_MEMBER_SIZE = 2
 OWBD_MASK_ALLOWED = 0x07FFFFFF
 OWBD_MASK2_ALLOWED = 0x7FFF
-OWBD_MASK3_ALLOWED = 0x3FFFFFFF
-OWBD_RELATIVE_MASK_ALLOWED = 0x061907A8
-OWBD_RELATIVE_MASK2_ALLOWED = 0x00F7
-OWBD_RELATIVE_MASK3_ALLOWED = 0x18FFFEFE
-OWBD_BOUNDED_MASK_ALLOWED = 0x00010700
-OWBD_BOUNDED_MASK2_ALLOWED = 0x0047
-OWBD_BOUNDED_MASK3_ALLOWED = 0x18FE7878
-# Byte offsets within OverworldWildBehaviorProfile, in override-mask bit order.
-OWBD_OPERATOR_FIELD_PROFILE_OFFSETS = (
-    0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 18, 11,
-    20, 21, 22, 3, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37,
-    39, 40, 41, 42, 43, 44, 17, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
-    55, 56, 57, 58, 59, 60, 33, 61, 62, 63, 64, 65, 66, 67, 68, 69, 38, 70, 71, 19,
-)
+OWBD_MASK3_ALLOWED = 0x0000000F
+OWBD_RELATIVE_MASK_ALLOWED = 0x05F101F8
+OWBD_RELATIVE_MASK2_ALLOWED = 0x1F8F
+OWBD_RELATIVE_MASK3_ALLOWED = 0x00000003
+OWBD_BOUNDED_MASK_ALLOWED = 0x01C00180
+OWBD_BOUNDED_MASK2_ALLOWED = 0x1F84
+OWBD_BOUNDED_MASK3_ALLOWED = 0x00000003
+# Compact data fields are stored in the same order as the mask bits.
+OWBD_OPERATOR_FIELD_PROFILE_OFFSETS = tuple(range(46))
 OWBD_OPERATOR_FIELD_MAXIMUMS = (
-    0, 0, 0, 64, 0, 64, 0, 64, 4, 4, 64, 0, 0, 0, 0, 0, 4,
-    0, 0, 100, 255, 0, 0, 0, 0, 12, 12, 255, 64, 255, 0, 8, 8, 32, 255,
-    0, 0, 0, 0, 0, 0, 0, 0, 12, 12, 255, 64, 255, 32, 4, 0, 12, 12,
-    255, 64, 255, 32, 4, 10, 64, 32, 4, 15, 64, 15, 8, 0, 0, 0, 32, 255, 0,
+    0, 0, 0, 255, 64, 64, 64, 4, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
+    0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 4,
+    15, 64, 15, 0, 0, 32, 255, 0, 0,
 )
 OWBD_BOUNDED_FIELD_MAXIMUMS = (
-    0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 64, 0, 0, 0, 0, 0, 4,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 64, 255, 0, 0, 0, 32,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 64, 255, 32, 0, 0,
-    0, 0, 255, 64, 255, 32, 0, 0, 64, 32, 4, 15, 64, 15, 8, 0, 0,
-    0, 32, 255, 0,
+    0, 0, 0, 0, 0, 0, 0, 4, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 255, 64, 255, 0, 0, 0, 0, 32, 0, 0, 0, 0, 64, 32, 4,
+    15, 64, 15, 0, 0, 32, 255, 0, 0,
 )
 OWBD_OVERRIDE_PROFILE_VALUE_OFFSET = 32
-OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET = 140
+OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET = 116
+OWBD_ALLOWED_TERRAIN_ALL = 0x3F
+OWBD_ALLOWED_TERRAIN_VALUE_OFFSET = 32
+OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET = 33
+OWBD_ALLOWED_TERRAIN_FIELD_BITS = (1 << 5) | (1 << 6)
 
 OWED_MAGIC = 0x4F574544
 OWED_VERSION = 2
@@ -249,34 +245,48 @@ def validate_owbd(path: Path, source: Path) -> None:
     for index in range(class_profile_count):
         profile_offset = class_profiles_offset + index * class_profile_size
         require(
-            1 <= blob[profile_offset + 19] <= 0xF,
+            1 <= blob[profile_offset + 15] <= 0xF,
             f"{path}: class profile {index} Next-to-player side mask must be between 1 and 15",
         )
-        for speed_offset in (9, 10, 11):
-            require(
-                1 <= blob[profile_offset + speed_offset] <= 4,
-                f"{path}: class profile {index} movement speeds must be between 1 and 4",
-            )
+        require(
+            1 <= blob[profile_offset + 7] <= 4,
+            f"{path}: class profile {index} Chill movement speed must be between 1 and 4",
+        )
+        require(
+            (blob[profile_offset + OWBD_ALLOWED_TERRAIN_VALUE_OFFSET]
+             | blob[profile_offset + OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET])
+            & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
+            f"{path}: class profile {index} has undefined terrain-policy bits",
+        )
     for index in range(override_profile_count):
         profile_offset = override_profiles_offset + index * override_profile_size
         mask, mask2, mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 20)
-        relative_mask, relative_mask2, relative_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 104)
-        at_least_mask, at_least_mask2, at_least_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 116)
-        at_most_mask, at_most_mask2, at_most_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 128)
+        relative_mask, relative_mask2, relative_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 80)
+        at_least_mask, at_least_mask2, at_least_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 92)
+        at_most_mask, at_most_mask2, at_most_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 104)
         operator_mask = relative_mask | at_least_mask | at_most_mask
-        for speed_bit, speed_offset in ((8, 9), (9, 10), (16, 11)):
-            if (mask & (1 << speed_bit)) and not (operator_mask & (1 << speed_bit)):
-                require(
-                    1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + speed_offset] <= 4,
-                    f"{path}: override profile {index} exact movement speeds must be between 1 and 4",
-                )
-        if mask3 & (1 << 29):
+        if (mask & (1 << 7)) and not (operator_mask & (1 << 7)):
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 19] <= 0xF,
+                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 7] <= 4,
+                f"{path}: override profile {index} exact Chill speed must be between 1 and 4",
+            )
+        if mask & (1 << 15):
+            require(
+                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 15] <= 0xF,
                 f"{path}: override profile {index} Next-to-player side mask must be between 1 and 15",
             )
         require((mask & ~OWBD_MASK_ALLOWED) == 0, f"{path}: override profile {index} mask has undefined bits")
         require((mask2 & ~OWBD_MASK2_ALLOWED) == 0, f"{path}: override profile {index} mask2 has undefined bits")
+        require(
+            (mask2 & OWBD_ALLOWED_TERRAIN_FIELD_BITS) in (0, OWBD_ALLOWED_TERRAIN_FIELD_BITS),
+            f"{path}: override profile {index} must update both terrain-policy fields together",
+        )
+        require(
+            (blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_ALLOWED_TERRAIN_VALUE_OFFSET]
+             | blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET])
+            & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
+            f"{path}: override profile {index} has undefined terrain-policy bits",
+        )
         require((mask3 & ~OWBD_MASK3_ALLOWED) == 0, f"{path}: override profile {index} mask3 has undefined bits")
         require((relative_mask & ~mask) == 0, f"{path}: override profile {index} relative mask is not active")
         require((relative_mask2 & ~mask2) == 0, f"{path}: override profile {index} relative mask2 is not active")
@@ -285,7 +295,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         require((relative_mask2 & ~OWBD_RELATIVE_MASK2_ALLOWED) == 0, f"{path}: override profile {index} has a non-numeric relative field in mask2")
         require((relative_mask3 & ~OWBD_RELATIVE_MASK3_ALLOWED) == 0, f"{path}: override profile {index} has a non-numeric relative field in mask3")
         field_index = 0
-        for operator_mask, width in zip((relative_mask, relative_mask2, relative_mask3), (27, 15, 30)):
+        for operator_mask, width in zip((relative_mask, relative_mask2, relative_mask3), (27, 15, 4)):
             for bit in range(width):
                 if operator_mask & (1 << bit):
                     value_offset = profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_OPERATOR_FIELD_PROFILE_OFFSETS[field_index]
@@ -306,7 +316,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             for operator_mask, compound_word, width in zip(
                 operator_masks,
                 (relative_mask, relative_mask2, relative_mask3),
-                (27, 15, 30),
+                (27, 15, 4),
             ):
                 for bit in range(width):
                     if operator_mask & (1 << bit):
@@ -318,7 +328,7 @@ def validate_owbd(path: Path, source: Path) -> None:
                         )
                         value_offset = profile_offset + value_base + OWBD_OPERATOR_FIELD_PROFILE_OFFSETS[field_index]
                         require(blob[value_offset] <= maximum, f"{path}: override profile {index} {operator_name} threshold exceeds field maximum")
-                        if field_index in {8, 9, 16}:
+                        if field_index == 7:
                             require(blob[value_offset] != 0, f"{path}: override profile {index} movement speed bound must be at least 1")
                     field_index += 1
         for word, (relative_word, at_least_word, at_most_word) in enumerate(zip(

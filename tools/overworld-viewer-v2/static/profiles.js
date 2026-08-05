@@ -256,13 +256,25 @@ const FIELD_SECTIONS = Object.freeze([
       Object.freeze({ id: "movement", label: "Movement style" }),
     ]),
     fields: [
-      "chillState", "chillTarget", "chillAllowedTile", "chillAllowedTile2",
+      "chillState", "chillTarget", "chillAllowedTerrainMask", "chillAllowedTerrainOverrideMask",
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
       "hopMaxDistance", "hopTime", "hopSpinSpeed", "hopPause", "teleportTime",
       "teleportPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction",
+      "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
+      "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
+      "alertSpecialAction",
     ],
     nodes: [
       { kind: "branch", field: "chillState", branch: "chill-behavior", subtab: "behavior" },
+      {
+        kind: "fields",
+        fields: [
+          "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
+          "circleRadius", "continueWhenArrived", "avoidPreviousTile",
+        ],
+        subtab: "behavior",
+      },
+      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action" },
       { kind: "branch", field: "chillAction", branch: "movement", scope: "chill", subtab: "movement" },
     ],
   },
@@ -284,52 +296,16 @@ const FIELD_SECTIONS = Object.freeze([
   {
     id: "active",
     title: "Active state",
-    hint: "Alerted behavior, targeting, chase, and active movement.",
-    scopedAction: "active",
-    sharedMovement: true,
-    subtabs: Object.freeze([
-      Object.freeze({ id: "behavior", label: "Behavior" }),
-      Object.freeze({ id: "movement", label: "Movement style" }),
-    ]),
-    fields: [
-      "attentiveState", "stamina", "targetSelector", "attentiveCircleRadius",
-      "attentiveContinueWhenArrived", "attentiveAllowedTile", "attentiveAllowedTile2",
-      "attentiveChaseBoostDistance", "attentiveChaseBoostSpeed", "movementStyle",
-      "attentiveSpeed", "attentiveHopAllowNonCardinal", "attentiveHopMinDistance",
-      "attentiveHopMaxDistance", "hopTime", "attentiveHopSpinSpeed", "attentiveHopPause",
-      "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "attentiveTeleportTime",
-      "attentiveTeleportPause", "attentiveRamAccelerationSteps", "attentiveRamMaxSpeed",
-      "attentiveBattle", "alertSpecialAction",
-    ],
-    nodes: [
-      { kind: "branch", field: "attentiveState", branch: "active-behavior", subtab: "behavior" },
-      { kind: "fields", fields: ["stamina"], subtab: "behavior" },
-      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action", subtab: "behavior" },
-      { kind: "branch", field: "movementStyle", branch: "movement", scope: "active", subtab: "movement" },
-      { kind: "fields", fields: ["attentiveBattle"], subtab: "behavior" },
-    ],
+    hint: "Choose the override profile applied while this Pokémon is active.",
+    stateProfileField: "activeProfile",
+    fields: ["stamina", "activeProfile"],
   },
   {
     id: "tired",
     title: "Tired state",
-    hint: "Recovery behavior, movement after exertion, and rest timing.",
-    sharedMovement: true,
-    subtabs: Object.freeze([
-      Object.freeze({ id: "behavior", label: "Behavior" }),
-      Object.freeze({ id: "movement", label: "Movement style" }),
-    ]),
-    fields: [
-      "tiredState", "tiredAllowedTile", "tiredAllowedTile2", "specialAction", "tiredSpeed",
-      "tiredHopAllowNonCardinal", "tiredHopMinDistance", "tiredHopMaxDistance", "hopTime",
-      "hopSpinSpeed", "tiredHopPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed",
-      "chainPauseVariance", "chainPauseAction", "tiredTeleportTime", "tiredTeleportPause",
-      "tiredRamAccelerationSteps", "tiredRamMaxSpeed", "restTime",
-    ],
-    nodes: [
-      { kind: "branch", field: "tiredState", branch: "tired-behavior", subtab: "behavior" },
-      { kind: "branch", field: "specialAction", branch: "movement", scope: "tired", subtab: "movement" },
-      { kind: "fields", fields: ["restTime"], subtab: "behavior" },
-    ],
+    hint: "Choose the override profile applied while this Pokémon is tired.",
+    stateProfileField: "tiredProfile",
+    fields: ["restTime", "tiredProfile"],
   },
   {
     id: "stats",
@@ -355,13 +331,30 @@ const LIFECYCLE_TAB_SUMMARY_FIELDS = Object.freeze({
     Object.freeze({ field: "chillAction", tabId: "movement" }),
   ]),
   active: Object.freeze([
-    Object.freeze({ field: "attentiveState", tabId: "behavior" }),
-    Object.freeze({ field: "movementStyle", tabId: "movement" }),
+    Object.freeze({ field: "activeProfile", profileReference: true }),
   ]),
   tired: Object.freeze([
-    Object.freeze({ field: "tiredState", tabId: "behavior" }),
-    Object.freeze({ field: "specialAction", tabId: "movement" }),
+    Object.freeze({ field: "tiredProfile", profileReference: true }),
   ]),
+});
+
+// Active and Tired now execute another profile's Chill state. Keep the Chill
+// value catalog broad enough to author values that previously appeared only in
+// the state-specific editors, while retaining the existing stored field names.
+const LINKED_CHILL_OPTION_SOURCES = Object.freeze({
+  chillState: Object.freeze(["attentiveState", "tiredState"]),
+  chillTarget: Object.freeze(["targetSelector"]),
+  chillAction: Object.freeze(["movementStyle", "specialAction"]),
+  chillSpeed: Object.freeze(["attentiveSpeed", "tiredSpeed"]),
+  hopAllowNonCardinal: Object.freeze(["attentiveHopAllowNonCardinal", "tiredHopAllowNonCardinal"]),
+  hopMinDistance: Object.freeze(["attentiveHopMinDistance", "tiredHopMinDistance"]),
+  hopMaxDistance: Object.freeze(["attentiveHopMaxDistance", "tiredHopMaxDistance"]),
+  hopPause: Object.freeze(["attentiveHopPause", "tiredHopPause"]),
+  hopSpinSpeed: Object.freeze(["attentiveHopSpinSpeed"]),
+  teleportTime: Object.freeze(["attentiveTeleportTime", "tiredTeleportTime"]),
+  teleportPause: Object.freeze(["attentiveTeleportPause", "tiredTeleportPause"]),
+  ramAccelerationSteps: Object.freeze(["attentiveRamAccelerationSteps", "tiredRamAccelerationSteps"]),
+  ramMaxSpeed: Object.freeze(["attentiveRamMaxSpeed", "tiredRamMaxSpeed"]),
 });
 
 const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
@@ -754,6 +747,24 @@ export function createProfilesController({
 
   function allProfiles() {
     return [...baseProfiles(), ...overrideProfiles()];
+  }
+
+  function stateReferenceProfiles() {
+    return orderedSavedOverrides().filter((profile) => (
+      !drafts.removedOverrides.has(profileKey(profile)) && ordersFor(profile).length
+    ));
+  }
+
+  function stateReferenceRaw(profile) {
+    const order = ordersFor(profile)[0];
+    return Number.isFinite(order) ? String(order - 1) : "";
+  }
+
+  function stateReferenceProfile(raw) {
+    if (String(raw ?? "").trim() === "") return null;
+    const expected = Number(raw);
+    if (!Number.isFinite(expected)) return null;
+    return stateReferenceProfiles().find((profile) => ordersFor(profile).includes(expected + 1)) || null;
   }
 
   function findProfile(key = ui.selectedKey) {
@@ -1173,6 +1184,15 @@ export function createProfilesController({
 
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     let options = [...(data.editOptions?.[fieldKey] || [])];
+    const optionRaws = new Set(options.map(valueRaw));
+    (LINKED_CHILL_OPTION_SOURCES[fieldKey] || []).forEach((sourceField) => {
+      (data.editOptions?.[sourceField] || []).forEach((option) => {
+        const raw = valueRaw(option);
+        if (!raw || optionRaws.has(raw)) return;
+        optionRaws.add(raw);
+        options.push(option);
+      });
+    });
     let usesRam = false;
     if (typeof context.ramMode === "boolean") usesRam = context.ramMode;
     else if (!context.ambiguous && profile && context.parentField) {
@@ -1315,6 +1335,12 @@ export function createProfilesController({
     return owningKey ? findProfile(owningKey) : fallbackProfile;
   }
 
+  function controlProfile(control, fallbackProfile = null) {
+    const owner = control?.closest?.("[data-profile-key]") || control;
+    const owningKey = owner?.dataset?.profileKey || "";
+    return owningKey ? findProfile(owningKey) : fallbackProfile;
+  }
+
   function numericInputPermissions(input, profile, fieldKey) {
     if (input?.dataset?.numericAdjust !== undefined && input?.dataset?.numericBounds !== undefined) {
       return {
@@ -1353,7 +1379,7 @@ export function createProfilesController({
   function renderProfileValueEditor(profile, fieldKey, options, selectedRaw, instance, label, descriptionId, allowInherit = isOverrideProfile(profile), attributes = "") {
     const permissions = numericOverridePermissions(profile, fieldKey);
     if (!isNumericProfileField(fieldKey)) {
-      return `<select class="field-control" data-profile-value data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
+      return `<select class="field-control" data-profile-value data-profile-key="${escapeHtml(profileKey(profile))}" data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
         ${renderProfileSelectOptions(options, selectedRaw, allowInherit, permissions)}
       </select>`;
     }
@@ -1621,7 +1647,7 @@ export function createProfilesController({
       "chill-behavior": {
         parent: "chillState",
         target: "chillTarget",
-        tiles: ["chillAllowedTile", "chillAllowedTile2"],
+        tiles: ["chillAllowedTerrainMask"],
       },
       "active-behavior": {
         parent: "attentiveState",
@@ -1676,6 +1702,7 @@ export function createProfilesController({
     (definition.tiles || []).forEach((field) => {
       const node = explicitInactiveNode(profile, field, usesTiles, {
         composite: branch === "active-behavior" && definition.target ? "active-target-tiles" : "",
+        virtual: field === "chillAllowedTerrainMask" ? "allowed-terrain-policy" : "",
       });
       if (node) nodes.push(node);
     });
@@ -1693,7 +1720,7 @@ export function createProfilesController({
     };
   }
 
-  function movementBranch(profile, parentField, scope) {
+  function movementBranch(profile, parentField, scope, showInactiveUnset = false) {
     const fields = MOVEMENT_FIELDS[scope];
     if (!fields) return { nodes: [], context: "" };
     const raw = fieldRaw(profile, parentField);
@@ -1719,12 +1746,16 @@ export function createProfilesController({
     const append = (fieldKeys, active, extra = {}) => {
       let appended = false;
       fieldKeys.forEach((field) => {
-        const candidate = explicitInactiveNode(profile, field, active, {
+        const presentation = {
           parentField,
           ambiguous,
           ...extra,
           beforeLabel: appended ? "" : extra.beforeLabel,
-        });
+        };
+        const candidate = explicitInactiveNode(profile, field, active, presentation)
+          || (showInactiveUnset && profileCanEditField(profile, field)
+            ? { field, inactive: !active, ...presentation }
+            : null);
         if (!candidate) return;
         appended = true;
         const existing = nodes.get(field);
@@ -1744,7 +1775,13 @@ export function createProfilesController({
       composite: fields.hopPath.composite,
     });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
-    if (inheritedMovementRam || (inherited && inheritedHasRam && !inheritedHasChain)) {
+    if (showInactiveUnset) {
+      append(fields.chain, inherited || CHAIN_LOCOMOTIONS.has(raw) || raw === LOCOMOTION.ram, {
+        composite: "movement-chain-or-ram",
+        chainRamDual: true,
+        ramMode: raw === LOCOMOTION.ram,
+      });
+    } else if (inheritedMovementRam || (inherited && inheritedHasRam && !inheritedHasChain)) {
       append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
       const inactiveChainFields = scope === "chill"
         ? ["chainMovementVariance", "chainPauseVariance", "chainPauseAction"]
@@ -1774,7 +1811,7 @@ export function createProfilesController({
       append(fields.chain, CHAIN_LOCOMOTIONS.has(raw), { composite: "movement-chain" });
     }
     append(fields.teleportTiming.fields, inherited || raw === LOCOMOTION.teleport, { composite: fields.teleportTiming.composite });
-    if (!inherited && !inheritedMovementRam && !inheritedMovementAmbiguous) {
+    if (!showInactiveUnset && !inherited && !inheritedMovementRam && !inheritedMovementAmbiguous) {
       append(fields.ramTuning.fields, raw === LOCOMOTION.ram, {
         composite: fields.ramTuning.composite,
         ramMode: raw === LOCOMOTION.ram,
@@ -1783,7 +1820,9 @@ export function createProfilesController({
     const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
     return {
       nodes: [...nodes.values()],
-      context: inherited
+      context: showInactiveUnset
+        ? "All Chill movement settings are available for this linked state profile."
+        : inherited
         ? "Available while movement style inherits."
         : (raw === LOCOMOTION.none
           ? (nodes.size ? "Stored suboptions are inactive while movement is None." : "None has no movement suboptions.")
@@ -1798,7 +1837,9 @@ export function createProfilesController({
     }
     const raw = fieldRaw(profile, descriptor.field);
     const inherited = isOverrideProfile(profile) && !raw;
-    if (descriptor.branch === "movement") return movementBranch(profile, descriptor.field, descriptor.scope);
+    if (descriptor.branch === "movement") {
+      return movementBranch(profile, descriptor.field, descriptor.scope, descriptor.showInactiveUnset);
+    }
     if (descriptor.branch === "scoped-action") {
       const showsThrowRange = descriptor.scope === "active" && activeActionShowsThrowRange(profile);
       const movementRaw = fieldRaw(profile, "movementStyle");
@@ -1906,7 +1947,7 @@ export function createProfilesController({
       : stateMarkup;
     const tabIndex = Number.isInteger(presentation.tabIndex) ? ` tabindex="${presentation.tabIndex}"` : "";
     return `
-      <div class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${override && !hasOverride ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${escapeHtml(fieldKey)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(label)}</strong>
           ${metaMarkup}
@@ -2041,7 +2082,7 @@ export function createProfilesController({
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
     return `
-      <div class="field-row profile-field pv2-field pv2-range-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-field-row="${escapeHtml(`${rangeNode.range.min}:${rangeNode.range.max}`)}" data-field-state="${rangeState}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field pv2-range-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.parent ? " is-parent-option" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${escapeHtml(`${rangeNode.range.min}:${rangeNode.range.max}`)}" data-field-state="${rangeState}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy">
           <strong>${escapeHtml(rangeNode.range.label)}</strong>
           <small class="pv2-field-meta">
@@ -2138,7 +2179,7 @@ export function createProfilesController({
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
     return `
-      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong>${inactive ? `<small class="pv2-field-meta"><span class="pv2-field-note">inactive</span></small>` : ""}</span>
         <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
           ${controls.map((control) => `
@@ -2241,6 +2282,103 @@ export function createProfilesController({
     return masks.length ? masks : [0xF];
   }
 
+  function allowedTerrainCatalog() {
+    const configured = Array.isArray(data.allowedTerrains) ? data.allowedTerrains : [];
+    if (configured.length) return configured.filter((terrain) => Number(terrain.bit) > 0);
+    return [
+      { key: "land", label: "Land", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND", bit: 1 },
+      { key: "water", label: "Water", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", bit: 2 },
+      { key: "canopy", label: "Canopy", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY", bit: 4 },
+      { key: "grass", label: "Grass", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS", bit: 8 },
+      { key: "player-front", label: "Player front", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT", bit: 32 },
+    ];
+  }
+
+  function allowedTerrainMaskNumber(raw) {
+    const cleaned = String(raw || "").trim();
+    if (!cleaned) return 0;
+    const numeric = Number(cleaned);
+    if (Number.isInteger(numeric)) return numeric & 0x3F;
+    if (cleaned.includes("ALLOWED_TERRAIN_ALL")) return 0x3F;
+    const parts = cleaned.replace(/[()]/g, "").split("|").map((part) => part.trim());
+    return parts.reduce((mask, part) => {
+      const terrain = allowedTerrainCatalog().find((candidate) => candidate.raw === part);
+      return mask | Number(terrain?.bit || 0);
+    }, 0) & 0x3F;
+  }
+
+  function allowedTerrainState(valueMask, explicitMask, bit) {
+    if (!(explicitMask & bit)) return "inherit";
+    return valueMask & bit ? "on" : "off";
+  }
+
+  function nextAllowedTerrainState(state) {
+    if (state === "inherit") return "on";
+    if (state === "on") return "off";
+    return "inherit";
+  }
+
+  function allowedTerrainIcon(key) {
+    const paths = {
+      land: '<path d="M4 19h16M6 16l4-7 3 4 2-3 3 6H6Z"/>',
+      water: '<path d="M3 9c2.2 0 2.2 1.5 4.5 1.5S9.8 9 12 9s2.2 1.5 4.5 1.5S18.8 9 21 9M3 14c2.2 0 2.2 1.5 4.5 1.5S9.8 14 12 14s2.2 1.5 4.5 1.5S18.8 14 21 14"/>',
+      canopy: '<path d="M12 20v-7M8 20h8M7.5 13a4 4 0 0 1 .8-7.9A4.5 4.5 0 0 1 17 7a3.5 3.5 0 0 1-.5 6H7.5Z"/>',
+      grass: '<path d="M5 20c0-5 1-8 4-12 0 5-1 8-4 12Zm7 0c0-7 0-11 2-16 1 6 1 10-2 16Zm4 0c0-4 1-7 4-10 0 5-1 8-4 10Z"/>',
+      "player-front": '<circle cx="12" cy="7" r="2.5"/><path d="M8 20v-3.5a4 4 0 0 1 8 0V20M12 4V1m0 0L9.8 3.2M12 1l2.2 2.2"/>',
+    };
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[key] || paths.land}</svg>`;
+  }
+
+  function setAllowedTerrainState(profile, bit, state) {
+    const valueField = "chillAllowedTerrainMask";
+    const explicitField = "chillAllowedTerrainOverrideMask";
+    let valueMask = allowedTerrainMaskNumber(fieldRaw(profile, valueField));
+    let explicitMask = allowedTerrainMaskNumber(fieldRaw(profile, explicitField));
+    if (state === "inherit") {
+      explicitMask &= ~bit;
+      valueMask &= ~bit;
+    } else {
+      explicitMask |= bit;
+      if (state === "on") valueMask |= bit;
+      else valueMask &= ~bit;
+    }
+    if (isOverrideProfile(profile) && !explicitMask) {
+      setField(profile, valueField, "");
+      setField(profile, explicitField, "");
+    } else {
+      setField(profile, valueField, String(valueMask & 0x3F));
+      setField(profile, explicitField, String(explicitMask & 0x3F));
+    }
+  }
+
+  function renderAllowedTerrainPolicy(profile, node, presentation) {
+    const valueField = "chillAllowedTerrainMask";
+    const explicitField = "chillAllowedTerrainOverrideMask";
+    const valueRawValue = fieldRaw(profile, valueField);
+    const explicitRawValue = fieldRaw(profile, explicitField);
+    const valueMask = allowedTerrainMaskNumber(valueRawValue);
+    const explicitMask = allowedTerrainMaskNumber(explicitRawValue);
+    const originalValue = originalFieldRaw(profile, valueField);
+    const originalExplicit = originalFieldRaw(profile, explicitField);
+    const changed = profile.draftId
+      ? Boolean(valueRawValue || explicitRawValue)
+      : valueRawValue !== originalValue || explicitRawValue !== originalExplicit;
+    const inherited = isOverrideProfile(profile) && !explicitRawValue;
+    const state = changed ? "changed" : (inherited ? "inherited" : (isOverrideProfile(profile) ? "override" : "saved"));
+    return `
+      <div class="field-row profile-field pv2-field pv2-terrain-policy-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${valueField}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>Allowed terrains</strong><small class="pv2-field-meta"><span class="pv2-field-note">Set each terrain independently</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-terrain-policy" role="group" aria-label="Allowed terrain policy">
+          ${allowedTerrainCatalog().map((terrain) => {
+            const bit = Number(terrain.bit);
+            const terrainState = allowedTerrainState(valueMask, explicitMask, bit);
+            const nextState = nextAllowedTerrainState(terrainState);
+            return `<button type="button" class="pv2-terrain-toggle is-${terrainState}" data-action="set-allowed-terrain" data-profile-key="${escapeHtml(profileKey(profile))}" data-terrain-bit="${bit}" data-terrain-state="${terrainState}" data-next-terrain-state="${nextState}" aria-label="${escapeHtml(`${terrain.label}: ${terrainState}. Click for ${nextState}.`)}" title="${escapeHtml(`${terrain.label} · ${terrainState}`)}">${allowedTerrainIcon(terrain.key)}<span>${escapeHtml(terrain.label)}</span><small class="sr-only">${escapeHtml(terrainState)}</small></button>`;
+          }).join("")}
+        </span>
+      </div>`;
+  }
+
   function renderPlayerAdjacentDirections(profile, node, presentation) {
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
@@ -2262,14 +2400,14 @@ export function createProfilesController({
       [3, "Right of player"],
     ];
     return `
-      <div class="field-row profile-field pv2-field pv2-direction-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field pv2-direction-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>Position relative to player</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared by Next to player targets${mixed ? " · mixed inherited values" : ""}</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
         <span class="pv2-direction-options" role="group" aria-label="Allowed positions relative to player">
           ${directions.map(([bit, label]) => {
             const directionMixed = Boolean((anyMask & (1 << bit)) && !(everyMask & (1 << bit)));
-            return `<label class="pv2-direction-option${directionMixed ? " is-mixed" : ""}"><input type="checkbox" data-player-adjacent-direction data-field-key="${fieldKey}" data-direction-bit="${bit}" ${everyMask & (1 << bit) ? "checked" : ""} ${directionMixed ? `data-direction-mixed aria-label="${label}, mixed inherited value"` : ""}><span>${label}${directionMixed ? " ·" : ""}</span></label>`;
+            return `<label class="pv2-direction-option${directionMixed ? " is-mixed" : ""}"><input type="checkbox" data-player-adjacent-direction data-profile-key="${escapeHtml(profileKey(profile))}" data-field-key="${fieldKey}" data-direction-bit="${bit}" ${everyMask & (1 << bit) ? "checked" : ""} ${directionMixed ? `data-direction-mixed aria-label="${label}, mixed inherited value"` : ""}><span>${label}${directionMixed ? " ·" : ""}</span></label>`;
           }).join("")}
-          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-player-adjacent-directions" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
+          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-player-adjacent-directions" data-profile-key="${escapeHtml(profileKey(profile))}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
         </span>
       </div>`;
   }
@@ -2280,6 +2418,9 @@ export function createProfilesController({
     const original = originalFieldRaw(profile, fieldKey);
     if (node.virtual === "player-adjacent-directions") {
       return renderPlayerAdjacentDirections(profile, node, presentation);
+    }
+    if (node.virtual === "allowed-terrain-policy") {
+      return renderAllowedTerrainPolicy(profile, node, presentation);
     }
     if (node.virtual === "spawn-destination-type") {
       return renderSelectField(profile, fieldKey, {
@@ -2555,6 +2696,64 @@ export function createProfilesController({
     }).join("");
   }
 
+  function renderStateProfileReference(profile, section) {
+    const fieldKey = section.stateProfileField;
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const override = isOverrideProfile(profile);
+    const linkedProfile = stateReferenceProfile(raw);
+    const references = stateReferenceProfiles();
+    const missing = Boolean(raw && !linkedProfile);
+    const selectOptions = references.map((candidate) => {
+      const candidateRaw = stateReferenceRaw(candidate);
+      const order = ordersFor(candidate)[0];
+      return `<option value="${escapeHtml(candidateRaw)}" ${candidateRaw === raw ? "selected" : ""}>${escapeHtml(nameFor(candidate))} · #${escapeHtml(order)}</option>`;
+    }).join("");
+    const emptyOption = override
+      ? `<option value="" ${raw ? "" : "selected"}>Inherit</option>`
+      : `<option value="" ${raw ? "" : "selected"} disabled>Select an override profile</option>`;
+    const missingOption = missing
+      ? `<option value="${escapeHtml(raw)}" selected disabled>Unavailable override profile · #${escapeHtml(Number(raw) + 1)}</option>`
+      : "";
+    const state = changed ? "changed" : (override ? (raw ? "override" : "inherited") : "saved");
+    const chillSection = FIELD_SECTIONS.find((candidate) => candidate.id === "chill");
+    const stateValueField = fieldKey === "activeProfile" ? "stamina" : "restTime";
+    const stateValueLabel = fieldKey === "activeProfile" ? "Active stamina" : "Tired rest time";
+    const linkedFields = linkedProfile && chillSection
+      ? sectionFields(chillSection, linkedProfile).filter((field) => field !== "stamina" && field !== "restTime")
+      : [];
+    const linkedSection = chillSection ? {
+      ...chillSection,
+      id: `${section.id}-linked-chill`,
+      fields: linkedFields,
+      nodes: chillSection.nodes?.map((descriptor) => {
+        const linkedDescriptor = descriptor.fields ? {
+          ...descriptor,
+          fields: descriptor.fields.filter((field) => field !== "stamina" && field !== "restTime"),
+        } : { ...descriptor };
+        if (descriptor.branch === "movement") linkedDescriptor.showInactiveUnset = true;
+        return linkedDescriptor;
+      }),
+    } : null;
+    return `<div class="pv2-state-profile-link${changed ? " is-changed" : ""}${missing ? " is-missing" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-state="${escapeHtml(state)}">
+      <div class="pv2-state-owned-value">
+        <p><strong>${escapeHtml(stateValueLabel)}</strong><small>Stored on ${escapeHtml(nameFor(profile))}; this value does not come from the selected override profile.</small></p>
+        <div class="pv2-root-field-grid">${profileCanEditField(profile, stateValueField) ? renderFieldControl(profile, stateValueField, { instance: `${section.id}:state-value:${stateValueField}`, label: stateValueField === "stamina" ? "Stamina" : "Rest time" }) : ""}</div>
+      </div>
+      <label class="pv2-state-profile-picker">
+        <span><strong>Override profile</strong><small>Applied whenever this Pokémon is ${escapeHtml(section.id)}.</small></span>
+        <select class="field-control" data-state-profile-reference data-profile-key="${escapeHtml(profileKey(profile))}" data-field-key="${escapeHtml(fieldKey)}" aria-label="${escapeHtml(`${section.title} override profile`)}" aria-invalid="${missing}">
+          ${emptyOption}${missingOption}${selectOptions}
+        </select>
+      </label>
+      ${linkedProfile && linkedSection ? `<div class="pv2-linked-chill-editor" data-linked-profile-key="${escapeHtml(profileKey(linkedProfile))}">
+        <header><span><strong>${escapeHtml(nameFor(linkedProfile))} · Chill state</strong><small>These are the selected override profile's Chill values. Editing them updates that override everywhere it is referenced.</small></span><em>Linked globally</em></header>
+        ${linkedFields.length ? renderSectionContent(linkedProfile, linkedSection) : `<p class="pv2-linked-state-empty">This override profile has no editable Chill fields.</p>`}
+      </div>` : `<p class="pv2-linked-state-empty">${missing ? "The referenced override profile is unavailable. Choose a replacement before saving." : "Choose an override profile to edit the Chill values used by this state."}</p>`}
+    </div>`;
+  }
+
   function sectionFields(section, profile) {
     const known = new Set(data.fields.map((field) => field.key));
     const allowed = new Set(data.overrideFieldKeys || []);
@@ -2616,10 +2815,13 @@ export function createProfilesController({
   function lifecycleTabSummaryParts(profile, section) {
     const descriptors = LIFECYCLE_TAB_SUMMARY_FIELDS[section.id];
     if (!descriptors) return [];
-    return descriptors.map(({ field, tabId }) => {
+    return descriptors.map(({ field, tabId, profileReference }) => {
       const raw = fieldRaw(profile, field);
       let label;
-      if (raw) {
+      if (profileReference && raw) {
+        const linkedProfile = stateReferenceProfile(raw);
+        label = linkedProfile ? nameFor(linkedProfile) : `Unavailable #${Number(raw) + 1}`;
+      } else if (raw) {
         const option = fieldOptions(field, raw, profile).find((candidate) => valueRaw(candidate) === raw);
         label = valueLabel(option || raw);
       } else {
@@ -2629,7 +2831,7 @@ export function createProfilesController({
         field,
         tabId,
         label,
-        available: section.subtabs?.some((tab) => tab.id === tabId) && profileCanEditField(profile, field),
+        available: !profileReference && section.subtabs?.some((tab) => tab.id === tabId) && profileCanEditField(profile, field),
       };
     });
   }
@@ -2654,7 +2856,7 @@ export function createProfilesController({
     const panels = sections.map((section) => {
       const selected = section.id === preferred.id;
       return `<section class="pv2-lifecycle-tabpanel" role="tabpanel" id="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-labelledby="pv2-lifecycle-tab-${escapeHtml(section.id)}" data-section-id="${escapeHtml(section.id)}" ${selected ? "" : "hidden"}>
-        ${selected ? `<p class="pv2-lifecycle-hint">${escapeHtml(section.hint)}</p>${override ? renderSectionToolbar(section) : ""}<div class="profile-fields pv2-field-hierarchy">${renderSectionContent(profile, section)}</div>` : ""}
+        ${selected ? `<p class="pv2-lifecycle-hint">${escapeHtml(section.hint)}</p>${override ? renderSectionToolbar(section) : ""}<div class="profile-fields pv2-field-hierarchy">${section.stateProfileField ? renderStateProfileReference(profile, section) : renderSectionContent(profile, section)}</div>` : ""}
       </section>`;
     }).join("");
     return `<div class="pv2-lifecycle-workspace"><div class="pv2-lifecycle-tabs" role="tablist" aria-label="Profile lifecycle" style="--lifecycle-tab-count:${sections.length}">${tabs}</div>${panels}</div>`;
@@ -2710,7 +2912,10 @@ export function createProfilesController({
 
   function selectModeTab(sectionId, tabId, focus = true) {
     const profile = findProfile();
-    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
+    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId)
+      || (sectionId.endsWith("-linked-chill")
+        ? FIELD_SECTIONS.find((candidate) => candidate.id === "chill")
+        : null);
     if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
     branchTabSelections.set(sectionId, tabId);
     renderEditor();
@@ -2801,6 +3006,16 @@ export function createProfilesController({
     for (const key of drafts.overrideOrder) {
       if (!overrideKeys.has(key)) errors.push(`A reordered override profile no longer exists in the latest source (${key})`);
     }
+    allProfiles().forEach((profile) => {
+      if (drafts.removedOverrides.has(profileKey(profile))) return;
+      ["activeProfile", "tiredProfile"].forEach((fieldKey) => {
+        if (!profileCanEditField(profile, fieldKey)) return;
+        const raw = fieldRaw(profile, fieldKey);
+        if (raw && !stateReferenceProfile(raw)) {
+          errors.push(`${nameFor(profile)} — ${fieldKey === "activeProfile" ? "Active" : "Tired"} override profile #${Number(raw) + 1} is unavailable`);
+        }
+      });
+    });
     allProfiles().forEach((profile) => {
       if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
       const editedFields = profile.draftId
@@ -3600,6 +3815,16 @@ export function createProfilesController({
       renderEditor(); renderList(); signalDirty();
       announce("Next-to-player side settings will inherit after saving.");
     }
+    else if (action === "set-allowed-terrain" && profile) {
+      const bit = Number(target.dataset.terrainBit);
+      const terrainState = target.dataset.nextTerrainState;
+      if (!Number.isInteger(bit) || bit <= 0 || !["inherit", "off", "on"].includes(terrainState)) return;
+      setAllowedTerrainState(profile, bit, terrainState);
+      renderEditor(); renderList(); signalDirty();
+      const selector = `[data-action="set-allowed-terrain"][data-profile-key="${CSS.escape(profileKey(profile))}"][data-terrain-bit="${bit}"]`;
+      editorElement.querySelector(selector)?.focus({ preventScroll: true });
+      announce(`${target.closest(".pv2-terrain-toggle")?.querySelector("strong")?.textContent || "Terrain"} will be ${terrainState} after saving.`);
+    }
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
     else if (action === "create-base") createBaseDialog();
@@ -3807,14 +4032,25 @@ export function createProfilesController({
       renderEditor();
       return;
     }
+    if (event.target.matches("[data-state-profile-reference]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      const fieldKey = event.target.dataset.fieldKey;
+      setField(owner, fieldKey, event.target.value);
+      renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-state-profile-reference][data-field-key="${CSS.escape(fieldKey)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
     if (updateNumericOverrideInput(event.target, profile, { render: false })) {
       if (event.target.getAttribute("aria-invalid") !== "true") refreshAfterFormulaCommit();
       return;
     }
-    if (event.target.matches("[data-player-adjacent-direction]") && profile) {
+    if (event.target.matches("[data-player-adjacent-direction]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
       const bit = Number(event.target.dataset.directionBit);
-      const currentRaw = fieldRaw(profile, "playerAdjacentDirectionMasks");
-      const inheritedMasks = playerAdjacentEffectiveMasks(profile, currentRaw);
+      const currentRaw = fieldRaw(owner, "playerAdjacentDirectionMasks");
+      const inheritedMasks = playerAdjacentEffectiveMasks(owner, currentRaw);
       let value = inheritedMasks.reduce((combined, candidate) => combined | candidate, 0);
       value = event.target.checked ? (value | (1 << bit)) : (value & ~(1 << bit));
       if (!value) {
@@ -3822,19 +4058,21 @@ export function createProfilesController({
         status("Next to player needs at least one allowed side.", "warning");
         return;
       }
-      setField(profile, "playerAdjacentDirectionMasks", String(value));
+      setField(owner, "playerAdjacentDirectionMasks", String(value));
       renderEditor(); renderList(); signalDirty();
       if (inheritedMasks.length > 1) {
         announce("Mixed inherited sides are now one shared explicit mask.");
       }
-      const selector = `[data-player-adjacent-direction][data-direction-bit="${bit}"]`;
+      const selector = `[data-player-adjacent-direction][data-profile-key="${CSS.escape(profileKey(owner))}"][data-direction-bit="${bit}"]`;
       editorElement.querySelector(selector)?.focus({ preventScroll: true });
       return;
     }
-    if (event.target.matches("[data-profile-value]:not([data-profile-numeric-entry])") && profile) {
+    if (event.target.matches("[data-profile-value]:not([data-profile-numeric-entry])")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
       const fieldKey = event.target.dataset.fieldKey;
       const fieldInstance = event.target.dataset.fieldInstance;
-      invalidNumericOperatorInputs.delete(`${profileKey(profile)}|${fieldKey}|${fieldInstance}`);
+      invalidNumericOperatorInputs.delete(`${profileKey(owner)}|${fieldKey}|${fieldInstance}`);
       const compound = event.target.dataset.profileCompound;
       const scope = event.target.dataset.compoundScope;
       const parentGroup = event.target.closest("[data-option-parent]");
@@ -3843,7 +4081,7 @@ export function createProfilesController({
       const modeTabSelect = event.target.closest("[data-mode-tab-select]");
       const wasParentControl = Boolean(event.target.closest(".pv2-option-parent"));
       const beforeChildren = parentGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
-      const currentRaw = fieldRaw(profile, fieldKey);
+      const currentRaw = fieldRaw(owner, fieldKey);
       let nextRaw = event.target.value;
       if (compound === "spawn-destination-type" && nextRaw) {
         const currentInfo = spawnDestinationPlayerInfo(currentRaw);
@@ -3856,8 +4094,8 @@ export function createProfilesController({
       } else if (compound === "alert-range-close") {
         nextRaw = alertRangeRawWithClose(currentRaw, nextRaw === "1");
       } else if (compound === "scoped-action") {
-        if (!nextRaw && isOverrideProfile(profile)) {
-          nextRaw = scopedActionClearRaw(scope, currentRaw, originalFieldRaw(profile, fieldKey));
+        if (!nextRaw && isOverrideProfile(owner)) {
+          nextRaw = scopedActionClearRaw(scope, currentRaw, originalFieldRaw(owner, fieldKey));
         } else if (nextRaw === ALERT_SPECIAL.none && scopedActionRaw(scope, currentRaw) === ALERT_SPECIAL.none) {
           nextRaw = currentRaw;
         }
@@ -3865,7 +4103,7 @@ export function createProfilesController({
       if (modeTabSelect) {
         branchTabSelections.set(modeTabSelect.dataset.modeTabSection, modeTabSelect.dataset.modeTabSelect);
       }
-      setField(profile, fieldKey, nextRaw);
+      setField(owner, fieldKey, nextRaw);
       renderEditor(); renderList(); signalDirty();
       const focusTarget = fieldInstance
         ? editorElement.querySelector(`[data-profile-value][data-field-instance="${CSS.escape(fieldInstance)}"]`)
@@ -3880,7 +4118,7 @@ export function createProfilesController({
         const afterGroup = editorElement.querySelector(`[data-section-id="${CSS.escape(sectionId)}"] [data-option-parent="${CSS.escape(parentField)}"]`);
         const afterChildren = afterGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
         if (afterChildren !== beforeChildren) {
-          announce(`${fieldLabelForProfile(profile, fieldKey)} now shows ${afterChildren} suboption${afterChildren === 1 ? "" : "s"}.`);
+          announce(`${fieldLabelForProfile(owner, fieldKey)} now shows ${afterChildren} suboption${afterChildren === 1 ? "" : "s"}.`);
         }
       }
       return;
