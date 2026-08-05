@@ -132,27 +132,6 @@ OUTPUT = $(BUILD)/output.bin
 
 MOVE_HISTORY_CAPTURE_MANIFEST = $(BUILD)/pokemon_move_history_capture_build.json
 MOVE_HISTORY_CAPTURE_MANIFEST_TMP = $(MOVE_HISTORY_CAPTURE_MANIFEST).tmp
-MOVE_HISTORY_CAPTURE_OBJECTS = \
-	$(BUILD)/pokemon.o \
-	$(BUILD)/pokemon_storage_system.o \
-	$(BUILD)/individual/GetMonEvolutionInternal.o \
-	$(BUILD)/field/script_commands.o \
-	$(BUILD)/party_menu.o \
-	$(BUILD)/save.o \
-	$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o \
-	$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o \
-	$(BUILD)/pokemon_move_history_overlay/entry.o \
-	$(BUILD)/pokemon_move_history_overlay/thumb_help.o \
-	$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o \
-	$(BUILD)/pokemon_move_history_task6_overlay/entry.o \
-	$(BUILD)/overlay.o \
-	$(BUILD)/other_hook.o \
-	$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
-	$(BUILD)/summary_move_relearn_overlay/entry.o
-.PHONY: FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
-$(MOVE_HISTORY_CAPTURE_OBJECTS): FORCE_MOVE_HISTORY_CAPTURE_OBJECTS
-FORCE_MOVE_HISTORY_CAPTURE_OBJECTS:
-
 INCLUDE_SRCS := $(wildcard $(INCLUDE_SUBDIR)/*.h)
 
 C_SRCS := $(wildcard $(C_SUBDIR)/*.c)
@@ -266,7 +245,7 @@ $(foreach folder, $(CODE_BUILD_DIRS), $(eval $(call FOLDER_CREATE_DEFINE,$(folde
 # generate .d dependency files that are included as part of compiling if it does not exist
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
-$1: $2 $(CODE_BUILD_DIRS) $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER)
+$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) | $(CODE_BUILD_DIRS)
 	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
@@ -276,7 +255,7 @@ $(foreach src, $(ALL_C_SRCS), $(eval $(call SRC_OBJ_INC_DEFINE,$(patsubst $(C_SU
 
 define ASM_OBJ_INC_DEFINE
 # these should have similar dependency scanning, but we do not currently use them in a way conducive to it
-$1: $2 $(CODE_BUILD_DIRS)
+$1: $2 | $(CODE_BUILD_DIRS)
 	$(AS) $(ASFLAGS) -c $2 -o $1
 endef
 $(foreach src, $(ALL_ASM_SRCS), $(eval $(call ASM_OBJ_INC_DEFINE,$(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o, $(src)),$(src))))
@@ -302,6 +281,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
 	$(NARCHIVE) create $(FILESYS)/a/0/2/8 $(BUILD)/a028/ -nf
 	$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py \
+		--package-only \
 		--source src/pokemon_storage_system.c \
 		--config include/config.h \
 		--save-constants include/constants/save.h \
@@ -314,8 +294,8 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--packaged-overlay129 $(BASE)/overlay/overlay_0129.bin \
 		--overlay-table $(BASE)/overarm9.bin
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
+		--package-only \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
-	$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
@@ -330,6 +310,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" \
 		--context "NDSTOOL=$(NDSTOOL)"
 	$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py \
+		--package-only \
 		--arm9 $(BASE)/arm9.bin \
 		--y9 $(BASE)/overarm9.bin \
 		--overlay129 $(BASE)/overlay/overlay_0129.bin \
@@ -339,6 +320,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
 		--summary-object $(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o \
 		--core-linked $(LINK)
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history_capture.py \
+		--package-only \
 		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
 	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \

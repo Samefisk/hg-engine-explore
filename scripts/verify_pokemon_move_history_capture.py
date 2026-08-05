@@ -50,10 +50,10 @@ OVERLAY155_CALL_INVENTORY_SHA256 = (
     "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "f47a9465293925c3a5427218c869195c2448992aabb85c805581298b1f6124f8"
+    "1e406eb80a30a2eee8fd3d85bced040cfe18ea239ba1ad43d61aee8921542090"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "b54204c156f2f8dce508ceea182c47233324bb5d3ac352c53a224c3a5ec5c026"
+    "047955c13589b9c24873021b1143caa81657690831337a50bfdaa30efe9e4645"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -3005,11 +3005,13 @@ def source_contracts() -> None:
     seal_command = "scripts/pokemon_move_history_build_manifest.py"
     verifier_command = (
         "scripts/verify_pokemon_move_history_capture.py \\\n"
+        "\t\t--package-only \\\n"
         "\t\t--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp"
     )
     summary_verifier_command = (
         "scripts/verify_summary_move_relearn.py \\\n"
+        "\t\t--package-only \\\n"
         "\t\t--arm9 $(BASE)/arm9.bin \\\n"
         "\t\t--y9 $(BASE)/overarm9.bin \\\n"
         "\t\t--overlay129 $(BASE)/overlay/overlay_0129.bin \\\n"
@@ -3060,7 +3062,8 @@ def source_contracts() -> None:
         '--context "ARMIPS_FLAGS=$(ARMIPS_FLAGS)" '
         '--context "NDSTOOL=$(NDSTOOL)"',
         "$(PYTHON_NO_VENV) scripts/verify_summary_move_relearn.py "
-        "--arm9 $(BASE)/arm9.bin --y9 $(BASE)/overarm9.bin "
+        "--package-only --arm9 $(BASE)/arm9.bin "
+        "--y9 $(BASE)/overarm9.bin "
         "--overlay129 $(BASE)/overlay/overlay_0129.bin "
         "--overlay154 $(BASE)/overlay/overlay_0154.bin "
         "--linked-overlay154 "
@@ -3072,7 +3075,7 @@ def source_contracts() -> None:
         "--core-linked $(LINK)",
         "$(PYTHON_NO_VENV) "
         "scripts/verify_pokemon_move_history_capture.py "
-        "--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
+        "--package-only --manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
         "--rom $(BUILDROM).tmp",
         "$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py "
         "--rom $(BUILDROM).tmp",
@@ -3108,6 +3111,7 @@ def source_contracts() -> None:
         "$(NARCHIVE) create $(FILESYS)/a/0/2/8 "
         "$(BUILD)/a028/ -nf",
         "$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py "
+        "--package-only "
         "--source src/pokemon_storage_system.c "
         "--config include/config.h "
         "--save-constants include/constants/save.h "
@@ -3118,8 +3122,8 @@ def source_contracts() -> None:
         "--packaged-overlay129 $(BASE)/overlay/overlay_0129.bin "
         "--overlay-table $(BASE)/overarm9.bin",
         "$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py "
+        "--package-only "
         "--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9",
-        "$(PYTHON_NO_VENV) scripts/verify_move_relearn_candidates.py",
         '@echo "Making ROM..."',
         *expected_publication_tail,
     ]
@@ -3750,37 +3754,15 @@ def source_contracts() -> None:
         },
         "manifest seal does not record the exact effective build context",
     )
-    forced_objects_match = re.search(
-        r"MOVE_HISTORY_CAPTURE_OBJECTS\s*=\s*\\\n"
-        r"(.*?)"
-        r"\n\.PHONY:\s*FORCE_MOVE_HISTORY_CAPTURE_OBJECTS",
-        makefile,
-        re.S,
-    )
     require(
-        forced_objects_match is not None
-        and {
-            "$(BUILD)/pokemon.o",
-            "$(BUILD)/pokemon_storage_system.o",
-            "$(BUILD)/individual/GetMonEvolutionInternal.o",
-            "$(BUILD)/field/script_commands.o",
-            "$(BUILD)/party_menu.o",
-            "$(BUILD)/save.o",
-            "$(BUILD)/pokemon_move_history_overlay/pokemon_move_history.o",
-            "$(BUILD)/pokemon_move_history_overlay/pokemon_move_relearn.o",
-            "$(BUILD)/pokemon_move_history_overlay/entry.o",
-            "$(BUILD)/pokemon_move_history_overlay/thumb_help.o",
-            "$(BUILD)/pokemon_move_history_task6_overlay/pokemon_move_history_task6.o",
-            "$(BUILD)/pokemon_move_history_task6_overlay/entry.o",
-            "$(BUILD)/overlay.o",
-            "$(BUILD)/other_hook.o",
-            "$(BUILD)/summary_move_relearn_overlay/summary_move_relearn.o",
-            "$(BUILD)/summary_move_relearn_overlay/entry.o",
-        }
-        == set(re.findall(r"\$\(BUILD\)/[^\s\\]+", forced_objects_match.group(1)))
-        and "$(MOVE_HISTORY_CAPTURE_OBJECTS): "
-        "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" in makefile,
-        "move-history provenance does not force exactly the sixteen capture objects",
+        "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" not in makefile
+        and "MOVE_HISTORY_CAPTURE_OBJECTS" not in makefile
+        and "-include $(basename $1).d" in makefile
+        and "$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) "
+        "| $(CODE_BUILD_DIRS)" in makefile
+        and "$1: $2 | $(CODE_BUILD_DIRS)" in makefile,
+        "incremental move-history objects are not covered by source/dependency "
+        "tracking",
     )
 
 
@@ -5935,7 +5917,12 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
             require(False, f"mutated {label} passes packaged metadata checks")
 
 
-def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
+def binary_contracts(
+    rom_path: Path,
+    manifest_path: Path,
+    *,
+    package_only: bool = False,
+) -> None:
     linked = REPO / "build/pokemon_move_history_overlay_linked.o"
     overlay_path = REPO / "build/output_pokemon_move_history_overlay.bin"
     arm9_path = REPO / "base/arm9.bin"
@@ -7966,10 +7953,16 @@ def binary_contracts(rom_path: Path, manifest_path: Path) -> None:
         "__PokemonMoveHistory_" not in nm_all,
         "overlay 153 contains generated move-history veneers",
     )
-    print(
-        "move-history capture: source, fixtures, ABI relocations, and final "
-        "packaged hook/helper targets verified"
-    )
+    if package_only:
+        print(
+            "move-history capture package verification: manifest, ABI "
+            "relocations, and packaged hook/helper targets verified"
+        )
+    else:
+        print(
+            "move-history capture: source, fixtures, ABI relocations, and "
+            "final packaged hook/helper targets verified"
+        )
 
 
 def main() -> None:
@@ -7988,6 +7981,11 @@ def main() -> None:
         "--source-only",
         action="store_true",
         help="run deterministic source and host checks before packaging",
+    )
+    parser.add_argument(
+        "--package-only",
+        action="store_true",
+        help="verify the packaged ROM and manifest without host fixture suites",
     )
     parser.add_argument(
         "--pre-make",
@@ -8034,6 +8032,10 @@ def main() -> None:
         (args.rom is not None) == (args.manifest is not None),
         "--manifest is required exactly when --rom is used",
     )
+    require(
+        not args.package_only or args.rom is not None,
+        "--package-only requires --rom and --manifest",
+    )
     if args.managed_build:
         enter_managed_build_environment("--managed-build-clean")
     if args.managed_build_clean:
@@ -8064,6 +8066,9 @@ def main() -> None:
             "pre-Make source/dependency trust gate differs",
         )
         print("move-history capture: pre-Make trust gate verified")
+        return
+    if args.package_only:
+        binary_contracts(args.rom, args.manifest, package_only=True)
         return
     source_contracts()
     host_fixtures(args.manifest, args.rom)

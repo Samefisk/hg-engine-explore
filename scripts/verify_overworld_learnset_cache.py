@@ -2678,18 +2678,26 @@ def main() -> None:
         action="store_true",
         help="run deterministic in-memory verifier fixtures without build artifacts",
     )
+    parser.add_argument(
+        "--package-only",
+        action="store_true",
+        help="verify current linked and packaged artifacts without fixture suites",
+    )
     args = parser.parse_args()
     repo = args.repo.resolve()
 
-    run_unit_fixtures()
+    if not args.package_only:
+        run_unit_fixtures()
     if args.self_test_only:
         return
 
-    verify_personal_overlay_source_contract(repo)
-    verify_buildtime_learnset_filter_contract(repo)
+    if not args.package_only:
+        verify_personal_overlay_source_contract(repo)
+        verify_buildtime_learnset_filter_contract(repo)
     move_layout = derive_authoritative_move_layout(repo)
-    verify_production_filter_black_box(repo, move_layout)
-    verify_atomic_narc_black_box(repo)
+    if not args.package_only:
+        verify_production_filter_black_box(repo, move_layout)
+        verify_atomic_narc_black_box(repo)
     core_symbols = symbols(repo / "build/linked.o")
     verify_runtime_move_filter_contract(repo, core_symbols, move_layout)
     require(
@@ -2711,16 +2719,22 @@ def main() -> None:
         core_symbols["IsMoveUnimplemented"][0],
     )
     verify_core_control_flow(repo, core_symbols, fallback, overlay_loader)
-    verify_exhaustive_oracle(repo)
-    verify_personal_exhaustive_oracle(repo)
+    if not args.package_only:
+        verify_exhaustive_oracle(repo)
+        verify_personal_exhaustive_oracle(repo)
     if args.patched_arm9 is None:
         print(
             "learnset hook gate: static-only; the packaging target requires "
             "--patched-arm9 base/arm9.bin"
         )
+    gate_label = (
+        "learnset cache package gate: "
+        if args.package_only
+        else "learnset cache static gate: "
+    )
     print(
-        "learnset cache static gate: "
-        f"hook=0x{HOOK_ADDR:08X} slot=0x{SLOT_ADDR:08X} "
+        gate_label
+        + f"hook=0x{HOOK_ADDR:08X} slot=0x{SLOT_ADDR:08X} "
         f"fallback=0x{fallback:08X} next=0x{NEXT_FUNCTION_ADDR:08X}"
     )
 

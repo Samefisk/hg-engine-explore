@@ -2,48 +2,104 @@
 
 ## Verdict
 
-Expanded terrain support is feasible, and much of the required movement foundation already exists. It should be implemented as a surface/layer system rather than by adding more special cases to the current land, water, grass, and canopy checks.
+Expanded terrain support is feasible, and the refactored behavior-profile system is now a much better fit for it than the earlier analysis assumed. Profiles already support any combination of the current terrain bits, per-bit `INHERIT`/`ENABLE`/`DISABLE` semantics, and separate resolved Chill, Active, and Tired lanes.
 
-There are two separate problems:
+The next step should therefore extend the existing lane-local terrain masks into a larger surface catalog. It should not add parallel class-policy and override-policy tables.
 
-1. Logical placement and movement: deciding that a Pokemon occupies a tree canopy, roof, bridge deck, cliff, water surface, or other terrain layer.
-2. Visual compositing: making the Pokemon render above a tree or building rather than inside or behind it.
+There are still two distinct problems:
 
-Logical surface support is reasonably straightforward. Correct rendering over occluding map geometry is the main technical risk.
+1. **Logical surfaces and movement:** deciding that a Pokemon occupies and can reach a canopy, roof, bridge deck, cliff shelf, water layer, or other surface.
+2. **Visual compositing:** rendering the Pokemon above occluding tree or building geometry instead of inside or behind it.
 
-## Current System
+The profile refactor largely solves how allowed destinations should be authored and composed. Correct upper-surface rendering remains the main technical risk.
 
-Spawn terrain currently records the encounter source as land, surf, headbutt, or fishing. Movement profiles separately permit land, water, canopy, grass, the player's tile, or the tile in front of the player.
+## Current System After the Profile Refactor
 
-The existing system already provides useful foundations:
+The live behavior blob is version 41 and currently contains:
 
-- The Canopy Hopper profile supports canopy and land movement, configurable hop distances, tired returns, and active movement behavior.
-- Normal steps, ledges, staged jumps, movement ownership, target reservations, and landing are already implemented.
-- Landing can refresh a map object's height from native field collision geometry.
-- Native HeartGold map objects retain both an exact world height and a discrete height layer.
-- Native object collision permits actors at the same X/Z coordinates when their vertical layers are sufficiently separated.
+- 4 behavior classes
+- 2 generic class rules
+- 113 species-class rules
+- 14 ordered override profiles
+- 164 shared override members
 
-The custom wild system nevertheless treats most occupancy, targeting, reservations, proximity checks, and battles as two-dimensional. A bird placed on a roof would therefore currently reserve and block the tile below it and could interact or battle through the building.
+`OverworldWildBehaviorProfileData` is a 46-byte compact lane. Among its fields are:
 
-## Physical Height and Visual Occlusion
+```c
+u8 chillAllowedTerrainMask;
+u8 chillAllowedTerrainOverrideMask;
+u8 activeProfile;
+u8 tiredProfile;
+```
 
-Raising a map object is not sufficient to render a Pokemon on top of a tree canopy. Previous Mankey experiments tried object height, position-vector height, map-object flags, draw modes, callbacks, OAM/depth settings, follower proxies, special-field-object proxies, and late calls to the normal map-object renderer. These remained behind the canopy or interfered with movement.
+The first terrain byte stores values. The second records which bits are explicit. Each bit consequently has three authoring states:
 
-An attached follower/emote bubble did render above the same canopy. This proves that an above-canopy effect render family exists, although rendering a complete animated Pokemon through it remains unproven.
+| Explicit bit | Value bit | Meaning |
+|---|---|---|
+| 0 | ignored | Inherit |
+| 1 | 0 | Disable |
+| 1 | 1 | Enable |
 
-The most evidence-backed presentation design is:
+An override is composed as:
 
-- Keep a normal map object as the logical actor for identity, movement, collision, encounter state, and battle.
-- Hide its normal visual while it occupies a visually occluded upper surface.
-- Display a synchronized effect-owned Pokemon visual above the canopy or building.
-- Synchronize species, form, shiny palette, facing, animation, movement offsets, and visibility.
-- Tear the effect visual down on landing, battle, despawn, and map transition.
+```c
+result = (result & ~explicitMask) | (valueMask & explicitMask);
+```
 
-Accessible roofs, bridges, and terraces with genuine collision geometry may work with a normal elevated map object. Synthetic tree canopies and most inaccessible building roofs will probably require the effect-owned presentation path.
+The current six-bit catalog is `LAND`, `WATER`, `CANOPY`, `GRASS`, `PLAYER`, and `PLAYER_FRONT`. `LAND` is the inherited default. The old primary/secondary allowed-tile limit has therefore already been removed in this workspace: a lane can enable any subset of these six entries.
 
-## Surface Model
+The runtime `OverworldWildBehaviorProfile` is not one small flat profile. It is a 138-byte composite of three 46-byte lanes:
 
-Every active wild Pokemon should retain a surface reference in addition to its existing tile coordinates:
+```text
+owner / Chill lane
+Active linked lane
+Tired linked lane
+```
+
+Movement selects one lane in constant time and reads that lane's allowed-terrain mask. Every state other than Active or Tired currently selects the owner/Chill lane. EMOTING does not choose movement destinations, so it does not need a fourth policy lane unless moving emotes are added later.
+
+## Exact Override and State Resolution
+
+The resolution order matters when terrain policy is authored:
+
+1. Ordered generic and species class rules choose a class; later matching rules win.
+2. The class's compact lane is copied as the owner lane, and inherited terrain bits resolve against the default `LAND` policy.
+3. Every matching override is applied to the owner in table order. The resolver records which overrides matched.
+4. The resolved owner's `activeProfile` and `tiredProfile` fields select linked override-profile records, with default Active/Tired fallbacks.
+5. Active and Tired each restart from the original class lane and reapply the already-matched overrides, excluding that lane's selected linked profile. Member lists are not scanned again.
+6. The selected linked profile is applied once at the end and is authoritative for that state.
+7. Owner, Active, and Tired are assembled into the cached runtime composite.
+
+This gives the desired profile → state behavior, but with one important authoring rule: Active and Tired profiles are globally shared linked records, not owner-local embedded copies. Editing a shared linked profile changes every owner that references it.
+
+Generic linked state profiles should normally leave surface bits inherited so ecology overrides survive into those lanes. When a state genuinely needs different policy—such as a bird enabling `AIR` only while Active—it should select a dedicated reusable Bird Active profile. Tooling should offer clone/detach-on-write when an author wants a profile-local variant.
+
+The resolver currently records applicable overrides in one `u32`, so it has a ceiling of 32 override-profile indices. The current count is 14. Creating unique linked profiles for every species × state combination would reach that limit quickly; reusable ecology/state profiles and curated member exceptions are more efficient.
+
+## Recommended Evolution of Allowed Terrain
+
+Reuse and widen the existing value/explicit pair inside `OverworldWildBehaviorProfileData`:
+
+```c
+typedef u32 OverworldWildSurfaceMask;
+
+typedef struct OverworldWildSurfacePolicy {
+    OverworldWildSurfaceMask valueMask;
+    OverworldWildSurfaceMask explicitMask;
+} OverworldWildSurfacePolicy;
+```
+
+The field names should become state-neutral, for example `allowedSurfaceMask` and `allowedSurfaceExplicitMask`; the containing owner, Active, or Tired lane supplies the state meaning. Surface composition should remain special-cased, as current terrain composition already is. A bitset should not participate in the generic numeric exact/relative/minimum/maximum operators.
+
+`u16` is a viable constrained interim format. It can likely use alignment holes in the present records, grow a runtime composite only from 138 to 144 bytes, and leave 14 physical bits if `PLAYER` and `PLAYER_FRONT` temporarily occupy the upper two. However, the candidate catalog already wants more room once distinct water, roof, canopy, air, bridge, and ground surfaces are represented. A one-time move to `u32` avoids replacing one small ceiling with another.
+
+With `u32`, the compact lane is expected to grow from 46 to about 52 bytes and the runtime composite from 138 to about 156 bytes. Exact ABI sizes must be asserted when implemented because padding affects override records. This modest data increase is preferable to a second policy hierarchy and second resolver.
+
+`ALL` must be derived from the defined catalog instead of remaining a hard-coded `0x3F`. The C header, blob writer, validator, Python viewer, and V2 web editor currently duplicate parts of the terrain catalog; they should consume one generated definition so every allowed surface is visible and the copies cannot drift. The current editors expose only five of the six runtime entries, omitting `PLAYER`, which demonstrates that drift already exists.
+
+## Physical Surface Catalog
+
+The authoritative location should become `(tileX, tileZ, surfaceId)`, not only `(tileX, tileZ)`. A runtime surface reference can retain native height information and presentation policy:
 
 ```c
 typedef struct OverworldWildSurfaceRef {
@@ -57,188 +113,113 @@ typedef struct OverworldWildSurfaceRef {
 } OverworldWildSurfaceRef;
 ```
 
-The authoritative location becomes `(tileX, tileZ, surfaceId)`, not only `(tileX, tileZ)`.
+Candidate leaf surfaces include:
 
-Candidate surface kinds include:
-
-- Ground
-- Grass
-- Sand
-- Mud
-- Snow
-- Ice
-- Cave floor
-- Shallow water
-- Deep water
-- Puddle
-- Magma
-- Canopy or branch
-- Roof
-- Cliff shelf
-- Bridge deck
-- Water below bridge
+- Ground, grass, sand, mud, snow, ice, and cave floor
+- Shallow water, deep water, puddle, and magma
+- Canopy or branch, roof, cliff shelf, and bridge deck
 - Air
 
-The exact catalog should be centralized so profiles, movement, spawn overrides, debugging output, and map data all use the same IDs.
+`surfaceId` distinguishes disconnected or vertically stacked surfaces of the same kind. For example, a bridge deck and water underneath may share X/Z without sharing `surfaceId`. Waterfall, whirlpool, ledge, climb, takeoff, and landing are better modeled as edge or transition attributes than destination surface kinds.
 
-`PLAYER` and `PLAYER_FRONT` should not be physical surface kinds. They are dynamic target and occupancy permissions. The player still occupies a real surface such as ground, a bridge deck, or shallow water.
+`PLAYER` and `PLAYER_FRONT` are not physical surfaces. They are dynamic target/occupancy permissions. They may remain compatibility bits during the first widening step, but should ultimately move to a separate destination-permission mask. Candidate resolution must use the player's actual physical surface and height; hard intersection with physical ecology/map masks must not accidentally erase these dynamic permissions.
 
-Native terrain predicates can classify grass, water, sand, mud, snow, ice, cave floor, puddles, magma, waterfalls, whirlpools, ledges, and rock-climb terrain. Canopies, roofs, rails, inaccessible cliff shelves, and similar model-defined surfaces will need explicit surface data.
+Every flat map tile should resolve to one exact leaf classification. Broad groups such as `LANDLIKE` should be compile-time mask aliases, not overlapping runtime classifications. The current `LAND` predicate also accepts grass and many other passable terrain behaviors, so enabling `LAND` can presently defeat an attempt to disable `GRASS`. A 256-entry metatile-behavior → leaf-surface-bit table with explicit precedence fixes that and makes a candidate check one lookup and one bit test.
 
-For the first implementation, model-defined surfaces should be authored per map as rectangles, masks, connected nodes, or individual perch points with explicit height and render policy. Automatic extraction from map models can be added after the runtime system is stable.
+Canopies, roofs, rails, inaccessible cliff shelves, and similar model-defined surfaces need per-map data. The first implementation can use authored rectangles, tile masks, connected nodes, or individual perch points with height and render policy. Automatic model extraction can wait until the runtime design is proven.
 
-The fixed-size persistent spawn structure should remain focused on encounter identity. Current surface, height, presentation, and per-spawn surface overrides can initially live in the runtime sidecar state.
+## Per-Spawn Policy
 
-## How This Fits the Current Profile Override System
-
-The current profile resolver already has the correct high-level composition model:
-
-1. Ordered generic class rules select a behavior class.
-2. Ordered species-class rules can replace that class; later matches win.
-3. The selected class profile becomes the numeric base profile.
-4. All matching override profiles are applied in authored table order.
-5. Later overrides can replace values written by earlier overrides.
-
-The current data contains four class profiles, two generic class rules, 113 species-class rules, eleven ordered override profiles, and 155 shared override members. Resolution is cached per live slot, so these tables are normally scanned only during spawn initialization or cache invalidation.
-
-Terrain policy should reuse that exact resolver pass. It should not introduce a second hierarchy or independently rescan species and override member lists.
-
-The existing `OverworldWildBehaviorProfile` should remain the compact 72-byte numeric profile. Its override machinery treats every field as a byte and supports exact, relative, minimum, and maximum operations. Surface bitsets have different enable/disable semantics, and inserting word-sized arrays into this frequently copied structure would increase stack traffic, profile-cache copies, every override record, and the complexity of the generic byte-field override code.
-
-Instead, store surface data in parallel records indexed exactly like the existing profile data:
+Each live spawn should use the same value/explicit representation for each movement lane:
 
 ```c
-typedef u32 OverworldWildSurfaceMask;
-
-typedef enum OverworldWildSurfacePolicyState {
-    OW_WILD_SURFACE_POLICY_CHILL,
-    OW_WILD_SURFACE_POLICY_ACTIVE,
-    OW_WILD_SURFACE_POLICY_TIRED,
-    OW_WILD_SURFACE_POLICY_STATE_COUNT
-} OverworldWildSurfacePolicyState;
-
-typedef struct OverworldWildClassSurfacePolicy {
-    OverworldWildSurfaceMask allowed[OW_WILD_SURFACE_POLICY_STATE_COUNT];
-} OverworldWildClassSurfacePolicy;
-
-typedef struct OverworldWildOverrideSurfaceDelta {
-    OverworldWildSurfaceMask enable[OW_WILD_SURFACE_POLICY_STATE_COUNT];
-    OverworldWildSurfaceMask disable[OW_WILD_SURFACE_POLICY_STATE_COUNT];
-} OverworldWildOverrideSurfaceDelta;
+typedef struct OverworldWildSpawnSurfacePolicy {
+    OverworldWildSurfacePolicy lane[3]; // Chill, Active, Tired
+} OverworldWildSpawnSurfacePolicy;
 ```
 
-Each class profile owns three absolute masks. Each existing override profile owns three enable masks and three disable masks. Whenever an override matches, its numeric profile fields and its surface delta are applied in the same ordered loop:
+With `u32` masks this costs 24 bytes per live slot, or 240 bytes for all ten slots. With a deliberately limited `u16` catalog it would cost 12 bytes per slot. Static authored overrides can be stored sparsely and expanded into the runtime sidecar.
+
+Apply the spawn policy after complete class/override/linked-lane composition:
 
 ```c
-resolved[state] |= overrideDelta->enable[state];
-resolved[state] &= ~overrideDelta->disable[state];
+requested = (resolvedLaneMask & ~spawn.explicitMask)
+          | (spawn.valueMask & spawn.explicitMask);
+
+effectivePhysical = requested
+                  & ecology.supportedSurfaceMask
+                  & mapAvailableSurfaceMask;
 ```
 
-Disable wins when one override accidentally contains the same bit in both fields. A later matching override can deliberately re-enable that surface, matching the current last-write-wins ordering. This is ordered composition, not an inferred general-to-specific ranking.
+Dynamic target permissions must be composed separately once `PLAYER` and `PLAYER_FRONT` are migrated out of the physical catalog.
 
-EMOTING currently cannot select a movement destination. It should retain the surface and policy of the state that started the emote instead of paying for a fourth independent movement mask. If moving emotes are added later, it can become a fourth policy state without changing the surface catalog.
+The final effective mask should be written into or cached beside the resolved lane. A spawn-policy edit needs only a per-slot policy revision and a recomposition of three words. It must not rerun class rules, override member scans, personal-data lookup, or map-surface discovery. Static spawn policy should be applied before validating the initial spawn destination.
 
-## Per-Spawn Surface Overrides
+An empty effective mask is valid only for an intentionally immobile state. Otherwise authoring validation should report it and runtime AI should idle rather than repeatedly perform a destination search or silently fall back to land.
 
-Every live spawn can carry the same three-state enable/disable delta in the runtime sidecar:
+## Ecology, Capabilities, and Behavior Intent
 
-```c
-typedef struct OverworldWildSpawnSurfaceDelta {
-    OverworldWildSurfaceMask enable[OW_WILD_SURFACE_POLICY_STATE_COUNT];
-    OverworldWildSurfaceMask disable[OW_WILD_SURFACE_POLICY_STATE_COUNT];
-} OverworldWildSpawnSurfaceDelta;
-```
+Battle type alone is too broad. Pidgey and Zubat may both be Flying-type, but they do not necessarily share roof-walking or perching behavior. Magnemite can hover without perching, while Aipom can use a canopy without true flight.
 
-This lets one spawn differ from other Pokemon using the same behavior profile. Examples include disabling roofs on a map whose building geometry is not authored, restricting a scripted bird to ground while an event is active, or permitting a particular arboreal spawn to descend to land.
+Three concepts should remain separate:
 
-The full three-state delta costs 24 bytes per slot, or 240 bytes for all ten wild slots. That is small enough to provide the requested state-specific spawn control. If later measurement shows those overrides are almost always state-independent, they can be compacted to one shared enable/disable pair per slot.
+- **Ecology tags** group authored behavior intent: `ARBOREAL`, `ROOF_VISITOR`, `CLIFF_DWELLER`, `SHOREBIRD`, `MARSH_DWELLER`, or `CAVE_FLYER`.
+- **Physical capabilities** gate mechanics: `CAN_WALK`, `CAN_HOP`, `CAN_FLY`, `CAN_HOVER`, `CAN_SWIM`, `CAN_WADE`, `CAN_PERCH`, `CAN_CLIMB`, `CAN_BURROW`, `CAN_SLIDE`, or `MAGMA_SAFE`.
+- **Surface policy** says where the resolved profile wants the actor to move in Chill, Active, or Tired.
 
-Changing a spawn delta should only increment a per-slot policy revision and rebuild that slot's three cached masks. It must not rerun the behavior-class, member-list, or numeric profile resolver.
+This separation answers how ecology fits the current override system efficiently:
 
-The static and spawn deltas resolve as:
+- Use named override profiles and their existing shared member lists as the first authoring-level ecology groups. A species can be in several groups, ordered composition already works, and matching happens only during a cold resolve.
+- Keep curated species exceptions in those lists rather than generating one profile per species.
+- If a small stable vocabulary needs rule matching, a few of the ten currently spare `groupFlags` bits can represent high-level ecology tags. Existing matching is any-overlap only, so do not force all/none semantics into it.
+- Add a separate ecology match mask only if the vocabulary outgrows those spare bits or genuinely needs `any`/`all`/`none` matching. Do not pre-emptively enlarge every match record.
+- Never grant intrinsic capabilities through a behavior override. An override may request `ROOF`; a form-aware capability record decides whether that Pokemon can perch, fly, or climb there.
 
-```c
-policyMask = resolvedProfileSurfaceMask[state];
-policyMask |= spawnDelta->enable[state];
-policyMask &= ~spawnDelta->disable[state];
-effectiveMask = policyMask
-    & resolvedEcology.supportedSurfaceMask
-    & mapAvailableSurfaceMask;
-```
-
-The last two masks are hard constraints. A spawn override can express stronger or weaker behavior intent, but it cannot manufacture a roof that is absent from the map or give an incapable Pokemon the physical ability to occupy it.
-
-An empty effective mask is valid for an intentionally immobile state. The AI must enter an idle/cooldown path rather than repeatedly searching or silently falling back to land.
-
-## Ecology Tags, Physical Capabilities, and Profile Intent
-
-Battle type is too broad for terrain eligibility. Pidgey and Zubat can both fly, but they do not necessarily share roof-walking or perching behavior. Magnemite can hover without perching. Aipom can occupy a canopy without true flight.
-
-Three concepts must remain separate:
-
-- **Ecology tags** identify authored species groups and allow override profiles to target them: `ARBOREAL`, `ROOF_VISITOR`, `CLIFF_DWELLER`, `SHOREBIRD`, `MARSH_DWELLER`, or `CAVE_FLYER`.
-- **Physical capabilities** describe available mechanics: `CAN_WALK`, `CAN_HOP`, `CAN_FLY`, `CAN_HOVER`, `CAN_SWIM`, `CAN_WADE`, `CAN_PERCH`, `CAN_CLIMB`, `CAN_BURROW`, `CAN_SLIDE`, or `MAGMA_SAFE`.
-- **Surface policy** describes where the resolved behavior profile wants this actor to move in CHILL, ACTIVE, or TIRED state.
-
-Ecology and capability data are intrinsic species/form metadata. Behavior overrides may match those tags, but should not grant intrinsic capabilities; otherwise an override could change the property that caused itself to match.
-
-If ecology targeting is needed, extend the existing behavior context and match with separate `any`, `all`, and `none` ecology masks. Do not reuse the current `groupFlags`: 22 of its 32 bits are already assigned, and its only matching rule is "any bit overlaps."
-
-For readable authoring and compact runtime data, species can be assigned named tags in source data and compiled into an ecology class:
+A compact intrinsic representation is one dense `u8 ecologyClassId` per species plus sorted form exceptions. A small class dictionary can resolve to:
 
 ```c
 typedef struct OverworldWildResolvedEcology {
     u32 supportedSurfaceMask;
-    u16 supportedTransitionMask;
+    u16 transitionCapabilityMask;
     u16 ecologyTags;
 } OverworldWildResolvedEcology;
 ```
 
-A compact implementation can store one `u8 ecologyClassId` per base species plus sorted `{ species, form, classId }` exceptions. A small class dictionary then supplies the resolved structure above. This is approximately one kilobyte for the dense species index plus the dictionary and exceptions, rather than expanding the existing spawn metadata record for every species and form.
+Resolve this once from species and form during spawn preparation. The current prepared-spawn path is form-aware, while a later cold behavior-cache path can rebuild type context from base-species personal data. Seeding both behavior and ecology caches from the prepared result avoids duplicate work and prevents this inconsistency.
 
-Ecology must be resolved with both species and form during spawn preparation, then copied into the slot cache. The current type-based path can rebuild a runtime context without the form on an initial cache miss; the new ecology path must not repeat that inconsistency. Prepared spawn data should seed the runtime resolved-policy cache directly.
+## Cache and Runtime Efficiency
 
-## Runtime Cache and Hot-Path Cost
+The runtime already caches a complete 138-byte three-lane profile per slot. A cache hit avoids context construction and member scans, but the profile is still copied by value and movement primitives are recomputed. Spawn preparation has already resolved a form-aware composite, yet slot initialization invalidates the cache, forcing a first-use resolve again.
 
-The system has at most ten wild slots. Active movement is updated every frame, but otherwise-idle AI is already distributed with a round-robin cursor so only one idle slot receives decision work per frame.
+Recommended changes are:
 
-Each slot should cache:
+1. Seed the slot cache directly from the prepared spawn's resolved profile and form-aware ecology.
+2. Cache derived movement primitives with the profile, or expose a stable cached lane/view instead of repeatedly copying the whole composite.
+3. Cache the ordinary base of canopy profiles and apply only the small dynamic settled/alertness adjustment afterward; the current dynamic canopy path bypasses caching.
+4. Include a spawn-policy revision and map-surface generation only when those values can change at runtime.
+5. Keep exact flat-surface lookup and authored elevated-surface indices map-local and precomputed.
 
-- The three surface masks after class and ordered override-profile resolution.
-- The three final masks after the spawn delta and hard constraints.
-- Resolved ecology tags, supported surfaces, and transition capabilities.
-- A spawn-policy revision and map-surface generation.
-
-The expected cache and spawn-delta cost is only a few hundred bytes across all ten slots. The important saving is CPU and code structure: no behavior table scan, member-list scan, personal-data lookup, model scan, or archive-backed tree search occurs inside candidate evaluation.
-
-The movement hot path becomes:
+Candidate evaluation should then be constant work:
 
 ```c
 allowedMask = cache->effectiveSurfaceMask[state];
-if ((allowedMask & OW_WILD_SURFACE_BIT(candidate->surfaceKind)) == 0) {
+candidateBit = mapSurfaceIndex->ResolveLeafBit(x, z, requestedLayer);
+
+if ((allowedMask & candidateBit) == 0)
     return FALSE;
-}
-if ((edge->requiredCapabilities & cache->supportedTransitionMask)
-        != edge->requiredCapabilities) {
+
+if ((edge->requiredCapabilities & cache->transitionCapabilityMask)
+        != edge->requiredCapabilities)
     return FALSE;
-}
 ```
 
-This is faster than iterating a list of enabled surfaces. The catalog can expose every terrain checkbox to the profile editor while runtime validation remains one 32-bit surface test and one transition-capability test.
+It must not iterate every enabled surface, rescan behavior members, load personal data, inspect models, reload tree archives, or rediscover a canopy during candidate checks or pathfinding.
 
-Every coordinate must resolve to an exact leaf surface such as `GROUND`, `GRASS`, `SAND`, or `SNOW`. Broad authoring groups such as `LANDLIKE` should be compile-time mask aliases, not additional classifications placed on the same tile. This lets a profile enable all landlike surfaces and still explicitly disable grass or mud.
+## Movement-System Integration
 
-Legacy `LAND` currently means almost any unblocked non-water, non-headbutt tile. Its migration mask must initially expand to the complete compatible ground family, including sand, snow, mud, and cave floor, or existing Pokemon will silently lose movement permissions.
+Allowed surfaces answer **where** a Pokemon may choose to go. Existing behavior fields and derived movement primitives answer **why and how** it moves. Permission to use `ROOF` does not make ordinary `WANDER` fly between disconnected buildings.
 
-## Movement Integration
-
-Allowed surfaces answer where a Pokemon may choose to go. They do not by themselves select how it gets there. The current movement profile and derived primitives remain responsible for intent and locomotion.
-
-A bird can therefore have `AIR | ROOF | CANOPY` in its ACTIVE policy and possess `CAN_FLY | CAN_PERCH`, but it still needs flight/perch locomotion primitives. A normal WANDER primitive should not magically interpret roof permission as permission to fly between disconnected buildings.
-
-The packed primary/secondary allowed-tile byte should be replaced at its callers by one cached `u32` destination mask. Candidate classification should occur once, followed by a bit test. It must not loop through all enabled surface kinds.
-
-The current boolean landing validator should evolve into a resolver that returns the concrete destination surface because a bridge deck and the water below can share X/Z:
+A destination resolver should return a concrete surface, because multiple layers can share X/Z:
 
 ```c
 BOOL TryResolveMovementDestination(
@@ -248,18 +229,18 @@ BOOL TryResolveMovementDestination(
     OverworldWildSurfaceRef *destination);
 ```
 
-A movement attempt should then:
+A movement attempt should:
 
-1. Select the cached effective mask for CHILL, ACTIVE, or TIRED.
+1. Select the cached Chill, Active, or Tired lane mask.
 2. Resolve candidate surface nodes permitted by that mask.
-3. Select an edge whose required traversal capabilities are satisfied.
-4. Reserve the destination `surfaceId` rather than only X/Z.
-5. Dispatch walk, hop, climb, takeoff, flight, landing, drop, swim, wade, burrow, or slide locomotion.
+3. Select an edge whose required capabilities are satisfied.
+4. Reserve `(tileX, tileZ, surfaceId)` rather than only X/Z.
+5. Dispatch the matching walk, hop, climb, takeoff, flight, landing, drop, swim, wade, burrow, or slide primitive.
 6. Use native walking for ordinary same-surface edges where native collision agrees.
-7. Reuse the custom jump/interpolation carrier for cross-surface hops and landings.
-8. Commit the destination surface only after the movement succeeds.
+7. Reuse the custom jump/interpolation carrier for cross-surface transitions.
+8. Commit the new surface only when movement succeeds.
 
-Surface masks govern destination selection, not instantaneous validity of the actor's current position. If a bird becomes TIRED while airborne and TIRED disables AIR, it must finish its current atomic transition and enter a landing search. It must not be teleported, cancelled halfway through a movement command, or declared invalid while still airborne.
+Surface masks govern new destination selection, not instantaneous validity of the actor's current position. If a bird becomes Tired while airborne and Tired disables `AIR`, it should finish the current atomic edge and enter a landing search. It should not teleport or cancel halfway through a movement command.
 
 For birds, a useful lifecycle is:
 
@@ -267,76 +248,96 @@ For birds, a useful lifecycle is:
 PERCHED -> TAKEOFF -> AIRBORNE -> CRUISE/SWOOP -> LAND -> PERCHED
 ```
 
-The first roof implementation should use authored perch nodes, takeoff, short flight, and landing. Full freeform walking across arbitrary roof models is not necessary for the initial feature.
+The first roof feature needs authored perch nodes, takeoff, short flight, and landing. It does not need freeform walking over arbitrary roof models.
 
-Reservations can be simplified to one current and one reserved `SurfaceRef` per slot plus a valid bitmask. With only ten actors, an O(10) reservation scan is inexpensive; the essential correction is comparing `surfaceId` and height rather than rejecting every identical X/Z coordinate.
+With only ten wild actors, an O(10) reservation scan remains inexpensive. The necessary correction is comparing surface identity and compatible height, so a Pokemon on a bridge or roof does not block, target, or battle a player underneath. Occupancy, A-button targeting, contact/ram battles, ball targeting, shadows, and save restoration all need the same layer awareness.
 
-Occupancy, A-button targeting, contact battles, ram battles, player-ball targeting, shadows, and save restoration must also become surface- or height-aware. A Pokemon on a roof must not block or directly battle a player below it.
+## Physical Height and Visual Occlusion
 
-## Map and Pathfinding Efficiency
+Raising a map object is not sufficient to render a Pokemon on top of a tree canopy. Previous Mankey experiments tried object height, position-vector height, map-object flags, draw modes, callbacks, OAM/depth settings, follower proxies, special-field-object proxies, and late normal-map-object rendering. These remained behind the canopy or interfered with movement.
 
-Flat terrain should use a 256-entry metatile-behavior classification table so the behavior byte maps directly to a leaf surface kind and attributes. Model-defined canopy and roof surfaces should be discovered or loaded once per map and indexed by tile.
+An attached follower/emote bubble did render above the same canopy. This proves that an above-canopy effect render family exists, although rendering a complete animated Pokemon through it remains unproven.
 
-Elevated surfaces should use compact node IDs and precomputed adjacency lists. A small graph can use bitsets for visited and occupied nodes, making planning bounded O(V + E). The current tree-top path should not reload archives, inspect models, or rediscover canopy structure inside breadth-first search or per-frame movement.
+The most evidence-backed presentation design is:
 
-Per-frame jump, flight, or effect-visual interpolation should read the destination selected at movement start. It should never query or classify terrain every animation frame.
+- Keep a normal map object as the logical actor for identity, movement, collision, encounter state, and battle.
+- Hide its normal visual on a visually occluded upper surface.
+- Display a synchronized effect-owned Pokemon visual above the canopy or building.
+- Synchronize species, form, shiny palette, facing, animation, movement offsets, and visibility.
+- Tear the effect visual down on landing, battle, despawn, and map transition.
 
-## Overlay and Data-Size Constraint
+Accessible roofs, bridges, and terraces with genuine collision geometry may work with a normal elevated map object. Synthetic canopies and inaccessible roofs will probably require the effect-owned presentation path.
 
-The mask operations and runtime cache are cheap, but code placement is a serious constraint. The current spawner overlay occupies approximately 45,050 bytes of a 45,056-byte region, leaving about six bytes of linker slack. The helper overlay has roughly ten bytes free, and the behavior-data overlay roughly 150 bytes.
+## Overlay and Data Constraints
 
-This feature cannot be added as a second generic layer beside the existing allowed-tile and Mankey-specific implementation. It must replace and remove legacy paths, reclaim code, move substantial new surface logic to a newly allocated overlay, or deliberately repartition existing overlays. Overlay map size must be checked after each implementation stage.
+The last linked artifacts in the workspace report approximately:
 
-The behavior data itself is modest. Parallel policies for four class profiles and eleven overrides cost approximately 312 bytes for the three moving states. Full per-spawn three-state deltas cost 240 runtime bytes. The danger is duplicated code and permanent migration paths, not the masks themselves.
+- Spawner overlay: 45,050 / 45,056 bytes, about 6 bytes free
+- Helper overlay: effectively 2 bytes free
+- Behavior-code overlay: 3,946 / 4,096 bytes, about 150 bytes free
+- Behavior-data blob: 3,344 bytes
 
-The behavior data version, blob header, validator, builder, and profile viewer must change together. A one-release migration should translate primary/secondary allowed tiles to masks, verify parity, and then remove the six legacy allowed-tile fields and matching code instead of retaining two permanent systems.
+These artifacts predate or may not include all uncommitted profile changes, and no build was authorized for this reevaluation. Treat the figures as last-measured constraints, not a newly verified final map.
 
-The encounter-source field remains separate. A Pokemon may originate from a HEADBUTT encounter while its behavior permits canopy, ground, and air. Spawn origin describes how the encounter was produced; surface policy describes where the actor may move afterward.
+Substantial map-surface resolution or graph code cannot simply be appended to the current overlays. The implementation must replace legacy allowed-tile/canopy paths, reclaim code, move data-driven lookup into the heap-loaded behavior blob, allocate a new overlay, or deliberately repartition overlays.
 
-## Example: Roof-Perching Bird with Other Overrides
+The profile data increase is not the dominant cost. Even a `u32` lane policy remains small relative to the existing profile and cache. Duplicate resolvers, permanent compatibility paths, archive work inside movement, and visual infrastructure are the larger risks.
 
-Suppose Pidgey matches an aggressive behavior class, the Bird override, and the Swarm override.
+The behavior data version, C definitions, blob writer, validator, Python viewer, and V2 profile editor must change together. Compile-time size and offset assertions should make padding assumptions explicit.
 
-- The aggressive class supplies its existing numeric chase behavior and base ground policy.
-- The Bird override enables roof and canopy while CHILL, enables air, roof, and canopy while ACTIVE, and disables air while TIRED.
-- The Swarm override adjusts numeric pursuit and group behavior without needing to replace the Bird surface policy.
-- Pidgey's ecology class supplies `CAN_FLY`, `CAN_PERCH`, and `ROOF_VISITOR` compatibility.
-- A map-specific spawn delta can disable roof if that map has no safe authored roof network.
+## Example: Roof-Perching Bird
 
-The final policy might be:
+Suppose Pidgey matches an aggressive class, a Bird ecology override, and a Swarm override.
 
-| State | Desired surfaces | Movement implication |
+- The aggressive class supplies chase behavior and inherited ground policy.
+- The Bird override supplies general perching intent and matches Pidgey through its curated ecology membership.
+- Swarm changes group/pursuit behavior while leaving surface bits inherited.
+- The owner selects reusable Bird Active and Bird Tired linked profiles.
+- Bird Active explicitly enables `AIR`, `ROOF`, and `CANOPY` as needed.
+- Bird Tired explicitly disables `AIR` but permits reachable landing surfaces.
+- Pidgey's form-aware ecology class supplies `CAN_FLY`, `CAN_PERCH`, and compatible physical surfaces.
+- A spawn policy can explicitly disable `ROOF` on a map whose roofs are not authored.
+
+| State | Example effective surfaces | Movement consequence |
 |---|---|---|
 | Chill | Ground, roof, canopy | Wander locally or remain perched |
-| Active | Ground, roof, canopy, air | Chase by walking, taking off, flying, or landing |
-| Tired | Ground, roof, canopy | Finish current flight and seek a legal landing |
+| Active | Ground, roof, canopy, air | Walk, take off, fly, or land using graph edges |
+| Tired | Ground, roof, canopy | Finish the current flight and seek a legal landing |
 
-Disconnected roof networks remain disconnected even though both contain `ROOF` surfaces. Surface masks permit the destination kind; graph edges determine whether that particular destination is reachable.
+This example deliberately uses Bird-specific linked profiles. If the shared Default Active/Tired profiles explicitly force `LAND`, their last-applied masks overwrite earlier Bird terrain choices. Generic defaults should inherit surface policy; intentional state differences belong in reusable dedicated linked profiles.
 
 ## Authoring and Validation
 
-Class profiles should display an ordinary on/off surface grid for CHILL, ACTIVE, and TIRED. Override profiles and individual spawns should display a tri-state grid: `INHERIT`, `ENABLE`, or `DISABLE` for every surface in each state.
+The current editors already provide tri-state terrain controls and linked-state editing. They should be evolved rather than replaced:
 
-The data tools should report resolved policy provenance and reject or warn about:
+- Generate and display the complete centralized catalog.
+- Show resolved policy and provenance for owner, Active, and Tired.
+- Clearly label linked profiles as globally shared.
+- Offer clone/detach-on-write for local state variants.
+- Allow sparse per-spawn `INHERIT`/`ENABLE`/`DISABLE` policy.
+- Distinguish physical surfaces from dynamic player-target permissions.
 
-- The same surface enabled and disabled in one delta.
-- A movement state whose effective mask is empty unless explicitly marked immobile.
-- A locomotion state with no compatible traversal capability.
-- A flyer whose TIRED state has no reachable landing surface.
-- A spawn destination excluded by its initial resolved policy.
-- A policy enabling surfaces that no targeted species can support.
-- A nonzero policy containing no surfaces present on the target map.
-- An elevated destination with no render policy or authored/native height.
+Validation should report or reject:
+
+- Undefined bits or catalog/version disagreement across tools
+- A non-immobile state with an empty effective mask
+- A locomotion state with no compatible transition capability
+- A flyer with no reachable Tired landing surface
+- An initial destination excluded by final spawn policy
+- Policy that targets no supported species/form or no surface present on the map
+- An elevated surface without height, graph connectivity, or render policy
+- Accidental edits to a linked state profile with broad downstream impact
+- Override-profile growth approaching the current 32-profile resolver limit
 
 ## Terrain and Pokemon Opportunities
 
 | Surface | Suitable Pokemon | Possible behavior |
 |---|---|---|
 | Tree canopy | Mankey, Aipom, birds, arboreal bugs | Branch hopping, resting, ambushing, dropping to ground |
-| Roofs, chimneys, and signs | Small or medium birds, bats, some levitators | Perching, short walks, circling, swooping |
+| Roofs, chimneys, and signs | Small/medium birds, bats, some levitators | Perching, short walks, circling, swooping |
 | Cliffs and rock shelves | Rock/Ground species, climbers, birds | Shelf walking, hopping, climbing, dropping |
 | Sand and beaches | Sandshrew, Diglett, Hippopotas, crabs, shorebirds | Scuttling, burrowing, emerging |
-| Mud, marsh, and shallow water | Wooper, Quagsire, Croagunk, Barboach | Wading, splashing, land/water transitions |
+| Mud, marsh, shallow water | Wooper, Quagsire, Croagunk, Barboach | Wading, splashing, land/water transitions |
 | Snow | Ice species, mammals, winter birds | Powder movement, hiding, slower travel |
 | Ice | Ice species, seals, penguin-like species | Sliding and controlled momentum |
 | Bridges | Birds above, aquatic Pokemon below | Multi-layer occupancy at identical X/Z |
@@ -347,13 +348,14 @@ The data tools should report resolved policy provenance and reject or warn about
 
 ## Recommended Implementation Order
 
-1. **Overlay ownership and renderer spike:** Decide which legacy code is replaced or which new overlay owns surface logic, then render one fully animated effect-owned Mankey above a known Route 29 canopy while retaining a hidden logical map object.
-2. **One-step policy migration:** Add the surface catalog and parallel class/override policy tables, translate every existing primary/secondary pair, update the data tools, and remove the legacy fields and matching path in the same feature branch.
-3. **Ecology and resolved cache:** Add form-aware ecology classes, seed the slot cache during spawn preparation, and verify that candidate checks use only cached masks and capabilities.
-4. **Layer-aware interactions:** Make occupancy, reservations, proximity, and battles surface-aware, then prove that actors can coexist on a native bridge deck and below it.
-5. **Canopy support:** Convert current tree-top detection into cached canopy surfaces with explicit height and presentation policy.
-6. **Roof-bird pilot:** Add one map with authored roof perches and one bird profile using perch, takeoff, swoop, and landing.
-7. **Flat terrain ecology:** Add sand, mud, snow, ice, shallow-water, cave, and cliff behaviors through the same catalog and mask system.
-8. **Connected elevated networks:** Add larger roof, cliff, canopy, and aerial surface graphs after the basic runtime and rendering paths are proven.
+1. **Overlay ownership and renderer spike:** decide which legacy code is replaced or which new overlay owns surface logic, then render one fully animated effect-owned Pokemon above a known canopy while retaining a hidden logical map object.
+2. **Evolve the existing masks:** choose the final catalog width, rename/widen the lane-local value/explicit masks, generate one catalog for C/validators/editors, separate or quarantine player-target bits, and replace broad OR predicates with exact leaf classification.
+3. **Correct linked-state data:** make general Active/Tired profiles inherit surfaces and add a small set of reusable ecology-specific linked profiles where states genuinely differ.
+4. **Seed the resolved cache:** carry the prepared form-aware composite and ecology class into slot state, cache primitives, and make canopy's dynamic adjustment cache-friendly.
+5. **Layer-aware interactions:** make occupancy, reservations, targeting, and battles surface-aware; prove that actors can coexist on a native bridge deck and below it.
+6. **Canopy support:** turn tree-top discovery into cached surface nodes with explicit height and presentation policy.
+7. **Roof-bird pilot:** author one roof-perch network and one bird lifecycle using perch, takeoff, flight, and landing.
+8. **Flat terrain ecology:** add sand, mud, snow, ice, shallow-water, cave, and cliff behavior through the same catalog and mask system.
+9. **Connected elevated networks:** add larger roof, cliff, canopy, and aerial graphs after the basic runtime and rendering paths are proven.
 
-The effect renderer remains the go/no-go experiment for convincing tree-top and inaccessible-roof presentation. The allowed-surface mask evolution is independent and can be implemented safely before every terrain type is available.
+The visual renderer remains the go/no-go experiment for convincing tree-top and inaccessible-roof presentation. The allowed-surface evolution is already compatible with the refactored profile system and can proceed independently.

@@ -892,9 +892,21 @@ def source_contracts(root: Path) -> None:
     )
     bind_index = build_wrapper.index("--bind-runtime")
     verify_bound_index = build_wrapper.index("--require-bound-runtime")
+    optional_gate_index = build_wrapper.index(
+        'if [ "$bind_summary_runtime" -eq 1 ]; then'
+    )
+    optional_skip_index = build_wrapper.index(
+        'echo "Skipped optional Summary runtime attestation."'
+    )
     delta_index = build_wrapper.index("./scripts/copy-test-nds-to-delta.sh")
     require(
-        build_wrapper.count("--bind-runtime") == 1
+        build_wrapper.count(
+            "bind_summary_runtime=${HG_ENGINE_BIND_SUMMARY_RUNTIME_AFTER_BUILD-0}"
+        ) == 1
+        and build_wrapper.count(
+            "HG_ENGINE_BIND_SUMMARY_RUNTIME_AFTER_BUILD must be 0 or 1"
+        ) == 1
+        and build_wrapper.count("--bind-runtime") == 1
         and build_wrapper.count("--require-bound-runtime") == 1
         and build_wrapper.count("/usr/bin/env -i") >= 3
         and build_wrapper.count("protected_native_bootstrap \\") == 2
@@ -912,9 +924,10 @@ def source_contracts(root: Path) -> None:
         and "/usr/bin/swift -" in build_wrapper
         and 'entitlements=$(/usr/bin/codesign -d --entitlements -'
         in build_wrapper
-        and bind_index < verify_bound_index < delta_index,
-        "managed build does not bind and verify the host runtime before Delta "
-        "publication",
+        and optional_gate_index < bind_index < verify_bound_index
+        < optional_skip_index < delta_index,
+        "managed build does not keep optional host runtime attestation gated "
+        "and ordered before Delta publication",
     )
     require(
         "AUTHENTICATED_HEADLESS" in party_verifier
@@ -4888,20 +4901,10 @@ def main() -> None:
     parser.add_argument("--summary-object", type=Path)
     parser.add_argument("--core-linked", type=Path)
     parser.add_argument("--task7-focused", action="store_true")
+    parser.add_argument("--package-only", action="store_true")
     args = parser.parse_args()
 
     root = args.root.resolve()
-    source_contracts(root)
-    if args.task7_focused:
-        host_state_contracts()
-        print(
-            "Summary move relearn Task 7 verification passed: source, "
-            "toggle/reset state, compatibility order, and bounds"
-        )
-        return
-    bootstrap_host_contracts(root)
-    artifact_publication_host_contracts(root)
-    host_state_contracts()
     binary_paths = (
         args.arm9,
         args.y9,
@@ -4917,6 +4920,29 @@ def main() -> None:
         or all(path is None for path in binary_paths),
         "binary arguments must be supplied as a complete set",
     )
+    if args.package_only:
+        require(
+            all(path is not None for path in binary_paths)
+            and not args.task7_focused,
+            "--package-only requires the complete binary argument set",
+        )
+        binary_contracts(args)
+        print(
+            "Summary move relearn package verification passed: "
+            "ABI, bounds, and packaged binaries"
+        )
+        return
+    source_contracts(root)
+    if args.task7_focused:
+        host_state_contracts()
+        print(
+            "Summary move relearn Task 7 verification passed: source, "
+            "toggle/reset state, compatibility order, and bounds"
+        )
+        return
+    bootstrap_host_contracts(root)
+    artifact_publication_host_contracts(root)
+    host_state_contracts()
     if args.arm9 is not None:
         binary_contracts(args)
     print(

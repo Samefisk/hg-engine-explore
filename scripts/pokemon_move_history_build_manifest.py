@@ -225,7 +225,7 @@ def _pinned_stage_zero_sha256(data: bytes) -> str:
 
 if __name__ == "__main__" and any(
     argument == mode or argument.startswith(mode + "=")
-    for mode in ("--seal", "--verify", "--bind-runtime", "--publish-pair")
+    for mode in ("--bind-runtime", "--require-bound-runtime")
     for argument in sys.argv[1:]
 ):
     import posix
