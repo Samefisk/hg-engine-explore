@@ -13,7 +13,7 @@ MSGDATA_COMPILETIME_DEPENDENCIES_DIR := $(BUILD)/rawtext
 CHARMAP := charmap.txt
 
 
-$(BUILD)/rawtext/%.txt: $(BUILD_NARC)/a011.narc $(BUILD_NARC)/a055.narc $(BUILD_NARC)/mondata.narc $(BUILD_NARC)/trainer_text_map.narc scripts/msg_cat.py
+$(BUILD)/rawtext/%.txt: $(BUILD_NARC)/a011.narc $(BUILD_NARC)/a055.narc $(BUILD_NARC)/mondata.narc $(BUILD_NARC)/trainer_text_map.narc scripts/msg_cat.py | venv
 	$(PYTHON) scripts/msg_cat.py $(BUILD)/rawtext
 
 # actual msgdata rule at bottom to allow MSGDATA_COMPILETIME_DEPENDENCIES to be fully defined
@@ -311,12 +311,12 @@ MOVE_SEQ_CUSTOM_SRCS := $(wildcard $(MOVE_SEQ_CUSTOM_DIR)/*.s)
 MOVE_SEQ_OBJS := $(patsubst $(MOVE_SEQ_DEPENDENCIES_DIR)/%.s,$(MOVE_SEQ_DIR)/0_%,$(MOVE_SEQ_SRCS))
 MOVE_SEQ_OBJS += $(patsubst $(MOVE_SEQ_CUSTOM_DIR)/%.s,$(MOVE_SEQ_DIR)/1_%,$(MOVE_SEQ_CUSTOM_SRCS))
 
-$(MOVE_SEQ_DIR)/0_%:$(MOVE_SEQ_DEPENDENCIES_DIR)/%.s
+$(MOVE_SEQ_DIR)/0_%:$(MOVE_SEQ_DEPENDENCIES_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(MOVE_SEQ_DEPENDENCIES_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/0_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(MOVE_SEQ_DEPENDENCIES_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/0_%_linked.o,$<) $(patsubst $(MOVE_SEQ_DEPENDENCIES_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/0_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(MOVE_SEQ_DEPENDENCIES_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/0_%_linked.o,$<) $@
 
-$(MOVE_SEQ_DIR)/1_%:$(MOVE_SEQ_CUSTOM_DIR)/%.s
+$(MOVE_SEQ_DIR)/1_%:$(MOVE_SEQ_CUSTOM_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(MOVE_SEQ_CUSTOM_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/1_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(MOVE_SEQ_CUSTOM_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/1_%_linked.o,$<) $(patsubst $(MOVE_SEQ_CUSTOM_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/1_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(MOVE_SEQ_CUSTOM_DIR)/%.s,$(MOVE_SEQ_OBJ_DIR)/1_%_linked.o,$<) $@
@@ -342,12 +342,12 @@ BATTLE_EFF_CUSTOM_SRCS := $(wildcard $(BATTLE_EFF_CUSTOM_DIR)/*.s)
 BATTLE_EFF_OBJS := $(patsubst $(BATTLE_EFF_DEPENDENCIES_DIR)/%.s,$(BATTLE_EFF_DIR)/0_%,$(BATTLE_EFF_SRCS))
 BATTLE_EFF_OBJS += $(patsubst $(BATTLE_EFF_CUSTOM_DIR)/%.s,$(BATTLE_EFF_DIR)/1_%,$(BATTLE_EFF_CUSTOM_SRCS))
 
-$(BATTLE_EFF_DIR)/0_%:$(BATTLE_EFF_DEPENDENCIES_DIR)/%.s
+$(BATTLE_EFF_DIR)/0_%:$(BATTLE_EFF_DEPENDENCIES_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(BATTLE_EFF_DEPENDENCIES_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/0_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(BATTLE_EFF_DEPENDENCIES_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/0_%_linked.o,$<) $(patsubst $(BATTLE_EFF_DEPENDENCIES_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/0_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(BATTLE_EFF_DEPENDENCIES_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/0_%_linked.o,$<) $@
 
-$(BATTLE_EFF_DIR)/1_%:$(BATTLE_EFF_CUSTOM_DIR)/%.s
+$(BATTLE_EFF_DIR)/1_%:$(BATTLE_EFF_CUSTOM_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(BATTLE_EFF_CUSTOM_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/1_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(BATTLE_EFF_CUSTOM_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/1_%_linked.o,$<) $(patsubst $(BATTLE_EFF_CUSTOM_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/1_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(BATTLE_EFF_CUSTOM_DIR)/%.s,$(BATTLE_EFF_OBJ_DIR)/1_%_linked.o,$<) $@
@@ -371,12 +371,12 @@ BATTLE_SUB_CUSTOM_SRCS += $(wildcard $(BATTLE_SUB_CUSTOM_DIR)/*.s)
 BATTLE_SUB_OBJS := $(patsubst $(BATTLE_SUB_DEPENDENCIES_DIR)/%.s,$(BATTLE_SUB_DIR)/1_%,$(BATTLE_SUB_SRCS))
 BATTLE_SUB_OBJS += $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_DIR)/2_%,$(BATTLE_SUB_CUSTOM_SRCS))
 
-$(BATTLE_SUB_DIR)/1_%:$(BATTLE_SUB_DEPENDENCIES_DIR)/%.s
+$(BATTLE_SUB_DIR)/1_%:$(BATTLE_SUB_DEPENDENCIES_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(BATTLE_SUB_DEPENDENCIES_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/1_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(BATTLE_SUB_DEPENDENCIES_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/1_%_linked.o,$<) $(patsubst $(BATTLE_SUB_DEPENDENCIES_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/1_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(BATTLE_SUB_DEPENDENCIES_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/1_%_linked.o,$<) $@
 
-$(BATTLE_SUB_DIR)/2_%:$(BATTLE_SUB_CUSTOM_DIR)/%.s
+$(BATTLE_SUB_DIR)/2_%:$(BATTLE_SUB_CUSTOM_DIR)/%.s | toolchain-preflight
 	$(AS) -c $< -o $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/2_%.o,$<)
 	$(LD) -T $(C_SUBDIR)/linker.ld -o $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/2_%_linked.o,$<) $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/2_%.o,$<)
 	$(OBJCOPY) -O binary $(patsubst $(BATTLE_SUB_CUSTOM_DIR)/%.s,$(BATTLE_SUB_OBJ_DIR)/2_%_linked.o,$<) $@
@@ -431,13 +431,13 @@ OVERWORLDS_CUSTOM_OBJS := $(patsubst $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.png
 ALL_OVERWORLDS_SRCS := $(OVERWORLDS_SRCS) $(OVERWORLDS_CUSTOM_SRCS)
 ALL_OVERWORLDS_OBJS := $(OVERWORLDS_OBJS) $(OVERWORLDS_CUSTOM_OBJS)
 
-$(OVERWORLDS_DIR)/1_%.btx0:$(OVERWORLDS_DEPENDENCIES_DIR)/%.png $(OVERWORLDS_DEPENDENCIES_DIR)/%.json $(OVERWORLDS_DEPENDENCIES_DIR)/%*.pal
+$(OVERWORLDS_DIR)/1_%.btx0: $(OVERWORLDS_DEPENDENCIES_DIR)/%.png $(OVERWORLDS_DEPENDENCIES_DIR)/%.json $(OVERWORLDS_DEPENDENCIES_DIR)/%*.pal | venv
 	$(BTX) $< $@
 
 $(OVERWORLDS_DIR)/1_%.bin:$(OVERWORLDS_DEPENDENCIES_DIR)/%.bin
 	cp -f $< $@
 
-$(OVERWORLDS_DIR)/2_%.btx0:$(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.png $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.json $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%*.pal
+$(OVERWORLDS_DIR)/2_%.btx0: $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.png $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%.json $(OVERWORLDS_DEPENDENCIES_DIR)/custom/%*.pal | venv
 	$(BTX) $< $@
 
 #$(OVERWORLDS_NARC): $(ALL_OVERWORLDS_SRCS) | overworld_extract $(ALL_OVERWORLDS_OBJS)
@@ -544,7 +544,7 @@ SDAT_DEPENDENCIES_DIR := sound/cries
 SDAT_SRCS := $(wildcard $(SDAT_DEPENDENCIES_DIR)/*.wav)
 SDAT_SWAR_OBJS := $(patsubst $(SDAT_DEPENDENCIES_DIR)/%.wav,$(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV%/00.swav,$(SDAT_SRCS))
 
-$(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV%/00.swav:$(SDAT_DEPENDENCIES_DIR)/%.wav
+$(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV%/00.swav: $(SDAT_DEPENDENCIES_DIR)/%.wav | venv
 	mkdir -p $(SDAT_OBJ_DIR)/WAVARC/WAVE_ARC_PV$$(basename "$<" .wav)
 	$(NTRWAVTOOL) $< $@ 16384 --adpcm-xq $(ADPCMXQ) --temp-file-dir build/sdat/temp
 

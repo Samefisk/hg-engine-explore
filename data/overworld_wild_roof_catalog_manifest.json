@@ -1,0 +1,250 @@
+{
+  "schema_version": 2,
+  "matrix_ids": [0],
+  "common_model_name_pattern": "(^|_)(pc|fs|h0[123])($|_)",
+  "point_surfaces": [
+    {
+      "model_id": 29, "model_name": "board_a", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x1AC00"
+    },
+    {
+      "model_id": 30, "model_name": "board_b", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x1E600"
+    },
+    {
+      "model_id": 31, "model_name": "board_c", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x17000"
+    },
+    {
+      "model_id": 32, "model_name": "board_d", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x28600"
+    },
+    {
+      "model_id": 33, "model_name": "board_e", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x20C00"
+    },
+    {
+      "model_id": 34, "model_name": "board_f", "surface_type": "signpost",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0x1C000"
+    },
+    {
+      "model_id": 52, "model_name": "yo_sp2", "surface_type": "flowerbed",
+      "confidence": "authored_approximation", "generation": "authored_node",
+      "relative_height_fx32": "0xE000"
+    }
+  ],
+  "native_ground_material_surface": {
+    "surface_type": "flowerbed",
+    "confidence": "mesh_verified",
+    "billboard_material_names": ["yo_sp1_yo_sp1", "flower_sp", "flower_sp2"],
+    "notes": "Tall grass-like flower billboards are discovered from every reused land model; low flower decals remain ordinary land and arrangement is not authored."
+  },
+  "models": [
+    {
+      "model_id": 1, "model_name": "en_fs", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x338D0",
+      "rectangle": {"min_center_x_q16": -24, "min_center_z_q16": -16, "width": 4, "height": 2},
+      "allowed_widths": [4], "allowed_heights": [2],
+      "mesh_verified_centers_q16": [[-24,-16],[-8,-16],[8,-16],[24,-16],[-24,0],[-8,0],[8,0],[24,0]],
+      "notes": "Ecruteak Pokemart reviewed flat roof plane."
+    },
+    {
+      "model_id": 2, "model_name": "en_pc", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x3C000",
+      "rectangle": {"min_center_x_q16": -32, "min_center_z_q16": -8, "width": 5, "height": 2},
+      "allowed_widths": [5], "allowed_heights": [4],
+      "mesh_verified_centers_q16": [[-32,-8],[-16,-8],[0,-8],[16,-8],[32,-8],[-32,8],[-16,8],[0,8],[16,8],[32,8]],
+      "notes": "Ecruteak Pokemon Center roof component seeded from its reviewed flat upper plane."
+    },
+    {
+      "model_id": 22, "model_name": "wk_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x45D90",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 37, "model_name": "yo_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x3D8B0",
+      "allowed_widths": [4], "allowed_heights": [3],
+      "notes": "Dense 4x3 gameplay roof covering both the pitched left half and flat right half."
+    },
+    {
+      "model_id": 38, "model_name": "yo_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x4C6C0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 39, "model_name": "fs", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x338D0",
+      "rectangle": {"min_center_x_q16": -24, "min_center_z_q16": -16, "width": 4, "height": 2},
+      "allowed_widths": [4], "allowed_heights": [2],
+      "mesh_verified_centers_q16": [[-24,-16],[-8,-16],[8,-16],[24,-16],[-24,0],[-8,0],[8,0],[24,0]],
+      "notes": "Common Pokemart reviewed flat roof plane."
+    },
+    {
+      "model_id": 40, "model_name": "pc", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x3C000",
+      "rectangle": {"min_center_x_q16": -32, "min_center_z_q16": -8, "width": 5, "height": 2},
+      "allowed_widths": [5], "allowed_heights": [4],
+      "mesh_verified_centers_q16": [[-32,-8],[-16,-8],[0,-8],[16,-8],[32,-8],[-32,8],[-16,8],[0,8],[16,8],[32,8]],
+      "notes": "Common Johto and route Pokemon Center roof component seeded from its reviewed flat upper plane."
+    },
+    {
+      "model_id": 41, "model_name": "kn_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x42150",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 46, "model_name": "hw_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x4F280",
+      "allowed_widths": [4], "allowed_heights": [4]
+    },
+    {
+      "model_id": 47, "model_name": "hw_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x532F0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 53, "model_name": "r30_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x47F00",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 56, "model_name": "kk_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x4D000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 62, "model_name": "kk_pc", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x3C000",
+      "rectangle": {"min_center_x_q16": -32, "min_center_z_q16": -8, "width": 5, "height": 2},
+      "allowed_widths": [5], "allowed_heights": [4],
+      "mesh_verified_centers_q16": [[-32,-8],[-16,-8],[0,-8],[16,-8],[32,-8],[-32,8],[-16,8],[0,8],[16,8],[32,8]],
+      "notes": "Blackthorn Pokemon Center roof component seeded from its reviewed flat upper plane."
+    },
+    {
+      "model_id": 63, "model_name": "kk_fs", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x338D0",
+      "rectangle": {"min_center_x_q16": -24, "min_center_z_q16": -16, "width": 4, "height": 2},
+      "allowed_widths": [4], "allowed_heights": [2],
+      "mesh_verified_centers_q16": [[-24,-16],[-8,-16],[8,-16],[24,-16],[-24,0],[-8,0],[8,0],[24,0]],
+      "notes": "Blackthorn Pokemart reviewed flat roof plane."
+    },
+    {
+      "model_id": 81, "model_name": "ko_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x33670",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 102, "model_name": "tn_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x44000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 109, "model_name": "as_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x4A720",
+      "allowed_widths": [5], "allowed_heights": [3]
+    },
+    {
+      "model_id": 132, "model_name": "fu_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x47400",
+      "allowed_widths": [4], "allowed_heights": [4]
+    },
+    {
+      "model_id": 134, "model_name": "ch_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x46650",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 215, "model_name": "kbc_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x307C0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 216, "model_name": "kbc_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x307C0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 236, "model_name": "ta_h01", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x38CD0",
+      "rectangle": {"min_center_x_q16": -8, "min_center_z_q16": -16, "width": 3, "height": 3},
+      "allowed_widths": [4], "allowed_heights": [3],
+      "mesh_verified_centers_q16": [[-8,-16],[8,-16],[24,-16],[-8,0],[8,0],[24,0],[-8,16],[8,16],[24,16]],
+      "notes": "Celadon house roof component includes the pitched left half connected to the reviewed flat plane."
+    },
+    {
+      "model_id": 237, "model_name": "ta_h02", "confidence": "mesh_verified",
+      "generation": "mesh_plane", "relative_height_fx32": "0x3A680",
+      "rectangle": {"min_center_x_q16": -24, "min_center_z_q16": -16, "width": 4, "height": 2},
+      "allowed_widths": [3,4], "allowed_heights": [2],
+      "mesh_verified_centers_q16": [[-24,-16],[-8,-16],[8,-16],[24,-16],[-24,0],[-8,0],[8,0],[24,0]],
+      "notes": "Celadon house reviewed dense flat plane."
+    },
+    {
+      "model_id": 238, "model_name": "ta_h03", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x61EF0",
+      "allowed_widths": [5], "allowed_heights": [4]
+    },
+    {
+      "model_id": 251, "model_name": "ybc_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x32000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 252, "model_name": "ybc_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x32000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 253, "model_name": "ybc_h03", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x3C000",
+      "allowed_widths": [3,4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 279, "model_name": "misaki_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x48000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 280, "model_name": "si_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x2DF70",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 292, "model_name": "nbc_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x40000",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 297, "model_name": "sk_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x3F910",
+      "allowed_widths": [4], "allowed_heights": [4]
+    },
+    {
+      "model_id": 298, "model_name": "sk_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x46E20",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 299, "model_name": "sk_h03", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x47770",
+      "allowed_widths": [4], "allowed_heights": [5]
+    },
+    {
+      "model_id": 315, "model_name": "to_h01", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x43ED0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    },
+    {
+      "model_id": 316, "model_name": "to_h02", "confidence": "authored_approximation",
+      "generation": "authored_model_bounds", "relative_height_fx32": "0x43ED0",
+      "allowed_widths": [4], "allowed_heights": [3]
+    }
+  ]
+}

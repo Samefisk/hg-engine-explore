@@ -75,6 +75,25 @@ SECTIONS {
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
+                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xF6C,
+                    "move-history code overlaps native-shadow filter entry");
+                . = ORIGIN(rom) + 0xF6C;
+                KEEP(*(.overworld_wild_shadow_filter_entry))
+                ASSERT(OverworldWildSpawns_FilterNativeShadowImpl
+                        == ORIGIN(rom) + 0xF6C,
+                    "native-shadow filter entry moved");
+                . = ORIGIN(rom) + 0xF9C;
+                KEEP(*(.overworld_wild_shadow_visibility_filter_entry))
+                ASSERT(OverworldWildSpawns_FilterNativeShadowVisibilityImpl
+                        == ORIGIN(rom) + 0xF9C,
+                    "native-shadow visibility filter entry moved");
+                . = ORIGIN(rom) + 0xFBC;
+                KEEP(*(.overworld_wild_shadow_position_filter_entry))
+                ASSERT(OverworldWildSpawns_CopyNativeShadowPositionImpl
+                        == ORIGIN(rom) + 0xFBC,
+                    "native-shadow position filter entry moved");
+                ASSERT(. <= ORIGIN(rom) + 0x1000,
+                    "native-shadow position filter exceeds resident page");
                 ASSERT(__bss_end__ + 0x1000 <= ORIGIN(rom) + LENGTH(rom),
                     "move-history overlay exceeds guarded code envelope");
         _end = __bss_end__ ;

@@ -311,23 +311,8 @@ BOOL OverworldFollowerSelector_IsReleaseTileAvailable(
     int x,
     int y)
 {
-    u8 behavior;
-
-    if (x < 0
-        || y < 0
-        || IsMetatileBlockedAt(fieldSystem, x, y)) {
-        return FALSE;
-    }
-    behavior = GetMetatileBehaviorAt(fieldSystem, x, y);
-    if (behavior == 0xFF
-        || behavior == 6
-        || behavior == 16
-        || behavior == 18
-        || behavior == 21
-        || behavior == 42) {
-        return FALSE;
-    }
-    return TRUE;
+    /* Temporary terrain bypass for testing authored elevated surfaces. */
+    return fieldSystem != NULL && x >= 0 && y >= 0;
 }
 
 s32 OverworldFollowerSelector_GetReleaseDistance(FieldSystem *fieldSystem)

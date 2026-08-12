@@ -2,6 +2,7 @@
 #define OVERWORLD_WILD_BEHAVIOR_DATA_H
 
 #include "types.h"
+#include "constants/generated/overworld_wild_roof_catalog_counts.h"
 
 typedef struct FieldSystem FieldSystem;
 struct LocalMapObject;
@@ -14,9 +15,9 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE_ADDR 0x023C3059
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP_ADDR 0x023C3101
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
-#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 2
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 8
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 41
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 63
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -31,6 +32,8 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_PERSONAL_PARAM_DISPATCH_SLOT_ADDR 0x0206FBEC
 #define OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR 0x023C30E0
 #define OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY_ADDR 0x023C30EC
+#define OVERWORLD_WILD_SURFACE_SERVICE_ENTRY_ADDR 0x023C30F0
+#define OVERWORLD_WILD_STAGED_HOP_TASKS_ADDR 0x023C3F18
 #define OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM 31
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
 #define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 1
@@ -39,11 +42,34 @@ struct OverworldWildBehaviorPrimitives;
 #define OWBD_CLASS_PROFILE_COUNT 4
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
-#define OWBD_OVERRIDE_PROFILE_COUNT 14
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 10
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE 12
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED 13
-#define OWBD_OVERRIDE_MEMBER_COUNT 164
+#define OWBD_OVERRIDE_PROFILE_COUNT 17
+#define OWBD_CONDITIONAL_STATE_COUNT 1
+#define OWBD_CONDITIONAL_STATE_STORAGE_COUNT \
+    ((OWBD_CONDITIONAL_STATE_COUNT) ? OWBD_CONDITIONAL_STATE_COUNT : 1)
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD 5
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 13
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE 15
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED 16
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD_ROOFTOP 11
+typedef char OverworldWildBehaviorOverrideProfileCountMustFitApplicabilityMask[
+    OWBD_OVERRIDE_PROFILE_COUNT <= 32 ? 1 : -1];
+#define OWBD_OVERRIDE_MEMBER_COUNT 195
+#define OWBD_SURFACE_MODEL_COUNT OWBD_GENERATED_SURFACE_MODEL_COUNT
+#define OWBD_SURFACE_INSTANCE_COUNT OWBD_GENERATED_SURFACE_INSTANCE_COUNT
+#define OWBD_SURFACE_TEMPLATE_COUNT OWBD_GENERATED_SURFACE_TEMPLATE_COUNT
+#define OWBD_SURFACE_CATALOG_RAW_SIZE \
+    (OWBD_SURFACE_MODEL_COUNT * 6 + OWBD_SURFACE_INSTANCE_COUNT * 10 \
+        + OWBD_SURFACE_TEMPLATE_COUNT * 2)
+/* surfaceModels begins two bytes past a four-byte boundary in blob v57. */
+#define OWBD_SURFACE_CATALOG_PADDING_SIZE \
+    ((4 - ((OWBD_SURFACE_CATALOG_RAW_SIZE + 2) & 3)) & 3)
+#define OW_WILD_ROOF_HEIGHT_QUANTUM_SHIFT 4
+#define OW_WILD_MAP_BLOCK_SHIFT 5
+#define OW_WILD_MAP_BLOCK_MASK 31
+#define OW_WILD_MAP_MATRIX_ALTITUDES_OFFSET 0x644
+#define OW_WILD_MAP_MATRIX_MODELS_OFFSET 0x964
+#define OW_WILD_MAP_ALTITUDE_HEIGHT_SHIFT 15
+#define OW_WILD_SURFACE_ID_BLOCK_SHIFT 4
 #define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
 #define OWED_ENCOUNTER_AREA_COUNT 150
 #define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
@@ -82,6 +108,10 @@ typedef enum OverworldWildSpawnDestination {
     OW_WILD_SPAWN_DESTINATION_THREE_TILES_BEHIND_PLAYER,
     OW_WILD_SPAWN_DESTINATION_FOUR_TILES_BEHIND_PLAYER,
     OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER,
+    OW_WILD_SPAWN_DESTINATION_ROOFTOP,
+    OW_WILD_SPAWN_DESTINATION_SIGNPOST,
+    OW_WILD_SPAWN_DESTINATION_MAILBOX,
+    OW_WILD_SPAWN_DESTINATION_FLOWERBED,
 } OverworldWildSpawnDestination;
 
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND         (1u << 0)
@@ -90,8 +120,29 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS        (1u << 3)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER       (1u << 4)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT (1u << 5)
-#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL          0x3F
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP      (1u << 6)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST     (1u << 7)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX      (1u << 8)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED    (1u << 9)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST \
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_ALL \
+    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP \
+        | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST \
+        | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX \
+        | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL          0x03FF
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT      OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND
+
+#define OW_WILD_SURFACE_TYPE_ROOFTOP 0
+#define OW_WILD_SURFACE_TYPE_SIGNPOST 1
+#define OW_WILD_SURFACE_TYPE_MAILBOX 2
+#define OW_WILD_SURFACE_TYPE_FLOWERBED 3
+#define OW_WILD_SURFACE_TYPE_COUNT 4
+#define OW_WILD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND 0xFF
+#define OW_WILD_SURFACE_ID_NATIVE_GROUND 0xFFFF
+#define OW_WILD_SURFACE_TYPE_TERRAIN_MASK(surfaceType) \
+    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST << (surfaceType))
 
 #define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT  (1u << 0)
 #define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_BEHIND (1u << 1)
@@ -103,6 +154,19 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE 0
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE 1
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND 2
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS 3
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS 4
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS 5
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_DEFAULT 3
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_MAX 8
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_DEFAULT 1
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_MAX 4
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_DEFAULT 1
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_MAX 5
+#define OW_WILD_BEHAVIOR_TILES_TO_ACCELERATE_DEFAULT 3
+#define OW_WILD_BEHAVIOR_MAX_WALK_SPEED_DEFAULT 4
+#define OW_WILD_BEHAVIOR_HOP_SWAY_WIDTH_MAX 8
+#define OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4 16
 
 /* Compact blob representation. Active and tired runtime lanes are composed
  * from the Chill lane of the referenced override profiles. */
@@ -140,8 +204,8 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 ramMaxSpeed;
     u8 chainPauseAction;
     /* One value bit and one explicit/inherit bit per terrain. */
-    u8 chillAllowedTerrainMask;
-    u8 chillAllowedTerrainOverrideMask;
+    u16 chillAllowedTerrainMask;
+    u16 chillAllowedTerrainOverrideMask;
     u8 hopTime;
     u8 chaseBoostDistance;
     u8 chaseBoostSpeed;
@@ -154,7 +218,27 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainPauseVariance;
     u8 activeProfile;
     u8 tiredProfile;
+    u8 hopElevationTimeScale;
+    u8 hopElevationArcScale;
+    u8 tilesToAccelerate;
+    u8 maxWalkSpeed;
+    /* Spawn placement uses the same option bits as allowed terrain, but its
+     * value/inheritance policy is stored and resolved independently. */
+    u16 spawnDestinationMask;
+    u16 spawnDestinationOverrideMask;
+    u8 hopAllowVerticalObstacles;
+    u8 chainRepositionJumpCount;
+    u8 hopSwayWidth;
+    u8 spawnHopSwayWidth;
+    u8 chainRepositionSpeed;
+    u8 chainRepositionDistance;
+    u8 chainRepositionDust;
+    u8 chainRepositionAllowCardinal;
+    u8 chainRepositionAllowDiagonal;
 } OverworldWildBehaviorProfileData;
+
+typedef char OverworldWildBehaviorProfileDataSizeMustRemain66Bytes[
+    sizeof(OverworldWildBehaviorProfileData) == 66 ? 1 : -1];
 
 /* Runtime composite. Its prefix intentionally matches the compact blob so the
  * owner Chill lane can be copied directly before linked state lanes are added. */
@@ -194,8 +278,8 @@ typedef struct OverworldWildBehaviorProfile {
     u8 ramAccelerationSteps;
     u8 ramMaxSpeed;
     u8 chainPauseAction;
-    u8 chillAllowedTerrainMask;
-    u8 chillAllowedTerrainOverrideMask;
+    u16 chillAllowedTerrainMask;
+    u16 chillAllowedTerrainOverrideMask;
     u8 hopTime;
     u8 chaseBoostDistance;
     u8 chaseBoostSpeed;
@@ -208,6 +292,21 @@ typedef struct OverworldWildBehaviorProfile {
     u8 chainPauseVariance;
     u8 activeProfile;
     u8 tiredProfile;
+    u8 hopElevationTimeScale;
+    u8 hopElevationArcScale;
+    u8 tilesToAccelerate;
+    u8 maxWalkSpeed;
+    u16 spawnDestinationMask;
+    u16 spawnDestinationOverrideMask;
+    u8 hopAllowVerticalObstacles;
+    u8 chainRepositionJumpCount;
+    u8 hopSwayWidth;
+    u8 spawnHopSwayWidth;
+    u8 chainRepositionSpeed;
+    u8 chainRepositionDistance;
+    u8 chainRepositionDust;
+    u8 chainRepositionAllowCardinal;
+    u8 chainRepositionAllowDiagonal;
         };
     };
     union {
@@ -234,19 +333,34 @@ typedef struct OverworldWildBehaviorProfile {
             u8 attentiveRamAccelerationSteps;
             u8 attentiveRamMaxSpeed;
             u8 attentiveChainPauseAction;
-            u8 attentiveAllowedTerrainMask;
-            u8 attentiveAllowedTerrainOverrideMask;
+            u16 attentiveAllowedTerrainMask;
+            u16 attentiveAllowedTerrainOverrideMask;
             u8 attentiveHopTime;
             u8 attentiveChaseBoostDistance;
             u8 attentiveChaseBoostSpeed;
             u8 attentiveHopSpinSpeed;
-            u8 _activePad38;
+            u8 _activePad40;
             u8 attentiveCircleRadius;
             u8 attentiveContinueWhenArrived;
             u8 attentiveAvoidPreviousTile;
             u8 attentiveChainMovementVariance;
             u8 attentiveChainPauseVariance;
-            u8 _activePad44[2];
+            u8 _activePad46[2];
+            u8 attentiveHopElevationTimeScale;
+            u8 attentiveHopElevationArcScale;
+            u8 attentiveTilesToAccelerate;
+            u8 attentiveMaxWalkSpeed;
+            u16 attentiveSpawnDestinationMask;
+            u16 attentiveSpawnDestinationOverrideMask;
+            u8 attentiveHopAllowVerticalObstacles;
+            u8 attentiveChainRepositionJumpCount;
+            u8 attentiveHopSwayWidth;
+            u8 attentiveSpawnHopSwayWidth;
+            u8 attentiveChainRepositionSpeed;
+            u8 attentiveChainRepositionDistance;
+            u8 attentiveChainRepositionDust;
+            u8 attentiveChainRepositionAllowCardinal;
+            u8 attentiveChainRepositionAllowDiagonal;
         };
     };
     union {
@@ -268,24 +382,43 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tiredRamAccelerationSteps;
             u8 tiredRamMaxSpeed;
             u8 tiredChainPauseAction;
-            u8 tiredAllowedTerrainMask;
-            u8 tiredAllowedTerrainOverrideMask;
+            u16 tiredAllowedTerrainMask;
+            u16 tiredAllowedTerrainOverrideMask;
             u8 tiredHopTime;
-            u8 _tiredPad35[2];
+            u8 _tiredPad37[2];
             u8 tiredHopSpinSpeed;
-            u8 _tiredPad38;
+            u8 _tiredPad40;
             u8 tiredCircleRadius;
             u8 tiredContinueWhenArrived;
             u8 tiredAvoidPreviousTile;
             u8 tiredChainMovementVariance;
             u8 tiredChainPauseVariance;
-            u8 _tiredPad44[2];
+            u8 _tiredPad46[2];
+            u8 tiredHopElevationTimeScale;
+            u8 tiredHopElevationArcScale;
+            u8 tiredTilesToAccelerate;
+            u8 tiredMaxWalkSpeed;
+            u16 tiredSpawnDestinationMask;
+            u16 tiredSpawnDestinationOverrideMask;
+            u8 tiredHopAllowVerticalObstacles;
+            u8 tiredChainRepositionJumpCount;
+            u8 tiredHopSwayWidth;
+            u8 tiredSpawnHopSwayWidth;
+            u8 tiredChainRepositionSpeed;
+            u8 tiredChainRepositionDistance;
+            u8 tiredChainRepositionDust;
+            u8 tiredChainRepositionAllowCardinal;
+            u8 tiredChainRepositionAllowDiagonal;
         };
     };
 } OverworldWildBehaviorProfile;
 
+typedef char OverworldWildBehaviorProfileSizeMustRemain198Bytes[
+    sizeof(OverworldWildBehaviorProfile) == 198 ? 1 : -1];
+
 typedef struct OverworldWildBehaviorContext {
     u16 species;
+    u16 conditionTerrainMask;
     u32 groupFlags;
     u8 level;
     u8 terrain;
@@ -335,9 +468,25 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     OverworldWildBehaviorProfileData compoundBoundProfile;
 } OverworldWildBehaviorOverrideProfile;
 
+typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain204Bytes[
+    sizeof(OverworldWildBehaviorOverrideProfile) == 204 ? 1 : -1];
+
+typedef struct OverworldWildBehaviorConditionalState {
+    u8 parentProfile;
+    u8 overrideProfile;
+    u16 terrainMask;
+    u16 terrainOverrideMask;
+    u8 minMovementSpeed;
+    u8 maxMovementSpeed;
+} OverworldWildBehaviorConditionalState;
+
+typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
+    sizeof(OverworldWildBehaviorConditionalState) == 8 ? 1 : -1];
+
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
+#define OW_WILD_BEHAVIOR_CONDITIONAL_PROFILE_NONE 0xFF
 #define OW_WILD_BEHAVIOR_RELATIVE(value) ((u8)(s8)(value))
 #define OW_WILD_BEHAVIOR_AT_LEAST(value) ((u8)(value))
 #define OW_WILD_BEHAVIOR_AT_MOST(value) ((u8)(value))
@@ -390,6 +539,21 @@ typedef struct OverworldWildBehaviorOverrideProfile {
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE (1u << 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE (1u << 2)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE (1u << 3)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_TIME_SCALE (1u << 4)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_ARC_SCALE (1u << 5)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_TILES_TO_ACCELERATE (1u << 6)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_MAX_WALK_SPEED (1u << 7)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_MASK (1u << 8)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_OVERRIDE_MASK (1u << 9)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ALLOW_VERTICAL_OBSTACLES (1u << 10)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_JUMP_COUNT (1u << 11)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_SWAY_WIDTH (1u << 12)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_SWAY_WIDTH (1u << 13)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_SPEED (1u << 14)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DISTANCE (1u << 15)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DUST (1u << 16)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_CARDINAL (1u << 17)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_DIAGONAL (1u << 18)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 
@@ -428,7 +592,117 @@ typedef struct OverworldWildBehaviorDataBlobHeader {
     u32 overrideMembersOffset;
     u16 overrideMemberCount;
     u16 overrideMemberSize;
+    u32 conditionalStatesOffset;
+    u16 conditionalStateCount;
+    u16 conditionalStateSize;
+    u32 surfaceModelsOffset;
+    u16 surfaceModelCount;
+    u16 surfaceModelSize;
+    u32 surfaceInstancesOffset;
+    u16 surfaceInstanceCount;
+    u16 surfaceInstanceSize;
+    u32 surfaceTemplatesOffset;
+    u16 surfaceTemplateCount;
+    u16 surfaceTemplateSize;
 } OverworldWildBehaviorDataBlobHeader;
+
+typedef char OverworldWildBehaviorDataBlobHeaderSizeMustRemain84Bytes[
+    sizeof(OverworldWildBehaviorDataBlobHeader) == 84 ? 1 : -1];
+
+typedef struct OverworldWildSurfaceModelDirectoryEntry {
+    u16 landDataId;
+    u16 firstInstance;
+    u8 instanceCount;
+    u8 reserved;
+} OverworldWildSurfaceModelDirectoryEntry;
+
+typedef struct OverworldWildSurfaceInstance {
+    u8 minX;
+    u8 minY;
+    u8 templateId;
+    u8 localSurfaceId;
+    u16 heightQ4;
+    u8 heightPage;
+    u8 surfaceType;
+    s8 anchorBlockDx;
+    s8 anchorBlockDy;
+} OverworldWildSurfaceInstance;
+
+typedef struct OverworldWildSurfaceTemplate {
+    u8 width;
+    u8 height;
+} OverworldWildSurfaceTemplate;
+
+typedef struct OverworldWildSurfaceCatalog {
+    OverworldWildSurfaceModelDirectoryEntry models[OWBD_SURFACE_MODEL_COUNT];
+    OverworldWildSurfaceInstance instances[OWBD_SURFACE_INSTANCE_COUNT];
+    OverworldWildSurfaceTemplate templates[OWBD_SURFACE_TEMPLATE_COUNT];
+} OverworldWildSurfaceCatalog;
+
+typedef struct OverworldWildSurfaceHit {
+    s32 height;
+    u16 surfaceId;
+    u8 surfaceType;
+    u8 nodeId;
+} OverworldWildSurfaceHit;
+
+typedef struct OverworldWildSurfaceBlockCache {
+    const OverworldWildSurfaceCatalog *catalog;
+    u16 blockIndex;
+    u8 matrixId;
+    u8 modelIndex;
+} OverworldWildSurfaceBlockCache;
+
+typedef char OverworldWildSurfaceModelCountMustFitCacheIndex[
+    OWBD_SURFACE_MODEL_COUNT < 0xFF ? 1 : -1];
+
+typedef char OverworldWildSurfaceModelDirectoryEntrySizeMustRemain6Bytes[
+    sizeof(OverworldWildSurfaceModelDirectoryEntry) == 6 ? 1 : -1];
+typedef char OverworldWildSurfaceInstanceSizeMustRemain10Bytes[
+    sizeof(OverworldWildSurfaceInstance) == 10 ? 1 : -1];
+typedef char OverworldWildSurfaceTemplateSizeMustRemain2Bytes[
+    sizeof(OverworldWildSurfaceTemplate) == 2 ? 1 : -1];
+typedef char OverworldWildSurfaceCatalogMustRemainPacked[
+    sizeof(OverworldWildSurfaceCatalog)
+            == OWBD_SURFACE_MODEL_COUNT * sizeof(OverworldWildSurfaceModelDirectoryEntry)
+                + OWBD_SURFACE_INSTANCE_COUNT * sizeof(OverworldWildSurfaceInstance)
+                + OWBD_SURFACE_TEMPLATE_COUNT * sizeof(OverworldWildSurfaceTemplate)
+        ? 1
+        : -1];
+typedef char OverworldWildSurfaceCatalogInstancesOffsetMustRemainPacked[
+    offsetof(OverworldWildSurfaceCatalog, instances)
+            == OWBD_SURFACE_MODEL_COUNT * sizeof(OverworldWildSurfaceModelDirectoryEntry)
+        ? 1
+        : -1];
+typedef char OverworldWildSurfaceCatalogTemplatesOffsetMustRemainPacked[
+    offsetof(OverworldWildSurfaceCatalog, templates)
+            == OWBD_SURFACE_MODEL_COUNT * sizeof(OverworldWildSurfaceModelDirectoryEntry)
+                + OWBD_SURFACE_INSTANCE_COUNT * sizeof(OverworldWildSurfaceInstance)
+        ? 1
+        : -1];
+typedef char OverworldWildSurfaceTemplateCountMustFitByteIndex[
+    OWBD_SURFACE_TEMPLATE_COUNT <= 256 ? 1 : -1];
+typedef char OverworldWildSurfaceHitSizeMustRemain8Bytes[
+    sizeof(OverworldWildSurfaceHit) == 8 ? 1 : -1];
+typedef char OverworldWildSurfaceBlockCacheSizeMustRemain8Bytes[
+    sizeof(OverworldWildSurfaceBlockCache) == 8 ? 1 : -1];
+
+typedef struct OverworldWildBehaviorDataBlob {
+    OverworldWildBehaviorDataBlobHeader header;
+    OverworldWildBehaviorProfileData classProfiles[OWBD_CLASS_PROFILE_COUNT];
+    OverworldWildBehaviorClassRule classRules[OWBD_CLASS_RULE_COUNT];
+    OverworldWildBehaviorSpeciesClassRule speciesClassRules[OWBD_SPECIES_CLASS_RULE_COUNT];
+    OverworldWildBehaviorOverrideProfile overrideProfiles[OWBD_OVERRIDE_PROFILE_COUNT];
+    u16 overrideMembers[OWBD_OVERRIDE_MEMBER_COUNT];
+    OverworldWildBehaviorConditionalState
+        conditionalStates[OWBD_CONDITIONAL_STATE_STORAGE_COUNT];
+    OverworldWildSurfaceModelDirectoryEntry surfaceModels[OWBD_SURFACE_MODEL_COUNT];
+    OverworldWildSurfaceInstance surfaceInstances[OWBD_SURFACE_INSTANCE_COUNT];
+    OverworldWildSurfaceTemplate surfaceTemplates[OWBD_SURFACE_TEMPLATE_COUNT];
+#if OWBD_SURFACE_CATALOG_PADDING_SIZE != 0
+    u8 surfacePadding[OWBD_SURFACE_CATALOG_PADDING_SIZE];
+#endif
+} OverworldWildBehaviorDataBlob;
 
 typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
@@ -465,6 +739,26 @@ typedef struct OverworldWildBehaviorOverlayEntry {
     u16 version;
     u16 size;
 } OverworldWildBehaviorOverlayEntry;
+
+typedef const OverworldWildSurfaceInstance *(*OverworldWildQuerySurfaceFunc)(
+    const OverworldWildSurfaceInstance *instances,
+    const OverworldWildSurfaceTemplate *templates,
+    u32 instanceCount,
+    u32 packedLocalCoordinates);
+typedef u32 (*OverworldWildCalculateJumpTrajectoryFunc)(
+    u8 framesPerTile,
+    u8 distance,
+    s32 elevationDelta,
+    u16 packedElevationScales);
+typedef s32 (*OverworldWildCalculateJumpArcFunc)(
+    u16 elapsedFrames,
+    u16 totalFrames,
+    u8 arcHeightQ4);
+typedef struct OverworldWildSurfaceServiceEntry {
+    OverworldWildQuerySurfaceFunc query;
+    OverworldWildCalculateJumpTrajectoryFunc calculateJumpTrajectory;
+    OverworldWildCalculateJumpArcFunc calculateJumpArc;
+} OverworldWildSurfaceServiceEntry;
 
 typedef void *(*OverworldWildCreateCustomJumpShadowEffectFunc)(
     void *effectContext,
@@ -639,6 +933,9 @@ typedef struct OverworldWildPersonalCacheOverlayEntry {
 #define OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY \
     ((const OverworldWildOverlapResolverEntry *) \
         OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY_ADDR)
+#define OVERWORLD_WILD_SURFACE_SERVICE_ENTRY \
+    ((const OverworldWildSurfaceServiceEntry *) \
+        OVERWORLD_WILD_SURFACE_SERVICE_ENTRY_ADDR)
 #define OVERWORLD_WILD_PERSONAL_CACHE_ENTRY \
     ((const OverworldWildPersonalCacheOverlayEntry *) \
         OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR)

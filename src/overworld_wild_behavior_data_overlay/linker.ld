@@ -37,6 +37,12 @@ SECTIONS {
                     "overworld wild overlap-resolver ABI moved");
                 ASSERT(. == ORIGIN(rom) + 0xF0,
                     "overworld wild overlap-resolver ABI size changed");
+                KEEP(*(.overworld_wild_surface_service_entry))
+                ASSERT(gOverworldWildSurfaceServiceEntry
+                        == ORIGIN(rom) + 0xF0,
+                    "overworld wild surface-service ABI moved");
+                ASSERT(. == ORIGIN(rom) + 0xFC,
+                    "overworld wild surface-service ABI size changed");
                 . = ORIGIN(rom) + 0x100;
                 KEEP(*(.overworld_wild_behavior_data_cleanup))
                 ASSERT(OverworldWildBehavior_CleanupOverlay
@@ -56,6 +62,18 @@ SECTIONS {
 
                 __bss_start__ = . ;
                 *(.bss)
+                ASSERT(. <= ORIGIN(rom) + 0xF18,
+                    "overworld wild behavior BSS overlaps staged-hop task ABI");
+                . = ORIGIN(rom) + 0xF18;
+                KEEP(*(.overworld_wild_staged_hop_tasks))
+                ASSERT(sOverworldWildStagedHopMovementTasks
+                        == ORIGIN(rom) + 0xF18,
+                    "overworld wild staged-hop task ABI moved");
+                ASSERT(. == ORIGIN(rom) + 0xF40,
+                    "overworld wild staged-hop task ABI size changed");
+                KEEP(*(.overworld_wild_levelup_cache))
+                ASSERT(. == ORIGIN(rom) + 0xFE4,
+                    "overworld wild level-up cache ABI size changed");
                 __bss_end__ = . ;
                 ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
                     "overworld wild behavior overlay BSS exceeds 4 KiB");

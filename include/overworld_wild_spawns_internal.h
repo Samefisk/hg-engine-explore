@@ -2,18 +2,20 @@
 #define OVERWORLD_WILD_SPAWNS_INTERNAL_H
 
 #include "overworld_wild_spawns.h"
+#include "overworld_wild_behavior_data.h"
 #include "constants/maps.h"
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR 0x023CD000
-
-#define OW_WILD_GRASS_MAX_SPAWNS 3
-#define OW_WILD_SURF_MAX_SPAWNS 3
+#define OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY_ADDR 0x023BD4D8
+#define OVERWORLD_WILD_NATIVE_SHADOW_POLICY_ENTRY_ADDR 0x023BE3D8
+#define OVERWORLD_WILD_NATIVE_SHADOW_POLICY_MASK_ADDR 0x023BE3FC
+#define OW_WILD_LAND_SURF_MAX_SPAWNS 6
 #define OW_WILD_HEADBUTT_MAX_SPAWNS 2
 #define OW_WILD_FISH_MAX_SPAWNS 2
-#define OW_WILD_HEADBUTT_SLOT_START (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS)
+#define OW_WILD_HEADBUTT_SLOT_START OW_WILD_LAND_SURF_MAX_SPAWNS
 #define OW_WILD_FISH_SLOT_START (OW_WILD_HEADBUTT_SLOT_START + OW_WILD_HEADBUTT_MAX_SPAWNS)
 #define OW_WILD_FOLLOWER_SLOT (OW_WILD_FISH_SLOT_START - 1)
-#define OW_WILD_MAX_SPAWNS (OW_WILD_GRASS_MAX_SPAWNS + OW_WILD_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
+#define OW_WILD_MAX_SPAWNS (OW_WILD_LAND_SURF_MAX_SPAWNS + OW_WILD_HEADBUTT_MAX_SPAWNS + OW_WILD_FISH_MAX_SPAWNS)
 #define OW_WILD_MAX_SAVED_SHINIES 2
 #define OW_WILD_PREVIOUS_TILE_UNLOCKED 0
 #define OW_WILD_PREVIOUS_TILE_LOCKED 1
@@ -32,6 +34,7 @@
 #define OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING 0x04
 #define OW_WILD_SPAWN_AGGRO_FLAG 0x02
 #define OW_WILD_SPAWN_AGGRO_PENDING_FLAG 0x04
+#define OW_WILD_SPOT_STATE_ACTIVE 2
 #define OW_WILD_SPOT_STATE_TIRED 3
 
 #define OW_WILD_FOLLOWER_RELEASE_NONE 0
@@ -261,6 +264,8 @@ typedef struct OverworldWildResidentData {
 } OverworldWildResidentData;
 
 extern OverworldWildResidentData gOverworldWildResidentData;
+#define gOverworldWildNativeShadowSuppressedMask \
+    (*(volatile u16 *)OVERWORLD_WILD_NATIVE_SHADOW_POLICY_MASK_ADDR)
 /* Exact byte alias exported by overlay 129 for cross-overlay relocations. */
 extern u8 gOverworldWildFieldIdleRearmPending;
 
@@ -269,6 +274,27 @@ typedef enum OverworldWildMapHeaderChangeMode {
     OW_WILD_MAP_HEADER_CHANGE_DISCARD,
     OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE,
 } OverworldWildMapHeaderChangeMode;
+
+typedef BOOL (*OverworldWildHopLandingBaseValidatorFunc)(
+    OverworldWildSpawnState *state,
+    int slot,
+    FieldSystem *fieldSystem,
+    u16 allowedTile,
+    int landingX,
+    int landingY,
+    int targetX,
+    int targetY);
+typedef BOOL (*OverworldWildStartPreparedCustomJumpFunc)(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    LocalMapObject *object,
+    u8 direction,
+    u8 distance,
+    int targetX,
+    int targetY,
+    const OverworldWildBehaviorProfile *profile,
+    BOOL suppressHopStartSound);
 
 typedef struct OverworldWildSpawnsOverlayEntry {
     BOOL (*onPlayerStep)(
@@ -289,12 +315,119 @@ typedef struct OverworldWildSpawnsOverlayEntry {
     void (*prepareMapHeaderChange)(
         OverworldWildSpawnState *state,
         OverworldWildMapHeaderChangeMode mode);
+    OverworldWildHopLandingBaseValidatorFunc validateHopLanding;
+    OverworldWildStartPreparedCustomJumpFunc startPreparedCustomJump;
 } OverworldWildSpawnsOverlayEntry;
 
-typedef char OverworldWildSpawnsOverlayEntrySizeMustRemain28Bytes[
-    sizeof(OverworldWildSpawnsOverlayEntry) == 28 ? 1 : -1];
+typedef char OverworldWildSpawnsOverlayEntrySizeMustRemain36Bytes[
+    sizeof(OverworldWildSpawnsOverlayEntry) == 36 ? 1 : -1];
 
 extern OverworldWildSpawnState sOverworldWildSpawnState;
+
+/*
+ * Stock terrain transitions can request a native shadow after the overworld
+ * overlay has classified an authored surface.  Keep the decision in resident
+ * code so every stock request can be filtered even while the overlay is
+ * between movement callbacks.
+ */
+typedef void (*OverworldWildSetNativeShadowSuppressedFunc)(
+    LocalMapObject *object,
+    BOOL suppressed);
+#define OverworldWildSpawns_SetNativeShadowSuppressed \
+    ((OverworldWildSetNativeShadowSuppressedFunc) \
+        (OVERWORLD_WILD_NATIVE_SHADOW_POLICY_ENTRY_ADDR | 1))
+
+typedef BOOL (*OverworldWildResolveHopTrajectoryFunc)(
+    FieldSystem *fieldSystem,
+    const OverworldWildSurfaceCatalog *surfaceCatalog,
+    const OverworldWildBehaviorProfileData *lane,
+    LocalMapObject *object,
+    s32 startBaseY,
+    s32 targetBaseY,
+    int startX,
+    int startY,
+    int targetX,
+    int targetY,
+    u8 distance,
+    u32 *trajectoryOut);
+
+typedef BOOL (*OverworldWildTryGetBehaviorHopVectorFunc)(
+    const OverworldWildBehaviorProfile *profile,
+    u8 spotState,
+    int dx,
+    int dy,
+    u8 *direction,
+    u8 *distance);
+typedef BOOL (*OverworldWildHopTileValidatorFunc)(
+    int landingX,
+    int landingY,
+    int targetX,
+    int targetY,
+    void *context);
+typedef void (*OverworldWildBuildHopHelperConfigFunc)(
+    const OverworldWildBehaviorProfile *profile,
+    u8 spotState,
+    int objectX,
+    int objectY,
+    int targetX,
+    int targetY,
+    const u8 *directions,
+    int directionCount,
+    BOOL stopOneHopAway,
+    void *config);
+typedef BOOL (*OverworldWildRunChainRepositionFunc)(
+    OverworldWildSpawnState *state,
+    int slot,
+    const OverworldWildBehaviorProfile *profile,
+    u8 *jumpsRemaining);
+
+#define OVERWORLD_WILD_CUSTOM_JUMP_RUNTIME_PREFIX_FIELDS \
+    u8 movementCustomJumpPrepActive[OW_WILD_MAX_SPAWNS]; \
+    u8 movementCustomJumpActive[OW_WILD_MAX_SPAWNS]; \
+    LocalMapObject *movementEmotePartnerPrepObjects[OW_WILD_MAX_SPAWNS]; \
+    s16 movementCustomJumpStartX[OW_WILD_MAX_SPAWNS]; \
+    s16 movementCustomJumpStartY[OW_WILD_MAX_SPAWNS]; \
+    s16 movementCustomJumpTargetX[OW_WILD_MAX_SPAWNS]; \
+    s16 movementCustomJumpTargetY[OW_WILD_MAX_SPAWNS]; \
+    s32 movementCustomJumpStartBaseY[OW_WILD_MAX_SPAWNS]; \
+    s32 movementCustomJumpTargetBaseY[OW_WILD_MAX_SPAWNS]; \
+    u16 movementCustomJumpFrameCounts[OW_WILD_MAX_SPAWNS]; \
+    u16 movementCustomJumpElapsedFrames[OW_WILD_MAX_SPAWNS]; \
+    u16 movementCustomJumpSpinElapsedFrames[OW_WILD_MAX_SPAWNS]; \
+    u8 movementCustomJumpSpinSpeeds[OW_WILD_MAX_SPAWNS]; \
+    u8 movementCustomJumpSpinTimers[OW_WILD_MAX_SPAWNS]; \
+    u8 movementCustomJumpSpinSteps[OW_WILD_MAX_SPAWNS]; \
+    s32 movementCustomJumpShadowBaseY[OW_WILD_MAX_SPAWNS]
+
+typedef u8 (*OverworldWildApplyJumpRenderMotionFunc)(
+    const void *runtimeState,
+    int slot,
+    LocalMapObject *object,
+    u32 elapsed,
+    u8 arcHeightQ4);
+
+typedef struct OverworldWildBehaviorHopValidationContext {
+    OverworldWildSpawnState *state;
+    FieldSystem *fieldSystem;
+    const OverworldWildBehaviorProfile *profile;
+    const OverworldWildSurfaceCatalog *surfaceCatalog;
+    OverworldWildHopLandingBaseValidatorFunc baseValidator;
+    int slot;
+    u16 allowedTile;
+} OverworldWildBehaviorHopValidationContext;
+
+typedef struct OverworldWildHopTrajectoryEntry {
+    OverworldWildResolveHopTrajectoryFunc resolve;
+    OverworldWildTryGetBehaviorHopVectorFunc tryGetVector;
+    OverworldWildHopTileValidatorFunc validateHopLanding;
+    OverworldWildBuildHopHelperConfigFunc buildHelperConfig;
+    OverworldWildRunChainRepositionFunc runChainReposition;
+    OverworldWildApplyJumpRenderMotionFunc applyJumpRenderMotion;
+} OverworldWildHopTrajectoryEntry;
+
+#define OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY \
+    ((const OverworldWildHopTrajectoryEntry *) \
+        OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY_ADDR)
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)
 

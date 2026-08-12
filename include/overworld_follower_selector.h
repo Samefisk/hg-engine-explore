@@ -5,6 +5,9 @@
 
 typedef struct FieldSystem FieldSystem;
 typedef struct OverworldWildSpawnState OverworldWildSpawnState;
+struct OverworldWildSurfaceCatalog;
+struct OverworldWildSurfaceHit;
+struct LocalMapObject;
 struct PartyPokemon;
 
 #define OVERWORLD_FOLLOWER_SELECTOR_RELEASE_GATE_FLAG 0x80
@@ -193,7 +196,7 @@ static inline void OverworldFollowerSelector_ClearYReleasePending(void)
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR 0x023C0400
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR 0x023C22A0
 #define OVERWORLD_FOLLOWER_SELECTOR_MAGIC 0x3153464F /* "OFS1" */
-#define OVERWORLD_FOLLOWER_SELECTOR_VERSION 4
+#define OVERWORLD_FOLLOWER_SELECTOR_VERSION 5
 
 typedef BOOL (*OverworldFollowerSelectorValidateFunc)(void);
 typedef BOOL (*OverworldFollowerSelectorUIOpenFunc)(
@@ -216,7 +219,10 @@ typedef BOOL (*OverworldFollowerSelectorIsReleaseTileAvailableFunc)(
     FieldSystem *fieldSystem,
     int x,
     int y);
-
+typedef int (*OverworldFollowerSelectorBuildDirectedDirectionsFunc)(
+    int dx,
+    int dy,
+    u8 *directions);
 typedef struct OverworldFollowerSelectorOverlayEntry {
     u32 magic;
     u16 version;
@@ -233,10 +239,11 @@ typedef struct OverworldFollowerSelectorOverlayEntry {
     OverworldFollowerSelectorGetSelectedPokemonFunc getSelectedPokemon;
     OverworldFollowerSelectorGetReleaseDistanceFunc getReleaseDistance;
     OverworldFollowerSelectorIsReleaseTileAvailableFunc isReleaseTileAvailable;
+    OverworldFollowerSelectorBuildDirectedDirectionsFunc buildDirectedDirections;
 } OverworldFollowerSelectorOverlayEntry;
 
-typedef char OverworldFollowerSelectorOverlayEntrySizeMustRemain56Bytes[
-    sizeof(OverworldFollowerSelectorOverlayEntry) == 56 ? 1 : -1];
+typedef char OverworldFollowerSelectorOverlayEntrySizeMustRemain60Bytes[
+    sizeof(OverworldFollowerSelectorOverlayEntry) == 60 ? 1 : -1];
 
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY \
     ((const OverworldFollowerSelectorOverlayEntry *) \
@@ -266,6 +273,10 @@ BOOL OverworldFollowerSelector_IsReleaseTileAvailable(
     FieldSystem *fieldSystem,
     int x,
     int y);
+int OverworldFollowerSelector_BuildDirectedDirections(
+    int dx,
+    int dy,
+    u8 *directions);
 
 /* Implemented by transient overlay 152 and used only while it is loaded. */
 u8 OverworldWildSpawns_GetSelectedFollowerPartySlot(FieldSystem *fieldSystem);

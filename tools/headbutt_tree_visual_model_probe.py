@@ -17,7 +17,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Iterable
 
-import ndspy.narc
+from narc_reader import NarcArchive
 
 
 CELL_SIZE = 32
@@ -88,7 +88,7 @@ def repo_path(*parts: str) -> Path:
 
 
 def read_matrix_file(matrix_id: int) -> dict[str, Any]:
-    matrix_narc = ndspy.narc.NARC.fromFile(repo_path("base", "root", "a", "0", "4", "1"))
+    matrix_narc = NarcArchive.from_file(repo_path("base", "root", "a", "0", "4", "1"))
     data = matrix_narc.files[matrix_id]
     width = data[0]
     height = data[1]
@@ -144,7 +144,7 @@ def read_map_stamps(map_id: int, matrix_id: int) -> tuple[dict[str, Any], list[d
 
 
 def read_land_sections(land_file_id: int) -> dict[str, Any]:
-    land_narc = ndspy.narc.NARC.fromFile(repo_path("base", "root", "a", "0", "6", "5"))
+    land_narc = NarcArchive.from_file(repo_path("base", "root", "a", "0", "6", "5"))
     data = land_narc.files[land_file_id]
     permission_len, buildings_len, nsbmd_len, bdhc_len = struct.unpack_from("<4I", data, 0)
     total_len = LAND_HEADER_SIZE + permission_len + buildings_len + nsbmd_len + bdhc_len

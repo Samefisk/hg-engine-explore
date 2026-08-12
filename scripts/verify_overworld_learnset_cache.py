@@ -67,13 +67,15 @@ OVERLAY_150_FIXED_RESOLVER_MIN_MARGIN = 2
 OVERLAY_150_BASE = 0x023C3000
 OVERLAY_150_CAPACITY = 0x1000
 OVERLAY_150_OVERLAP_RESOLVER_OFFSET = 0xEC
+OVERLAY_150_BEHAVIOR_ABI_VERSION = 8
 ARM9_OVERLAY_TABLE_ROW_SIZE = 0x20
 OVERLAY_PACKAGING = {
     149: {
         "output": "output_overworld_wild_spawns_overlay.bin",
         "linked": "overworld_wild_spawns_overlay_linked.o",
-        "load_address": 0x023CD000,
-        "capacity": 0xB000,
+        "load_address": 0x023CCFD8,
+        "capacity": 0xB028,
+        "file_capacity": 0xB000,
     },
     150: {
         "output": "output_overworld_wild_behavior_data_overlay.bin",
@@ -211,7 +213,11 @@ def has_authenticated_fixed_overlap_resolver(
 
     if len(overlay) < 0xEC:
         return False
-    if struct.unpack_from("<IHH", overlay, 0) != (0x4F57424F, 2, 8):
+    if struct.unpack_from("<IHH", overlay, 0) != (
+        0x4F57424F,
+        OVERLAY_150_BEHAVIOR_ABI_VERSION,
+        8,
+    ):
         return False
     if struct.unpack_from("<IHH", overlay, 0xE0) != (0x4F575043, 1, 12):
         return False
@@ -1170,6 +1176,10 @@ def verify_packaged_overlays(repo: Path) -> None:
             f"overlay {overlay_id} file size differs from y9 RAM size",
         )
         require(
+            len(packaged) <= spec.get("file_capacity", spec["capacity"]),
+            f"overlay {overlay_id} packaged payload exceeds its FAT slot",
+        )
+        require(
             actual[1] + actual[2] + actual[3]
             <= spec["load_address"] + spec["capacity"],
             f"overlay {overlay_id} packaged RAM+BSS exceeds its reserved range",
@@ -1676,10 +1686,18 @@ def verify_overlay_lifecycle(repo: Path, fallback: int, move_filter: int) -> int
     )
     require(len(helper) <= 16384, f"overlay 151 is {len(helper)} bytes")
     require((repo / "build/output.bin").stat().st_size <= 31232, "custom main exceeds cap")
-    require((repo / "build/output_overworld_wild_spawns_overlay.bin").stat().st_size <= 45056, "overlay 149 exceeds cap")
+    require(
+        (repo / "build/output_overworld_wild_spawns_overlay.bin").stat().st_size
+        <= OVERLAY_PACKAGING[149]["file_capacity"],
+        "overlay 149 exceeds cap",
+    )
 
     magic, version, entry_size = struct.unpack_from("<IHH", overlay, 0)
-    require((magic, version, entry_size) == (0x4F57424F, 2, 8), "behavior ABI header mismatch")
+    require(
+        (magic, version, entry_size)
+        == (0x4F57424F, OVERLAY_150_BEHAVIOR_ABI_VERSION, 8),
+        "behavior ABI header mismatch",
+    )
     cache_magic, cache_version, cache_size, loader, warm = struct.unpack_from("<IHHII", overlay, 0x48)
     require(
         (cache_magic, cache_version, cache_size) == (0x4F574C43, 1, 16),
@@ -1903,7 +1921,10 @@ def verify_overlay_lifecycle(repo: Path, fallback: int, move_filter: int) -> int
     auth_bytes = helper[auth_addr - 0x023C4000 : auth_addr - 0x023C4000 + auth_size]
     for value, label in (
         (0x4F57424F, "behavior magic"),
-        (0x00080002, "behavior version/size"),
+        (
+            8 << 16 | OVERLAY_150_BEHAVIOR_ABI_VERSION,
+            "behavior version/size",
+        ),
         (0x023C3059, "behavior validator"),
         (0x023C3048, "learnset cache entry"),
     ):
@@ -2415,7 +2436,14 @@ def run_unit_fixtures() -> None:
     resolver_payload = bytearray(
         OVERLAY_150_CAPACITY - OVERLAY_150_FIXED_RESOLVER_MIN_MARGIN
     )
-    struct.pack_into("<IHH", resolver_payload, 0, 0x4F57424F, 2, 8)
+    struct.pack_into(
+        "<IHH",
+        resolver_payload,
+        0,
+        0x4F57424F,
+        OVERLAY_150_BEHAVIOR_ABI_VERSION,
+        8,
+    )
     struct.pack_into("<IHH", resolver_payload, 0xE0, 0x4F575043, 1, 12)
     resolver_target = OVERLAY_150_BASE + 0x200
     struct.pack_into(

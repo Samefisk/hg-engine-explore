@@ -1094,17 +1094,22 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
     OverworldWildPreparedSpawn *prepared)
 {
     OverworldWildRolledEncounter encounter;
-    OverworldWildSpawnPosition position = { 0 };
+    OverworldWildSpawnPosition position = {
+        .startX = -1,
+        .startY = -1,
+    };
     int savedShinySlot;
     BOOL shiny;
 
     if (!OverworldWildHelper_AreSpawnCallbacksValid(callbacks)
         || prepared == NULL
-        || !OverworldWildHelper_TryPickSpawnPositionForTerrain(
-            callbacks,
-            context,
-            terrain,
-            &position)
+        || (!OverworldWildHelper_TryPickSpawnPositionForTerrain(
+                callbacks,
+                context,
+                terrain,
+                &position)
+            && terrain != OW_WILD_SPAWN_TERRAIN_LAND
+            && terrain != OW_WILD_SPAWN_TERRAIN_SURF)
         || !OverworldWildHelper_TryPrepareSpawnEncounter(
             callbacks,
             context,
@@ -1140,16 +1145,21 @@ static BOOL OverworldWildHelper_TryPrepareEncounterSpawn(
     OverworldWildPreparedSpawn *prepared)
 {
     OverworldWildRolledEncounter rolledEncounter;
-    OverworldWildSpawnPosition position = { 0 };
+    OverworldWildSpawnPosition position = {
+        .startX = -1,
+        .startY = -1,
+    };
 
     if (!OverworldWildHelper_AreSpawnCallbacksValid(callbacks)
         || prepared == NULL
         || encounter == NULL
-        || !OverworldWildHelper_TryPickSpawnPositionForTerrain(
-            callbacks,
-            context,
-            terrain,
-            &position)) {
+        || (!OverworldWildHelper_TryPickSpawnPositionForTerrain(
+                callbacks,
+                context,
+                terrain,
+                &position)
+            && terrain != OW_WILD_SPAWN_TERRAIN_LAND
+            && terrain != OW_WILD_SPAWN_TERRAIN_SURF)) {
         return FALSE;
     }
 
@@ -3935,7 +3945,8 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
     object->yPrev = y;
     object->posVec[0] = (u32)((s32)x * 0x10000 + 0x8000);
     object->posVec[2] = (u32)((s32)y * 0x10000 + 0x8000);
-    (void)MapObject_RefreshHeightFromTerrain(object);
+    /* Retained objects already carry their exact cross-route elevation. */
+    __asm__("nop\n\tnop");
     object->faceVec[0] = 0;
     object->faceVec[1] = 0;
     object->faceVec[2] = 0;

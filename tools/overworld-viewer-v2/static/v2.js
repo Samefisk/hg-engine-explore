@@ -6,6 +6,9 @@ import { createPokemonController } from "/v2-assets/pokemon.js";
 const WORKSPACE_VIEWS = ["pokemon", "profiles", "routes", "sounds"];
 const NAVIGATION_CONTEXT_KEY = "ow-v2-navigation-context";
 const POKEMON_SELECTION_KEY = "ow-v2-pokemon-selection";
+const DRAFT_BACKUP_FORMAT = "hg-engine-overworld-v2-draft";
+const DRAFT_BACKUP_VERSION = 1;
+const MAX_DRAFT_BACKUP_BYTES = 256 * 1024 * 1024;
 
 const state = {
   data: null,
@@ -26,6 +29,10 @@ const state = {
   navigationContext: null,
   applyingLocation: false,
   buildServerAvailable: false,
+  buildStarting: false,
+  buildReconciling: false,
+  buildOutcomeUnknown: false,
+  buildPollGeneration: 0,
   latestBuildStatus: null,
 };
 
@@ -34,6 +41,9 @@ let pokemonSelectionKey = (() => {
   if (!stored) return "";
   try { return String(JSON.parse(stored) || ""); } catch (_error) { return stored; }
 })();
+let preparedDraftDownloadUrl = "";
+let buildPollTimer = null;
+let buildDisplayTimer = null;
 Object.defineProperty(state, "selectedPokemonKey", {
   enumerable: true,
   get: () => pokemonSelectionKey,
@@ -73,7 +83,8 @@ function escapeHtml(value) {
 const elements = {};
 [
   "app", "appHeader", "workspaceNav", "globalStatus", "pendingCount",
-  "saveAll", "resetDraft", "buildRom", "openNds", "restartServer",
+  "saveAll", "resetDraft", "exportDraft", "downloadPreparedDraft", "importDraft", "importDraftFile",
+  "buildRom", "openNds", "restartServer",
   "autoBuild", "autoRun", "showBuildLog", "buildPanel", "buildOutput",
   "pokemonView", "pokemonSearch", "pokemonTypeFilter", "pokemonStateFilter",
   "pokemonLibrary", "pokemonLibraryCount", "pokemonInspector",
@@ -214,10 +225,15 @@ async function timedJsonRequest(path, options = {}, timeoutMs = API_TIMEOUT_MS) 
 
 const api = {
   async get(path, options = {}) {
+    const { timeoutMs = API_TIMEOUT_MS, ...requestOptions } = options;
     let response;
     let result;
     try {
-      ({ response, result } = await timedJsonRequest(path, { cache: "no-store", ...options }));
+      ({ response, result } = await timedJsonRequest(
+        path,
+        { cache: "no-store", ...requestOptions },
+        timeoutMs
+      ));
     } catch (error) {
       if (error?.isTimeout) throw error;
       if (error instanceof SyntaxError) throw new Error("The V2 server returned an unreadable response.", { cause: error });
@@ -248,7 +264,7 @@ const api = {
         : error instanceof SyntaxError
           ? new Error("The V2 server response ended before save confirmation.", { cause: error })
           : offlineRequestError(error);
-      if (MUTATION_PATHS.has(path)) wrapped.isOutcomeUnknown = true;
+      if (MUTATION_PATHS.has(path) || path === "/build") wrapped.isOutcomeUnknown = true;
       throw wrapped;
     }
     const recoverableConflict = response.status === 409
@@ -263,6 +279,7 @@ const api = {
       error.status = response.status;
       error.code = result?.code || "";
       error.isConflict = recoverableConflict;
+      error.isBuildRunning = path === "/build" && result?.error === "Build already running";
       error.currentRevision = String(result?.sourceRevision || "");
       error.currentAssetRevision = String(result?.assetRevision || "");
       throw error;
@@ -275,6 +292,30 @@ const api = {
     return this.get(`/api/v2/resolve?${new URLSearchParams(params)}`);
   },
 };
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForReplacementServer(previousInstanceId, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const health = await api.get(`/api/v2/health?restartProbe=${Date.now()}`, { timeoutMs: 1000 });
+      if (
+        health?.ok === true
+        && health.service === "overworld-viewer-v2"
+        && health.apiVersion === 2
+        && health.serverInstanceId
+        && (!previousInstanceId || health.serverInstanceId !== previousInstanceId)
+      ) return;
+    } catch (_error) {
+      // The listening socket is expected to disappear briefly during exec.
+    }
+    await delay(300);
+  }
+  throw new Error("the replacement server did not become ready in time");
+}
 
 function setStatus(message, kind = "ready") {
   const heading = elements.globalStatus.querySelector("strong");
@@ -456,6 +497,12 @@ function markDirty() {
   if (blockingCount > 0 && !validationCount) elements.saveAll.title = firstBlockingMessage();
   else elements.saveAll.removeAttribute("title");
   elements.resetDraft.disabled = state.busy || (count === 0 && validationCount === 0);
+  elements.exportDraft.disabled = state.busy || count === 0;
+  elements.exportDraft.title = count === 0 && !state.busy
+    ? "There are no stored draft changes to export. Finish or cancel invalid text input first."
+    : "";
+  elements.importDraft.disabled = state.busy || count > 0 || validationCount > 0 || blockingCount > 0;
+  elements.importDraft.title = elements.importDraft.disabled && !state.busy ? "Export and Reset the current draft before importing another backup." : "";
   if (validationCount > 0 && !state.busy) {
     setStatus(`${validationCount} invalid draft value${validationCount === 1 ? "" : "s"} · ${firstValidationMessage()}`, "error");
   } else if (blockingCount > 0 && !state.busy) {
@@ -538,7 +585,7 @@ function setBusy(busy, { inert = false } = {}) {
   if (busy && inert) setWorkspaceInert(true);
   state.busy = busy;
   elements.app.toggleAttribute("aria-busy", busy);
-  [elements.saveAll, elements.resetDraft]
+  [elements.saveAll, elements.resetDraft, elements.exportDraft, elements.importDraft, elements.restartServer]
     .forEach((control) => { control.disabled = busy; });
   updateBuildControls();
   markDirty();
@@ -1346,29 +1393,281 @@ async function resetAllDrafts() {
   toast("Drafts discarded.");
 }
 
-function applyBuildStatus(status) {
+function draftBackupControllers() {
+  return ["profiles", "routes", "pokemon"];
+}
+
+async function createDraftBackup() {
+  const controllers = {};
+  for (const name of draftBackupControllers()) {
+    const controller = state.controllers[name];
+    if (!controller) {
+      controllers[name] = null;
+      continue;
+    }
+    if (typeof controller.exportDraft !== "function") throw new Error(`${controllerDisplayName(name)} cannot export drafts.`);
+    controllers[name] = await controller.exportDraft();
+  }
+  return {
+    format: DRAFT_BACKUP_FORMAT,
+    version: DRAFT_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    sourceRevision: state.revision,
+    assetRevision: String(controllers.pokemon?.assetRevision || ""),
+    changeCount: totalChangeCount(),
+    validationCount: totalValidationCount(),
+    controllers,
+  };
+}
+
+function draftBackupFilename(exportedAt) {
+  const stamp = String(exportedAt || new Date().toISOString())
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace("T", "-");
+  return `hg-engine-draft-${stamp}.owdraft`;
+}
+
+function clearPreparedDraftDownload() {
+  if (preparedDraftDownloadUrl) URL.revokeObjectURL(preparedDraftDownloadUrl);
+  preparedDraftDownloadUrl = "";
+  elements.downloadPreparedDraft.hidden = true;
+  elements.downloadPreparedDraft.removeAttribute("download");
+  elements.downloadPreparedDraft.href = "#";
+}
+
+function prepareDraftDownload(blob, filename) {
+  clearPreparedDraftDownload();
+  preparedDraftDownloadUrl = URL.createObjectURL(blob);
+  elements.downloadPreparedDraft.href = preparedDraftDownloadUrl;
+  elements.downloadPreparedDraft.download = filename;
+  elements.downloadPreparedDraft.hidden = false;
+}
+
+async function exportDraftBackup() {
+  const changeCount = totalChangeCount();
+  const validationCount = totalValidationCount();
+  if (!changeCount && !validationCount && !totalBlockingCount()) return;
+  setBusy(true, { inert: true });
+  setStatus("Preparing draft backup…", "busy");
+  let outcome;
+  try {
+    const backup = await createDraftBackup();
+    if (!backup.changeCount) throw new Error("There are no stored draft changes to export. Fix or cancel the invalid field first.");
+    const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], { type: "application/json" });
+    if (blob.size > MAX_DRAFT_BACKUP_BYTES) throw new Error("Draft backup exceeds the 256 MB recovery-file limit.");
+    prepareDraftDownload(blob, draftBackupFilename(backup.exportedAt));
+    const warning = validationCount ? " Invalid text still being edited may not be included." : "";
+    outcome = {
+      message: `Prepared ${backup.changeCount} draft change${backup.changeCount === 1 ? "" : "s"}. If the download does not start, click Download prepared backup.${warning}`,
+      kind: validationCount ? "pending" : "success",
+      toastMessage: "Draft backup prepared.",
+      toastKind: "success",
+      downloadReady: true,
+    };
+  } catch (error) {
+    outcome = { message: `Draft export failed: ${error.message}`, kind: "error", toastMessage: error.message, toastKind: "error" };
+  } finally {
+    setBusy(false);
+  }
+  setStatus(outcome.message, outcome.kind);
+  toast(outcome.toastMessage, outcome.toastKind);
+  if (outcome.downloadReady) elements.downloadPreparedDraft.click();
+}
+
+function draftBackupRevisionState(backup) {
+  if (!backup || typeof backup !== "object" || Array.isArray(backup)
+      || backup.format !== DRAFT_BACKUP_FORMAT || backup.version !== DRAFT_BACKUP_VERSION) {
+    throw new TypeError("This is not a supported Pokédex Workshop draft backup.");
+  }
+  if (typeof backup.sourceRevision !== "string" || !backup.sourceRevision) {
+    throw new TypeError("Draft backup source revision metadata is missing.");
+  }
+  if (!backup.controllers || typeof backup.controllers !== "object" || Array.isArray(backup.controllers)) {
+    throw new TypeError("Draft backup controller data is missing.");
+  }
+  if (backup.controllers.pokemon && backup.sourceRevision !== backup.controllers.pokemon.sourceRevision) {
+    throw new TypeError("Draft backup source revision metadata is inconsistent.");
+  }
+  if (backup.controllers.pokemon && String(backup.assetRevision || "") !== String(backup.controllers.pokemon.assetRevision || "")) {
+    throw new TypeError("Draft backup asset revision metadata is inconsistent.");
+  }
+  const currentAssetRevision = String(state.data?.assetRevision || "");
+  return {
+    sourceChanged: backup.sourceRevision !== state.revision,
+    assetChanged: Boolean(backup.assetRevision && currentAssetRevision && String(backup.assetRevision) !== currentAssetRevision),
+  };
+}
+
+async function prepareDraftBackupImport(backup, { allowRevisionMismatch = false } = {}) {
+  const revisionState = draftBackupRevisionState(backup);
+  if (!allowRevisionMismatch && (revisionState.sourceChanged || revisionState.assetChanged)) {
+    throw new Error("This backup belongs to a different workspace revision.");
+  }
+  const prepared = {};
+  for (const name of draftBackupControllers()) {
+    const snapshot = backup.controllers[name];
+    const controller = state.controllers[name];
+    if (controller && snapshot == null) throw new TypeError(`${controllerDisplayName(name)} draft data is missing from the backup.`);
+    if (snapshot == null) continue;
+    if (!controller || typeof controller.prepareDraftImport !== "function" || typeof controller.applyDraftImport !== "function") {
+      throw new Error(`${controllerDisplayName(name)} is unavailable, so this backup cannot be restored completely.`);
+    }
+    prepared[name] = await controller.prepareDraftImport(snapshot, { allowRevisionMismatch });
+  }
+  return prepared;
+}
+
+async function importDraftBackupFile(file) {
+  if (!(file instanceof File)) return;
+  if (file.size <= 0 || file.size > MAX_DRAFT_BACKUP_BYTES) throw new Error("Draft backup must be between 1 byte and 256 MB.");
+  if (totalChangeCount() || totalValidationCount() || totalBlockingCount()) {
+    throw new Error("The current draft is not empty. Export it, then Reset before importing another backup.");
+  }
+  setBusy(true, { inert: true });
+  setStatus("Reading draft backup…", "busy");
+  let success = false;
+  let applyStarted = false;
+  let restoredAcrossRevision = false;
+  try {
+    let backup;
+    try {
+      backup = JSON.parse(await file.text());
+    } catch (_error) {
+      throw new TypeError("Draft backup is not valid JSON.");
+    }
+    const revisionState = draftBackupRevisionState(backup);
+    if (revisionState.sourceChanged || revisionState.assetChanged) {
+      setBusy(false);
+      const confirmed = await confirmAction({
+        title: "Restore this draft onto the current workspace?",
+        message: "The workspace changed after this backup was exported. Every backed-up target will be checked against the current data before anything is restored. If a target no longer exists, import stops without changing the draft. Otherwise, the recovered values return as unsaved changes and take precedence only if you later choose Save.",
+        confirmLabel: "Restore compatible draft",
+      });
+      if (!confirmed) {
+        setStatus("Draft import canceled; source files were unchanged.", "ready");
+        return;
+      }
+      if (totalChangeCount() || totalValidationCount() || totalBlockingCount()) {
+        throw new Error("The current draft changed while import confirmation was open. Export it, then Reset before importing another backup.");
+      }
+      restoredAcrossRevision = true;
+      setBusy(true, { inert: true });
+      setStatus("Checking backup against the current workspace…", "busy");
+    }
+    setStatus("Validating draft backup…", "busy");
+    const prepared = await prepareDraftBackupImport(backup, { allowRevisionMismatch: restoredAcrossRevision });
+    applyStarted = true;
+    if (prepared.pokemon) {
+      setStatus("Restaging imported Pokémon assets…", "busy");
+      await state.controllers.pokemon.applyDraftImport(prepared.pokemon);
+    }
+    for (const name of ["profiles", "routes"]) {
+      if (prepared[name]) state.controllers[name].applyDraftImport(prepared[name]);
+    }
+    markDirty();
+    success = true;
+  } catch (error) {
+    if (applyStarted) {
+      draftBackupControllers().forEach((name) => {
+        try { state.controllers[name]?.reset?.(); } catch (_resetError) { /* Preserve the original import failure. */ }
+      });
+    }
+    throw error;
+  } finally {
+    setBusy(false);
+  }
+  if (success) {
+    const count = totalChangeCount();
+    setStatus(`${restoredAcrossRevision ? "Recovered" : "Imported"} ${count} draft change${count === 1 ? "" : "s"}${restoredAcrossRevision ? " onto the current workspace" : ""}. Review before saving.`, "pending");
+    toast(`Draft backup ${restoredAcrossRevision ? "recovered" : "imported"}. Nothing was saved to source.`, "success");
+  }
+}
+
+function applyBuildStatus(status, { announce = true } = {}) {
   state.buildServerAvailable = true;
+  state.buildOutcomeUnknown = false;
   state.latestBuildStatus = status || {};
   const running = Boolean(status?.running);
+  if (running) {
+    state.buildStarting = false;
+    state.buildReconciling = false;
+  }
   const output = status?.output || status?.error || "";
   elements.buildOutput.textContent = output;
   elements.buildPanel.hidden = !elements.showBuildLog.checked;
-  elements.buildRom.textContent = running ? "Building…" : "Build ROM";
   updateBuildControls();
-  if (running) setStatus(status.latestLine || "Building ROM…", "busy");
-  if (!running && status?.ok === true) setStatus("ROM build complete", "success");
-  if (!running && status?.ok === false) setStatus("ROM build failed", "error");
+  updateBuildDisplayTimer();
+  if (announce) {
+    if (running) renderBuildActivity();
+    if (!running && status?.ok === true) setStatus("ROM build complete", "success");
+    if (!running && status?.ok === false) setStatus("ROM build failed", "error");
+  }
   return running;
 }
 
+function buildElapsed(status = state.latestBuildStatus) {
+  const startedAt = Number(status?.startedAt);
+  if (!Number.isFinite(startedAt)) {
+    return { seconds: 0, label: status?.elapsedLabel || "0:00" };
+  }
+  const endedAt = Number(status?.endedAt);
+  const end = Number.isFinite(endedAt) ? endedAt : Date.now() / 1000;
+  const total = Math.max(0, Math.floor(end - startedAt));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return {
+    seconds: total,
+    label: hours
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+      : `${minutes}:${String(seconds).padStart(2, "0")}`,
+  };
+}
+
+function renderBuildActivity() {
+  const status = state.latestBuildStatus;
+  if (!status?.running || !state.buildServerAvailable) return;
+  const elapsed = buildElapsed(status);
+  const latestLine = status.latestLine || "Building ROM…";
+  const detail = latestLine === "Starting Docker build..." && elapsed.seconds > 0
+    ? "Waiting for build output…"
+    : latestLine;
+  updateBuildControls();
+  setStatus(`${elapsed.label} · ${detail}`, "busy");
+}
+
+function updateBuildDisplayTimer() {
+  if (state.latestBuildStatus?.running && state.buildServerAvailable) {
+    if (buildDisplayTimer === null) {
+      buildDisplayTimer = window.setInterval(renderBuildActivity, 1000);
+    }
+    return;
+  }
+  if (buildDisplayTimer !== null) window.clearInterval(buildDisplayTimer);
+  buildDisplayTimer = null;
+}
+
 function updateBuildControls() {
+  const starting = state.buildStarting;
+  const outcomeUnknown = state.buildOutcomeUnknown;
   const running = Boolean(state.latestBuildStatus?.running);
   const hasRom = state.latestBuildStatus?.testNdsExists === true;
-  elements.buildRom.disabled = state.busy || running;
-  elements.openNds.disabled = state.busy || running || !state.buildServerAvailable || !hasRom;
+  const elapsed = running ? ` ${buildElapsed().label}` : "";
+  let buildLabel = "Build ROM";
+  if (outcomeUnknown) buildLabel = "Status unknown";
+  else if (starting) buildLabel = state.buildReconciling ? "Checking…" : "Starting…";
+  else if (running) buildLabel = `Building…${elapsed}`;
+  elements.buildRom.textContent = buildLabel;
+  elements.buildRom.disabled = state.busy || outcomeUnknown || starting || running;
+  elements.openNds.disabled = state.busy || outcomeUnknown || starting || running || !state.buildServerAvailable || !hasRom;
 
-  if (!state.buildServerAvailable) {
+  if (outcomeUnknown) {
+    elements.openNds.title = "Reload the Workshop to confirm build status before opening the ROM.";
+  } else if (!state.buildServerAvailable) {
     elements.openNds.title = "V2 server is offline or has not responded. Reload after restarting it.";
+  } else if (starting) {
+    elements.openNds.title = "Open NDS is unavailable while the ROM build is starting.";
   } else if (running) {
     elements.openNds.title = "Open NDS is unavailable while the ROM is building.";
   } else if (!hasRom) {
@@ -1378,37 +1677,174 @@ function updateBuildControls() {
   }
 }
 
-async function pollBuild() {
+function resetBuildPolling() {
+  state.buildPollGeneration += 1;
+  if (buildPollTimer !== null) {
+    window.clearTimeout(buildPollTimer);
+    buildPollTimer = null;
+  }
+  return state.buildPollGeneration;
+}
+
+function beginBuildPolling(options = {}) {
+  return pollBuild(resetBuildPolling(), options);
+}
+
+function scheduleBuildPoll(generation, delay, options = {}) {
+  buildPollTimer = window.setTimeout(() => {
+    buildPollTimer = null;
+    void pollBuild(generation, options);
+  }, delay);
+}
+
+async function pollBuild(generation, {
+  preserveIdleStatus = false,
+  preserveError = false,
+  previousStartedAt = null,
+  previousStatusKnown = true,
+  requestStartedAt = null,
+  resolveBuildStarting = false,
+  retryUntilStatus = false,
+  confirmationDeadline = null,
+} = {}) {
+  const pollOptions = {
+    preserveIdleStatus,
+    preserveError,
+    previousStartedAt,
+    previousStatusKnown,
+    requestStartedAt,
+    resolveBuildStarting,
+    retryUntilStatus,
+    confirmationDeadline,
+  };
   try {
-    const status = await api.get(`/build-status?ts=${Date.now()}`);
-    if (applyBuildStatus(status)) window.setTimeout(pollBuild, 900);
+    const statusTimeoutMs = confirmationDeadline === null
+      ? API_TIMEOUT_MS
+      : Math.max(250, confirmationDeadline - Date.now());
+    const status = await api.get(`/build-status?ts=${Date.now()}`, { timeoutMs: statusTimeoutMs });
+    if (generation !== state.buildPollGeneration) return;
+    const running = Boolean(status?.running);
+    const statusStartedAt = status?.startedAt ?? null;
+    const isFreshTerminalStatus = !running
+      && requestStartedAt !== null
+      && typeof statusStartedAt === "number"
+      && statusStartedAt >= requestStartedAt;
+    const isPreviousTerminalStatus = preserveIdleStatus
+      && !running
+      && (requestStartedAt !== null
+        ? !isFreshTerminalStatus
+        : !previousStatusKnown || statusStartedAt === previousStartedAt);
+    if (isPreviousTerminalStatus && retryUntilStatus) {
+      applyBuildStatus(status, { announce: false });
+      if (confirmationDeadline !== null && Date.now() >= confirmationDeadline) {
+        state.buildStarting = false;
+        state.buildReconciling = false;
+        updateBuildControls();
+        setStatus("Build did not start. You can retry.", "error");
+        return;
+      }
+      scheduleBuildPoll(generation, 500, pollOptions);
+      return;
+    }
+    if (resolveBuildStarting) {
+      state.buildStarting = false;
+      state.buildReconciling = false;
+    }
+    if (applyBuildStatus(status, { announce: !isPreviousTerminalStatus })) {
+      scheduleBuildPoll(generation, 900);
+    }
   } catch (error) {
+    if (generation !== state.buildPollGeneration) return;
+    const shouldRetry = retryUntilStatus || Boolean(state.latestBuildStatus?.running);
     state.buildServerAvailable = false;
+    updateBuildDisplayTimer();
     updateBuildControls();
-    if (error.isConnectionFailure) {
-      setStatus("V2 server is offline. Restart it, then reload this page.", "error");
-    } else {
-      setStatus(`Build status unavailable: ${error.message}`, "error");
+    if (!preserveError) {
+      if (error.isConnectionFailure) {
+        setStatus("V2 server is offline. Restart it, then reload this page.", "error");
+      } else {
+        setStatus(`Build status unavailable: ${error.message}`, "error");
+      }
+    }
+    if (shouldRetry && confirmationDeadline !== null && Date.now() >= confirmationDeadline) {
+      state.buildStarting = false;
+      state.buildReconciling = false;
+      state.buildOutcomeUnknown = true;
+      updateBuildControls();
+      setStatus("Build status is unknown. Reload the Workshop before building again.", "error");
+    } else if (shouldRetry) {
+      scheduleBuildPoll(generation, 1800, pollOptions);
     }
   }
 }
 
 async function startBuild() {
-  setStatus("Starting ROM build…", "busy");
+  if (state.buildOutcomeUnknown || state.buildStarting || state.latestBuildStatus?.running) return;
+  const previousStatusKnown = state.latestBuildStatus !== null;
+  const previousStartedAt = state.latestBuildStatus?.startedAt ?? null;
+  const requestStartedAt = Date.now() / 1000;
+  const startPollGeneration = resetBuildPolling();
+  state.buildStarting = true;
+  state.buildReconciling = false;
+  state.buildOutcomeUnknown = false;
+  updateBuildControls();
+  setStatus("0:00 · Starting Docker build…", "busy");
   elements.buildPanel.hidden = !elements.showBuildLog.checked;
+  void pollBuild(startPollGeneration, {
+    preserveIdleStatus: true,
+    preserveError: true,
+    previousStartedAt,
+    previousStatusKnown,
+    requestStartedAt,
+    resolveBuildStarting: true,
+    retryUntilStatus: true,
+  });
   try {
     const status = await api.post("/build", { runAfter: elements.autoRun.checked });
-    applyBuildStatus(status);
-    window.setTimeout(pollBuild, 700);
+    resetBuildPolling();
+    state.buildStarting = false;
+    state.buildReconciling = false;
+    state.buildOutcomeUnknown = false;
+    if (applyBuildStatus(status)) void beginBuildPolling();
   } catch (error) {
-    if (error.isConnectionFailure) {
+    const needsStatusConfirmation = Boolean(error.isOutcomeUnknown || error.isBuildRunning);
+    const statusAlreadyConfirmed = Boolean(
+      state.latestBuildStatus?.running
+      || (typeof state.latestBuildStatus?.startedAt === "number"
+        && state.latestBuildStatus.startedAt >= requestStartedAt)
+    );
+    if (statusAlreadyConfirmed) return;
+    state.buildStarting = needsStatusConfirmation;
+    state.buildReconciling = needsStatusConfirmation;
+    if (!needsStatusConfirmation) resetBuildPolling();
+    if (error.isBuildRunning) {
+      setStatus("Build already running. Reconnecting…", "busy");
+    } else if (error.isConnectionFailure) {
       state.buildServerAvailable = false;
-      updateBuildControls();
       setStatus("V2 server is offline. Restart it, then reload this page.", "error");
     } else {
       setStatus(`Build failed to start: ${error.message}`, "error");
     }
+    updateBuildControls();
+    if (needsStatusConfirmation) {
+      void beginBuildPolling({
+        preserveIdleStatus: true,
+        preserveError: true,
+        previousStartedAt: state.latestBuildStatus?.startedAt ?? previousStartedAt,
+        previousStatusKnown: true,
+        requestStartedAt,
+        resolveBuildStarting: true,
+        retryUntilStatus: true,
+        confirmationDeadline: Date.now() + 8000,
+      });
+    }
   }
+}
+
+function resumeActiveBuildPolling() {
+  if (document.visibilityState === "hidden") return;
+  renderBuildActivity();
+  if (state.latestBuildStatus?.running) void beginBuildPolling();
 }
 
 async function openNds() {
@@ -1471,20 +1907,45 @@ function bindGlobalActions() {
     void action();
   });
   elements.resetDraft.addEventListener("click", resetAllDrafts);
+  elements.exportDraft.addEventListener("click", exportDraftBackup);
+  elements.importDraft.addEventListener("click", () => {
+    elements.importDraftFile.value = "";
+    elements.importDraftFile.click();
+  });
+  elements.importDraftFile.addEventListener("change", async () => {
+    const [file] = elements.importDraftFile.files || [];
+    elements.importDraftFile.value = "";
+    if (!file) return;
+    try {
+      await importDraftBackupFile(file);
+    } catch (error) {
+      setStatus(`Draft import failed: ${error.message}`, "error");
+      toast(error.message, "error");
+    }
+  });
   elements.buildRom.addEventListener("click", startBuild);
   elements.openNds.addEventListener("click", openNds);
   elements.restartServer.addEventListener("click", async () => {
+    if (state.busy) return;
     const confirmed = await confirmAction({
       title: "Restart the V2 server?",
-      message: "Any unsaved draft remains only in this browser and may be lost.",
+      message: totalChangeCount() || totalValidationCount() || totalBlockingCount()
+        ? `${totalValidationCount() ? "Finish or cancel invalid text input, then " : ""}Export a draft backup first. Restarting reloads this page and clears its in-memory draft.`
+        : "The server and this page will restart.",
       confirmLabel: "Restart server",
     });
     if (!confirmed) return;
+    setBusy(true, { inert: true });
     setStatus("Restarting server…", "busy");
     try {
-      await api.post("/restart-server", {});
-      window.setTimeout(() => location.reload(), 1100);
+      const currentHealth = await api.get(`/api/v2/health?restartProbe=${Date.now()}`, { timeoutMs: 1000 });
+      const result = await api.post("/restart-server", {});
+      const previousInstanceId = result.previousServerInstanceId || currentHealth.serverInstanceId || "";
+      if (!previousInstanceId) await delay(500);
+      await waitForReplacementServer(previousInstanceId);
+      location.reload();
     } catch (error) {
+      setBusy(false);
       setStatus(`Restart failed: ${error.message}`, "error");
     }
   });
@@ -1512,10 +1973,14 @@ function bindGlobalActions() {
     else if (!elements.saveAll.disabled) elements.saveAll.click();
   });
   window.addEventListener("beforeunload", (event) => {
-    if (!totalChangeCount()) return;
+    if (!totalChangeCount() && !totalValidationCount() && !totalBlockingCount()) return;
     event.preventDefault();
     event.returnValue = "";
   });
+  window.addEventListener("pagehide", clearPreparedDraftDownload);
+  document.addEventListener("visibilitychange", resumeActiveBuildPolling);
+  window.addEventListener("focus", resumeActiveBuildPolling);
+  window.addEventListener("pageshow", resumeActiveBuildPolling);
 }
 
 async function boot() {
@@ -1543,7 +2008,7 @@ async function boot() {
   } catch (error) {
     setStatus(`Pokémon Editor failed to initialize: ${error.message}`, "error");
   }
-  const [workspaceResult] = await Promise.allSettled([loadData(), loadShiny(), pollBuild()]);
+  const [workspaceResult] = await Promise.allSettled([loadData(), loadShiny(), beginBuildPolling()]);
   if (workspaceResult.status === "rejected") {
     const error = workspaceResult.reason;
     state.workspaceDataError = String(error?.message || error || "Workspace data unavailable");

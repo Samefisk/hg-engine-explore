@@ -163,6 +163,8 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         'OverworldWildSpawns_OverlayOnPlayerFrame',
         'OverworldWildSpawns_OverlayOnFieldBusy',
         'OverworldWildSpawns_PrepareMapHeaderChange',
+        'OverworldWildSpawns_IsBehaviorAllowedHopLandingTile',
+        'OverworldWildSpawns_StartPreparedCustomJumpCommand',
     ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
@@ -177,6 +179,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
             'overlay 149 ABI gate is missing linked symbols: ' + ', '.join(missing)
         )
     entry_address, entry_size = symbols[entry_name]
+    overlay_base_address = 0x023CCFD8
     expected_entry_size = len(callback_names) * 4
     if entry_address != 0x023CD000 or entry_size != expected_entry_size:
         raise RuntimeError(
@@ -190,12 +193,14 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         packaged = file.read()
     if overlay != packaged:
         raise RuntimeError('packaged overlay 149 differs from its linked binary')
-    if len(overlay) < expected_entry_size:
+    entry_offset = entry_address - overlay_base_address
+    if entry_offset < 0 or len(overlay) < entry_offset + expected_entry_size:
         raise RuntimeError('overlay 149 is shorter than its exported ABI entry')
 
     actual_callbacks = struct.unpack_from(
         f'<{len(callback_names)}I',
         overlay,
+        entry_offset,
     )
     expected_callbacks = tuple(symbols[name][0] | 1 for name in callback_names)
     if actual_callbacks != expected_callbacks:
@@ -311,6 +316,7 @@ def VerifyOverworldFollowerSelectorOverlay(
         'OverworldFollowerSelector_GetSelectedPokemon',
         'OverworldFollowerSelector_GetReleaseDistance',
         'OverworldFollowerSelector_IsReleaseTileAvailable',
+        'OverworldFollowerSelector_BuildDirectedDirections',
     ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
@@ -332,7 +338,7 @@ def VerifyOverworldFollowerSelectorOverlay(
 
     entry_address, entry_size = symbols[entry_name]
     expected_entry_address = 0x023C0400
-    expected_entry_size = 56
+    expected_entry_size = 60
     overlay_end = 0x023C22A0
     if (entry_address != expected_entry_address
             or entry_size != expected_entry_size):
@@ -360,7 +366,7 @@ def VerifyOverworldFollowerSelectorOverlay(
         raise RuntimeError('overlay 152 is shorter than its exported ABI entry')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3153464F, 4, expected_entry_size)
+    expected_header = (0x3153464F, 5, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 152 exported ABI magic/version/size does not match'
@@ -388,6 +394,107 @@ def VerifyOverworldFollowerSelectorOverlay(
     digest = hashlib.sha256(overlay).hexdigest()
     print(
         f'overlay 152 ABI gate: entry=0x{entry_address:08X} '
+        f'size={entry_size} sha256={digest}'
+    )
+
+
+def VerifyOverworldWildRuntimeOverlay(
+        linked_path: str,
+        output_path: str,
+        packaged_path: str) -> None:
+    entry_name = 'gOverworldWildRuntimeOverlayEntry'
+    callback_names = [
+        'OverworldWildRuntime_ValidateImpl',
+        'OverworldWildRuntime_QuerySurface',
+        'OverworldWildRuntime_GetGroundBaseY',
+        'OverworldWildRuntime_WalkMomentumReset',
+        'OverworldWildRuntime_WalkMomentumStart',
+        'OverworldWildRuntime_WalkMomentumFinish',
+        'OverworldWildRuntime_BehaviorMatchApplies',
+        'OverworldWildRuntime_OverrideTargetsContext',
+        'OverworldWildRuntime_ApplyBehaviorOverride',
+        'OverworldWildRuntime_NormalizeMovementProfile',
+        'OverworldWildRuntime_ResolveInheritedPolicies',
+        'OverworldWildRuntime_ValidateBehaviorDataBlob',
+        'OverworldWildRuntime_PlayStepDirtParticle',
+        'OverworldWildRuntime_PlayLandingHopParticle',
+    ]
+    symbols = {}
+    output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+            symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
+
+    missing = [
+        name
+        for name in [entry_name, *callback_names]
+        if name not in symbols
+    ]
+    if missing:
+        raise RuntimeError(
+            'overlay 156 ABI gate is missing linked symbols: '
+            + ', '.join(missing)
+        )
+
+    entry_address, entry_size = symbols[entry_name]
+    expected_entry_address = 0x023BC800
+    expected_entry_size = 64
+    overlay_end = 0x023BD400
+    if (entry_address != expected_entry_address
+            or entry_size != expected_entry_size):
+        raise RuntimeError(
+            f'overlay 156 ABI entry changed: address=0x{entry_address:08X} '
+            f'size={entry_size}, expected address=0x{expected_entry_address:08X} '
+            f'size={expected_entry_size}'
+        )
+
+    for name in callback_names:
+        callback_address, _ = symbols[name]
+        if not expected_entry_address <= callback_address < overlay_end:
+            raise RuntimeError(
+                f'overlay 156 callback {name} is outside its owned range: '
+                f'0x{callback_address:08X}'
+            )
+
+    with open(output_path, 'rb') as file:
+        overlay = file.read()
+    with open(packaged_path, 'rb') as file:
+        packaged = file.read()
+    if overlay != packaged:
+        raise RuntimeError('packaged overlay 156 differs from its linked binary')
+    if len(overlay) < expected_entry_size:
+        raise RuntimeError('overlay 156 is shorter than its exported ABI entry')
+
+    actual_header = struct.unpack_from('<IHH', overlay)
+    expected_header = (0x3152574F, 5, expected_entry_size)
+    if actual_header != expected_header:
+        raise RuntimeError(
+            'overlay 156 exported ABI magic/version/size does not match'
+        )
+    actual_callbacks = struct.unpack_from(
+        f'<{len(callback_names)}I',
+        overlay,
+        8,
+    )
+    expected_callbacks = tuple(
+        symbols[name][0] | 1
+        for name in callback_names
+    )
+    if actual_callbacks != expected_callbacks:
+        raise RuntimeError(
+            'overlay 156 exported ABI does not exactly match its linked '
+            'Thumb callbacks'
+        )
+    if any((pointer & 1) == 0 for pointer in actual_callbacks):
+        raise RuntimeError('overlay 156 exported a non-Thumb callback')
+    if any(not expected_entry_address <= (pointer & ~1) < overlay_end
+            for pointer in actual_callbacks):
+        raise RuntimeError('overlay 156 exported a callback outside its range')
+
+    digest = hashlib.sha256(overlay).hexdigest()
+    print(
+        f'overlay 156 ABI gate: entry=0x{entry_address:08X} '
         f'size={entry_size} sha256={digest}'
     )
 
@@ -751,6 +858,12 @@ def writeall():
             )
         if newOverlay == 152:
             VerifyOverworldFollowerSelectorOverlay(
+                LINKED_SECTIONS[i + 1],
+                NEW_OVERLAYS[i],
+                overlayPath,
+            )
+        if newOverlay == 156:
+            VerifyOverworldWildRuntimeOverlay(
                 LINKED_SECTIONS[i + 1],
                 NEW_OVERLAYS[i],
                 overlayPath,
