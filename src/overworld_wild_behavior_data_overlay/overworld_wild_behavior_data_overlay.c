@@ -256,7 +256,7 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
             || object == NULL
             || (excludedMask & (1u << i)) != 0
             || state->movementEmoteTimers[i] != 0
-            || state->movementPhantomVisiblePause[i]
+            || state->movementTeleportVisiblePause[i]
             || !queryTarget(
                 state,
                 throwState,
@@ -881,7 +881,7 @@ static int OverworldWildBehavior_FindBattleTalkSlot(
 
         if (state->movementSpawnRunActive[slot]
             || (excludedMask & (1u << slot)) != 0
-            || state->movementPhantomHidden[slot]
+            || state->movementTeleportHidden[slot]
             || !state->spawns[slot].active
             || spawnObject == NULL) {
             continue;

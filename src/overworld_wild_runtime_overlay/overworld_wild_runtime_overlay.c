@@ -9,7 +9,7 @@
 #define OW_WILD_RUNTIME_MATCH_LEVEL_ANY 0
 #define OW_WILD_RUNTIME_BEHAVIOR_GROUP_NONE 0
 #define OW_WILD_RUNTIME_BEHAVIOR_KIND_MAX 11
-#define OW_WILD_RUNTIME_LOCOMOTION_MAX 8
+#define OW_WILD_RUNTIME_LOCOMOTION_MAX 11
 #define OW_WILD_RUNTIME_TARGET_NONE 0
 #define OW_WILD_RUNTIME_TARGET_MAX 9
 #define OW_WILD_RUNTIME_BOOL_YES 1
@@ -570,11 +570,11 @@ static const u8 sOverworldWildRuntimeBehaviorRelativeFieldMaximums[] = {
     0, 0, 0, 255, 64, 64, 64, 4, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 4,
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 4, 0, 0, 0, 8, 8, 8, 4,
-    5, 0, 0, 0,
+    5, 0, 0, 0, 0,
 };
 
-typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain61[
-    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 61 ? 1 : -1];
+typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain62[
+    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 62 ? 1 : -1];
 typedef char OverworldWildRuntimeBehaviorProfileDataSizeMustRemain66[
     sizeof(OverworldWildBehaviorProfileData) == 66 ? 1 : -1];
 typedef char OverworldWildRuntimeBehaviorFieldsBeforeTerrainMustRemain32[
@@ -616,6 +616,8 @@ typedef char OverworldWildRuntimeBehaviorVerticalObstacleOptionMustRemain56[
                chainRepositionAllowCardinal) == 63
             && __builtin_offsetof(OverworldWildBehaviorProfileData,
                chainRepositionAllowDiagonal) == 64
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               walkOptions) == 65
         ? 1
         : -1];
 
@@ -746,7 +748,7 @@ static BOOL OverworldWildRuntime_IsOverrideOperatorFamilyValid(
         && OverworldWildRuntime_IsOverrideOperatorMaskValid(
             profile->mask3,
             operatorMask3,
-            0x0007FFFF,
+            0x000FFFFF,
             42,
             profile,
             compoundMask3,

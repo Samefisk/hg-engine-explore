@@ -17,7 +17,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 8
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 63
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 65
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -165,6 +165,47 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_MAX 5
 #define OW_WILD_BEHAVIOR_TILES_TO_ACCELERATE_DEFAULT 3
 #define OW_WILD_BEHAVIOR_MAX_WALK_SPEED_DEFAULT 4
+#define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT 6
+#define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER 9
+#define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE 10
+#define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER 11
+/* Source compatibility for profiles authored before Teleport was generalized. */
+#define OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT
+#define OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(locomotion) \
+    ((locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT \
+        || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER \
+        || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE \
+        || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER)
+#define OW_WILD_BEHAVIOR_TELEPORT_USES_FLICKER(locomotion) \
+    ((locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT \
+        || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE)
+#define OW_WILD_BEHAVIOR_TELEPORT_USES_PER_TILE_TIME(locomotion) \
+    ((locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE \
+        || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER)
+#define OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION (1u << 0)
+#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT 1
+#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK (7u << OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT)
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT 4
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK (7u << OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT)
+#define OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK (1u << 7)
+#define OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) == 0)
+#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK) \
+        >> OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT)
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK) \
+        >> OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT)
+#define OW_WILD_BEHAVIOR_WALK_OPTIONS(lockDirection, stompSpeed, crashSound) \
+    (((lockDirection) ? OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION : 0) \
+        | (((stompSpeed) << OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK) \
+        | (((crashSound) << OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK))
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_NONE 0
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_WALL_HIT 1
+#define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MAX \
+    OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_WALL_HIT
 #define OW_WILD_BEHAVIOR_HOP_SWAY_WIDTH_MAX 8
 #define OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4 16
 
@@ -235,6 +276,8 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainRepositionDust;
     u8 chainRepositionAllowCardinal;
     u8 chainRepositionAllowDiagonal;
+    /* Zero preserves the legacy Walk behavior: turning allowed, no effects. */
+    u8 walkOptions;
 } OverworldWildBehaviorProfileData;
 
 typedef char OverworldWildBehaviorProfileDataSizeMustRemain66Bytes[
@@ -246,67 +289,68 @@ typedef struct OverworldWildBehaviorProfile {
     union {
         OverworldWildBehaviorProfileData owner;
         struct {
-    u8 chillState;
-    u8 alertState;
-    u8 alertEmote;
-    u8 alertTime;
-    u8 alertness;
-    u8 stamina;
-    u8 restTime;
-    u8 chillSpeed;
-    u8 range;
-    u8 jumpLevel;
-    u8 profileId;
-    u8 spawnState;
-    u8 chillAction;
-    u8 chillTarget;
-    u8 alertRange;
-    u8 playerAdjacentDirectionMasks;
-    u8 alertChance;
-    u8 spawnDestination;
-    u8 battleTrigger;
-    u8 hopAllowNonCardinal;
-    u8 hopMinDistance;
-    u8 hopMaxDistance;
-    u8 hopPause;
-    u8 teleportTime;
-    u8 teleportPause;
-    u8 alertSpecialAction;
-    u8 overworldLimit;
-    u8 spawnDestinationMinDistance;
-    u8 spawnDestinationMaxDistance;
-    u8 ramAccelerationSteps;
-    u8 ramMaxSpeed;
-    u8 chainPauseAction;
-    u16 chillAllowedTerrainMask;
-    u16 chillAllowedTerrainOverrideMask;
-    u8 hopTime;
-    u8 chaseBoostDistance;
-    u8 chaseBoostSpeed;
-    u8 hopSpinSpeed;
-    u8 spawnHopTime;
-    u8 circleRadius;
-    u8 continueWhenArrived;
-    u8 avoidPreviousTile;
-    u8 chainMovementVariance;
-    u8 chainPauseVariance;
-    u8 activeProfile;
-    u8 tiredProfile;
-    u8 hopElevationTimeScale;
-    u8 hopElevationArcScale;
-    u8 tilesToAccelerate;
-    u8 maxWalkSpeed;
-    u16 spawnDestinationMask;
-    u16 spawnDestinationOverrideMask;
-    u8 hopAllowVerticalObstacles;
-    u8 chainRepositionJumpCount;
-    u8 hopSwayWidth;
-    u8 spawnHopSwayWidth;
-    u8 chainRepositionSpeed;
-    u8 chainRepositionDistance;
-    u8 chainRepositionDust;
-    u8 chainRepositionAllowCardinal;
-    u8 chainRepositionAllowDiagonal;
+            u8 chillState;
+            u8 alertState;
+            u8 alertEmote;
+            u8 alertTime;
+            u8 alertness;
+            u8 stamina;
+            u8 restTime;
+            u8 chillSpeed;
+            u8 range;
+            u8 jumpLevel;
+            u8 profileId;
+            u8 spawnState;
+            u8 chillAction;
+            u8 chillTarget;
+            u8 alertRange;
+            u8 playerAdjacentDirectionMasks;
+            u8 alertChance;
+            u8 spawnDestination;
+            u8 battleTrigger;
+            u8 hopAllowNonCardinal;
+            u8 hopMinDistance;
+            u8 hopMaxDistance;
+            u8 hopPause;
+            u8 teleportTime;
+            u8 teleportPause;
+            u8 alertSpecialAction;
+            u8 overworldLimit;
+            u8 spawnDestinationMinDistance;
+            u8 spawnDestinationMaxDistance;
+            u8 ramAccelerationSteps;
+            u8 ramMaxSpeed;
+            u8 chainPauseAction;
+            u16 chillAllowedTerrainMask;
+            u16 chillAllowedTerrainOverrideMask;
+            u8 hopTime;
+            u8 chaseBoostDistance;
+            u8 chaseBoostSpeed;
+            u8 hopSpinSpeed;
+            u8 spawnHopTime;
+            u8 circleRadius;
+            u8 continueWhenArrived;
+            u8 avoidPreviousTile;
+            u8 chainMovementVariance;
+            u8 chainPauseVariance;
+            u8 activeProfile;
+            u8 tiredProfile;
+            u8 hopElevationTimeScale;
+            u8 hopElevationArcScale;
+            u8 tilesToAccelerate;
+            u8 maxWalkSpeed;
+            u16 spawnDestinationMask;
+            u16 spawnDestinationOverrideMask;
+            u8 hopAllowVerticalObstacles;
+            u8 chainRepositionJumpCount;
+            u8 hopSwayWidth;
+            u8 spawnHopSwayWidth;
+            u8 chainRepositionSpeed;
+            u8 chainRepositionDistance;
+            u8 chainRepositionDust;
+            u8 chainRepositionAllowCardinal;
+            u8 chainRepositionAllowDiagonal;
+            u8 walkOptions;
         };
     };
     union {
@@ -361,6 +405,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 attentiveChainRepositionDust;
             u8 attentiveChainRepositionAllowCardinal;
             u8 attentiveChainRepositionAllowDiagonal;
+            u8 attentiveWalkOptions;
         };
     };
     union {
@@ -409,6 +454,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tiredChainRepositionDust;
             u8 tiredChainRepositionAllowCardinal;
             u8 tiredChainRepositionAllowDiagonal;
+            u8 tiredWalkOptions;
         };
     };
 } OverworldWildBehaviorProfile;
@@ -554,6 +600,7 @@ typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DUST (1u << 16)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_CARDINAL (1u << 17)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_DIAGONAL (1u << 18)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_OPTIONS (1u << 19)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 
