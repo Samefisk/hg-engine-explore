@@ -33,6 +33,7 @@ static u32 sBattlePersonalityOverrideValue;
 static FieldSystem *sFieldReadyTaskFieldSystem;
 static u16 sFieldReadyTaskMapId;
 OverworldWildResidentData gOverworldWildResidentData;
+
 __asm__(
     ".global gOverworldWildFieldIdleRearmPending\n"
     ".set gOverworldWildFieldIdleRearmPending, gOverworldWildResidentData\n"

@@ -274,6 +274,7 @@ void LONG_CALL sub_02069DC8(LocalMapObject *mapObject, BOOL enable_bit);
 void *LONG_CALL ov01_021F72DC(LocalMapObject *mapObject);
 void LONG_CALL ov01_021F9048(LocalMapObject* map_object);
 const u16 *LONG_CALL ov01_021F9318(LocalMapObject *mapObject);
+void LONG_CALL sub_02060114(LocalMapObject *mapObject);
 void LONG_CALL sub_020603F8(LocalMapObject *mapObject, u8 previousBehavior, u8 currentBehavior, const u16 *descriptor);
 BOOL LONG_CALL ov01_02203A48(LocalMapObject *mapObject, int emoteId);
 void LONG_CALL ov01_02203AB4(FieldSystem *fieldSystem, LocalMapObject *mapObject, int emoteId);

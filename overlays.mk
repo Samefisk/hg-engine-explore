@@ -46,7 +46,7 @@ $(foreach overlay, $(OVERLAYS), $(eval $(call OVERLAY_DEFINE,$(overlay))))
 
 CODE_BUILD_DIRS += $(BUILD)/$(INDIVIDUAL)
 
-rom_gen_battle.ld:$(battle_LINK) $(battle_OUTPUT) rom_gen.ld
+rom_gen_battle.ld: $(battle_LINK) $(battle_OUTPUT) rom_gen.ld | venv
 	cp rom_gen.ld rom_gen_battle.ld
 	$(PYTHON) scripts/generate_ld.py rom_gen_battle.ld $(battle_LINK)
 

@@ -315,17 +315,23 @@ DEPENDENCY_FILES = (
     "build/field/script_commands.d",
     "build/party_menu.d",
     "build/overworld_wild_spawns.d",
+    "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d",
     "build/save.d",
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
     "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.d",
+    "build/pokemon_move_history_task6_overlay/overworld_wild_hop_trajectory.d",
     "build/summary_move_relearn_overlay/summary_move_relearn.d",
 )
 FIXED_INPUTS = (
     "Makefile",
+    "asm/pokemon_move_history_task6_overlay/thumb_help.s",
+    "asm/pokemon_move_history_overlay/overworld_wild_shadow_filter.s",
+    "asm/pokemon_move_history_task6_overlay/native_shadow_policy.s",
     "bytereplacement",
     "docker-makerom.cmd",
+    "requirements.txt",
     "data/text/302.txt",
     "hooks",
     "overlays.mk",
@@ -343,9 +349,11 @@ FIXED_INPUTS = (
     "src/pokemon_move_history_overlay/linker.ld",
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/summary_move_relearn_overlay/linker.ld",
+    "src/overworld_wild_runtime_overlay/linker.ld",
     "src/field/linker.ld",
     "scripts/generate_armips_symbols.py",
     "scripts/build_move_relearn_parents.py",
+    "scripts/check_docker_ready.py",
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/verify_pokemon_move_history_capture.py",
@@ -395,6 +403,12 @@ OUTPUTS = {
         "build/summary_move_relearn_overlay/entry.o",
     "summary_linked": "build/summary_move_relearn_overlay_linked.o",
     "summary_binary": "build/output_summary_move_relearn_overlay.bin",
+    "overworld_wild_runtime_object":
+        "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.o",
+    "overworld_wild_runtime_linked":
+        "build/overworld_wild_runtime_overlay_linked.o",
+    "overworld_wild_runtime_binary":
+        "build/output_overworld_wild_runtime_overlay.bin",
     "patched_arm9": "base/arm9.bin",
     "overlay_table": "base/overarm9.bin",
     "patched_overlay12": "base/overlay/overlay_0012.bin",
@@ -408,6 +422,7 @@ OUTPUTS = {
     "patched_overlay153": "base/overlay/overlay_0153.bin",
     "patched_overlay154": "base/overlay/overlay_0154.bin",
     "patched_overlay155": "base/overlay/overlay_0155.bin",
+    "patched_overlay156": "base/overlay/overlay_0156.bin",
 }
 
 

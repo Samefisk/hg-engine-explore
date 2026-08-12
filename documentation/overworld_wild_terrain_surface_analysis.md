@@ -15,7 +15,7 @@ The profile refactor largely solves how allowed destinations should be authored 
 
 ## Current System After the Profile Refactor
 
-The live behavior blob is version 41 and currently contains:
+The live behavior blob is version 44 and currently contains:
 
 - 4 behavior classes
 - 2 generic class rules
@@ -46,7 +46,21 @@ An override is composed as:
 result = (result & ~explicitMask) | (valueMask & explicitMask);
 ```
 
-The current six-bit catalog is `LAND`, `WATER`, `CANOPY`, `GRASS`, `PLAYER`, and `PLAYER_FRONT`. `LAND` is the inherited default. The old primary/secondary allowed-tile limit has therefore already been removed in this workspace: a lane can enable any subset of these six entries.
+The current seven-bit catalog is `LAND`, `WATER`, `CANOPY`, `GRASS`, `PLAYER`, `PLAYER_FRONT`, and `ROOFTOP`. `LAND` is the inherited default. The old primary/secondary allowed-tile limit has therefore already been removed in this workspace: a lane can enable any subset of these entries.
+
+The `ROOFTOP` implementation is generated from reusable building-model definitions rather than map-specific world coordinates. A build-time tool reads approved `bm_field` model templates, discovers their placements in the land archive through the existing map matrix, samples the rendered roof at every authored tile centre, clips the result at 32×32 block boundaries, and emits a compact land-data directory. Runtime only reads that catalog; it never parses NSBMD geometry or building records.
+
+The generator has an explicit coverage gate for common outdoor building names matching Pokemon Centers, Marts, and house families. The current manifest covers all 35 discovered common model families and all 125 placements in matrix 0, with no exclusions. Their 1,628 authored landing tiles are sampled using exact rational vertical-ray intersections against the highest eligible roof triangle at each tile centre, then rounded upward to Q4 so a sprite cannot sink into the mesh. Equal-height neighbors are coalesced into 606 logical rectangles and 614 block-clipped instances across 59 land-data rows and 13 rectangle templates. Thirty conservative silhouette or continuity nodes in six model families have no triangle directly beneath their centre; those nodes inherit the nearest sampled tile height, and every fallback coordinate is retained in the generated audit report rather than being silently dropped.
+
+The tested Cherrygrove block remains a useful concrete example. Its Pokemon Center is now a dense 5×4 connected roof at block-local `x=18..22`, `y=4..7`: the reviewed flat centre remains `0x4C000`, while the connected rear slope and front eave range down to `0x44000`. Both ordinary `yo_h01` houses are dense 4×3 roofs covering the pitched left half and flat right half, with sampled tile heights from `0x3FD50` to `0x4D8B0`. The nearby `yo_h02` gabled house ranges from `0x41070` to `0x5BD00`. Tile/model sampling uses the actual tile centre, `(tile * 16) + 8`, which fixes the earlier universal two-tile north displacement.
+
+Dense means every tile in an authored rectangle is a valid roof tile. A 3×4 house therefore exposes all 12 tiles, not a checkerboard or a few hand-selected perch points. Mesh-verified roofs grow from their reviewed flat seed across edge-connected faces with projected area, so connected slopes are included while vertical façades and disconnected signs cannot expand or override the roof. The generator reports 235 nodes added by this component expansion and rejects obsolete partial authored offsets. A pitched roof is stored as several non-overlapping equal-height rectangles that all share the building's `surfaceId`; this preserves continuous movement without adding a runtime height-map decoder. The payload still uses six bytes per land-directory row, ten bytes per clipped height rectangle, and two bytes per reusable width/height template. The complete common-roof catalog is 6,520 bytes. Heights retain exact Q4 precision; one page byte extends the compact height past the old `u16` ceiling. Cross-block fragments store signed deltas to a canonical anchor block, so one building retains the same `surfaceId` and anchor altitude across a seam.
+
+The Bird profile now selects the dedicated `ROOFTOP` spawn destination. Destination selection and allowed terrain are separate, authoritative checks: the destination requests an exact rooftop search, while the resolved Chill lane must explicitly allow `ROOFTOP`. If no authored rooftop exists in range, that spawn attempt fails. It does not retain the pool coordinate, reinterpret canopy as roof, or apply a map-specific fallback. Profiles can select `POOL`, `CANOPY`, `ROOFTOP`, or another destination deliberately, so maps without authored roofs need no exceptional rule.
+
+The current bounded radius-eight rooftop scan considers at most 289 coordinates. Each query returns an exact terrain kind and sampled tile height, and a persistent last-block cache means the sorted land directory is searched only when a query enters another 32×32 block. Chill hopping can land only where the active lane's allowed mask matches the returned terrain kind. If a bird already occupies a roof, a hop target must return the same `surfaceId`, preventing it from hopping directly to an unrelated building or dropping to ground through ordinary wandering. Ground-to-roof entry remains possible. All height rectangles and cross-block fragments belonging to one building share a canonical surface identity. Custom jumps linearly interpolate from the source tile's base height to the destination tile's base height while adding the existing arc, so uphill and downhill hops do not snap at the end. Initial placement and the shared native-movement completion boundary also reapply the sampled surface height. Active and Tired inherit the composed ecology terrain policy unless their linked state profiles explicitly override it, so Bird retains rooftop authority in every state.
+
+For direct MVP testing, the Y-menu follower release throw temporarily ignores all terrain and metatile-behavior blocking when it selects a landing coordinate. A released follower still receives any authored surface height at that coordinate, so throwing a bird onto one of the Cherrygrove roof points places it on the roof plane. This bypass is isolated to the Y-menu release path; ordinary wild spawning and profile-driven movement retain their normal terrain checks.
 
 The runtime `OverworldWildBehaviorProfile` is not one small flat profile. It is a 138-byte composite of three 46-byte lanes:
 
@@ -95,7 +109,7 @@ The field names should become state-neutral, for example `allowedSurfaceMask` an
 
 With `u32`, the compact lane is expected to grow from 46 to about 52 bytes and the runtime composite from 138 to about 156 bytes. Exact ABI sizes must be asserted when implemented because padding affects override records. This modest data increase is preferable to a second policy hierarchy and second resolver.
 
-`ALL` must be derived from the defined catalog instead of remaining a hard-coded `0x3F`. The C header, blob writer, validator, Python viewer, and V2 web editor currently duplicate parts of the terrain catalog; they should consume one generated definition so every allowed surface is visible and the copies cannot drift. The current editors expose only five of the six runtime entries, omitting `PLAYER`, which demonstrates that drift already exists.
+`ALL` should eventually be derived from the defined catalog instead of remaining a hard-coded value. The C header, blob writer, validator, Python viewer, and V2 web editor still duplicate parts of the terrain catalog; they should consume one generated definition so every allowed surface is visible and the copies cannot drift. The rooftop MVP updates both editors to expose all seven current entries, including the previously hidden `PLAYER` bit.
 
 ## Physical Surface Catalog
 
@@ -126,7 +140,9 @@ Candidate leaf surfaces include:
 
 Every flat map tile should resolve to one exact leaf classification. Broad groups such as `LANDLIKE` should be compile-time mask aliases, not overlapping runtime classifications. The current `LAND` predicate also accepts grass and many other passable terrain behaviors, so enabling `LAND` can presently defeat an attempt to disable `GRASS`. A 256-entry metatile-behavior → leaf-surface-bit table with explicit precedence fixes that and makes a candidate check one lookup and one bit test.
 
-Canopies, roofs, rails, inaccessible cliff shelves, and similar model-defined surfaces need per-map data. The first implementation can use authored rectangles, tile masks, connected nodes, or individual perch points with height and render policy. Automatic model extraction can wait until the runtime design is proven.
+Canopies, roofs, rails, inaccessible cliff shelves, and similar model-defined surfaces need model-local data. The first scalable implementation now uses a land-data directory, compact constant-height fragments, and reusable dense-rectangle templates. Runtime lookup converts the world coordinate to a 32×32 block and local coordinate, reads the block's land-data ID from the existing map matrix, rejects unrelated instances by bounds, then derives `surfaceId`, node index, terrain kind, and height. A persistent block cache stores both successful and empty model lookups, so repeated movement and spawn queries in the same block do not rescan the 59-row sorted directory.
+
+Scaling coverage should remain a build-time authoring/extraction task: inspect each land member's building records, associate recognized geometry with an authored dense footprint, sample its rendered upper surface, and emit only model-local instances. The game should not parse NSBMD geometry during movement. Equal-height coalescing handles pitched and gabled roofs without a runtime decoder; irregular footprints can later add bitmask templates while retaining the same directory and surface identity. A preview overlay should show generated world tiles and sampled heights before approval so coordinate or height mistakes are caught outside the ROM.
 
 ## Per-Spawn Policy
 

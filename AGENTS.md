@@ -40,6 +40,10 @@ Keep each entry to one or two sentences and record only something you directly o
 
 `PAPERCUTS.md` is a local, git-ignored queue. Continue the requested task after logging. Review or fix the accumulated queue only when the user asks; a fresh Codex task can read the file and handle the queue without another model or a special review command. If the user asks to review the current task for papercuts, use the available task context and log only concrete incidents. Do not mine private transcript storage automatically.
 
+When the user asks to review or fix `PAPERCUTS.md`, triage every entry and preserve its history. Never delete, clear, or silently omit an entry. Move verified fixes to `## Resolved` with the resolution date, changed files, and verification evidence. Move partial workarounds to `## Mitigated` with the remaining limitation. Keep non-repository issues under `## External / Environment` with an owner, workaround, and next action, and leave all other unfinished work under `## Open`. Only delete entries when the user explicitly asks for queue cleanup. Deduplicate by cross-reference or merge while preserving the original observations.
+
+Before applying a targeted patch, read the exact surrounding source context instead of inferring a nearby signature. For shell diagnostics and snippets, use macOS/BSD-portable command forms, avoid GNU-only options such as `od -w` and `dd status=none`, and do not use zsh special parameter names such as `status` for local variables.
+
 ## Local HeartGold Decompilation Reference
 
 When it is present, use `.codex-reference/pokeheartgold/` as the read-only vanilla HeartGold source reference for reverse-engineering and implementation work. It is a local, Git-excluded checkout of `pret/pokeheartgold`, and the local USA HeartGold ROM matches that project's expected SHA-1.

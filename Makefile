@@ -22,7 +22,7 @@ $(error "Do not put files into OneDrive.  Please clone the repository in a diffe
 endif
 
 DESIRED_GAMECODE := IPKE
-GAMECODE = $(shell dd bs=1 skip=12 count=4 if=$(ROMNAME) status=none)
+GAMECODE = $(shell dd bs=1 skip=12 count=4 if=$(ROMNAME) 2>/dev/null)
 VALID_GAMECODE = $(shell echo $(GAMECODE) | grep -i -q $(DESIRED_GAMECODE); echo $$?)
 
 ifneq ($(VALID_GAMECODE), 0)
@@ -78,18 +78,23 @@ PYTHON = $(PYTHON_NO_VENV)
 VENV_ACTIVATE =
 endif
 
-.PHONY: clean all dumprom
+.PHONY: clean all dumprom venv
 
 default: all
 
 ifneq ($(PYTHON_VENV_VERSION), 0)
 # only set up venv if we need to
 venv: $(VENV_ACTIVATE)
+	@"$(VENV)/bin/python3" -m pip install --disable-pip-version-check --no-index -r $(REQUIREMENTS) >/dev/null 2>&1 \
+		|| "$(VENV)/bin/python3" -m pip install --disable-pip-version-check -r $(REQUIREMENTS)
 
 # divorce this python3 from venv so that it works
-$(VENV_ACTIVATE): $(REQUIREMENTS)
+$(VENV_ACTIVATE):
 	$(PYTHON_NO_VENV) -m venv $(VENV)
-	$(PYTHON) -m pip install -r $(REQUIREMENTS)
+
+else
+venv:
+	@:
 
 endif
 
@@ -231,7 +236,7 @@ $(ENCODEPWIMG):
 TOOLS += $(ENCODEPWIMG)
 
 ####################### Build #######################
-rom_gen.ld:$(LINK) $(OUTPUT) rom.ld $(VENV_ACTIVATE)
+rom_gen.ld: $(LINK) $(OUTPUT) rom.ld | venv
 	cp rom.ld rom_gen.ld
 	$(PYTHON) scripts/generate_ld.py
 	$(PYTHON_NO_VENV) scripts/generate_armips_symbols.py rom_gen.ld armips/include/generated/c_symbols.s
@@ -242,10 +247,37 @@ $1: ; mkdir -p $1
 endef
 $(foreach folder, $(CODE_BUILD_DIRS), $(eval $(call FOLDER_CREATE_DEFINE,$(folder))))
 
+$(NARC_FILES): | venv toolchain-preflight
+
+COMPILE_CONFIG_STAMP := $(BUILD)/.compile-config
+
+.PHONY: FORCE_COMPILE_CONFIG toolchain-preflight
+FORCE_COMPILE_CONFIG:
+
+$(COMPILE_CONFIG_STAMP): FORCE_COMPILE_CONFIG | $(BUILD)
+	@{ \
+		printf '%s\n' 'CC=$(CC)' 'CFLAGS=$(CFLAGS)' \
+			'AS=$(AS)' 'ASFLAGS=$(ASFLAGS)' \
+			'OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS=$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS)' \
+			'OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS=$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS)'; \
+	} > $@.tmp
+	@cmp -s $@ $@.tmp || mv $@.tmp $@
+	@rm -f $@.tmp
+
+toolchain-preflight:
+	@command -v $(CC) >/dev/null 2>&1 \
+		&& command -v $(AS) >/dev/null 2>&1 \
+		&& command -v $(LD) >/dev/null 2>&1 \
+		&& command -v $(OBJCOPY) >/dev/null 2>&1 \
+		|| { echo "ARM toolchain is incomplete. Reinstall the configured ARM GCC/newlib toolchain or use ./docker-makerom.cmd." >&2; exit 1; }
+	@printf '%s\n' '#include <stdint.h>' 'int main(void) { return 0; }' \
+		| $(CC) -mcpu=arm7tdmi -mthumb -x c -E - >/dev/null 2>&1 \
+		|| { echo "$(CC) cannot preprocess <stdint.h>. Reinstall its matching newlib headers or use ./docker-makerom.cmd." >&2; exit 1; }
+
 # generate .d dependency files that are included as part of compiling if it does not exist
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
-$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) | $(CODE_BUILD_DIRS)
+$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv toolchain-preflight
 	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
@@ -255,7 +287,7 @@ $(foreach src, $(ALL_C_SRCS), $(eval $(call SRC_OBJ_INC_DEFINE,$(patsubst $(C_SU
 
 define ASM_OBJ_INC_DEFINE
 # these should have similar dependency scanning, but we do not currently use them in a way conducive to it
-$1: $2 | $(CODE_BUILD_DIRS)
+$1: $2 $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) toolchain-preflight
 	$(AS) $(ASFLAGS) -c $2 -o $1
 endef
 $(foreach src, $(ALL_ASM_SRCS), $(eval $(call ASM_OBJ_INC_DEFINE,$(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o, $(src)),$(src))))
@@ -268,7 +300,7 @@ $(OUTPUT):$(LINK)
 
 
 
-all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)
+all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 	rm -rf $(BASE)
 	@mkdir -p $(REQUIRED_DIRECTORIES)
 	@# find and delete macOS and windows files
@@ -553,7 +585,7 @@ move_narc: $(NARC_FILES)
 DUMP_SCRIPT_LOCATION := tools/source/dumptools
 # the goal here is to extract the required narcs to the proper folders for the dump scripts to work.
 # learnsets are covered by script migration
-dumprom: $(VENV_ACTIVATE) $(TOOLS)
+dumprom: $(TOOLS) | venv
 	$(MAKE) clean
 	chmod +x $(DUMP_SCRIPT_LOCATION)/*.sh
 
@@ -584,7 +616,7 @@ dumprom: $(VENV_ACTIVATE) $(TOOLS)
 	@echo "Done.  See output in dumped_armips/, learnsets are already in data/learnsets/learnsets.json."
 
 
-update_machine_moves: $(VENV_ACTIVATE)
+update_machine_moves: | venv
 	$(PYTHON) scripts/update_machine_moves.py --descriptions --sprites
 	$(PYTHON) tools/source/dumptools/wrap_item_text.py data/text/830.txt data/text/830.txt
 	$(PYTHON) tools/source/dumptools/wrap_item_text.py data/text/834.txt data/text/834.txt

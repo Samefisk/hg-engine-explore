@@ -246,6 +246,28 @@ static BOOL FollowerSelectorUI_EnsureState(void)
     return TRUE;
 }
 
+int OverworldFollowerSelector_BuildDirectedDirections(
+    int dx,
+    int dy,
+    u8 *directions)
+{
+    int count = 0;
+    int absDx = dx < 0 ? -dx : dx;
+    int absDy = dy < 0 ? -dy : dy;
+
+    if ((dx | dy) == 0) {
+        return 0;
+    }
+    if (absDx >= absDy) {
+        if (dx != 0) directions[count++] = dx > 0 ? 3 : 2;
+        if (dy != 0) directions[count++] = dy > 0 ? 1 : 0;
+    } else {
+        if (dy != 0) directions[count++] = dy > 0 ? 1 : 0;
+        if (dx != 0) directions[count++] = dx > 0 ? 3 : 2;
+    }
+    return count;
+}
+
 const OverworldFollowerSelectorOverlayEntry gOverworldFollowerSelectorOverlayEntry
     __attribute__((section(".overworld_follower_selector_entry"), used)) = {
         OVERWORLD_FOLLOWER_SELECTOR_MAGIC,
@@ -263,6 +285,7 @@ const OverworldFollowerSelectorOverlayEntry gOverworldFollowerSelectorOverlayEnt
         OverworldFollowerSelector_GetSelectedPokemon,
         OverworldFollowerSelector_GetReleaseDistance,
         OverworldFollowerSelector_IsReleaseTileAvailable,
+        OverworldFollowerSelector_BuildDirectedDirections,
 };
 
 static BOOL OverworldFollowerSelector_ValidateImpl(void)
@@ -279,7 +302,8 @@ static BOOL OverworldFollowerSelector_ValidateImpl(void)
         && entry->inputIsActive != NULL
         && entry->getSelectedPokemon != NULL
         && entry->getReleaseDistance != NULL
-        && entry->isReleaseTileAvailable != NULL;
+        && entry->isReleaseTileAvailable != NULL
+        && entry->buildDirectedDirections != NULL;
 }
 
 static void FollowerSelectorUI_EnableObjPlane(void)

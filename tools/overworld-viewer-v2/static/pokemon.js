@@ -4127,6 +4127,306 @@ export function createPokemonController({
     return payload;
   }
 
+  function cloneDraftValue(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return btoa(binary);
+  }
+
+  function base64ToBytes(value) {
+    const binary = atob(value);
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  }
+
+  const MAX_BACKUP_ASSET_BASE64_LENGTH = 256 * 1024 * 1024;
+
+  async function sha256Hex(bytes) {
+    if (!globalThis.crypto?.subtle) throw new Error("This browser cannot verify embedded asset backups.");
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
+    return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function exportAssetFile(file) {
+    if (!(file instanceof File)) throw new Error("A staged Pokémon asset no longer has its original file. Choose the file again before exporting the draft.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return {
+      name: file.name,
+      type: file.type || "image/png",
+      lastModified: Number(file.lastModified) || 0,
+      size: bytes.length,
+      sha256: await sha256Hex(bytes),
+      base64: bytesToBase64(bytes),
+    };
+  }
+
+  async function importAssetFile(raw) {
+    if (!isRecord(raw) || typeof raw.name !== "string" || typeof raw.type !== "string"
+        || typeof raw.base64 !== "string" || !/^[0-9a-f]{64}$/.test(raw.sha256)
+        || !Number.isInteger(Number(raw.size)) || Number(raw.size) < 0) {
+      throw new TypeError("A Pokémon asset backup is malformed.");
+    }
+    if (raw.base64.length > MAX_BACKUP_ASSET_BASE64_LENGTH) throw new TypeError(`Embedded asset ${raw.name} is too large.`);
+    let bytes;
+    try {
+      bytes = base64ToBytes(raw.base64);
+    } catch (_error) {
+      throw new TypeError(`Embedded asset ${raw.name} is not valid base64.`);
+    }
+    if (bytes.length !== Number(raw.size) || await sha256Hex(bytes) !== raw.sha256) {
+      throw new TypeError(`Embedded asset ${raw.name} failed its integrity check.`);
+    }
+    return new File([bytes], raw.name, { type: raw.type || "image/png", lastModified: Number(raw.lastModified) || 0 });
+  }
+
+  async function exportDraft() {
+    const assets = [];
+    for (const [symbol, draft] of assetDrafts) {
+      for (const [slot, entry] of Object.entries(draft.assets || {})) {
+        const canRestage = ["ready", "staging"].includes(entry.status);
+        assets.push({
+          symbol,
+          slot,
+          status: canRestage ? "restage" : "error",
+          error: canRestage
+            ? ""
+            : textValue(entry.error, entry.status === "validating" ? "Asset validation was interrupted; choose the file again after import." : "Imported asset requires review."),
+          file: await exportAssetFile(entry.file),
+        });
+      }
+    }
+    return {
+      version: 1,
+      sourceRevision: String(model.sourceRevision || ""),
+      assetRevision: String(model.assetRevision || ""),
+      fields: [...drafts].map(([symbol, values]) => [symbol, [...values]]),
+      learnsets: cloneDraftValue([...learnsetDrafts.values()]),
+      evolutions: cloneDraftValue([...evolutionDrafts.values()]),
+      familyStageSummaries: cloneDraftValue([...familyStageSummaries]),
+      forms: cloneDraftValue([...formDrafts.values()]),
+      assets,
+    };
+  }
+
+  async function prepareDraftImport(snapshot, { allowRevisionMismatch = false } = {}) {
+    if (!isRecord(snapshot) || snapshot.version !== 1) throw new TypeError("Pokémon draft backup version is not supported.");
+    if (typeof snapshot.sourceRevision !== "string" || typeof snapshot.assetRevision !== "string") {
+      throw new TypeError("Pokémon draft backup revision metadata is malformed.");
+    }
+    if (!allowRevisionMismatch && (snapshot.sourceRevision !== String(model.sourceRevision || "") || snapshot.assetRevision !== String(model.assetRevision || ""))) {
+      throw new Error("Pokémon draft backup belongs to a different source or asset revision.");
+    }
+    const requireArray = (value, label) => {
+      if (!Array.isArray(value)) throw new TypeError(`${label} must be an array.`);
+      return value;
+    };
+    const knownSpecies = (symbol, label) => {
+      if (typeof symbol !== "string" || !model.species.some((species) => species.__symbol === symbol)) {
+        throw new TypeError(`${label} refers to an unknown Pokémon.`);
+      }
+      return symbol;
+    };
+    const knownFieldPaths = new Set(asArray(model.fieldRegistry).map((descriptor) => descriptor.path).filter(Boolean));
+    const fieldSymbols = new Set();
+    const fieldDrafts = new Map(requireArray(snapshot.fields, "Pokémon fields").map((entry) => {
+      if (!Array.isArray(entry) || entry.length !== 2) throw new TypeError("Pokémon fields contains an invalid entry.");
+      const symbol = knownSpecies(entry[0], "Pokémon fields");
+      if (fieldSymbols.has(symbol)) throw new TypeError(`Pokémon fields contains duplicate ${symbol}.`);
+      fieldSymbols.add(symbol);
+      const paths = new Set();
+      const values = new Map(requireArray(entry[1], `Pokémon fields.${symbol}`).map((field) => {
+        if (!Array.isArray(field) || field.length !== 2 || typeof field[0] !== "string") throw new TypeError(`Pokémon fields.${symbol} contains an invalid field.`);
+        if (paths.has(field[0])) throw new TypeError(`Pokémon fields.${symbol} contains a duplicate path.`);
+        if (!knownFieldPaths.has(field[0])) throw new TypeError(`Pokémon fields.${symbol} refers to unknown path ${field[0]}.`);
+        paths.add(field[0]);
+        return [field[0], cloneDraftValue(field[1])];
+      }));
+      return [symbol, values];
+    }));
+    const recordsBySymbol = (value, label, validate) => {
+      const symbols = new Set();
+      return new Map(requireArray(value, label).map((record) => {
+        if (!isRecord(record)) throw new TypeError(`${label} contains an invalid record.`);
+        const symbol = knownSpecies(record.symbol, label);
+        if (symbols.has(symbol) || !validate(record)) throw new TypeError(`${label} contains an invalid or duplicate ${symbol} record.`);
+        symbols.add(symbol);
+        return [symbol, cloneDraftValue(record)];
+      }));
+    };
+    const formSymbols = new Set();
+    const importedForms = new Map(requireArray(snapshot.forms, "Pokémon forms").map((record) => {
+      if (!isRecord(record) || typeof record.baseSymbol !== "string") throw new TypeError("Pokémon forms contains an invalid record.");
+      if (!model.species.some((species) => baseSymbolFor(species) === record.baseSymbol)) throw new TypeError("Pokémon forms refers to an unknown form family.");
+      if (formSymbols.has(record.baseSymbol) || !Array.isArray(record.forms)) throw new TypeError("Pokémon forms contains an invalid or duplicate form family.");
+      formSymbols.add(record.baseSymbol);
+      return [record.baseSymbol, cloneDraftValue(record)];
+    }));
+    const assets = [];
+    const assetKeys = new Set();
+    for (const record of requireArray(snapshot.assets, "Pokémon assets")) {
+      if (!isRecord(record) || typeof record.slot !== "string") throw new TypeError("Pokémon assets contains an invalid record.");
+      const symbol = knownSpecies(record.symbol, "Pokémon assets");
+      if (!ASSET_SLOTS.some(([slot]) => slot === record.slot)) throw new TypeError(`Pokémon assets contains unknown slot ${record.slot}.`);
+      const key = `${symbol}|${record.slot}`;
+      if (assetKeys.has(key)) throw new TypeError(`Pokémon assets contains duplicate ${key}.`);
+      assetKeys.add(key);
+      if (!["restage", "error"].includes(record.status) || typeof record.error !== "string") throw new TypeError(`Pokémon asset ${key} has invalid recovery state.`);
+      assets.push({ symbol, slot: record.slot, status: record.status, error: record.error, file: await importAssetFile(record.file) });
+    }
+    const learnsets = recordsBySymbol(snapshot.learnsets, "Pokémon learnsets", (record) => (
+      Array.isArray(record.levelMoves) && Array.isArray(record.machineMoves)
+      && Array.isArray(record.tutorMoves) && Array.isArray(record.eggMoves)
+    ));
+    const evolutions = recordsBySymbol(snapshot.evolutions, "Pokémon evolutions", (record) => (
+      Array.isArray(record.edges) && typeof record.edgesTouched === "boolean" && typeof record.babyTouched === "boolean"
+    ));
+    const summaryKeys = new Set();
+    const summaries = new Map(requireArray(snapshot.familyStageSummaries, "Pokémon familyStageSummaries").map((entry) => {
+      if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !isRecord(entry[1])) {
+        throw new TypeError("Pokémon familyStageSummaries contains an invalid entry.");
+      }
+      if (summaryKeys.has(entry[0])) throw new TypeError("Pokémon familyStageSummaries contains a duplicate entry.");
+      summaryKeys.add(entry[0]);
+      return [entry[0], cloneDraftValue(entry[1])];
+    }));
+    const detailSymbols = new Set([...learnsets.keys(), ...evolutions.keys(), ...assets.map((asset) => asset.symbol)]);
+    for (const baseSymbol of importedForms.keys()) {
+      const species = model.species.find((candidate) => baseSymbolFor(candidate) === baseSymbol);
+      if (species) detailSymbols.add(species.__symbol);
+    }
+    for (const symbol of detailSymbols) {
+      const species = model.species.find((candidate) => candidate.__symbol === symbol);
+      await ensureLearnsetDetail(species, false, { rejectOnError: true });
+    }
+    return {
+      fields: fieldDrafts,
+      learnsets,
+      evolutions,
+      familyStageSummaries: summaries,
+      forms: importedForms,
+      assets,
+    };
+  }
+
+  async function stageImportedAsset({ symbol, slot, file }) {
+    const species = model.species.find((candidate) => candidate.__symbol === symbol);
+    await ensureLearnsetDetail(species, false, { rejectOnError: true });
+    const editor = assetEditorFor(species);
+    if (!assetSlotWritable(editor, slot)) throw new Error(`${symbol}.${slot} is not writable in the current source.`);
+    const rule = assetRuleFor(editor, slot);
+    const allowed = asArray(firstDefined(rule.allowedMimeTypes, ["image/png"]));
+    const maximumBytes = Number(firstDefined(rule.maxBytes, 2 * 1024 * 1024));
+    if (allowed.length && !allowed.includes(file.type)) throw new Error(`${symbol}.${slot} must use ${allowed.join(" or ")}.`);
+    if (file.size > maximumBytes) throw new Error(`${symbol}.${slot} exceeds the asset size limit.`);
+    const dimensions = await imageDimensions(file);
+    const expectedWidth = Number(firstDefined(rule.width, rule.expectedWidth));
+    const expectedHeight = Number(firstDefined(rule.height, rule.expectedHeight));
+    if (Number.isFinite(expectedWidth) && dimensions.width !== expectedWidth || Number.isFinite(expectedHeight) && dimensions.height !== expectedHeight) {
+      throw new Error(`${symbol}.${slot} expected ${expectedWidth || "any"}×${expectedHeight || "any"} px; received ${dimensions.width}×${dimensions.height} px.`);
+    }
+    const staged = await uploadAssetStage(species, slot, file);
+    const stagingToken = textValue(staged?.stagingToken, staged?.token);
+    if (!stagingToken || textValue(staged?.sourceRevision) !== model.sourceRevision
+        || model.assetRevision && textValue(staged?.assetRevision) !== model.assetRevision) {
+      discardAssetStage({ stagingToken });
+      throw new Error(`${symbol}.${slot} could not be staged against the current workspace revision.`);
+    }
+    return {
+      symbol,
+      slot,
+      entry: {
+        file,
+        fileName: file.name,
+        mimeType: file.type,
+        bytes: file.size,
+        width: dimensions.width,
+        height: dimensions.height,
+        status: "ready",
+        stagingToken,
+        sourceRevision: textValue(staged?.sourceRevision),
+        assetRevision: textValue(staged?.assetRevision),
+        previewUrl: textValue(staged?.previewUrl),
+        expiresAt: staged?.expiresAt,
+        error: "",
+      },
+    };
+  }
+
+  async function applyDraftImport(prepared) {
+    const stagedAssets = [];
+    try {
+      for (const asset of prepared.assets) {
+        if (asset.status === "error") {
+          stagedAssets.push({
+            symbol: asset.symbol,
+            slot: asset.slot,
+            entry: {
+              file: asset.file,
+              fileName: asset.file.name,
+              mimeType: asset.file.type,
+              bytes: asset.file.size,
+              status: "error",
+              stagingToken: "",
+              error: asset.error || "Imported asset requires review.",
+            },
+          });
+        } else {
+          stagedAssets.push(await stageImportedAsset(asset));
+        }
+      }
+      for (const { entry } of stagedAssets) entry.objectUrl = URL.createObjectURL(entry.file);
+    } catch (error) {
+      stagedAssets.forEach(({ entry }) => {
+        discardAssetStage(entry);
+        revokeAssetPreview(entry);
+      });
+      throw error;
+    }
+
+    const replaceMap = (target, source) => {
+      target.clear();
+      source.forEach((value, key) => target.set(key, value));
+    };
+    try {
+      replaceMap(drafts, prepared.fields);
+      replaceMap(learnsetDrafts, prepared.learnsets);
+      replaceMap(evolutionDrafts, prepared.evolutions);
+      replaceMap(formDrafts, prepared.forms);
+      replaceMap(familyStageSummaries, prepared.familyStageSummaries);
+      projectedFamilyGraphCache = null;
+      assetDrafts.forEach((draft) => Object.values(draft.assets || {}).forEach((entry) => {
+        discardAssetStage(entry);
+        revokeAssetPreview(entry);
+      }));
+      assetDrafts.clear();
+      for (const { symbol, slot, entry } of stagedAssets) {
+        const record = assetDrafts.get(symbol) || { symbol, assets: {} };
+        record.assets[slot] = entry;
+        assetDrafts.set(symbol, record);
+      }
+      renderAll();
+      signalDirty();
+    } catch (error) {
+      stagedAssets.forEach(({ entry }) => {
+        discardAssetStage(entry);
+        revokeAssetPreview(entry);
+      });
+      drafts.clear();
+      learnsetDrafts.clear();
+      evolutionDrafts.clear();
+      formDrafts.clear();
+      familyStageSummaries.clear();
+      assetDrafts.clear();
+      projectedFamilyGraphCache = null;
+      throw error;
+    }
+  }
+
   function clearDrafts(domains = ["pokemonUpdates", "pokemonLearnsetUpdates", "pokemonEvolutionUpdates", "pokemonFormUpdates", "pokemonAssetUpdates"], { discardAssets = true } = {}) {
     if (domains.includes("pokemonUpdates")) drafts.clear();
     if (domains.includes("pokemonLearnsetUpdates")) learnsetDrafts.clear();
@@ -4186,6 +4486,9 @@ export function createPokemonController({
     blockingMessage: () => assetBusyIssues()[0]?.message || "",
     isBlocking: () => assetBusyIssues().length > 0,
     commitPayload,
+    exportDraft,
+    prepareDraftImport,
+    applyDraftImport,
     clearCommitted,
     reset,
     refresh,

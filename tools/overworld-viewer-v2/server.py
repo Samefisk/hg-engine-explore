@@ -11,6 +11,7 @@ import io
 import json
 import re
 import sys
+import uuid
 from email import policy
 from email.parser import BytesParser
 from http.server import ThreadingHTTPServer
@@ -28,6 +29,35 @@ import pokemon_asset_writer
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_VIEWER_SOURCE = ROOT / "scripts/overworld_behavior_profile_viewer.py"
 STATIC_DIR = Path(__file__).resolve().with_name("static")
+SERVER_INSTANCE_ID = uuid.uuid4().hex
+
+
+def server_code_revision() -> str:
+    digest = hashlib.sha256()
+    for source in (
+        Path(__file__).resolve(),
+        Path(reliability.__file__).resolve(),
+        LEGACY_VIEWER_SOURCE,
+    ):
+        try:
+            label = source.relative_to(ROOT).as_posix()
+        except ValueError:
+            label = source.name
+        digest.update(label.encode("utf-8") + b"\0")
+        try:
+            digest.update(source.read_bytes())
+        except OSError:
+            digest.update(b"missing")
+        digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
+
+
+SERVER_CODE_REVISION = server_code_revision()
+
+
+def server_restart_required() -> bool:
+    return server_code_revision() != SERVER_CODE_REVISION
+
 
 V2_ASSETS = {
     "/v2-assets/v2.css": (STATIC_DIR / "v2.css", "text/css; charset=utf-8"),
@@ -233,6 +263,9 @@ class V2ViewerHandler(legacy.ViewerHandler):
                         "ok": True,
                         "service": "overworld-viewer-v2",
                         "apiVersion": 2,
+                        "serverInstanceId": SERVER_INSTANCE_ID,
+                        "serverCodeRevision": SERVER_CODE_REVISION,
+                        "restartRequired": server_restart_required(),
                         "legacyBackend": str(LEGACY_VIEWER_SOURCE.relative_to(ROOT)),
                         "capabilities": legacy.source_capabilities(),
                     }
@@ -389,6 +422,15 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 self.send_json(payload)
                 return
             if path == "/api/v2/resolve":
+                if server_restart_required():
+                    self.send_json(
+                        {
+                            "error": "V2 server code changed on disk. Restart the server before resolving another context.",
+                            "code": "server_restart_required",
+                        },
+                        status=409,
+                    )
+                    return
                 reliability.require_capability(legacy, "profiles")
                 query = parse_qs(urlparse(self.path).query)
                 with reliability.workspace_guard(ROOT):
@@ -435,6 +477,7 @@ class V2ViewerHandler(legacy.ViewerHandler):
             with reliability.workspace_guard(ROOT):
                 reliability.begin_restart()
                 result = legacy.restart_server_soon()
+                result["previousServerInstanceId"] = SERVER_INSTANCE_ID
             self.send_json(result)
             return
         if path == "/api/v2/pokemon-assets/stage":

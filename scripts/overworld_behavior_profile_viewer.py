@@ -73,6 +73,7 @@ BLOB_BEHAVIOR_FIELD_INDEXES = {
     "sOverworldWildBehaviorSpeciesClassRules": 3,
     "sOverworldWildBehaviorOverrideProfiles": 4,
     "sOverworldWildBehaviorOverrideMembers": 5,
+    "sOverworldWildBehaviorConditionalStates": 6,
     "sOverworldWildBehaviorOverrideRules": 5,
     "sOverworldWildBehaviorOverrides": 4,
 }
@@ -108,7 +109,7 @@ def default_test_dsv_path() -> Path:
 TEST_DSV = Path(os.environ.get("HG_ENGINE_TEST_DSV", str(default_test_dsv_path()))).expanduser()
 BUILD_COMMAND = "./docker-makerom.cmd"
 BUILD_OUTPUT_LIMIT = 60000
-BUILD_STARTUP_TIMEOUT_SECONDS = 45
+BUILD_STARTUP_TIMEOUT_SECONDS = 120
 BUILD_STARTUP_TIMEOUT_CODE = 124
 DSV_RAW_SAVE_SIZE = 0x80000
 SAVE_COPY_BASES = (0x0, 0x40000)
@@ -269,7 +270,7 @@ LEGACY_PROFILE_FIELDS = [
     "chainPauseVariance",
 ]
 
-# Stored profile schema v41. Active and Tired no longer duplicate complete
+# Stored profile schema v59. Active and Tired no longer duplicate complete
 # behavior lanes; they select an override profile and consume that profile's
 # Chill lane. Keep this order synchronized with
 # OverworldWildBehaviorProfileData and its three override-mask words.
@@ -320,7 +321,39 @@ PROFILE_FIELDS = [
     "chainPauseVariance",
     "activeProfile",
     "tiredProfile",
+    "hopElevationTimeScale",
+    "hopElevationArcScale",
+    "tilesToAccelerate",
+    "maxWalkSpeed",
+    "spawnDestinationMask",
+    "spawnDestinationOverrideMask",
+    "hopAllowVerticalObstacles",
+    "chainRepositionJumpCount",
+    "hopSwayWidth",
+    "spawnHopSwayWidth",
+    "chainRepositionSpeed",
+    "chainRepositionDistance",
+    "chainRepositionDust",
+    "chainRepositionAllowCardinal",
+    "chainRepositionAllowDiagonal",
 ]
+
+# v63 appends explicit Reposition-skid distance, particle, and direction controls.
+# v62 appends Reposition speed after the v61 compact profile.
+# v59 consumes the byte that was tail padding in v58. All migrations preserve
+# every earlier packed-field offset.
+PROFILE_FIELDS_V62 = [
+    field for field in PROFILE_FIELDS
+    if field not in {
+        "chainRepositionDistance",
+        "chainRepositionDust",
+        "chainRepositionAllowCardinal",
+        "chainRepositionAllowDiagonal",
+    }
+]
+PROFILE_FIELDS_V61 = [field for field in PROFILE_FIELDS_V62 if field != "chainRepositionSpeed"]
+PROFILE_FIELDS_V58 = [field for field in PROFILE_FIELDS_V61 if field != "spawnHopSwayWidth"]
+PROFILE_FIELDS_V57 = [field for field in PROFILE_FIELDS_V58 if field != "hopSwayWidth"]
 
 MATCH_FIELDS = [
     "groupMask",
@@ -331,6 +364,39 @@ MATCH_FIELDS = [
     "shiny",
     "behaviorClass",
 ]
+
+CONDITION_PARENT_NONE_RAW = "OW_WILD_BEHAVIOR_CONDITION_PARENT_NONE"
+CONDITION_ON_ROOFTOP_RAW = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP_OR_SIGNPOST"
+LEGACY_CONDITION_ON_ROOFTOP_RAW = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP"
+CONDITION_PARENT_NONE_VALUE = 0xFF
+CONDITION_ON_ROOFTOP_VALUE = 1
+CONDITIONAL_PROFILE_NONE_RAW = "OW_WILD_BEHAVIOR_CONDITIONAL_PROFILE_NONE"
+CONDITIONAL_PROFILE_NONE_VALUE = 0xFF
+CONDITIONAL_TERRAIN_ALL_VALUE = 0x03FF
+CONDITIONAL_MOVEMENT_SPEED_MAX = 4
+MAX_RUNTIME_OVERRIDE_PROFILES = 32
+
+
+def make_condition_value(raw: str, field: str, macros: dict[str, int]) -> dict:
+    """Parse compact condition metadata while legacy headers are still readable."""
+    value = make_value(raw, field, macros)
+    if value.get("value") is None:
+        fallback = {
+            CONDITION_PARENT_NONE_RAW: CONDITION_PARENT_NONE_VALUE,
+            CONDITION_ON_ROOFTOP_RAW: CONDITION_ON_ROOFTOP_VALUE,
+            LEGACY_CONDITION_ON_ROOFTOP_RAW: CONDITION_ON_ROOFTOP_VALUE,
+        }.get(clean_token(raw))
+        if fallback is not None:
+            value["value"] = fallback
+    return value
+
+
+def default_override_condition_raws() -> dict[str, str]:
+    return {
+        "conditionParentProfile": CONDITION_PARENT_NONE_RAW,
+        "conditionMask": "0",
+        "conditionValue": "0",
+    }
 
 FIELD_LABELS = {
     "chillState": "Behavior",
@@ -357,16 +423,25 @@ FIELD_LABELS = {
     "movementStyle": "Movement style",
     "alertChance": "Alert chance",
     "spawnDestination": "Spawn destination",
+    "spawnDestinationMask": "Spawn destinations",
+    "spawnDestinationOverrideMask": "Spawn destination override mask",
     "battleTrigger": "Battle trigger",
     "attentiveBattle": "Battle Active",
     "specialAction": "Movement style",
     "hopAllowNonCardinal": "Allow non-cardinal",
+    "hopAllowVerticalObstacles": "Cross vertical obstacles",
     "hopMinDistance": "Min hop distance",
     "hopMaxDistance": "Max hop distance",
     "hopPause": "Hop pause",
     "hopTime": "Hop time",
+    "hopElevationTimeScale": "Elevation time scaling",
+    "hopElevationArcScale": "Elevation arc scaling",
+    "tilesToAccelerate": "Tiles to accelerate",
+    "maxWalkSpeed": "Max speed",
     "hopSpinSpeed": "Spin speed",
+    "hopSwayWidth": "Horizontal sway",
     "spawnHopTime": "Spawn hop time",
+    "spawnHopSwayWidth": "Spawn horizontal sway",
     "attentiveHopSpinSpeed": "Spin speed",
     "teleportTime": "Teleport time",
     "teleportPause": "Teleport pause",
@@ -379,6 +454,12 @@ FIELD_LABELS = {
     "ramMaxSpeed": "Chain pause",
     "chainPauseVariance": "Pause variance",
     "chainPauseAction": "Chain pause action",
+    "chainRepositionJumpCount": "Reposition moves",
+    "chainRepositionSpeed": "Reposition speed",
+    "chainRepositionDistance": "Reposition skid distance",
+    "chainRepositionDust": "Reposition skid dust",
+    "chainRepositionAllowCardinal": "Allow cardinal directions",
+    "chainRepositionAllowDiagonal": "Allow diagonal directions",
     "chillAllowedTerrainMask": "Allowed terrains",
     "chillAllowedTerrainOverrideMask": "Terrain override mask",
     "attentiveAllowedTile": "Allowed tile",
@@ -418,6 +499,7 @@ FIELD_LABELS = {
 
 FIELD_UNITS = {
     "spawnHopTime": "frames",
+    "spawnHopSwayWidth": "px",
     "spawnDestinationMinDistance": "tiles",
     "spawnDestinationMaxDistance": "tiles",
     "overworldLimit": "Pokémon",
@@ -425,7 +507,12 @@ FIELD_UNITS = {
     "hopMinDistance": "tiles",
     "hopMaxDistance": "tiles",
     "hopTime": "frames",
+    "hopElevationTimeScale": "%",
+    "hopElevationArcScale": "%",
+    "tilesToAccelerate": "tiles",
+    "maxWalkSpeed": "speed",
     "hopSpinSpeed": "frames",
+    "hopSwayWidth": "px",
     "hopPause": "frames",
     "teleportTime": "frames",
     "teleportPause": "frames",
@@ -433,6 +520,9 @@ FIELD_UNITS = {
     "chainMovementVariance": "moves",
     "ramMaxSpeed": "frames",
     "chainPauseVariance": "frames",
+    "chainRepositionJumpCount": "moves",
+    "chainRepositionSpeed": "speed",
+    "chainRepositionDistance": "tiles",
     "alertTime": "frames",
     "alertness": "tiles",
     "alertChance": "%",
@@ -517,6 +607,10 @@ FIELD_PREFIXES = {
     "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chainPauseAction": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_",
     "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "hopAllowVerticalObstacles": "OW_WILD_BEHAVIOR_BOOL_",
+    "chainRepositionDust": "OW_WILD_BEHAVIOR_BOOL_",
+    "chainRepositionAllowCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "chainRepositionAllowDiagonal": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
     "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveContinueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
@@ -557,6 +651,7 @@ CANONICAL_MOVEMENT_STYLE_RAWS = [
     "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
     "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
     "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND",
 ]
 
 CANONICAL_TARGET_RAWS = [
@@ -584,6 +679,9 @@ CANONICAL_CHAIN_PAUSE_ACTION_RAWS = [
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE",
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND",
+    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS",
+    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS",
+    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS",
 ]
 
 CANONICAL_ALLOWED_TILE_RAWS = [
@@ -604,7 +702,12 @@ ALLOWED_TERRAIN_OPTIONS = [
     ("water", "Water", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER"),
     ("canopy", "Canopy", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY"),
     ("grass", "Grass", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS"),
+    ("player", "Player tile", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER"),
     ("player-front", "Player front", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT"),
+    ("rooftop", "Rooftop", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP"),
+    ("signpost", "Signpost", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST"),
+    ("mailbox", "Mailbox", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX"),
+    ("flowerbed", "Flowerbed", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED"),
 ]
 
 CANONICAL_PROFILE_FIELD_RAWS = {
@@ -618,6 +721,7 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "specialAction": CANONICAL_MOVEMENT_STYLE_RAWS,
     "alertSpecialAction": CANONICAL_ALERT_SPECIAL_ACTION_RAWS,
     "chainPauseAction": CANONICAL_CHAIN_PAUSE_ACTION_RAWS,
+    "hopAllowVerticalObstacles": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "chillAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
     "attentiveAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
     "tiredAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
@@ -713,6 +817,21 @@ OVERRIDE3_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE": "chainPauseVariance",
     "OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE": "activeProfile",
     "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE": "tiredProfile",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_TIME_SCALE": "hopElevationTimeScale",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_ARC_SCALE": "hopElevationArcScale",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TILES_TO_ACCELERATE": "tilesToAccelerate",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_MAX_WALK_SPEED": "maxWalkSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_MASK": "spawnDestinationMask",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_OVERRIDE_MASK": "spawnDestinationOverrideMask",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ALLOW_VERTICAL_OBSTACLES": "hopAllowVerticalObstacles",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_JUMP_COUNT": "chainRepositionJumpCount",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_HOP_SWAY_WIDTH": "hopSwayWidth",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_HOP_SWAY_WIDTH": "spawnHopSwayWidth",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_SPEED": "chainRepositionSpeed",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DISTANCE": "chainRepositionDistance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DUST": "chainRepositionDust",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_CARDINAL": "chainRepositionAllowCardinal",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_DIAGONAL": "chainRepositionAllowDiagonal",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -849,8 +968,7 @@ SPAWN_SETTING_GROUPS = [
         "key": "capacity",
         "label": "Visible Spawn Capacity",
         "settings": [
-            {"symbol": "OW_WILD_GRASS_MAX_SPAWNS", "label": "Grass max spawns", "min": 0, "max": 10, "source": SPAWNS_INTERNAL_HEADER},
-            {"symbol": "OW_WILD_SURF_MAX_SPAWNS", "label": "Surf max spawns", "min": 0, "max": 10, "source": SPAWNS_INTERNAL_HEADER},
+            {"symbol": "OW_WILD_LAND_SURF_MAX_SPAWNS", "label": "Grass + Surf max spawns", "min": 0, "max": 10, "source": SPAWNS_INTERNAL_HEADER},
             {"symbol": "OW_WILD_HEADBUTT_MAX_SPAWNS", "label": "Headbutt max spawns", "min": 0, "max": 10, "source": SPAWNS_INTERNAL_HEADER},
             {"symbol": "OW_WILD_FISH_MAX_SPAWNS", "label": "Fishing max spawns", "min": 0, "max": 10, "source": SPAWNS_INTERNAL_HEADER},
             {"symbol": "OW_WILD_MAX_SAVED_SHINIES", "label": "Saved shiny slots", "min": 0, "max": 50, "source": SPAWNS_INTERNAL_HEADER},
@@ -860,7 +978,7 @@ SPAWN_SETTING_GROUPS = [
         "key": "spawnFlow",
         "label": "Spawn Flow",
         "settings": [
-            {"symbol": "OW_WILD_REFILL_COOLDOWN_STEPS", "label": "Refill cooldown steps", "min": 0, "max": 255, "source": OVERLAY_SOURCE},
+            {"symbol": "OW_WILD_REFILL_COOLDOWN_STEPS", "label": "Base refill cooldown steps", "min": 0, "max": 24, "source": OVERLAY_SOURCE},
             {"symbol": "OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT", "label": "Headbutt spawn chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
             {"symbol": "OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN", "label": "Headbutt attempt cooldown", "min": 0, "max": 255, "source": OVERLAY_SOURCE},
             {"symbol": "OW_WILD_FISHING_SPAWN_CHANCE_PERCENT", "label": "Fishing spawn chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
@@ -935,8 +1053,14 @@ NUMERIC_PROFILE_FIELDS = {
     "hopMaxDistance",
     "hopPause",
     "hopTime",
+    "hopElevationTimeScale",
+    "hopElevationArcScale",
+    "tilesToAccelerate",
+    "maxWalkSpeed",
     "hopSpinSpeed",
+    "hopSwayWidth",
     "spawnHopTime",
+    "spawnHopSwayWidth",
     "attentiveHopSpinSpeed",
     "teleportTime",
     "teleportPause",
@@ -961,6 +1085,9 @@ NUMERIC_PROFILE_FIELDS = {
     "chainMovementVariance",
     "ramMaxSpeed",
     "chainPauseVariance",
+    "chainRepositionJumpCount",
+    "chainRepositionSpeed",
+    "chainRepositionDistance",
     "attentiveChaseBoostDistance",
     "attentiveChaseBoostSpeed",
     "attentiveCircleRadius",
@@ -969,6 +1096,8 @@ NUMERIC_PROFILE_FIELDS = {
     "circleRadius",
     "chillAllowedTerrainMask",
     "chillAllowedTerrainOverrideMask",
+    "spawnDestinationMask",
+    "spawnDestinationOverrideMask",
     "activeProfile",
     "tiredProfile",
 }
@@ -983,6 +1112,8 @@ RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(
         "tiredProfile",
         "chillAllowedTerrainMask",
         "chillAllowedTerrainOverrideMask",
+        "spawnDestinationMask",
+        "spawnDestinationOverrideMask",
     }
 )
 BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
@@ -994,12 +1125,21 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "teleportTime",
     "teleportPause",
     "hopTime",
+    "hopElevationTimeScale",
+    "hopElevationArcScale",
+    "tilesToAccelerate",
+    "maxWalkSpeed",
     "hopSpinSpeed",
+    "hopSwayWidth",
     "spawnHopTime",
+    "spawnHopSwayWidth",
     "attentiveHopSpinSpeed",
     "ramAccelerationSteps",
     "chainMovementVariance",
     "chainPauseVariance",
+    "chainRepositionJumpCount",
+    "chainRepositionSpeed",
+    "chainRepositionDistance",
     "attentiveHopPause",
     "attentiveTeleportTime",
     "attentiveTeleportPause",
@@ -1085,8 +1225,14 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "hopMaxDistance": 12,
     "hopPause": 255,
     "hopTime": 64,
+    "hopElevationTimeScale": 255,
+    "hopElevationArcScale": 255,
+    "tilesToAccelerate": 32,
+    "maxWalkSpeed": 4,
     "hopSpinSpeed": 15,
+    "hopSwayWidth": 8,
     "spawnHopTime": 64,
+    "spawnHopSwayWidth": 8,
     "attentiveHopSpinSpeed": 15,
     "teleportTime": 64,
     "teleportPause": 255,
@@ -1096,6 +1242,9 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "ramAccelerationSteps": 32,
     "chainMovementVariance": 32,
     "chainPauseVariance": 255,
+    "chainRepositionJumpCount": 8,
+    "chainRepositionSpeed": 4,
+    "chainRepositionDistance": 5,
     # Shared storage: Movement Chain reads this as a 0..255-frame pause, while
     # RAM consumers independently clamp it to their 0..4 speed tier.
     "ramMaxSpeed": 255,
@@ -1105,8 +1254,10 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "chaseBoostDistance": 32,
     "chaseBoostSpeed": 4,
     "circleRadius": 8,
-    "chillAllowedTerrainMask": 63,
-    "chillAllowedTerrainOverrideMask": 63,
+    "chillAllowedTerrainMask": 1023,
+    "chillAllowedTerrainOverrideMask": 1023,
+    "spawnDestinationMask": 1023,
+    "spawnDestinationOverrideMask": 1023,
     "activeProfile": 255,
     "tiredProfile": 255,
 }
@@ -1114,8 +1265,13 @@ NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "chillSpeed": 1,
     "attentiveSpeed": 1,
     "tiredSpeed": 1,
+    "tilesToAccelerate": 1,
+    "maxWalkSpeed": 1,
     "spawnDestinationMinDistance": 1,
     "spawnDestinationMaxDistance": 1,
+    "chainRepositionJumpCount": 1,
+    "chainRepositionSpeed": 1,
+    "chainRepositionDistance": 1,
 }
 
 for _profile_field, _source_field in {
@@ -1457,6 +1613,7 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 def _uncached_macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     label_overrides = {
         "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND": "Turn around",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
@@ -1642,7 +1799,7 @@ def canonical_profile_change_raw(
                 f"relative override for {field} must be between {RELATIVE_OVERRIDE_DELTA_MIN:+d} and {RELATIVE_OVERRIDE_DELTA_MAX:+d}"
             )
         maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-        minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+        minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
         if threshold < minimum or threshold > maximum:
             raise ValueError(f"override bound for {field} must be between {minimum} and {maximum}")
         return f"{delta:+d}, {operator}{threshold}"
@@ -1667,7 +1824,7 @@ def canonical_profile_change_raw(
             raise ValueError(f"field cannot use a numeric override operator: {field}")
         threshold = int(bound_match.group(1), 10)
         maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-        minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+        minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
         if threshold < minimum or threshold > maximum:
             raise ValueError(f"override bound for {field} must be between {minimum} and {maximum}")
         return f"/{cleaned[1]}{threshold}"
@@ -1686,6 +1843,65 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     if len(items) == 1 and clean_token(str(items[0])) == "0":
         return {
             field: make_value("0", field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V62):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V62)
+        }
+        speed = numeric(make_value(legacy["chainRepositionSpeed"], "chainRepositionSpeed", macros)) or 1
+        legacy["chainRepositionDistance"] = str(min(5, speed * 2 - 1))
+        legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V61):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V61)
+        }
+        legacy["chainRepositionSpeed"] = "1"
+        legacy["chainRepositionDistance"] = "1"
+        legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V58):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V58)
+        }
+        legacy["spawnHopSwayWidth"] = "0"
+        legacy["chainRepositionSpeed"] = "1"
+        legacy["chainRepositionDistance"] = "1"
+        legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V57):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V57)
+        }
+        legacy["hopSwayWidth"] = "0"
+        legacy["spawnHopSwayWidth"] = "0"
+        legacy["chainRepositionSpeed"] = "1"
+        legacy["chainRepositionDistance"] = "1"
+        legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        return {
+            field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
         }
     if len(PROFILE_FIELDS) < len(items) <= len(LEGACY_PROFILE_FIELDS):
@@ -1707,6 +1923,16 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
             "avoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_NO",
             "activeProfile": "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE",
             "tiredProfile": "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED",
+            "hopElevationTimeScale": "100",
+            "hopElevationArcScale": "100",
+            "tilesToAccelerate": "3",
+            "maxWalkSpeed": "4",
+            "chainRepositionJumpCount": "3",
+            "chainRepositionSpeed": "1",
+            "chainRepositionDistance": "1",
+            "chainRepositionDust": "OW_WILD_BEHAVIOR_BOOL_YES",
+            "chainRepositionAllowCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
+            "chainRepositionAllowDiagonal": "OW_WILD_BEHAVIOR_BOOL_YES",
         })
         return {
             field: make_value(migrated[field], field, macros)
@@ -1715,7 +1941,22 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     if len(items) > len(PROFILE_FIELDS):
         raise ParseError(f"profile has {len(items)} fields, expected {len(PROFILE_FIELDS)}")
     if len(items) < len(PROFILE_FIELDS):
-        items = [*items, *(["0"] * (len(PROFILE_FIELDS) - len(items)))]
+        items = [
+            *items,
+            *("100" if field in {"hopElevationTimeScale", "hopElevationArcScale"}
+              else "3" if field == "tilesToAccelerate"
+              else "4" if field == "maxWalkSpeed"
+              else "3" if field == "chainRepositionJumpCount"
+              else "1" if field == "chainRepositionSpeed"
+              else "1" if field == "chainRepositionDistance"
+              else "OW_WILD_BEHAVIOR_BOOL_YES" if field in {
+                  "chainRepositionDust",
+                  "chainRepositionAllowCardinal",
+                  "chainRepositionAllowDiagonal",
+              }
+              else "0"
+              for field in PROFILE_FIELDS[len(items):]),
+        ]
     return {
         field: make_value(str(items[idx]), field, macros)
         for idx, field in enumerate(PROFILE_FIELDS)
@@ -1915,7 +2156,7 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
                     else (int(canonical_threshold.group(1), 10) if canonical_threshold else stored_value)
                 )
             maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-            minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+            minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
             if threshold is None or threshold < minimum or threshold > maximum:
                 raise ParseError(f"{operator} override for {field} must be between {minimum} and {maximum}")
             compound_bound_profile[field]["raw"] = f"{operator}{threshold}"
@@ -1982,7 +2223,7 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
     expected_member_start = 0
     profiles = []
     for order, entry in enumerate(entries, 1):
-        if len(entry) in {8, 11, 17, 18} and isinstance(entry[0], list):
+        if len(entry) in {8, 11, 17, 18, 21} and isinstance(entry[0], list):
             member_start = numeric(make_value(str(entry[1]), None, macros))
             member_count = numeric(make_value(str(entry[2]), None, macros))
             target_mode = make_value(str(entry[3]), None, macros)
@@ -2032,6 +2273,38 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
                 if is_global:
                     raise ParseError(f"override profile #{order} ALL target requires a shared condition")
             expected_member_start = member_end
+            condition_raws = default_override_condition_raws()
+            behavior_start = 4
+            if len(entry) == 21:
+                condition_raws = {
+                    "conditionParentProfile": clean_token(str(entry[4])),
+                    "conditionMask": clean_token(str(entry[5])),
+                    "conditionValue": clean_token(str(entry[6])),
+                }
+                behavior_start = 7
+            condition_parent = make_condition_value(
+                condition_raws["conditionParentProfile"],
+                "conditionParentProfile",
+                macros,
+            )
+            condition_mask = make_condition_value(
+                condition_raws["conditionMask"],
+                "conditionMask",
+                macros,
+            )
+            condition_value = make_condition_value(
+                condition_raws["conditionValue"],
+                "conditionValue",
+                macros,
+            )
+            if any(numeric(value) is None for value in (condition_parent, condition_mask, condition_value)):
+                raise ParseError(f"override profile #{order} has invalid condition metadata")
+            if not 0 <= numeric(condition_parent) <= 0xFF:
+                raise ParseError(f"override profile #{order} condition parent exceeds u8 storage")
+            if not 0 <= numeric(condition_mask) <= 0xFF or not 0 <= numeric(condition_value) <= 0xFF:
+                raise ParseError(f"override profile #{order} condition bits exceed u8 storage")
+            if numeric(condition_value) & ~numeric(condition_mask):
+                raise ParseError(f"override profile #{order} condition value is outside its mask")
             profiles.append(
                 {
                     "order": order,
@@ -2043,7 +2316,10 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
                     "members": members,
                     "memberSymbols": member_symbols,
                     "targetMode": target_mode,
-                    "behavior": parse_behavior_override(entry[4:], macros),
+                    "conditionParentProfile": condition_parent,
+                    "conditionMask": condition_mask,
+                    "conditionValue": condition_value,
+                    "behavior": parse_behavior_override(entry[behavior_start:], macros),
                 }
             )
             continue
@@ -2056,6 +2332,24 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
             }
         )
     if uses_member_model:
+        for profile_index, profile in enumerate(profiles):
+            parent = numeric(profile["conditionParentProfile"])
+            if parent != CONDITION_PARENT_NONE_VALUE and (
+                parent is None or parent >= profile_index
+            ):
+                raise ParseError(
+                    f"override profile #{profile_index + 1} has an invalid condition parent"
+                )
+        for profile_index in range(len(profiles)):
+            seen = {profile_index}
+            parent = numeric(profiles[profile_index]["conditionParentProfile"])
+            while parent != CONDITION_PARENT_NONE_VALUE:
+                if parent in seen:
+                    raise ParseError(
+                        f"override profile #{profile_index + 1} has a cyclic condition parent"
+                    )
+                seen.add(parent)
+                parent = numeric(profiles[parent]["conditionParentProfile"])
         if expected_member_start == 0:
             sentinel_ok = len(member_values) == 1 and numeric(member_values[0]) == macros.get("SPECIES_NONE", 0)
             if not sentinel_ok:
@@ -2063,6 +2357,141 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
         elif expected_member_start != len(member_values):
             raise ParseError("override member table contains unreferenced entries")
     return profiles
+
+
+def conditional_state_value(raw: str, field: str, macros: dict[str, int]) -> dict:
+    value = make_value(clean_token(raw), field, macros)
+    if value.get("value") is None and clean_token(raw) == CONDITIONAL_PROFILE_NONE_RAW:
+        value["value"] = CONDITIONAL_PROFILE_NONE_VALUE
+    return value
+
+
+def conditional_state_entries_are_empty_sentinel(entries: list) -> bool:
+    if len(entries) != 1 or not isinstance(entries[0], list) or len(entries[0]) not in {4, 6}:
+        return False
+    raws = list(map(
+        lambda raw: clean_token(str(raw)),
+        entries[0],
+    ))
+    parent_raw, override_raw = raws[:2]
+
+    def is_none(raw: str) -> bool:
+        if raw == CONDITIONAL_PROFILE_NONE_RAW:
+            return True
+        try:
+            return int(raw, 0) == CONDITIONAL_PROFILE_NONE_VALUE
+        except ValueError:
+            return False
+
+    try:
+        condition_values = [int(raw, 0) for raw in raws[2:]]
+    except ValueError:
+        return False
+    return is_none(parent_raw) and is_none(override_raw) and not any(condition_values)
+
+
+def validate_conditional_state(
+    state: dict[str, int],
+    label: str,
+    override_profile_count: int,
+    error_type: type[Exception] = ParseError,
+) -> None:
+    parent_profile = state["parentProfile"]
+    override_profile = state["overrideProfile"]
+    terrain_mask = state["terrainMask"]
+    terrain_override_mask = state["terrainOverrideMask"]
+    min_speed = state["minMovementSpeed"]
+    max_speed = state["maxMovementSpeed"]
+    if not 0 <= parent_profile <= 0xFF or not 0 <= override_profile <= 0xFF:
+        raise error_type(f"{label} profile reference exceeds u8 storage")
+    if parent_profile >= override_profile_count:
+        raise error_type(f"{label} parent profile is out of range")
+    if override_profile != CONDITIONAL_PROFILE_NONE_VALUE and override_profile >= override_profile_count:
+        raise error_type(f"{label} override profile is out of range")
+    if terrain_mask & ~CONDITIONAL_TERRAIN_ALL_VALUE \
+            or terrain_override_mask & ~CONDITIONAL_TERRAIN_ALL_VALUE:
+        raise error_type(f"{label} terrain condition contains unknown terrain bits")
+    if terrain_mask & ~terrain_override_mask:
+        raise error_type(f"{label} enabled terrains must also be explicit")
+    if (min_speed == 0) != (max_speed == 0):
+        raise error_type(f"{label} movement speed must have both minimum and maximum bounds")
+    if min_speed not in range(CONDITIONAL_MOVEMENT_SPEED_MAX + 1) \
+            or max_speed not in range(CONDITIONAL_MOVEMENT_SPEED_MAX + 1):
+        raise error_type(f"{label} movement speed bounds must be 0 (any) or 1..4")
+    if min_speed > max_speed:
+        raise error_type(f"{label} minimum movement speed exceeds its maximum")
+    if terrain_override_mask == 0 and min_speed == 0 and max_speed == 0:
+        raise error_type(f"{label} must select a terrain or movement-speed condition")
+
+
+def parse_behavior_conditional_states(
+    source: str,
+    macros: dict[str, int],
+    override_profile_count: int,
+) -> list[dict[str, int]]:
+    if "OWBD_CONDITIONAL_STATE_COUNT" not in macros \
+            and "sOverworldWildBehaviorConditionalStates" not in source:
+        return []
+    entries = parse_initializer(
+        extract_braced_initializer(source, "sOverworldWildBehaviorConditionalStates")
+    )
+    if conditional_state_entries_are_empty_sentinel(entries):
+        return []
+    states: list[dict[str, int]] = []
+    signatures: set[tuple[int, int, int, int, int]] = set()
+    for order, entry in enumerate(entries, 1):
+        if not isinstance(entry, list) or len(entry) not in {4, 6}:
+            raise ParseError(f"conditional state #{order} initializer shape changed")
+        values = [
+            conditional_state_value(str(entry[0]), "parentProfile", macros),
+            conditional_state_value(str(entry[1]), "overrideProfile", macros),
+        ]
+        if len(entry) == 6:
+            values.extend([
+                conditional_state_value(str(entry[2]), "terrainMask", macros),
+                conditional_state_value(str(entry[3]), "terrainOverrideMask", macros),
+                conditional_state_value(str(entry[4]), "minMovementSpeed", macros),
+                conditional_state_value(str(entry[5]), "maxMovementSpeed", macros),
+            ])
+        else:
+            # Read the single legacy rooftop/signpost condition and expose it in
+            # the richer terrain-mask model. The next save rewrites the row.
+            condition_mask = conditional_state_value(str(entry[2]), "conditionMask", macros)
+            condition_value = conditional_state_value(str(entry[3]), "conditionValue", macros)
+            if numeric(condition_mask) is None or numeric(condition_value) is None:
+                raise ParseError(f"conditional state #{order} contains an unresolved value")
+            rooftop_mask = (
+                macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP", 1 << 6)
+                | macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST", 1 << 7)
+            )
+            explicit_mask = rooftop_mask if int(numeric(condition_mask)) & CONDITION_ON_ROOFTOP_VALUE else 0
+            enabled_mask = rooftop_mask if int(numeric(condition_value)) & CONDITION_ON_ROOFTOP_VALUE else 0
+            values.extend([
+                make_value(str(enabled_mask), "terrainMask", macros),
+                make_value(str(explicit_mask), "terrainOverrideMask", macros),
+                make_value("0", "minMovementSpeed", macros),
+                make_value("0", "maxMovementSpeed", macros),
+            ])
+        if any(numeric(value) is None for value in values):
+            raise ParseError(f"conditional state #{order} contains an unresolved value")
+        parent_profile, override_profile, terrain_mask, terrain_override_mask, min_speed, max_speed = (
+            int(numeric(value)) for value in values
+        )
+        state = {
+            "parentProfile": parent_profile,
+            "overrideProfile": override_profile,
+            "terrainMask": terrain_mask,
+            "terrainOverrideMask": terrain_override_mask,
+            "minMovementSpeed": min_speed,
+            "maxMovementSpeed": max_speed,
+        }
+        validate_conditional_state(state, f"conditional state #{order}", override_profile_count)
+        signature = (parent_profile, terrain_mask, terrain_override_mask, min_speed, max_speed)
+        if signature in signatures:
+            raise ParseError(f"conditional state #{order} duplicates an existing parent condition")
+        signatures.add(signature)
+        states.append(state)
+    return states
 
 
 def parse_behavior_override_rules(source: str, macros: dict[str, int], group_labels: dict[int, dict]) -> list[dict]:
@@ -2275,6 +2704,14 @@ def parse_pair_table(source: str, name: str, fields: tuple[str, str], macros: di
 
 
 def parse_primitive_maps(source: str, macros: dict[str, int]) -> dict[str, list]:
+    alert_primitives = [
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_NONE", "OW_WILD_BEHAVIOR_REACTION_NONE"),
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_FACING_LINE", "OW_WILD_BEHAVIOR_REACTION_EMOTE"),
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_FACING_LINE_CLOSE_RADIUS", "OW_WILD_BEHAVIOR_REACTION_EMOTE"),
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_CARDINAL_LINE", "OW_WILD_BEHAVIOR_REACTION_EMOTE"),
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_RADIUS", "OW_WILD_BEHAVIOR_REACTION_EMOTE"),
+        ("OW_WILD_BEHAVIOR_ALERT_LOGIC_TERRAIN_ONLY", "OW_WILD_BEHAVIOR_REACTION_EMOTE"),
+    ]
     return {
         "spawnLocomotionBySpawnState": parse_value_table(
             source,
@@ -2282,12 +2719,13 @@ def parse_primitive_maps(source: str, macros: dict[str, int]) -> dict[str, list]
             "spawnLocomotion",
             macros,
         ),
-        "alertPrimitivesByRange": parse_pair_table(
-            source,
-            "sOverworldWildAlertPrimitivesByRange",
-            ("alertLogic", "alertReaction"),
-            macros,
-        ),
+        "alertPrimitivesByRange": [
+            {
+                "alertLogic": make_value(logic, "alertLogic", macros),
+                "alertReaction": make_value(reaction, "alertReaction", macros),
+            }
+            for logic, reaction in alert_primitives
+        ],
     }
 
 
@@ -2521,6 +2959,33 @@ def clone_profile(profile: dict[str, dict]) -> dict[str, dict]:
     return copy.deepcopy(profile)
 
 
+def spawn_destination_mask_for_legacy(value: dict | None) -> int:
+    """Map the retained single-destination value into the shared policy pool."""
+    destination = numeric(value or {})
+    if destination == 1:
+        return 1 << 2  # Canopy
+    if destination == 2:
+        return 1 << 0  # Land
+    if destination == 3:
+        return 1 << 3  # Grass
+    if destination in {4, 5}:
+        return 1 << 1  # Shore and Water share the Water policy.
+    if destination in {7, 8, 9, 10, 11}:
+        return 1 << 5  # Player front, with the legacy value retaining distance.
+    if destination in {6, 12, 13, 14, 15, 16}:
+        return 1 << 4  # Player-relative / behind / next-to-player.
+    if destination == 17:
+        return 1 << 6  # Rooftop
+    if destination == 18:
+        return 1 << 7  # Signpost
+    if destination == 19:
+        return 1 << 8  # Mailbox
+    if destination == 20:
+        return 1 << 9  # Flowerbed
+    # Pool follows the natural land/surf/headbutt encounter destination.
+    return (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)
+
+
 def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
     changes = []
     relative_fields = set(override.get("relativeFields") or [])
@@ -2532,9 +2997,11 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
         + override.get("mask3", {"bits": []})["bits"]
     )
     active_fields = {bit.get("field") for bit in bits}
-    terrain_fields = {
+    policy_fields = {
         "chillAllowedTerrainMask",
         "chillAllowedTerrainOverrideMask",
+        "spawnDestinationMask",
+        "spawnDestinationOverrideMask",
     }
     if "chillAllowedTerrainOverrideMask" in active_fields:
         before = profile["chillAllowedTerrainMask"]
@@ -2542,12 +3009,12 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
         before_explicit = numeric(profile["chillAllowedTerrainOverrideMask"]) or 0
         override_mask = numeric(override["profile"]["chillAllowedTerrainMask"]) or 0
         explicit_mask = numeric(override["profile"]["chillAllowedTerrainOverrideMask"]) or 0
-        explicit_mask &= 0x3F
+        explicit_mask &= 0x3FF
         resolved = (before_mask & ~explicit_mask) | (override_mask & explicit_mask)
-        after = make_value(str(resolved & 0x3F), "chillAllowedTerrainMask", {})
+        after = make_value(str(resolved & 0x3FF), "chillAllowedTerrainMask", {})
         profile["chillAllowedTerrainMask"] = after
         profile["chillAllowedTerrainOverrideMask"] = make_value(
-            str((before_explicit | explicit_mask) & 0x3F),
+            str((before_explicit | explicit_mask) & 0x3FF),
             "chillAllowedTerrainOverrideMask",
             {},
         )
@@ -2564,9 +3031,58 @@ def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
                     "operand": None,
                 }
             )
+    if "spawnDestinationOverrideMask" in active_fields:
+        before = profile["spawnDestinationMask"]
+        before_mask = numeric(before) or 0
+        before_explicit = numeric(profile["spawnDestinationOverrideMask"]) or 0
+        override_mask = numeric(override["profile"]["spawnDestinationMask"]) or 0
+        explicit_mask = numeric(override["profile"]["spawnDestinationOverrideMask"]) or 0
+        explicit_mask &= 0x3FF
+        resolved = (before_mask & ~explicit_mask) | (override_mask & explicit_mask)
+        after = make_value(str(resolved & 0x3FF), "spawnDestinationMask", {})
+        profile["spawnDestinationMask"] = after
+        profile["spawnDestinationOverrideMask"] = make_value(
+            str((before_explicit | explicit_mask) & 0x3FF),
+            "spawnDestinationOverrideMask",
+            {},
+        )
+        if before_mask != resolved:
+            changes.append(
+                {
+                    "field": "spawnDestinationMask",
+                    "label": FIELD_LABELS["spawnDestinationMask"],
+                    "before": before,
+                    "after": after,
+                    "relative": False,
+                    "delta": None,
+                    "operator": "absolute",
+                    "operand": None,
+                }
+            )
+    elif "spawnDestination" in active_fields:
+        # Existing source profiles can still carry the legacy scalar override.
+        # Mirror it into the new independent policy until that profile is saved.
+        before = profile["spawnDestinationMask"]
+        resolved = spawn_destination_mask_for_legacy(override["profile"]["spawnDestination"])
+        after = make_value(str(resolved), "spawnDestinationMask", {})
+        profile["spawnDestinationMask"] = after
+        profile["spawnDestinationOverrideMask"] = make_value("1023", "spawnDestinationOverrideMask", {})
+        if numeric(before) != resolved:
+            changes.append(
+                {
+                    "field": "spawnDestinationMask",
+                    "label": FIELD_LABELS["spawnDestinationMask"],
+                    "before": before,
+                    "after": after,
+                    "relative": False,
+                    "delta": None,
+                    "operator": "absolute",
+                    "operand": None,
+                }
+            )
     for bit in bits:
         field = bit.get("field")
-        if not field or field in terrain_fields:
+        if not field or field in policy_fields:
             continue
         before = profile[field]
         after = copy.deepcopy(override["profile"][field])
@@ -2676,6 +3192,11 @@ def validate_override_profile_groups(variable_overrides: list[dict], override_pr
 def validate_behavior_data_override_profiles(raw_behavior_data: str, macros: dict[str, int], group_labels: dict[int, dict]) -> None:
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
+    conditional_states = parse_behavior_conditional_states(
+        behavior_source,
+        macros,
+        len(variable_overrides),
+    )
     override_profile_names = parse_override_profile_names(raw_behavior_data)
     validate_override_profile_groups(variable_overrides, override_profile_names)
 
@@ -2686,6 +3207,15 @@ def override_edit_profile(behavior: dict, macros: dict[str, int]) -> dict[str, d
     for field in PROFILE_FIELDS:
         if field not in active_fields:
             profile[field] = make_value("", field, macros)
+    if "spawnDestination" in active_fields \
+            and "spawnDestinationOverrideMask" not in active_fields:
+        legacy_mask = spawn_destination_mask_for_legacy(behavior["profile"]["spawnDestination"])
+        profile["spawnDestinationMask"] = make_value(str(legacy_mask), "spawnDestinationMask", macros)
+        profile["spawnDestinationOverrideMask"] = make_value(
+            str(macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)),
+            "spawnDestinationOverrideMask",
+            macros,
+        )
     return profile
 
 
@@ -2753,7 +3283,24 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
         set_field("chaseBoostSpeed", "4")
     if (numeric(profile["circleRadius"]) or 0) > 8:
         set_field("circleRadius", "8")
+    if (numeric(profile["tilesToAccelerate"]) or 0) < 1:
+        set_field("tilesToAccelerate", "3")
+    elif (numeric(profile["tilesToAccelerate"]) or 0) > 32:
+        set_field("tilesToAccelerate", "32")
+    if (numeric(profile["maxWalkSpeed"]) or 0) < 1:
+        set_field("maxWalkSpeed", "4")
+    elif (numeric(profile["maxWalkSpeed"]) or 0) > 4:
+        set_field("maxWalkSpeed", "4")
+    if (numeric(profile["chainRepositionSpeed"]) or 0) < 1:
+        set_field("chainRepositionSpeed", "1")
+    elif (numeric(profile["chainRepositionSpeed"]) or 0) > 4:
+        set_field("chainRepositionSpeed", "4")
+    if (numeric(profile["chainRepositionDistance"]) or 0) < 1:
+        set_field("chainRepositionDistance", "1")
+    elif (numeric(profile["chainRepositionDistance"]) or 0) > 5:
+        set_field("chainRepositionDistance", "5")
     for bool_field in (
+        "hopAllowVerticalObstacles",
         "continueWhenArrived",
         "avoidPreviousTile",
     ):
@@ -2762,6 +3309,16 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
             macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
         }:
             set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_NO")
+    for bool_field in (
+        "chainRepositionDust",
+        "chainRepositionAllowCardinal",
+        "chainRepositionAllowDiagonal",
+    ):
+        if numeric(profile[bool_field]) not in {
+            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
+            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
+        }:
+            set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_YES")
     if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
         set_field("stamina", "1")
         set_field("alertness", "0")
@@ -2770,7 +3327,7 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
 
 
 def resolve_inherited_terrain_policy(profile: dict[str, dict], macros: dict[str, int]) -> None:
-    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3F)
+    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)
     default_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT", 1)
     explicit_mask = (numeric(profile["chillAllowedTerrainOverrideMask"]) or 0) & all_mask
     value_mask = numeric(profile["chillAllowedTerrainMask"]) or 0
@@ -2783,6 +3340,24 @@ def resolve_inherited_terrain_policy(profile: dict[str, dict], macros: dict[str,
     profile["chillAllowedTerrainOverrideMask"] = make_value(
         str(all_mask),
         "chillAllowedTerrainOverrideMask",
+        macros,
+    )
+
+
+def resolve_inherited_spawn_destination_policy(profile: dict[str, dict], macros: dict[str, int]) -> None:
+    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)
+    explicit_mask = (numeric(profile["spawnDestinationOverrideMask"]) or 0) & all_mask
+    value_mask = numeric(profile["spawnDestinationMask"]) or 0
+    legacy_mask = spawn_destination_mask_for_legacy(profile.get("spawnDestination"))
+    resolved = (value_mask & explicit_mask) | (legacy_mask & ~explicit_mask)
+    profile["spawnDestinationMask"] = make_value(
+        str(resolved & all_mask),
+        "spawnDestinationMask",
+        macros,
+    )
+    profile["spawnDestinationOverrideMask"] = make_value(
+        str(all_mask),
+        "spawnDestinationOverrideMask",
         macros,
     )
 
@@ -4308,7 +4883,11 @@ def class_for_context(context: dict, class_rules: list[dict], class_count: int, 
     return behavior_class, hits
 
 
-def behavior_override_applies(context: dict, override: dict, macros: dict[str, int]) -> bool:
+def behavior_override_targets_context(
+    context: dict,
+    override: dict,
+    macros: dict[str, int],
+) -> bool:
     if "targetMode" not in override:
         return match_applies(context, override["match"], macros)
     mode = numeric(override["targetMode"])
@@ -4323,12 +4902,77 @@ def behavior_override_applies(context: dict, override: dict, macros: dict[str, i
     return any(numeric(member) == context["species"] for member in override.get("members", []))
 
 
+def behavior_override_applies(
+    context: dict,
+    override: dict,
+    macros: dict[str, int],
+    applicable_override_indexes: set[int] | None = None,
+) -> bool:
+    del applicable_override_indexes
+    return behavior_override_targets_context(context, override, macros)
+
+
+def selected_conditional_override_indexes(
+    context: dict,
+    conditional_states: list[dict[str, int]],
+    normally_applicable_override_indexes: set[int],
+    movement_speed: int,
+    macros: dict[str, int],
+) -> set[int]:
+    terrain_mask = context.get("conditionTerrainMask")
+    if terrain_mask is None:
+        terrain = int(context.get("terrain", 0))
+        terrain_mask = {
+            macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0): macros.get(
+                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND", 1 << 0
+            ),
+            macros.get("OW_WILD_SPAWN_TERRAIN_SURF", 1): macros.get(
+                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", 1 << 1
+            ),
+            macros.get("OW_WILD_SPAWN_TERRAIN_FISHING", 3): macros.get(
+                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", 1 << 1
+            ),
+            macros.get("OW_WILD_SPAWN_TERRAIN_HEADBUTT", 2): macros.get(
+                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY", 1 << 2
+            ),
+        }.get(terrain, 0)
+    terrain_mask = int(terrain_mask) & CONDITIONAL_TERRAIN_ALL_VALUE
+
+    def conditions_match(state: dict[str, int]) -> bool:
+        explicit = state["terrainOverrideMask"]
+        enabled = state["terrainMask"] & explicit
+        disabled = explicit & ~state["terrainMask"]
+        if explicit and not terrain_mask:
+            return False
+        if terrain_mask & disabled:
+            return False
+        if enabled and not terrain_mask & enabled:
+            return False
+        minimum = state["minMovementSpeed"]
+        maximum = state["maxMovementSpeed"]
+        if minimum and movement_speed < minimum:
+            return False
+        if maximum and movement_speed > maximum:
+            return False
+        return True
+
+    return {
+        state["overrideProfile"]
+        for state in conditional_states
+        if state["overrideProfile"] != CONDITIONAL_PROFILE_NONE_VALUE
+        and state["parentProfile"] in normally_applicable_override_indexes
+        and conditions_match(state)
+    }
+
+
 def resolve_referenced_profile_for_context(
     context: dict,
     class_profiles: list[dict[str, dict]],
     variable_overrides: list[dict],
     macros: dict[str, int],
     reference: dict,
+    normally_applicable_override_indexes: set[int] | None = None,
+    conditional_override_indexes: set[int] | None = None,
 ) -> dict[str, dict] | None:
     reference_index = numeric(reference)
     if reference_index is None or reference_index < 0:
@@ -4345,12 +4989,22 @@ def resolve_referenced_profile_for_context(
         class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     resolved = clone_profile(class_profiles[class_index])
     resolve_inherited_terrain_policy(resolved, macros)
+    resolve_inherited_spawn_destination_policy(resolved, macros)
+    normal_indexes = normally_applicable_override_indexes or set()
+    conditional_indexes = conditional_override_indexes or set()
     for override in variable_overrides:
         if override["order"] == selected_order:
             continue
-        if behavior_override_applies(context, override, macros):
+        override_index = override["order"] - 1
+        if override_index in normal_indexes - conditional_indexes:
             merge_profile(resolved, override["behavior"])
     merge_profile(resolved, selected["behavior"])
+    for override in variable_overrides:
+        if override["order"] == selected_order:
+            continue
+        override_index = override["order"] - 1
+        if override_index in conditional_indexes:
+            merge_profile(resolved, override["behavior"])
     normalize_profile(resolved, macros)
     return resolved
 
@@ -4360,26 +5014,52 @@ def resolve_profile_for_context(
     class_profiles: list[dict[str, dict]],
     variable_overrides: list[dict],
     macros: dict[str, int],
+    conditional_states: list[dict[str, int]] | None = None,
 ) -> tuple[dict[str, dict], list[dict], list[dict], list[dict]]:
     class_index = context["behaviorClass"]
     if class_index >= len(class_profiles):
         class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     profile = clone_profile(class_profiles[class_index])
     resolve_inherited_terrain_policy(profile, macros)
+    resolve_inherited_spawn_destination_policy(profile, macros)
     layers = [{"kind": "class", "label": f"Class profile #{class_index}", "changes": []}]
     variable_hits = []
+    normally_applicable_override_indexes = {
+        override["order"] - 1
+        for override in variable_overrides
+        if behavior_override_targets_context(context, override, macros)
+    }
+    preconditional_profile = clone_profile(profile)
     for override in variable_overrides:
-        if behavior_override_applies(context, override, macros):
-            changes = merge_profile(profile, override["behavior"])
-            variable_hits.append(override)
-            layers.append(
-                {
-                    "kind": "behaviorOverride",
-                    "label": f"Behavior override #{override['order']}",
-                    "changes": changes,
-                    "mask": behavior_override_mask_summary(override["behavior"]),
-                }
-            )
+        override_index = override["order"] - 1
+        if override_index in normally_applicable_override_indexes:
+            merge_profile(preconditional_profile, override["behavior"])
+    normalize_profile(preconditional_profile, macros)
+    preconditional_speed = numeric(preconditional_profile["chillSpeed"]) or 1
+    conditional_override_indexes = selected_conditional_override_indexes(
+        context,
+        conditional_states or [],
+        normally_applicable_override_indexes,
+        preconditional_speed,
+        macros,
+    )
+    for applicable_indexes in (
+        normally_applicable_override_indexes - conditional_override_indexes,
+        conditional_override_indexes,
+    ):
+        for override in variable_overrides:
+            override_index = override["order"] - 1
+            if override_index in applicable_indexes:
+                changes = merge_profile(profile, override["behavior"])
+                variable_hits.append(override)
+                layers.append(
+                    {
+                        "kind": "behaviorOverride",
+                        "label": f"Behavior override #{override['order']}",
+                        "changes": changes,
+                        "mask": behavior_override_mask_summary(override["behavior"]),
+                    }
+                )
     normalizations = normalize_profile(profile, macros)
     if normalizations:
         layers.append({"kind": "normalization", "label": "Runtime fallback", "changes": normalizations})
@@ -4389,6 +5069,8 @@ def resolve_profile_for_context(
         variable_overrides,
         macros,
         profile["activeProfile"],
+        normally_applicable_override_indexes,
+        conditional_override_indexes,
     )
     profile["_tiredProfileData"] = resolve_referenced_profile_for_context(
         context,
@@ -4396,6 +5078,8 @@ def resolve_profile_for_context(
         variable_overrides,
         macros,
         profile["tiredProfile"],
+        normally_applicable_override_indexes,
+        conditional_override_indexes,
     )
     return profile, layers, variable_hits, normalizations
 
@@ -4699,11 +5383,18 @@ def build_data(
         parse_profile(entry, macros)
         for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
     ]
+    for class_profile in class_profiles:
+        resolve_inherited_spawn_destination_policy(class_profile, macros)
     default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
     default_profile = class_profiles[default_class]
     class_rules = parse_behavior_class_rules(behavior_source, macros, group_labels, class_labels)
 
     variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
+    conditional_states = parse_behavior_conditional_states(
+        behavior_source,
+        macros,
+        len(variable_overrides),
+    )
     override_profile_names = parse_override_profile_names(raw_behavior_data)
     validate_override_profile_groups(variable_overrides, override_profile_names)
 
@@ -4765,6 +5456,7 @@ def build_data(
             class_profiles,
             variable_overrides,
             macros,
+            conditional_states,
         )
         max_speed_hits = [
             {"order": override["order"], "summary": override["summary"], "fields": behavior_override_mask_summary(override["behavior"])["labels"]}
@@ -4928,8 +5620,9 @@ def build_data(
             for field in sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS)
         },
         "numericOverrideOperandMinimums": {
-            field: 1
-            for field in sorted(MOVEMENT_SPEED_FIELDS)
+            field: NUMERIC_PROFILE_FIELD_OPTION_MIN[field]
+            for field in sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS)
+            if field in NUMERIC_PROFILE_FIELD_OPTION_MIN
         },
         "relativeOverrideDeltaRange": {
             "min": RELATIVE_OVERRIDE_DELTA_MIN,
@@ -4958,6 +5651,7 @@ def build_data(
         "classRules": class_rules,
         "maxSpeedOverrides": variable_overrides,
         "variableOverrides": variable_overrides,
+        "conditionalStates": conditional_states,
         "groups": [
             {
                 "group": group_labels.get(group, {"name": str(group), "symbol": str(group), "value": group}),
@@ -5406,6 +6100,9 @@ def behavior_blob_counts(raw_source: str) -> dict[str, int]:
                 "OWBD_OVERRIDE_MEMBER_COUNT": "sOverworldWildBehaviorOverrideMembers",
             }
         )
+        if "sOverworldWildBehaviorConditionalStates" in raw_source:
+            count_defines["OWBD_CONDITIONAL_STATE_COUNT"] = \
+                "sOverworldWildBehaviorConditionalStates"
     elif "sOverworldWildBehaviorOverrideRules" in raw_source:
         count_defines.update(
             {
@@ -5418,7 +6115,12 @@ def behavior_blob_counts(raw_source: str) -> dict[str, int]:
     counts = {}
     for define, initializer_name in count_defines.items():
         entries = parse_initializer(extract_braced_initializer(source, initializer_name))
-        counts[define] = len(entries)
+        counts[define] = (
+            0
+            if define == "OWBD_CONDITIONAL_STATE_COUNT"
+            and conditional_state_entries_are_empty_sentinel(entries)
+            else len(entries)
+        )
     return counts
 
 
@@ -5743,6 +6445,7 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
     raw_reorder = []
     raw_match_replacements = {}
     raw_target_replacements = {}
+    raw_conditional_states = None
     if isinstance(changes, list):
         raw_adds = changes
         raw_removes = []
@@ -5754,6 +6457,7 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raw_reorder = changes.get("reorder", [])
         raw_match_replacements = changes.get("replaceMatches", {})
         raw_target_replacements = changes.get("replaceTargets", {})
+        raw_conditional_states = changes.get("conditionalStates")
     else:
         raise ValueError("missing changes list")
     if not isinstance(raw_adds, list):
@@ -5770,6 +6474,8 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         raise ValueError("override match replacements must be an object")
     if not isinstance(raw_target_replacements, dict):
         raise ValueError("override target replacements must be an object")
+    if raw_conditional_states is not None and not isinstance(raw_conditional_states, list):
+        raise ValueError("conditional states must be a list")
 
     def parse_raw_match(raw_match: dict) -> dict[str, str]:
         match_raws = default_behavior_match_raws()
@@ -5797,7 +6503,12 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         default_match = default_behavior_match_raws()
         contextual = any(shared_match[field] != default_match[field] for field in MATCH_FIELDS if field != "species")
         mode = "members" if members else ("all" if contextual else "disabled")
-        return {"members": members, "match": shared_match, "targetMode": mode}
+        return {
+            "members": members,
+            "match": shared_match,
+            "targetMode": mode,
+            **default_override_condition_raws(),
+        }
 
     def parse_target(raw_target: dict, label: str) -> dict:
         raw_members = raw_target.get("members", [])
@@ -5815,7 +6526,16 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             raise ValueError(f"{label} has invalid target mode")
         if raw_mode == "members" and not members:
             raw_mode = "disabled"
-        return {"members": members, "match": match, "targetMode": raw_mode}
+        condition_raws = default_override_condition_raws()
+        for field in condition_raws:
+            if field in raw_target:
+                condition_raws[field] = clean_token(str(raw_target[field]))
+        return {
+            "members": members,
+            "match": match,
+            "targetMode": raw_mode,
+            **condition_raws,
+        }
 
     parsed_adds = []
     for index, raw_change in enumerate(raw_adds, 1):
@@ -5921,6 +6641,36 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
             raise ValueError(f"override {order} cannot replace matches and target together")
         parsed_target_replacements[order] = target_from_matches(matches, f"override {order}")
 
+    parsed_conditional_states = None
+    if raw_conditional_states is not None:
+        parsed_conditional_states = []
+        for index, raw_state in enumerate(raw_conditional_states, 1):
+            if not isinstance(raw_state, dict):
+                raise ValueError(f"conditional state {index} must be an object")
+            missing = {
+                "parentProfile",
+                "overrideProfile",
+                "terrainMask",
+                "terrainOverrideMask",
+                "minMovementSpeed",
+                "maxMovementSpeed",
+            } - set(raw_state)
+            if missing:
+                raise ValueError(
+                    f"conditional state {index} is missing {', '.join(sorted(missing))}"
+                )
+            parsed_conditional_states.append({
+                field: clean_token(str(raw_state[field]))
+                for field in (
+                    "parentProfile",
+                    "overrideProfile",
+                    "terrainMask",
+                    "terrainOverrideMask",
+                    "minMovementSpeed",
+                    "maxMovementSpeed",
+                )
+            })
+
     return {
         "add": parsed_adds,
         "edit": parsed_edits,
@@ -5929,6 +6679,7 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
         "reorder": parsed_reorder,
         "replaceMatches": parsed_match_replacements,
         "replaceTargets": parsed_target_replacements,
+        "conditionalStates": parsed_conditional_states,
     }
 
 
@@ -6133,6 +6884,37 @@ def format_behavior_override_member_profile(
         f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
         f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
         f"{indent}}}"
+    )
+
+
+def format_behavior_conditional_state(state: dict[str, int], indent: str = "    ") -> str:
+    parent_profile = state["parentProfile"]
+    parent_raw = (
+        CONDITIONAL_PROFILE_NONE_RAW
+        if parent_profile == CONDITIONAL_PROFILE_NONE_VALUE
+        else str(parent_profile)
+    )
+    override_profile = state["overrideProfile"]
+    override_raw = (
+        CONDITIONAL_PROFILE_NONE_RAW
+        if override_profile == CONDITIONAL_PROFILE_NONE_VALUE
+        else str(override_profile)
+    )
+    def terrain_mask_raw(mask: int) -> str:
+        parts = [
+            raw
+            for bit, (_, _, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
+            if mask & (1 << bit)
+        ]
+        return " | ".join(parts) if parts else "0"
+
+    return (
+        f"{indent}{{"
+        f"{parent_raw}, {override_raw}, "
+        f"{terrain_mask_raw(state['terrainMask'])}, "
+        f"{terrain_mask_raw(state['terrainOverrideMask'])}, "
+        f"{state['minMovementSpeed']}, {state['maxMovementSpeed']}"
+        f"}}"
     )
 
 
@@ -6343,7 +7125,10 @@ def apply_profile_override_changes(body: bytes) -> dict:
     reorder_groups = changes["reorder"]
     match_replacements = changes["replaceMatches"]
     target_replacements = changes["replaceTargets"]
-    if not additions and not edits and not renames and not removals and not reorder_groups and not target_replacements:
+    conditional_state_replacement = changes["conditionalStates"]
+    if not additions and not edits and not renames and not removals \
+            and not reorder_groups and not target_replacements \
+            and conditional_state_replacement is None:
         return {"saved": False, "message": "No changes"}
 
     raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
@@ -6369,7 +7154,56 @@ def apply_profile_override_changes(body: bytes) -> dict:
     ]
     group_labels = invert_labels(macros, GROUP_PREFIX)
     existing_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
+    existing_conditional_states = parse_behavior_conditional_states(
+        behavior_source,
+        macros,
+        len(existing_overrides),
+    )
     existing_names = parse_override_profile_names(raw_behavior_data)
+
+    def canonical_conditional_states(raw_states: list[dict[str, str]]) -> list[dict[str, int]]:
+        profile_count = len(existing_overrides) + len(additions)
+        parsed_states = []
+        signatures = set()
+        for index, raw_state in enumerate(raw_states, 1):
+            parsed_values = {
+                field: numeric(conditional_state_value(raw_state[field], field, macros))
+                for field in (
+                    "parentProfile",
+                    "overrideProfile",
+                    "terrainMask",
+                    "terrainOverrideMask",
+                    "minMovementSpeed",
+                    "maxMovementSpeed",
+                )
+            }
+            if any(value is None for value in parsed_values.values()):
+                raise ValueError(f"conditional state {index} contains an invalid value")
+            state = {field: int(value) for field, value in parsed_values.items()}
+            validate_conditional_state(
+                state,
+                f"conditional state {index}",
+                profile_count,
+                ValueError,
+            )
+            signature = (
+                state["parentProfile"],
+                state["terrainMask"],
+                state["terrainOverrideMask"],
+                state["minMovementSpeed"],
+                state["maxMovementSpeed"],
+            )
+            if signature in signatures:
+                raise ValueError(f"conditional state {index} duplicates an existing parent condition")
+            signatures.add(signature)
+            parsed_states.append(state)
+        return parsed_states
+
+    conditional_states = (
+        existing_conditional_states
+        if conditional_state_replacement is None
+        else canonical_conditional_states(conditional_state_replacement)
+    )
     valid_options = valid_change_options(macros, class_profiles)
     for addition in additions:
         addition["fields"] = {
@@ -6383,19 +7217,38 @@ def apply_profile_override_changes(body: bytes) -> dict:
         }
         for order, field_changes in edits.items()
     }
+    for field_changes in edits.values():
+        if "spawnDestinationMask" in field_changes \
+                or "spawnDestinationOverrideMask" in field_changes:
+            # Once the unified policy is edited it is authoritative, including
+            # an explicit 0/0 pair used to mean fully inherited. Remove the
+            # hidden scalar so it cannot be projected back on the next load.
+            field_changes["spawnDestination"] = ""
     for override in existing_overrides:
         for field in behavior_override_field_keys(override["behavior"]):
             value = override["behavior"]["profile"][field]
             if value.get("raw") and value.get("value") is not None:
                 valid_options[field].add(canonical_profile_value_raw(value, field))
 
-    def validate_override_fields(fields: dict[str, str], label: str) -> None:
-        terrain_value_present = bool(fields.get("chillAllowedTerrainMask"))
-        terrain_override_present = bool(fields.get("chillAllowedTerrainOverrideMask"))
-        if terrain_value_present != terrain_override_present:
-            raise ValueError(
-                f"{label} must update allowed terrain values and inheritance together"
-            )
+    def validate_override_fields(
+        fields: dict[str, str],
+        label: str,
+        *,
+        require_terrain_pair: bool = True,
+    ) -> None:
+        if require_terrain_pair:
+            terrain_value_present = bool(fields.get("chillAllowedTerrainMask"))
+            terrain_override_present = bool(fields.get("chillAllowedTerrainOverrideMask"))
+            if terrain_value_present != terrain_override_present:
+                raise ValueError(
+                    f"{label} must update allowed terrain values and inheritance together"
+                )
+            destination_value_present = bool(fields.get("spawnDestinationMask"))
+            destination_override_present = bool(fields.get("spawnDestinationOverrideMask"))
+            if destination_value_present != destination_override_present:
+                raise ValueError(
+                    f"{label} must update spawn destination values and inheritance together"
+                )
         for field, raw in fields.items():
             if field not in PROFILE_FIELDS:
                 raise ValueError(f"invalid override field: {field}")
@@ -6412,7 +7265,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
                     if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
                         raise ValueError(f"invalid relative value for {field}: {raw}")
                     maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-                    minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+                    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
                     if threshold < minimum or threshold > maximum:
                         raise ValueError(f"invalid override bound for {field}: {raw}")
                 elif is_relative_override_raw(field, raw):
@@ -6422,9 +7275,21 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 else:
                     threshold = int(raw[2:], 10)
                     maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-                    minimum = 1 if field in MOVEMENT_SPEED_FIELDS else 0
+                    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
                     if threshold < minimum or threshold > maximum:
                         raise ValueError(f"invalid override bound for {field}: {raw}")
+                continue
+            if raw and field in NUMERIC_PROFILE_FIELDS:
+                # Existing source entries may use symbolic expressions (for
+                # example a combined terrain mask) while editor changes are
+                # canonicalized to decimal strings. Validate both forms by
+                # their evaluated value instead of requiring an exact option
+                # spelling match.
+                evaluated = numeric_raw(raw, field, macros)
+                minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+                maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+                if evaluated is None or evaluated < minimum or evaluated > maximum:
+                    raise ValueError(f"invalid value for {field}: {raw}")
                 continue
             if raw and raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
@@ -6456,7 +7321,13 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if min_level != any_level and max_level != any_level and min_level is not None and max_level is not None and min_level > max_level:
             raise ValueError(f"{label} minimum level cannot be greater than maximum level")
 
-    def validate_override_target(target: dict, label: str) -> None:
+    maximum_condition_parent = len(existing_overrides) + len(additions) - 1
+
+    def validate_override_target(
+        target: dict,
+        label: str,
+        own_profile_index: int | None = None,
+    ) -> None:
         mode = target["targetMode"]
         members = target["members"]
         if len(members) != len(set(members)):
@@ -6469,6 +7340,38 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if mode == "members" and not members:
             raise ValueError(f"{label} member target must include at least one Pokemon")
         validate_override_match(target["match"], label, allow_global=(mode in {"members", "disabled"}))
+        parent = numeric(make_condition_value(
+            target["conditionParentProfile"],
+            "conditionParentProfile",
+            macros,
+        ))
+        condition_mask = numeric(make_condition_value(
+            target["conditionMask"],
+            "conditionMask",
+            macros,
+        ))
+        condition_value = numeric(make_condition_value(
+            target["conditionValue"],
+            "conditionValue",
+            macros,
+        ))
+        if parent is None or not 0 <= parent <= 0xFF:
+            raise ValueError(f"{label} has an invalid condition parent profile")
+        if condition_mask is None or condition_value is None \
+                or not 0 <= condition_mask <= 0xFF or not 0 <= condition_value <= 0xFF:
+            raise ValueError(f"{label} has invalid condition bits")
+        if condition_value & ~condition_mask:
+            raise ValueError(f"{label} condition value contains bits outside its mask")
+        if parent == CONDITION_PARENT_NONE_VALUE:
+            if condition_mask != 0 or condition_value != 0:
+                raise ValueError(f"{label} has conditions but no parent profile")
+        else:
+            if parent > maximum_condition_parent:
+                raise ValueError(f"{label} condition parent profile is out of range")
+            if own_profile_index is not None and parent >= own_profile_index:
+                raise ValueError(f"{label} condition parent must precede the linked profile")
+            if condition_mask == 0:
+                raise ValueError(f"{label} condition link must select at least one condition")
 
     def legacy_matches_from_target(target: dict, label: str) -> list[dict[str, str]]:
         """Losslessly project the v32 target shape onto the pre-v32 row model."""
@@ -6541,6 +7444,9 @@ def apply_profile_override_changes(body: bytes) -> dict:
                         "members": list(profile.get("memberSymbols") or []),
                         "match": raw_match_values(profile["match"]),
                         "targetMode": mode_name(profile["targetMode"]),
+                        "conditionParentProfile": profile["conditionParentProfile"]["raw"],
+                        "conditionMask": profile["conditionMask"]["raw"],
+                        "conditionValue": profile["conditionValue"]["raw"],
                     },
                 }
             )
@@ -6548,16 +7454,20 @@ def apply_profile_override_changes(body: bytes) -> dict:
         for order, field_changes in edits.items():
             if order in removals:
                 continue
-            validate_override_fields(field_changes, f"override {order}")
+            validate_override_fields(
+                field_changes,
+                f"override {order}",
+                require_terrain_pair=False,
+            )
             behavior = profiles_model[order - 1]["behavior"]
             fields = {
                 field: behavior["profile"][field]["raw"]
                 for field in behavior_override_field_keys(behavior)
             }
             fields.update(field_changes)
-            profiles_model[order - 1]["behavior"] = behavior_from_fields(
-                {field: raw for field, raw in fields.items() if raw}
-            )
+            fields = {field: raw for field, raw in fields.items() if raw}
+            validate_override_fields(fields, f"override {order}")
+            profiles_model[order - 1]["behavior"] = behavior_from_fields(fields)
 
         for order, name in renames.items():
             if order not in removals:
@@ -6566,13 +7476,17 @@ def apply_profile_override_changes(body: bytes) -> dict:
         for order, target in target_replacements.items():
             if order in removals:
                 raise ValueError(f"override {order} cannot be removed and retargeted")
-            validate_override_target(target, f"override {order}")
+            validate_override_target(target, f"override {order}", order - 1)
             profiles_model[order - 1]["target"] = target
 
         next_original_order = len(profiles_model) + 1
         for index, change in enumerate(additions, 1):
             validate_override_fields(change["fields"], f"override addition {index}")
-            validate_override_target(change["target"], f"override addition {index}")
+            validate_override_target(
+                change["target"],
+                f"override addition {index}",
+                next_original_order - 1,
+            )
             fields = {field: raw for field, raw in change["fields"].items() if raw}
             profiles_model.append(
                 {
@@ -6608,6 +7522,29 @@ def apply_profile_override_changes(body: bytes) -> dict:
             for new_index, profile in enumerate(active)
         }
 
+        remapped_conditional_states = []
+        for state_index, state in enumerate(conditional_states, 1):
+            parent_profile = state["parentProfile"]
+            override_profile = state["overrideProfile"]
+            if parent_profile not in old_index_to_new:
+                raise ValueError(
+                    f"conditional state {state_index} references a parent profile being removed"
+                )
+            if override_profile != CONDITIONAL_PROFILE_NONE_VALUE \
+                    and override_profile not in old_index_to_new:
+                raise ValueError(
+                    f"conditional state {state_index} references an override profile being removed"
+                )
+            remapped_conditional_states.append({
+                **state,
+                "parentProfile": old_index_to_new[parent_profile],
+                "overrideProfile": (
+                    CONDITIONAL_PROFILE_NONE_VALUE
+                    if override_profile == CONDITIONAL_PROFILE_NONE_VALUE
+                    else old_index_to_new[override_profile]
+                ),
+            })
+
         def remap_reference_raw(raw: str, label: str) -> str:
             old_index = numeric_raw(raw, label, macros)
             if old_index is None:
@@ -6619,6 +7556,33 @@ def apply_profile_override_changes(body: bytes) -> dict:
             if re.fullmatch(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", raw.strip()):
                 return str(old_index_to_new[old_index])
             return raw
+
+        def remap_condition_parent_raw(raw: str, label: str) -> str:
+            old_index = numeric(make_condition_value(raw, "conditionParentProfile", macros))
+            if old_index is None:
+                raise ValueError(f"{label} has an invalid condition parent profile: {raw}")
+            if old_index == CONDITION_PARENT_NONE_VALUE:
+                return CONDITION_PARENT_NONE_RAW
+            if old_index not in old_index_to_new:
+                raise ValueError(f"{label} references a condition parent profile being removed")
+            return str(old_index_to_new[old_index])
+
+        for new_profile_index, profile in enumerate(active):
+            target = profile["target"]
+            target["conditionParentProfile"] = remap_condition_parent_raw(
+                target["conditionParentProfile"],
+                f"override {profile['originalOrder']}",
+            )
+            remapped_parent = numeric(make_condition_value(
+                target["conditionParentProfile"],
+                "conditionParentProfile",
+                macros,
+            ))
+            if remapped_parent != CONDITION_PARENT_NONE_VALUE \
+                    and remapped_parent >= new_profile_index:
+                raise ValueError(
+                    f"override {profile['originalOrder']} condition parent must precede the linked profile"
+                )
 
         for profile in active:
             behavior = profile["behavior"]
@@ -6652,13 +7616,20 @@ def apply_profile_override_changes(body: bytes) -> dict:
         names = [profile["name"].strip().lower() for profile in active if profile["name"].strip()]
         if len(names) != len(set(names)):
             raise ValueError("override profile names must be unique")
-        if len(active) > 0xFFFF:
-            raise ValueError("too many override profiles for u16 storage")
+        if len(active) > MAX_RUNTIME_OVERRIDE_PROFILES:
+            raise ValueError(
+                f"the runtime supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} ordered override profiles"
+            )
 
         profile_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideProfiles")
         member_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideMembers")
+        conditional_span = initializer_brace_span(
+            raw_behavior_data,
+            "sOverworldWildBehaviorConditionalStates",
+        )
         profile_indent = line_indent_before(raw_behavior_data, profile_span[0])
         member_indent = line_indent_before(raw_behavior_data, member_span[0])
+        conditional_indent = line_indent_before(raw_behavior_data, conditional_span[0])
         profile_entry_indent = profile_indent + "    "
         member_entry_indent = member_indent + "    "
         flat_members = []
@@ -6691,9 +7662,30 @@ def apply_profile_override_changes(body: bytes) -> dict:
         member_entries_text = ",\n".join(member_entry_indent + member for member in stored_members)
         formatted_profiles = f"{{\n{profile_entries_text}\n{profile_indent}}}"
         formatted_members = f"{{\n{member_entries_text}\n{member_indent}}}"
+        conditional_entry_indent = conditional_indent + "    "
+        stored_conditional_states = remapped_conditional_states or [{
+            "parentProfile": CONDITIONAL_PROFILE_NONE_VALUE,
+            "overrideProfile": CONDITIONAL_PROFILE_NONE_VALUE,
+            "terrainMask": 0,
+            "terrainOverrideMask": 0,
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0,
+        }]
+        conditional_entries_text = ",\n".join(
+            format_behavior_conditional_state(state, conditional_entry_indent)
+            for state in stored_conditional_states
+        )
+        formatted_conditional_states = (
+            f"{{\n{conditional_entries_text}\n{conditional_indent}}}"
+        )
         replacements = [
             (profile_span[0], profile_span[1], formatted_profiles),
             (member_span[0], member_span[1], formatted_members),
+            (
+                conditional_span[0],
+                conditional_span[1],
+                formatted_conditional_states,
+            ),
         ]
         if class_profiles_changed:
             class_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
@@ -6715,7 +7707,10 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if changed:
             validate_behavior_data_override_profiles(updated_source, macros, group_labels)
             write_behavior_data_source(updated_source)
-        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + len(target_replacements) + (1 if reorder_groups else 0)
+        total_changes = len(additions) + len(edits) + len(renames) \
+            + len(set(removals)) + len(target_replacements) \
+            + (1 if reorder_groups else 0) \
+            + (1 if conditional_state_replacement is not None else 0)
         label = "override profile change" if total_changes == 1 else "override profile changes"
         return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
 
@@ -6733,7 +7728,11 @@ def apply_profile_override_changes(body: bytes) -> dict:
             if order < 1 or order > len(existing_overrides):
                 raise ValueError(f"override order out of range: {order}")
         for order, field_changes in edits.items():
-            validate_override_fields(field_changes, f"override {order}")
+            validate_override_fields(
+                field_changes,
+                f"override {order}",
+                require_terrain_pair=False,
+            )
 
         profiles_model = [
             {
@@ -6753,6 +7752,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
         ]
         preferred_profile_orders: set[int] = set()
         identity_changed_profile_orders: set[int] = set()
+        edited_profile_orders: dict[int, int] = {}
 
         for order, replacement_matches in match_replacements.items():
             profile_order = existing_overrides[order - 1]["profileOrder"]
@@ -6801,6 +7801,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 continue
             profile_order = existing_overrides[order - 1]["profileOrder"]
             preferred_profile_orders.add(profile_order)
+            edited_profile_orders.setdefault(profile_order, order)
             behavior = profiles_model[profile_order - 1]["behavior"]
             fields = {
                 field: behavior["profile"][field]["raw"]
@@ -6831,6 +7832,14 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 ],
                 macros,
             )
+
+        for profile_order, source_order in edited_profile_orders.items():
+            behavior = profiles_model[profile_order - 1]["behavior"]
+            fields = {
+                field: behavior["profile"][field]["raw"]
+                for field in behavior_override_field_keys(behavior)
+            }
+            validate_override_fields(fields, f"override {source_order}")
 
         for order, name in renames.items():
             if order in removals:
@@ -7059,7 +8068,11 @@ def apply_profile_override_changes(body: bytes) -> dict:
         if order < 1 or order > len(override_entry_spans):
             raise ValueError(f"override order out of range: {order}")
     for order, field_changes in edits.items():
-        validate_override_fields(field_changes, f"override {order}")
+        validate_override_fields(
+            field_changes,
+            f"override {order}",
+            require_terrain_pair=False,
+        )
 
     override_group_orders: dict[str, list[int]] = {}
     for override in existing_overrides:
@@ -7103,6 +8116,7 @@ def apply_profile_override_changes(body: bytes) -> dict:
         fields = grouped_override_fields(order)
         fields.update(field_changes)
         fields = {field: raw for field, raw in fields.items() if raw}
+        validate_override_fields(fields, f"override {order}")
         entry_span = override_replacement_spans[order - 1]
         profile_indent = line_indent_before(raw_behavior_data, entry_span[0])
         override_name = existing_names.get(order, "")
@@ -15959,8 +16973,16 @@ HTML = r"""<!doctype html>
       "hopMaxDistance",
       "hopPause",
       "hopTime",
+      "hopElevationTimeScale",
+      "hopElevationArcScale",
+      "tilesToAccelerate",
+      "chainRepositionJumpCount",
+      "chainRepositionSpeed",
+      "chainRepositionDistance",
       "hopSpinSpeed",
+      "hopSwayWidth",
       "spawnHopTime",
+      "spawnHopSwayWidth",
       "attentiveHopSpinSpeed",
       "teleportTime",
       "teleportPause",
@@ -15994,10 +17016,16 @@ HTML = r"""<!doctype html>
     ]);
     const PROFILE_NUMBER_FIELD_LIMITS = {
       hopSpinSpeed: { min: 0, max: 15 },
+      hopSwayWidth: { min: 0, max: 8 },
+      spawnHopSwayWidth: { min: 0, max: 8 },
       attentiveHopSpinSpeed: { min: 0, max: 15 },
       attentiveChaseBoostDistance: { min: 0, max: 32 },
       attentiveChaseBoostSpeed: { min: 0, max: 4 },
       attentiveCircleRadius: { min: 0, max: 8 },
+      tilesToAccelerate: { min: 1, max: 32 },
+      chainRepositionJumpCount: { min: 1, max: 8 },
+      chainRepositionSpeed: { min: 1, max: 4 },
+      chainRepositionDistance: { min: 1, max: 5 },
     };
     const PROFILE_FIELD_HINTS = {
       profileId: "Optional behavior-family label. Most profiles can leave this as Default.",
@@ -16008,8 +17036,19 @@ HTML = r"""<!doctype html>
       attentiveAllowedTile2: "Optional second tile type this Active behavior may target.",
       tiredAllowedTile2: "Optional second tile type this Tired behavior may target.",
       hopTime: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
+      hopElevationTimeScale: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier.",
+      hopElevationArcScale: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier.",
+      tilesToAccelerate: "Consecutive Walk tiles in one direction before movement speed increases by 1.",
+      chainRepositionJumpCount: "Number of fixed-facing random surrounding-tile moves performed by Reposition jumps, steps, or skids.",
+      chainRepositionSpeed: "Movement speed for Reposition steps and skids; jumps use Hop timing.",
+      chainRepositionDistance: "Tiles travelled by each Reposition skid.",
+      chainRepositionDust: "Play a dust particle on every tile crossed by a Reposition skid.",
+      chainRepositionAllowCardinal: "Allow up, down, left, and right Reposition directions.",
+      chainRepositionAllowDiagonal: "Allow diagonal Reposition directions.",
       spawnHopTime: "Ticks for the forced off-screen spawn hop. 0 is immediate.",
+      spawnHopSwayWidth: "Side-to-side drift during the forced off-screen spawn hop. 0 disables sway. Max 8 px.",
       hopSpinSpeed: "Ticks per 90-degree facing turn during Chill Hop. 0 disables spin. Max 15.",
+      hopSwayWidth: "Side-to-side drift during each Hop. 0 disables sway. Max 8 px.",
       attentiveHopSpinSpeed: "Ticks per 90-degree facing turn during Active Hop. 0 disables spin. Max 15.",
       overworldLimit: "Maximum active spawns for this profile or override bucket. 0 is unlimited.",
       attentiveCircleRadius: "Radius around the player for Circle player target. 0 behaves as 1 tile.",
@@ -16047,6 +17086,7 @@ HTML = r"""<!doctype html>
     const PROFILE_FIELD_META = {
       spawnState: { label: "Spawn behavior", shortLabel: "Spawn", category: "spawn", subgroup: "Behavior", iconFamily: "movement" },
       spawnHopTime: { label: "Spawn delay", shortLabel: "Delay", unit: "ticks", category: "spawn", subgroup: "Timing", iconFamily: "timing" },
+      spawnHopSwayWidth: { label: "Spawn horizontal sway", shortLabel: "Spawn sway", unit: "px", category: "spawn", subgroup: "Timing", iconFamily: "timing" },
       spawnDestination: { label: "Spawn destination", shortLabel: "Destination", category: "spawn", subgroup: "Range", iconFamily: "condition" },
       spawnDestinationType: { label: "Spawn destination", shortLabel: "Destination", category: "spawn", subgroup: "Range", iconFamily: "condition" },
       spawnDestinationDistance: { label: "Spawn distance", shortLabel: "Distance", unit: "tiles", category: "spawn", subgroup: "Range", iconFamily: "range" },
@@ -16059,19 +17099,30 @@ HTML = r"""<!doctype html>
       chillTarget: { label: "Chill target", shortLabel: "Target", category: "chill", subgroup: "Targeting", iconFamily: "condition" },
       chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillSpeed: { label: "Chill speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
+      tilesToAccelerate: { label: "Tiles to accelerate", shortLabel: "Acceleration", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       hopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
+      hopAllowVerticalObstacles: { label: "Cross vertical obstacles", shortLabel: "Vertical obstacles", category: "chill", subgroup: "Movement", iconFamily: "condition" },
       hopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopTime: { label: "Hop travel time", shortLabel: "Hop time", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
+      hopElevationTimeScale: { label: "Elevation time scaling", shortLabel: "Elevation", unit: "%", category: "chill", subgroup: "Timing", iconFamily: "timing" },
+      hopElevationArcScale: { label: "Elevation arc scaling", shortLabel: "Arc", unit: "%", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       hopSpinSpeed: { label: "Hop turn speed", shortLabel: "Spin", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
+      hopSwayWidth: { label: "Horizontal sway", shortLabel: "Sway", unit: "px", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       hopPause: { label: "Pause between hops", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       teleportTime: { label: "Teleport vanish time", shortLabel: "Teleport", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       teleportPause: { label: "Teleport pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       ramAccelerationSteps: { label: "Chain move count", shortLabel: "Chain", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainPauseAction: { label: "Chain pause action", shortLabel: "Action", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
+      chainRepositionJumpCount: { label: "Reposition moves", shortLabel: "Moves", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      chainRepositionSpeed: { label: "Reposition speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
+      chainRepositionDistance: { label: "Reposition skid distance", shortLabel: "Skid distance", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "range" },
+      chainRepositionDust: { label: "Reposition skid dust", shortLabel: "Skid dust", category: "chill", subgroup: "Visual", iconFamily: "visualAudio" },
+      chainRepositionAllowCardinal: { label: "Allow cardinal directions", shortLabel: "Cardinal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
+      chainRepositionAllowDiagonal: { label: "Allow diagonal directions", shortLabel: "Diagonal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
 
       alertState: { label: "Alert trigger", shortLabel: "Trigger", category: "alert", subgroup: "Behavior", iconFamily: "condition" },
       alertEmote: { label: "Alert emote", shortLabel: "Emote", category: "alert", subgroup: "Visual", iconFamily: "visualAudio", rowIcon: true },
@@ -16148,6 +17199,9 @@ HTML = r"""<!doctype html>
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE: "None",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE: "Hop in place",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND: "Look around",
+      OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS: "Reposition jumps",
+      OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS: "Reposition steps",
+      OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS: "Reposition skids",
       OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE: "Player cardinal line",
       [CIRCLE_PLAYER_TARGET_RAW]: "Circle player",
     };
@@ -16158,7 +17212,7 @@ HTML = r"""<!doctype html>
         label: "Spawn",
         icon: "footstep",
         typeClass: "type-movement",
-        fields: ["spawnState", "spawnHopTime", "spawnDestination", "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "jumpLevel", "overworldLimit"],
+        fields: ["spawnState", "spawnHopTime", "spawnHopSwayWidth", "spawnDestination", "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "jumpLevel", "overworldLimit"],
       },
       {
         key: "chill",
@@ -16170,19 +17224,30 @@ HTML = r"""<!doctype html>
           "chillTarget",
           "chillAction",
           "chillSpeed",
+          "tilesToAccelerate",
           "chillAllowedTerrainMask",
           "chillAllowedTerrainOverrideMask",
           "hopAllowNonCardinal",
+          "hopAllowVerticalObstacles",
           "hopMinDistance",
           "hopMaxDistance",
           "hopTime",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
           "hopSpinSpeed",
+          "hopSwayWidth",
           "hopPause",
           "teleportTime",
           "teleportPause",
           "ramAccelerationSteps",
           "ramMaxSpeed",
           "chainPauseAction",
+          "chainRepositionJumpCount",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
           "chainMovementVariance",
           "chainPauseVariance",
           "battleTrigger",
@@ -17712,6 +18777,7 @@ HTML = r"""<!doctype html>
         OW_WILD_BEHAVIOR_LOCOMOTION_HOP: "Hop",
         OW_WILD_BEHAVIOR_LOCOMOTION_RAM: "Ram",
         OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT: "Phantom Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND: "Turn Around",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE: "None",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP: "Call for help",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW: "Pick up and throw",
@@ -18190,6 +19256,10 @@ HTML = r"""<!doctype html>
           className: "profile-suboption-field",
           hint: "Ticks for the forced off-screen spawn hop. 0 is immediate. Hop turn speed is edited under Chill.",
         }));
+        fields.push(profileEditFieldItem(item, "spawnHopSwayWidth", {
+          className: "profile-suboption-field",
+          hint: "Side-to-side drift during the forced off-screen spawn hop. 0 disables sway.",
+        }));
       }
       fields.push(profileFieldItem(SPAWN_DESTINATION_TYPE_FIELD, profileEditSpawnDestinationTypeField(item)));
       if (playerDestinationInfo) {
@@ -18294,6 +19364,10 @@ HTML = r"""<!doctype html>
       return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
     }
 
+    function movementStyleTurnsOnly(raw) {
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND";
+    }
+
     function activeBehaviorCanSelectTarget(raw) {
       return [
         "OW_WILD_BEHAVIOR_KIND_CHASE",
@@ -18319,17 +19393,32 @@ HTML = r"""<!doctype html>
       return raw && raw !== "OW_WILD_BEHAVIOR_LOCOMOTION_NONE";
     }
 
+    function movementStyleUsesWalk(raw) {
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER";
+    }
+
     const PROFILE_MOVEMENT_SUBOPTION_FIELDS = {
       chill: {
         hopAllowNonCardinal: "hopAllowNonCardinal",
+        hopAllowVerticalObstacles: "hopAllowVerticalObstacles",
         hopMinDistance: "hopMinDistance",
         hopMaxDistance: "hopMaxDistance",
         hopPause: "hopPause",
         hopTime: "hopTime",
+        hopElevationTimeScale: "hopElevationTimeScale",
+        hopElevationArcScale: "hopElevationArcScale",
         hopSpinSpeed: "hopSpinSpeed",
+        hopSwayWidth: "hopSwayWidth",
+        tilesToAccelerate: "tilesToAccelerate",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainRepositionJumpCount: "chainRepositionJumpCount",
+        chainRepositionSpeed: "chainRepositionSpeed",
+        chainRepositionDistance: "chainRepositionDistance",
+        chainRepositionDust: "chainRepositionDust",
+        chainRepositionAllowCardinal: "chainRepositionAllowCardinal",
+        chainRepositionAllowDiagonal: "chainRepositionAllowDiagonal",
         teleportTime: "teleportTime",
         teleportPause: "teleportPause",
         ramAccelerationSteps: "ramAccelerationSteps",
@@ -18337,14 +19426,25 @@ HTML = r"""<!doctype html>
       },
       attentive: {
         hopAllowNonCardinal: "attentiveHopAllowNonCardinal",
+        hopAllowVerticalObstacles: "hopAllowVerticalObstacles",
         hopMinDistance: "attentiveHopMinDistance",
         hopMaxDistance: "attentiveHopMaxDistance",
         hopPause: "attentiveHopPause",
         hopTime: "hopTime",
+        hopElevationTimeScale: "hopElevationTimeScale",
+        hopElevationArcScale: "hopElevationArcScale",
         hopSpinSpeed: "attentiveHopSpinSpeed",
+        hopSwayWidth: "hopSwayWidth",
+        tilesToAccelerate: "tilesToAccelerate",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainRepositionJumpCount: "chainRepositionJumpCount",
+        chainRepositionSpeed: "chainRepositionSpeed",
+        chainRepositionDistance: "chainRepositionDistance",
+        chainRepositionDust: "chainRepositionDust",
+        chainRepositionAllowCardinal: "chainRepositionAllowCardinal",
+        chainRepositionAllowDiagonal: "chainRepositionAllowDiagonal",
         teleportTime: "attentiveTeleportTime",
         teleportPause: "attentiveTeleportPause",
         ramAccelerationSteps: "attentiveRamAccelerationSteps",
@@ -18352,14 +19452,25 @@ HTML = r"""<!doctype html>
       },
       tired: {
         hopAllowNonCardinal: "tiredHopAllowNonCardinal",
+        hopAllowVerticalObstacles: "hopAllowVerticalObstacles",
         hopMinDistance: "tiredHopMinDistance",
         hopMaxDistance: "tiredHopMaxDistance",
         hopPause: "tiredHopPause",
         hopTime: "hopTime",
+        hopElevationTimeScale: "hopElevationTimeScale",
+        hopElevationArcScale: "hopElevationArcScale",
         hopSpinSpeed: "hopSpinSpeed",
+        hopSwayWidth: "hopSwayWidth",
+        tilesToAccelerate: "tilesToAccelerate",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainRepositionJumpCount: "chainRepositionJumpCount",
+        chainRepositionSpeed: "chainRepositionSpeed",
+        chainRepositionDistance: "chainRepositionDistance",
+        chainRepositionDust: "chainRepositionDust",
+        chainRepositionAllowCardinal: "chainRepositionAllowCardinal",
+        chainRepositionAllowDiagonal: "chainRepositionAllowDiagonal",
         teleportTime: "tiredTeleportTime",
         teleportPause: "tiredTeleportPause",
         ramAccelerationSteps: "tiredRamAccelerationSteps",
@@ -18372,15 +19483,27 @@ HTML = r"""<!doctype html>
       const raw = pendingProfileValue(item.index, fieldKey, originalRaw);
       const suboptionFields = PROFILE_MOVEMENT_SUBOPTION_FIELDS[suboptionKey] || PROFILE_MOVEMENT_SUBOPTION_FIELDS.chill;
       const inheritedOverride = isOverrideProfile(item) && !raw;
-      const showsChainControls = inheritedOverride || (movementStyleUsesMovement(raw) && !movementStyleUsesRam(raw));
+      const showsChainControls = inheritedOverride || (movementStyleUsesMovement(raw)
+        && !movementStyleUsesRam(raw)
+        && !movementStyleTurnsOnly(raw));
       const showsSharedChainRamLabels = inheritedOverride || showInactiveUnset;
       const fields = [
         profileEditFieldItem(item, fieldKey),
       ];
-      if (speedFieldKey && (showInactiveUnset || movementStyleUsesMovement(raw) || inheritedOverride)) {
+      if (speedFieldKey && (showInactiveUnset
+          || (movementStyleUsesMovement(raw) && !movementStyleTurnsOnly(raw))
+          || inheritedOverride)) {
         fields.push(profileEditFieldItem(item, speedFieldKey, {
           className: "profile-suboption-field",
           hint: `${profileFieldLabel(fieldKey)} speed`,
+        }));
+      }
+      if (suboptionFields.tilesToAccelerate
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.tilesToAccelerate, {
+          className: "profile-suboption-field",
+          hint: "Consecutive Walk tiles in one direction before movement speed increases by 1.",
+          numberLimits: { min: 1, max: 32 },
         }));
       }
       if (showInactiveUnset || movementStyleUsesHop(raw) || inheritedOverride) {
@@ -18388,6 +19511,10 @@ HTML = r"""<!doctype html>
           profileEditFieldItem(item, suboptionFields.hopAllowNonCardinal, {
             className: "profile-suboption-field",
             hint: "Allow diagonal/non-cardinal hops",
+          }),
+          profileEditFieldItem(item, suboptionFields.hopAllowVerticalObstacles, {
+            className: "profile-suboption-field",
+            hint: "Off rejects arcs that intersect a catalogued vertical obstruction. On raises the arc enough to clear it.",
           }),
           profileEditFieldItem(item, suboptionFields.hopMinDistance, {
             className: "profile-suboption-field",
@@ -18401,10 +19528,25 @@ HTML = r"""<!doctype html>
             className: "profile-suboption-field",
             hint: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
           }),
+          profileEditFieldItem(item, suboptionFields.hopElevationTimeScale, {
+            className: "profile-suboption-field",
+            hint: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier.",
+            numberLimits: { min: 0, max: 255 },
+          }),
+          profileEditFieldItem(item, suboptionFields.hopElevationArcScale, {
+            className: "profile-suboption-field",
+            hint: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier.",
+            numberLimits: { min: 0, max: 255 },
+          }),
           profileEditFieldItem(item, suboptionFields.hopSpinSpeed, {
             className: "profile-suboption-field",
             hint: "Ticks per 90-degree facing turn during Hop. 0 disables spin. Max 15.",
             numberLimits: { min: 0, max: 15 },
+          }),
+          profileEditFieldItem(item, suboptionFields.hopSwayWidth, {
+            className: "profile-suboption-field",
+            hint: "Side-to-side drift during each Hop. 0 disables sway. Max 8 px.",
+            numberLimits: { min: 0, max: 8 },
           }),
           profileEditFieldItem(item, suboptionFields.hopPause, {
             className: "profile-suboption-field",
@@ -18433,6 +19575,33 @@ HTML = r"""<!doctype html>
           profileEditFieldItem(item, suboptionFields.chainPauseAction, {
             className: "profile-suboption-field",
             hint: "Optional action to play when Chain pause is reached.",
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionJumpCount, {
+            className: "profile-suboption-field",
+            hint: "Random surrounding-tile moves used by Reposition jumps, steps, or skids. Facing remains unchanged.",
+            numberLimits: { min: 1, max: 8 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionSpeed, {
+            className: "profile-suboption-field",
+            hint: "Movement speed for Reposition steps and skids; jumps use Hop timing.",
+            numberLimits: { min: 1, max: 4 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionDistance, {
+            className: "profile-suboption-field",
+            hint: "Tiles travelled by each Reposition skid.",
+            numberLimits: { min: 1, max: 5 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionDust, {
+            className: "profile-suboption-field",
+            hint: "Play a dust particle on every tile crossed by a Reposition skid.",
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionAllowCardinal, {
+            className: "profile-suboption-field",
+            hint: "Allow up, down, left, and right Reposition directions.",
+          }),
+          profileEditFieldItem(item, suboptionFields.chainRepositionAllowDiagonal, {
+            className: "profile-suboption-field",
+            hint: "Allow diagonal Reposition directions.",
           }),
         );
       }

@@ -37,7 +37,6 @@
 #define OW_WILD_PERSONAL_ATTR_COUNT (PERSONAL_TM_ARRAY_4 + 1)
 #define OW_WILD_PERSONAL_CACHE_INVALID 0
 #define OW_WILD_PERSONAL_CACHE_FAILED ((void *)1)
-
 typedef struct OverworldWildBehaviorDataOverlayHeader {
     OverworldWildBehaviorOverlayEntry behavior;
     OverworldWildEncounterLookupDataEntry legacyEncounterLookup;
@@ -90,6 +89,21 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
     u16 unstableMask,
     OverworldWildQueryPickupThrowTargetFunc queryTarget,
     OverworldWildStartSpawnerMovementFunc startMovement);
+static const OverworldWildSurfaceInstance *
+__attribute__((optimize("Os", "no-unroll-loops"))) OverworldWildBehavior_QuerySurface(
+    const OverworldWildSurfaceInstance *instances,
+    const OverworldWildSurfaceTemplate *templates,
+    u32 instanceCount,
+    u32 packedLocalCoordinates);
+static u32 OverworldWildBehavior_CalculateJumpTrajectory(
+    u8 framesPerTile,
+    u8 distance,
+    s32 elevationDelta,
+    u16 packedElevationScales);
+static s32 OverworldWildBehavior_CalculateJumpArc(
+    u16 elapsedFrames,
+    u16 totalFrames,
+    u8 arcHeightQ4);
 static u32 OverworldWildBehavior_GetPersonalParam(int species, int parameter);
 static void OverworldWildBehavior_PublishPersonalDispatchers(void)
     __attribute__((section(".overworld_wild_personal_cache_dispatch"), noinline, used));
@@ -138,10 +152,6 @@ void OverworldWildBehavior_CleanupOverlay(void);
     }, \
 }
 
-static const OverworldWildBehaviorDataOverlayHeader
-    sOverworldWildBehaviorExpectedOverlayHeader =
-        OW_WILD_BEHAVIOR_OVERLAY_HEADER_INITIALIZER;
-
 const OverworldWildBehaviorDataOverlayHeader gOverworldWildBehaviorDataOverlayHeader
     __attribute__((section(".overworld_wild_behavior_data_entry"), used)) =
         OW_WILD_BEHAVIOR_OVERLAY_HEADER_INITIALIZER;
@@ -149,6 +159,13 @@ const OverworldWildBehaviorDataOverlayHeader gOverworldWildBehaviorDataOverlayHe
 const OverworldWildOverlapResolverEntry gOverworldWildOverlapResolverEntry
     __attribute__((section(".overworld_wild_overlap_resolver_entry"), used)) = {
         OverworldWildBehavior_TryResolveOverlap,
+    };
+
+const OverworldWildSurfaceServiceEntry gOverworldWildSurfaceServiceEntry
+    __attribute__((section(".overworld_wild_surface_service_entry"), used)) = {
+        OverworldWildBehavior_QuerySurface,
+        OverworldWildBehavior_CalculateJumpTrajectory,
+        OverworldWildBehavior_CalculateJumpArc,
     };
 
 #define OW_WILD_PERSONAL_CACHE_OVERLAY_ENTRY_INITIALIZER { \
@@ -178,6 +195,8 @@ typedef char OverworldWildLearnsetCacheOverlayEntrySizeMustRemain16Bytes[
     sizeof(OverworldWildLearnsetCacheOverlayEntry) == 16 ? 1 : -1];
 typedef char OverworldWildPersonalCacheOverlayEntrySizeMustRemain12Bytes[
     sizeof(OverworldWildPersonalCacheOverlayEntry) == 12 ? 1 : -1];
+typedef char OverworldWildSurfaceServiceEntrySizeMustRemain12Bytes[
+    sizeof(OverworldWildSurfaceServiceEntry) == 12 ? 1 : -1];
 typedef char OverworldWildPersonalCacheStateSizeMustRemain52Bytes[
     sizeof(OverworldWildPersonalCacheState) == 52 ? 1 : -1];
 typedef char OverworldWildPersonalRowCountMustRemain1393[
@@ -277,15 +296,83 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
     return FALSE;
 }
 
+static const OverworldWildSurfaceInstance *
+__attribute__((optimize("Os", "no-unroll-loops"))) OverworldWildBehavior_QuerySurface(
+    const OverworldWildSurfaceInstance *instances,
+    const OverworldWildSurfaceTemplate *templates,
+    u32 instanceCount,
+    u32 packedLocalCoordinates)
+{
+    const OverworldWildSurfaceTemplate *template;
+    u32 localX = packedLocalCoordinates & OW_WILD_MAP_BLOCK_MASK;
+    u32 localY = packedLocalCoordinates >> OW_WILD_MAP_BLOCK_SHIFT;
+
+    for (; instanceCount != 0; instanceCount--, instances++) {
+        template = &templates[instances->templateId];
+        if ((u32)(localX - instances->minX) < template->width
+            && (u32)(localY - instances->minY) < template->height) {
+            return instances;
+        }
+    }
+    return NULL;
+}
+
+static u32 OverworldWildBehavior_CalculateJumpTrajectory(
+    u8 framesPerTile,
+    u8 distance,
+    s32 elevationDelta,
+    u16 packedElevationScales)
+{
+    u32 frameCount = framesPerTile
+        + (u32)(distance - 1) * (framesPerTile - (framesPerTile >> 2));
+    u32 elevationQ4;
+    u32 arcHeightQ4;
+
+    if (elevationDelta < 0) {
+        elevationDelta = -elevationDelta;
+    }
+    elevationQ4 = (u32)elevationDelta >> FX32_SHIFT;
+    frameCount += (elevationQ4
+            * framesPerTile
+            * (packedElevationScales & 0xFF))
+        / (16 * 100);
+    if (frameCount > 0xFFFF) {
+        frameCount = 0xFFFF;
+    }
+    arcHeightQ4 = OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4
+        + elevationQ4 * (packedElevationScales >> 8) / (2 * 100);
+    if (arcHeightQ4 > 0xFF) {
+        arcHeightQ4 = 0xFF;
+    }
+    return (arcHeightQ4 << 16) | frameCount;
+}
+
+static s32 OverworldWildBehavior_CalculateJumpArc(
+    u16 elapsedFrames,
+    u16 totalFrames,
+    u8 arcHeightQ4)
+{
+    u32 curve;
+
+    if (elapsedFrames >= totalFrames) {
+        return 0;
+    }
+    curve = (4u * elapsedFrames * (totalFrames - elapsedFrames)) / totalFrames;
+    return (s32)(arcHeightQ4 * ((curve << FX32_SHIFT) / totalFrames));
+}
+
 static void *sOverworldWildSpawnMetadataBlob;
 static u32 sOverworldWildSpawnMetadataBlobSize;
 static BOOL sOverworldWildSpawnMetadataLoadAttempted;
 static void *sOverworldWildLevelUpLearnsetsNarc;
-static u32 sOverworldWildLevelUpLearnsetCache[MAX_LEVELUP_MOVES];
+static u32 sOverworldWildLevelUpLearnsetCache[MAX_LEVELUP_MOVES]
+    __attribute__((section(".overworld_wild_levelup_cache"), used));
 static u16 sOverworldWildLevelUpLearnsetCachedSpecies =
     OW_WILD_LEVELUP_LEARNSET_CACHE_INVALID;
 static BOOL sOverworldWildLevelUpLearnsetOpenAttempted;
 static OverworldWildPersonalCacheState sOverworldWildPersonalCache;
+void *sOverworldWildStagedHopMovementTasks[OW_WILD_MAX_SPAWNS]
+    __attribute__((section(".overworld_wild_staged_hop_tasks"), used));
 
 static u32 OverworldWildBehavior_SpawnMetadataChecksum(const u8 *blob, u32 size)
 {
@@ -547,24 +634,21 @@ BOOL OverworldWildBehavior_ValidateOverlay(void)
 {
     const volatile u32 *actual =
         (const volatile u32 *)OVERWORLD_WILD_BEHAVIOR_DATA_OVERLAY_ENTRY_ADDR;
-    const u32 *expected =
-        (const u32 *)&sOverworldWildBehaviorExpectedOverlayHeader;
     const volatile u32 *personalEntry =
         (const volatile u32 *)OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR;
-    u32 i;
+    const volatile u32 *surfaceEntry =
+        (const volatile u32 *)OVERWORLD_WILD_SURFACE_SERVICE_ENTRY_ADDR;
 
-    for (i = 0;
-         i < sizeof(OverworldWildBehaviorDataOverlayHeader) / sizeof(u32);
-         i++) {
-        if (actual[i] != expected[i]) {
-            return FALSE;
-        }
-    }
-    return personalEntry[0] == OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_MAGIC
+    return actual[0] == OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC
+        && actual[1]
+            == ((u32)sizeof(OverworldWildBehaviorOverlayEntry) << 16
+                | OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION)
+        && personalEntry[0] == OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_MAGIC
         && personalEntry[1]
             == ((u32)sizeof(OverworldWildPersonalCacheOverlayEntry) << 16
                 | OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_VERSION)
-        && personalEntry[2] == (u32)OverworldWildBehavior_GetPersonalParam;
+        && personalEntry[2] == (u32)OverworldWildBehavior_GetPersonalParam
+        && surfaceEntry[0] == (u32)OverworldWildBehavior_QuerySurface;
 }
 
 static void OverworldWildBehavior_PublishPersonalDispatchers(void)

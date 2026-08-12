@@ -17,6 +17,7 @@
 .include "armips/asm/pokemon_move_history_capture.s" // record committed permanent move changes
 .include "armips/asm/summary_move_relearn.s" // exact Summary state-2 BL patch
 .include "armips/asm/overworld_wild_movement.s" // custom movement descriptor for visible wild Pokemon
+.include "armips/asm/overworld_wild_shadow.s" // prevent stock callbacks from restoring policy-suppressed shadows
 .include "armips/asm/disable_follower_pokemon.s" // disable the vanilla walking follower presentation and gameplay
 .include "armips/asm/overworld_follower_release_overlay2.s" // reuse retired follower task for release presentation
 .include "armips/asm/overworld_follower_selector.s" // reserve physical Y from registered items

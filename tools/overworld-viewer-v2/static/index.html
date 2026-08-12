@@ -52,6 +52,20 @@
       <details class="utility-menu">
         <summary class="button button--dark">Utilities</summary>
         <div class="utility-popover">
+          <section class="utility-section" aria-labelledby="draftRecoveryHeading">
+            <div class="utility-heading">
+              <span><small>Recovery</small><strong id="draftRecoveryHeading">Draft backup</strong></span>
+              <span class="utility-tag">Local JSON</span>
+            </div>
+            <div class="utility-actions">
+              <button id="exportDraft" class="button" type="button" aria-describedby="draftRecoveryHelp" disabled>Export draft</button>
+              <a id="downloadPreparedDraft" class="button" href="#" aria-describedby="draftRecoveryHelp" hidden>Download prepared backup</a>
+              <button id="importDraft" class="button" type="button" aria-describedby="draftRecoveryHelp">Import draft…</button>
+              <input id="importDraftFile" type="file" accept="application/json,.owdraft" hidden>
+            </div>
+            <p id="draftRecoveryHelp" class="utility-help">Back up every stored unsaved source change. Pokémon images are embedded. Finish or cancel invalid text inputs first; importing requires an empty draft.</p>
+          </section>
+
           <section class="utility-section" aria-labelledby="pipelineHeading">
             <div class="utility-heading">
               <span><small>Pipeline</small><strong id="pipelineHeading">Build &amp; run</strong></span>

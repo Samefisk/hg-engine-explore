@@ -1975,6 +1975,12 @@ button {
   width: 100%;
 }
 
+.utility-help {
+  margin: 8px 0 0;
+  color: #b7bfbb;
+  font: 500 11px/1.45 var(--sans);
+}
+
 .switch-list {
   display: grid;
   gap: 1px;
@@ -5183,6 +5189,76 @@ button {
 #profileInspector .pv2-terrain-toggle:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--life-accent, #477768) 42%, transparent);
   outline-offset: 1px;
+}
+
+.pv2-condition-profile-link .pv2-member-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pv2-condition-profile-link .member-list > .pv2-conditional-state-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pv2-conditional-state-card > header,
+.pv2-conditional-terrain,
+.pv2-conditional-speed {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, auto);
+  align-items: start;
+  gap: 12px;
+}
+
+.pv2-conditional-state-card > header > span,
+.pv2-conditional-terrain > span:first-child,
+.pv2-conditional-speed > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.pv2-conditional-state-card small,
+.pv2-conditional-terrain small,
+.pv2-conditional-speed small {
+  color: var(--muted);
+}
+
+.pv2-conditional-terrain .pv2-terrain-policy {
+  grid-template-columns: repeat(5, minmax(46px, 58px));
+}
+
+.pv2-conditional-speed {
+  grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(80px, 120px));
+}
+
+.pv2-conditional-speed > label {
+  display: grid;
+  gap: 4px;
+}
+
+.pv2-conditional-speed > label > span {
+  color: var(--muted);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 940px) {
+  .pv2-conditional-state-card > header,
+  .pv2-conditional-terrain,
+  .pv2-conditional-speed {
+    grid-template-columns: 1fr;
+  }
+
+  .pv2-conditional-speed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pv2-conditional-speed > span:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 .pv2-value-control {

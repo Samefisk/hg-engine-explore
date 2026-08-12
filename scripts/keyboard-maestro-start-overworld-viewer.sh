@@ -25,7 +25,7 @@ set -euo pipefail
   echo "PATH: $PATH"
 } >> "$LOG_FILE" 2>&1
 
-trap 'status=$?; echo "[$(date "+%H:%M:%S")] Script exiting with status $status" >> "$LOG_FILE"' EXIT
+trap 'exit_code=$?; echo "[$(date "+%H:%M:%S")] Script exiting with status $exit_code" >> "$LOG_FILE"' EXIT
 
 REPO_DIR="/Users/christofferandersen/Documents/2. Projects/23. App Devolopment/hg-engine.nosync"
 PYTHON_BIN="$REPO_DIR/.venv/bin/python3"
@@ -34,6 +34,7 @@ HOST="127.0.0.1"
 PORT="8766"
 URL="http://${HOST}:${PORT}/"
 HEALTH_URL="${URL}api/v2/health"
+NDS_OPEN_COMMAND="/usr/bin/open -b net.kuribo64.melonDS {rom}"
 
 # Set OPEN_PAGE=0, KMVAR_OPEN_PAGE=0, or KMVAR_OpenPage=0 in Keyboard Maestro
 # if you only want to start the server.
@@ -95,6 +96,12 @@ is_managed_v2() {
   [[ "$listener_pids" == "$managed_pid" ]]
 }
 
+is_managed_v2_config_current() {
+  local job_state
+  job_state="$(/bin/launchctl print "$DOMAIN/$LABEL" 2>/dev/null)" || return 1
+  [[ "$job_state" == *"NDS_OPEN_COMMAND => $NDS_OPEN_COMMAND"* ]]
+}
+
 open_page() {
   if [[ "$OPEN_PAGE" == "1" ]]; then
     /usr/bin/open "$URL" >/dev/null 2>&1 || true
@@ -105,12 +112,16 @@ MANAGED_V2=0
 if is_managed_v2; then
   MANAGED_V2=1
   if is_v2_live; then
-    echo "V2 overworld viewer is already running: $URL"
-    log_debug "Managed V2 viewer already live."
-    open_page
-    exit 0
+    if is_managed_v2_config_current; then
+      echo "V2 overworld viewer is already running: $URL"
+      log_debug "Managed V2 viewer already live."
+      open_page
+      exit 0
+    fi
+    log_debug "Managed V2 configuration changed; reloading its LaunchAgent."
+  else
+    log_debug "Managed V2 listener is unhealthy; reloading its LaunchAgent."
   fi
-  log_debug "Managed V2 listener is unhealthy; reloading its LaunchAgent."
 fi
 
 if [[ "$MANAGED_V2" != "1" ]] && /usr/sbin/lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -132,7 +143,7 @@ for log_path in "$OUT_LOG" "$ERR_LOG"; do
 done
 
 PLIST_TMP="${PLIST}.tmp.$$"
-trap 'status=$?; /bin/rm -f "${PLIST_TMP:-}"; echo "[$(date "+%H:%M:%S")] Script exiting with status $status" >> "$LOG_FILE"' EXIT
+trap 'exit_code=$?; /bin/rm -f "${PLIST_TMP:-}"; echo "[$(date "+%H:%M:%S")] Script exiting with status $exit_code" >> "$LOG_FILE"' EXIT
 
 /bin/cat > "$PLIST_TMP" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -165,6 +176,8 @@ trap 'status=$?; /bin/rm -f "${PLIST_TMP:-}"; echo "[$(date "+%H:%M:%S")] Script
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>PYTHONUNBUFFERED</key>
     <string>1</string>
+    <key>NDS_OPEN_COMMAND</key>
+    <string>$NDS_OPEN_COMMAND</string>
   </dict>
   <key>StandardOutPath</key>
   <string>$OUT_LOG</string>

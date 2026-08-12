@@ -74,6 +74,10 @@ If you are looking to contribute to hg-engine, please see the [CONTRIBUTING.md](
     * ```export PKG_CONFIG_PATH=$(brew --prefix zlib)/lib/pkgconfig```
 3. Continue to [Further Setup Instructions](#further-setup-instructions-all-platforms-continued-from-individual-sections)
 
+The build checks that the selected ARM compiler can preprocess `<stdint.h>`
+before compiling project sources. If this preflight fails after a Homebrew
+upgrade, reinstall the `gcc-arm-embedded` cask or use the Docker build path.
+
 
 ## Setup Instructions (Windows on WSL)
 1. Open the Windows Command Prompt as Administrator (look up "Command Prompt" on your Start Menu, Right Click -> Run as Administrator). Once you have done that, execute the following command: ```dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all```

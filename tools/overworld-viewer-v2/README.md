@@ -26,6 +26,11 @@ python3 tools/overworld-viewer-v2/server.py
 
 Use `--host` or `--port` to override the foreground server's local binding.
 
+ROM builds run a bounded Docker readiness check before starting the container.
+On macOS it starts Docker Desktop when the daemon is unavailable; an
+unresponsive daemon fails promptly with restart guidance instead of leaving the
+Workshop waiting indefinitely.
+
 ## Sharing and reduced mode
 
 The application discovers workspace capabilities at runtime. A project does
@@ -75,6 +80,8 @@ sources themselves.
   Stale editors receive a conflict instead of silently overwriting newer work.
 - Verifies the source revision before and after every full-data or resolver
   read, retrying instead of pairing stale parsed data with a newer revision.
+- Refuses resolver reads when its loaded Python sources changed on disk; restart
+  V2 to load the new parser before resolving another context.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
   across profiles, memberships, overrides, encounters, and spawn settings.
 - Rebuilds Route Deck around the proven encounter workflow: persisted
@@ -113,6 +120,15 @@ The V2-only API surface is:
 - `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...`
 - `POST /api/v2/commit`
 
+The health response includes `serverInstanceId` and `restartRequired`. The
+restart endpoint is asynchronous; clients should poll health until a different
+instance ID is ready before reloading.
+
+If browser automation reports a stale or unowned tab handle, discard that
+handle, verify `/api/v2/health`, and open a fresh local Workshop tab. Build and
+status operations remain available through the documented HTTP endpoints; tab
+ownership itself is controlled by the browser integration, not this server.
+
 ## Source and ROM state
 
 “Saved” means the source transaction committed and the complete source model
@@ -121,10 +137,12 @@ remain explicit, separate actions in the header.
 
 Open NDS uses the platform file opener by default. To launch a specific
 emulator, set `NDS_OPEN_COMMAND`; include `{rom}` where the absolute ROM path
-belongs, or omit it to append the path automatically. For example:
+belongs, or omit it to append the path automatically. On macOS, launch the
+installed melonDS app by bundle identifier:
 
 ```bash
-NDS_OPEN_COMMAND='melonDS {rom}' python3 tools/overworld-viewer-v2/server.py
+NDS_OPEN_COMMAND='/usr/bin/open -b net.kuribo64.melonDS {rom}' \
+  python3 tools/overworld-viewer-v2/server.py
 ```
 
 Run one source-writing viewer process for a workspace at a time. V2 instances

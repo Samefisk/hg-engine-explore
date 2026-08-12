@@ -19,45 +19,60 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from pokemon_move_history_build_manifest import (
-    DEPENDENCY_FILES,
-    FIXED_INPUTS,
-    OUTPUTS,
-    PACKAGED_ROM_LOGICAL_PATH,
-    SCHEMA as BUILD_MANIFEST_SCHEMA,
-    ManifestError,
-    armips_dependency_paths,
-    file_record,
-    load_manifest,
-    publish_pair,
-    unbound_runtime_environment,
-    verify_manifest,
-    verify_manifest_document,
-)
+if __package__:
+    from .pokemon_move_history_build_manifest import (
+        DEPENDENCY_FILES,
+        FIXED_INPUTS,
+        OUTPUTS,
+        PACKAGED_ROM_LOGICAL_PATH,
+        SCHEMA as BUILD_MANIFEST_SCHEMA,
+        ManifestError,
+        armips_dependency_paths,
+        file_record,
+        load_manifest,
+        publish_pair,
+        unbound_runtime_environment,
+        verify_manifest,
+        verify_manifest_document,
+    )
+else:
+    from pokemon_move_history_build_manifest import (
+        DEPENDENCY_FILES,
+        FIXED_INPUTS,
+        OUTPUTS,
+        PACKAGED_ROM_LOGICAL_PATH,
+        SCHEMA as BUILD_MANIFEST_SCHEMA,
+        ManifestError,
+        armips_dependency_paths,
+        file_record,
+        load_manifest,
+        publish_pair,
+        unbound_runtime_environment,
+        verify_manifest,
+        verify_manifest_document,
+    )
 
 
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x1000
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "21d0a504635c977e812d2f395445b3e7a2b8d416a0c5607c72b55865657250e2"
+    "5af0491f46bec5684ebc61744310127356065e360d2e6be64b73ad1e6a85a21a"
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
-OVERLAY155_DIAGNOSTIC_SCRATCH = 0x023BE200
-OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE = 0x134
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "d0c4d752ab5ea21863b8887d8a22282a16aa4dbcbb1dac2bf876e04d639b1fa3"
+    "dba024cb98bb6a5c689238d2217238f45020e31a64f21c1833f6d192ed8536f1"
 )
 EXPECTED_MAKEFILE_SHA256 = (
-    "1e406eb80a30a2eee8fd3d85bced040cfe18ea239ba1ad43d61aee8921542090"
+    "4c305ae18d7be261af37c5554d166f956f6d4449905eaac70092bd7424361fdd"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "047955c13589b9c24873021b1143caa81657690831337a50bfdaa30efe9e4645"
+    "1968d013d730de3d11efdab8ce57679a19a7c0b5b424c92690e00baa0412f349"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
-        "d0fe26e89f80a5101339650e69ba205fe8a352b7dd8a09a13f1394583b84f5bd",
+        "4a3e1f4cc31ff8b62471711cd31bbf3839c82f8826425a6492bcaeefa87b7af1",
     "data/graphics/itemgra.mk":
         "3e90342beaa98774e2e1bb62fd0c0b32673edee65d69b1ce85603c81a8aad444",
     "data/graphics/pokegra.mk":
@@ -65,9 +80,9 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/itemdata/itemdata.mk":
         "5f6fb210d6106c88edca22ce74b9e4c8e93a9dc29d54ad9dd86bc281e010bf51",
     "narcs.mk":
-        "a9ac0903e08e654c1a34869ffd8998e55d394b46fbdc547c4e34495e69321d03",
+        "df964fe5b5822e230ab179e45eb53e23fbf9adab46afbe89167495b4f96e467a",
     "overlays.mk":
-        "d850825fa9a0e9c183f41d55c16c268d43ffe32faa9e54fe7259aa4dc7458c97",
+        "90b6c7cdc1f0751953ce435c3efae0b0a494dd9fe48d550115b6d6a7c3403b10",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -2050,6 +2065,15 @@ def source_contracts() -> None:
             f"runtime evidence input is not uniquely sealed: "
             f"{runtime_evidence_input}",
         )
+    for managed_build_input in (
+        "requirements.txt",
+        "scripts/check_docker_ready.py",
+    ):
+        require(
+            FIXED_INPUTS.count(managed_build_input) == 1,
+            f"managed build input is not uniquely sealed: "
+            f"{managed_build_input}",
+        )
     require(
         len(FIXED_INPUTS) == len(set(FIXED_INPUTS)),
         "fixed manifest inputs contain duplicate paths",
@@ -3133,12 +3157,12 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "e8ac941be193804f733059805bc2acfe28dae0c2a0612102339e0d0fc9861628"
+        "fca576ab8cf88b408ed70e2a4de8f5d335aab5e7e0e4fb63c5886ad81bafbe78"
     )
     require(
         make_publication_contract_matches(
             makefile,
-            "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)",
+            "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv",
             expected_all_recipe,
             expected_publication_tail,
         ),
@@ -3225,7 +3249,7 @@ def source_contracts() -> None:
             ),
             f"Make global flag mutation passes: {makeflags_mutation.strip()}",
         )
-    exact_target = "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS)"
+    exact_target = "all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv"
     prerequisite_mutation = makefile.replace(
         exact_target,
         exact_target + " clobber-accepted-rom",
@@ -5627,14 +5651,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     153: (
         OVERLAY_BASE,
-        0xF6C,
+        0xFF8,
         0,
         0,
         0,
         153,
         0,
         0x421600,
-        0x42256C,
+        0x4225F8,
     ),
     154: (
         0x023C0400,
@@ -5649,14 +5673,25 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     155: (
         OVERLAY155_BASE,
-        0x994,
+        0x1000,
         0,
         0,
         0,
         155,
         0,
         0x423C00,
-        0x424594,
+        0x424C00,
+    ),
+    156: (
+        0x023BC800,
+        0xC00,
+        0,
+        0,
+        0,
+        156,
+        0,
+        0x424C00,
+        0x425800,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -5926,6 +5961,7 @@ def binary_contracts(
     linked = REPO / "build/pokemon_move_history_overlay_linked.o"
     overlay_path = REPO / "build/output_pokemon_move_history_overlay.bin"
     arm9_path = REPO / "base/arm9.bin"
+    ov1_path = REPO / "base/overlay/overlay_0001.bin"
     ov12_path = REPO / "base/overlay/overlay_0012.bin"
     ov68_path = REPO / "base/overlay/overlay_0068.bin"
     ov112_path = REPO / "base/overlay/overlay_0112.bin"
@@ -5977,6 +6013,7 @@ def binary_contracts(
         linked,
         overlay_path,
         arm9_path,
+        ov1_path,
         ov12_path,
         ov68_path,
         ov112_path,
@@ -6020,6 +6057,16 @@ def binary_contracts(
     )
     symbols = symbol_table(linked)
     linked_symbol_sizes = symbol_sizes(linked)
+    require(
+        symbols.get("OverworldWildSpawns_FilterNativeShadowImpl")
+        == OVERLAY_BASE + 0xF6C,
+        "overlay 153 native-shadow filter entry moved",
+    )
+    require(
+        symbols.get("OverworldWildSpawns_FilterNativeShadowVisibilityImpl")
+        == OVERLAY_BASE + 0xF9C,
+        "overlay 153 native-shadow visibility filter entry moved",
+    )
     for name in (
         "PokemonMoveHistory_ReplaceMoveImpl",
         "PokemonMoveHistory_DeleteMoveSlotImpl",
@@ -6163,6 +6210,7 @@ def binary_contracts(
     )
     packaged_metadata_mutation_fixtures(rom_bytes)
     require(arm9_base == 0x02000000, "packaged ARM9 RAM base differs")
+    ov1_component = packaged_overlays[1]
     ov12_component = packaged_overlays[12]
     ov65_component = packaged_overlays[65]
     ov68_component = packaged_overlays[68]
@@ -6173,6 +6221,10 @@ def binary_contracts(
     ov153_component = packaged_overlays[153]
     ov154_component = packaged_overlays[154]
     ov155_component = packaged_overlays[155]
+    ov1_base, packaged_ov1 = (
+        ov1_component.ram_address,
+        ov1_component.data,
+    )
     ov12_base, packaged_ov12 = (
         ov12_component.ram_address,
         ov12_component.data,
@@ -6261,6 +6313,7 @@ def binary_contracts(
         and ov131_component.fat_end == 0x003F83D2,
         "packaged scripted-daycare field overlay 131 metadata differs",
     )
+    require(ov1_base == 0x021E5900, "packaged overlay 1 base differs")
     require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
     require(ov154_base == 0x023C0400, "packaged overlay 154 base differs")
     require(
@@ -6272,6 +6325,10 @@ def binary_contracts(
         base_arm9.startswith(packaged_arm9)
         and len(base_arm9) - len(packaged_arm9) <= 12,
         "packaged ARM9 bytes differ from the current patched ARM9",
+    )
+    require(
+        packaged_ov1 == ov1_path.read_bytes(),
+        "packaged field overlay 1 differs from the current patched artifact",
     )
     require(
         packaged_ov12 == ov12_path.read_bytes(),
@@ -6399,15 +6456,19 @@ def binary_contracts(
         0 < len(packaged_ov155) <= OVERLAY155_LIMIT,
         "packaged overlay 155 exceeds its fixed reservation",
     )
-    require(
-        ov155_base + len(packaged_ov155)
-        <= OVERLAY155_DIAGNOSTIC_SCRATCH
-        and OVERLAY155_DIAGNOSTIC_SCRATCH
-        + OVERLAY155_DIAGNOSTIC_SCRATCH_SIZE
-        <= ov155_base + OVERLAY155_LIMIT,
-        "packaged overlay 155 overlaps the sealed diagnostic scratch",
-    )
     task6_symbols = symbol_table(task6_linked)
+    require(
+        task6_symbols.get(
+            "OverworldWildSpawns_SetNativeShadowSuppressedImpl"
+        ) == ov155_base + 0xFD8,
+        "packaged overlay 155 native-shadow policy entry moved",
+    )
+    require(
+        task6_symbols.get(
+            "gOverworldWildNativeShadowSuppressedMaskStorage"
+        ) == ov155_base + 0xFFC,
+        "packaged overlay 155 native-shadow policy mask moved",
+    )
     for name, offset in (
         ("MoveHistoryTask6Entry_IsCanonical", 0x00),
         ("MoveHistoryTask6Entry_DaycareDepositCommit", 0x08),
@@ -6459,6 +6520,19 @@ def binary_contracts(
         packaged_ov155[0xA8:0xD8] == bytes(0x30),
         "packaged overlay 155 diagnostic mailbox is not zero-initialized",
     )
+    for offset, implementation in (
+        (0xD8, "OverworldWild_ResolveHopTrajectory"),
+        (0xDC, "OverworldWild_TryGetBehaviorHopVector"),
+        (0xE0, "OverworldWild_ValidateHopLanding"),
+        (0xE4, "OverworldWild_BuildHopHelperConfig"),
+        (0xEC, "OverworldWild_ApplyJumpRenderMotion"),
+    ):
+        require(
+            struct.unpack_from("<I", packaged_ov155, offset)[0]
+            == task6_symbols.get(implementation, 0) + 1,
+            f"packaged overlay 155 hop service target differs: "
+            f"{implementation}",
+        )
     task6_calls = packaged_thumb_calls(
         packaged_ov155,
         ov155_base,
@@ -6466,9 +6540,9 @@ def binary_contracts(
         len(packaged_ov155),
     )
     require(
-        len(task6_calls) == 75
+        len(task6_calls) == 101
         and sum(kind == "bl" for _address, kind, _target in task6_calls)
-        == 68
+        == 89
         and sum(
             kind == "blx_reg"
             for _address, kind, _target in task6_calls
@@ -6509,7 +6583,7 @@ def binary_contracts(
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 111
+        and len(packaged_call_inventory) == 113
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
@@ -6518,9 +6592,12 @@ def binary_contracts(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory
         ) == 2
-        and not [
+        and [
             call for call in packaged_call_inventory
             if call[1] == "blx_reg"
+        ] == [
+            (OVERLAY_BASE + 0xF8E, "blx_reg", 5),
+            (OVERLAY_BASE + 0xFC4, "blx_reg", 6),
         ]
         and call_inventory_sha256(packaged_call_inventory)
         == OVERLAY153_CALL_INVENTORY_SHA256,
@@ -6634,6 +6711,82 @@ def binary_contracts(
         )
 
     core_symbols = symbol_table(core_linked)
+    native_shadow_filter = OVERLAY_BASE + 0xF6C
+    native_shadow_call_sites = (0x0205FFD2, 0x02060062, 0x020603F2)
+    require(
+        all(
+            thumb_bl_target(packaged_arm9, arm9_base, call_site)
+            == native_shadow_filter
+            for call_site in native_shadow_call_sites
+        ),
+        "stock native-shadow creation routes bypass the overworld-wild policy filter",
+    )
+    require(
+        linked_symbol_sizes.get("OverworldWildSpawns_FilterNativeShadowImpl")
+        == 0x30
+        and packaged_thumb_calls(
+            packaged_ov153,
+            ov153_base,
+            native_shadow_filter,
+            0x30,
+        ) == [(native_shadow_filter + 0x22, "blx_reg", 5)]
+        and struct.unpack_from(
+            "<I",
+            packaged_ov153,
+            native_shadow_filter + 0x2C - ov153_base,
+        )[0] == 0x020603F9,
+        "native-shadow fallback is not an explicit Thumb-state stock call",
+    )
+    native_shadow_visibility_filter = OVERLAY_BASE + 0xF9C
+    require(
+        all(
+            thumb_bl_target(packaged_ov1, ov1_base, call_site)
+            == native_shadow_visibility_filter
+            for call_site in (0x021FD752, 0x021FD950)
+        ),
+        "native-shadow update tasks bypass the overworld-wild visibility policy",
+    )
+    require(
+        linked_symbol_sizes.get(
+            "OverworldWildSpawns_FilterNativeShadowVisibilityImpl"
+        ) == 0x20
+        and bytes_at(
+            packaged_ov153,
+            ov153_base,
+            native_shadow_visibility_filter,
+            0x20,
+        ) == bytes.fromhex(
+            "b2 68 e0 3a 01 23 93 40 04 4a 12 88 1a 42 01 d0 "
+            "01 22 00 e0 00 22 e2 60 70 47 00 00 fc e3 3b 02"
+        ),
+        "native-shadow visibility filter body differs",
+    )
+    native_shadow_position_filter = OVERLAY_BASE + 0xFBC
+    require(
+        all(
+            thumb_bl_target(packaged_ov1, ov1_base, call_site)
+            == native_shadow_position_filter
+            for call_site in (0x021FD76E, 0x021FD96C)
+        ),
+        "native-shadow update tasks bypass the independent position filter",
+    )
+    require(
+        linked_symbol_sizes.get(
+            "OverworldWildSpawns_CopyNativeShadowPositionImpl"
+        ) == 0x3C
+        and packaged_thumb_calls(
+            packaged_ov153,
+            ov153_base,
+            native_shadow_position_filter,
+            0x3C,
+        ) == [(native_shadow_position_filter + 8, "blx_reg", 6)]
+        and struct.unpack_from(
+            "<II",
+            packaged_ov153,
+            native_shadow_position_filter + 0x34 - ov153_base,
+        ) == (0x0205F945, 0x023DF918),
+        "native-shadow position filter body or runtime anchors differ",
+    )
     require(
         "IsMoveUnimplemented" in core_symbols,
         "resident core does not export IsMoveUnimplemented",

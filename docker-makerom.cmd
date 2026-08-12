@@ -3,6 +3,17 @@
   goto :WINDOWS
 fi
 
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+
+docker_preflight_python=$(command -v python3) || {
+  echo "Python 3 is required for the bounded Docker readiness check." >&2
+  exit 1
+}
+[ -n "$docker_preflight_python" ] && [ -x "$docker_preflight_python" ] || exit 1
+"$docker_preflight_python" scripts/check_docker_ready.py --start --wait 120 || exit $?
+
 docker run -it --rm \
   --workdir /hg-engine \
   --mount type=bind,source="$(pwd)",destination=/hg-engine \
@@ -161,4 +172,5 @@ exit "$build_status"
 
 :WINDOWS
 
+python scripts\check_docker_ready.py --start --wait 120 || exit /b 1
 for /f "usebackq tokens=*" %%i in (`cd`) do docker run -it --rm --workdir /hg-engine --mount type=bind,source="%%i",destination=/hg-engine --mount type=volume,source=hg-engine-venv,destination=/tmp/hg-engine-venv --mount type=volume,source=hg-engine-pip-cache,destination=/tmp/pip-cache -e PIP_CACHE_DIR=/tmp/pip-cache hg-engine /usr/bin/env -i LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin PIP_CACHE_DIR=/tmp/pip-cache PWD=/hg-engine /usr/bin/python3 scripts/verify_pokemon_move_history_capture.py --managed-build-clean

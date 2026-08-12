@@ -98,7 +98,7 @@ LEARNSETS_GENERATOR_INPUTS := \
 	data/FormToSpeciesMapping.c
 
 .PHONY: learnsets-ensure
-learnsets-ensure: $(LEARNSETS_GENERATOR_INPUTS) $(VENV_ACTIVATE)
+learnsets-ensure: $(LEARNSETS_GENERATOR_INPUTS) | venv
 	@echo "generating learnset data..."
 	$(PYTHON) scripts/build_learnsets.py \
 		--learnsets $(LEARNSETS_INPUT) \
@@ -211,7 +211,7 @@ BATTLETESTS_FORCE_REGEN := $(if $(strip $(TEST_FILTER)),force-test,)
 BATTLETESTS_OBJS := $(patsubst %.c,%.o,$(BATTLETESTS_DEPENDENCIES))
 BATTLETESTS_BIN := $(patsubst $(BATTLETESTS_OUTPUT_DIR)/%.c,$(BUILD)/%.bin,$(BATTLETESTS_DEPENDENCIES))
 
-$(BATTLETESTS_HEADER): $(BATTLETESTS_TEST_FILES) $(BATTLETESTS_FORCE_REGEN) $(VENV_ACTIVATE)
+$(BATTLETESTS_HEADER): $(BATTLETESTS_TEST_FILES) $(BATTLETESTS_FORCE_REGEN) | venv
 	$(PYTHON) scripts/build_tests.py $(TEST_FILTER)
 
 $(BATTLETESTS_DEPENDENCIES): $(BATTLETESTS_HEADER)
@@ -226,13 +226,41 @@ REQUIRED_DIRECTORIES += $(BATTLETESTS_OUTPUT_DIR)
 
 OVERWORLD_WILD_BEHAVIOR_DATA_TARGET := $(BUILD)/a028/9_17
 OVERWORLD_WILD_BLOB_VALIDATOR := scripts/validate_overworld_wild_blobs.py
-OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES := data/OverworldWildBehaviorData.c include/overworld_wild_behavior_data.h include/config.h include/constants/species.h $(OVERWORLD_WILD_BLOB_VALIDATOR) $(VENV_ACTIVATE)
+OVERWORLD_WILD_ROOF_CATALOG_GENERATOR := tools/generate_overworld_wild_roof_catalog.py
+OVERWORLD_WILD_ROOF_CATALOG_MANIFEST := data/overworld_wild_roof_catalog_manifest.json
+OVERWORLD_WILD_ROOF_CATALOG_COUNTS := include/constants/generated/overworld_wild_roof_catalog_counts.h
+OVERWORLD_WILD_ROOF_CATALOG_INCLUDE := data/generated/overworld_wild_roof_catalog.inc
+OVERWORLD_WILD_ROOF_CATALOG_REPORT := data/generated/overworld_wild_roof_catalog.json
+OVERWORLD_WILD_ROOF_CATALOG_DEPENDENCIES := $(OVERWORLD_WILD_ROOF_CATALOG_GENERATOR) $(OVERWORLD_WILD_ROOF_CATALOG_MANIFEST) tools/headbutt_tree_visual_model_probe.py base/root/a/0/4/0 base/root/a/0/4/1 base/root/a/0/6/5
+
+$(OVERWORLD_WILD_ROOF_CATALOG_COUNTS): $(OVERWORLD_WILD_ROOF_CATALOG_DEPENDENCIES) | venv
+	@echo "generating overworld wild roof catalog..."
+	$(PYTHON) $(OVERWORLD_WILD_ROOF_CATALOG_GENERATOR)
+
+$(OVERWORLD_WILD_ROOF_CATALOG_INCLUDE): $(OVERWORLD_WILD_ROOF_CATALOG_COUNTS)
+	@test -f $@ || $(PYTHON) $(OVERWORLD_WILD_ROOF_CATALOG_GENERATOR)
+
+$(OVERWORLD_WILD_ROOF_CATALOG_REPORT): $(OVERWORLD_WILD_ROOF_CATALOG_COUNTS)
+	@test -f $@ || $(PYTHON) $(OVERWORLD_WILD_ROOF_CATALOG_GENERATOR)
+
+include/overworld_wild_behavior_data.h: $(OVERWORLD_WILD_ROOF_CATALOG_COUNTS)
+
+build/overlay.o build/pokemon.o build/field/map_teleport.o \
+build/overworld_follower_release_overlay2/overworld_follower_release_overlay2.o \
+build/overworld_follower_selector_icons_overlay2/overworld_follower_selector_icons_overlay2.o \
+build/overworld_follower_selector_overlay/follower_selector_input.o \
+build/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.o \
+build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o \
+build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o: $(OVERWORLD_WILD_ROOF_CATALOG_COUNTS)
+
+OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES := data/OverworldWildBehaviorData.c include/overworld_wild_behavior_data.h include/config.h include/constants/species.h $(OVERWORLD_WILD_ROOF_CATALOG_COUNTS) $(OVERWORLD_WILD_ROOF_CATALOG_INCLUDE) $(OVERWORLD_WILD_ROOF_CATALOG_REPORT) $(OVERWORLD_WILD_BLOB_VALIDATOR)
 OVERWORLD_WILD_BEHAVIOR_DATA_OBJ := build/OverworldWildBehaviorData.o
 OVERWORLD_WILD_BEHAVIOR_DATA_BIN := build/OverworldWildBehaviorData.bin
 
 $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN): $(OVERWORLD_WILD_BEHAVIOR_DATA_DEPENDENCIES)
 	@echo "writing overworld wild behavior data..."
 	@mkdir -p $(dir $@)
+	$(PYTHON) $(OVERWORLD_WILD_ROOF_CATALOG_GENERATOR) --check
 	$(PYTHON) scripts/overworld_behavior_profile_viewer.py --validate-overrides
 	$(CC) $(CFLAGS) -c data/OverworldWildBehaviorData.c -o $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ)
 	$(OBJCOPY) -O binary $(OVERWORLD_WILD_BEHAVIOR_DATA_OBJ) $@
@@ -242,7 +270,7 @@ NARC_FILES += $(OVERWORLD_WILD_BEHAVIOR_DATA_BIN)
 
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_TARGET := $(BUILD)/a028/9_18
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR := scripts/build_overworld_wild_encounter_data.py
-OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h include/config.h include/constants/maps.h $(BUILD_NARC)/encounters.narc $(OVERWORLD_WILD_BLOB_VALIDATOR) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR) $(VENV_ACTIVATE)
+OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES := data/OverworldWildEncounterLookupData.c include/overworld_wild_behavior_data.h include/config.h include/constants/maps.h $(BUILD_NARC)/encounters.narc $(OVERWORLD_WILD_BLOB_VALIDATOR) $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_GENERATOR)
 OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN := build/OverworldWildEncounterLookupData.bin
 
 $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN): $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_DEPENDENCIES)
@@ -256,7 +284,7 @@ NARC_FILES += $(OVERWORLD_WILD_ENCOUNTER_LOOKUP_BIN)
 OVERWORLD_WILD_SPAWN_METADATA_TARGET := $(BUILD)/a028/9_19
 OVERWORLD_WILD_SPAWN_METADATA_GENERATOR := scripts/build_overworld_wild_spawn_metadata.py
 OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER := include/overworld_wild_behavior_data.h
-OVERWORLD_WILD_SPAWN_METADATA_DEPENDENCIES := $(BUILD_NARC)/mondata.narc $(BUILD_NARC)/overworld_properties.narc $(BUILD)/a028/9_09 $(SPECIES_TO_OW_GFX_BIN) $(POKEFORMDATATBL_BIN) build/field/overworld_table.o base/overlay/overlay_0001.bin $(OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER) $(OVERWORLD_WILD_SPAWN_METADATA_GENERATOR) $(VENV_ACTIVATE)
+OVERWORLD_WILD_SPAWN_METADATA_DEPENDENCIES := $(BUILD_NARC)/mondata.narc $(BUILD_NARC)/overworld_properties.narc $(BUILD)/a028/9_09 $(SPECIES_TO_OW_GFX_BIN) $(POKEFORMDATATBL_BIN) build/field/overworld_table.o base/overlay/overlay_0001.bin $(OVERWORLD_WILD_SPAWN_METADATA_FORMAT_HEADER) $(OVERWORLD_WILD_SPAWN_METADATA_GENERATOR)
 OVERWORLD_WILD_SPAWN_METADATA_BIN := build/OverworldWildSpawnMetadata.bin
 
 $(OVERWORLD_WILD_SPAWN_METADATA_BIN): $(OVERWORLD_WILD_SPAWN_METADATA_DEPENDENCIES)

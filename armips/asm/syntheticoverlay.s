@@ -30,7 +30,11 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #153
     bl LoadResidentOverlay
 
+// load overlay 156's generic overworld-wild runtime services
     mov r0, #0
+    mov r1, #156
+    bl LoadResidentOverlay
+
     mov r0, #0
     mov r1, #3
     pop {r2, pc}

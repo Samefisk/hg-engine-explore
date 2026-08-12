@@ -18,6 +18,9 @@ OVERLAY_GUARD = 0x1000
 TASK6_OVERLAY_ID = 155
 TASK6_OVERLAY_BASE = 0x023BD400
 TASK6_OVERLAY_LIMIT = 0x023BE400
+RUNTIME_OVERLAY_ID = 156
+RUNTIME_OVERLAY_BASE = 0x023BC800
+RUNTIME_OVERLAY_LIMIT = 0x023BD400
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
 DTCM_START = 0x027E0000
@@ -1154,6 +1157,39 @@ def main() -> None:
         TASK6_OVERLAY_ID < len(rows),
         "final y9 has no overlay 155 row",
     )
+    require(
+        RUNTIME_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 156 row",
+    )
+
+    runtime_row = rows[RUNTIME_OVERLAY_ID]
+    runtime_overlay = final_overlay(rom, fat, runtime_row)
+    runtime_built = (
+        REPO / "build/output_overworld_wild_runtime_overlay.bin"
+    ).read_bytes()
+    require(
+        runtime_overlay == runtime_built,
+        "final ROM overlay 156 differs from linked output",
+    )
+    require(
+        runtime_row == (
+            RUNTIME_OVERLAY_ID,
+            RUNTIME_OVERLAY_BASE,
+            len(runtime_overlay),
+            0,
+            0,
+            0,
+            RUNTIME_OVERLAY_ID,
+            0,
+        ),
+        "final overlay 156 row has unexpected metadata",
+    )
+    require(
+        0 < len(runtime_overlay)
+        and RUNTIME_OVERLAY_BASE + len(runtime_overlay)
+            <= RUNTIME_OVERLAY_LIMIT,
+        "overlay 156 exceeds its fixed 0xC00 reservation",
+    )
 
     task6_row = rows[TASK6_OVERLAY_ID]
     task6_overlay = final_overlay(rom, fat, task6_row)
@@ -1262,7 +1298,11 @@ def main() -> None:
 
     for other in rows:
         other_size = other[2] + other[3]
-        if other[0] in (OVERLAY_ID, TASK6_OVERLAY_ID) or other_size == 0:
+        if other[0] in (
+            OVERLAY_ID,
+            TASK6_OVERLAY_ID,
+            RUNTIME_OVERLAY_ID,
+        ) or other_size == 0:
             continue
         other_start = other[1]
         other_end = other_start + other_size
@@ -1284,9 +1324,9 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x10D000
-        and 0x110000 - heap3_size == 0x3000,
-        "heap 3 does not explicitly reserve 0x3000 for overlays 155/153",
+        heap3_size == 0x10C400
+        and 0x110000 - heap3_size == 0x3C00,
+        "heap 3 does not explicitly reserve 0x3C00 for overlays 156/155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1349,7 +1389,7 @@ def main() -> None:
         "FNT/FAT caches exceed the SDK archive allocation",
     )
     require(
-        archive_end + OVERLAY_GUARD <= TASK6_OVERLAY_BASE,
+        archive_end + OVERLAY_GUARD <= RUNTIME_OVERLAY_BASE,
         f"boot FNT+FAT allocation reaches 0x{archive_end:08X}",
     )
 
@@ -1358,20 +1398,20 @@ def main() -> None:
         not ranges_overlap(
             arm9_ram,
             arm9_end,
-            TASK6_OVERLAY_BASE,
+            RUNTIME_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "final ARM9 load image overlaps resident overlays 155/153",
+        "final ARM9 load image overlaps resident overlays 156/155/153",
     )
     require(
         OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
-            TASK6_OVERLAY_BASE,
+            RUNTIME_OVERLAY_BASE,
             OVERLAY_LIMIT,
         ),
-        "resident overlays 155/153 cross the main arena or DTCM stack boundary",
+        "resident overlays 156/155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")
@@ -1413,9 +1453,11 @@ def main() -> None:
     require(
         "mov r1, #155" in startup
         and "mov r1, #153" in startup
+        and "mov r1, #156" in startup
         and startup.index("mov r1, #155")
-        < startup.index("mov r1, #153"),
-        "startup does not load overlay 155 before overlay 153",
+        < startup.index("mov r1, #153")
+        < startup.index("mov r1, #156"),
+        "startup does not load overlays 155, 153, and 156 in order",
     )
     require("0x02007188|1" in startup,
             "startup does not use the untracked no-init loader")

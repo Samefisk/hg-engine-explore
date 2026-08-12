@@ -51,6 +51,12 @@ SECTIONS {
                 KEEP(*(.pokemon_move_history_task6_diagnostic_data))
                 ASSERT(. == ORIGIN(rom) + 0xD8,
                     "task-6 diagnostic mailbox size differs");
+                KEEP(*(.overworld_wild_hop_trajectory_entry))
+                ASSERT(gOverworldWildHopTrajectoryEntry
+                        == ORIGIN(rom) + 0xD8,
+                    "overworld wild hop trajectory entry moved");
+                ASSERT(. == ORIGIN(rom) + 0xF0,
+                    "overworld wild hop trajectory entry size differs");
                 KEEP(*(.pokemon_move_history_task6_short_branch_targets))
                 ASSERT(MoveHistoryTask6Entry_IsCanonical
                         == ORIGIN(rom) + 0x00,
@@ -95,13 +101,24 @@ SECTIONS {
                 *(.dtors)
                 *(.rodata)
                 *(.fini)
+                KEEP(*(.overworld_wild_hop_trajectory_code))
                 *(COMMON)
-                __text_end = . ;
 
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
+                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xFD8,
+                    "task-6 resident helper overlaps native-shadow policy entry");
+                . = ORIGIN(rom) + 0xFD8;
+                KEEP(*(.overworld_wild_shadow_policy_entry))
+                ASSERT(OverworldWildSpawns_SetNativeShadowSuppressedImpl
+                        == ORIGIN(rom) + 0xFD8,
+                    "native-shadow policy entry moved");
+                ASSERT(gOverworldWildNativeShadowSuppressedMaskStorage
+                        == ORIGIN(rom) + 0xFFC,
+                    "native-shadow policy mask moved");
+                __text_end = . ;
+                ASSERT(__text_end <= ORIGIN(rom) + LENGTH(rom),
                     "task-6 resident helper exceeds 0x1000 reservation");
                 _end = __bss_end__ ;
                 __end__ = __bss_end__ ;

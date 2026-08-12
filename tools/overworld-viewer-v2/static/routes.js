@@ -1350,6 +1350,83 @@ export function createRoutesController({
     return payload;
   }
 
+  function exportDraft() {
+    return {
+      version: 1,
+      encounterDrafts: [...model.encounterDrafts],
+      overrideDrafts: [...model.overrideDrafts].map(([routeId, operation]) => [routeId, JSON.parse(JSON.stringify(operation))]),
+      spawnDrafts: [...model.spawnDrafts],
+    };
+  }
+
+  function prepareDraftImport(snapshot) {
+    if (!snapshot || typeof snapshot !== "object" || snapshot.version !== 1) {
+      throw new TypeError("Route draft backup version is not supported.");
+    }
+    const entries = (value, label, validateValue) => {
+      if (!Array.isArray(value)) throw new TypeError(`${label} must be an array.`);
+      const keys = new Set();
+      return value.map((entry) => {
+        if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !validateValue(entry[1])) {
+          throw new TypeError(`${label} contains an invalid entry.`);
+        }
+        if (keys.has(entry[0])) throw new TypeError(`${label} contains a duplicate key.`);
+        keys.add(entry[0]);
+        return entry;
+      });
+    };
+    const text = (value) => typeof value === "string";
+    const operation = (value) => value && typeof value === "object" && !Array.isArray(value)
+      && (value.action === "clear" || value.action === "set" && typeof value.species === "string" && Array.isArray(value.entries));
+    const encounterEntries = entries(snapshot.encounterDrafts, "Route encounterDrafts", text);
+    for (const [key] of encounterEntries) {
+      if (!model.baselines.has(key)) throw new TypeError("Route draft backup refers to an unknown encounter field.");
+    }
+    const overrideEntries = entries(snapshot.overrideDrafts, "Route overrideDrafts", operation);
+    for (const [routeId, value] of overrideEntries) {
+      if (!model.routesById.has(routeId)) throw new TypeError(`Route draft backup refers to unknown Route ${routeId}.`);
+      if (value.action === "set") {
+        if (!resolveSpecies(value.species) || !value.entries.every((entry) => (
+          entry && typeof entry === "object" && typeof entry.path === "string"
+          && typeof entry.species === "string" && Boolean(resolveSpecies(entry.species))
+          && typeof entry.form === "string"
+          && (entry.formPath === undefined || typeof entry.formPath === "string")
+        ))) throw new TypeError(`Route override ${routeId} is malformed.`);
+      }
+    }
+    const spawnSymbols = new Set();
+    asArray(model.data.spawnSettings).forEach((group) => asArray(group.settings).forEach((setting) => {
+      (setting.kind === "testSpawn" ? asArray(setting.fields) : [setting]).forEach((field) => spawnSymbols.add(field.symbol));
+    }));
+    const spawnEntries = entries(snapshot.spawnDrafts, "Route spawnDrafts", text);
+    if (spawnEntries.some(([symbol]) => !spawnSymbols.has(symbol))) throw new TypeError("Route draft backup refers to an unknown spawn setting.");
+    return {
+      encounterDrafts: new Map(encounterEntries),
+      overrideDrafts: new Map(overrideEntries.map(([key, value]) => [key, JSON.parse(JSON.stringify(value))])),
+      spawnDrafts: new Map(spawnEntries),
+    };
+  }
+
+  function applyDraftImport(prepared) {
+    model.encounterDrafts.clear();
+    prepared.encounterDrafts.forEach((value, key) => model.encounterDrafts.set(key, value));
+    model.overrideDrafts.clear();
+    prepared.overrideDrafts.forEach((value, key) => model.overrideDrafts.set(key, value));
+    model.spawnDrafts.clear();
+    prepared.spawnDrafts.forEach((value, key) => model.spawnDrafts.set(key, value));
+    model.invalidInputs.clear();
+    model.entryEditor = null;
+    model.overrideEditor = false;
+    model.spawnEditor = false;
+    for (const key of model.encounterDrafts.keys()) {
+      const [routeId, path] = splitBaselineKey(key);
+      validateTargetRange(currentRouteById(routeId), path);
+    }
+    validateSpawnRelationships();
+    render();
+    signalDirty();
+  }
+
   function clearCommitted(scope = "all") {
     if (scope === "all" || scope === "encounters" || scope === "/save-encounters") {
       model.encounterDrafts.clear();
@@ -1723,6 +1800,9 @@ export function createRoutesController({
     speciesSymbolsForPool,
     locationsForPokemon,
     commitPayload,
+    exportDraft,
+    prepareDraftImport,
+    applyDraftImport,
     clearCommitted,
     reset,
     refresh,
