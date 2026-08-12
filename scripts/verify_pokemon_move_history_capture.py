@@ -5629,25 +5629,25 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     129: (
         0x023D8000,
-        0x7FC0,
+        0x7F20,
         0,
         0,
         0,
         129,
         0,
         0x3DAA00,
-        0x3E29C0,
+        0x3E2920,
     ),
     131: (
         0x023C8000,
-        0x4FD2,
+        0x4FC2,
         0,
         0,
         0,
         131,
         0,
         0x3F3400,
-        0x3F83D2,
+        0x3F83C2,
     ),
     153: (
         OVERLAY_BASE,
@@ -6302,7 +6302,7 @@ def binary_contracts(
     )
     require(
         ov131_base == 0x023C8000
-        and len(packaged_ov131) == 0x4FD2
+        and len(packaged_ov131) == 0x4FC2
         and ov131_component.ram_size == len(packaged_ov131)
         and ov131_component.bss_size == 0
         and ov131_component.static_init_start == 0
@@ -6310,7 +6310,7 @@ def binary_contracts(
         and ov131_component.file_id == 131
         and ov131_component.flags == 0
         and ov131_component.fat_start == 0x003F3400
-        and ov131_component.fat_end == 0x003F83D2,
+        and ov131_component.fat_end == 0x003F83C2,
         "packaged scripted-daycare field overlay 131 metadata differs",
     )
     require(ov1_base == 0x021E5900, "packaged overlay 1 base differs")

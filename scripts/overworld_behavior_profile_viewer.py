@@ -336,14 +336,17 @@ PROFILE_FIELDS = [
     "chainRepositionDust",
     "chainRepositionAllowCardinal",
     "chainRepositionAllowDiagonal",
+    "walkOptions",
 ]
 
+# v64 consumes the compact profile's final padding byte for packed Walk options.
 # v63 appends explicit Reposition-skid distance, particle, and direction controls.
 # v62 appends Reposition speed after the v61 compact profile.
 # v59 consumes the byte that was tail padding in v58. All migrations preserve
 # every earlier packed-field offset.
+PROFILE_FIELDS_V63 = [field for field in PROFILE_FIELDS if field != "walkOptions"]
 PROFILE_FIELDS_V62 = [
-    field for field in PROFILE_FIELDS
+    field for field in PROFILE_FIELDS_V63
     if field not in {
         "chainRepositionDistance",
         "chainRepositionDust",
@@ -460,6 +463,7 @@ FIELD_LABELS = {
     "chainRepositionDust": "Reposition skid dust",
     "chainRepositionAllowCardinal": "Allow cardinal directions",
     "chainRepositionAllowDiagonal": "Allow diagonal directions",
+    "walkOptions": "Walk options",
     "chillAllowedTerrainMask": "Allowed terrains",
     "chillAllowedTerrainOverrideMask": "Terrain override mask",
     "attentiveAllowedTile": "Allowed tile",
@@ -473,16 +477,16 @@ FIELD_LABELS = {
     "attentiveHopPause": "Hop pause",
     "attentiveTeleportTime": "Teleport time",
     "attentiveTeleportPause": "Teleport pause",
-    "attentiveRamAccelerationSteps": "Accelerate every",
-    "attentiveRamMaxSpeed": "Max speed",
+    "attentiveRamAccelerationSteps": "Chain moves",
+    "attentiveRamMaxSpeed": "Chain pause",
     "tiredHopAllowNonCardinal": "Allow non-cardinal",
     "tiredHopMinDistance": "Min hop distance",
     "tiredHopMaxDistance": "Max hop distance",
     "tiredHopPause": "Hop pause",
     "tiredTeleportTime": "Teleport time",
     "tiredTeleportPause": "Teleport pause",
-    "tiredRamAccelerationSteps": "Accelerate every",
-    "tiredRamMaxSpeed": "Max speed",
+    "tiredRamAccelerationSteps": "Chain moves",
+    "tiredRamMaxSpeed": "Chain pause",
     "attentiveChaseBoostDistance": "Boost distance",
     "attentiveChaseBoostSpeed": "Boost speed",
     "attentiveCircleRadius": "Circle radius",
@@ -535,8 +539,8 @@ FIELD_UNITS = {
     "attentiveHopSpinSpeed": "frames",
     "attentiveTeleportTime": "frames",
     "attentiveTeleportPause": "frames",
-    "attentiveRamAccelerationSteps": "steps",
-    "attentiveRamMaxSpeed": "speed",
+    "attentiveRamAccelerationSteps": "moves",
+    "attentiveRamMaxSpeed": "frames",
     "attentiveChaseBoostDistance": "tiles",
     "attentiveChaseBoostSpeed": "speed",
     "tiredSpeed": "speed",
@@ -545,8 +549,8 @@ FIELD_UNITS = {
     "tiredHopPause": "frames",
     "tiredTeleportTime": "frames",
     "tiredTeleportPause": "frames",
-    "tiredRamAccelerationSteps": "steps",
-    "tiredRamMaxSpeed": "speed",
+    "tiredRamAccelerationSteps": "moves",
+    "tiredRamMaxSpeed": "frames",
     "restTime": "frames",
     "range": "tiles",
     "chaseBoostDistance": "tiles",
@@ -649,8 +653,7 @@ CANONICAL_MOVEMENT_STYLE_RAWS = [
     "OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
     "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
     "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
-    "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
-    "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT",
     "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND",
 ]
 
@@ -744,6 +747,29 @@ PROFILE_OPTION_EXCLUDED_SUFFIXES = (
 )
 
 PROFILE_OPTION_FIELD_EXCLUDED_RAWS = {
+    # Value 5 remains parseable for existing source, but dedicated RAM is no
+    # longer offered for new movement selections.
+    "chillAction": {
+        "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
+    },
+    "movementStyle": {
+        "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
+    },
+    "specialAction": {
+        "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
+    },
     "chillTarget": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
     "targetSelector": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
     "attentiveTarget": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
@@ -763,6 +789,17 @@ PROFILE_OPTION_FIELD_EXCLUDED_RAWS = {
     "attentiveAllowedTile2": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER"},
     "tiredAllowedTile2": {"OW_WILD_BEHAVIOR_ALLOWED_TILE_PLAYER"},
 }
+
+# These are implementation encodings selected by the decoded Teleport controls,
+# not separate user-facing movement choices. Keep them out of editOptions while
+# accepting them in source writes for every field that stores locomotion.
+TELEPORT_STORAGE_RAWS = frozenset({
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+    "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
+})
+TELEPORT_STORAGE_FIELDS = frozenset({"chillAction", "movementStyle", "specialAction"})
 
 OVERRIDE1_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE": "chillState",
@@ -832,6 +869,7 @@ OVERRIDE3_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DUST": "chainRepositionDust",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_CARDINAL": "chainRepositionAllowCardinal",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_DIAGONAL": "chainRepositionAllowDiagonal",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_OPTIONS": "walkOptions",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -1100,6 +1138,7 @@ NUMERIC_PROFILE_FIELDS = {
     "spawnDestinationOverrideMask",
     "activeProfile",
     "tiredProfile",
+    "walkOptions",
 }
 
 # Override profiles may transform numeric byte fields produced by earlier
@@ -1114,6 +1153,7 @@ RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(
         "chillAllowedTerrainOverrideMask",
         "spawnDestinationMask",
         "spawnDestinationOverrideMask",
+        "walkOptions",
     }
 )
 BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
@@ -1245,8 +1285,8 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "chainRepositionJumpCount": 8,
     "chainRepositionSpeed": 4,
     "chainRepositionDistance": 5,
-    # Shared storage: Movement Chain reads this as a 0..255-frame pause, while
-    # RAM consumers independently clamp it to their 0..4 speed tier.
+    # The serialized name is retained for compatibility; Movement Chain reads
+    # this byte as its pause frame count.
     "ramMaxSpeed": 255,
     "attentiveChaseBoostDistance": 32,
     "attentiveChaseBoostSpeed": 4,
@@ -1260,6 +1300,7 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "spawnDestinationOverrideMask": 1023,
     "activeProfile": 255,
     "tiredProfile": 255,
+    "walkOptions": 127,
 }
 NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "chillSpeed": 1,
@@ -1292,10 +1333,8 @@ for _profile_field, _source_field in {
 }.items():
     NUMERIC_PROFILE_FIELD_OPTION_MAX[_profile_field] = NUMERIC_PROFILE_FIELD_OPTION_MAX[_source_field]
 
-# Unlike the shared chill-state byte above, these state-specific fields are
-# exclusively RAM speed tiers.
-NUMERIC_PROFILE_FIELD_OPTION_MAX["attentiveRamMaxSpeed"] = 4
-NUMERIC_PROFILE_FIELD_OPTION_MAX["tiredRamMaxSpeed"] = 4
+# The state-specific serialized names remain for compatibility and now use the
+# same Movement Chain frame-count range as the owner field.
 
 
 class ParseError(RuntimeError):
@@ -1613,6 +1652,11 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 def _uncached_macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
     label_overrides = {
         "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT": "Teleport",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT": "Teleport",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER": "Teleport",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE": "Teleport",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER": "Teleport",
         "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND": "Turn around",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
@@ -1621,7 +1665,7 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE": "Aggressive chase",
         "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM": "Aggressive ram",
         "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2": "Canopy hopper",
-        "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER": "Phantom stalker",
+        "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER": "Teleport stalker",
         "OW_WILD_BEHAVIOR_CLASS_THROWING": "Throwing",
         "OW_WILD_BEHAVIOR_CLASS_PICKED_UP": "Picked up",
         "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP": "Forced asleep",
@@ -1729,8 +1773,15 @@ def numeric(value: dict) -> int | None:
     return value.get("value")
 
 
+def walk_options_valid(value: int) -> bool:
+    return (value & 0x80) == 0 and ((value & 0x0E) >> 1) <= 4 and ((value & 0x70) >> 4) <= 1
+
+
 def canonical_profile_value_raw(value: dict, field: str) -> str:
     raw = value.get("raw", "")
+    if field in {"chillAction", "movementStyle", "specialAction"} \
+            and raw == "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT":
+        return "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT"
     if field in {"chillTarget", "targetSelector", "attentiveTarget"} \
             and raw == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
         return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
@@ -1836,6 +1887,8 @@ def canonical_profile_change_raw(
     maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
     if evaluated < minimum or evaluated > maximum:
         raise ValueError(f"value for {field} must be between {minimum} and {maximum}")
+    if field == "walkOptions" and not walk_options_valid(evaluated):
+        raise ValueError("walkOptions must use stomp speed 0..4 and crash sound 0..1")
     return str(evaluated)
 
 
@@ -1843,6 +1896,16 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     if len(items) == 1 and clean_token(str(items[0])) == "0":
         return {
             field: make_value("0", field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V63):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V63)
+        }
+        legacy["walkOptions"] = "0"
+        return {
+            field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
         }
     if len(items) == len(PROFILE_FIELDS_V62):
@@ -1855,6 +1918,7 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["walkOptions"] = "0"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1869,6 +1933,7 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["walkOptions"] = "0"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1884,6 +1949,7 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["walkOptions"] = "0"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1900,6 +1966,7 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionDust"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
+        legacy["walkOptions"] = "0"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -5936,9 +6003,13 @@ def valid_change_options(macros: dict[str, int], class_profiles: list[dict[str, 
             value = profile[field]
             if value.get("raw") and value.get("value") is not None:
                 options[field].add(canonical_profile_value_raw(value, field))
-    # Movement Chain pause reuses ramMaxSpeed as a frame count. The visible RAM
-    # controls stay capped as speeds, but saving must accept Chain frame values.
+    # The serialized name remains ramMaxSpeed, but the value is the Movement
+    # Chain pause frame count.
     options["ramMaxSpeed"].update(str(value) for value in range(0, 256))
+    for field in TELEPORT_STORAGE_FIELDS:
+        options.setdefault(field, set()).update(
+            raw for raw in TELEPORT_STORAGE_RAWS if raw in macros
+        )
     return options
 
 
@@ -7290,6 +7361,8 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
                 if evaluated is None or evaluated < minimum or evaluated > maximum:
                     raise ValueError(f"invalid value for {field}: {raw}")
+                if field == "walkOptions" and not walk_options_valid(evaluated):
+                    raise ValueError(f"invalid packed Walk options for {label}: {raw}")
                 continue
             if raw and raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
@@ -16976,6 +17049,7 @@ HTML = r"""<!doctype html>
       "hopElevationTimeScale",
       "hopElevationArcScale",
       "tilesToAccelerate",
+      "walkOptions",
       "chainRepositionJumpCount",
       "chainRepositionSpeed",
       "chainRepositionDistance",
@@ -17023,6 +17097,7 @@ HTML = r"""<!doctype html>
       attentiveChaseBoostSpeed: { min: 0, max: 4 },
       attentiveCircleRadius: { min: 0, max: 8 },
       tilesToAccelerate: { min: 1, max: 32 },
+      walkOptions: { min: 0, max: 127 },
       chainRepositionJumpCount: { min: 1, max: 8 },
       chainRepositionSpeed: { min: 1, max: 4 },
       chainRepositionDistance: { min: 1, max: 5 },
@@ -17039,6 +17114,7 @@ HTML = r"""<!doctype html>
       hopElevationTimeScale: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier.",
       hopElevationArcScale: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier.",
       tilesToAccelerate: "Consecutive Walk tiles in one direction before movement speed increases by 1.",
+      walkOptions: "Packed Walk options: bit 0 locks direction, bits 1-3 set stomp-at-speed (0 disables), and bits 4-6 select crash sound.",
       chainRepositionJumpCount: "Number of fixed-facing random surrounding-tile moves performed by Reposition jumps, steps, or skids.",
       chainRepositionSpeed: "Movement speed for Reposition steps and skids; jumps use Hop timing.",
       chainRepositionDistance: "Tiles travelled by each Reposition skid.",
@@ -17100,6 +17176,7 @@ HTML = r"""<!doctype html>
       chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillSpeed: { label: "Chill speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       tilesToAccelerate: { label: "Tiles to accelerate", shortLabel: "Acceleration", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "speed" },
+      walkOptions: { label: "Walk options (packed)", shortLabel: "Walk options", unit: "0..127", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       hopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
@@ -17154,8 +17231,8 @@ HTML = r"""<!doctype html>
       attentiveHopSpinSpeed: { label: "Hop turn speed", shortLabel: "Spin", unit: "ticks", category: "attentive", subgroup: "Timing", iconFamily: "timing" },
       attentiveTeleportTime: { label: "Teleport vanish time", shortLabel: "Teleport", unit: "ticks", category: "attentive", subgroup: "Timing", iconFamily: "timing" },
       attentiveTeleportPause: { label: "Teleport pause", shortLabel: "Pause", unit: "ticks", category: "attentive", subgroup: "Timing", iconFamily: "timing" },
-      attentiveRamAccelerationSteps: { label: "RAM acceleration interval", shortLabel: "Accel every", unit: "steps", category: "attentive", subgroup: "Movement", iconFamily: "movement" },
-      attentiveRamMaxSpeed: { label: "Maximum ram speed", shortLabel: "Max speed", unit: "speed", category: "attentive", subgroup: "Movement", iconFamily: "speed" },
+      attentiveRamAccelerationSteps: { label: "Movement Chain moves", shortLabel: "Chain", unit: "moves", category: "attentive", subgroup: "Movement", iconFamily: "movement" },
+      attentiveRamMaxSpeed: { label: "Movement Chain pause", shortLabel: "Pause", unit: "ticks", category: "attentive", subgroup: "Timing", iconFamily: "timing" },
       attentiveChaseBoostDistance: { label: "Chase boost distance", shortLabel: "Boost dist.", unit: "tiles", category: "attentive", subgroup: "Range", iconFamily: "range" },
       attentiveChaseBoostSpeed: { label: "Chase boost speed", shortLabel: "Boost speed", unit: "speed", category: "attentive", subgroup: "Movement", iconFamily: "speed" },
 
@@ -17172,8 +17249,8 @@ HTML = r"""<!doctype html>
       tiredHopPause: { label: "Pause between hops", shortLabel: "Pause", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
       tiredTeleportTime: { label: "Teleport vanish time", shortLabel: "Teleport", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
       tiredTeleportPause: { label: "Teleport pause", shortLabel: "Pause", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
-      tiredRamAccelerationSteps: { label: "RAM acceleration interval", shortLabel: "Accel every", unit: "steps", category: "tired", subgroup: "Movement", iconFamily: "movement" },
-      tiredRamMaxSpeed: { label: "Maximum ram speed", shortLabel: "Max speed", unit: "speed", category: "tired", subgroup: "Movement", iconFamily: "speed" },
+      tiredRamAccelerationSteps: { label: "Movement Chain moves", shortLabel: "Chain", unit: "moves", category: "tired", subgroup: "Movement", iconFamily: "movement" },
+      tiredRamMaxSpeed: { label: "Movement Chain pause", shortLabel: "Pause", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
       restTime: { label: "Rest duration", shortLabel: "Rest", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
 
       range: { label: "Flee trigger range", shortLabel: "Flee range", unit: "tiles", category: "stats", subgroup: "Range", iconFamily: "range" },
@@ -17225,6 +17302,7 @@ HTML = r"""<!doctype html>
           "chillAction",
           "chillSpeed",
           "tilesToAccelerate",
+          "walkOptions",
           "chillAllowedTerrainMask",
           "chillAllowedTerrainOverrideMask",
           "hopAllowNonCardinal",
@@ -18775,8 +18853,12 @@ HTML = r"""<!doctype html>
         OW_WILD_BEHAVIOR_LOCOMOTION_NONE: "None",
         OW_WILD_BEHAVIOR_LOCOMOTION_WANDER: "Walk",
         OW_WILD_BEHAVIOR_LOCOMOTION_HOP: "Hop",
-        OW_WILD_BEHAVIOR_LOCOMOTION_RAM: "Ram",
-        OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT: "Phantom Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_RAM: "Legacy movement (5)",
+        OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT: "Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT: "Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER: "Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE: "Teleport",
+        OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER: "Teleport",
         OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND: "Turn Around",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE: "None",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP: "Call for help",
@@ -19041,6 +19123,9 @@ HTML = r"""<!doctype html>
     function profileOptionForRaw(fieldKey, raw) {
       if (fieldKey === ALERT_RANGE_TYPE_FIELD) return alertRangeTypeOptionForRaw(raw);
       if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) return spawnDestinationTypeOptionForRaw(raw);
+      if (PROFILE_MOVEMENT_FIELDS.has(fieldKey) && movementStyleUsesTeleport(raw)) {
+        return { raw, value: ["9", "10", "11"].includes(String(raw)) ? Number(raw) : 6, label: "Teleport" };
+      }
       const option = profileOptionsForField(fieldKey).find(item =>
         item.raw === raw || (Number.isFinite(item.value) && String(item.value) === String(raw))
       ) || null;
@@ -19356,12 +19441,53 @@ HTML = r"""<!doctype html>
       return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_HOP";
     }
 
-    function movementStyleUsesPhantomTeleport(raw) {
-      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT";
+    const TELEPORT_LOCOMOTION_RAWS = new Set([
+      "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT",
+      "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+      "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+      "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+      "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
+      "6", "9", "10", "11",
+    ]);
+
+    function movementStyleUsesTeleport(raw) {
+      return TELEPORT_LOCOMOTION_RAWS.has(String(raw || ""));
     }
 
-    function movementStyleUsesRam(raw) {
-      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
+    function teleportLocomotionSettings(raw) {
+      const value = String(raw || "");
+      return {
+        flicker: !["OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER", "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER", "9", "11"].includes(value),
+        perTile: ["OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE", "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER", "10", "11"].includes(value),
+      };
+    }
+
+    function teleportLocomotionRaw(flicker, perTile) {
+      if (perTile) return flicker
+        ? "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE"
+        : "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER";
+      return flicker
+        ? "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT"
+        : "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER";
+    }
+
+    function profileEditTeleportOptionsItem(item, fieldKey, raw) {
+      const originalRaw = item.profile[fieldKey]?.raw ?? "0";
+      const settings = teleportLocomotionSettings(raw || originalRaw);
+      const changed = raw !== originalRaw;
+      const inherited = isOverrideProfile(item) && !raw;
+      const classes = ["field", "profile-suboption-field", changed ? "changed" : "", inherited ? "inherited" : ""].filter(Boolean).join(" ");
+      return profileFieldItem(`${fieldKey}:teleportOptions`, `
+        <div class="${esc(classes)}" data-profile-field="${esc(`${fieldKey}:teleportOptions`)}" data-profile-subgroup="Movement" title="Teleport presentation and timing mode">
+          ${profileFieldLabelMarkup(fieldKey, "Teleport presentation", "", "Teleport")}
+          ${profileFieldControlMarkup(`
+            <span class="profile-teleport-options">
+              <label><input type="checkbox" data-profile-teleport-option data-teleport-part="flicker" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}" ${settings.flicker ? "checked" : ""}> Flicker while travelling</label>
+              <label>Timing <select data-profile-teleport-option data-teleport-part="timing" data-class-index="${esc(item.index)}" data-field="${esc(fieldKey)}" data-original="${esc(originalRaw)}"><option value="fixed" ${settings.perTile ? "" : "selected"}>Fixed duration</option><option value="per-tile" ${settings.perTile ? "selected" : ""}>Per tile</option></select></label>
+            </span>
+          `)}
+        </div>
+      `, { subgroup: "Movement" });
     }
 
     function movementStyleTurnsOnly(raw) {
@@ -19410,6 +19536,7 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "hopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkOptions: "walkOptions",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19436,6 +19563,7 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "attentiveHopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkOptions: "walkOptions",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19462,6 +19590,7 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "hopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkOptions: "walkOptions",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19484,9 +19613,7 @@ HTML = r"""<!doctype html>
       const suboptionFields = PROFILE_MOVEMENT_SUBOPTION_FIELDS[suboptionKey] || PROFILE_MOVEMENT_SUBOPTION_FIELDS.chill;
       const inheritedOverride = isOverrideProfile(item) && !raw;
       const showsChainControls = inheritedOverride || (movementStyleUsesMovement(raw)
-        && !movementStyleUsesRam(raw)
         && !movementStyleTurnsOnly(raw));
-      const showsSharedChainRamLabels = inheritedOverride || showInactiveUnset;
       const fields = [
         profileEditFieldItem(item, fieldKey),
       ];
@@ -19504,6 +19631,14 @@ HTML = r"""<!doctype html>
           className: "profile-suboption-field",
           hint: "Consecutive Walk tiles in one direction before movement speed increases by 1.",
           numberLimits: { min: 1, max: 32 },
+        }));
+      }
+      if (suboptionFields.walkOptions
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.walkOptions, {
+          className: "profile-suboption-field",
+          hint: "Packed Walk options: bit 0 locks direction, bits 1-3 set stomp-at-speed (0 disables), and bits 4-6 select crash sound.",
+          numberLimits: { min: 0, max: 127 },
         }));
       }
       if (showInactiveUnset || movementStyleUsesHop(raw) || inheritedOverride) {
@@ -19558,17 +19693,17 @@ HTML = r"""<!doctype html>
         fields.push(
           profileEditFieldItem(item, suboptionFields.chainHops, {
             className: "profile-suboption-field",
-            label: showsSharedChainRamLabels ? "Chain moves / RAM steps" : "Chain moves",
-            shortLabel: showsSharedChainRamLabels ? "Chain/RAM" : "Chain",
-            unit: showsSharedChainRamLabels ? "" : "moves",
+            label: "Chain moves",
+            shortLabel: "Chain",
+            unit: "moves",
             hint: "Consecutive completed movement steps before applying Chain pause. 0 disables chain pauses.",
             numberLimits: { min: 0, max: 32 },
           }),
           profileEditFieldItem(item, suboptionFields.chainHopPause, {
             className: "profile-suboption-field",
-            label: showsSharedChainRamLabels ? "Chain pause / RAM max" : "Chain pause",
-            shortLabel: showsSharedChainRamLabels ? "Pause/RAM" : "Pause",
-            unit: showsSharedChainRamLabels ? "" : "ticks",
+            label: "Chain pause",
+            shortLabel: "Pause",
+            unit: "ticks",
             hint: "Ticks to wait after the Chain move count is reached. 0 keeps chaining without an extra pause.",
             numberLimits: { min: 0, max: 255 },
           }),
@@ -19605,27 +19740,24 @@ HTML = r"""<!doctype html>
           }),
         );
       }
-      if (showInactiveUnset || movementStyleUsesPhantomTeleport(raw) || inheritedOverride) {
+      if (showInactiveUnset || movementStyleUsesTeleport(raw) || inheritedOverride) {
+        const teleportSettings = teleportLocomotionSettings(raw);
+        fields.push(profileEditTeleportOptionsItem(item, fieldKey, raw));
         fields.push(
           profileEditFieldItem(item, suboptionFields.teleportTime, {
             className: "profile-suboption-field",
-            hint: "Ticks spent hidden/flickering during Phantom Teleport movement",
+            label: "Travel time",
+            shortLabel: "Travel",
+            hint: teleportSettings.perTile
+              ? "Travel frames per tile while Teleport is hidden or flickering."
+              : "Fixed total travel frames while Teleport is hidden or flickering.",
+            unit: teleportSettings.perTile ? "frames/tile" : "frames total",
           }),
           profileEditFieldItem(item, suboptionFields.teleportPause, {
             className: "profile-suboption-field",
-            hint: "Ticks to wait after each Phantom Teleport before the next movement decision",
-          }),
-        );
-      }
-      if (!showInactiveUnset && (movementStyleUsesRam(raw) || inheritedOverride)) {
-        fields.push(
-          profileEditFieldItem(item, suboptionFields.ramAccelerationSteps, {
-            className: "profile-suboption-field",
-            hint: "Completed RAM steps before speed increases by 1. 0 disables acceleration.",
-          }),
-          profileEditFieldItem(item, suboptionFields.ramMaxSpeed, {
-            className: "profile-suboption-field",
-            hint: "Highest movement speed RAM can accelerate to. The state speed is the starting speed.",
+            label: "Post-teleport pause",
+            shortLabel: "Post pause",
+            hint: "Frames to wait after each Teleport before the next movement decision.",
           }),
         );
       }
@@ -23539,6 +23671,12 @@ HTML = r"""<!doctype html>
           || PROFILE_SCOPED_SPECIAL_ACTION_FIELDS.has(fieldKey)
           || fieldKey === ALERT_RANGE_TYPE_FIELD
           || fieldKey === SPAWN_DESTINATION_TYPE_FIELD) {
+        if (PROFILE_MOVEMENT_FIELDS.has(fieldKey)
+            && preferredRaw
+            && movementStyleUsesTeleport(preferredRaw)
+            && value.toLowerCase() === "teleport") {
+          return { raw: preferredRaw, value: ["9", "10", "11"].includes(String(preferredRaw)) ? Number(preferredRaw) : 6, label: "Teleport" };
+        }
         const options = profileOptionsForField(fieldKey);
         const lower = value.toLowerCase();
         const preferred = preferredRaw
@@ -27061,6 +27199,29 @@ HTML = r"""<!doctype html>
       updateProfileComboStatus(input);
     });
     els.profilesTab.addEventListener("change", event => {
+      const teleportControl = event.target.closest("[data-profile-teleport-option]");
+      if (teleportControl) {
+        const classIndex = teleportControl.dataset.classIndex;
+        const fieldKey = teleportControl.dataset.field;
+        const originalRaw = teleportControl.dataset.original;
+        const currentRaw = pendingProfileValue(classIndex, fieldKey, originalRaw);
+        const settings = teleportLocomotionSettings(currentRaw || originalRaw);
+        if (teleportControl.dataset.teleportPart === "flicker") {
+          settings.flicker = teleportControl.checked;
+        } else if (teleportControl.dataset.teleportPart === "timing") {
+          settings.perTile = teleportControl.value === "per-tile";
+        }
+        setProfileEdit(
+          classIndex,
+          fieldKey,
+          teleportLocomotionRaw(settings.flicker, settings.perTile),
+          originalRaw,
+        );
+        markProfilePanelsDirty("profiles", "selected");
+        renderActiveProfilePanel(true);
+        setSaveStatus(pendingChangeStatus());
+        return;
+      }
       const input = event.target.closest(".profile-combo");
       if (!input) return;
       commitProfileCombo(input, true);

@@ -213,24 +213,24 @@ typedef struct OverworldWildSpawnState {
     u8 movementStagedHopPending[OW_WILD_MAX_SPAWNS];
     u8 movementStagedHopAvoidValid[OW_WILD_MAX_SPAWNS];
     u8 movementMankeyPathFailureCounts[OW_WILD_MAX_SPAWNS];
-    u8 movementRamDirections[OW_WILD_MAX_SPAWNS];
-    u8 movementRamStepCounters[OW_WILD_MAX_SPAWNS];
-    u8 movementRamSpeeds[OW_WILD_MAX_SPAWNS];
-    u8 movementRamCrashShakeTimers[OW_WILD_MAX_SPAWNS];
-    u32 movementRamCrashShakeBaseX[OW_WILD_MAX_SPAWNS];
-    u32 movementRamCrashShakeBaseZ[OW_WILD_MAX_SPAWNS];
-    u8 movementPhantomHidden[OW_WILD_MAX_SPAWNS];
-    u8 movementPhantomHiddenSteps[OW_WILD_MAX_SPAWNS];
-    u8 movementPhantomFlickerTimers[OW_WILD_MAX_SPAWNS];
-    u8 movementPhantomVisiblePause[OW_WILD_MAX_SPAWNS];
+    union {
+        u8 movementCrashShakeTimers[OW_WILD_MAX_SPAWNS];
+        u8 movementRamCrashShakeTimers[OW_WILD_MAX_SPAWNS];
+    };
+    union {
+        u32 movementCrashShakeBaseX[OW_WILD_MAX_SPAWNS];
+        u32 movementRamCrashShakeBaseX[OW_WILD_MAX_SPAWNS];
+    };
+    union {
+        u32 movementCrashShakeBaseZ[OW_WILD_MAX_SPAWNS];
+        u32 movementRamCrashShakeBaseZ[OW_WILD_MAX_SPAWNS];
+    };
+    u8 movementTeleportHidden[OW_WILD_MAX_SPAWNS];
+    u8 movementTeleportHiddenSteps[OW_WILD_MAX_SPAWNS];
+    u8 movementTeleportFlickerTimers[OW_WILD_MAX_SPAWNS];
+    u8 movementTeleportVisiblePause[OW_WILD_MAX_SPAWNS];
     LocalMapObject *movementMankeyTreeTopProxyObjects[OW_WILD_MAX_SPAWNS];
-    LocalMapObject *movementPhantomFlickerObjects[OW_WILD_MAX_SPAWNS];
-    LocalMapObject *movementPhantomTeleportFlickerObjects[OW_WILD_MAX_SPAWNS];
-    s16 movementPhantomTeleportOriginX[OW_WILD_MAX_SPAWNS];
-    s16 movementPhantomTeleportOriginY[OW_WILD_MAX_SPAWNS];
-    s16 movementPhantomTeleportTargetX[OW_WILD_MAX_SPAWNS];
-    s16 movementPhantomTeleportTargetY[OW_WILD_MAX_SPAWNS];
-    u8 movementPhantomTeleportHasTarget[OW_WILD_MAX_SPAWNS];
+    LocalMapObject *movementTeleportFlickerObjects[OW_WILD_MAX_SPAWNS];
     u8 movementAButtonDown;
     u16 mapGeneration;
     u16 pendingMapGeneration;

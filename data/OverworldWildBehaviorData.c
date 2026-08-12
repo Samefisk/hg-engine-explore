@@ -129,8 +129,6 @@
 #define OW_WILD_SPAWNER_ONIX_RAM_RANGE 16
 #define OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES 3
 #define OW_WILD_SPAWNER_ONIX_RAM_MAX_SPEED OW_WILD_SPAWNER_MOVEMENT_SPEED_4
-#define OW_WILD_SPAWNER_ONIX_RAM_CRASH_SE SEQ_SE_DP_WALL_HIT
-#define OW_WILD_SPAWNER_ONIX_RAM_STEP_SE SEQ_SE_GS_IWAOTOSHI02
 #define OW_WILD_SPAWNER_CANOPY_HOPPER_RANGE 16
 #define OW_WILD_SPAWNER_CANOPY_SHIFT_SOUTH_LAND_ANCHORS 1
 #define OW_WILD_SPAWNER_CANOPY_SOUTH_LAND_SHIFT_TILES 1
@@ -250,7 +248,8 @@
 #define OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW 2
 #define OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE 0
 #define OW_WILD_BEHAVIOR_BATTLE_TRIGGER_CONTACT 1
-#define OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH 2
+#define OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH 2
+#define OW_WILD_BEHAVIOR_BATTLE_TRIGGER_RAM_CRASH OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_NONE 0
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_DOWNHILL 1
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH 2
@@ -275,7 +274,6 @@
 #define OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN 3
 #define OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN 4
 #define OW_WILD_BEHAVIOR_LOCOMOTION_RAM 5
-#define OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT 6
 #define OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP 7
 #define OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND 8
 #define OW_WILD_BEHAVIOR_TARGET_NONE 0
@@ -757,7 +755,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
 },
     /* sOverworldWildBehaviorOverrideProfiles */
     {
-        /* profile: Phantom stalker override */
+        /* profile: Teleport stalker override */
         {
             {
                 OW_WILD_BEHAVIOR_GROUP_NONE,
@@ -791,7 +789,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 OW_WILD_BEHAVIOR_PROFILE_DEFAULT,
                 0,
-                OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT,
+                OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT,
                 0,
                 0,
                 OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT,
@@ -2110,6 +2108,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION
+                | OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_MAX_DISTANCE
@@ -2124,7 +2123,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK,
             OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE,
+                | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE
+                | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_OPTIONS,
             {
                 OW_WILD_BEHAVIOR_KIND_WANDER,
                 OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
@@ -2144,7 +2144,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
                 100,
                 OW_WILD_SPAWN_DESTINATION_POOL,
-                OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
+                OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH,
                 OW_WILD_BEHAVIOR_BOOL_YES,
                 1,
                 2,
@@ -2155,8 +2155,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 1,
                 5,
-                3,
-                4,
+                0,
+                0,
                 OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE,
                 1,
                 127,
@@ -2183,6 +2183,11 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 1,
+                1,
+                OW_WILD_BEHAVIOR_BOOL_YES,
+                OW_WILD_BEHAVIOR_BOOL_YES,
+                OW_WILD_BEHAVIOR_BOOL_YES,
+                21, /* lock direction, stomp at speed 2, wall-hit crash */
             },
             0,
             0,

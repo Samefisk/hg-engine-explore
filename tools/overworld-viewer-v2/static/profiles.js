@@ -132,37 +132,37 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
   }),
   "movement-chain-or-ram": Object.freeze({
     id: "movement-chain-or-ram",
-    label: "Shared Chain / RAM tuning",
+    label: "Movement chain",
     fields: Object.freeze([
       Object.freeze({
         key: "ramAccelerationSteps",
-        label: "Move count / RAM interval",
-        unit: "moves / steps",
-        note: "Chain move count or RAM acceleration interval, depending on the inherited movement style. Zero disables both behaviors",
+        label: "Move count",
+        unit: "moves",
+        note: "Completed moves before applying the chain pause. Zero disables chain pauses",
       }),
       Object.freeze({
         key: "chainMovementVariance",
         label: "Chain variance",
         unit: "moves",
-        note: "Adds a random 0 through this value when a movement chain begins; ignored by RAM",
+        note: "Adds a random 0 through this value when a movement chain begins",
       }),
       Object.freeze({
         key: "ramMaxSpeed",
-        label: "Pause / max speed",
-        unit: "frames / speed tier",
-        note: "Chain pause duration or RAM maximum speed, depending on the inherited movement style",
+        label: "Pause",
+        unit: "frames",
+        note: "Movement Chain pause duration",
       }),
       Object.freeze({
         key: "chainPauseVariance",
         label: "Pause variance",
         unit: "frames",
-        note: "Adds a random 0 through this value to passive and Look around pauses, or to the total Reposition jumps duration; ignored by RAM, Reposition steps, Reposition skids, and successful Hop in place actions",
+        note: "Adds a random 0 through this value to passive and Look around pauses, or to the total Reposition jumps duration; ignored by Reposition steps, Reposition skids, and successful Hop in place actions",
       }),
       Object.freeze({
         key: "chainPauseAction",
         label: "Chain pause action",
         unit: "",
-        note: "Ignored when the inherited movement style uses RAM",
+        note: "Optional action to perform when the chain pause is reached",
       }),
       Object.freeze({
         key: "chainRepositionJumpCount",
@@ -275,30 +275,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "tiredTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
     ]),
   }),
-  "ram-tuning-chill": Object.freeze({
-    id: "ram-tuning-chill",
-    label: "RAM tuning",
-    fields: Object.freeze([
-      Object.freeze({ key: "ramAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration. Shared with Movement Chain move count" }),
-      Object.freeze({ key: "ramMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed. Shared with Movement Chain pause frames" }),
-    ]),
-  }),
-  "ram-tuning-active": Object.freeze({
-    id: "ram-tuning-active",
-    label: "RAM tuning",
-    fields: Object.freeze([
-      Object.freeze({ key: "attentiveRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
-      Object.freeze({ key: "attentiveRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
-    ]),
-  }),
-  "ram-tuning-tired": Object.freeze({
-    id: "ram-tuning-tired",
-    label: "RAM tuning",
-    fields: Object.freeze([
-      Object.freeze({ key: "tiredRamAccelerationSteps", label: "Accelerate every", unit: "steps", note: "Zero disables acceleration" }),
-      Object.freeze({ key: "tiredRamMaxSpeed", label: "Max speed", unit: "speed tier", note: "Zero or a value below starting speed keeps the starting speed" }),
-    ]),
-  }),
 });
 
 const FIELD_SECTIONS = Object.freeze([
@@ -334,7 +310,7 @@ const FIELD_SECTIONS = Object.freeze([
       "chainRepositionSpeed",
       "chainRepositionDistance", "chainRepositionDust",
       "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal",
-      "tilesToAccelerate", "maxWalkSpeed",
+      "tilesToAccelerate", "maxWalkSpeed", "walkOptions",
       "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
       "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
       "alertSpecialAction",
@@ -450,18 +426,54 @@ const LOCOMOTION = Object.freeze({
   wander: "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
   hop: "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
   ram: "OW_WILD_BEHAVIOR_LOCOMOTION_RAM",
-  teleport: "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT",
+  teleport: "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT",
+  teleportNoFlicker: "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_NO_FLICKER",
+  teleportPerTile: "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE",
+  teleportPerTileNoFlicker: "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
   turnAround: "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND",
 });
+
+const LEGACY_TELEPORT_LOCOMOTION = "OW_WILD_BEHAVIOR_LOCOMOTION_PHANTOM_TELEPORT";
+const TELEPORT_LOCOMOTIONS = Object.freeze(new Set([
+  LOCOMOTION.teleport,
+  LOCOMOTION.teleportNoFlicker,
+  LOCOMOTION.teleportPerTile,
+  LOCOMOTION.teleportPerTileNoFlicker,
+  LEGACY_TELEPORT_LOCOMOTION,
+  "6", "9", "10", "11",
+]));
+
+function teleportLocomotionSettings(raw) {
+  const value = String(raw || "");
+  return {
+    flicker: ![LOCOMOTION.teleportNoFlicker, LOCOMOTION.teleportPerTileNoFlicker, "9", "11"].includes(value),
+    perTile: [LOCOMOTION.teleportPerTile, LOCOMOTION.teleportPerTileNoFlicker, "10", "11"].includes(value),
+  };
+}
+
+function teleportLocomotionRaw(flicker, perTile) {
+  if (perTile) return flicker ? LOCOMOTION.teleportPerTile : LOCOMOTION.teleportPerTileNoFlicker;
+  return flicker ? LOCOMOTION.teleport : LOCOMOTION.teleportNoFlicker;
+}
 
 const CHAIN_LOCOMOTIONS = Object.freeze(new Set([
   LOCOMOTION.wander,
   LOCOMOTION.hop,
+  LOCOMOTION.ram,
   LOCOMOTION.teleport,
+  LOCOMOTION.teleportNoFlicker,
+  LOCOMOTION.teleportPerTile,
+  LOCOMOTION.teleportPerTileNoFlicker,
 ]));
 
 const RAW_LABEL_OVERRIDES = Object.freeze({
   [LOCOMOTION.wander]: "Walk",
+  [LOCOMOTION.teleport]: "Teleport",
+  [LOCOMOTION.teleportNoFlicker]: "Teleport",
+  [LOCOMOTION.teleportPerTile]: "Teleport",
+  [LOCOMOTION.teleportPerTileNoFlicker]: "Teleport",
+  [LEGACY_TELEPORT_LOCOMOTION]: "Teleport",
+  [LOCOMOTION.ram]: "Legacy movement (5)",
   [LOCOMOTION.turnAround]: "Turn Around",
   "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS": "Reposition jumps",
   "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS": "Reposition steps",
@@ -473,31 +485,31 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "chillSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkOptions: "walkOptions",
     hopPath: Object.freeze({ composite: "hop-path-chill", fields: Object.freeze(["hopAllowNonCardinal", "hopAllowVerticalObstacles", "hopMinDistance", "hopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "hopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
-    ramTuning: Object.freeze({ composite: "ram-tuning-chill", fields: Object.freeze(["ramAccelerationSteps", "ramMaxSpeed"]) }),
   }),
   active: Object.freeze({
     speed: "attentiveSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkOptions: "walkOptions",
     hopPath: Object.freeze({ composite: "hop-path-active", fields: Object.freeze(["attentiveHopAllowNonCardinal", "hopAllowVerticalObstacles", "attentiveHopMinDistance", "attentiveHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "attentiveHopPause", "attentiveHopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
-    ramTuning: Object.freeze({ composite: "ram-tuning-active", fields: Object.freeze(["attentiveRamAccelerationSteps", "attentiveRamMaxSpeed"]) }),
   }),
   tired: Object.freeze({
     speed: "tiredSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkOptions: "walkOptions",
     hopPath: Object.freeze({ composite: "hop-path-tired", fields: Object.freeze(["tiredHopAllowNonCardinal", "hopAllowVerticalObstacles", "tiredHopMinDistance", "tiredHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "tiredHopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
-    ramTuning: Object.freeze({ composite: "ram-tuning-tired", fields: Object.freeze(["tiredRamAccelerationSteps", "tiredRamMaxSpeed"]) }),
   }),
 });
 
@@ -515,8 +527,6 @@ const ANY_MATCH_PREFIXES = Object.freeze([
   "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
   "OW_WILD_BEHAVIOR_GROUP_NONE",
 ]);
-
-const RAM_LOCOMOTION = "OW_WILD_BEHAVIOR_LOCOMOTION_RAM";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -1416,22 +1426,10 @@ export function createProfilesController({
     return [...resolved];
   }
 
-  function canUseRamLocomotion(profile) {
-    return effectiveFieldCandidates(profile, "chillAction").includes(RAM_LOCOMOTION);
-  }
-
   function fieldLabelForProfile(profile, fieldKey, context = {}) {
     if (context.label) return context.label;
     if (!['ramAccelerationSteps', 'ramMaxSpeed'].includes(fieldKey)) return fieldLabel(fieldKey);
-    const parentRaw = context.parentField ? fieldRaw(profile, context.parentField) : "";
-    const ambiguous = context.ambiguous || (isOverrideProfile(profile) && !parentRaw);
-    const usesRam = context.parentField === "chillAction" && parentRaw === RAM_LOCOMOTION;
-    if (fieldKey === "ramAccelerationSteps") {
-      if (ambiguous) return "Chain moves / RAM steps";
-      return usesRam ? "RAM acceleration steps" : "Chain moves";
-    }
-    if (ambiguous) return "Chain pause / RAM max";
-    return usesRam ? "RAM max speed" : "Chain pause";
+    return fieldKey === "ramAccelerationSteps" ? "Chain moves" : "Chain pause";
   }
 
   function fieldUnitForProfile(profile, fieldKey, context = {}) {
@@ -1439,19 +1437,19 @@ export function createProfilesController({
     if (!["ramAccelerationSteps", "ramMaxSpeed"].includes(fieldKey)) {
       return data.fields.find((field) => field.key === fieldKey)?.unit || "";
     }
-    const parentRaw = context.parentField ? fieldRaw(profile, context.parentField) : "";
-    const ambiguous = context.ambiguous || (isOverrideProfile(profile) && !parentRaw);
-    const usesRam = context.parentField === "chillAction" && parentRaw === RAM_LOCOMOTION;
-    if (fieldKey === "ramAccelerationSteps") {
-      if (ambiguous) return "moves / steps";
-      return usesRam ? "steps" : "moves";
-    }
-    if (ambiguous) return "frames / speed";
-    return usesRam ? "speed" : "frames";
+    return fieldKey === "ramAccelerationSteps" ? "moves" : "frames";
   }
 
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     let options = [...(data.editOptions?.[fieldKey] || [])];
+    if (["chillAction", "movementStyle", "specialAction"].includes(fieldKey)
+        && TELEPORT_LOCOMOTIONS.has(String(currentRaw))) {
+      options = options.filter((option) => {
+        const raw = valueRaw(option);
+        return !TELEPORT_LOCOMOTIONS.has(raw);
+      });
+      options.push({ raw: currentRaw, label: "Teleport", value: Number(currentRaw) || 6 });
+    }
     const optionRaws = new Set(options.map(valueRaw));
     (LINKED_CHILL_OPTION_SOURCES[fieldKey] || []).forEach((sourceField) => {
       (data.editOptions?.[sourceField] || []).forEach((option) => {
@@ -1461,50 +1459,16 @@ export function createProfilesController({
         options.push(option);
       });
     });
-    let usesRam = false;
-    if (typeof context.ramMode === "boolean") usesRam = context.ramMode;
-    else if (!context.ambiguous && profile && context.parentField) {
-      usesRam = context.parentField === "chillAction" && fieldRaw(profile, context.parentField) === RAM_LOCOMOTION;
-    } else if (!context.ambiguous && profile) {
-      usesRam = canUseRamLocomotion(profile);
-    }
-    if (fieldKey === "ramMaxSpeed" && !usesRam) {
+    if (fieldKey === "ramMaxSpeed") {
       for (let value = 0; value <= 255; value += 1) {
         const raw = String(value);
         if (!options.some((option) => valueRaw(option) === raw)) options.push({ raw, label: raw, value });
       }
     }
-    if (context.chainRamDual && ["ramAccelerationSteps", "ramMaxSpeed"].includes(fieldKey)) {
-      options = options.map((option) => {
-        const raw = valueRaw(option);
-        const numeric = Number(raw);
-        if (!Number.isFinite(numeric)) return option;
-        if (fieldKey === "ramAccelerationSteps") {
-          return {
-            ...option,
-            label: numeric === 0
-              ? "0 — disables Chain pauses and RAM acceleration"
-              : `${raw} moves / steps`,
-          };
-        }
-        if (numeric === 0) return { ...option, label: "0 — no Chain pause; RAM stays at starting speed" };
-        if (numeric <= 4) return { ...option, label: `${raw} frame${numeric === 1 ? "" : "s"} / speed tier ${raw}` };
-        return { ...option, label: `${raw} frames — RAM clamps to speed tier 4` };
-      });
-    }
-    if (fieldKey === "ramMaxSpeed" && usesRam) {
-      options = options
-        .filter((option) => Number(valueRaw(option)) <= 4 || valueRaw(option) === currentRaw)
-        .map((option) => Number(valueRaw(option)) > 4
-          ? { ...option, label: `${valueRaw(option)} — RAM clamps to 4; Chain pause ${valueRaw(option)} frames` }
-          : option);
-    }
     if (currentRaw && !isNumericOverrideRaw(currentRaw) && !options.some((option) => valueRaw(option) === currentRaw)) {
       options.push({
         raw: currentRaw,
-        label: fieldKey === "ramMaxSpeed" && usesRam && Number(currentRaw) > 4
-          ? `${currentRaw} — RAM clamps to 4; Chain pause ${currentRaw} frames`
-          : humanizeRaw(currentRaw),
+        label: humanizeRaw(currentRaw),
       });
     }
     return options;
@@ -1941,22 +1905,21 @@ export function createProfilesController({
     const inheritedMovementCandidates = inherited
       ? effectiveFieldCandidates(profile, parentField)
       : [];
-    const inheritedHasRam = inheritedMovementCandidates.includes(LOCOMOTION.ram);
     const inheritedHasChain = inheritedMovementCandidates.some((candidate) => CHAIN_LOCOMOTIONS.has(candidate));
-    const inheritedMovementRam = inheritedMovementCandidates.length > 0
-      && inheritedMovementCandidates.every((candidate) => candidate === LOCOMOTION.ram);
     // An override with no current coverage has no inherited value to inspect.
     // Keep the shared controls available: membership may be enabled later, and
     // hiding them makes it impossible to prepare this layer beforehand.
     const inheritedMovementUnknown = inherited && inheritedMovementCandidates.length === 0;
-    const inheritedMovementAmbiguous = inherited
-      && (inheritedMovementUnknown || (inheritedHasRam && inheritedHasChain));
+    const inheritedMovementAmbiguous = inherited && inheritedMovementUnknown;
     const usesMovementSpeed = inherited
       ? inheritedMovementCandidates.some((candidate) => candidate === LOCOMOTION.wander || candidate === LOCOMOTION.ram)
       : raw === LOCOMOTION.wander || raw === LOCOMOTION.ram;
     const usesWalkAcceleration = inherited
       ? inheritedMovementCandidates.includes(LOCOMOTION.wander)
       : raw === LOCOMOTION.wander;
+    const usesTeleport = inherited
+      ? inheritedMovementCandidates.some((candidate) => TELEPORT_LOCOMOTIONS.has(String(candidate)))
+      : TELEPORT_LOCOMOTIONS.has(String(raw));
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -1991,6 +1954,11 @@ export function createProfilesController({
         unit: "tiles",
       });
     }
+    if (fields.walkOptions) {
+      append([fields.walkOptions], usesWalkAcceleration, {
+        virtual: "walk-options",
+      });
+    }
     const throwUsesStandaloneRange = scope === "active"
       && activeActionShowsThrowRange(profile)
       && !inherited
@@ -2004,47 +1972,25 @@ export function createProfilesController({
     });
     append(fields.hopTiming.fields, inherited || raw === LOCOMOTION.hop, { composite: fields.hopTiming.composite });
     if (showInactiveUnset) {
-      append(fields.chain, inherited || CHAIN_LOCOMOTIONS.has(raw) || raw === LOCOMOTION.ram, {
-        composite: "movement-chain-or-ram",
-        chainRamDual: true,
-        ramMode: raw === LOCOMOTION.ram,
+      append(fields.chain, inherited || CHAIN_LOCOMOTIONS.has(raw), {
+        composite: "movement-chain",
       });
-    } else if (inheritedMovementRam || (inherited && inheritedHasRam && !inheritedHasChain)) {
-      append(fields.ramTuning.fields, true, { composite: fields.ramTuning.composite, ramMode: true });
-      const inactiveChainFields = scope === "chill"
-        ? ["chainMovementVariance", "chainPauseVariance", "chainPauseAction", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"]
-        : fields.chain;
-      append(inactiveChainFields, false, { composite: "movement-chain" });
     } else if (inheritedMovementAmbiguous) {
-      if (scope === "chill") {
-        append(fields.chain, true, {
-          composite: "movement-chain-or-ram",
-          chainRamDual: true,
-          ramMode: inheritedMovementCandidates.includes(LOCOMOTION.ram),
-        });
-      } else {
-        // Active and Tired RAM tuning use state-specific fields, while their
-        // chain settings remain shared. Unknown/mixed inheritance needs both
-        // groups rather than mislabeled Chill RAM controls.
-        append(fields.chain, true, { composite: "movement-chain" });
-        append(fields.ramTuning.fields, true, {
-          composite: fields.ramTuning.composite,
-          ramMode: true,
-        });
-      }
+      append(fields.chain, true, { composite: "movement-chain" });
     } else if (inherited) {
       append(fields.chain, inheritedHasChain, { composite: "movement-chain" });
-      append(fields.ramTuning.fields, false, { composite: fields.ramTuning.composite });
     } else {
       append(fields.chain, CHAIN_LOCOMOTIONS.has(raw), { composite: "movement-chain" });
     }
-    append(fields.teleportTiming.fields, inherited || raw === LOCOMOTION.teleport, { composite: fields.teleportTiming.composite });
-    if (!showInactiveUnset && !inherited && !inheritedMovementRam && !inheritedMovementAmbiguous) {
-      append(fields.ramTuning.fields, raw === LOCOMOTION.ram, {
-        composite: fields.ramTuning.composite,
-        ramMode: raw === LOCOMOTION.ram,
+    if (usesTeleport || inherited) {
+      nodes.set(`teleport-options-${scope}`, {
+        field: parentField,
+        parentField,
+        virtual: "teleport-options",
+        inactive: !usesTeleport,
       });
     }
+    append(fields.teleportTiming.fields, usesTeleport || inherited, { composite: fields.teleportTiming.composite });
     const option = fieldOptions(parentField, raw, profile).find((candidate) => valueRaw(candidate) === raw);
     return {
       nodes: [...nodes.values()],
@@ -2349,6 +2295,14 @@ export function createProfilesController({
     const rangeErrorId = `pv2-range-error-${String(presentation.instance || compositeNode.composite.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const controls = compositeNode.composite.fields.map((definition) => {
       const node = compositeNode.nodes.find((candidate) => candidate.field === definition.key) || {};
+      const teleportTimeField = ["teleportTime", "attentiveTeleportTime", "tiredTeleportTime"]
+        .includes(definition.key);
+      const teleportSettings = teleportTimeField
+        ? teleportLocomotionSettings(effectiveTeleportLocomotionRaw(profile, node.parentField || "chillAction"))
+        : null;
+      const unit = teleportSettings
+        ? (teleportSettings.perTile ? "frames/tile" : "frames total")
+        : definition.unit;
       const raw = fieldRaw(profile, definition.key);
       const original = originalFieldRaw(profile, definition.key);
       const contextBase = override ? ui.contextResult?.baseProfile?.[definition.key] : null;
@@ -2373,13 +2327,14 @@ export function createProfilesController({
       const rangeMember = Boolean(compositeNode.composite.range
         && [compositeNode.composite.range.min, compositeNode.composite.range.max].includes(definition.key));
       const description = [
-        definition.unit ? `Unit: ${definition.unit}.` : "",
+        unit ? `Unit: ${unit}.` : "",
         definition.note ? `${definition.note}.` : "",
         `Status: ${stateLabel}.`,
         hasContextBase ? `Base value: ${baseLabel}.` : "",
       ].filter(Boolean).join(" ");
       return {
         ...definition,
+        unit,
         node,
         raw,
         changed,
@@ -2656,12 +2611,89 @@ export function createProfilesController({
       </div>`;
   }
 
+  function walkOptionsNumber(profile, raw) {
+    const direct = Number(raw);
+    if (Number.isInteger(direct) && direct >= 0 && direct <= 127) return direct;
+    const inherited = isOverrideProfile(profile)
+      ? effectiveFieldCandidates(profile, "walkOptions")
+      : [];
+    const candidate = inherited.map(Number).find((value) => Number.isInteger(value) && value >= 0 && value <= 127);
+    return candidate ?? 0;
+  }
+
+  function renderWalkOptions(profile, node, presentation) {
+    const fieldKey = node.field;
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const options = walkOptionsNumber(profile, raw);
+    const override = isOverrideProfile(profile);
+    const inherited = override && !raw;
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const state = override
+      ? (changed ? "changed" : (inherited ? "inherited" : "override"))
+      : (changed ? "changed" : "saved");
+    const allowTurning = !(options & 1);
+    const stompSpeed = (options >> 1) & 7;
+    const crashSound = (options >> 4) & 7;
+    const profileKeyValue = escapeHtml(profileKey(profile));
+    const common = `data-walk-option-part data-profile-key="${profileKeyValue}" data-field-key="${fieldKey}"`;
+    return `
+      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>Walk options</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared packed movement policy</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:3">
+          <label class="pv2-composite-control"><span><b>Allow turning</b></span><input type="checkbox" ${common} data-walk-option="turning" ${allowTurning ? "checked" : ""}></label>
+          <label class="pv2-composite-control"><span><b>Stomp at speed</b><small>0 disables</small></span><select class="field-control" ${common} data-walk-option="stomp">${[0, 1, 2, 3, 4].map((value) => `<option value="${value}" ${stompSpeed === value ? "selected" : ""}>${value === 0 ? "None" : `Speed ${value}`}</option>`).join("")}</select></label>
+          <label class="pv2-composite-control"><span><b>Crash sound</b></span><select class="field-control" ${common} data-walk-option="crash"><option value="0" ${crashSound === 0 ? "selected" : ""}>None</option><option value="1" ${crashSound === 1 ? "selected" : ""}>Wall hit</option></select></label>
+          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-walk-options" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
+        </span>
+      </div>`;
+  }
+
+  function effectiveTeleportLocomotionRaw(profile, fieldKey) {
+    const direct = fieldRaw(profile, fieldKey);
+    if (TELEPORT_LOCOMOTIONS.has(String(direct))) return direct;
+    if (isOverrideProfile(profile) && !direct) {
+      const inherited = effectiveFieldCandidates(profile, fieldKey)
+        .find((candidate) => TELEPORT_LOCOMOTIONS.has(String(candidate)));
+      if (inherited) return inherited;
+    }
+    return LOCOMOTION.teleport;
+  }
+
+  function renderTeleportOptions(profile, node, presentation) {
+    const fieldKey = node.parentField || node.field;
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const settings = teleportLocomotionSettings(effectiveTeleportLocomotionRaw(profile, fieldKey));
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const inherited = isOverrideProfile(profile) && !raw;
+    const state = isOverrideProfile(profile)
+      ? (changed ? "changed" : (inherited ? "inherited" : "override"))
+      : (changed ? "changed" : "saved");
+    const profileKeyValue = escapeHtml(profileKey(profile));
+    const common = `data-teleport-option data-profile-key="${profileKeyValue}" data-field-key="${escapeHtml(fieldKey)}"`;
+    return `
+      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${node.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${escapeHtml(`${fieldKey}-teleport-options`)}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>Teleport presentation</strong><small class="pv2-field-meta"><span class="pv2-field-note">stored with the Teleport movement choice</span>${node.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-composite-controls" role="group" aria-label="Teleport presentation" style="--composite-columns:2">
+          <label class="pv2-composite-control"><span><b>Flicker while travelling</b></span><input type="checkbox" ${common} data-teleport-option-part="flicker" ${settings.flicker ? "checked" : ""}></label>
+          <label class="pv2-composite-control"><span><b>Timing</b></span><select class="field-control" ${common} data-teleport-option-part="timing"><option value="fixed" ${settings.perTile ? "" : "selected"}>Fixed duration</option><option value="per-tile" ${settings.perTile ? "selected" : ""}>Per tile</option></select></label>
+        </span>
+      </div>`;
+  }
+
   function renderVirtualFieldControl(profile, node, presentation = {}) {
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
     const original = originalFieldRaw(profile, fieldKey);
     if (node.virtual === "player-adjacent-directions") {
       return renderPlayerAdjacentDirections(profile, node, presentation);
+    }
+    if (node.virtual === "walk-options") {
+      return renderWalkOptions(profile, node, presentation);
+    }
+    if (node.virtual === "teleport-options") {
+      return renderTeleportOptions(profile, node, presentation);
     }
     if (node.virtual === "allowed-terrain-policy") {
       return renderTerrainPolicy(profile, node, presentation, "allowed");
@@ -3445,12 +3477,6 @@ export function createProfilesController({
         const error = profileFieldRangeError(profile, range);
         if (error) errors.push(`${nameFor(profile)} — ${error}`);
       });
-      if (!canUseRamLocomotion(profile)) return;
-      const raw = fieldRaw(profile, "ramMaxSpeed");
-      if (isNumericOverrideRaw(raw)) return;
-      const option = (data.editOptions?.ramMaxSpeed || []).find((candidate) => valueRaw(candidate) === raw);
-      const numeric = Number(option?.value ?? raw);
-      if (Number.isFinite(numeric) && numeric > 4) errors.push(`${nameFor(profile)} RAM max speed must be between 0 and 4`);
     });
     const seenNames = new Set();
     const activeOverrides = overrideProfiles().filter((profile) => !drafts.removedOverrides.has(profileKey(profile)));
@@ -4310,6 +4336,11 @@ export function createProfilesController({
       renderEditor(); renderList(); signalDirty();
       announce("Next-to-player side settings will inherit after saving.");
     }
+    else if (action === "inherit-walk-options" && profile) {
+      setField(profile, "walkOptions", "");
+      renderEditor(); renderList(); signalDirty();
+      announce("Walk options will inherit after saving.");
+    }
     else if (action === "set-terrain-policy" && profile) {
       const policyId = target.dataset.terrainPolicy;
       const bit = Number(target.dataset.terrainBit);
@@ -4592,6 +4623,40 @@ export function createProfilesController({
         ? "data-condition-speed-mode"
         : (event.target.matches("[data-condition-speed-min]") ? "data-condition-speed-min" : "data-condition-speed-max");
       editorElement.querySelector(`[${attribute}][data-condition-state-key="${CSS.escape(conditionalStateKey(updated))}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.matches("[data-walk-option-part]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      let options = walkOptionsNumber(owner, fieldRaw(owner, "walkOptions"));
+      const part = event.target.dataset.walkOption;
+      if (part === "turning") {
+        options = event.target.checked ? options & ~1 : options | 1;
+      } else if (part === "stomp") {
+        options = (options & ~0x0E) | ((Number(event.target.value) & 7) << 1);
+      } else if (part === "crash") {
+        options = (options & ~0x70) | ((Number(event.target.value) & 7) << 4);
+      } else {
+        return;
+      }
+      setField(owner, "walkOptions", String(options));
+      renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-walk-option-part][data-profile-key="${CSS.escape(profileKey(owner))}"][data-walk-option="${CSS.escape(part)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.matches("[data-teleport-option]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      const fieldKey = event.target.dataset.fieldKey;
+      const part = event.target.dataset.teleportOptionPart;
+      const settings = teleportLocomotionSettings(
+        effectiveTeleportLocomotionRaw(owner, fieldKey));
+      if (part === "flicker") settings.flicker = event.target.checked;
+      else if (part === "timing") settings.perTile = event.target.value === "per-tile";
+      else return;
+      setField(owner, fieldKey, teleportLocomotionRaw(settings.flicker, settings.perTile));
+      renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-teleport-option][data-profile-key="${CSS.escape(profileKey(owner))}"][data-field-key="${CSS.escape(fieldKey)}"][data-teleport-option-part="${CSS.escape(part)}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (updateNumericOverrideInput(event.target, profile, { render: false })) {

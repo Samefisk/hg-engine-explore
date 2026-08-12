@@ -2544,7 +2544,7 @@ static int OverworldWildHelper_FindPlayerBallHit(
             continue;
         }
         targetObject = state->spawns[i].object;
-        if (state->movementPhantomHidden[i]
+        if (state->movementTeleportHidden[i]
             || (targetObject->flags & BIT_VANISH) != 0) {
             continue;
         }
@@ -2623,7 +2623,7 @@ static BOOL OverworldWildHelper_TryApplyPlayerBallAimAssist(
             continue;
         }
         targetObject = state->spawns[i].object;
-        if (state->movementPhantomHidden[i]
+        if (state->movementTeleportHidden[i]
             || (targetObject->flags & BIT_VANISH) != 0) {
             continue;
         }
@@ -4068,11 +4068,9 @@ static BOOL OverworldWildHelper_IsStablePickupThrowTarget(
         || state->movementSpawnRunActive[targetSlot]
         || state->movementStagedHopPending[targetSlot]
         || state->movementRamCrashShakeTimers[targetSlot] != 0
-        || state->movementPhantomHidden[targetSlot]
-        || state->movementPhantomFlickerTimers[targetSlot] != 0
-        || state->movementPhantomTeleportHasTarget[targetSlot]
-        || state->movementPhantomFlickerObjects[targetSlot] != NULL
-        || state->movementPhantomTeleportFlickerObjects[targetSlot] != NULL
+        || state->movementTeleportHidden[targetSlot]
+        || state->movementTeleportFlickerTimers[targetSlot] != 0
+        || state->movementTeleportFlickerObjects[targetSlot] != NULL
         || (state->movementInProgressMask & (1u << targetSlot)) != 0) {
         return FALSE;
     }
