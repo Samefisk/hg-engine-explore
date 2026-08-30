@@ -5,7 +5,7 @@
 
 /* Stable Thumb entry in resident overlay 129. The package verifier checks
  * this address against the mount bridge literal on every ROM build. */
-#define OVERWORLD_WILD_PLAYER_STEP_HANDLER_ADDR 0x023D9B65
+#define OVERWORLD_WILD_PLAYER_STEP_HANDLER_ADDR 0x023D9B79
 
 typedef struct OverworldMountRuntimeState {
     FieldSystem *fieldSystem;
@@ -40,6 +40,11 @@ typedef struct OverworldMountRuntimeState {
     u16 motionFrameCount;
     u16 motionElapsed;
     u16 motionCooldown;
+    /* These bytes also keep the coordinate pairs word-aligned. The resident
+     * field task uses them to preserve one Select edge while frame services
+     * are temporarily stopped. */
+    u8 bufferedTogglePending;
+    u8 bufferedToggleDown;
     s16 motionStartX;
     s16 motionStartY;
     s16 motionTargetX;
@@ -52,5 +57,21 @@ typedef struct OverworldMountRuntimeState {
     u8 motionLandingPauseStarted;
     u8 preserveTransitionPrepared;
 } OverworldMountRuntimeState;
+
+typedef char OverworldMountMotionStartXOffsetMustRemain98[
+    offsetof(OverworldMountRuntimeState, motionStartX) == 0x98 ? 1 : -1];
+typedef char OverworldMountMotionTargetXOffsetMustRemain9C[
+    offsetof(OverworldMountRuntimeState, motionTargetX) == 0x9C ? 1 : -1];
+typedef char OverworldMountMotionStartBaseYOffsetMustRemainA0[
+    offsetof(OverworldMountRuntimeState, motionStartBaseY) == 0xA0 ? 1 : -1];
+typedef char OverworldMountMotionTargetBaseYOffsetMustRemainA4[
+    offsetof(OverworldMountRuntimeState, motionTargetBaseY) == 0xA4 ? 1 : -1];
+typedef char OverworldMountTogglePendingOffsetMustRemain96[
+    offsetof(OverworldMountRuntimeState, bufferedTogglePending) == 0x96
+        ? 1 : -1];
+
+/* Fixed resident helper in overlay 153. */
+void OverworldWalkMount_RebaseMotionTarget(
+    OverworldMountRuntimeState *state);
 
 #endif // OVERWORLD_MOUNT_INTERNAL_H

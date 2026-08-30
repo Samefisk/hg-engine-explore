@@ -236,7 +236,7 @@ const OverworldWildMovementPolicyEntry gOverworldWildMovementPolicyEntry
         OverworldWildMovementPolicy_PrepareChainPause,
     };
 
-static void OverworldMount_FinishCustomMotion(BOOL commitTarget);
+static void OverworldMount_FinishCustomMotion(void);
 static void OverworldMount_UpdateCustomMotion(void);
 static void OverworldMount_DrainLandStream(void);
 static void OverworldMount_ResumeCustomMotionAfterMapTransition(void);
@@ -249,6 +249,7 @@ void OverworldMount_IssueHeldMovement(
     u32 vanillaCommand);
 static int OverworldMount_DirectionDeltaX(u8 direction);
 static int OverworldMount_DirectionDeltaY(u8 direction);
+void OverworldMount_PlayCrashSound(u32 sequence);
 extern void LONG_CALL ov01_021F62E8(
     VecFx32 *position,
     void *landDataManager);
@@ -283,6 +284,8 @@ OverworldMount_StartWalkCrash(void)
         sOverworldMountState.motionFrameCount =
             OVERWORLD_MOUNT_CRASH_SHAKE_FRAMES;
         sOverworldMountState.motionElapsed = 0;
+    } else {
+        sOverworldMountState.motionCooldown = 4;
     }
     OverworldMount_ResetMomentum();
 }
@@ -364,6 +367,17 @@ OverworldMount_BindingMatchesFollower(
     return TRUE;
 }
 
+static void __attribute__((noinline, section(".overworld_mount_precode")))
+OverworldMount_ResumeFollowerCommand(
+    LocalMapObject *follower,
+    u32 freezeCommand)
+{
+    if (sOverworldMountState.snapshot.motionMode
+            != OVERWORLD_MOUNT_MOTION_WALK) {
+        MapObject_StartMovementCommandInternal(follower, freezeCommand);
+    }
+}
+
 static LocalMapObject * __attribute__((noinline, section(".overworld_mount_precode")))
 OverworldMount_GetFollowerObject(void)
 {
@@ -385,7 +399,8 @@ static BOOL OverworldMount_HasCurrentPlayer(void)
         && fieldSystem->playerAvatar->mapObject != NULL;
 }
 
-static void OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
+static void __attribute__((noinline, section(".overworld_mount_step_extra")))
+OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
 {
     if (player->faceVec[1] != sOverworldMountState.lastAppliedPlayerFaceY) {
         sOverworldMountState.playerBaseFaceY = player->faceVec[1];
@@ -393,6 +408,26 @@ static void OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
     if (player->unk88[1] != sOverworldMountState.lastAppliedPlayerUnk88Y) {
         sOverworldMountState.playerBaseUnk88Y = player->unk88[1];
     }
+}
+
+static void __attribute__((naked, noinline, section(".overworld_mount_crash_extra")))
+OverworldMount_ClearObjectCommand(LocalMapObject *player)
+{
+    __asm__(
+        "ldr r3, 1f\n"
+        "bx r3\n"
+        ".align 2\n"
+        "1: .word MapObject_ClearHeldMovement\n");
+}
+
+static void __attribute__((naked, noinline, section(".overworld_mount_field_input_extra")))
+OverworldMount_ResetAvatarAfterCancel(FIELD_PLAYER_AVATAR *avatar)
+{
+    __asm__(
+        "ldr r3, 1f\n"
+        "bx r3\n"
+        ".align 2\n"
+        "1: .word PlayerAvatar_ResetMovement\n");
 }
 
 static void OverworldMount_SyncPresentation(void)
@@ -421,21 +456,13 @@ static void OverworldMount_SyncPresentation(void)
             - OVERWORLD_MOUNT_RIDER_HEIGHT_FX32
         : 0;
 
-    if (!sOverworldMountState.pendingStep
-        || sOverworldMountState.snapshot.motionMode
-            == OVERWORLD_MOUNT_MOTION_WALK) {
-        /* This must not use MapObject_SetPositionFromVectorAndDirection: that
-         * relocation helper clears the held movement which freezes both
-         * halves of the mounted Hop. Mirror only the presentation position
-         * and logical current tile while the controller owns the actor. */
-        follower->posVec[0] = player->posVec[0];
-        follower->posVec[1] = player->posVec[1];
-        follower->posVec[2] = player->posVec[2];
-        follower->xCurr = player->xCurr;
-        follower->hCurr = player->hCurr;
-        follower->yCurr = player->yCurr;
-        follower->flags &= ~MAPOBJECTFLAG_UNK7;
-    }
+    /* This must not use MapObject_SetPositionFromVectorAndDirection: that
+     * relocation helper clears the held movement which freezes both halves
+     * of a mounted Hop. The follower is presentation-only while mounted, so
+     * it must mirror the player even during the Walk completion boundary. */
+    memcpy(follower->posVec, player->posVec, sizeof(follower->posVec));
+    memcpy(&follower->xPrev, &player->xPrev, 6 * sizeof(int));
+    follower->flags &= ~MAPOBJECTFLAG_UNK7;
     follower->faceVec[0] = 0;
     follower->faceVec[1] = (u32)(mountedArc
         + (s32)sOverworldMountState.playerBaseFaceY);
@@ -453,7 +480,10 @@ static void OverworldMount_SyncPresentation(void)
          * while the mount controller owns the composite Hop. */
         follower->unk94[1] = 0;
     }
-    follower->flags |= MAPOBJECTFLAG_UNK18;
+    /* UNK31 is unused by retail map objects. While set, the resident facing-
+     * vector wrapper prevents overlay 1 from applying an independent vertical
+     * render offset after the mounted pair has been synchronized. */
+    follower->flags |= MAPOBJECTFLAG_UNK18 | MAPOBJECTFLAG_UNK31;
     if (sOverworldMountState.snapshot.motionMode
             != OVERWORLD_MOUNT_MOTION_TELEPORT) {
         follower->flags &= ~BIT_VANISH;
@@ -479,6 +509,11 @@ static void OverworldMount_SyncPresentation(void)
     OverworldMount_ApplyCrashPresentation(player, follower);
     sOverworldWildSpawnState.movementCooldowns[OW_WILD_FOLLOWER_SLOT] =
         OVERWORLD_MOUNT_IDLE_COOLDOWN;
+    /* A wild crash shake runs after mount sync and restores a saved position.
+     * Once mounted, the follower is presentation-only and that saved tile is
+     * stale, so discard the timer without applying its old base position. */
+    sOverworldWildSpawnState.movementCrashShakeTimers[
+        OW_WILD_FOLLOWER_SLOT] = 0;
 }
 
 static BOOL OverworldMount_AttachPresentation(void)
@@ -515,7 +550,7 @@ static BOOL OverworldMount_AttachPresentation(void)
      * its renderer. The mount controller already removes the follower from AI
      * movement ownership, so keep the presentation object unpaused while it
      * mirrors the player. */
-    MapObject_ClearHeldMovement(follower);
+    OverworldMount_ClearObjectCommand(follower);
     MapObject_UnpauseMovement(follower);
     OverworldMount_SyncPresentation();
     return TRUE;
@@ -525,12 +560,20 @@ static void OverworldMount_DetachPresentation(void)
 {
     LocalMapObject *follower = OverworldMount_GetFollowerObject();
     LocalMapObject *player = NULL;
+    FIELD_PLAYER_AVATAR *avatar;
 
     if (!sOverworldMountState.presentationAttached) {
         return;
     }
     if (OverworldMount_HasCurrentPlayer()) {
-        player = sOverworldMountState.fieldSystem->playerAvatar->mapObject;
+        avatar = sOverworldMountState.fieldSystem->playerAvatar;
+        player = avatar->mapObject;
+        /* A cancellation can arrive after stock code has changed the avatar
+         * state but before pendingStep records the command. Always return
+         * control ownership to the normal player controller on detach. */
+        OverworldMount_ClearObjectCommand(player);
+        avatar->unk0 &= ~OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT;
+        OverworldMount_ResetAvatarAfterCancel(avatar);
         OverworldMount_UpdatePlayerBaseHeight(player);
         player->flags &= ~MAPOBJECTFLAG_UNK7;
         player->faceVec[1] = sOverworldMountState.playerBaseFaceY;
@@ -545,7 +588,8 @@ static void OverworldMount_DetachPresentation(void)
         }
     }
     if (follower != NULL) {
-        MapObject_ClearHeldMovement(follower);
+        OverworldMount_ClearObjectCommand(follower);
+        follower->flags &= ~MAPOBJECTFLAG_UNK31;
         follower->xPrev = follower->xCurr;
         follower->hPrev = follower->hCurr;
         follower->yPrev = follower->yCurr;
@@ -578,9 +622,10 @@ static void OverworldMount_Cancel(u8 reason)
 
     if (sOverworldMountState.snapshot.motionMode
             != OVERWORLD_MOUNT_MOTION_NONE) {
-        OverworldMount_FinishCustomMotion(
-            !sOverworldMountState.motionStreamPreparing);
-    } else if (sOverworldMountState.motionStreamPreparing
+        OverworldWalkMount_RebaseMotionTarget(&sOverworldMountState);
+        OverworldMount_FinishCustomMotion();
+    }
+    if (sOverworldMountState.motionStreamPreparing
         && OverworldMount_HasCurrentPlayer()) {
         OverworldMount_RestoreLandStreamTarget(
             sOverworldMountState.fieldSystem->playerAvatar->mapObject);
@@ -603,7 +648,7 @@ static BOOL OverworldMount_Begin(
     u32 generation;
     u8 baseSpeed;
     u8 maxSpeed;
-    u8 previousToggleDown = sOverworldMountState.previousToggleDown;
+    u8 bufferedToggleDown = sOverworldMountState.bufferedToggleDown;
 
     if (fieldSystem == NULL
         || binding == NULL
@@ -619,7 +664,10 @@ static BOOL OverworldMount_Begin(
         generation = ++sOverworldMountNextSessionGeneration;
     }
     memset(&sOverworldMountState, 0, sizeof(sOverworldMountState));
-    sOverworldMountState.previousToggleDown = previousToggleDown;
+    /* The Select press that starts this session can still be physically held.
+     * Preserve its resident edge state so it cannot become an immediate
+     * second toggle after the session reset. */
+    sOverworldMountState.bufferedToggleDown = bufferedToggleDown;
     sOverworldMountState.fieldSystem = fieldSystem;
     sOverworldMountState.surfaceCatalog = surfaceCatalog;
     sOverworldMountState.snapshot.profile = profile->owner;
@@ -678,7 +726,8 @@ static void OverworldMount_PrepareMapTransition(u8 mode)
         return;
     }
     if (sOverworldMountState.snapshot.motionMode
-            == OVERWORLD_MOUNT_MOTION_NONE) {
+            == OVERWORLD_MOUNT_MOTION_NONE
+        && !sOverworldMountState.pendingStep) {
         OverworldMount_ResetMomentum();
         sOverworldMountState.motionCooldown = 0;
     }
@@ -719,9 +768,7 @@ OverworldMount_ResumeCustomMotionAfterMapTransition(void)
     MapObject_StartMovementCommandInternal(
         player,
         freezeCommand);
-    MapObject_StartMovementCommandInternal(
-        follower,
-        freezeCommand);
+    OverworldMount_ResumeFollowerCommand(follower, freezeCommand);
 }
 
 static BOOL __attribute__((noinline, section(".overworld_mount_control_tail")))
@@ -841,11 +888,13 @@ OverworldMount_NormalizeFollowerAfterStep(
      * presentation, so cancel its matching command and snap it to the
      * authoritative player tile instead of waiting forever for a second
      * movement-complete signal. */
-    follower->flags &= ~MAPOBJECTFLAG_UNK7;
     MapObject_SetPositionFromVectorAndDirection(
         follower,
         (VecFx32 *)player->posVec,
         player->curFacing);
+    follower->xPrev = player->xPrev;
+    follower->hPrev = player->hPrev;
+    follower->yPrev = player->yPrev;
 }
 
 static BOOL __attribute__((noinline))
@@ -1092,7 +1141,7 @@ static void __attribute__((noinline)) OverworldMount_DrainLandStream(void)
     sOverworldMountState.motionStreamPreparing = FALSE;
 }
 
-static void OverworldMount_FinishCustomMotion(BOOL commitTarget)
+static void OverworldMount_FinishCustomMotion(void)
 {
     FIELD_PLAYER_AVATAR *avatar;
     LocalMapObject *follower;
@@ -1130,10 +1179,10 @@ static void OverworldMount_FinishCustomMotion(BOOL commitTarget)
     if (!sOverworldMountState.motionLandingPauseStarted) {
         sOverworldMountState.motionCooldown = pause;
     }
-    if (commitTarget && !walkMotion) {
+    if (!walkMotion) {
         OverworldMount_CommitMotionTarget(player);
     }
-    if (commitTarget && walkMotion) {
+    if (walkMotion) {
         /* Keep the stationary command alive through the next player update.
          * That gives vanilla exactly one real END boundary for step scripts,
          * encounters, map connections, and warps. Relocation would clear the
@@ -1149,19 +1198,12 @@ static void OverworldMount_FinishCustomMotion(BOOL commitTarget)
         player->posVec[1] = (u32)sOverworldMountState.motionTargetBaseY;
         player->posVec[2] =
             ((u32)(u16)sOverworldMountState.motionTargetY << 16) + 0x8000;
-        /* Finish the shared visual step before pendingStep changes the normal
-         * presentation-sync rule at the vanilla movement-end boundary. */
-        OverworldMount_SyncPresentation();
-    }
-    if (!commitTarget) {
-        OverworldMount_RestoreLandStreamTarget(player);
-        sOverworldMountState.motionStreamPreparing = FALSE;
     }
     if (!walkMotion) {
-        MapObject_ClearHeldMovement(player);
+        OverworldMount_ClearObjectCommand(player);
     }
     if (follower != NULL) {
-        MapObject_ClearHeldMovement(follower);
+        OverworldMount_ClearObjectCommand(follower);
     }
     OverworldMount_ApplyTeleportVisibility(TRUE);
     avatar->unk0 &= ~OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT;
@@ -1170,7 +1212,7 @@ static void OverworldMount_FinishCustomMotion(BOOL commitTarget)
         avatar->unk14 = 2; /* PLAYER_MOVE_STATE_MOVING */
         sOverworldMountState.pendingStep = TRUE;
     } else {
-        PlayerAvatar_ResetMovement(avatar);
+        OverworldMount_ResetAvatarAfterCancel(avatar);
     }
     sOverworldMountState.snapshot.motionMode = OVERWORLD_MOUNT_MOTION_NONE;
     sOverworldMountState.motionElapsed = 0;
@@ -1230,7 +1272,7 @@ OverworldMount_UpdateCustomMotion(void)
     }
     if (sOverworldMountState.motionElapsed
         >= sOverworldMountState.motionFrameCount) {
-        OverworldMount_FinishCustomMotion(TRUE);
+        OverworldMount_FinishCustomMotion();
         return;
     }
     sOverworldMountState.motionElapsed++;
@@ -1311,7 +1353,7 @@ OverworldMount_UpdateCustomMotion(void)
             >= sOverworldMountState.motionFrameCount) {
             /* Commit on the Nth update. The stationary player command stays
              * active so vanilla still emits one movement-end boundary next. */
-            OverworldMount_FinishCustomMotion(TRUE);
+            OverworldMount_FinishCustomMotion();
             return;
         }
         /* PlayerAvatar_UpdateMovement runs before this controller. Hold its
@@ -1576,7 +1618,7 @@ hop_target_found:
     sOverworldMountState.motionFrameCount = (u16)frames;
     sOverworldMountState.motionElapsed = 0;
     avatar->unk0 |= OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT;
-    PlayerAvatar_ResetMovement(avatar);
+    OverworldMount_ResetAvatarAfterCancel(avatar);
     /* Normalize any just-finished stock step before custom motion takes
      * ownership. This prevents a stale SINGLE_MOVEMENT flag from surviving
      * the entire jump and blocking control after landing. */
@@ -1630,25 +1672,43 @@ static BOOL __attribute__((noinline)) OverworldMount_HandleCustomInput(
         return TRUE;
     }
     direction = OverworldMount_GetInputDirection(*newKeys | *heldKeys);
-    if (direction >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST) {
+    if (direction >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST
+        && direction <= OVERWORLD_MOUNT_DIRECTION_SOUTH_EAST) {
         direction = OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(
             avatar->mapObject,
             direction,
             *newKeys);
     }
-    if ((rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
-            || OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(rawLocomotion))
-        && direction != OVERWORLD_MOUNT_DIRECTION_NONE
-        && OverworldMount_CanControl(avatar)) {
-        (void)OverworldMount_TryStartCustomMotion(
-            avatar,
-            direction,
-            direction);
+    if (rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+        || OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(rawLocomotion)) {
+        /* Overlay 1 asks the stock avatar collision helper about held input
+         * after a custom Hop commits. That query changes unk10 to TURNING as
+         * a side effect. Stock walking clears it on its next movement call,
+         * but custom locomotion owns that call and must clear the stale state
+         * itself. Otherwise field input stays unready and controls appear to
+         * lock after landing, especially beside blocked tiles. */
+        if (avatar->unk10 != OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE
+            || avatar->unk14 != OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE) {
+            OverworldMount_ResetAvatarAfterCancel(avatar);
+        }
+        if (direction != OVERWORLD_MOUNT_DIRECTION_NONE
+            && OverworldMount_CanControl(avatar)) {
+            (void)OverworldMount_TryStartCustomMotion(
+                avatar,
+                direction,
+                direction);
+        }
+        /* Custom locomotion owns the player for its complete idle/move/pause
+         * cycle. Letting an idle frame reach stock control can start a second
+         * movement state from the map object's stationary command. */
         return TRUE;
     }
     if (sOverworldMountState.motionCooldown != 0) {
-        *newKeys &= ~PAD_PLUS_KEY_MASK;
-        *heldKeys &= ~PAD_PLUS_KEY_MASK;
+        /* Field input has already resolved its direction before this wrapper.
+         * Calling stock control with cleared key masks can still start that
+         * stale direction and leave the avatar in MOVE_STATE_START after a
+         * Hop landing. Consume the whole control call during the pause. */
+        return TRUE;
     }
     return FALSE;
 }
@@ -1731,7 +1791,7 @@ OverworldMount_TryHandleDiagonalWalk(
             requestedDirection,
             facingDirection)) {
         sOverworldMountState.pendingSkid = FALSE;
-        return requestedDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST;
+        OverworldMount_PlayCrashSound(SEQ_SE_DP_WALL_HIT);
     }
     return TRUE;
 }
@@ -1858,6 +1918,13 @@ void OverworldMount_IssueHeldMovement(
     if (trackedStep) {
         u8 facingDirection = direction;
 
+        if (sOverworldMountState.snapshot.motionMode
+                != OVERWORLD_MOUNT_MOTION_NONE) {
+            /* The held-movement hook can run before the current exact-frame
+             * Walk reaches its final update. Keep ownership with that motion;
+             * replacing it here drops its last frame and logical boundary. */
+            return;
+        }
         /* A turn skid keeps both travel and facing on the committed heading.
          * Apply the requested facing only after the last skid tile lands. */
         (void)OverworldMount_TryStartCustomMotion(
@@ -1966,21 +2033,23 @@ static void OverworldRuntime_TickWildRefillTimer(
         OW_WILD_FIELD_IDLE_REARM_PENDING;
 }
 
-static BOOL OverworldMount_Tick(
+static BOOL __attribute__((used)) OverworldMount_Tick(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
     u16 physicalKeys)
 {
-    BOOL toggleDown = (physicalKeys & OVERWORLD_MOUNT_TOGGLE_BUTTON) != 0;
-    BOOL togglePressed = toggleDown && !sOverworldMountState.previousToggleDown;
+    BOOL togglePressed = sOverworldMountState.bufferedTogglePending != 0;
 
-    sOverworldMountState.previousToggleDown = (u8)toggleDown;
     OverworldRuntime_TickWildRefillTimer(state);
     OverworldMount_HandleFollowerSelectionRequest(fieldSystem, state);
     if (togglePressed
         && !OverworldFollowerSelector_IsActiveFlagSet()
         && !OverworldFollowerSelector_IsReleaseGated()
         && OverworldMount_CanToggle(fieldSystem)) {
+        /* A buffered edge belongs to the mount controller until it is
+         * accepted. Do not discard it merely because a Hop or a field update
+         * made this particular frame unable to toggle. */
+        sOverworldMountState.bufferedTogglePending = FALSE;
         if (OverworldMount_IsActive()) {
             OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_EXPLICIT);
         } else {
@@ -2025,6 +2094,31 @@ static BOOL OverworldMount_Tick(
     return TRUE;
 }
 
+static BOOL __attribute__((naked, noinline, used,
+    section(".overworld_mount_toggle_latch")))
+OverworldMount_TickLatched(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    u16 physicalKeys)
+{
+    __asm__(
+        "push {r0}\n"
+        "ldr r3, 2f\n"
+        "ldrb r0, [r3, #0]\n"
+        "lsl r0, r0, #2\n"
+        "orr r2, r0\n"
+        /* Preserve the wrapper's fixed ABI size while leaving the buffered
+         * edge owned by OverworldMount_Tick until a toggle succeeds. */
+        "nop\n"
+        "nop\n"
+        "pop {r0}\n"
+        "ldr r3, 3f\n"
+        "bx r3\n"
+        ".align 2\n"
+        "2: .word 0x023BC78A\n"
+        "3: .word OverworldMount_Tick + 1\n");
+}
+
 const OverworldMountOverlayEntry gOverworldMountOverlayEntry
     __attribute__((section(".overworld_mount_entry"), used)) = {
         OVERWORLD_MOUNT_OVERLAY_MAGIC,
@@ -2035,5 +2129,5 @@ const OverworldMountOverlayEntry gOverworldMountOverlayEntry
         OverworldMount_PrepareMapTransition,
         OverworldMount_OnPlayerStep,
         OverworldMount_IsActive,
-        OverworldMount_Tick,
+        OverworldMount_TickLatched,
     };

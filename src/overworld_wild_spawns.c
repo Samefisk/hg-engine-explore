@@ -4,6 +4,7 @@
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
 #include "../include/constants/file.h"
+#include "../include/constants/buttons.h"
 #include "../include/constants/species.h"
 #include "../include/battle.h"
 #include "../include/map_teleport.h"
@@ -60,6 +61,20 @@ __asm__(
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad);
 
+static void OverworldWildSpawns_CaptureMountToggle(FieldSystem *fieldSystem)
+{
+    u8 toggleDown = (reg_PAD_KEYINPUT & PAD_BUTTON_SELECT) == 0;
+    u8 toggleWasDown = OVERWORLD_MOUNT_TOGGLE_DOWN;
+
+    OVERWORLD_MOUNT_TOGGLE_DOWN = toggleDown;
+    if (fieldSystem->taskman == NULL
+        && toggleDown
+        && !toggleWasDown
+        && !OverworldFollowerSelector_IsActiveFlagSet()) {
+        OVERWORLD_MOUNT_TOGGLE_PENDING = TRUE;
+    }
+}
+
 static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
 {
     FieldSystem *fieldSystem = (FieldSystem *)data;
@@ -71,6 +86,10 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         DestroySysTask(task);
         return;
     }
+
+    /* This task can temporarily stop before the extension frame service runs.
+     * Keep a short Select press from being lost in that gap after a Hop. */
+    OverworldWildSpawns_CaptureMountToggle(fieldSystem);
 
     if (!sub_0203DF8C(fieldSystem)) {
         gOverworldWildFieldIdleRearmPending |=
@@ -149,14 +168,9 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
 #endif
     /*
      * Keep the resident helper addresses used by overlay 155 stable. The
-     * explicit cold-load fence above is smaller than the old grace path.
+     * remaining fence accounts for the resident Select-edge latch above.
      */
-    __asm__(
-        "nop\n" "nop\n" "nop\n" "nop\n"
-        "nop\n" "nop\n" "nop\n" "nop\n"
-        "nop\n" "nop\n" "nop\n" "nop\n"
-        "nop\n" "nop\n" "nop\n" "nop\n"
-        "nop\n" "nop\n" "nop\n" "nop\n");
+    __asm__("");
 }
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad)

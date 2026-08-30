@@ -37,6 +37,26 @@ static OverworldWildRuntimeSurfaceBlockCache sOverworldWildSurfaceBlockCache = {
     OW_WILD_RUNTIME_SURFACE_MODEL_NONE,
 };
 
+/* Overlay 1 normally owns each object-facing vector. A mounted follower is a
+ * presentation child of the player, so its controller-owned vector must not
+ * be replaced later in the same frame. UNK31 is reserved for that one state. */
+void __attribute__((naked, noinline, used,
+        section(".overworld_wild_runtime_mount_facing")))
+OverworldWildRuntime_SetFacingVectorUnlessMounted(
+    LocalMapObject *object,
+    VecFx32 *facingVector)
+{
+    __asm__(
+        "ldr r2, [r0, #0]\n"
+        "cmp r2, #0\n"
+        "bmi 1f\n"
+        "ldr r3, 2f\n"
+        "bx r3\n"
+        "1: bx lr\n"
+        ".align 2\n"
+        "2: .word 0x0205F97D\n");
+}
+
 void OverworldWildRuntime_PlayStepDirtParticle(LocalMapObject *object)
 {
     if (object == NULL) {

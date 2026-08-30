@@ -584,7 +584,10 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
     Walk_SetFacing(player, facingDirection);
     Walk_SetFacing(follower, facingDirection);
     MapObject_StartMovementCommandInternal(player, WALK_MOUNT_FREEZE_COMMAND);
-    MapObject_StartMovementCommandInternal(follower, WALK_MOUNT_FREEZE_COMMAND);
+    /* The mounted follower is already removed from wild movement scheduling
+     * and mirrors the player every field tick. Giving it an independent stock
+     * command lets that command write the previous render tile after the
+     * player commits, causing a one-frame full-tile split at every boundary. */
     if (!state->motionStreamPreparing) {
         state->motionStreamAnchor = *(VecFx32 *)player->posVec;
         state->motionStreamPreparing = TRUE;
@@ -811,6 +814,23 @@ const OverworldWalkMountModuleEntry gOverworldWalkMountModuleEntry
         Walk_MountFilterInput,
         Walk_StartMountedFlatMotion,
     };
+
+/* Keep canceled custom motion on a complete tile. The mount state stores the
+ * two start coordinates directly before the two target coordinates, followed
+ * by start and target base height. */
+void __attribute__((naked, noinline, used, aligned(2),
+        section(".overworld_walk_mount_abort")))
+OverworldWalkMount_RebaseMotionTargetImpl(
+    OverworldMountRuntimeState *state)
+{
+    __asm__(
+        "add r0, #0x98\n"
+        "ldr r1, [r0, #0]\n"
+        "str r1, [r0, #4]\n"
+        "ldr r1, [r0, #8]\n"
+        "str r1, [r0, #12]\n"
+        "bx lr\n");
+}
 
 const OverworldWalkFaceModuleEntry gOverworldWalkFaceModuleEntry
     __attribute__((section(".overworld_walk_face_module_entry"), used)) = {

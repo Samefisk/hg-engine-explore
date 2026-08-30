@@ -39,17 +39,21 @@ SECTIONS {
                     "overworld mount player-control wrapper exceeded reserve");
                 . = ORIGIN(rom) + 0xBA0;
                 KEEP(*(.overworld_mount_step))
+                KEEP(*(.overworld_mount_step_extra))
                 ASSERT(. <= ORIGIN(rom) + 0xBE0,
                     "overworld mount player-step wrapper exceeded reserve");
                 . = ORIGIN(rom) + 0xBE0;
                 KEEP(*(.overworld_mount_field_input))
+                KEEP(*(.overworld_mount_field_input_extra))
                 ASSERT(. <= ORIGIN(rom) + 0xC40,
                     "overworld mount field-input wrapper exceeded reserve");
                 . = ORIGIN(rom) + 0xC40;
                 KEEP(*(.overworld_mount_crash))
-                ASSERT(. <= ORIGIN(rom) + 0xC80,
+                KEEP(*(.overworld_mount_crash_extra))
+                ASSERT(. <= ORIGIN(rom) + 0xC78,
                     "overworld mount crash-sound wrapper exceeded reserve");
-                . = ORIGIN(rom) + 0xC80;
+                . = ORIGIN(rom) + 0xC78;
+                KEEP(*(.overworld_mount_toggle_latch))
                 *(.init)
                 *(.text)
                 *(.ctors)

@@ -21,14 +21,19 @@ ENTRY_VERSION = 8
 ENTRY_SIZE = 32
 PLAYER_CONTROL_WRAPPER = OVERLAY_ENTRY + 0x20
 PLAYER_STEP_WRAPPER = OVERLAY_ENTRY + 0xA0
-PLAYER_STEP_RESIDENT_HANDLER = 0x023D9B65
+PLAYER_STEP_RESIDENT_HANDLER = 0x023D9B79
 PLAYER_STEP_RESIDENT_LITERAL = PLAYER_STEP_WRAPPER + 0x14
 FIELD_INPUT_WRAPPER = OVERLAY_ENTRY + 0xE0
 CRASH_SOUND_WRAPPER = OVERLAY_ENTRY + 0x140
+TOGGLE_LATCH_WRAPPER = OVERLAY_BASE + 0xC78
+TOGGLE_LATCH_ADDR = 0x023BC78A
 MOVE_CONTROL_CALL_SITES = (0x0203E1F0, 0x0203E260, 0x0203E2E4)
 FIELD_INPUT_CALL_SITE = 0x0203E270
 CRASH_SOUND_CALL_SITES = (0x0205D532, 0x0205D5C2)
 HELD_MOVEMENT_HOOK = 0x0205DA1C
+FIELD_OBJECT_OVERLAY_ID = 1
+MOUNT_FACING_CALL_SITE = 0x021F8E68
+MOUNT_FACING_WRAPPER = 0x023BD3EC
 
 
 def require(condition: bool, message: str) -> None:
@@ -111,9 +116,26 @@ def main() -> None:
         decode_thumb_bl(
             player_step_overlay,
             player_step_load,
-            0x023DD544,
+            0x023DD558,
         ) == PLAYER_STEP_WRAPPER,
         "canonical player-step call does not target the mount bridge",
+    )
+    object_row = struct.unpack_from(
+        "<8I", rom, y9_offset + FIELD_OBJECT_OVERLAY_ID * 0x20
+    )
+    object_load = object_row[1]
+    object_file_id = object_row[6]
+    object_start, object_end = struct.unpack_from(
+        "<2I", rom, fat_offset + object_file_id * 8
+    )
+    object_overlay = rom[object_start:object_end]
+    require(
+        decode_thumb_bl(
+            object_overlay,
+            object_load,
+            MOUNT_FACING_CALL_SITE,
+        ) == MOUNT_FACING_WRAPPER,
+        "mounted follower facing vector is overwritten after synchronization",
     )
 
     entry_offset = OVERLAY_ENTRY - OVERLAY_BASE
@@ -135,6 +157,26 @@ def main() -> None:
         callbacks[-1] & ~1 != PLAYER_CONTROL_WRAPPER
         and callbacks[-1] & ~1 != CRASH_SOUND_WRAPPER,
         "frame callback aliases a fixed player-control wrapper",
+    )
+    toggle_wrapper = packaged[
+        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE:
+        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE + 0x1C
+    ]
+    require(
+        callbacks[-1] == TOGGLE_LATCH_WRAPPER + 1
+        and toggle_wrapper[:0x14]
+            == bytes.fromhex(
+                "01 b4 04 4b 18 78 80 00 02 43 c0 46 c0 46 01 bc "
+                "01 4b 18 47"
+            )
+        and struct.unpack_from("<I", toggle_wrapper, 0x14)[0]
+            == TOGGLE_LATCH_ADDR
+        and (
+            OVERLAY_BASE
+            <= (struct.unpack_from("<I", toggle_wrapper, 0x18)[0] & ~1)
+            < OVERLAY_BASE + file_size
+        ),
+        "missed Select edges do not route through the resident mount latch",
     )
 
     arm9_offset, arm9_entry, arm9_load, arm9_size = struct.unpack_from(
@@ -255,10 +297,26 @@ def main() -> None:
     mount_linker = (
         REPO / "src/overworld_mount_overlay/linker.ld"
     ).read_text()
+    mount_header = (REPO / "include/overworld_mount.h").read_text()
+    mount_internal = (
+        REPO / "include/overworld_mount_internal.h"
+    ).read_text()
+    runtime_source = (
+        REPO
+        / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+    ).read_text()
+    runtime_linker = (
+        REPO / "src/overworld_wild_runtime_overlay/linker.ld"
+    ).read_text()
+    overworld_patch = (REPO / "armips/asm/overworlds.s").read_text()
     walk_module_source = (
         REPO
         / "src/pokemon_move_history_overlay/overworld_walk_module.c"
     ).read_text()
+    walk_module_linker = (
+        REPO / "src/pokemon_move_history_overlay/linker.ld"
+    ).read_text()
+    root_linker = (REPO / "rom.ld").read_text()
     mount_runtime_source = mount_source + "\n" + walk_module_source
     issue_held_movement = re.search(
         r"void\s+OverworldMount_IssueHeldMovement\([^;]*?\)\s*"
@@ -278,6 +336,16 @@ def main() -> None:
         and "profile->owner.maxWalkSpeed" in mount_source
         and "profile->owner.walkOptions" in mount_source,
         "mounted Walk does not consume the fully resolved owner profile",
+    )
+    require(
+        "MAPOBJECTFLAG_UNK18 | MAPOBJECTFLAG_UNK31" in mount_source
+        and "follower->flags &= ~MAPOBJECTFLAG_UNK31;" in mount_source
+        and "OverworldWildRuntime_SetFacingVectorUnlessMounted" in runtime_source
+        and "2: .word 0x0205F97D" in runtime_source
+        and ". = ORIGIN(rom) + 0xBEC;" in runtime_linker
+        and "KEEP(*(.overworld_wild_runtime_mount_facing))" in runtime_linker
+        and "bl 0x023BD3EC" in overworld_patch,
+        "mounted facing-vector ownership is incomplete",
     )
     require(
         "snapshot.profile.chillAction" in mount_source
@@ -369,7 +437,8 @@ def main() -> None:
         and mount_runtime_source.count(
             "MapObject_SetPositionFromVectorAndDirection("
         ) >= 3
-        and "follower->posVec[0] = player->posVec[0];" in mount_source,
+        and "memcpy(follower->posVec, player->posVec" in mount_source
+        and "memcpy(&follower->xPrev, &player->xPrev" in mount_source,
         "mounted custom motion lacks landing or avatar-state safeguards",
     )
     require(
@@ -394,15 +463,12 @@ def main() -> None:
         and "Defer stop skid for one sample" in mount_runtime_source
         and "MAPOBJECTFLAG_UNK7" in mount_source
         and "MapObject_SetPositionFromVectorAndDirection" in mount_source
-        and re.search(
-            r"if \(!sOverworldMountState\.pendingStep\s*"
-            r"\|\| sOverworldMountState\.snapshot\.motionMode\s*"
-            r"== OVERWORLD_MOUNT_MOTION_WALK\) \{.*?"
-            r"follower->posVec\[0\] = player->posVec\[0\];.*?"
-            r"follower->xCurr = player->xCurr;",
-            mount_source,
-            re.DOTALL,
-        ) is not None
+        and "memcpy(follower->posVec, player->posVec" in mount_source
+        and "memcpy(&follower->xPrev, &player->xPrev" in mount_source
+        and "MapObject_StartMovementCommandInternal(\n        follower,\n"
+            not in walk_module_source
+        and "follower->xPrev = player->xPrev;" in mount_source
+        and "follower->yPrev = player->yPrev;" in mount_source
         and "OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND" in mount_source
         and mount_runtime_source.count(
             "MapObject_StartMovementCommandInternal("
@@ -472,7 +538,7 @@ def main() -> None:
                 "Commit on the Nth update."
             )
             < update_motion.group("body").find(
-                "OverworldMount_FinishCustomMotion(TRUE);",
+                "OverworldMount_FinishCustomMotion();",
                 update_motion.group("body").find("Commit on the Nth update."),
             )
         and "stationary player command stays" in update_motion.group("body"),
@@ -495,18 +561,177 @@ def main() -> None:
     )
     require(
         re.search(
-            r"if \(commitTarget && walkMotion\) \{.*?"
-            r"player->posVec\[2\].*?OverworldMount_SyncPresentation\(\);.*?"
-            r"sOverworldMountState\.pendingStep = TRUE;",
+            r"if \(walkMotion\) \{.*?"
+            r"player->posVec\[2\].*?"
+            r"OverworldMount_ClearObjectCommand\(follower\);\s*\}.*?"
+            r"if \(walkMotion\) \{.*?"
+            r"sOverworldMountState\.pendingStep = TRUE;.*?\}.*?"
+            r"OverworldMount_SyncPresentation\(\);",
             mount_source,
             re.DOTALL,
         ) is not None,
         "mounted flat Walk does not finish player and mount presentation together",
     )
+    cancel_mount = re.search(
+        r"static void OverworldMount_Cancel\(u8 reason\)\s*\{"
+        r"(?P<body>.*?)\n\}",
+        mount_source,
+        re.DOTALL,
+    )
+    detach_mount = mount_source.split(
+        "static void OverworldMount_DetachPresentation(void)", 1
+    )[1].split("static void OverworldMount_Cancel", 1)[0]
+    require(
+        cancel_mount is not None
+        and "OverworldWalkMount_RebaseMotionTarget(&sOverworldMountState);"
+            in cancel_mount.group("body")
+        and "OverworldMount_DetachPresentation();"
+            in cancel_mount.group("body")
+        and "OverworldMount_ClearObjectCommand(player);" in detach_mount
+        and "OverworldMount_ResetAvatarAfterCancel(avatar);" in detach_mount
+        and "if (sOverworldMountState.pendingStep)" not in detach_mount,
+        "mounted cancellation can leave the player movement command active",
+    )
+    require(
+        "section(\".overworld_walk_mount_abort\")" in walk_module_source
+        and "OverworldWalkMount_RebaseMotionTargetImpl"
+            in walk_module_source
+        and ". = ORIGIN(rom) + 0x1BEA;" in walk_module_linker
+        and "KEEP(*(.overworld_walk_mount_abort))" in walk_module_linker
+        and "OverworldWalkMount_RebaseMotionTarget = 0x023BFFEA | 1;"
+            in root_linker,
+        "mounted cancellation rollback helper is not fixed in resident code",
+    )
+    resume_follower = re.search(
+        r"OverworldMount_ResumeFollowerCommand\(.*?\)\s*\{"
+        r"(?P<body>.*?)\n\}",
+        mount_source,
+        re.DOTALL,
+    )
+    require(
+        resume_follower is not None
+        and "!= OVERWORLD_MOUNT_MOTION_WALK"
+            in resume_follower.group("body"),
+        "mounted Walk transition resumes an independent follower command",
+    )
+    require(
+        "movementCrashShakeTimers[\n        OW_WILD_FOLLOWER_SLOT] = 0;"
+            in mount_source,
+        "mounted presentation can be overwritten by a stale crash shake",
+    )
+    require(
+        re.search(
+            r"KEEP\(\*\(\.overworld_mount_step\)\)\s*"
+            r"KEEP\(\*\(\.overworld_mount_step_extra\)\)",
+            mount_linker,
+        ) is not None
+        and re.search(
+            r"KEEP\(\*\(\.overworld_mount_field_input\)\)\s*"
+            r"KEEP\(\*\(\.overworld_mount_field_input_extra\)\)",
+            mount_linker,
+        ) is not None
+        and re.search(
+            r"KEEP\(\*\(\.overworld_mount_crash\)\)\s*"
+            r"KEEP\(\*\(\.overworld_mount_crash_extra\)\)",
+            mount_linker,
+        ) is not None,
+        "mount helper code is not kept inside the audited ABI reserves",
+    )
     require(
         "OVERWORLD_MOUNT_TOGGLE_BUTTON PAD_BUTTON_SELECT" in mount_source
         and "beginMountSelectedFollower(fieldSystem, state)" in mount_source,
         "Select does not bind the current follower through the profile bridge",
+    )
+    require(
+        "if (sOverworldMountState.motionCooldown != 0) {\n        "
+            "/* Field input has already resolved its direction"
+            in mount_source
+        and "*newKeys &= ~PAD_PLUS_KEY_MASK;" not in mount_source
+        and "*heldKeys &= ~PAD_PLUS_KEY_MASK;" not in mount_source,
+        "landing pause can leak a stale direction into stock player control",
+    )
+    require(
+        "The held-movement hook can run before the current exact-frame"
+            in mount_source
+        and re.search(
+            r"if \(trackedStep\) \{.*?"
+            r"snapshot.motionMode\s*!= OVERWORLD_MOUNT_MOTION_NONE"
+            r".*?return;",
+            mount_source,
+            re.DOTALL,
+        ) is not None,
+        "held input can replace an active mounted Walk motion",
+    )
+    require(
+        "/* Custom locomotion owns the player for its complete idle/move/pause"
+            in mount_source
+        and "Overlay 1 asks the stock avatar collision helper" in mount_source
+        and re.search(
+            r"if \(avatar->unk10 != OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE"
+            r".*?OverworldMount_ResetAvatarAfterCancel\(avatar\);",
+            mount_source,
+            re.DOTALL,
+        ) is not None
+        and re.search(
+            r"OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT\(rawLocomotion\)\) \{"
+            r".*?OverworldMount_TryStartCustomMotion\(.*?return TRUE;\s*\}",
+            mount_source,
+            re.DOTALL,
+        ) is not None,
+        "idle custom locomotion can fall through to stock player control",
+    )
+    require(
+        "direction >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST\n"
+            "        && direction <= OVERWORLD_MOUNT_DIRECTION_SOUTH_EAST"
+            in mount_source,
+        "no-direction input can be misread as a mounted diagonal",
+    )
+    capture_toggle = re.search(
+        r"static void OverworldWildSpawns_CaptureMountToggle\([^;]*?\)\s*\{"
+        r".*?\n\}",
+        resident_spawns,
+        re.DOTALL,
+    )
+    resident_field_ready_task = re.search(
+        r"static void OverworldWildSpawns_FieldReadyTask\([^;]*?\)\s*\{"
+        r".*?\n\}",
+        resident_spawns,
+        re.DOTALL,
+    )
+    require(
+        "OVERWORLD_MOUNT_TOGGLE_LATCH_ADDR 0x023BC78A" in mount_header
+        and "u8 bufferedTogglePending;" in mount_internal
+        and "u8 bufferedToggleDown;" in mount_internal
+        and "bufferedTogglePending) == 0x96" in mount_internal
+        and capture_toggle is not None
+        and "reg_PAD_KEYINPUT & PAD_BUTTON_SELECT"
+            in capture_toggle.group(0)
+        and "fieldSystem->taskman == NULL" in capture_toggle.group(0)
+        and "!OverworldFollowerSelector_IsActiveFlagSet()"
+            in capture_toggle.group(0)
+        and "OVERWORLD_MOUNT_TOGGLE_PENDING = TRUE;"
+            in capture_toggle.group(0)
+        and "togglePressed = sOverworldMountState.bufferedTogglePending != 0"
+            in mount_source
+        and "sOverworldMountState.bufferedTogglePending = FALSE;"
+            in mount_source
+        and "u8 bufferedToggleDown = sOverworldMountState.bufferedToggleDown;"
+            in mount_source
+        and "sOverworldMountState.bufferedToggleDown = bufferedToggleDown;"
+            in mount_source
+        and "until a toggle succeeds" in mount_source
+        and resident_field_ready_task is not None
+        and resident_field_ready_task.group(0).find(
+            "OverworldWildSpawns_CaptureMountToggle(fieldSystem);"
+        ) < resident_field_ready_task.group(0).find(
+            "if (!sub_0203DF8C(fieldSystem))"
+        )
+        and "section(\".overworld_mount_toggle_latch\")" in mount_source
+        and "OverworldMount_TickLatched" in mount_source
+        and "OverworldMount_TickLatched," in mount_source
+        and ". = ORIGIN(rom) + 0xC78;" in mount_linker
+        and "KEEP(*(.overworld_mount_toggle_latch))" in mount_linker,
+        "Select input can be lost while the mount frame service is stopped",
     )
     require(
         "OVERWORLD_MOUNT_RIDER_SPRITE_MALE 178" in mount_source
@@ -805,10 +1030,12 @@ def main() -> None:
     require(
         "(void)OverworldMount_UpdateLandStreamAnchor();" in mount_source
         and re.search(
-            r"if \(!commitTarget\) \{\s*"
-            r"OverworldMount_RestoreLandStreamTarget\(player\);\s*"
+            r"OverworldMount_Cancel\(u8 reason\).*?"
+            r"if \(sOverworldMountState\.motionStreamPreparing.*?"
+            r"OverworldMount_RestoreLandStreamTarget\(.*?\);\s*"
             r"sOverworldMountState\.motionStreamPreparing = FALSE;",
             mount_source,
+            re.DOTALL,
         ) is not None
         and re.search(
             r"OverworldMount_UpdateCustomMotion\(\);\s*"

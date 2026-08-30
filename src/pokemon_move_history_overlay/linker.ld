@@ -116,11 +116,21 @@ SECTIONS {
                     "overworld wild policy module entry moved");
                 *(.overworld_walk_module)
                 *(.overworld_walk_module_rodata)
-                ASSERT(. <= ORIGIN(rom) + 0x1C00,
-                    "overworld Walk module exceeds guarded resident page");
+                ASSERT(. <= ORIGIN(rom) + 0x1BEA,
+                    "overworld Walk module overlaps mount abort helper");
+                . = ORIGIN(rom) + 0x1BEA;
                 ASSERT(__bss_end__ + 0x1000 <= ORIGIN(rom) + LENGTH(rom),
                     "move-history overlay exceeds guarded code envelope");
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
+        } >rom = 0xff
+
+        .mount_abort ORIGIN(rom) + 0x1BEA : {
+                KEEP(*(.overworld_walk_mount_abort))
+                ASSERT(OverworldWalkMount_RebaseMotionTargetImpl
+                        == ORIGIN(rom) + 0x1BEA,
+                    "mounted motion abort helper moved");
+                ASSERT(. == ORIGIN(rom) + 0x1BF6,
+                    "mounted motion abort helper changed packaged size");
         } >rom = 0xff
 }

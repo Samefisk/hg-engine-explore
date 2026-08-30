@@ -25,9 +25,17 @@ SECTIONS {
                 *(.text)
                 *(.ctors)
                 *(.dtors)
+                *(.data)
                 *(.rodata)
                 *(.fini)
                 *(COMMON)
+                ASSERT(. <= ORIGIN(rom) + 0xBEC,
+                    "overworld wild runtime core exceeds stable reserve");
+                . = ORIGIN(rom) + 0xBEC;
+                KEEP(*(.overworld_wild_runtime_mount_facing))
+                ASSERT(. <= ORIGIN(rom) + 0xC00,
+                    "mounted facing wrapper exceeds resident reserve");
+                . = ORIGIN(rom) + 0xC00;
                 __text_end  = . ;
 
                 __bss_start__ = . ;
