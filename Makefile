@@ -328,6 +328,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 	$(PYTHON_NO_VENV) scripts/verify_overworld_learnset_cache.py \
 		--package-only \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
+	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_direction_delta_calls.py
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
@@ -355,6 +356,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 		--package-only \
 		--manifest $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_pokemon_move_history.py --rom $(BUILDROM).tmp
+	$(PYTHON_NO_VENV) scripts/verify_overworld_mount.py --rom $(BUILDROM).tmp
 	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
 		scripts/pokemon_move_history_build_manifest.py \
 		--publish-pair \

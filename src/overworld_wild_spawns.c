@@ -8,6 +8,7 @@
 #include "../include/battle.h"
 #include "../include/map_teleport.h"
 #include "../include/overlay.h"
+#include "../include/overworld_follower_selector.h"
 #include "../include/script.h"
 #include "../include/task.h"
 
@@ -117,22 +118,45 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
         return;
     }
     /* Overlay 131 is guaranteed resident after the map-service guard above. */
-    OverworldFollowerSelectorTaskPollEntry(fieldSystem);
-    if (sOverworldWildSpawnState.battleGraceSteps != 0) {
-        sOverworldWildSpawnState.battleGraceSteps--;
-        return;
-    }
-    /* Advance field presentations before a pending refill consumes the frame. */
-    OverworldFieldService_PollFrame(fieldSystem);
+    /* Refresh stale map state before any input-driven presentation runs. */
     if (gOverworldWildFieldIdleRearmPending != 0) {
-        (void)OverworldWildSpawns_OnPlayerStep(fieldSystem);
+        if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+            (void)HandleLoadOverlay(
+                OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION,
+                0);
+            return;
+        }
+        if ((OVERWORLD_FOLLOWER_SELECTOR_STATE
+                & OVERWORLD_FOLLOWER_SELECTOR_DIRECT_LOADED_FLAG) == 0
+            || OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->validate == NULL
+            || !OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->validate()) {
+            return;
+        }
+        (void)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->onPlayerStep(
+            fieldSystem,
+            &sOverworldWildSpawnState,
+            &gOverworldWildResidentData);
         if (gOverworldWildFieldIdleRearmPending != 0) {
             return;
         }
     }
+    /* Read the current frame's Y edge only after map state is current. */
+    OverworldFollowerSelectorTaskPollEntry(fieldSystem);
+    /* The field services now see the current map and object manager. */
+    OverworldFieldService_PollFrame(fieldSystem);
 #if OW_WILD_FIELD_READY_INITIAL_SPAWN
     OverworldWildSpawns_OnPlayerStep(fieldSystem);
 #endif
+    /*
+     * Keep the resident helper addresses used by overlay 155 stable. The
+     * explicit cold-load fence above is smaller than the old grace path.
+     */
+    __asm__(
+        "nop\n" "nop\n" "nop\n" "nop\n"
+        "nop\n" "nop\n" "nop\n" "nop\n"
+        "nop\n" "nop\n" "nop\n" "nop\n"
+        "nop\n" "nop\n" "nop\n" "nop\n"
+        "nop\n" "nop\n" "nop\n" "nop\n");
 }
 
 static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntry(BOOL deferColdLoad)
@@ -163,9 +187,11 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
     }
     if (fieldSystem->taskman != NULL
         || sFieldReadyTaskMapId != (u16)fieldSystem->location->mapId
-        || sOverworldWildSpawnState.battleGraceSteps != 0) {
+        || gOverworldWildFieldIdleRearmPending != 0) {
         return FALSE;
     }
+    /* Preserve the resident arithmetic-helper targets used by overlay 155. */
+    __asm__("nop\n" "nop\n");
     entry = OverworldWildSpawns_GetOverlayEntry(TRUE);
     if (entry == NULL) {
         return FALSE;

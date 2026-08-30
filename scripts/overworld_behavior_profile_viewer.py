@@ -270,7 +270,7 @@ LEGACY_PROFILE_FIELDS = [
     "chainPauseVariance",
 ]
 
-# Stored profile schema v59. Active and Tired no longer duplicate complete
+# Stored profile schema v69. Active and Tired no longer duplicate complete
 # behavior lanes; they select an override profile and consume that profile's
 # Chill lane. Keep this order synchronized with
 # OverworldWildBehaviorProfileData and its three override-mask words.
@@ -337,14 +337,30 @@ PROFILE_FIELDS = [
     "chainRepositionAllowCardinal",
     "chainRepositionAllowDiagonal",
     "walkOptions",
+    "wanderStraightChance",
+    "chainPauseActionChance",
+    "walkPause",
+    "tilesBeforeTurnSkid",
 ]
 
+# v68 appends the required straight Walk tiles before a turn skid.
+# v67 appends the per-tile Walk pause.
+# v66 appends Wander direction persistence and chain pause-action chance.
 # v64 consumes the compact profile's final padding byte for packed Walk options.
 # v63 appends explicit Reposition-skid distance, particle, and direction controls.
 # v62 appends Reposition speed after the v61 compact profile.
 # v59 consumes the byte that was tail padding in v58. All migrations preserve
 # every earlier packed-field offset.
-PROFILE_FIELDS_V63 = [field for field in PROFILE_FIELDS if field != "walkOptions"]
+PROFILE_FIELDS_V67 = [
+    field for field in PROFILE_FIELDS
+    if field != "tilesBeforeTurnSkid"
+]
+PROFILE_FIELDS_V66 = [field for field in PROFILE_FIELDS_V67 if field != "walkPause"]
+PROFILE_FIELDS_V65 = [
+    field for field in PROFILE_FIELDS_V66
+    if field not in {"wanderStraightChance", "chainPauseActionChance"}
+]
+PROFILE_FIELDS_V63 = [field for field in PROFILE_FIELDS_V65 if field != "walkOptions"]
 PROFILE_FIELDS_V62 = [
     field for field in PROFILE_FIELDS_V63
     if field not in {
@@ -431,7 +447,7 @@ FIELD_LABELS = {
     "battleTrigger": "Battle trigger",
     "attentiveBattle": "Battle Active",
     "specialAction": "Movement style",
-    "hopAllowNonCardinal": "Allow non-cardinal",
+    "hopAllowNonCardinal": "Allowed movement directions",
     "hopAllowVerticalObstacles": "Cross vertical obstacles",
     "hopMinDistance": "Min hop distance",
     "hopMaxDistance": "Max hop distance",
@@ -464,6 +480,10 @@ FIELD_LABELS = {
     "chainRepositionAllowCardinal": "Allow cardinal directions",
     "chainRepositionAllowDiagonal": "Allow diagonal directions",
     "walkOptions": "Walk options",
+    "wanderStraightChance": "Continue straight chance",
+    "chainPauseActionChance": "Pause action chance",
+    "walkPause": "Pause after step",
+    "tilesBeforeTurnSkid": "Steps before turn skid",
     "chillAllowedTerrainMask": "Allowed terrains",
     "chillAllowedTerrainOverrideMask": "Terrain override mask",
     "attentiveAllowedTile": "Allowed tile",
@@ -471,7 +491,7 @@ FIELD_LABELS = {
     "chillAllowedTile2": "Allowed tile 2",
     "attentiveAllowedTile2": "Allowed tile 2",
     "tiredAllowedTile2": "Allowed tile 2",
-    "attentiveHopAllowNonCardinal": "Allow non-cardinal",
+    "attentiveHopAllowNonCardinal": "Allowed movement directions",
     "attentiveHopMinDistance": "Min hop distance",
     "attentiveHopMaxDistance": "Max hop distance",
     "attentiveHopPause": "Hop pause",
@@ -479,7 +499,7 @@ FIELD_LABELS = {
     "attentiveTeleportPause": "Teleport pause",
     "attentiveRamAccelerationSteps": "Chain moves",
     "attentiveRamMaxSpeed": "Chain pause",
-    "tiredHopAllowNonCardinal": "Allow non-cardinal",
+    "tiredHopAllowNonCardinal": "Allowed movement directions",
     "tiredHopMinDistance": "Min hop distance",
     "tiredHopMaxDistance": "Max hop distance",
     "tiredHopPause": "Hop pause",
@@ -491,12 +511,12 @@ FIELD_LABELS = {
     "attentiveChaseBoostSpeed": "Boost speed",
     "attentiveCircleRadius": "Circle radius",
     "attentiveContinueWhenArrived": "Continue when arrived",
-    "attentiveAvoidPreviousTile": "Avoid previous tile",
+    "attentiveAvoidPreviousTile": "Avoid immediate backtracking",
     "chaseBoostDistance": "Boost distance",
     "chaseBoostSpeed": "Boost speed",
     "circleRadius": "Circle radius",
     "continueWhenArrived": "Continue when arrived",
-    "avoidPreviousTile": "Avoid previous tile",
+    "avoidPreviousTile": "Avoid immediate backtracking",
     "activeProfile": "Active override profile",
     "tiredProfile": "Tired override profile",
 }
@@ -530,6 +550,10 @@ FIELD_UNITS = {
     "alertTime": "frames",
     "alertness": "tiles",
     "alertChance": "%",
+    "wanderStraightChance": "%",
+    "chainPauseActionChance": "%",
+    "walkPause": "frames",
+    "tilesBeforeTurnSkid": "tiles",
     "stamina": "frames",
     "attentiveCircleRadius": "tiles",
     "attentiveSpeed": "speed",
@@ -610,13 +634,13 @@ FIELD_PREFIXES = {
     "battleTrigger": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_",
     "specialAction": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chainPauseAction": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_",
-    "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "hopAllowNonCardinal": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_",
     "hopAllowVerticalObstacles": "OW_WILD_BEHAVIOR_BOOL_",
     "chainRepositionDust": "OW_WILD_BEHAVIOR_BOOL_",
     "chainRepositionAllowCardinal": "OW_WILD_BEHAVIOR_BOOL_",
     "chainRepositionAllowDiagonal": "OW_WILD_BEHAVIOR_BOOL_",
-    "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
-    "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_BOOL_",
+    "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_",
+    "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_",
     "attentiveContinueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveAvoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_",
     "continueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
@@ -655,6 +679,12 @@ CANONICAL_MOVEMENT_STYLE_RAWS = [
     "OW_WILD_BEHAVIOR_LOCOMOTION_HOP",
     "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT",
     "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND",
+]
+
+CANONICAL_MOVEMENT_DIRECTION_RAWS = [
+    "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY",
+    "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL",
+    "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY",
 ]
 
 CANONICAL_TARGET_RAWS = [
@@ -724,6 +754,7 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "specialAction": CANONICAL_MOVEMENT_STYLE_RAWS,
     "alertSpecialAction": CANONICAL_ALERT_SPECIAL_ACTION_RAWS,
     "chainPauseAction": CANONICAL_CHAIN_PAUSE_ACTION_RAWS,
+    "hopAllowNonCardinal": CANONICAL_MOVEMENT_DIRECTION_RAWS,
     "hopAllowVerticalObstacles": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "chillAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
     "attentiveAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
@@ -731,8 +762,8 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "chillAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
     "attentiveAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
     "tiredAllowedTile2": CANONICAL_SECONDARY_ALLOWED_TILE_RAWS,
-    "attentiveHopAllowNonCardinal": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
-    "tiredHopAllowNonCardinal": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "attentiveHopAllowNonCardinal": CANONICAL_MOVEMENT_DIRECTION_RAWS,
+    "tiredHopAllowNonCardinal": CANONICAL_MOVEMENT_DIRECTION_RAWS,
     "attentiveContinueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "attentiveAvoidPreviousTile": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "continueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
@@ -870,6 +901,10 @@ OVERRIDE3_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_CARDINAL": "chainRepositionAllowCardinal",
     "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_ALLOW_DIAGONAL": "chainRepositionAllowDiagonal",
     "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_OPTIONS": "walkOptions",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WANDER_STRAIGHT_CHANCE": "wanderStraightChance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION_CHANCE": "chainPauseActionChance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE": "walkPause",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID": "tilesBeforeTurnSkid",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -1016,7 +1051,7 @@ SPAWN_SETTING_GROUPS = [
         "key": "spawnFlow",
         "label": "Spawn Flow",
         "settings": [
-            {"symbol": "OW_WILD_REFILL_COOLDOWN_STEPS", "label": "Base refill cooldown steps", "min": 0, "max": 24, "source": OVERLAY_SOURCE},
+            {"symbol": "OW_WILD_REFILL_BASE_INTERVAL_FRAMES", "label": "Base refill interval", "min": 1, "max": 255, "source": OVERLAY_SOURCE, "suffix": " frames"},
             {"symbol": "OW_WILD_HEADBUTT_SPAWN_CHANCE_PERCENT", "label": "Headbutt spawn chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
             {"symbol": "OW_WILD_HEADBUTT_REFILL_ATTEMPT_COOLDOWN", "label": "Headbutt attempt cooldown", "min": 0, "max": 255, "source": OVERLAY_SOURCE},
             {"symbol": "OW_WILD_FISHING_SPAWN_CHANCE_PERCENT", "label": "Fishing spawn chance", "min": 0, "max": 100, "source": OVERLAY_SOURCE, "suffix": "%"},
@@ -1139,6 +1174,10 @@ NUMERIC_PROFILE_FIELDS = {
     "activeProfile",
     "tiredProfile",
     "walkOptions",
+    "wanderStraightChance",
+    "chainPauseActionChance",
+    "walkPause",
+    "tilesBeforeTurnSkid",
 }
 
 # Override profiles may transform numeric byte fields produced by earlier
@@ -1154,6 +1193,9 @@ RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(
         "spawnDestinationMask",
         "spawnDestinationOverrideMask",
         "walkOptions",
+        "wanderStraightChance",
+        "chainPauseActionChance",
+        "tilesBeforeTurnSkid",
     }
 )
 BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
@@ -1194,6 +1236,7 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "chaseBoostDistance",
     "chaseBoostSpeed",
     "circleRadius",
+    "walkPause",
 })
 MOVEMENT_SPEED_FIELDS = frozenset({"chillSpeed"})
 RELATIVE_OVERRIDE_DELTA_MIN = -127
@@ -1300,7 +1343,11 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "spawnDestinationOverrideMask": 1023,
     "activeProfile": 255,
     "tiredProfile": 255,
-    "walkOptions": 127,
+    "walkOptions": 255,
+    "wanderStraightChance": 100,
+    "chainPauseActionChance": 100,
+    "walkPause": 255,
+    "tilesBeforeTurnSkid": 32,
 }
 NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "chillSpeed": 1,
@@ -1313,6 +1360,7 @@ NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "chainRepositionJumpCount": 1,
     "chainRepositionSpeed": 1,
     "chainRepositionDistance": 1,
+    "tilesBeforeTurnSkid": 0,
 }
 
 for _profile_field, _source_field in {
@@ -1658,6 +1706,10 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE": "Teleport",
         "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER": "Teleport",
         "OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND": "Turn around",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_FLUTTER": "Flutter",
+        "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY": "Cardinal only",
+        "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL": "Cardinal and diagonal",
+        "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY": "Diagonal only",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
@@ -1774,7 +1826,8 @@ def numeric(value: dict) -> int | None:
 
 
 def walk_options_valid(value: int) -> bool:
-    return (value & 0x80) == 0 and ((value & 0x0E) >> 1) <= 4 and ((value & 0x70) >> 4) <= 1
+    return ((value & 0x0E) >> 1) <= 4 \
+        and (value & 0xC0) != 0xC0
 
 
 def canonical_profile_value_raw(value: dict, field: str) -> str:
@@ -1837,6 +1890,12 @@ def canonical_profile_change_raw(
             and cleaned == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
         return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
     if field not in NUMERIC_PROFILE_FIELDS:
+        canonical_options = CANONICAL_PROFILE_FIELD_RAWS.get(field, ())
+        evaluated = numeric_raw(cleaned, field, macros)
+        if evaluated is not None:
+            for option in canonical_options:
+                if macros.get(option) == evaluated:
+                    return option
         return cleaned
     compound = compound_override_parts(field, cleaned)
     if compound is not None:
@@ -1888,7 +1947,7 @@ def canonical_profile_change_raw(
     if evaluated < minimum or evaluated > maximum:
         raise ValueError(f"value for {field} must be between {minimum} and {maximum}")
     if field == "walkOptions" and not walk_options_valid(evaluated):
-        raise ValueError("walkOptions must use stomp speed 0..4 and crash sound 0..1")
+        raise ValueError("walkOptions must use valid stomp, crash sound, and facing values")
     return str(evaluated)
 
 
@@ -1898,12 +1957,50 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
             field: make_value("0", field, macros)
             for field in PROFILE_FIELDS
         }
+    if len(items) == len(PROFILE_FIELDS_V67):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V67)
+        }
+        legacy["tilesBeforeTurnSkid"] = "1"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V66):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V66)
+        }
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V65):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V65)
+        }
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
+        return {
+            field: make_value(legacy[field], field, macros)
+            for field in PROFILE_FIELDS
+        }
     if len(items) == len(PROFILE_FIELDS_V63):
         legacy = {
             field: str(items[idx])
             for idx, field in enumerate(PROFILE_FIELDS_V63)
         }
         legacy["walkOptions"] = "0"
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1919,6 +2016,10 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["walkOptions"] = "0"
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1934,6 +2035,10 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["walkOptions"] = "0"
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1950,6 +2055,10 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["walkOptions"] = "0"
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1967,6 +2076,10 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
         legacy["chainRepositionAllowCardinal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["chainRepositionAllowDiagonal"] = "OW_WILD_BEHAVIOR_BOOL_YES"
         legacy["walkOptions"] = "0"
+        legacy["wanderStraightChance"] = "0"
+        legacy["chainPauseActionChance"] = "100"
+        legacy["walkPause"] = "32"
+        legacy["tilesBeforeTurnSkid"] = "1"
         return {
             field: make_value(legacy[field], field, macros)
             for field in PROFILE_FIELDS
@@ -1986,6 +2099,10 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
             "chaseBoostDistance": "0",
             "chaseBoostSpeed": "0",
             "circleRadius": "1",
+            "wanderStraightChance": "0",
+            "chainPauseActionChance": "100",
+            "walkPause": "32",
+            "tilesBeforeTurnSkid": "1",
             "continueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_NO",
             "avoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_NO",
             "activeProfile": "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE",
@@ -2021,6 +2138,8 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
                   "chainRepositionAllowCardinal",
                   "chainRepositionAllowDiagonal",
               }
+              else "32" if field == "walkPause"
+              else "1" if field == "tilesBeforeTurnSkid"
               else "0"
               for field in PROFILE_FIELDS[len(items):]),
         ]
@@ -3327,11 +3446,11 @@ def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[
     for allow_field, min_field, max_field in (
         ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
     ):
-        if numeric(profile[allow_field]) not in {
-            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
-            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
-        }:
-            set_field(allow_field, "OW_WILD_BEHAVIOR_BOOL_YES")
+        if numeric(profile[allow_field]) not in range(3):
+            set_field(
+                allow_field,
+                "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY",
+            )
         if (numeric(profile[max_field]) or 0) < (numeric(profile[min_field]) or 0):
             set_field(max_field, profile[min_field]["raw"])
     if (numeric(profile["spawnDestinationMinDistance"]) or 0) < 1:
@@ -17050,6 +17169,10 @@ HTML = r"""<!doctype html>
       "hopElevationArcScale",
       "tilesToAccelerate",
       "walkOptions",
+      "wanderStraightChance",
+      "chainPauseActionChance",
+      "walkPause",
+      "tilesBeforeTurnSkid",
       "chainRepositionJumpCount",
       "chainRepositionSpeed",
       "chainRepositionDistance",
@@ -17097,7 +17220,11 @@ HTML = r"""<!doctype html>
       attentiveChaseBoostSpeed: { min: 0, max: 4 },
       attentiveCircleRadius: { min: 0, max: 8 },
       tilesToAccelerate: { min: 1, max: 32 },
-      walkOptions: { min: 0, max: 127 },
+      walkOptions: { min: 0, max: 255 },
+      wanderStraightChance: { min: 0, max: 100 },
+      chainPauseActionChance: { min: 0, max: 100 },
+      walkPause: { min: 0, max: 255 },
+      tilesBeforeTurnSkid: { min: 0, max: 32 },
       chainRepositionJumpCount: { min: 1, max: 8 },
       chainRepositionSpeed: { min: 1, max: 4 },
       chainRepositionDistance: { min: 1, max: 5 },
@@ -17114,7 +17241,11 @@ HTML = r"""<!doctype html>
       hopElevationTimeScale: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier.",
       hopElevationArcScale: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier.",
       tilesToAccelerate: "Consecutive Walk tiles in one direction before movement speed increases by 1.",
-      walkOptions: "Packed Walk options: bit 0 locks direction, bits 1-3 set stomp-at-speed (0 disables), and bits 4-6 select crash sound.",
+      walkOptions: "Packed Walk options: bit 0 locks direction, bits 1-3 set stomp-at-speed, bit 4 selects crash sound, bit 5 disables acceleration, bit 6 faces the player, and bit 7 keeps one facing until a pause action.",
+      wanderStraightChance: "Exact chance to continue the last movement direction. A failed roll excludes that direction.",
+      chainPauseActionChance: "Chance to run the configured pause action. A failed roll starts another movement chain.",
+      walkPause: "Frames to pause after each completed normal Walk step. 0 removes the pause.",
+      tilesBeforeTurnSkid: "Continuous Walk steps required before a turn can skid. 0 disables turn skids.",
       chainRepositionJumpCount: "Number of fixed-facing random surrounding-tile moves performed by Reposition jumps, steps, or skids.",
       chainRepositionSpeed: "Movement speed for Reposition steps and skids; jumps use Hop timing.",
       chainRepositionDistance: "Tiles travelled by each Reposition skid.",
@@ -17129,7 +17260,7 @@ HTML = r"""<!doctype html>
       overworldLimit: "Maximum active spawns for this profile or override bucket. 0 is unlimited.",
       attentiveCircleRadius: "Radius around the player for Circle player target. 0 behaves as 1 tile.",
       attentiveContinueWhenArrived: "When Circle player reaches a valid ring tile, keep choosing another ring tile.",
-      attentiveAvoidPreviousTile: "Prefer not to step back onto the previous tile when another step is available.",
+      attentiveAvoidPreviousTile: "Do not immediately step back onto the previous tile unless it is the only valid move.",
     };
     const PROFILE_ICON_FAMILIES = {
       behavior: { icon: "target", typeClass: "type-placement" },
@@ -17176,10 +17307,13 @@ HTML = r"""<!doctype html>
       chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillSpeed: { label: "Chill speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       tilesToAccelerate: { label: "Tiles to accelerate", shortLabel: "Acceleration", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "speed" },
-      walkOptions: { label: "Walk options (packed)", shortLabel: "Walk options", unit: "0..127", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      walkOptions: { label: "Walk options (packed)", shortLabel: "Walk options", unit: "0..255", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      wanderStraightChance: { label: "Continue straight chance", shortLabel: "Straight", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      walkPause: { label: "Pause after step", shortLabel: "Step pause", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
+      tilesBeforeTurnSkid: { label: "Steps before turn skid", shortLabel: "Skid buildup", unit: "steps", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
-      hopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "chill", subgroup: "Movement", iconFamily: "condition" },
+      hopAllowNonCardinal: { label: "Allowed movement directions", shortLabel: "Directions", category: "chill", subgroup: "Movement", iconFamily: "condition" },
       hopAllowVerticalObstacles: { label: "Cross vertical obstacles", shortLabel: "Vertical obstacles", category: "chill", subgroup: "Movement", iconFamily: "condition" },
       hopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
@@ -17194,6 +17328,7 @@ HTML = r"""<!doctype html>
       ramAccelerationSteps: { label: "Chain move count", shortLabel: "Chain", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainPauseAction: { label: "Chain pause action", shortLabel: "Action", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
+      chainPauseActionChance: { label: "Pause action chance", shortLabel: "Action chance", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "trigger" },
       chainRepositionJumpCount: { label: "Reposition moves", shortLabel: "Moves", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chainRepositionSpeed: { label: "Reposition speed", shortLabel: "Speed", unit: "speed", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       chainRepositionDistance: { label: "Reposition skid distance", shortLabel: "Skid distance", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "range" },
@@ -17218,13 +17353,13 @@ HTML = r"""<!doctype html>
       targetSelector: { label: "Active target", shortLabel: "Target", category: "attentive", subgroup: "Targeting", iconFamily: "condition" },
       attentiveCircleRadius: { label: "Circle radius", shortLabel: "Circle", unit: "tiles", category: "attentive", subgroup: "Targeting", iconFamily: "range" },
       attentiveContinueWhenArrived: { label: "Continue when arrived", shortLabel: "Continue", category: "attentive", subgroup: "Targeting", iconFamily: "condition", rowIcon: true },
-      attentiveAvoidPreviousTile: { label: "Avoid previous tile", shortLabel: "No backtrack", category: "attentive", subgroup: "Targeting", iconFamily: "condition", rowIcon: true },
+      attentiveAvoidPreviousTile: { label: "Avoid immediate backtracking", shortLabel: "No backtrack", category: "attentive", subgroup: "Targeting", iconFamily: "condition", rowIcon: true },
       playerAdjacentDirectionMasks: { label: "Position relative to player", shortLabel: "Position", category: "attentive", subgroup: "Targeting", iconFamily: "condition" },
       movementStyle: { label: "Active movement", shortLabel: "Movement", category: "attentive", subgroup: "Movement", iconFamily: "movement" },
       attentiveSpeed: { label: "Active speed", shortLabel: "Speed", unit: "speed", category: "attentive", subgroup: "Movement", iconFamily: "speed" },
       attentiveAllowedTile: { label: "Allowed tile", shortLabel: "Tile", category: "attentive", subgroup: "Terrain", iconFamily: "terrain" },
       attentiveAllowedTile2: { label: "Second allowed tile", shortLabel: "Tile 2", category: "attentive", subgroup: "Terrain", iconFamily: "terrain" },
-      attentiveHopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "attentive", subgroup: "Movement", iconFamily: "condition" },
+      attentiveHopAllowNonCardinal: { label: "Allowed movement directions", shortLabel: "Directions", category: "attentive", subgroup: "Movement", iconFamily: "condition" },
       attentiveHopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "attentive", subgroup: "Range", iconFamily: "range" },
       attentiveHopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "attentive", subgroup: "Range", iconFamily: "range" },
       attentiveHopPause: { label: "Pause between hops", shortLabel: "Pause", unit: "ticks", category: "attentive", subgroup: "Timing", iconFamily: "timing" },
@@ -17243,7 +17378,7 @@ HTML = r"""<!doctype html>
       tiredSpeed: { label: "Tired speed", shortLabel: "Speed", unit: "speed", category: "tired", subgroup: "Movement", iconFamily: "speed" },
       tiredAllowedTile: { label: "Allowed tile", shortLabel: "Tile", category: "tired", subgroup: "Terrain", iconFamily: "terrain" },
       tiredAllowedTile2: { label: "Second allowed tile", shortLabel: "Tile 2", category: "tired", subgroup: "Terrain", iconFamily: "terrain" },
-      tiredHopAllowNonCardinal: { label: "Allow diagonal hops", shortLabel: "Diagonal", category: "tired", subgroup: "Movement", iconFamily: "condition" },
+      tiredHopAllowNonCardinal: { label: "Allowed movement directions", shortLabel: "Directions", category: "tired", subgroup: "Movement", iconFamily: "condition" },
       tiredHopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "tired", subgroup: "Range", iconFamily: "range" },
       tiredHopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "tired", subgroup: "Range", iconFamily: "range" },
       tiredHopPause: { label: "Pause between hops", shortLabel: "Pause", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
@@ -17303,6 +17438,9 @@ HTML = r"""<!doctype html>
           "chillSpeed",
           "tilesToAccelerate",
           "walkOptions",
+          "wanderStraightChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
           "chillAllowedTerrainMask",
           "chillAllowedTerrainOverrideMask",
           "hopAllowNonCardinal",
@@ -17320,6 +17458,7 @@ HTML = r"""<!doctype html>
           "ramAccelerationSteps",
           "ramMaxSpeed",
           "chainPauseAction",
+          "chainPauseActionChance",
           "chainRepositionJumpCount",
           "chainRepositionSpeed",
           "chainRepositionDistance",
@@ -18860,6 +18999,7 @@ HTML = r"""<!doctype html>
         OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE: "Teleport",
         OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER: "Teleport",
         OW_WILD_BEHAVIOR_LOCOMOTION_TURN_AROUND: "Turn Around",
+        OW_WILD_BEHAVIOR_LOCOMOTION_FLUTTER: "Flutter",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE: "None",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP: "Call for help",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW: "Pick up and throw",
@@ -19438,7 +19578,8 @@ HTML = r"""<!doctype html>
     }
 
     function movementStyleUsesHop(raw) {
-      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_HOP";
+      return raw === "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
+        || raw === "OW_WILD_BEHAVIOR_LOCOMOTION_FLUTTER";
     }
 
     const TELEPORT_LOCOMOTION_RAWS = new Set([
@@ -19537,9 +19678,13 @@ HTML = r"""<!doctype html>
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
         walkOptions: "walkOptions",
+        wanderStraightChance: "wanderStraightChance",
+        walkPause: "walkPause",
+        tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainPauseActionChance: "chainPauseActionChance",
         chainRepositionJumpCount: "chainRepositionJumpCount",
         chainRepositionSpeed: "chainRepositionSpeed",
         chainRepositionDistance: "chainRepositionDistance",
@@ -19564,9 +19709,13 @@ HTML = r"""<!doctype html>
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
         walkOptions: "walkOptions",
+        wanderStraightChance: "wanderStraightChance",
+        walkPause: "walkPause",
+        tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainPauseActionChance: "chainPauseActionChance",
         chainRepositionJumpCount: "chainRepositionJumpCount",
         chainRepositionSpeed: "chainRepositionSpeed",
         chainRepositionDistance: "chainRepositionDistance",
@@ -19591,9 +19740,13 @@ HTML = r"""<!doctype html>
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
         walkOptions: "walkOptions",
+        wanderStraightChance: "wanderStraightChance",
+        walkPause: "walkPause",
+        tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
+        chainPauseActionChance: "chainPauseActionChance",
         chainRepositionJumpCount: "chainRepositionJumpCount",
         chainRepositionSpeed: "chainRepositionSpeed",
         chainRepositionDistance: "chainRepositionDistance",
@@ -19637,16 +19790,44 @@ HTML = r"""<!doctype html>
           && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
         fields.push(profileEditFieldItem(item, suboptionFields.walkOptions, {
           className: "profile-suboption-field",
-          hint: "Packed Walk options: bit 0 locks direction, bits 1-3 set stomp-at-speed (0 disables), and bits 4-6 select crash sound.",
-          numberLimits: { min: 0, max: 127 },
+          hint: "Packed Walk options. Bit 6 faces the player; bit 7 keeps one facing until a pause action.",
+          numberLimits: { min: 0, max: 255 },
         }));
       }
-      if (showInactiveUnset || movementStyleUsesHop(raw) || inheritedOverride) {
+      if (suboptionFields.wanderStraightChance
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.wanderStraightChance, {
+          className: "profile-suboption-field",
+          hint: "Exact chance to continue the last direction. A failed roll excludes it.",
+          numberLimits: { min: 0, max: 100 },
+        }));
+      }
+      if (suboptionFields.walkPause
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.walkPause, {
+          className: "profile-suboption-field",
+          hint: "Frames to pause after each completed normal Walk step. 0 removes the pause.",
+          numberLimits: { min: 0, max: 255 },
+        }));
+      }
+      if (suboptionFields.tilesBeforeTurnSkid
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.tilesBeforeTurnSkid, {
+          className: "profile-suboption-field",
+          hint: "Continuous Walk steps required before a turn can skid. Pause after step resets the buildup. 0 disables turn skids.",
+          numberLimits: { min: 0, max: 32 },
+        }));
+      }
+      if (showInactiveUnset || movementStyleUsesWalk(raw) || movementStyleUsesHop(raw) || inheritedOverride) {
         fields.push(
           profileEditFieldItem(item, suboptionFields.hopAllowNonCardinal, {
             className: "profile-suboption-field",
-            hint: "Allow diagonal/non-cardinal hops",
+            hint: "Choose cardinal only, cardinal and diagonal, or diagonal only movement.",
           }),
+        );
+      }
+      if (showInactiveUnset || movementStyleUsesHop(raw) || inheritedOverride) {
+        fields.push(
           profileEditFieldItem(item, suboptionFields.hopAllowVerticalObstacles, {
             className: "profile-suboption-field",
             hint: "Off rejects arcs that intersect a catalogued vertical obstruction. On raises the arc enough to clear it.",
@@ -19710,6 +19891,11 @@ HTML = r"""<!doctype html>
           profileEditFieldItem(item, suboptionFields.chainPauseAction, {
             className: "profile-suboption-field",
             hint: "Optional action to play when Chain pause is reached.",
+          }),
+          profileEditFieldItem(item, suboptionFields.chainPauseActionChance, {
+            className: "profile-suboption-field",
+            hint: "Chance to run the pause action. A failed roll starts another movement chain.",
+            numberLimits: { min: 0, max: 100 },
           }),
           profileEditFieldItem(item, suboptionFields.chainRepositionJumpCount, {
             className: "profile-suboption-field",

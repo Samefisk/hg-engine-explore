@@ -27,4 +27,13 @@ SECTIONS {
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
         } >rom = 0xff
+
+        .data : {
+                *(.data)
+                *(.data.*)
+        } >rom = 0xff
+
+        .overworld_wild_turn_skid : {
+                KEEP(*(.overworld_wild_turn_skid))
+        } >rom = 0xff
 }

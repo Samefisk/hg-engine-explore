@@ -339,8 +339,11 @@ static u32 OverworldWildBehavior_CalculateJumpTrajectory(
     if (frameCount > 0xFFFF) {
         frameCount = 0xFFFF;
     }
-    arcHeightQ4 = OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4
-        + elevationQ4 * (packedElevationScales >> 8) / (2 * 100);
+    arcHeightQ4 = packedElevationScales >> 8;
+    if (arcHeightQ4 != 0) {
+        arcHeightQ4 = OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4
+            + elevationQ4 * arcHeightQ4 / (2 * 100);
+    }
     if (arcHeightQ4 > 0xFF) {
         arcHeightQ4 = 0xFF;
     }

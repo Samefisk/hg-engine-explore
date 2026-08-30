@@ -4,6 +4,7 @@
 #include "../include/bag.h"
 #include "../include/constants/file.h"
 #include "../include/config.h"
+#include "../include/overworld_mount.h"
 #include "../include/overworld_wild_spawns.h"
 
 
@@ -14,7 +15,7 @@ u16 ALIGN4 CurrentRepelType = 0;
 
 bool32 PlayerStepEvent_RepelCounterDecrement(SaveData *saveData, FieldSystem *fieldSystem) {
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
-    if (OverworldWildSpawns_OnPlayerStep(fieldSystem)) {
+    if (OverworldMount_PlayerStepBridgeEntry(fieldSystem)) {
         return TRUE;
     }
 #endif

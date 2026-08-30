@@ -3,8 +3,8 @@ CODE_BUILD_DIRS += $(BUILD)
 THUMB_HELP := $(BUILD)/thumb_help.o
 LINKED_OUTPUTS = build/linked.o
 
-OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-ipa-pta -fno-expensive-optimizations -fno-tree-dominator-opts -fno-if-conversion -fno-tree-pre -fno-tree-copy-prop
-OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-expensive-optimizations
+OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-short-enums -fno-tree-dominator-opts -fno-tree-forwprop -fno-tree-loop-ivcanon
+OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions
 OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS := --wrap=memcpy --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi --wrap=__gnu_thumb1_case_shi
 OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS := --wrap=memset --wrap=__gnu_thumb1_case_uqi --wrap=__gnu_thumb1_case_uhi
 

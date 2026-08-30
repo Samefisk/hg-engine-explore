@@ -95,3 +95,26 @@ __wrap_memcpy:
     blx 0x020E5AD8
     pop {pc}
 .size __wrap_memcpy, . - __wrap_memcpy
+
+// These stock helpers are Thumb code. Absolute linker symbols have no
+// function type, so a direct far call can generate an ARM-mode veneer.
+// Load the odd Thumb address explicitly instead.
+.align 2
+.global OverworldWildSpawns_MovementDirectionDeltaX
+.thumb_func
+.type OverworldWildSpawns_MovementDirectionDeltaX, function
+OverworldWildSpawns_MovementDirectionDeltaX:
+    ldr r3, 1f
+    bx r3
+1:  .word 0x02060F0D
+.size OverworldWildSpawns_MovementDirectionDeltaX, . - OverworldWildSpawns_MovementDirectionDeltaX
+
+.align 2
+.global OverworldWildSpawns_MovementDirectionDeltaY
+.thumb_func
+.type OverworldWildSpawns_MovementDirectionDeltaY, function
+OverworldWildSpawns_MovementDirectionDeltaY:
+    ldr r3, 2f
+    bx r3
+2:  .word 0x02060F19
+.size OverworldWildSpawns_MovementDirectionDeltaY, . - OverworldWildSpawns_MovementDirectionDeltaY

@@ -1,0 +1,75 @@
+/* Overlay 157 */
+OUTPUT_ARCH(arm)
+MEMORY {
+        /*
+         * Boot-resident mount control occupies a dedicated block immediately
+         * below resident overworld runtime overlay 156. Heap 3 reserves this
+         * complete range; never borrow incidental padding from another overlay.
+         */
+        rom     : ORIGIN = 0x023BAB00, LENGTH = 0x1D00
+        ewram   : ORIGIN = 0x023BAB00, LENGTH = 0x1D00
+}
+
+SECTIONS {
+        .text : {
+                FILL (0xABCD)
+                KEEP(*(.overworld_mount_precode))
+                KEEP(*(.overworld_mount_hop_search))
+                KEEP(*(.overworld_mount_streaming))
+                ASSERT(. <= ORIGIN(rom) + 0x300,
+                    "overworld mount precode exceeds expanded reserve");
+                . = ORIGIN(rom) + 0x300;
+                __text_start = . ;
+                KEEP(*(.overworld_mount_motion))
+                build/thumb_help.o(.text)
+                ASSERT(. <= ORIGIN(rom) + 0xAE0,
+                    "overworld mount motion exceeds audited archive gap");
+                . = ORIGIN(rom) + 0xAE0;
+                KEEP(*(.overworld_wild_movement_policy_entry))
+                ASSERT(. <= ORIGIN(rom) + 0xAF0,
+                    "overworld wild movement policy entry exceeds ABI reserve");
+                . = ORIGIN(rom) + 0xB00;
+                KEEP(*(.overworld_mount_entry))
+                ASSERT(. <= ORIGIN(rom) + 0xB20,
+                    "overworld mount entry exceeds ABI reserve");
+                . = ORIGIN(rom) + 0xB20;
+                KEEP(*(.overworld_mount_control))
+                KEEP(*(.overworld_mount_control_tail))
+                ASSERT(. <= ORIGIN(rom) + 0xBA0,
+                    "overworld mount player-control wrapper exceeded reserve");
+                . = ORIGIN(rom) + 0xBA0;
+                KEEP(*(.overworld_mount_step))
+                ASSERT(. <= ORIGIN(rom) + 0xBE0,
+                    "overworld mount player-step wrapper exceeded reserve");
+                . = ORIGIN(rom) + 0xBE0;
+                KEEP(*(.overworld_mount_field_input))
+                ASSERT(. <= ORIGIN(rom) + 0xC40,
+                    "overworld mount field-input wrapper exceeded reserve");
+                . = ORIGIN(rom) + 0xC40;
+                KEEP(*(.overworld_mount_crash))
+                ASSERT(. <= ORIGIN(rom) + 0xC80,
+                    "overworld mount crash-sound wrapper exceeded reserve");
+                . = ORIGIN(rom) + 0xC80;
+                *(.init)
+                *(.text)
+                *(.ctors)
+                *(.dtors)
+                *(.rodata)
+                *(.rodata.*)
+                *(.fini)
+                . = ALIGN(4);
+                __text_end = . ;
+        } >rom = 0xff
+
+        .bss (NOLOAD) : {
+                __bss_start__ = . ;
+                *(.bss)
+                *(COMMON)
+                . = ALIGN(4);
+                __bss_end__ = . ;
+                ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
+                    "overworld mount overlay exceeds reserved RAM");
+                _end = __bss_end__ ;
+                __end__ = __bss_end__ ;
+        } >rom = 0xff
+}

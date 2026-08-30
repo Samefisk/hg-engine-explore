@@ -51,8 +51,13 @@ OverworldWild_TryGetBehaviorHopVector(
         return FALSE;
     }
     lane = OverworldWild_GetHopLane(profile, spotState);
-    if ((absDx != 0 && absDy != 0
-            && (lane->hopAllowNonCardinal != 1 || absDx != absDy))
+    if (((absDx == 0 || absDy == 0)
+            && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
+                lane->hopAllowNonCardinal))
+        || (absDx != 0 && absDy != 0
+            && (!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+                    lane->hopAllowNonCardinal)
+                || absDx != absDy))
         || jumpDistance < lane->hopMinDistance
         || jumpDistance > lane->hopMaxDistance) {
         return FALSE;
@@ -84,8 +89,6 @@ OverworldWild_ResolveHopTrajectory(
     u32 trajectory;
     u32 totalFrames;
     u8 arcHeightQ4;
-    int stepX;
-    int stepY;
     int tileIndex;
 
     trajectory = OVERWORLD_WILD_SURFACE_SERVICE_ENTRY->calculateJumpTrajectory(
@@ -101,8 +104,6 @@ OverworldWild_ResolveHopTrajectory(
         return TRUE;
     }
 
-    stepX = (targetX > startX) - (targetX < startX);
-    stepY = (targetY > startY) - (targetY < startY);
     for (tileIndex = 1; tileIndex < distance; tileIndex++) {
         u32 denominator = 2 * distance;
         OverworldWildSurfaceHit hit;
@@ -111,8 +112,16 @@ OverworldWild_ResolveHopTrajectory(
         int tileY;
         int edge;
 
-        tileX = startX + stepX * tileIndex;
-        tileY = startY + stepY * tileIndex;
+        tileX = OverworldWild_LerpJumpFx32(
+            (startX << 16) + 0x8000,
+            (targetX << 16) + 0x8000,
+            tileIndex,
+            distance) >> 16;
+        tileY = OverworldWild_LerpJumpFx32(
+            (startY << 16) + 0x8000,
+            (targetY << 16) + 0x8000,
+            tileIndex,
+            distance) >> 16;
         if (distance != OW_WILD_OFFSCREEN_HOP_DISTANCE) {
             if (!OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->querySurface(
                     fieldSystem,
@@ -271,6 +280,11 @@ OverworldWild_RunChainReposition(
         : lane->chainRepositionJumpCount;
     fieldSystem = state->movementFieldSystem;
     object = state->spawns[slot].object;
+    if (fieldSystem == NULL || object == NULL) {
+        *movesRemaining = 0;
+        return FALSE;
+    }
+    startIndex = gf_rand() & 3;
     if (remaining == 0) {
         goto finished;
     }
@@ -278,7 +292,6 @@ OverworldWild_RunChainReposition(
     distance = repositionMode == OW_WILD_CHAIN_REPOSITION_SKID
         ? lane->chainRepositionDistance
         : 1;
-    startIndex = gf_rand() & 7;
     for (attempt = 0; attempt < 8; attempt++) {
         directionIndex = (startIndex + attempt) & 7;
         if ((&lane->chainRepositionAllowCardinal)[directionIndex >> 2] == 0) {
@@ -322,6 +335,9 @@ OverworldWild_RunChainReposition(
         break;
     }
 finished:
+    if (remaining == 0) {
+        object->curFacing = startIndex;
+    }
     *movesRemaining = 0;
     return FALSE;
 }
@@ -419,10 +435,14 @@ OverworldWild_ApplyJumpRenderMotion(
     object->hCurr = (int)(baseY >> 15);
     object->faceVec[0] = 0;
     object->posVec[1] = (u32)baseY;
-    object->faceVec[1] = (u32)arc;
+    /* Autonomous wild-object rendering uses unk88 as its stable body-offset
+     * carrier. Keeping faceVec at floor level avoids applying the same arc
+     * twice while preserving the visible custom Hop. Mounted player motion
+     * has its own renderer path and deliberately uses faceVec instead. */
+    object->faceVec[1] = 0;
     object->faceVec[2] = 0;
     object->unk88[0] = 0;
-    object->unk88[1] = object->faceVec[1];
+    object->unk88[1] = (u32)arc;
     object->unk94[1] = 0;
     object->flags = (object->flags
             & ~(BIT_JUMP_START | BIT_VANISH | MAPOBJECTFLAG_UNK4

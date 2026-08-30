@@ -19,7 +19,20 @@
 #define OW_WILD_RUNTIME_CIRCLE_RADIUS_MAX 8
 #define OW_WILD_RUNTIME_BATTLE_TRIGGER_MAX 2
 #define OW_WILD_RUNTIME_SURFACE_MODEL_NONE 0xFF
-static OverworldWildSurfaceBlockCache sFollowerSelectorSurfaceBlockCache;
+
+typedef struct OverworldWildRuntimeSurfaceBlockCache {
+    u16 blockIndex;
+    u8 matrixId;
+    u8 modelIndex;
+} OverworldWildRuntimeSurfaceBlockCache;
+
+/* The behavior-data overlay owns one fixed surface catalog. Matrix identity
+ * is therefore sufficient to invalidate this compact per-block cache. */
+static OverworldWildRuntimeSurfaceBlockCache sOverworldWildSurfaceBlockCache = {
+    0,
+    0xFF,
+    OW_WILD_RUNTIME_SURFACE_MODEL_NONE,
+};
 
 void OverworldWildRuntime_PlayStepDirtParticle(LocalMapObject *object)
 {
@@ -62,9 +75,7 @@ OverworldWildRuntime_QuerySurface(
     int i;
 
     if (fieldSystem == NULL
-        || fieldSystem->map_matrix == NULL
-        || catalog == NULL
-        || hit == NULL) {
+        || fieldSystem->map_matrix == NULL) {
         return FALSE;
     }
     matrix = (const u8 *)fieldSystem->map_matrix;
@@ -73,10 +84,9 @@ OverworldWildRuntime_QuerySurface(
         return FALSE;
     }
     blockIndex = blockX + blockY * matrix[0];
-    if (sFollowerSelectorSurfaceBlockCache.catalog == catalog
-        && sFollowerSelectorSurfaceBlockCache.matrixId == matrix[2]
-        && sFollowerSelectorSurfaceBlockCache.blockIndex == blockIndex) {
-        modelIndex = sFollowerSelectorSurfaceBlockCache.modelIndex;
+    if (sOverworldWildSurfaceBlockCache.matrixId == matrix[2]
+        && sOverworldWildSurfaceBlockCache.blockIndex == blockIndex) {
+        modelIndex = sOverworldWildSurfaceBlockCache.modelIndex;
     } else {
         u16 landDataId = *(const u16 *)(matrix
             + OW_WILD_MAP_MATRIX_MODELS_OFFSET
@@ -93,10 +103,9 @@ OverworldWildRuntime_QuerySurface(
         } else {
             modelIndex = (u8)i;
         }
-        sFollowerSelectorSurfaceBlockCache.catalog = catalog;
-        sFollowerSelectorSurfaceBlockCache.blockIndex = blockIndex;
-        sFollowerSelectorSurfaceBlockCache.matrixId = matrix[2];
-        sFollowerSelectorSurfaceBlockCache.modelIndex = modelIndex;
+        sOverworldWildSurfaceBlockCache.blockIndex = blockIndex;
+        sOverworldWildSurfaceBlockCache.matrixId = matrix[2];
+        sOverworldWildSurfaceBlockCache.modelIndex = modelIndex;
     }
     if (modelIndex == OW_WILD_RUNTIME_SURFACE_MODEL_NONE) {
         return FALSE;
@@ -214,7 +223,7 @@ void OverworldWildRuntime_WalkMomentumReset(
     state->baseSpeed = 0;
     state->spotState = OW_WILD_WALK_DIRECTION_NONE;
     state->skidRemaining = 0;
-    state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
+    state->turnDirection = 0;
     state->resumeSpeed = 0;
 }
 
@@ -267,7 +276,6 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     void *context)
 {
     u8 oldDirection;
-    u8 speedGain;
 
     if (state == NULL || startStep == NULL) {
         return FALSE;
@@ -286,10 +294,11 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     oldDirection = state->direction;
     if (requestedDirection == OW_WILD_WALK_DIRECTION_NONE) {
         state->tileCounter = 0;
-        speedGain = state->speed - state->baseSpeed;
-        if (oldDirection != OW_WILD_WALK_DIRECTION_NONE && speedGain != 0) {
-            /* Acceleration gains 1/2/3 map to 1/2/4 skid tiles. */
-            state->skidRemaining = 1u << (speedGain - 1u);
+        if (oldDirection != OW_WILD_WALK_DIRECTION_NONE
+            && state->speed > (OW_WILD_WALK_SPEED_MIN + 1u)) {
+            /* Absolute speed tiers 3/4 map to 1/2 skid tiles. */
+            state->skidRemaining = 1u <<
+                (state->speed - (OW_WILD_WALK_SPEED_MIN + 2u));
             state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
             state->resumeSpeed = state->baseSpeed;
             state->speed--;
@@ -329,11 +338,12 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     }
 
     state->tileCounter = 0;
-    speedGain = state->speed - state->baseSpeed;
-    if (speedGain != 0) {
-        state->skidRemaining = 1u << (speedGain - 1u);
+    if (state->speed > (OW_WILD_WALK_SPEED_MIN + 1u)
+        && requestedDirection < OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG) {
+        state->skidRemaining = 1u <<
+            (state->speed - (OW_WILD_WALK_SPEED_MIN + 2u));
         state->turnDirection = requestedDirection;
-        state->resumeSpeed = state->speed - 1u;
+        state->resumeSpeed = state->speed;
         state->speed--;
         if (startStep(
                 context,
@@ -354,6 +364,7 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
         return TRUE;
     }
     state->resumeSpeed = 0;
+    requestedDirection &= OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG - 1u;
 
     if (effect != NULL) {
         effect(context, requestedDirection, FALSE);
@@ -402,14 +413,13 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
 
     if (wasSkidding) {
         turnDirection = state->turnDirection;
-        if (effect != NULL) {
+        /* A multi-tile skid is one maneuver. Emit its landing feedback once,
+         * on the final tile, instead of allocating one effect per tile. */
+        if (effect != NULL && state->skidRemaining == 1) {
             effect(context, turnDirection, TRUE);
         }
         state->skidRemaining--;
         if (state->skidRemaining != 0) {
-            if (state->speed > state->baseSpeed) {
-                state->speed--;
-            }
             if (startStep(
                     context,
                     state->direction,
@@ -446,7 +456,7 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
         state->speed = state->resumeSpeed;
         state->resumeSpeed = 0;
         state->direction = turnDirection;
-        state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
+        state->turnDirection = 0;
         state->tileCounter = 0;
         if (effect != NULL) {
             effect(context, turnDirection, FALSE);
@@ -458,8 +468,8 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
                 turnDirection,
                 TRUE,
                 FALSE)) {
-            /* Mark the committed post-skid step so it cannot immediately
-             * accelerate away the turn's one-speed momentum loss. */
+            /* Mark the committed post-skid step so it completes the turn
+             * before normal acceleration accounting resumes. */
             state->resumeSpeed = state->speed;
         } else {
             OverworldWildRuntime_StopWalkMomentum(
@@ -570,13 +580,13 @@ static const u8 sOverworldWildRuntimeBehaviorRelativeFieldMaximums[] = {
     0, 0, 0, 255, 64, 64, 64, 4, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 4,
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 4, 0, 0, 0, 8, 8, 8, 4,
-    5, 0, 0, 0, 0,
+    5, 0, 0, 0, 0, 0, 0, 255, 32,
 };
 
-typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain62[
-    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 62 ? 1 : -1];
-typedef char OverworldWildRuntimeBehaviorProfileDataSizeMustRemain66[
-    sizeof(OverworldWildBehaviorProfileData) == 66 ? 1 : -1];
+typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain66[
+    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 66 ? 1 : -1];
+typedef char OverworldWildRuntimeBehaviorProfileDataSizeMustRemain70[
+    sizeof(OverworldWildBehaviorProfileData) == 70 ? 1 : -1];
 typedef char OverworldWildRuntimeBehaviorFieldsBeforeTerrainMustRemain32[
     __builtin_offsetof(OverworldWildBehaviorProfileData, chainPauseAction) == 31
         && __builtin_offsetof(OverworldWildBehaviorProfileData,
@@ -618,6 +628,14 @@ typedef char OverworldWildRuntimeBehaviorVerticalObstacleOptionMustRemain56[
                chainRepositionAllowDiagonal) == 64
             && __builtin_offsetof(OverworldWildBehaviorProfileData,
                walkOptions) == 65
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               wanderStraightChance) == 66
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               chainPauseActionChance) == 67
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               walkPause) == 68
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               tilesBeforeTurnSkid) == 69
         ? 1
         : -1];
 
@@ -631,7 +649,7 @@ static u8 OverworldWildRuntime_GetBehaviorOverrideFieldOffset(u8 fieldIndex)
 
 #define OW_WILD_RUNTIME_BOUNDED_FIELDS_1 0x01C00180u
 #define OW_WILD_RUNTIME_BOUNDED_FIELDS_2 0x00001F84u
-#define OW_WILD_RUNTIME_BOUNDED_FIELDS_3 0x0000F8F3u
+#define OW_WILD_RUNTIME_BOUNDED_FIELDS_3 0x0040F8F3u
 
 static BOOL OverworldWildRuntime_AreProfileMovementSpeedsValid(
     const OverworldWildBehaviorProfileData *profile)
@@ -748,7 +766,7 @@ static BOOL OverworldWildRuntime_IsOverrideOperatorFamilyValid(
         && OverworldWildRuntime_IsOverrideOperatorMaskValid(
             profile->mask3,
             operatorMask3,
-            0x000FFFFF,
+            0x00FFFFFF,
             42,
             profile,
             compoundMask3,
@@ -997,8 +1015,10 @@ OverworldWildRuntime_NormalizeMovementProfile(
     if (profile->chillTarget > OW_WILD_RUNTIME_TARGET_MAX) {
         profile->chillTarget = OW_WILD_RUNTIME_TARGET_NONE;
     }
-    if (profile->hopAllowNonCardinal > OW_WILD_RUNTIME_BOOL_YES) {
-        profile->hopAllowNonCardinal = OW_WILD_RUNTIME_BOOL_YES;
+    if (profile->hopAllowNonCardinal
+        > OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_MAX) {
+        profile->hopAllowNonCardinal =
+            OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
     }
     if (profile->hopMaxDistance < profile->hopMinDistance) {
         profile->hopMaxDistance = profile->hopMinDistance;

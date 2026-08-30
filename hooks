@@ -287,6 +287,10 @@ arm9 StoreFieldSysPtr 0203E028 1
 # stock field-active flag at FieldSystem+0x6C is cleared.
 arm9 FieldSystem_LeaveFieldHook 0203DF34 1
 
+# Replace the stock player held-movement sink. r3 is scratch and keeps this
+# total replacement within the sink's 0x18-byte footprint.
+arm9 OverworldMount_IssueHeldMovement 0205DA1C 3
+
 #endif
 
 
