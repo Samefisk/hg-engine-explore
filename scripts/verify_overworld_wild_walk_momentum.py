@@ -308,11 +308,11 @@ def main() -> int:
     )
     if chain_pause.find(
         "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE"
-    ) > chain_pause.find(
+    ) < chain_pause.find(
         "OverworldWildMovementPolicy_RecordCompletedWalkTile("
     ):
         raise SystemExit(
-            "chain-pause None must disable the lane before movement counting"
+            "completed Walk counting must precede chain-pause disable"
         )
 
     direction_from_delta = function_body(

@@ -5706,14 +5706,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     157: (
         0x023BAB00,
-        0x1C20,
+        0x1C08,
         0xBC,
         0,
         0,
         157,
         0,
         0x426400,
-        0x428020,
+        0x428008,
     ),
 }
 OVERLAY129_THUNKS = {

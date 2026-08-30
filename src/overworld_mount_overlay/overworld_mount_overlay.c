@@ -138,7 +138,7 @@ static int OverworldWildMovementPolicy_ChooseWanderDirection(
     return -2;
 }
 
-static void __attribute__((noinline))
+static inline __attribute__((always_inline)) void
 OverworldWildMovementPolicy_RecordCompletedWalkTile(
     OverworldWildWalkMomentumState *walkMomentum,
     BOOL resetForWait)
@@ -163,14 +163,14 @@ static BOOL OverworldWildMovementPolicy_PrepareChainPause(
     u8 pauseTicks;
     u32 pauseFrames;
 
-    if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE) {
-        *deferredPauseTicks = 0;
-        goto chain_disabled;
-    }
     if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK) {
         OverworldWildMovementPolicy_RecordCompletedWalkTile(
             walkMomentum,
             lane->walkPause != 0);
+    }
+    if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE) {
+        *deferredPauseTicks = 0;
+        goto chain_disabled;
     }
     if ((locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK
             && !OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(lane->walkOptions))
@@ -717,7 +717,7 @@ OverworldMount_ResumeCustomMotionAfterMapTransition(void)
         OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND);
 }
 
-static BOOL __attribute__((noinline))
+static BOOL __attribute__((noinline, section(".overworld_mount_control_tail")))
 OverworldMount_IsActive(void)
 {
     return sOverworldMountState.snapshot.phase != OVERWORLD_MOUNT_PHASE_NONE;
