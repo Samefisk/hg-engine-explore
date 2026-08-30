@@ -123,11 +123,26 @@ def main() -> int:
         module,
         (
             "Walk_WildResolvePrimitives(",
+            "PokemonMoveHistory_OverlayMemset(",
             "Walk_WildGroupFlagsForTypes(",
             "Walk_WildSelectConditionalOverrideMask(",
             "gOverworldWalkWildPolicyModuleEntry",
         ),
         "resident wild policy implementation",
+    )
+    primitive_resolver = function_body(module, "Walk_WildResolvePrimitives")
+    require(
+        primitive_resolver,
+        (
+            "PokemonMoveHistory_OverlayMemset(",
+            "sizeof(*primitives)",
+        ),
+        "resident wild primitive initialization",
+    )
+    reject(
+        primitive_resolver,
+        ("(OverworldWildBehaviorPrimitives){0}", "memset("),
+        "unsafe cross-overlay resident memset call",
     )
     require(
         source,

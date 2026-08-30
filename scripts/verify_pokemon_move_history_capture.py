@@ -63,7 +63,7 @@ OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
 OVERLAY_GUARDED_END = OVERLAY_BASE + OVERLAY_LIMIT
 OVERLAY152_BASE = 0x023C0400
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "8f7bd2863e9c262a65632eb43f91b4f3c308b8334f9ddc65b0d38baafed0276a"
+    "40a0a844ed426155d23b9f1f1d6bb6d8b7e38813f53745a2e770f1a1a544b565"
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
@@ -5662,14 +5662,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     153: (
         OVERLAY_BASE,
-        0x1BEA,
+        0x1BF6,
         0,
         0,
         0,
         153,
         0,
         0x421600,
-        0x4231EA,
+        0x4231F6,
     ),
     154: (
         0x023C0400,
@@ -5706,14 +5706,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     157: (
         0x023BAB00,
-        0x1C08,
+        0x1BF0,
         0xBC,
         0,
         0,
         157,
         0,
         0x426400,
-        0x428008,
+        0x427FF0,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -6634,11 +6634,11 @@ def binary_contracts(
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 143
+        and len(packaged_call_inventory) == 145
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
-        ) == 139
+        ) == 141
         and sum(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory
@@ -8004,7 +8004,7 @@ def binary_contracts(
 
     helper_specs = (
         ("PokemonMoveHistory_OverlayMemcpy", 3, 0x020E5AD8),
-        ("PokemonMoveHistory_OverlayMemset", 1, 0x020E5B44),
+        ("PokemonMoveHistory_OverlayMemset", 2, 0x020E5B44),
     )
     helper_addresses: dict[str, int] = {}
     for helper, expected_count, retail_target in helper_specs:
@@ -8091,6 +8091,7 @@ def binary_contracts(
         for object_path in (
             history_object,
             relearn_object,
+            REPO / "build/pokemon_move_history_overlay/overworld_walk_module.o",
             REPO / "build/pokemon_move_history_overlay/entry.o",
             REPO / "build/pokemon_move_history_overlay/thumb_help.o",
         )
@@ -8101,7 +8102,7 @@ def binary_contracts(
     )
     require(
         relocation_names.count("PokemonMoveHistory_OverlayMemcpy") == 3
-        and relocation_names.count("PokemonMoveHistory_OverlayMemset") == 1
+        and relocation_names.count("PokemonMoveHistory_OverlayMemset") == 2
         and relocation_names.count("MIi_CpuClearFast") == 3,
         "overlay copy/clear relocation multiset differs",
     )

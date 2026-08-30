@@ -103,9 +103,12 @@ __wrap_memcpy:
 .thumb_func
 .type OverworldWildSpawns_MovementDirectionDeltaX, function
 OverworldWildSpawns_MovementDirectionDeltaX:
-    ldr r3, 1f
+    // Thumb-1 literal load. Do not let unified syntax select Thumb-2 LDR.W;
+    // ARM946E-S cannot execute it.
+    .hword 0x4B01
     ldr r3, [r3]
     bx r3
+    nop
 1:  .word 0x023BF424
 .size OverworldWildSpawns_MovementDirectionDeltaX, . - OverworldWildSpawns_MovementDirectionDeltaX
 
@@ -114,8 +117,9 @@ OverworldWildSpawns_MovementDirectionDeltaX:
 .thumb_func
 .type OverworldWildSpawns_MovementDirectionDeltaY, function
 OverworldWildSpawns_MovementDirectionDeltaY:
-    ldr r3, 2f
+    .hword 0x4B01
     ldr r3, [r3]
     bx r3
+    nop
 2:  .word 0x023BF428
 .size OverworldWildSpawns_MovementDirectionDeltaY, . - OverworldWildSpawns_MovementDirectionDeltaY

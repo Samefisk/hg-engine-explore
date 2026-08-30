@@ -252,11 +252,26 @@ def main() -> None:
         REPO
         / "src/overworld_mount_overlay/overworld_mount_overlay.c"
     ).read_text()
+    mount_linker = (
+        REPO / "src/overworld_mount_overlay/linker.ld"
+    ).read_text()
     walk_module_source = (
         REPO
         / "src/pokemon_move_history_overlay/overworld_walk_module.c"
     ).read_text()
     mount_runtime_source = mount_source + "\n" + walk_module_source
+    issue_held_movement = re.search(
+        r"void\s+OverworldMount_IssueHeldMovement\([^;]*?\)\s*"
+        r"\{.*?^\}",
+        mount_source,
+        re.DOTALL | re.MULTILINE,
+    )
+    diagonal_walk = re.search(
+        r"OverworldMount_TryHandleDiagonalWalk\([^;]*?\)\s*"
+        r"\{.*?^\}",
+        mount_source,
+        re.DOTALL | re.MULTILINE,
+    )
     require(
         "profile->owner.chillSpeed" in mount_source
         and "profile->owner.tilesToAccelerate" in mount_source
@@ -392,17 +407,32 @@ def main() -> None:
         and mount_runtime_source.count(
             "MapObject_StartMovementCommandInternal("
         ) >= 4
-        and "facingDirection = sOverworldMountState.turnDirection;"
-            in mount_source
+        and issue_held_movement is not None
         and re.search(
+            r"if \(trackedStep\) \{\s*"
+            r"u8 facingDirection = direction;.*?"
             r"OverworldMount_TryStartCustomMotion\(\s*"
             r"avatar,\s*direction,\s*facingDirection\)",
-            mount_source,
-        ) is not None,
-        "mounted turn skid does not keep its old-heading travel and new facing",
+            issue_held_movement.group(0),
+            re.DOTALL,
+        ) is not None
+        and "turnDirection" not in issue_held_movement.group(0),
+        "mounted turn skid does not keep its committed travel and facing",
     )
     require(
         "OVERWORLD_WALK_MOUNT_MODULE_ENTRY->filterInput(" in mount_source
+        and re.search(
+            r"OverworldMount_TryStartWalkFromInput\(\s*"
+            r"FIELD_PLAYER_AVATAR \*avatar,\s*u32 \*newKeys,\s*"
+            r"u32 \*heldKeys\).*?"
+            r"OverworldMount_ResolveDiagonalInput\(avatar, newKeys, heldKeys\);"
+            r".*?OverworldMount_FilterMovementInput\(avatar, newKeys, heldKeys\);"
+            r".*?OverworldMount_TryHandleDiagonalWalk\(\s*"
+            r"avatar,\s*\*newKeys,\s*\*heldKeys\);",
+            mount_source,
+            re.DOTALL,
+        ) is not None
+        and "avatar,\n            &newKeys,\n            &heldKeys" in mount_source
         and "state->motionFrameCount = Walk_ClampTime(state->speed);"
             in walk_module_source
         and "state->motionArcHeightQ4 = 0;" in walk_module_source
@@ -418,8 +448,15 @@ def main() -> None:
         and "state->bufferedDirection < WALK_DIRECTION_NORTH_WEST"
             in walk_module_source
         and "state->snapshot.profile.tilesBeforeTurnSkid" in walk_module_source
-        and "facingDirection = sOverworldMountState.turnDirection;"
-            in mount_source,
+        and diagonal_walk is not None
+        and re.search(
+            r"facingDirection = requestedDirection;.*?"
+            r"OverworldMount_TryStartCustomMotion\(\s*"
+            r"avatar,\s*requestedDirection,\s*facingDirection\)",
+            diagonal_walk.group(0),
+            re.DOTALL,
+        ) is not None
+        and "turnDirection" not in diagonal_walk.group(0),
         "mounted exact-frame diagonal Walk policy is incomplete",
     )
     update_motion = re.search(
@@ -440,6 +477,21 @@ def main() -> None:
             )
         and "stationary player command stays" in update_motion.group("body"),
         "mounted flat Walk does not finish on its exact Nth frame",
+    )
+    require(
+        "#define OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND 0x3E"
+            in mount_source
+        and "#define OVERWORLD_MOUNT_WALK_FREEZE_COMMAND 0x3C"
+            in mount_source
+        and "#define WALK_MOUNT_FREEZE_COMMAND 0x3C"
+            in walk_module_source
+        and mount_source.count("OverworldMount_CompletePendingStep(") == 3,
+        "mounted Walk uses a fixed-delay boundary or has competing step consumers",
+    )
+    require(
+        "ASSERT(. <= ORIGIN(rom) + 0x1BF0" in mount_linker
+        and ". = ORIGIN(rom) + 0x1BF0;" in mount_linker,
+        "mount overlay file size can drift from its packaged Y9/FAT metadata",
     )
     require(
         re.search(
@@ -529,9 +581,16 @@ def main() -> None:
         and "preserveTransitionPrepared = TRUE" in transition_prepare.group("body")
         and "OverworldMount_ResumeCustomMotionAfterMapTransition();"
             in mount_source
+        and re.search(
+            r"freezeCommand = sOverworldMountState\.snapshot\.motionMode\s*"
+            r"== OVERWORLD_MOUNT_MOTION_WALK\s*"
+            r"\? OVERWORLD_MOUNT_WALK_FREEZE_COMMAND\s*"
+            r": OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND;",
+            mount_source,
+        ) is not None
         and mount_source.count(
             "OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND"
-        ) >= 5,
+        ) >= 4,
         "mounted custom motion does not survive a preserved map-area transition",
     )
     helper_source = (
@@ -759,7 +818,8 @@ def main() -> None:
         "landed custom motion does not release before its land stream drains",
     )
     complete_step = re.search(
-        r"static BOOL OverworldMount_CompletePendingStep\([^;]*?\)\s*\{"
+        r"static BOOL(?:\s+__attribute__\(\([^)]*\)\))?\s*"
+        r"OverworldMount_CompletePendingStep\([^;]*?\)\s*\{"
         r".*?\n\}",
         mount_source,
         re.DOTALL,

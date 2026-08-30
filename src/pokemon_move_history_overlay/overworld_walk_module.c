@@ -21,13 +21,18 @@
 #define WALK_DIRECTION_SOUTH_EAST 7
 #define WALK_COLLISION_CHECK \
     ((int (*)(FIELD_PLAYER_AVATAR *, LocalMapObject *, int))0x0205DA35)
-#define WALK_MOUNT_FREEZE_COMMAND 0x3E
+#define WALK_MOUNT_FREEZE_COMMAND 0x3C
 #define WALK_MOUNT_AVATAR_FORCED_MOVEMENT (1u << 0)
 #define WALK_PLAYER_MOVE_STATE_NONE 0
 #define WALK_PLAYER_MOVE_STATE_END 3
 
 #define WALK_CODE __attribute__((section(".overworld_walk_module")))
 #define WALK_RODATA __attribute__((section(".overworld_walk_module_rodata")))
+
+extern void *PokemonMoveHistory_OverlayMemset(
+    void *destination,
+    int value,
+    u32 size);
 
 #define WALK_WILD_BEHAVIOR_KIND_WANDER 2
 #define WALK_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP 7
@@ -433,6 +438,10 @@ static void WALK_CODE Walk_MountFilterInput(
         } else {
             /* The newest valid queued direction owns the next tile boundary. */
             requestedDirection = state->bufferedDirection;
+            Walk_MountForceDirection(
+                newKeys,
+                heldKeys,
+                requestedDirection);
         }
     }
     if (state->skidRemaining != 0) {
@@ -535,6 +544,10 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
         return FALSE;
     }
     player = avatar->mapObject;
+    if (direction < WALK_DIRECTION_NORTH_WEST
+        && !Walk_CanCardinal(avatar, direction)) {
+        return FALSE;
+    }
     targetX = player->xCurr + Walk_DeltaX(direction);
     targetY = player->yCurr + Walk_DeltaY(direction);
     state->motionStartBaseY = (s32)player->posVec[1];
@@ -637,7 +650,10 @@ static void WALK_CODE Walk_WildResolvePrimitives(
     const OverworldWildBehaviorProfile *profile,
     OverworldWildBehaviorPrimitives *primitives)
 {
-    *primitives = (OverworldWildBehaviorPrimitives){0};
+    PokemonMoveHistory_OverlayMemset(
+        primitives,
+        0,
+        sizeof(*primitives));
     if (profile == NULL) {
         return;
     }

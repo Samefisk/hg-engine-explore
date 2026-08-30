@@ -38,6 +38,7 @@
 #define OVERWORLD_MOUNT_CRASH_SHAKE_FX32 0x2000
 #define OVERWORLD_MOUNT_WALK_COMMAND 0x0C
 #define OVERWORLD_MOUNT_RUN_COMMAND 0x58
+#define OVERWORLD_MOUNT_WALK_FREEZE_COMMAND 0x3C
 #define OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND 0x3E
 #define OVERWORLD_MOUNT_FIELD_INPUT_END_MOVEMENT (1u << 1)
 #define OVERWORLD_MOUNT_FIELD_INPUT_SIGN (1u << 5)
@@ -239,7 +240,8 @@ static void OverworldMount_FinishCustomMotion(BOOL commitTarget);
 static void OverworldMount_UpdateCustomMotion(void);
 static void OverworldMount_DrainLandStream(void);
 static void OverworldMount_ResumeCustomMotionAfterMapTransition(void);
-static BOOL OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar);
+static BOOL __attribute__((noinline))
+OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar);
 static void OverworldMount_ResetMomentum(void);
 void OverworldMount_IssueHeldMovement(
     FIELD_PLAYER_AVATAR *avatar,
@@ -688,6 +690,7 @@ OverworldMount_ResumeCustomMotionAfterMapTransition(void)
 {
     LocalMapObject *follower;
     LocalMapObject *player;
+    u32 freezeCommand;
 
     if (!sOverworldMountState.preserveTransitionPrepared) {
         return;
@@ -709,12 +712,16 @@ OverworldMount_ResumeCustomMotionAfterMapTransition(void)
     player = sOverworldMountState.fieldSystem->playerAvatar->mapObject;
     /* Map-header canonicalization clears every wild object's held command.
      * Reassert the stationary shell without changing elapsed motion state. */
+    freezeCommand = sOverworldMountState.snapshot.motionMode
+            == OVERWORLD_MOUNT_MOTION_WALK
+        ? OVERWORLD_MOUNT_WALK_FREEZE_COMMAND
+        : OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND;
     MapObject_StartMovementCommandInternal(
         player,
-        OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND);
+        freezeCommand);
     MapObject_StartMovementCommandInternal(
         follower,
-        OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND);
+        freezeCommand);
 }
 
 static BOOL __attribute__((noinline, section(".overworld_mount_control_tail")))
@@ -841,7 +848,8 @@ OverworldMount_NormalizeFollowerAfterStep(
         player->curFacing);
 }
 
-static BOOL OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar)
+static BOOL __attribute__((noinline))
+OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar)
 {
     u8 turnDirection;
 
@@ -1645,7 +1653,8 @@ static BOOL __attribute__((noinline)) OverworldMount_HandleCustomInput(
     return FALSE;
 }
 
-static void __attribute__((noinline)) OverworldMount_FilterMovementInput(
+static void __attribute__((noinline, section(".overworld_mount_motion")))
+OverworldMount_FilterMovementInput(
     FIELD_PLAYER_AVATAR *avatar,
     u32 *newKeys,
     u32 *heldKeys)
@@ -1690,22 +1699,24 @@ OverworldMount_TryHandleDiagonalWalk(
         || sOverworldMountState.motionCooldown != 0) {
         return FALSE;
     }
+    if (sOverworldMountState.pendingStep) {
+        /* A flat diagonal tile still owns the stock movement-end boundary.
+         * Do not start its successor before that boundary updates skid and
+         * acceleration state. */
+        return TRUE;
+    }
     requestedDirection = OverworldMount_GetInputDirection(newKeys | heldKeys);
-    if (requestedDirection < OVERWORLD_MOUNT_DIRECTION_NORTH_WEST) {
+    if (requestedDirection == OVERWORLD_MOUNT_DIRECTION_NONE) {
         return FALSE;
     }
-    if (!OVERWORLD_WALK_MODULE_ENTRY->strictDiagonalAllowed(
+    if (requestedDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST
+        && !OVERWORLD_WALK_MODULE_ENTRY->strictDiagonalAllowed(
             &sOverworldMountState,
             avatar,
             requestedDirection)) {
         return TRUE;
     }
     facingDirection = requestedDirection;
-    if (sOverworldMountState.skidRemaining != 0
-        && sOverworldMountState.turnDirection
-            != OVERWORLD_MOUNT_DIRECTION_NONE) {
-        facingDirection = sOverworldMountState.turnDirection;
-    }
     if (facingDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST) {
         facingDirection = OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(
             avatar->mapObject,
@@ -1713,11 +1724,29 @@ OverworldMount_TryHandleDiagonalWalk(
             newKeys);
     }
     sOverworldMountState.direction = requestedDirection;
-    (void)OverworldMount_TryStartCustomMotion(
-        avatar,
-        requestedDirection,
-        facingDirection);
+    sOverworldMountState.pendingSkid =
+        sOverworldMountState.skidRemaining != 0;
+    if (!OverworldMount_TryStartCustomMotion(
+            avatar,
+            requestedDirection,
+            facingDirection)) {
+        sOverworldMountState.pendingSkid = FALSE;
+        return requestedDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST;
+    }
     return TRUE;
+}
+
+static BOOL OverworldMount_TryStartWalkFromInput(
+    FIELD_PLAYER_AVATAR *avatar,
+    u32 *newKeys,
+    u32 *heldKeys)
+{
+    OverworldMount_ResolveDiagonalInput(avatar, newKeys, heldKeys);
+    OverworldMount_FilterMovementInput(avatar, newKeys, heldKeys);
+    return OverworldMount_TryHandleDiagonalWalk(
+        avatar,
+        *newKeys,
+        *heldKeys);
 }
 
 static void __attribute__((noinline))
@@ -1732,12 +1761,10 @@ OverworldMount_ProcessPlayerControl(
     if (OverworldMount_HandleCustomInput(avatar, &newKeys, &heldKeys)) {
         return;
     }
-    OverworldMount_ResolveDiagonalInput(avatar, &newKeys, &heldKeys);
-    OverworldMount_FilterMovementInput(avatar, &newKeys, &heldKeys);
-    if (OverworldMount_TryHandleDiagonalWalk(
+    if (OverworldMount_TryStartWalkFromInput(
             avatar,
-            newKeys,
-            heldKeys)) {
+            &newKeys,
+            &heldKeys)) {
         return;
     }
     PlayerAvatar_MoveControl(
@@ -1831,13 +1858,8 @@ void OverworldMount_IssueHeldMovement(
     if (trackedStep) {
         u8 facingDirection = direction;
 
-        if (sOverworldMountState.pendingSkid
-            && sOverworldMountState.turnDirection
-                != OVERWORLD_MOUNT_DIRECTION_NONE) {
-            /* A turn skid travels along the committed heading while the pair
-             * faces the requested heading. */
-            facingDirection = sOverworldMountState.turnDirection;
-        }
+        /* A turn skid keeps both travel and facing on the committed heading.
+         * Apply the requested facing only after the last skid tile lands. */
         (void)OverworldMount_TryStartCustomMotion(
             avatar,
             direction,
@@ -1995,7 +2017,6 @@ static BOOL OverworldMount_Tick(
     }
     OverworldMount_UpdateCustomMotion();
     OverworldMount_DrainLandStream();
-    OverworldMount_CompletePendingStep(fieldSystem->playerAvatar);
     if (!OverworldMount_AttachPresentation()) {
         OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_IDENTITY_CHANGED);
         return FALSE;

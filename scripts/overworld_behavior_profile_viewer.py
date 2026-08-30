@@ -1991,17 +1991,6 @@ def legacy_movement_speed_range_to_walk_time(
     )
 
 
-def legacy_walk_relative_to_frame_delta(delta: int) -> int:
-    """Keep the old faster/slower direction under direct frame-time math.
-
-    A tier delta cannot be converted to one exact frame delta for every base
-    tier because the old 16, 8, 4, 2 scale was nonlinear.  Inverting the sign
-    is the only base-independent conversion: positive speed changes become
-    negative (faster) frame changes and negative speed changes become slower.
-    """
-    return -delta
-
-
 def legacy_walk_bound_to_frame_bound(operator: str, threshold: int) -> tuple[str, int]:
     """Convert an old speed-tier bound to its inverse frame-time bound."""
     converted_operator = "/>" if operator == "/<" else "/<"
@@ -2378,6 +2367,19 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     relative_fields = {bit.get("field") for parsed in (relative_mask, relative_mask2, relative_mask3) for bit in parsed["bits"] if bit.get("field")}
     at_least_fields = {bit.get("field") for parsed in (at_least_mask, at_least_mask2, at_least_mask3) for bit in parsed["bits"] if bit.get("field")}
     at_most_fields = {bit.get("field") for parsed in (at_most_mask, at_most_mask2, at_most_mask3) for bit in parsed["bits"] if bit.get("field")}
+    legacy_walk_fields = {
+        "chillSpeed",
+        "maxWalkSpeed",
+        "chaseBoostSpeed",
+        "chainRepositionSpeed",
+    }
+    if legacy_walk_storage:
+        ambiguous_relative_fields = sorted(legacy_walk_fields & relative_fields)
+        if ambiguous_relative_fields:
+            raise ParseError(
+                "legacy relative Walk speed overrides need a manual exact-frame "
+                "value: " + ", ".join(ambiguous_relative_fields)
+            )
     for operator_name, operator_fields, supported_fields in (
         ("relative", relative_fields, RELATIVE_OVERRIDE_PROFILE_FIELDS),
         ("at-least", at_least_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
@@ -2472,49 +2474,13 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
                 profile[field]["label"] = f"{operator}{threshold}"
             profile[field]["symbol"] = None
     if legacy_walk_storage:
-        legacy_walk_fields = {
-            "chillSpeed",
-            "maxWalkSpeed",
-            "chaseBoostSpeed",
-            "chainRepositionSpeed",
-        }
         migrated_at_least_fields = set(at_least_fields)
         migrated_at_most_fields = set(at_most_fields)
         for field in legacy_walk_fields & mask_fields:
             raw = clean_token(profile[field].get("raw", ""))
-            compound = compound_override_parts(field, raw)
-            relative = RELATIVE_OVERRIDE_RAW_RE.fullmatch(raw)
             at_least = AT_LEAST_OVERRIDE_RAW_RE.fullmatch(raw)
             at_most = AT_MOST_OVERRIDE_RAW_RE.fullmatch(raw)
-            if compound is not None:
-                delta, operator, threshold = compound
-                operator, threshold = legacy_walk_bound_to_frame_bound(
-                    operator,
-                    threshold,
-                )
-                delta = legacy_walk_relative_to_frame_delta(delta)
-                canonical = f"{delta:+d}, {operator}{threshold}"
-                profile[field].update({
-                    "raw": canonical,
-                    "value": delta,
-                    "label": canonical,
-                    "symbol": None,
-                })
-                compound_bound_profile[field].update({
-                    "raw": f"{operator}{threshold}",
-                    "value": threshold,
-                    "label": f"{operator}{threshold}",
-                    "symbol": None,
-                })
-            elif relative is not None:
-                delta = legacy_walk_relative_to_frame_delta(int(raw, 10))
-                profile[field].update({
-                    "raw": f"{delta:+d}",
-                    "value": delta,
-                    "label": f"{delta:+d}",
-                    "symbol": None,
-                })
-            elif at_least is not None or at_most is not None:
+            if at_least is not None or at_most is not None:
                 operator = "/<" if at_least is not None else "/>"
                 match = at_least if at_least is not None else at_most
                 operator, threshold = legacy_walk_bound_to_frame_bound(

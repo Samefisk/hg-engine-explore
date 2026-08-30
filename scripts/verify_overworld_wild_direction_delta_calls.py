@@ -81,7 +81,7 @@ def main() -> None:
         offset = address - text_address
         if offset < 0 or offset + 12 > len(text):
             fail(f"{name} is outside .text")
-        module = bytes((0xDF, 0xF8, 0x04, 0x30, 0x1B, 0x68, 0x18, 0x47)) \
+        module = bytes((0x01, 0x4B, 0x1B, 0x68, 0x18, 0x47, 0xC0, 0x46)) \
             + slot.to_bytes(4, "little")
         actual = text[offset : offset + 12]
         if actual != module:

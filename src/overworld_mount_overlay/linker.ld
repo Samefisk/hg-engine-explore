@@ -58,6 +58,12 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 . = ALIGN(4);
+                ASSERT(. <= ORIGIN(rom) + 0x1BF0,
+                    "overworld mount code exceeds stable packaged size");
+                /* Overlay 157 is boot-resident. Keep its file size stable so
+                 * the Y9/FAT metadata sealed into the ROM cannot drift when
+                 * a compiler change makes the code smaller. */
+                . = ORIGIN(rom) + 0x1BF0;
                 __text_end = . ;
         } >rom = 0xff
 

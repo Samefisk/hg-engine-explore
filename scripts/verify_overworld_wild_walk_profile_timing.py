@@ -91,22 +91,25 @@ def main() -> None:
             "0",
         ], {})
 
-    migrated_relative = parse_legacy_chill_speed_override(
-        "OW_WILD_BEHAVIOR_RELATIVE(+1)",
-        relative=True,
-    )
+    legacy_relative_deltas = [
+        viewer.legacy_walk_speed_to_time(min(tier + 1, 4))
+        - viewer.legacy_walk_speed_to_time(tier)
+        for tier in range(1, 5)
+    ]
     require(
-        migrated_relative["profile"]["chillSpeed"]["raw"] == "-1",
-        "legacy faster relative tier override did not become a faster frame delta",
+        legacy_relative_deltas == [-8, -4, -2, 0],
+        "legacy relative tiers unexpectedly have one exact frame delta",
     )
-    migrated_numeric_relative = parse_legacy_chill_speed_override(
-        "1",
-        relative=True,
-    )
-    require(
-        migrated_numeric_relative["profile"]["chillSpeed"]["raw"] == "-1",
-        "legacy raw numeric relative tier was converted as an absolute Walk time",
-    )
+    for stored_raw in ("OW_WILD_BEHAVIOR_RELATIVE(+1)", "1"):
+        try:
+            parse_legacy_chill_speed_override(stored_raw, relative=True)
+        except viewer.ParseError as error:
+            require(
+                "manual exact-frame value" in str(error),
+                "legacy relative Walk rejection did not explain the required migration",
+            )
+        else:
+            raise SystemExit("legacy relative Walk override was migrated approximately")
     migrated_at_least = parse_legacy_chill_speed_override(
         "OW_WILD_BEHAVIOR_AT_LEAST(2)",
         at_least=True,
@@ -127,35 +130,39 @@ def main() -> None:
         and "chillSpeed" not in migrated_at_most["atMostFields"],
         "legacy maximum-speed bound did not become the inverse frame-time bound",
     )
-    for legacy_tier, expected_time in ((1, 16), (2, 8), (3, 4), (4, 2)):
+    for legacy_tier in range(1, 5):
         compound_profile_items = ["0"] * len(viewer.PROFILE_FIELDS_V71)
         compound_bound_items = ["0"] * len(viewer.PROFILE_FIELDS_V71)
         chill_speed_index = viewer.PROFILE_FIELDS_V71.index("chillSpeed")
         compound_profile_items[chill_speed_index] = "OW_WILD_BEHAVIOR_RELATIVE(+1)"
         compound_bound_items[chill_speed_index] = str(legacy_tier)
         field_mask = "OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED"
-        migrated_compound = viewer.parse_behavior_override([
-            field_mask,
-            "0",
-            "0",
-            compound_profile_items,
-            field_mask,
-            "0",
-            "0",
-            field_mask,
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            compound_bound_items,
-        ], {})
-        require(
-            migrated_compound["profile"]["chillSpeed"]["raw"]
-                == f"-1, />{expected_time}"
-            and "chillSpeed" in migrated_compound["atMostFields"],
-            f"legacy compound tier {legacy_tier} was not converted exactly once",
-        )
+        try:
+            viewer.parse_behavior_override([
+                field_mask,
+                "0",
+                "0",
+                compound_profile_items,
+                field_mask,
+                "0",
+                "0",
+                field_mask,
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+                compound_bound_items,
+            ], {})
+        except viewer.ParseError as error:
+            require(
+                "manual exact-frame value" in str(error),
+                f"legacy compound tier {legacy_tier} did not fail closed",
+            )
+        else:
+            raise SystemExit(
+                f"legacy compound tier {legacy_tier} was migrated approximately"
+            )
 
     legacy_items = ["0"] * len(viewer.PROFILE_FIELDS_V71)
     legacy_indexes = {field: index for index, field in enumerate(viewer.PROFILE_FIELDS_V71)}
