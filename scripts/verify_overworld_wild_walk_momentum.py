@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify callback context required by chained wild Walk skid steps."""
+"""Verify exact-frame wild Walk motion and shared momentum rules."""
 
 from __future__ import annotations
 
@@ -13,11 +13,17 @@ REPO = Path(__file__).resolve().parents[1]
 
 def function_body(source: str, name: str) -> str:
     start = -1
-    opening = -1
     while True:
         start = source.find(name, start + 1)
         if start < 0:
             raise ValueError(f"missing function body: {name}")
+        line_start = source.rfind("\n", 0, start) + 1
+        declaration_prefix = source[line_start:start]
+        if declaration_prefix and not any(
+            token in declaration_prefix
+            for token in ("static", "BOOL", "u8", "void")
+        ):
+            continue
         opening = source.find("{", start)
         declaration = source.find(";", start)
         if opening >= 0 and (declaration < 0 or opening < declaration):
@@ -31,6 +37,18 @@ def function_body(source: str, name: str) -> str:
             if depth == 0:
                 return source[opening + 1 : index]
     raise ValueError(f"unterminated body: {name}")
+
+
+def require(source: str, values: tuple[str, ...], label: str) -> None:
+    missing = [value for value in values if value not in source]
+    if missing:
+        raise SystemExit(f"{label} is incomplete: {', '.join(missing)}")
+
+
+def reject(source: str, values: tuple[str, ...], label: str) -> None:
+    found = [value for value in values if value in source]
+    if found:
+        raise SystemExit(f"{label} still contains: {', '.join(found)}")
 
 
 def main() -> int:
@@ -48,370 +66,547 @@ def main() -> int:
         / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
     )
     parser.add_argument(
+        "--movement-header",
+        type=Path,
+        default=REPO / "include/overworld_wild_movement.h",
+    )
+    parser.add_argument(
+        "--timing-policy-header",
+        type=Path,
+        default=REPO / "include/overworld_walk_timing_policy.h",
+    )
+    parser.add_argument(
+        "--direction-policy-header",
+        type=Path,
+        default=REPO / "include/overworld_walk_direction_policy.h",
+    )
+    parser.add_argument(
+        "--walk-module-source",
+        type=Path,
+        default=REPO
+        / "src/pokemon_move_history_overlay/overworld_walk_module.c",
+    )
+    parser.add_argument(
+        "--walk-module-header",
+        type=Path,
+        default=REPO / "include/overworld_walk_module.h",
+    )
+    parser.add_argument(
         "--mount-source",
         type=Path,
         default=REPO / "src/overworld_mount_overlay/overworld_mount_overlay.c",
     )
-    parser.add_argument(
-        "--behavior-source",
-        type=Path,
-        default=REPO / "data/OverworldWildBehaviorData.c",
-    )
     args = parser.parse_args()
+
     source = args.source.read_text()
-
-    finish = function_body(
-        source,
-        "OverworldWildSpawns_HandleFinishedWalkMovement",
-    )
-    callback_call = finish.find("walkMomentumFinish(")
-    if callback_call < 0:
-        raise SystemExit("walk momentum finish callback is missing")
-    setup = finish[:callback_call]
-    required = (
-        "stepContext.profile = profile;",
-        "stepContext.primitives = primitives;",
-    )
-    missing = [assignment for assignment in required if assignment not in setup]
-    if missing:
-        raise SystemExit(
-            "walk momentum continuation context is incomplete: "
-            + ", ".join(missing)
-        )
-    callback_guard = setup.find("if (object == NULL)")
-    if (
-        callback_guard < 0
-        or "OverworldWildSpawns_ClearWalkMovementState(state, slot, NULL);"
-        not in setup[callback_guard:]
-    ):
-        raise SystemExit(
-            "walk momentum completion can call skid callbacks after its object is gone"
-        )
-
-    start_step = function_body(
-        source,
-        "OverworldWildSpawns_StartMomentumWalkStep",
-    )
-    if "stepContext->profile" not in start_step:
-        raise SystemExit("blocked skid path no longer consumes the profile context")
-
-    skid_formula = re.compile(
-        r"skidRemaining\s*=\s*1u\s*<<\s*\(\s*"
-        r"(?:state->speed|sOverworldMountState\.speed)\s*-\s*"
-        r"\(OW_WILD_WALK_SPEED_MIN\s*\+\s*(\d+)u\)\s*\);"
-    )
-    for label, path in (
-        ("wild", args.runtime_source),
-        ("mount", args.mount_source),
-    ):
-        shifts = skid_formula.findall(path.read_text())
-        if shifts != ["2", "2"]:
-            raise SystemExit(
-                f"{label} Walk skid formulas differ from speed 3/4 = 1/2 tiles: "
-                f"{shifts}"
-            )
-
-    runtime_source = args.runtime_source.read_text()
-    wild_start = function_body(
-        runtime_source,
-        "OverworldWildRuntime_WalkMomentumStart",
-    )
-    for invariant in (
-        "requestedDirection < OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
-        "requestedDirection &= OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG - 1u;",
-    ):
-        if invariant not in wild_start:
-            raise SystemExit(
-                f"wild Walk turn-skid suppression is incomplete: {invariant}"
-            )
-    if "speedGain" in wild_start:
-        raise SystemExit(
-            "wild Walk still requires acceleration above base speed to skid"
-        )
-    if wild_start.count(
-        "state->speed > (OW_WILD_WALK_SPEED_MIN + 1u)"
-    ) != 2:
-        raise SystemExit(
-            "wild Walk stop and turn skids are not both gated by absolute speed"
-        )
-    wild_turn = wild_start[wild_start.find(
-        "state->turnDirection = requestedDirection;"
-    ) :]
-    wild_turn = wild_turn[:wild_turn.find("if (startStep(")]
-    if (
-        "state->resumeSpeed = state->speed;" not in wild_turn
-        or "state->speed--;" not in wild_turn
-    ):
-        raise SystemExit(
-            "wild Walk turn skid does not reduce speed only after saving it"
-        )
-    wild_stop = wild_start[
-        wild_start.find(
-            "state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;"
-        ) : wild_start.find("if (startStep(")
-    ]
-    if (
-        "state->resumeSpeed = state->baseSpeed;" not in wild_stop
-        or wild_stop.count("state->speed--;") != 1
-    ):
-        raise SystemExit("wild Walk stop skid does not lower speed exactly once")
-
-    wild_finish = function_body(
-        runtime_source,
-        "OverworldWildRuntime_WalkMomentumFinish",
-    )
-    skid_continuation = wild_finish[
-        wild_finish.find("if (state->skidRemaining != 0)") :
-        wild_finish.find("if (turnDirection == OW_WILD_WALK_DIRECTION_NONE)")
-    ]
-    if "state->speed--;" in skid_continuation:
-        raise SystemExit("wild Walk skid loses more than one speed tier")
-    if "state->speed = state->resumeSpeed;" not in wild_finish:
-        raise SystemExit("wild Walk turn skid does not restore its entry speed")
-    if not re.search(
-        r"if \(effect != NULL\s*&& state->skidRemaining == 1\)\s*\{\s*"
-        r"effect\(context, turnDirection, TRUE\);",
-        wild_finish,
-    ):
-        raise SystemExit("wild Walk emits a landing effect for every skid tile")
-
-    for wrapper_name in (
-        "OverworldWildRuntime_PlayStepDirtParticle",
-        "OverworldWildRuntime_PlayLandingHopParticle",
-    ):
-        wrapper = function_body(runtime_source, wrapper_name)
-        if "if (object == NULL)" not in wrapper:
-            raise SystemExit(f"{wrapper_name} dereferences a null object")
-
+    runtime = args.runtime_source.read_text()
+    header = args.movement_header.read_text()
+    timing_policy = args.timing_policy_header.read_text()
+    direction_policy = args.direction_policy_header.read_text()
+    module = args.walk_module_source.read_text()
+    module_header = args.walk_module_header.read_text()
     mount_source = args.mount_source.read_text()
-    mount_filter = function_body(
-        mount_source,
-        "OverworldMount_FilterMovementInput",
-    )
-    for invariant in (
-        "sOverworldMountState.turnDirection",
-        ">= sOverworldMountState.snapshot.profile.tilesBeforeTurnSkid",
-    ):
-        if invariant not in mount_filter:
-            raise SystemExit(
-                f"mounted Walk turn-skid buildup is incomplete: {invariant}"
-            )
-    if "speed > sOverworldMountState.baseSpeed" in mount_filter:
-        raise SystemExit(
-            "mounted Walk still requires acceleration above base speed to skid"
-        )
-    if mount_filter.count(
-        "> (OW_WILD_WALK_SPEED_MIN + 1u)"
-    ) != 2:
-        raise SystemExit(
-            "mounted Walk stop and turn skids are not both gated by absolute speed"
-        )
-    mount_turn = mount_filter[mount_filter.find(
-        "sOverworldMountState.turnDirection = requestedDirection;"
-    ) :]
-    mount_turn = mount_turn[:mount_turn.find("OverworldMount_ForceDirection(")]
-    if (
-        "sOverworldMountState.resumeSpeed = sOverworldMountState.speed;"
-        not in mount_turn
-        or mount_turn.count("sOverworldMountState.speed--;") != 1
-    ):
-        raise SystemExit(
-            "mounted Walk turn skid does not reduce speed only after saving it"
-        )
-    mount_stop_start = mount_filter.find(
-        "sOverworldMountState.turnDirection = OVERWORLD_MOUNT_DIRECTION_NONE;"
-    )
-    mount_stop = mount_filter[
-        mount_stop_start : mount_filter.find(
-            "OverworldMount_ForceDirection(",
-            mount_stop_start,
-        )
-    ]
-    if (
-        "sOverworldMountState.resumeSpeed = "
-        "sOverworldMountState.baseSpeed;" not in mount_stop
-        or mount_stop.count("sOverworldMountState.speed--;") != 1
-    ):
-        raise SystemExit("mounted Walk stop skid does not lower speed exactly once")
 
-    mount_finish = function_body(
-        mount_source,
-        "OverworldMount_CompletePendingStep",
+    require(
+        module_header,
+        (
+            "#define OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY_ADDR 0x023BF474",
+            "typedef struct OverworldWalkWildPolicyModuleEntry",
+            "OverworldWalkWildPolicyModuleEntrySizeMustRemain20Bytes",
+            "resolvePrimitives",
+            "groupFlagsForTypes",
+            "selectConditionalOverrideMask",
+        ),
+        "resident wild policy ABI",
     )
-    buildup_increment = mount_finish.find(
-        "sOverworldMountState.turnDirection++;"
+    require(
+        module,
+        (
+            "Walk_WildResolvePrimitives(",
+            "Walk_WildGroupFlagsForTypes(",
+            "Walk_WildSelectConditionalOverrideMask(",
+            "gOverworldWalkWildPolicyModuleEntry",
+        ),
+        "resident wild policy implementation",
     )
-    resume_return = mount_finish.find(
-        "if (sOverworldMountState.resumeSpeed != 0)"
-    )
-    if buildup_increment < 0 or buildup_increment > resume_return:
-        raise SystemExit(
-            "mounted Walk does not count the committed post-skid tile"
-        )
-    completion_point = mount_finish.find(
-        "sOverworldMountState.pendingStep = FALSE;"
-    )
-    if completion_point < 0:
-        raise SystemExit("mounted Walk completion point is missing")
-    if "MapObject_IsMovementPaused(follower)" in mount_finish[:completion_point]:
-        raise SystemExit(
-            "mounted Walk still waits indefinitely for the visual follower"
-        )
-    if "OverworldMount_NormalizeFollowerAfterStep(" not in mount_finish:
-        raise SystemExit(
-            "mounted Walk does not normalize the visual follower after a step"
-        )
-    mount_skid_continuation = mount_finish[
-        mount_finish.find("if (sOverworldMountState.skidRemaining != 0)") :
-        mount_finish.find("turnDirection = sOverworldMountState.turnDirection;")
-    ]
-    if "sOverworldMountState.speed--;" in mount_skid_continuation:
-        raise SystemExit("mounted Walk skid loses more than one speed tier")
-    if (
-        "sOverworldMountState.speed = "
-        "sOverworldMountState.resumeSpeed;" not in mount_finish
-    ):
-        raise SystemExit("mounted Walk turn skid does not restore its entry speed")
-    if not re.search(
-        r"if \(sOverworldMountState\.skidRemaining == 1\)\s*\{\s*"
-        r"OverworldMount_EmitStepEffect\(TRUE\);",
-        mount_finish,
-    ):
-        raise SystemExit("mounted Walk emits a landing effect for every skid tile")
-
-    mount_normalize = function_body(
-        mount_source,
-        "OverworldMount_NormalizeFollowerAfterStep",
-    )
-    if "MapObject_SetPositionFromVectorAndDirection(" not in mount_normalize:
-        raise SystemExit(
-            "mounted Walk follower normalization does not clear and snap movement"
-        )
-
-    mount_issue = function_body(
-        mount_source,
-        "OverworldMount_IssueHeldMovement",
-    )
-    for invariant in (
-        "BOOL trackedStep = FALSE;",
-        "else if (mountedPlayer)",
-        "if (trackedStep && sOverworldMountState.pendingSkid)",
-    ):
-        if invariant not in mount_issue:
-            raise SystemExit(
-                "mounted Walk does not cancel stale skid state for every "
-                f"special movement command: {invariant}"
-            )
-    if (
-        "OverworldMount_GetWalkCommand(sOverworldMountState.speed)"
-        not in mount_issue
-    ):
-        raise SystemExit("mounted Walk skid command does not use temporary speed")
-    special_interrupt = mount_issue.find("else if (mountedPlayer)")
-    special_reset = mount_issue.find(
-        "OverworldMount_ResetMomentum();",
-        special_interrupt,
-    )
-    if (
-        special_interrupt < 0
-        or special_reset < 0
-        or "OverworldMount_NormalizeFollowerAfterStep(object);"
-        not in mount_issue[special_interrupt:special_reset]
-    ):
-        raise SystemExit(
-            "mounted special movement does not cancel the visual follower command"
-        )
-
-    try_start = function_body(
+    require(
         source,
-        "OverworldWildSpawns_TryStartAcceleratedWalkStep",
+        (
+            "OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY->groupFlagsForTypes(",
+            "->selectConditionalOverrideMask(",
+        ),
+        "overlay149 resident policy routing",
     )
-    for invariant in (
-        "OverworldWildWalkMomentum_GateTurnSkid(",
-        "lane->tilesBeforeTurnSkid",
+    if (
+        "OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY->resolvePrimitives(" not in source
+        and not (
+            '"1: .word 0x023BF474\\n"' in source
+            and '"ldr r2, [r2, #8]\\n"' in source
+        )
     ):
-        if invariant not in try_start:
-            raise SystemExit(
-                f"wild Walk turn-skid buildup gate is incomplete: {invariant}"
-            )
+        raise SystemExit("overlay149 primitive-resolution ABI routing is missing")
+
+    entry = re.search(
+        r"typedef struct OverworldWalkModuleEntry \{(?P<body>.*?)"
+        r"\} OverworldWalkModuleEntry;",
+        module_header,
+        re.DOTALL,
+    )
+    entry_fields = (
+        "clampTime",
+        "accelerateTime",
+        "skidTiles",
+        "skidTime",
+        "stompApplies",
+        "directionFromKeys",
+        "directionKey",
+        "deltaX",
+        "deltaY",
+        "isFortyFiveDegreeTurn",
+        "resolveMountedDiagonal",
+        "strictDiagonalAllowed",
+        "diagonalFacing",
+        "directionFromDelta",
+    )
+    entry_positions = [] if entry is None else [
+        entry.group("body").find(field) for field in entry_fields
+    ]
+    if entry is None or any(position < 0 for position in entry_positions) \
+            or entry_positions != sorted(entry_positions):
+        raise SystemExit("fixed 0x40 Walk entry field order changed")
+    require(
+        module_header,
+        (
+            "OVERWORLD_WALK_MODULE_ENTRY_ADDR 0x023BF400",
+            "OVERWORLD_WALK_PROFILE_MODULE_ENTRY_ADDR 0x023BF440",
+            "OVERWORLD_WALK_MOUNT_MODULE_ENTRY_ADDR 0x023BF458",
+            "OVERWORLD_WALK_FACE_MODULE_ENTRY_ADDR 0x023BF468",
+            "OverworldWalkModuleEntrySizeMustRemain64Bytes",
+        ),
+        "resident Walk service ABI",
+    )
+
+    require(
+        header,
+        (
+            "#define OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG 0x80",
+            "#define OW_WILD_WALK_TRAVEL_TIME_MIN 1",
+            "#define OW_WILD_WALK_TRAVEL_TIME_MAX 32",
+        ),
+        "Walk frame-time range",
+    )
+    clamp = function_body(timing_policy, "OverworldWalkTimingPolicy_Clamp")
+    require(
+        clamp,
+        (
+            "travelTime < OVERWORLD_WALK_TIMING_MIN",
+            "travelTime > OVERWORLD_WALK_TIMING_MAX",
+        ),
+        "Walk frame-time clamp",
+    )
+    accelerate = function_body(
+        timing_policy,
+        "OverworldWalkTimingPolicy_Accelerate",
+    )
+    require(
+        accelerate,
+        (
+            "(currentTravelTime + 1u) / 2u",
+            "nextTravelTime < fastestTravelTime",
+        ),
+        "Walk half-step acceleration",
+    )
+    skid_tiles = function_body(
+        timing_policy,
+        "OverworldWalkTimingPolicy_SkidTiles",
+    )
+    require(
+        skid_tiles,
+        (
+            "travelTime >= 5",
+            "travelTime >= 3",
+            "travelTime == 2 ? 2 : 4",
+        ),
+        "Walk skid distance bands",
+    )
+    skid_time = function_body(
+        timing_policy,
+        "OverworldWalkTimingPolicy_SkidTime",
+    )
+    require(
+        skid_time,
+        ("OVERWORLD_WALK_TIMING_MAX / 2", "travelTime * 2u"),
+        "Walk skid frame time",
+    )
+
+    start = function_body(runtime, "OverworldWildRuntime_WalkMomentumStart")
+    require(
+        start,
+        (
+            "preventTurnSkid = (requestedDirection",
+            "~OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
+            "OVERWORLD_WALK_MODULE_ENTRY->isFortyFiveDegreeTurn(",
+            "OVERWORLD_WALK_MODULE_ENTRY->skidTiles(state->speed)",
+            "OVERWORLD_WALK_MODULE_ENTRY->skidTime(state->speed)",
+        ),
+        "wild Walk turn and skid rules",
+    )
+    reject(
+        start,
+        (
+            "requestedDirection &= 3",
+            "requestedDirection & 3",
+            "requestedDirection < OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
+            "state->speed--;",
+            "state->speed++;",
+            "1u <<",
+        ),
+        "wild Walk direction or speed-tier handling",
+    )
+    flag_strip = start.find("~OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG")
+    forty_five = start.find("isFortyFiveDegreeTurn(")
+    skid_branch = start.find("skidTiles =", forty_five)
+    if not (0 <= flag_strip < forty_five < skid_branch):
+        raise SystemExit(
+            "wild Walk must strip only the 0x80 flag, accept 45-degree turns, "
+            "then test 90-degree skids"
+        )
+
+    finish = function_body(runtime, "OverworldWildRuntime_WalkMomentumFinish")
+    require(
+        finish,
+        (
+            "completedDistance != 1",
+            "completedDirection != state->direction",
+            "state->tileCounter >= tilesToAccelerate",
+            "OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(",
+            "fastestTravelTime",
+        ),
+        "wild Walk completion and acceleration",
+    )
+    reject(
+        finish,
+        ("state->speed--;", "state->speed++;", "1u <<"),
+        "wild Walk completion speed-tier handling",
+    )
+
     chain_pause = function_body(
-        source,
-        "OverworldWildSpawns_ApplyUniversalChainMovementPause",
-    )
-    for invariant in (
-        "&runtime->movementWalkMomentum[slot]",
-    ):
-        if invariant not in chain_pause:
-            raise SystemExit(
-                f"wild Walk buildup completion rule is incomplete: {invariant}"
-            )
-    policy = function_body(
         mount_source,
         "OverworldWildMovementPolicy_PrepareChainPause",
     )
-    for invariant in (
-        "locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK",
-        "lane->walkPause != 0",
-        "OverworldWildMovementPolicy_RecordCompletedWalkTile(",
-    ):
-        if invariant not in policy:
-            raise SystemExit(
-                f"shared Walk buildup completion rule is incomplete: {invariant}"
-            )
-    chain_commit = function_body(
-        source,
-        "OverworldWildSpawns_CommitDeferredChainMovementPause",
+    require(
+        chain_pause,
+        (
+            "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
+            "*deferredPauseTicks = 0;",
+            "goto chain_disabled;",
+            "chain_disabled:",
+            "*stepsRemaining = 0;",
+            "*deferredPauseAction = 0;",
+        ),
+        "disabled chain-pause cleanup",
     )
-    if "runtime->movementWalkMomentum[slot].turnDirection" not in chain_commit:
-        raise SystemExit("Movement Chain pauses do not reset turn-skid buildup")
-
-    behavior_source = args.behavior_source.read_text()
-    nervous_start = behavior_source.find("/* profile: Nervous scavenger */")
-    nervous_end = behavior_source.find(
-        "/* profile: Follower Pokemon */",
-        nervous_start,
-    )
-    if nervous_start < 0 or nervous_end < 0:
-        raise SystemExit("Nervous scavenger profile is missing")
-    nervous = behavior_source[nervous_start:nervous_end]
-    if not re.search(
-        r"10,\s*3,\s*20,\s*10,\s*3,\s*32,",
-        nervous,
-    ):
-        raise SystemExit("Nervous scavenger base speed is not 3")
-    if not re.search(
-        r"100,\s*100,\s*2,\s*3,",
-        nervous,
-    ):
-        raise SystemExit("Nervous scavenger maximum Walk speed is not 3")
-    for invariant in (
-        "OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE",
-        "OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE",
-    ):
-        if invariant not in nervous:
-            raise SystemExit(f"Nervous scavenger lifecycle mask is missing: {invariant}")
-    if nervous.count(
-        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER"
-    ) != 2:
-        raise SystemExit("Nervous scavenger does not keep speed 3 in both lifecycle lanes")
-    for invariant in (
-        "OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID",
-        "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE",
-    ):
-        if invariant not in nervous:
-            raise SystemExit(
-                f"Nervous scavenger skid buildup mask is missing: {invariant}"
-            )
-    if not re.search(
-        r"30,\s*60,\s*OW_WILD_BEHAVIOR_WALK_PAUSE_DEFAULT,\s*3,\s*\}",
-        nervous,
+    if chain_pause.find(
+        "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE"
+    ) > chain_pause.find(
+        "OverworldWildMovementPolicy_RecordCompletedWalkTile("
     ):
         raise SystemExit(
-            "Nervous scavenger must use its normal tile wait and require three tiles"
+            "chain-pause None must disable the lane before movement counting"
         )
 
+    direction_from_delta = function_body(
+        direction_policy,
+        "OverworldWalkDirectionPolicy_FromDelta",
+    )
+    require(
+        direction_from_delta,
+        (
+            "OVERWORLD_WALK_DIRECTION_NORTH_WEST",
+            "OVERWORLD_WALK_DIRECTION_NORTH_EAST",
+            "OVERWORLD_WALK_DIRECTION_SOUTH_WEST",
+            "OVERWORLD_WALK_DIRECTION_SOUTH_EAST",
+            "OVERWORLD_WALK_DIRECTION_NONE",
+        ),
+        "eight-way direction encoding",
+    )
+    forty_five_rule = function_body(
+        direction_policy,
+        "OverworldWalkDirectionPolicy_IsFortyFiveDegreeTurn",
+    )
+    require(
+        forty_five_rule,
+        (
+            "OverworldWalkDirectionPolicy_DeltaX(from)",
+            "OverworldWalkDirectionPolicy_DeltaX(to)",
+            "OverworldWalkDirectionPolicy_DeltaY(from)",
+            "OverworldWalkDirectionPolicy_DeltaY(to)",
+            "> 0",
+        ),
+        "45-degree dot-product rule",
+    )
+    strict_diagonal = function_body(module, "Walk_StrictDiagonalAllowed")
+    if strict_diagonal.count("Walk_CanCardinal(avatar,") != 2:
+        raise SystemExit(
+            "strict diagonal movement must clear both cardinal neighbor tiles"
+        )
+    require(
+        strict_diagonal,
+        ("targetX", "targetY", "validateHopLanding("),
+        "strict diagonal destination validation",
+    )
+
+    planned = function_body(
+        source,
+        "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand",
+    )
+    require(
+        planned,
+        (
+            "OVERWORLD_WALK_MODULE_ENTRY->directionFromDelta(",
+            "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(",
+            "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(",
+            "distance = 1;",
+            "OverworldWildSpawns_TryStartAcceleratedWalkStep(",
+            "state->movementStagedHopPending[slot] = TRUE;",
+        ),
+        "wild flat Walk planning",
+    )
+    reject(
+        planned,
+        (
+            "OverworldWildSpawns_MovementDirectionDeltaX(direction)",
+            "OverworldWildSpawns_MovementDirectionDeltaY(direction)",
+            "MapObject_MovementCommandFromDirection(",
+        ),
+        "wild diagonal Walk stock-direction handling",
+    )
+
+    prepared = function_body(
+        source,
+        "OverworldWildSpawns_StartPreparedCustomJumpCommand",
+    )
+    require(
+        prepared,
+        (
+            "frameCount = runtime->movementWalkMomentum[slot].speed;",
+            "runtime->movementCustomMotionModes[slot] = flatWalk",
+            "OW_WILD_CUSTOM_MOTION_WALK",
+            "movementCustomJumpArcHeightsQ4[slot] = !flatWalk",
+            "OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(",
+            "runtime->movementCustomJumpPrepActive[slot] = !flatWalk;",
+            "if (chainReposition && !repositionUsesArc)",
+            "(object->flags & MAPOBJECTFLAG_UNK7) != 0",
+        ),
+        "wild exact flat-motion setup",
+    )
+    reject(
+        prepared,
+        ("frameCount = 1u <<", "frameCount = 1 <<"),
+        "wild flat Walk frame timing",
+    )
+
+    landing = function_body(
+        source,
+        "OverworldWildSpawns_IsBehaviorAllowedHopLandingTile",
+    )
+    require(
+        landing,
+        (
+            "OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER",
+            "x != movingObject->xCurr",
+            "y != movingObject->yCurr",
+            "x,\n                movingObject->yCurr",
+            "movingObject->xCurr,\n                y",
+        ),
+        "wild strict diagonal clearance",
+    )
+
+    reservation = function_body(
+        source,
+        "OverworldWildSpawns_IsTileReservedByOtherWild",
+    )
+    guard = reservation.find(
+        "movementPendingDirections[i]\n"
+        "                <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT"
+    )
+    delta = reservation.find("OverworldWildSpawns_MovementDirectionDeltaX(")
+    if guard < 0 or delta < 0 or guard > delta:
+        raise SystemExit(
+            "diagonal pending directions can reach a stock cardinal delta helper"
+        )
+
+    gate = function_body(source, "OverworldWildWalkMomentum_GateTurnSkid")
+    require(gate, ('"add r1, r1, #128\\n"',), "wild no-skid flag assembly")
+    reject(gate, ('"add r1, r1, #4\\n"',), "old diagonal/no-skid collision")
+
+    start_step = function_body(source, "OverworldWildSpawns_StartMomentumWalkStep")
+    require(
+        start_step,
+        (
+            "movementPreviousTileLocked[stepContext->slot] += skidStep;",
+            "OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG",
+            "OVERWORLD_WALK_MODULE_ENTRY->deltaX(direction)",
+            "OVERWORLD_WALK_MODULE_ENTRY->deltaY(direction)",
+            "OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER",
+            "direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
+            "validateStep = FALSE;",
+            "if (skidStep && validateStep)",
+            "OverworldWildSpawns_PlayMovementCrashFeedback(",
+        ),
+        "wild skid history isolation",
+    )
+    if start_step.count("OverworldWildSpawns_PlayMovementCrashFeedback(") != 1:
+        raise SystemExit("a blocked skid must request crash feedback exactly once")
+    blocked_label = start_step.find("validated_step_blocked:")
+    feedback = start_step.find("OverworldWildSpawns_PlayMovementCrashFeedback(")
+    validation_complete = start_step.find("validateStep = FALSE;")
+    prepared_start = start_step.find(
+        "OverworldWildSpawns_StartPreparedCustomJumpCommand("
+    )
+    if not (0 <= validation_complete < prepared_start < blocked_label < feedback):
+        raise SystemExit(
+            "blocked skid feedback must only run for failed collision validation"
+        )
+    crash_feedback = function_body(
+        source,
+        "OverworldWildSpawns_PlayMovementCrashFeedback",
+    )
+    require(
+        crash_feedback,
+        (
+            "OW_WILD_BEHAVIOR_WALK_CRASH_SOUND(lane->walkOptions)",
+            "OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_WALL_HIT",
+            "PlaySE(OW_WILD_SPAWNER_WALK_CRASH_SE);",
+        ),
+        "authored blocked skid crash feedback",
+    )
+    effect = function_body(source, "OverworldWildSpawns_ApplyWalkMomentumEffect")
+    require(
+        effect,
+        (
+            "movementPreviousTileLocked[stepContext->slot] = FALSE;",
+            "movementLastDistances[stepContext->slot] = 0;",
+        ),
+        "wild skid completion isolation",
+    )
+
+    accelerated = function_body(
+        source,
+        "OverworldWildSpawns_TryStartAcceleratedWalkStep",
+    )
+    require(
+        accelerated,
+        (
+            "movementSpawnRunActive[stepContext->slot]",
+            "? OW_WILD_SPAWNER_SPOT_STATE_ACTIVE",
+            "direction | OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
+            "OverworldWildWalkMomentum_GateTurnSkid(",
+        ),
+        "spawn-run fixed momentum",
+    )
+    single_step = function_body(
+        source,
+        "OverworldWildSpawns_TryStartSingleDirectionMovementStep",
+    )
+    require(
+        single_step,
+        (
+            "direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
+            "movementSpawnRunActive[stepContext->slot]",
+            "OverworldWildSpawns_TryStartAcceleratedWalkStep(",
+        ),
+        "spawn-run exact flat-motion route",
+    )
+    reject(
+        single_step,
+        ("if (!stepContext->state->movementSpawnRunActive",),
+        "spawn-run stock command bypass",
+    )
+    spawn_finish = function_body(
+        source,
+        "OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand",
+    )
+    require(
+        spawn_finish,
+        (
+            "customWalkWasActive",
+            "movementCustomJumpTargetX[slot]",
+            "movementCustomJumpTargetY[slot]",
+        ),
+        "spawn-run one-tile custom Walk completion",
+    )
+    spawn_start = function_body(source, "OverworldWildSpawns_SetSpawnRunState")
+    spawn_clear = function_body(source, "OverworldWildSpawns_ClearSpawnRunState")
+    require(
+        spawn_start,
+        ("walkMomentumReset(", "movementWalkMomentum[slot]"),
+        "spawn-run fixed-speed start",
+    )
+    require(
+        spawn_clear,
+        ("movementWalkMomentum[slot].speed = 0;",),
+        "spawn-run momentum finish",
+    )
+    reject(
+        source,
+        ("OverworldWildSpawns_GetMovementWalkCommandForProfile",),
+        "obsolete quantized profile Walk command",
+    )
+    directed = function_body(
+        source,
+        "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand",
+    )
+    require(
+        directed,
+        (
+            "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(movementDirections)",
+            "!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(movementDirections)",
+        ),
+        "wild directed diagonal/cardinal policy",
+    )
+    reject(
+        directed,
+        ("hopAllowNonCardinal == OW_WILD_BEHAVIOR_BOOL_YES",),
+        "old diagonal-only exclusion",
+    )
+    active = function_body(
+        source,
+        "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand",
+    )
+    require(
+        active,
+        (
+            "primitives->attentiveLocomotion\n"
+            "                == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
+            "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(",
+            "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(",
+        ),
+        "directed diagonal Wander/Chase routing",
+    )
+
+    require(
+        source,
+        (
+            "#define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT "
+            "OW_WILD_BEHAVIOR_WALK_TIME_DEFAULT",
+            "boostedProfile.attentiveSpeed > "
+            "profile->attentiveChaseBoostSpeed",
+        ),
+        "wild frame-time fallback and scheduler",
+    )
+    reject(
+        source,
+        (
+            "OverworldWildSpawns_GetFrameMovementDecisionIntervalForSpeed",
+            "OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed",
+            "boostedProfile.attentiveSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
+        ),
+        "old tier-only wild speed policy",
+    )
+
     print(
-        "overworld Walk skid context, continuous buildup, and mounted parity verified"
+        "wild exact-frame Walk timing, skid, diagonal, and completion rules verified"
     )
     return 0
 

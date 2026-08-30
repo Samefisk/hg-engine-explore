@@ -10,7 +10,7 @@ typedef struct LocalMapObject LocalMapObject;
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY_ADDR 0x023BC800
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_END_ADDR 0x023BD400
 #define OVERWORLD_WILD_RUNTIME_MAGIC 0x3152574F /* "OWR1" */
-#define OVERWORLD_WILD_RUNTIME_VERSION 8
+#define OVERWORLD_WILD_RUNTIME_VERSION 9
 
 typedef BOOL (*OverworldWildRuntimeValidateFunc)(void);
 typedef BOOL (*OverworldWildRuntimeQuerySurfaceFunc)(
@@ -39,6 +39,7 @@ typedef BOOL (*OverworldWildRuntimeWalkMomentumFinishFunc)(
     OverworldWildWalkMomentumState *state,
     u8 baseSpeed,
     u8 spotState,
+    u8 fastestTravelTime,
     u8 tilesToAccelerate,
     u8 completedDirection,
     u8 completedDistance,

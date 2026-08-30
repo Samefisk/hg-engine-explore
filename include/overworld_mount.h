@@ -22,6 +22,8 @@ typedef enum OverworldMountMotionMode {
     OVERWORLD_MOUNT_MOTION_HOP,
     OVERWORLD_MOUNT_MOTION_TELEPORT,
     OVERWORLD_MOUNT_MOTION_CRASH,
+    /* Exact-frame, one-tile movement with no jump arc. */
+    OVERWORLD_MOUNT_MOTION_WALK,
 } OverworldMountMotionMode;
 
 typedef enum OverworldMountCancelReason {

@@ -21,7 +21,17 @@ const CONDITION_ON_ROOFTOP = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP_OR_SIGNPOST"
 const LEGACY_CONDITION_ON_ROOFTOP = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP";
 const CONDITION_ON_ROOFTOP_BIT = 1;
 const CONDITIONAL_DEFAULT_TERRAIN_BITS = 64 | 128;
-const CONDITIONAL_MOVEMENT_SPEED_MAX = 4;
+const CONDITIONAL_MOVEMENT_SPEED_MAX = 32;
+const WALK_TIME_FIELDS = Object.freeze(new Set([
+  "chillSpeed",
+  "attentiveSpeed",
+  "tiredSpeed",
+  "maxWalkSpeed",
+  "chaseBoostSpeed",
+  "attentiveChaseBoostSpeed",
+  "chainRepositionSpeed",
+  "walkStompTime",
+]));
 const CONDITIONAL_PROFILE_NONE_VALUE = 0xFF;
 const CONDITIONS_LIFECYCLE_SECTION_ID = "conditions";
 const CONDITIONAL_LIFECYCLE_SECTION_PREFIX = "conditional:";
@@ -101,7 +111,7 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     label: "Chase boost",
     fields: Object.freeze([
       Object.freeze({ key: "attentiveChaseBoostDistance", label: "Distance", unit: "tiles" }),
-      Object.freeze({ key: "attentiveChaseBoostSpeed", label: "Speed", unit: "speed" }),
+      Object.freeze({ key: "attentiveChaseBoostSpeed", label: "Walk time", unit: "frames" }),
     ]),
   }),
   "active-target-tiles": Object.freeze({
@@ -124,7 +134,7 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
       Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Chance to run the pause action. A failed roll starts a new movement chain" }),
       Object.freeze({ key: "chainRepositionJumpCount", label: "Reposition moves", unit: "moves", note: "Number of fixed-facing random jumps, steps, or skids. Steps and skids finish the pause after the final move" }),
-      Object.freeze({ key: "chainRepositionSpeed", label: "Reposition speed", unit: "speed", note: "Movement speed for Reposition steps and skids; jumps use Hop timing" }),
+      Object.freeze({ key: "chainRepositionSpeed", label: "Reposition Walk time", unit: "frames", note: "Travel time for Reposition steps and skids; jumps use Hop timing" }),
       Object.freeze({ key: "chainRepositionDistance", label: "Skid distance", unit: "tiles", note: "Tiles travelled by each Reposition skid" }),
       Object.freeze({ key: "chainRepositionDust", label: "Skid dust", unit: "", note: "Play a dust particle on every tile crossed by a Reposition skid" }),
       Object.freeze({ key: "chainRepositionAllowCardinal", label: "Cardinal directions", unit: "", note: "Allow up, down, left, and right Reposition directions" }),
@@ -179,9 +189,9 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       }),
       Object.freeze({
         key: "chainRepositionSpeed",
-        label: "Reposition speed",
-        unit: "speed",
-        note: "Movement speed for Reposition steps and skids; jumps use Hop timing",
+        label: "Reposition Walk time",
+        unit: "frames",
+        note: "Travel time for Reposition steps and skids; jumps use Hop timing",
       }),
       Object.freeze({ key: "chainRepositionDistance", label: "Skid distance", unit: "tiles", note: "Tiles travelled by each Reposition skid" }),
       Object.freeze({ key: "chainRepositionDust", label: "Skid dust", unit: "", note: "Play a dust particle on every tile crossed by a Reposition skid" }),
@@ -317,7 +327,7 @@ const FIELD_SECTIONS = Object.freeze([
       "chainRepositionSpeed",
       "chainRepositionDistance", "chainRepositionDust",
       "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal",
-      "tilesToAccelerate", "maxWalkSpeed", "walkOptions", "wanderStraightChance",
+      "tilesToAccelerate", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance",
       "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
       "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
       "alertSpecialAction",
@@ -501,6 +511,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
     walkOptions: "walkOptions",
+    walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
@@ -514,6 +525,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
     walkOptions: "walkOptions",
+    walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
@@ -527,6 +539,7 @@ const MOVEMENT_FIELDS = Object.freeze({
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
     walkOptions: "walkOptions",
+    walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
@@ -1524,15 +1537,27 @@ export function createProfilesController({
     return Boolean(parseNumericOverrideRaw(raw));
   }
 
-  function numericOperatorStateLabel(raw, changed) {
+  function numericOperatorStateLabel(raw, changed, fieldKey = "") {
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
+    const walkTime = WALK_TIME_FIELDS.has(fieldKey);
     if (operator.kind === "compound") {
-      const direction = operator.bound.kind === "atLeast" ? "no less than" : "no greater than";
+      const direction = walkTime
+        ? (operator.bound.kind === "atLeast" ? "no faster than" : "no slower than")
+        : (operator.bound.kind === "atLeast" ? "no less than" : "no greater than");
       return `${changed ? "Edited compound formula" : "Adjusts the earlier stored value"} by ${operator.adjust.operand > 0 ? "+" : ""}${operator.adjust.operand}, then limits it to ${direction} ${operator.bound.operand}`;
     }
     if (operator.kind === "adjust") {
+      if (walkTime) {
+        const direction = operator.operand > 0 ? "slower" : "faster";
+        return `${changed ? "Edited adjustment" : "Adjusts earlier stored value"} by ${Math.abs(operator.operand)} frames ${direction}; the stored result is clamped to this field's valid range`;
+      }
       return `${changed ? "Edited adjustment" : "Adjusts earlier stored value"} by ${raw}; the stored result is clamped to this field's valid range`;
+    }
+    if (walkTime) {
+      return operator.kind === "atLeast"
+        ? `${changed ? "Edited fastest limit" : "Limits the earlier stored value"} to no faster than ${operator.operand} frames`
+        : `${changed ? "Edited slowest limit" : "Limits the earlier stored value"} to no slower than ${operator.operand} frames`;
     }
     if (operator.kind === "atLeast") {
       return `${changed ? "Edited minimum" : "Raises the earlier stored value"} to no less than ${operator.operand}`;
@@ -1540,16 +1565,33 @@ export function createProfilesController({
     return `${changed ? "Edited maximum" : "Lowers the earlier stored value"} to no greater than ${operator.operand}`;
   }
 
-  function numericOperatorVisibleNote(raw) {
+  function numericOperatorVisibleNote(raw, fieldKey = "") {
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
+    const walkTime = WALK_TIME_FIELDS.has(fieldKey);
     if (operator.kind === "compound") {
-      const bound = operator.bound.kind === "atLeast"
-        ? `at least ${operator.bound.operand} (/<${operator.bound.operand})`
-        : `at most ${operator.bound.operand} (/>${operator.bound.operand})`;
-      return `adjust ${operator.adjust.operand > 0 ? "+" : ""}${operator.adjust.operand}, then ${bound}`;
+      const bound = walkTime
+        ? (operator.bound.kind === "atLeast"
+          ? `no faster than ${operator.bound.operand} frames (/<${operator.bound.operand})`
+          : `no slower than ${operator.bound.operand} frames (/>${operator.bound.operand})`)
+        : (operator.bound.kind === "atLeast"
+          ? `at least ${operator.bound.operand} (/<${operator.bound.operand})`
+          : `at most ${operator.bound.operand} (/>${operator.bound.operand})`);
+      const adjustment = walkTime
+        ? `${Math.abs(operator.adjust.operand)} frames ${operator.adjust.operand > 0 ? "slower" : "faster"}`
+        : `${operator.adjust.operand > 0 ? "+" : ""}${operator.adjust.operand}`;
+      return `adjust ${adjustment}, then ${bound}`;
     }
-    if (operator.kind === "adjust") return `adjust ${raw}`;
+    if (operator.kind === "adjust") {
+      return walkTime
+        ? `${Math.abs(operator.operand)} frames ${operator.operand > 0 ? "slower" : "faster"}`
+        : `adjust ${raw}`;
+    }
+    if (walkTime) {
+      return operator.kind === "atLeast"
+        ? `no faster than ${operator.operand} frames (/<${operator.operand})`
+        : `no slower than ${operator.operand} frames (/>${operator.operand})`;
+    }
     return operator.kind === "atLeast"
       ? `at least ${operator.operand} (/<${operator.operand})`
       : `at most ${operator.operand} (/>${operator.operand})`;
@@ -1641,7 +1683,12 @@ export function createProfilesController({
     }
     const listId = `pv2-numeric-options-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const errorId = `pv2-numeric-error-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-    const syntax = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : "", permissions.adjust && permissions.bounds ? "+1, /<2" : ""].filter(Boolean).join(", ");
+    const walkTime = WALK_TIME_FIELDS.has(fieldKey);
+    const syntax = [
+      permissions.adjust ? (walkTime ? "+2 (slower) or -1 (faster)" : "+2 or -1") : "",
+      permissions.bounds ? (walkTime ? "/<2 (no faster) or />2 (no slower)" : "/<2 or />2") : "",
+      permissions.adjust && permissions.bounds ? "+1, /<2" : "",
+    ].filter(Boolean).join(", ");
     const title = syntax
       ? `Clear to inherit. Type an exact value, ${syntax}.`
       : (allowInherit
@@ -1965,11 +2012,11 @@ export function createProfilesController({
         if (!existing || (existing.inactive && !candidate.inactive)) nodes.set(field, candidate);
       });
     };
-    append([fields.speed], usesMovementSpeed, { label: "Movement speed" });
+    append([fields.speed], usesMovementSpeed, { label: "Walk time", unit: "frames" });
     if (fields.maxWalkSpeed) {
       append([fields.maxWalkSpeed], usesWalkAcceleration, {
-        label: "Max speed",
-        unit: "speed",
+        label: "Fastest Walk time",
+        unit: "frames",
       });
     }
     if (fields.walkAcceleration) {
@@ -1981,6 +2028,12 @@ export function createProfilesController({
     if (fields.walkOptions) {
       append([fields.walkOptions], usesWalkAcceleration, {
         virtual: "walk-options",
+      });
+    }
+    if (fields.walkStompTime) {
+      append([fields.walkStompTime], usesWalkAcceleration, {
+        label: "Stomp at Walk time",
+        unit: "frames",
       });
     }
     const movementDirectionField = fields.hopPath.fields[0];
@@ -2138,7 +2191,7 @@ export function createProfilesController({
         : (hasOverride ? "Overrides base" : "Inherited"))
       : (changed ? "Edited value" : "Saved value");
     const numericOperator = parseNumericOverrideRaw(stateRaw);
-    if (override && numericOperator) stateLabel = numericOperatorStateLabel(stateRaw, changed);
+    if (override && numericOperator) stateLabel = numericOperatorStateLabel(stateRaw, changed, fieldKey);
     if (presentation.inactive) stateLabel = `${stateLabel}; currently inactive`;
     const instance = presentation.instance || fieldKey;
     const label = fieldLabelForProfile(profile, fieldKey, presentation);
@@ -2156,7 +2209,7 @@ export function createProfilesController({
     const stateMarkup = `<span id="${escapeHtml(descriptionId)}" class="sr-only">${escapeHtml(description)}</span>`;
     const visibleMeta = [
       unit ? `<span class="pv2-field-unit" aria-hidden="true">${escapeHtml(unit)}</span>` : "",
-      override && numericOperator ? `<span class="pv2-field-note pv2-field-note--operator" aria-hidden="true">${escapeHtml(numericOperatorVisibleNote(stateRaw))}</span>` : "",
+      override && numericOperator ? `<span class="pv2-field-note pv2-field-note--operator" aria-hidden="true">${escapeHtml(numericOperatorVisibleNote(stateRaw, fieldKey))}</span>` : "",
       presentation.inactive ? `<span class="pv2-field-note" aria-hidden="true">inactive</span>` : "",
       hasContextBase ? `<span class="field-base base-value pv2-field-base" aria-hidden="true">(${escapeHtml(baseLabel)})</span>` : "",
     ].filter(Boolean).join("");
@@ -2264,7 +2317,7 @@ export function createProfilesController({
           ? (hasOverride ? "Edited override" : "Will inherit")
           : (hasOverride ? "Overrides base" : "Inherited"))
         : (changed ? "Edited value" : "Saved value");
-      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed);
+      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed, control.fieldKey);
       if (inactive) stateLabel = `${stateLabel}; currently inactive`;
       const instance = `${presentation.instance}:${control.fieldKey}`;
       const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -2286,7 +2339,7 @@ export function createProfilesController({
         description,
         hasContextBase,
         baseLabel,
-        operatorNote: numericOperatorVisibleNote(raw),
+        operatorNote: numericOperatorVisibleNote(raw, control.fieldKey),
         options: fieldOptions(control.fieldKey, raw, profile, control.node || {}),
       };
     });
@@ -2366,7 +2419,7 @@ export function createProfilesController({
           ? (hasOverride ? "Edited override" : "Will inherit")
           : (hasOverride ? "Overrides base" : "Inherited"))
         : (changed ? "Edited value" : "Saved value");
-      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed);
+      if (override && isNumericOverrideRaw(raw)) stateLabel = numericOperatorStateLabel(raw, changed, definition.key);
       if (inactive) stateLabel = `${stateLabel}; currently inactive`;
       const instance = `${presentation.instance}:${definition.key}`;
       const descriptionId = `pv2-field-description-${instance.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -2393,7 +2446,7 @@ export function createProfilesController({
         description,
         hasContextBase,
         baseLabel,
-        operatorNote: numericOperatorVisibleNote(raw),
+        operatorNote: numericOperatorVisibleNote(raw, definition.key),
         rangeMember,
         options: fieldOptions(definition.key, raw, profile, node),
       };
@@ -2727,7 +2780,6 @@ export function createProfilesController({
       ? (changed ? "changed" : (inherited ? "inherited" : "override"))
       : (changed ? "changed" : "saved");
     const allowTurning = !(options & 1);
-    const stompSpeed = (options >> 1) & 7;
     const crashSound = (options >> 4) & 1;
     const allowAcceleration = !(options & 0x20);
     const playerFacing = Boolean(options & 0x40);
@@ -2736,11 +2788,10 @@ export function createProfilesController({
     const common = `data-walk-option-part data-profile-key="${profileKeyValue}" data-field-key="${fieldKey}"`;
     return `
       <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
-        <span class="field-copy pv2-field-copy"><strong>Walk options</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared packed movement policy</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
-        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:5">
+        <span class="field-copy pv2-field-copy"><strong>Walk options</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared movement policy</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:4">
           <label class="pv2-composite-control"><span><b>Allow turning</b></span><input type="checkbox" ${common} data-walk-option="turning" ${allowTurning ? "checked" : ""}></label>
           <label class="pv2-composite-control"><span><b>Allow acceleration</b></span><input type="checkbox" ${common} data-walk-option="acceleration" ${allowAcceleration ? "checked" : ""}></label>
-          <label class="pv2-composite-control"><span><b>Stomp at speed</b><small>0 disables</small></span><select class="field-control" ${common} data-walk-option="stomp">${[0, 1, 2, 3, 4].map((value) => `<option value="${value}" ${stompSpeed === value ? "selected" : ""}>${value === 0 ? "None" : `Speed ${value}`}</option>`).join("")}</select></label>
           <label class="pv2-composite-control"><span><b>Crash sound</b></span><select class="field-control" ${common} data-walk-option="crash"><option value="0" ${crashSound === 0 ? "selected" : ""}>None</option><option value="1" ${crashSound === 1 ? "selected" : ""}>Wall hit</option></select></label>
           <label class="pv2-composite-control"><span><b>Facing</b></span><select class="field-control" ${common} data-walk-option="facing"><option value="movement" ${!fixedFacing && !playerFacing ? "selected" : ""}>Face movement</option><option value="fixed" ${fixedFacing ? "selected" : ""}>Fixed until pause action</option><option value="player" ${playerFacing ? "selected" : ""}>Face player</option></select></label>
           ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-walk-options" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
@@ -3198,10 +3249,10 @@ export function createProfilesController({
     if (excludedNames.length) terrainParts.push(`not ${excludedNames.join(" or ")}`);
     const minSpeed = conditionalMovementSpeed(entry.minMovementSpeed);
     const maxSpeed = conditionalMovementSpeed(entry.maxMovementSpeed);
-    const speed = !minSpeed && !maxSpeed
+    const time = !minSpeed && !maxSpeed
       ? ""
-      : (minSpeed === maxSpeed ? `speed ${minSpeed}` : `speed ${minSpeed}–${maxSpeed}`);
-    return [...terrainParts, speed].filter(Boolean).join(" and ") || "No conditions";
+      : (minSpeed === maxSpeed ? `${minSpeed} frames/tile` : `${minSpeed}–${maxSpeed} frames/tile`);
+    return [...terrainParts, time].filter(Boolean).join(" and ") || "No conditions";
   }
 
   function renderConditionalTerrainPolicy(profile, conditionalState) {
@@ -3228,9 +3279,9 @@ export function createProfilesController({
     return min === max ? "exact" : "range";
   }
 
-  function movementSpeedOptions(selected) {
+  function movementTimeOptions(selected) {
     return Array.from({ length: CONDITIONAL_MOVEMENT_SPEED_MAX }, (_, index) => index + 1)
-      .map((speed) => `<option value="${speed}" ${speed === selected ? "selected" : ""}>${speed}</option>`)
+      .map((time) => `<option value="${time}" ${time === selected ? "selected" : ""}>${time} frames</option>`)
       .join("");
   }
 
@@ -3240,10 +3291,10 @@ export function createProfilesController({
     const min = conditionalMovementSpeed(conditionalState.minMovementSpeed) || 1;
     const max = conditionalMovementSpeed(conditionalState.maxMovementSpeed) || (mode === "range" ? CONDITIONAL_MOVEMENT_SPEED_MAX : min);
     return `<div class="pv2-conditional-speed">
-      <span><strong>Movement speed</strong><small>Match the resolved Chill speed before this conditional override: any, exact, or an inclusive range.</small></span>
+      <span><strong>Walk time</strong><small>Match the resolved Chill travel time before this conditional override: any, exact, or an inclusive range.</small></span>
       <label><span>Match</span><select class="field-control" data-condition-speed-mode data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}"><option value="any" ${mode === "any" ? "selected" : ""}>Any</option><option value="exact" ${mode === "exact" ? "selected" : ""}>Exact</option><option value="range" ${mode === "range" ? "selected" : ""}>Range</option></select></label>
-      ${mode !== "any" ? `<label><span>${mode === "exact" ? "Speed" : "Minimum"}</span><select class="field-control" data-condition-speed-min data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementSpeedOptions(min)}</select></label>` : ""}
-      ${mode === "range" ? `<label><span>Maximum</span><select class="field-control" data-condition-speed-max data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementSpeedOptions(max)}</select></label>` : ""}
+      ${mode !== "any" ? `<label><span>${mode === "exact" ? "Time" : "Fastest time"}</span><select class="field-control" data-condition-speed-min data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementTimeOptions(min)}</select></label>` : ""}
+      ${mode === "range" ? `<label><span>Slowest time</span><select class="field-control" data-condition-speed-max data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementTimeOptions(max)}</select></label>` : ""}
     </div>`;
   }
 
@@ -3260,7 +3311,7 @@ export function createProfilesController({
         ${configuredStates ? `<ul class="member-list pv2-member-list">${configuredStates}</ul>` : `<p class="pv2-linked-state-empty">No conditional states have been added.</p>`}
       </div>
       <div class="pv2-state-profile-picker" data-condition-add-row>
-        <span><strong>Add conditional state</strong><small>Starts with Rooftop and Signpost accepted; adjust any tile or speed after adding.</small></span>
+        <span><strong>Add conditional state</strong><small>Starts with Rooftop and Signpost accepted; adjust any tile or Walk time after adding.</small></span>
         <button type="button" data-action="add-conditional-state">Add state</button>
       </div>
     </div>`;
@@ -3612,8 +3663,8 @@ export function createProfilesController({
           || !Number.isInteger(accepted) || accepted < 0 || accepted & ~allTerrainBits || accepted & ~explicit) {
         errors.push(`${nameFor(parent) || "A conditional state"} has an invalid tile condition`);
       }
-      if ((!minSpeed && maxSpeed) || (minSpeed && !maxSpeed) || minSpeed > maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} has an invalid movement speed range`);
-      if (!explicit && !minSpeed && !maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} needs at least one tile or movement speed condition`);
+      if ((!minSpeed && maxSpeed) || (minSpeed && !maxSpeed) || minSpeed > maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} has an invalid Walk-time range`);
+      if (!explicit && !minSpeed && !maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} needs at least one tile or Walk-time condition`);
       if (seenConditionalStates.has(signature)) errors.push(`${nameFor(parent) || "A profile"} has the same conditional state more than once`);
       seenConditionalStates.add(signature);
     });
@@ -4391,7 +4442,7 @@ export function createProfilesController({
       state.profileLifecycleSection = conditionalLifecycleBaseId(conditionalState);
       renderEditor(); renderList(); signalDirty();
       focusSectionNavigation(state.profileLifecycleSection);
-      announce("Rooftop or Signpost state added. Adjust its tile or speed conditions, then choose its override profile.");
+      announce("Rooftop or Signpost state added. Adjust its tile or Walk-time conditions, then choose its override profile.");
     }
     else if (action === "remove-conditional-state" && profile) {
       const stateKey = target.dataset.conditionStateKey || "";
@@ -4767,8 +4818,6 @@ export function createProfilesController({
         options = event.target.checked ? options & ~1 : options | 1;
       } else if (part === "acceleration") {
         options = event.target.checked ? options & ~0x20 : options | 0x20;
-      } else if (part === "stomp") {
-        options = (options & ~0x0E) | ((Number(event.target.value) & 7) << 1);
       } else if (part === "crash") {
         options = (options & ~0x10) | ((Number(event.target.value) & 1) << 4);
       } else if (part === "facing") {
@@ -5297,7 +5346,7 @@ export function createProfilesController({
             if (explicit < 0 || accepted < 0 || (accepted & ~explicit)
                 || minSpeed < 0 || maxSpeed > CONDITIONAL_MOVEMENT_SPEED_MAX
                 || ((!minSpeed && maxSpeed) || (minSpeed && !maxSpeed) || minSpeed > maxSpeed)) {
-              throw new TypeError(`Profile conditionalStates.${index} has an invalid tile or movement speed condition.`);
+              throw new TypeError(`Profile conditionalStates.${index} has an invalid tile or Walk-time condition.`);
             }
           }
           return cloneConditionalState(entry);

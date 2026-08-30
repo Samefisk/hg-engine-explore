@@ -50,10 +50,10 @@ def main() -> int:
     validator = (REPO / "scripts/validate_overworld_wild_blobs.py").read_text()
 
     for required in (
-        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 71",
+        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 72",
         "u8 walkPause;",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)",
-        "OverworldWildBehaviorProfileDataSizeMustRemain70Bytes",
+        "OverworldWildBehaviorProfileDataSizeMustRemain72Bytes",
         "OverworldWildBehaviorOverrideProfileSizeMustRemain212Bytes",
     ):
         if required not in header:
@@ -76,12 +76,14 @@ def main() -> int:
     for required in (
         "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE",
         "OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID",
-        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER",
     ):
         if required not in nervous:
             raise SystemExit(f"Nervous scavenger Walk pause is incomplete: {required}")
+    if "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER" not in nervous \
+            and not re.search(r"\b12,\s*12,", nervous):
+        raise SystemExit("Nervous scavenger does not retain its Active and Tired lanes")
     if not re.search(
-        r"30,\s*60,\s*OW_WILD_BEHAVIOR_WALK_PAUSE_DEFAULT,\s*3,\s*\}",
+        r"30,\s*60,\s*(?:OW_WILD_BEHAVIOR_WALK_PAUSE_DEFAULT|32),\s*3,\s*0,\s*\}",
         nervous,
     ):
         raise SystemExit(
@@ -97,11 +99,11 @@ def main() -> int:
             raise SystemExit(f"{name} does not preserve its zero Walk wait")
 
     for source, required in (
-        (runtime, "OverworldWildRuntimeBehaviorProfileDataSizeMustRemain70"),
-        (runtime, "OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain66"),
+        (runtime, "OverworldWildRuntimeBehaviorProfileDataSizeMustRemain72"),
+        (runtime, "OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain67"),
         (backend, '"walkPause"'),
         (viewer, "walkPause"),
-        (validator, "OWBD_PROFILE_SIZE = 70"),
+        (validator, "OWBD_PROFILE_SIZE = 72"),
         (validator, "OWBD_OVERRIDE_PROFILE_SIZE = 212"),
     ):
         if required not in source:

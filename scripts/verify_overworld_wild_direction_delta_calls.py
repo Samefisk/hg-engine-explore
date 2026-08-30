@@ -10,9 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OBJECT = ROOT / "build/overworld_wild_spawns_overlay_linked.o"
-SYMBOL_TARGETS = {
-    "OverworldWildSpawns_MovementDirectionDeltaX": 0x02060F0D,
-    "OverworldWildSpawns_MovementDirectionDeltaY": 0x02060F19,
+WALK_MODULE_SLOTS = {
+    "OverworldWildSpawns_MovementDirectionDeltaX": 0x023BF424,
+    "OverworldWildSpawns_MovementDirectionDeltaY": 0x023BF428,
 }
 
 
@@ -53,7 +53,7 @@ def main() -> None:
     symbols = {}
     for line in nm.splitlines():
         parts = line.split()
-        if len(parts) != 3 or parts[2] not in SYMBOL_TARGETS:
+        if len(parts) != 3 or parts[2] not in WALK_MODULE_SLOTS:
             continue
         symbols[parts[2]] = (int(parts[0], 16), parts[1])
 
@@ -72,21 +72,22 @@ def main() -> None:
         )
         text = text_path.read_bytes()
 
-    for name, target in SYMBOL_TARGETS.items():
+    for name, slot in WALK_MODULE_SLOTS.items():
         if name not in symbols:
             fail(f"missing symbol {name}")
         address, symbol_type = symbols[name]
         if symbol_type not in ("T", "t"):
             fail(f"{name} is {symbol_type}, not a Thumb function")
         offset = address - text_address
-        if offset < 0 or offset + 8 > len(text):
+        if offset < 0 or offset + 12 > len(text):
             fail(f"{name} is outside .text")
-        expected = bytes((0x00, 0x4B, 0x18, 0x47)) + target.to_bytes(4, "little")
-        actual = text[offset : offset + 8]
-        if actual != expected:
+        module = bytes((0xDF, 0xF8, 0x04, 0x30, 0x1B, 0x68, 0x18, 0x47)) \
+            + slot.to_bytes(4, "little")
+        actual = text[offset : offset + 12]
+        if actual != module:
             fail(
                 f"{name} wrapper bytes differ: "
-                f"expected {expected.hex()}, got {actual.hex()}"
+                f"expected resident module {module.hex()}, got {actual.hex()}"
             )
 
     print("overworld wild direction-delta Thumb calls verified")

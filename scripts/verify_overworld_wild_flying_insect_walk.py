@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-FACE_PLAYER_RESIDENT_ENTRY = 0x023D9907
+FACE_PLAYER_RESIDENT_ENTRY = 0x023BF468
 sys.path.insert(0, str(REPO))
 
 from scripts import overworld_behavior_profile_viewer as profile_viewer
@@ -52,7 +52,7 @@ def main() -> int:
     )
     profile = profile_entry["profile"]
     expected = {
-        "chillSpeed": 2,
+        "chillSpeed": 8,
         "chillAction": 1,
         "hopAllowNonCardinal": 2,
         "hopMinDistance": 1,
@@ -69,7 +69,7 @@ def main() -> int:
         "walkPause": 0,
         "tilesBeforeTurnSkid": 0,
         "chainRepositionJumpCount": 4,
-        "chainRepositionSpeed": 4,
+        "chainRepositionSpeed": 8,
         "chainRepositionDistance": 2,
         "chainRepositionDust": 0,
         "chainRepositionAllowCardinal": 0,
@@ -110,13 +110,13 @@ def main() -> int:
             follower_entry["override"],
         )
         profile_viewer.normalize_profile(resolved_follower_lane, macros)
-        if profile_viewer.numeric(resolved_follower_lane["chillSpeed"]) != 2:
+        if profile_viewer.numeric(resolved_follower_lane["chillSpeed"]) != 8:
             raise SystemExit(
-                f"Flying insect follower {lane_name} lane does not start at speed 2"
+                f"Flying insect follower {lane_name} lane does not start at 8 frames"
             )
-        if profile_viewer.numeric(resolved_follower_lane["maxWalkSpeed"]) != 4:
+        if profile_viewer.numeric(resolved_follower_lane["maxWalkSpeed"]) != 2:
             raise SystemExit(
-                f"Flying insect follower {lane_name} lane unexpectedly caps max speed"
+                f"Flying insect follower {lane_name} lane does not keep its 2-frame fastest time"
             )
         if not profile_viewer.numeric(resolved_follower_lane["walkOptions"]) & 0x20:
             raise SystemExit(
@@ -151,7 +151,14 @@ def main() -> int:
         REPO
         / "src/overworld_mount_overlay/overworld_mount_overlay.c"
     ).read_text()
-    face_player_runtime = (REPO / "src/overworld_wild_movement.c").read_text()
+    walk_runtime = (
+        REPO
+        / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+    ).read_text()
+    face_player_runtime = (
+        REPO
+        / "src/pokemon_move_history_overlay/overworld_walk_module.c"
+    ).read_text()
     runtime_sources = spawns + face_player_runtime
     for required in (
         "OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION",
@@ -165,17 +172,11 @@ def main() -> int:
     ):
         if required not in runtime_sources:
             raise SystemExit(f"flat-Walk runtime is missing: {required}")
-    if "repositionPauseTicksBySpeed[] = {8, 8, 4, 2, 1}" not in mount:
-        raise SystemExit("flat Reposition speed tiers are not preserved")
-    if not re.search(
-        r"OverworldWildSpawns_HandleFinishedWalkMovement\(.*?"
-        r"momentum->speed\s*>=\s*maxSpeed\s*"
-        r"\|\|\s*OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION\(lane->walkOptions\)"
-        r"\s*\?\s*0\s*:\s*lane->tilesToAccelerate",
-        spawns,
-        re.DOTALL,
-    ):
-        raise SystemExit("wild Walk completion does not disable profile acceleration")
+    if "pauseTicks = lane->chainRepositionSpeed;" not in mount:
+        raise SystemExit("mounted flat Reposition does not use exact frame timing")
+    if "OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(" not in walk_runtime \
+            or "OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION" not in spawns:
+        raise SystemExit("wild Walk completion does not use exact-frame acceleration")
     if not re.search(
         r"OverworldMount_Begin\(.*?"
         r"OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION\(\s*"
@@ -186,20 +187,13 @@ def main() -> int:
     ):
         raise SystemExit("mounted Walk does not disable profile acceleration")
     if not re.search(
-        r"CHAIN_PAUSE_ACTION_REPOSITION_JUMPS\)\s*\{.*?"
-        r"pauseTicks\s*\+=\s*pauseTicks;",
-        mount,
-        re.DOTALL,
-    ):
-        raise SystemExit("Reposition jump timing is no longer converted to real frames")
-    if not re.search(
-        r"if \(chainReposition\) \{\s*"
+        r"if \(chainReposition\s*&&\s*!repositionUsesArc\) \{\s*"
         r"frameCount\s*=\s*runtime->movementDeferredChainPauseTicks\[slot\];\s*"
         r"frameCount\s*\*=\s*distance;\s*"
-        r"\} else if \(flatWalk\)",
+        r"\}",
         spawns,
     ):
-        raise SystemExit("diagonal Walk overrides the dedicated Reposition speed")
+        raise SystemExit("flat Reposition does not use its exact Walk time")
     if not re.search(
         r"profile\.hopTime\s*=\s*profile\.spawnHopTime;\s*"
         r"profile\.hopSwayWidth\s*=\s*profile\.spawnHopSwayWidth;\s*"
@@ -222,44 +216,44 @@ def main() -> int:
     for required in ("straightX", "hasBacktrack", "candidateCount"):
         if required not in helper:
             raise SystemExit(f"flat-Walk direction policy is missing: {required}")
-    if not re.search(
-        r"OverworldWildSpawns_ApplyFacePlayerFacing\(.*?"
-        r"fieldSystem\s*=\s*state->movementFieldSystem;.*?"
-        r"playerObject\s*==\s*NULL.*?"
-        r"dx\s*>\s*0.*?dx\s*=\s*-dx.*?"
-        r"dy\s*>\s*0.*?dy\s*=\s*-dy.*?"
-        r"direction\s*=\s*dx\s*>=\s*dy\s*\?\s*horizontal\s*:\s*vertical",
-        face_player_runtime,
-        re.DOTALL,
-    ):
+    if not all(value in face_player_runtime for value in (
+        "Walk_ApplyFacePlayerFacing(",
+        "state->movementFieldSystem == NULL",
+        "player == NULL",
+        "horizontal = dx > 0 ? WALK_DIRECTION_EAST : WALK_DIRECTION_WEST;",
+        "vertical = dy > 0 ? WALK_DIRECTION_SOUTH : WALK_DIRECTION_NORTH;",
+        "dx = -dx;",
+        "dy = -dy;",
+        "object->curFacing = dx >= dy ? horizontal : vertical;",
+    )):
         raise SystemExit("Face-player readiness or diagonal tie behavior is missing")
     if not re.search(
         r"if \(OW_WILD_BEHAVIOR_WALK_FACES_PLAYER\("
         r"profile\.owner\.walkOptions\)\) \{.*?"
-        r"OVERWORLD_WILD_FACE_PLAYER_FACING_ADDR\)\(",
+        r"OVERWORLD_WALK_FACE_MODULE_ENTRY->apply\(",
         spawns,
         re.DOTALL,
     ):
         raise SystemExit("Face-player work is not gated before the resident call")
 
-    movement_header = (REPO / "include/overworld_wild_movement.h").read_text()
+    movement_header = (REPO / "include/overworld_walk_module.h").read_text()
     if (
-        f"OVERWORLD_WILD_FACE_PLAYER_FACING_ADDR 0x{FACE_PLAYER_RESIDENT_ENTRY:08X}"
+        f"OVERWORLD_WALK_FACE_MODULE_ENTRY_ADDR 0x{FACE_PLAYER_RESIDENT_ENTRY:08X}"
         not in movement_header
     ):
         raise SystemExit("Face-player resident entry address is stale")
 
-    core_object = REPO / "build/linked.o"
+    core_object = REPO / "build/pokemon_move_history_overlay_linked.o"
     spawns_object = REPO / "build/overworld_wild_spawns_overlay_linked.o"
     if core_object.is_file() and spawns_object.is_file():
         core_symbols = subprocess.check_output(
-            ["arm-none-eabi-readelf", "-sW", str(core_object)],
+            ["arm-none-eabi-nm", "-n", str(core_object)],
             text=True,
         )
         symbol_match = re.search(
-            r"\b([0-9A-Fa-f]{8})\s+\d+\s+FUNC\s+GLOBAL\s+DEFAULT\s+\d+\s+"
-            r"OverworldWildSpawns_ApplyFacePlayerFacing\b",
+            r"^([0-9A-Fa-f]{8})\s+[A-Za-z]\s+gOverworldWalkFaceModuleEntry$",
             core_symbols,
+            re.MULTILINE,
         )
         if symbol_match is None or int(symbol_match.group(1), 16) != FACE_PLAYER_RESIDENT_ENTRY:
             raise SystemExit("Built face-player resident entry moved")
@@ -268,7 +262,7 @@ def main() -> int:
             text=True,
         )
         if "__OverworldWildSpawns_ApplyFacePlayerFacing_from_thumb" in spawns_symbols:
-            raise SystemExit("Face-player call still uses the unsafe linker veneer")
+            raise SystemExit("Face-player call still uses the movable core veneer")
     if not re.search(
         r"OverworldWildSpawns_StartSpawnHop\(.*?"
         r"fieldSystem->playerAvatar->mapObject\s*==\s*NULL.*?"
@@ -283,7 +277,7 @@ def main() -> int:
         "OW_WILD_BEHAVIOR_WALK_OPTION_DISABLE_ACCELERATION (1u << 5)",
         "OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER (1u << 6)",
         "OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING (1u << 7)",
-        "OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0",
+        "OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0x0E",
     ):
         if required not in header:
             raise SystemExit(f"Walk facing schema is missing: {required}")

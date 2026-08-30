@@ -14,7 +14,12 @@ REPO = Path(__file__).resolve().parents[1]
 OVERLAY_ID = 153
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x023C0400
-OVERLAY_GUARD = 0x1000
+OVERLAY_SIZE_LIMIT = 0x1C00
+OVERLAY_GUARD = 0x400
+OVERLAY_WALK_ENTRY = OVERLAY_BASE + 0x1000
+OVERLAY_PROFILE_ENTRY = OVERLAY_BASE + 0x1040
+OVERLAY_MOUNT_ENTRY = OVERLAY_BASE + 0x1058
+OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
 TASK6_OVERLAY_ID = 155
 TASK6_OVERLAY_BASE = 0x023BD400
 TASK6_OVERLAY_LIMIT = 0x023BE400
@@ -1279,6 +1284,7 @@ def main() -> None:
     )
     require(
         0 < len(overlay)
+        and len(overlay) <= OVERLAY_SIZE_LIMIT
         and OVERLAY_BASE + len(overlay) + OVERLAY_GUARD <= OVERLAY_LIMIT,
         "overlay 153 exceeds its reservation or upper growth guard",
     )
@@ -1290,6 +1296,21 @@ def main() -> None:
         ],
         text=True,
     )
+    for symbol, expected in (
+        ("gOverworldWalkModuleEntry", OVERLAY_WALK_ENTRY),
+        ("gOverworldWalkProfileModuleEntry", OVERLAY_PROFILE_ENTRY),
+        ("gOverworldWalkMountModuleEntry", OVERLAY_MOUNT_ENTRY),
+        ("gOverworldWalkFaceModuleEntry", OVERLAY_FACE_ENTRY),
+    ):
+        match = re.search(
+            rf"^([0-9a-fA-F]+) [A-Za-z] {re.escape(symbol)}$",
+            linked_symbols,
+            re.MULTILINE,
+        )
+        require(
+            match is not None and int(match.group(1), 16) == expected,
+            f"overlay 153 Walk service entry moved: {symbol}",
+        )
     query_impl_match = re.search(
         r"^([0-9a-fA-F]+) T PokemonMoveHistory_QueryImpl$",
         linked_symbols,

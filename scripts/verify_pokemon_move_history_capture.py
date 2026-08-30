@@ -55,9 +55,15 @@ else:
 
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
-OVERLAY_LIMIT = 0x1000
+OVERLAY_LIMIT = 0x1C00
+OVERLAY_WALK_ENTRY = OVERLAY_BASE + 0x1000
+OVERLAY_PROFILE_ENTRY = OVERLAY_BASE + 0x1040
+OVERLAY_MOUNT_ENTRY = OVERLAY_BASE + 0x1058
+OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
+OVERLAY_GUARDED_END = OVERLAY_BASE + OVERLAY_LIMIT
+OVERLAY152_BASE = 0x023C0400
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "5af0491f46bec5684ebc61744310127356065e360d2e6be64b73ad1e6a85a21a"
+    "8f7bd2863e9c262a65632eb43f91b4f3c308b8334f9ddc65b0d38baafed0276a"
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
@@ -3786,8 +3792,10 @@ def source_contracts() -> None:
         and "MOVE_HISTORY_CAPTURE_OBJECTS" not in makefile
         and "-include $(basename $1).d" in makefile
         and "$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) "
-        "| $(CODE_BUILD_DIRS)" in makefile
-        and "$1: $2 | $(CODE_BUILD_DIRS)" in makefile,
+        "$(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv "
+        "toolchain-preflight" in makefile
+        and "$1: $2 $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) "
+        "toolchain-preflight" in makefile,
         "incremental move-history objects are not covered by source/dependency "
         "tracking",
     )
@@ -5654,14 +5662,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     153: (
         OVERLAY_BASE,
-        0xFF8,
+        0x1BEA,
         0,
         0,
         0,
         153,
         0,
         0x421600,
-        0x4225F8,
+        0x4231EA,
     ),
     154: (
         0x023C0400,
@@ -5671,8 +5679,8 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         154,
         0,
-        0x422600,
-        0x423AE8,
+        0x423200,
+        0x4246E8,
     ),
     155: (
         OVERLAY155_BASE,
@@ -5682,30 +5690,30 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         155,
         0,
-        0x423C00,
-        0x424C00,
+        0x424800,
+        0x425800,
     ),
     156: (
         0x023BC800,
-        0xBF0,
+        0xBEC,
         0,
         0,
         0,
         156,
         0,
-        0x424C00,
-        0x4257F0,
+        0x425800,
+        0x4263EC,
     ),
     157: (
         0x023BAB00,
-        0x1C34,
+        0x1C20,
         0xBC,
         0,
         0,
         157,
         0,
-        0x425800,
-        0x427434,
+        0x426400,
+        0x428020,
     ),
 }
 OVERLAY129_THUNKS = {
@@ -6012,6 +6020,9 @@ def binary_contracts(
     relearn_object = (
         REPO / "build/pokemon_move_history_overlay/pokemon_move_relearn.o"
     )
+    walk_module_object = (
+        REPO / "build/pokemon_move_history_overlay/overworld_walk_module.o"
+    )
     summary_object = (
         REPO / "build/summary_move_relearn_overlay/summary_move_relearn.o"
     )
@@ -6048,6 +6059,7 @@ def binary_contracts(
         field_binary,
         history_object,
         relearn_object,
+        walk_module_object,
         summary_object,
         summary_entry_object,
         summary_linked,
@@ -6069,6 +6081,10 @@ def binary_contracts(
         len(overlay) <= OVERLAY_LIMIT,
         f"overlay 153 exceeds guarded 0x{OVERLAY_LIMIT:X}-byte envelope",
     )
+    require(
+        OVERLAY_GUARDED_END + 0x400 <= OVERLAY152_BASE,
+        "overlay 153 no longer leaves its 0x400 upper guard",
+    )
     symbols = symbol_table(linked)
     linked_symbol_sizes = symbol_sizes(linked)
     require(
@@ -6080,6 +6096,18 @@ def binary_contracts(
         symbols.get("OverworldWildSpawns_FilterNativeShadowVisibilityImpl")
         == OVERLAY_BASE + 0xF9C,
         "overlay 153 native-shadow visibility filter entry moved",
+    )
+    require(
+        symbols.get("gOverworldWalkModuleEntry") == OVERLAY_WALK_ENTRY
+        and symbols.get("gOverworldWalkProfileModuleEntry")
+            == OVERLAY_PROFILE_ENTRY
+        and symbols.get("gOverworldWalkMountModuleEntry")
+            == OVERLAY_MOUNT_ENTRY,
+        "overlay 153 Walk service entries moved",
+    )
+    require(
+        symbols.get("gOverworldWalkFaceModuleEntry") == OVERLAY_FACE_ENTRY,
+        "overlay 153 face-player service entry moved",
     )
     for name in (
         "PokemonMoveHistory_ReplaceMoveImpl",
@@ -6328,7 +6356,16 @@ def binary_contracts(
         "packaged scripted-daycare field overlay 131 metadata differs",
     )
     require(ov1_base == 0x021E5900, "packaged overlay 1 base differs")
-    require(ov153_base == OVERLAY_BASE, "packaged overlay 153 base differs")
+    require(
+        ov153_base == OVERLAY_BASE
+        and ov153_component.ram_size == len(packaged_ov153)
+        and ov153_component.bss_size == 0
+        and ov153_component.static_init_start == 0
+        and ov153_component.static_init_end == 0
+        and ov153_component.file_id == 153
+        and ov153_component.flags == 0,
+        "packaged overlay 153 metadata or RAM size differs",
+    )
     require(ov154_base == 0x023C0400, "packaged overlay 154 base differs")
     require(
         ov155_base == OVERLAY155_BASE,
@@ -6597,11 +6634,11 @@ def binary_contracts(
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 113
+        and len(packaged_call_inventory) == 143
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
-        ) == 109
+        ) == 139
         and sum(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory

@@ -96,17 +96,17 @@ __wrap_memcpy:
     pop {pc}
 .size __wrap_memcpy, . - __wrap_memcpy
 
-// These stock helpers are Thumb code. Absolute linker symbols have no
-// function type, so a direct far call can generate an ARM-mode veneer.
-// Load the odd Thumb address explicitly instead.
+// The resident Walk module owns cardinal and diagonal direction encoding.
+// Load its fixed dispatch slots instead of calling stock cardinal-only code.
 .align 2
 .global OverworldWildSpawns_MovementDirectionDeltaX
 .thumb_func
 .type OverworldWildSpawns_MovementDirectionDeltaX, function
 OverworldWildSpawns_MovementDirectionDeltaX:
     ldr r3, 1f
+    ldr r3, [r3]
     bx r3
-1:  .word 0x02060F0D
+1:  .word 0x023BF424
 .size OverworldWildSpawns_MovementDirectionDeltaX, . - OverworldWildSpawns_MovementDirectionDeltaX
 
 .align 2
@@ -115,6 +115,7 @@ OverworldWildSpawns_MovementDirectionDeltaX:
 .type OverworldWildSpawns_MovementDirectionDeltaY, function
 OverworldWildSpawns_MovementDirectionDeltaY:
     ldr r3, 2f
+    ldr r3, [r3]
     bx r3
-2:  .word 0x02060F19
+2:  .word 0x023BF428
 .size OverworldWildSpawns_MovementDirectionDeltaY, . - OverworldWildSpawns_MovementDirectionDeltaY

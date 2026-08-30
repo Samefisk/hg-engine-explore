@@ -19,11 +19,12 @@ struct OverworldWildSpawnState;
 #define OW_WILD_MOVEMENT_BEHAVIOR_FLEE_PLAYER 2
 
 #define OW_WILD_WALK_DIRECTION_NONE 0xFF
-#define OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG 4
-#define OW_WILD_WALK_SPEED_MIN 1
-#define OW_WILD_WALK_SPEED_MAX 4
+#define OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG 0x80
+#define OW_WILD_WALK_TRAVEL_TIME_MIN 1
+#define OW_WILD_WALK_TRAVEL_TIME_MAX 32
+#define OW_WILD_WALK_SPEED_MIN OW_WILD_WALK_TRAVEL_TIME_MIN
+#define OW_WILD_WALK_SPEED_MAX OW_WILD_WALK_TRAVEL_TIME_MAX
 #define OW_WILD_WALK_TURN_SKIDS_DISABLED 0
-#define OVERWORLD_WILD_FACE_PLAYER_FACING_ADDR 0x023D9907
 #define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
 #define OW_WILD_SPAWNER_SPOT_STATE_EMOTING 1
 #define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
@@ -51,11 +52,6 @@ typedef void (*OverworldWildWalkEffectCallback)(
     void *context,
     u8 direction,
     BOOL playDirt);
-typedef void (*OverworldWildFacePlayerFacingFunc)(
-    struct OverworldWildSpawnState *state,
-    int slot,
-    u8 emotePlayHopSound);
-
 #define OverworldWildCustomMovement_SetFieldSystem(fieldSystem) ((void)(fieldSystem))
 void OverworldWildSpawns_ApplyFacePlayerFacing(
     struct OverworldWildSpawnState *state,

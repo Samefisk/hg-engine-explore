@@ -252,6 +252,11 @@ def main() -> None:
         REPO
         / "src/overworld_mount_overlay/overworld_mount_overlay.c"
     ).read_text()
+    walk_module_source = (
+        REPO
+        / "src/pokemon_move_history_overlay/overworld_walk_module.c"
+    ).read_text()
+    mount_runtime_source = mount_source + "\n" + walk_module_source
     require(
         "profile->owner.chillSpeed" in mount_source
         and "profile->owner.tilesToAccelerate" in mount_source
@@ -277,7 +282,9 @@ def main() -> None:
     )
     require(
         "OverworldMount_TryNextHopLandingCandidate" in mount_source
-        and "lateral != 0 && lane->hopAllowNonCardinal != 1" in mount_source
+        and "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(" in mount_source
+        and "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(" in mount_source
+        and "lateralMagnitude != search->distance" in mount_source
         and "forwardX * search->distance - forwardY * lateral" in mount_source
         and "forwardY * search->distance + forwardX * lateral" in mount_source
         and "lateralMagnitude = search->lateral == maxDistance" in mount_source
@@ -295,14 +302,14 @@ def main() -> None:
         "mounted Hop does not widen landing candidates from cardinal to diagonal",
     )
     require(
-        "motionStreamAnchor" in mount_source
-        and "motionStreamPreparing" in mount_source
+        "motionStreamAnchor" in mount_runtime_source
+        and "motionStreamPreparing" in mount_runtime_source
         and "OverworldMount_UpdateLandStreamAnchor" in mount_source
         and "OverworldMount_RestoreLandStreamTarget" in mount_source
-        and "extern void LONG_CALL ov01_021F62E8" in mount_source
-        and "ov01_021F62E8(" in mount_source
+        and "extern void LONG_CALL ov01_021F62E8" in mount_runtime_source
+        and "ov01_021F62E8(" in mount_runtime_source
         and "OverworldMount_GetLandDataManager() + 0xA0" in mount_source
-        and "ov01_021F62CC(" not in mount_source
+        and "ov01_021F62CC(" not in mount_runtime_source
         and "motionStreamAnchor.x +=" in mount_source
         and "motionStreamAnchor.z +=" in mount_source
         and "player->xCurr << 16" in mount_source
@@ -315,19 +322,18 @@ def main() -> None:
             mount_source,
             re.DOTALL,
         ) is not None
-        and re.search(
-            r"if \(sOverworldMountState\.motionCooldown != 0\s*"
-            r"\|\| sOverworldMountState\.motionStreamPreparing",
-            mount_source,
-        ) is not None
+        and "OVERWORLD_WALK_MOUNT_MODULE_ENTRY->startFlatMotion(" in mount_source
+        and "if (state->motionCooldown != 0" in walk_module_source
         and re.search(
             r"OverworldMount_UpdateCustomMotion\(\);\s*"
             r"OverworldMount_DrainLandStream\(\);",
             mount_source,
         ) is not None
         and re.search(
-            r"if \(player->xCurr != baseX >> 16 \|\| "
-            r"player->yCurr != baseZ >> 16\) \{\s*"
+            r"if \(sOverworldMountState\.snapshot\.motionMode\s*"
+            r"!= OVERWORLD_MOUNT_MOTION_WALK\s*"
+            r"&& \(player->xCurr != baseX >> 16 \|\| "
+            r"player->yCurr != baseZ >> 16\)\) \{\s*"
             r"player->xPrev = player->xCurr;\s*"
             r"player->yPrev = player->yCurr;",
             mount_source,
@@ -337,15 +343,15 @@ def main() -> None:
     require(
         "OVERWORLD_MOUNT_MOTION_CRASH" in mount_source
         and "OverworldMount_ApplyCrashPresentation" in mount_source
-        and "OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING" in mount_source
+        and "OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING" in mount_runtime_source
         and "lane->hopSwayWidth" in mount_source
         and "lane->hopSpinSpeed" in mount_source,
         "mounted Walk crash or player custom-Jump presentation is incomplete",
     )
     require(
-        "validateHopLanding" in mount_source
+        "validateHopLanding" in mount_runtime_source
         and "PlayerAvatar_ResetMovement" in mount_source
-        and mount_source.count(
+        and mount_runtime_source.count(
             "MapObject_SetPositionFromVectorAndDirection("
         ) >= 3
         and "follower->posVec[0] = player->posVec[0];" in mount_source,
@@ -368,33 +374,82 @@ def main() -> None:
         "mounted spinning Hop resets facing at takeoff or landing",
     )
     require(
-        "bufferedDirection" in mount_source
-        and "stopPending" in mount_source
-        and "Defer stop skid for that frame" in mount_source
+        "bufferedDirection" in mount_runtime_source
+        and "stopPending" in mount_runtime_source
+        and "Defer stop skid for one sample" in mount_runtime_source
         and "MAPOBJECTFLAG_UNK7" in mount_source
         and "MapObject_SetPositionFromVectorAndDirection" in mount_source
-        and "MapObject_StartMovementCommandInternal(follower, movementCommand)"
-            in mount_source
         and re.search(
-            r"if \(!sOverworldMountState\.pendingStep\) \{.*?"
+            r"if \(!sOverworldMountState\.pendingStep\s*"
+            r"\|\| sOverworldMountState\.snapshot\.motionMode\s*"
+            r"== OVERWORLD_MOUNT_MOTION_WALK\) \{.*?"
             r"follower->posVec\[0\] = player->posVec\[0\];.*?"
             r"follower->xCurr = player->xCurr;",
             mount_source,
             re.DOTALL,
         ) is not None
         and "OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND" in mount_source
-        and mount_source.count(
+        and mount_runtime_source.count(
             "MapObject_StartMovementCommandInternal("
         ) >= 4
+        and "facingDirection = sOverworldMountState.turnDirection;"
+            in mount_source
         and re.search(
-            r"if \(sOverworldMountState\.pendingSkid\).*?"
-            r"object->flags \|= MAPOBJECTFLAG_UNK7;.*?"
-            r"object->curFacing = sOverworldMountState\.turnDirection;.*?"
-            r"MapObject_StartMovementCommandInternal\(object, movementCommand\);",
+            r"OverworldMount_TryStartCustomMotion\(\s*"
+            r"avatar,\s*direction,\s*facingDirection\)",
+            mount_source,
+        ) is not None,
+        "mounted turn skid does not keep its old-heading travel and new facing",
+    )
+    require(
+        "OVERWORLD_WALK_MOUNT_MODULE_ENTRY->filterInput(" in mount_source
+        and "state->motionFrameCount = Walk_ClampTime(state->speed);"
+            in walk_module_source
+        and "state->motionArcHeightQ4 = 0;" in walk_module_source
+        and "Walk_StrictDiagonalAllowed" in walk_module_source
+        and "Walk_CanCardinal(avatar, vertical)" in walk_module_source
+        and "Walk_CanCardinal(avatar, horizontal)" in walk_module_source
+        and "Walk_IsFortyFiveDegreeTurn" in walk_module_source
+        and "!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(" in walk_module_source
+        and "requestedDirection < WALK_DIRECTION_NORTH_WEST"
+            in walk_module_source
+        and "A queued direction cannot bypass the profile's movement mode."
+            in walk_module_source
+        and "state->bufferedDirection < WALK_DIRECTION_NORTH_WEST"
+            in walk_module_source
+        and "state->snapshot.profile.tilesBeforeTurnSkid" in walk_module_source
+        and "facingDirection = sOverworldMountState.turnDirection;"
+            in mount_source,
+        "mounted exact-frame diagonal Walk policy is incomplete",
+    )
+    update_motion = re.search(
+        r"OverworldMount_UpdateCustomMotion\(void\)\s*\{(?P<body>.*?)"
+        r"typedef struct OverworldMountHopSearch",
+        mount_source,
+        re.DOTALL,
+    )
+    require(
+        update_motion is not None
+        and update_motion.group("body").find("motionElapsed++;")
+            < update_motion.group("body").find(
+                "Commit on the Nth update."
+            )
+            < update_motion.group("body").find(
+                "OverworldMount_FinishCustomMotion(TRUE);",
+                update_motion.group("body").find("Commit on the Nth update."),
+            )
+        and "stationary player command stays" in update_motion.group("body"),
+        "mounted flat Walk does not finish on its exact Nth frame",
+    )
+    require(
+        re.search(
+            r"if \(commitTarget && walkMotion\) \{.*?"
+            r"player->posVec\[2\].*?OverworldMount_SyncPresentation\(\);.*?"
+            r"sOverworldMountState\.pendingStep = TRUE;",
             mount_source,
             re.DOTALL,
         ) is not None,
-        "mounted turn skid does not lock facing before issuing its old-heading step",
+        "mounted flat Walk does not finish player and mount presentation together",
     )
     require(
         "OVERWORLD_MOUNT_TOGGLE_BUTTON PAD_BUTTON_SELECT" in mount_source

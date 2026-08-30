@@ -94,6 +94,30 @@ SECTIONS {
                     "native-shadow position filter entry moved");
                 ASSERT(. <= ORIGIN(rom) + 0x1000,
                     "native-shadow position filter exceeds resident page");
+                . = ORIGIN(rom) + 0x1000;
+                KEEP(*(.overworld_walk_module_entry))
+                ASSERT(gOverworldWalkModuleEntry == ORIGIN(rom) + 0x1000,
+                    "overworld Walk module entry moved");
+                KEEP(*(.overworld_walk_profile_module_entry))
+                ASSERT(gOverworldWalkProfileModuleEntry
+                        == ORIGIN(rom) + 0x1040,
+                    "overworld Walk profile module entry moved");
+                KEEP(*(.overworld_walk_mount_module_entry))
+                ASSERT(gOverworldWalkMountModuleEntry
+                        == ORIGIN(rom) + 0x1058,
+                    "overworld mounted Walk module entry moved");
+                KEEP(*(.overworld_walk_face_module_entry))
+                ASSERT(gOverworldWalkFaceModuleEntry
+                        == ORIGIN(rom) + 0x1068,
+                    "overworld face-player module entry moved");
+                KEEP(*(.overworld_walk_wild_policy_module_entry))
+                ASSERT(gOverworldWalkWildPolicyModuleEntry
+                        == ORIGIN(rom) + 0x1074,
+                    "overworld wild policy module entry moved");
+                *(.overworld_walk_module)
+                *(.overworld_walk_module_rodata)
+                ASSERT(. <= ORIGIN(rom) + 0x1C00,
+                    "overworld Walk module exceeds guarded resident page");
                 ASSERT(__bss_end__ + 0x1000 <= ORIGIN(rom) + LENGTH(rom),
                     "move-history overlay exceeds guarded code envelope");
         _end = __bss_end__ ;

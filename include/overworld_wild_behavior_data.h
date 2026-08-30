@@ -17,7 +17,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 11
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 71
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 72
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -161,12 +161,15 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS 5
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_DEFAULT 3
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_MAX 8
-#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_DEFAULT 1
-#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_MAX 4
+#define OW_WILD_BEHAVIOR_WALK_TIME_MIN 1
+#define OW_WILD_BEHAVIOR_WALK_TIME_MAX 32
+#define OW_WILD_BEHAVIOR_WALK_TIME_DEFAULT 16
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_DEFAULT 16
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_SPEED_MAX 32
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_DEFAULT 1
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_MAX 5
 #define OW_WILD_BEHAVIOR_TILES_TO_ACCELERATE_DEFAULT 3
-#define OW_WILD_BEHAVIOR_MAX_WALK_SPEED_DEFAULT 4
+#define OW_WILD_BEHAVIOR_MAX_WALK_SPEED_DEFAULT 2
 #define OW_WILD_BEHAVIOR_WALK_PAUSE_DEFAULT 32
 #define OW_WILD_BEHAVIOR_TURN_SKID_BUILDUP_DEFAULT 1
 #define OW_WILD_BEHAVIOR_TURN_SKIDS_DISABLED 0
@@ -191,8 +194,6 @@ typedef enum OverworldWildSpawnDestination {
     ((locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE \
         || (locomotion) == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION (1u << 0)
-#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT 1
-#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK (7u << OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT)
 #define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT 4
 #define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK (1u << OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_DISABLE_ACCELERATION (1u << 5)
@@ -207,12 +208,9 @@ typedef enum OverworldWildSpawnDestination {
     ((mode) != OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER (1u << 6)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING (1u << 7)
-#define OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0
+#define OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0x0E
 #define OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(options) \
     (((options) & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) == 0)
-#define OW_WILD_BEHAVIOR_WALK_STOMP_SPEED(options) \
-    (((options) & OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK) \
-        >> OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT)
 #define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND(options) \
     (((options) & OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK) \
         >> OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT)
@@ -225,10 +223,8 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING(options) \
     (((options) & (OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER \
         | OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING)) != 0)
-#define OW_WILD_BEHAVIOR_WALK_OPTIONS(lockDirection, stompSpeed, crashSound) \
+#define OW_WILD_BEHAVIOR_WALK_OPTIONS(lockDirection, crashSound) \
     (((lockDirection) ? OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION : 0) \
-        | (((stompSpeed) << OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_SHIFT) \
-            & OW_WILD_BEHAVIOR_WALK_STOMP_SPEED_MASK) \
         | (((crashSound) << OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_SHIFT) \
             & OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK))
 #define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_NONE 0
@@ -316,10 +312,12 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 walkPause;
     /* Required continuous Walk steps before a turn skid; zero disables them. */
     u8 tilesBeforeTurnSkid;
+    /* Zero disables stomp; otherwise stomp at this travel time or faster. */
+    u8 walkStompTime;
 } OverworldWildBehaviorProfileData;
 
-typedef char OverworldWildBehaviorProfileDataSizeMustRemain70Bytes[
-    sizeof(OverworldWildBehaviorProfileData) == 70 ? 1 : -1];
+typedef char OverworldWildBehaviorProfileDataSizeMustRemain72Bytes[
+    sizeof(OverworldWildBehaviorProfileData) == 72 ? 1 : -1];
 
 /* Runtime composite. Its prefix intentionally matches the compact blob so the
  * owner Chill lane can be copied directly before linked state lanes are added. */
@@ -393,6 +391,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 chainPauseActionChance;
             u8 walkPause;
             u8 tilesBeforeTurnSkid;
+            u8 walkStompTime;
         };
     };
     union {
@@ -452,6 +451,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 attentiveChainPauseActionChance;
             u8 attentiveWalkPause;
             u8 attentiveTilesBeforeTurnSkid;
+            u8 attentiveWalkStompTime;
         };
     };
     union {
@@ -505,6 +505,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tiredChainPauseActionChance;
             u8 tiredWalkPause;
             u8 tiredTilesBeforeTurnSkid;
+            u8 tiredWalkStompTime;
         };
     };
 } OverworldWildBehaviorProfile;
@@ -525,8 +526,8 @@ typedef struct OverworldWildBehaviorPrimitives {
     u8 tiredReaction;
 } OverworldWildBehaviorPrimitives;
 
-typedef char OverworldWildBehaviorProfileSizeMustRemain210Bytes[
-    sizeof(OverworldWildBehaviorProfile) == 210 ? 1 : -1];
+typedef char OverworldWildBehaviorProfileSizeMustRemain216Bytes[
+    sizeof(OverworldWildBehaviorProfile) == 216 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorContext {
     u16 species;
@@ -602,6 +603,8 @@ typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
 #define OW_WILD_BEHAVIOR_RELATIVE(value) ((u8)(s8)(value))
 #define OW_WILD_BEHAVIOR_AT_LEAST(value) ((u8)(value))
 #define OW_WILD_BEHAVIOR_AT_MOST(value) ((u8)(value))
+#define OW_WILD_BEHAVIOR_NO_SLOWER_THAN(value) OW_WILD_BEHAVIOR_AT_MOST(value)
+#define OW_WILD_BEHAVIOR_NO_FASTER_THAN(value) OW_WILD_BEHAVIOR_AT_LEAST(value)
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)
@@ -671,6 +674,7 @@ typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_ACTION_CHANCE (1u << 21)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID (1u << 23)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME (1u << 24)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 

@@ -25,6 +25,7 @@ void OverworldWildSpawns_EnterAggroState(
 #include "../../include/map_teleport.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_follower_selector.h"
+#include "../../include/overworld_walk_module.h"
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/overworld_wild_runtime.h"
@@ -172,21 +173,11 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_SPAWNER_FRAME_WORK_HEAVY_SHIFT 16
 #define OW_WILD_SPAWNER_FRAME_WORK_GLOBAL 0x80000000
 #define OW_WILD_SPAWNER_MOVEMENT_LOOK_UP_COMMAND 0x00
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_1 1
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_2 2
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_3 3
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4 4
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT 1
+#define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT OW_WILD_BEHAVIOR_WALK_TIME_DEFAULT
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND 0x08
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND 0x0C
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND 0x10
 #define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND 0x14
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_1_STEP_FRAMES 16
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_2_STEP_FRAMES 8
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_STEP_FRAMES 4
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_STEP_FRAMES OW_WILD_SPAWNER_MOVEMENT_SPEED_3_STEP_FRAMES
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_3_DECISION_INTERVAL 2
-#define OW_WILD_SPAWNER_MOVEMENT_SPEED_4_DECISION_INTERVAL 1
 #define OW_WILD_SPAWNER_REAL_FRAMES_PER_LOGICAL_TICK 2
 #define OW_WILD_SPAWNER_REAL_FRAMES_TO_LOGICAL_TICKS(frames) \
     (((frames) + OW_WILD_SPAWNER_REAL_FRAMES_PER_LOGICAL_TICK - 1) \
@@ -395,7 +386,6 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #endif
 #define OW_WILD_SPAWNER_BUBBLE_ID_NONE 0xFF
 
-/* Zero is the compact-data sentinel for the default speed-1 timing. */
 #define OW_WILD_SPAWNER_THROW_TARGET_NONE 0
 #define OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG 0x80
 #define OW_WILD_SPAWNER_THROW_TARGET_WINDUP_FLAG 0x40
@@ -405,6 +395,8 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
     ((u8)(OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG | OW_WILD_SPAWNER_THROW_TARGET_ENCODE(slot)))
 #define OW_WILD_SPAWNER_THROW_TARGET_DECODE(value) \
     ((u8)(((value) & OW_WILD_SPAWNER_THROW_TARGET_SLOT_MASK) - 1))
+#define OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER 0x8000
+#define OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG 0x80
 #define OW_WILD_BEHAVIOR_KIND_NONE 0
 #define OW_WILD_BEHAVIOR_KIND_IDLE 1
 #define OW_WILD_BEHAVIOR_KIND_WANDER 2
@@ -430,9 +422,10 @@ typedef void (*OverworldWildMapObjectMovementFunc)(LocalMapObject *object);
 #define OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH 2
 #define OW_WILD_BEHAVIOR_PROFILE_DEFAULT 0
 #define OW_WILD_CUSTOM_MOTION_NONE 0
-#define OW_WILD_CUSTOM_MOTION_JUMP 1
-#define OW_WILD_CUSTOM_MOTION_TELEPORT_FLICKER 2
-#define OW_WILD_CUSTOM_MOTION_TELEPORT_HIDDEN 3
+#define OW_WILD_CUSTOM_MOTION_WALK 1
+#define OW_WILD_CUSTOM_MOTION_JUMP 2
+#define OW_WILD_CUSTOM_MOTION_TELEPORT_FLICKER 3
+#define OW_WILD_CUSTOM_MOTION_TELEPORT_HIDDEN 4
 #define OW_WILD_BEHAVIOR_LIMIT_KEY_OVERRIDE_BASE OWBD_CLASS_PROFILE_COUNT
 #define OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR 0
 #define OW_WILD_BEHAVIOR_SPAWN_STATE_RUN_FROM_OFF_SCREEN 1
@@ -695,12 +688,39 @@ typedef struct OverworldWildAlertPrimitiveMap {
     u8 reaction;
 } OverworldWildAlertPrimitiveMap;
 
+/* The profile tooling reads these canonical maps from source. Production
+ * resolution lives in the resident Wild policy module to keep overlay 149
+ * within its fixed FAT slot. */
+#if 0
 static const u8 sOverworldWildSpawnLocomotionBySpawnState[] = {
     OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
     OW_WILD_BEHAVIOR_LOCOMOTION_RUN_FROM_OFF_SCREEN,
     OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN,
     OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP,
 };
+
+static const u8 sOverworldWildDefaultTargetByBehaviorKind[] = {
+    OW_WILD_BEHAVIOR_TARGET_NONE,
+    OW_WILD_BEHAVIOR_TARGET_NONE,
+    OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY,
+    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
+    OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER,
+    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
+    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
+    OW_WILD_BEHAVIOR_TARGET_TREE_TOP,
+};
+
+static const u8 sOverworldWildActiveReactionByBehaviorKind[] = {
+    OW_WILD_BEHAVIOR_REACTION_NONE,
+    OW_WILD_BEHAVIOR_REACTION_NONE,
+    OW_WILD_BEHAVIOR_REACTION_NONE,
+    OW_WILD_BEHAVIOR_REACTION_CONTACT,
+    OW_WILD_BEHAVIOR_REACTION_FLEE,
+    OW_WILD_BEHAVIOR_REACTION_EMOTE,
+    OW_WILD_BEHAVIOR_REACTION_CONTACT,
+    OW_WILD_BEHAVIOR_REACTION_CONTACT,
+};
+#endif
 
 static const OverworldWildHelperOverlayEntry *OverworldWildSpawns_GetHelperOverlayEntry(void);
 
@@ -761,28 +781,6 @@ static int OverworldWildSpawns_FindCapturedPokemonDestination(
         ? box
         : OW_WILD_PLAYER_BALL_CAPTURE_DESTINATION_NONE;
 }
-
-static const u8 sOverworldWildDefaultTargetByBehaviorKind[] = {
-    OW_WILD_BEHAVIOR_TARGET_NONE,
-    OW_WILD_BEHAVIOR_TARGET_NONE,
-    OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY,
-    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
-    OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER,
-    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
-    OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER,
-    OW_WILD_BEHAVIOR_TARGET_TREE_TOP,
-};
-
-static const u8 sOverworldWildActiveReactionByBehaviorKind[] = {
-    OW_WILD_BEHAVIOR_REACTION_NONE,
-    OW_WILD_BEHAVIOR_REACTION_NONE,
-    OW_WILD_BEHAVIOR_REACTION_NONE,
-    OW_WILD_BEHAVIOR_REACTION_CONTACT,
-    OW_WILD_BEHAVIOR_REACTION_FLEE,
-    OW_WILD_BEHAVIOR_REACTION_EMOTE,
-    OW_WILD_BEHAVIOR_REACTION_CONTACT,
-    OW_WILD_BEHAVIOR_REACTION_CONTACT,
-};
 
 static OverworldWildBehaviorProfile OverworldWildSpawns_GetFallbackBehaviorProfile(void)
 {
@@ -1339,6 +1337,9 @@ static void OverworldWildSpawns_CompleteTeleportMovement(
 static BOOL OverworldWildSpawns_HandleLockedWalkCrash(
     const OverworldWildDirectionStepContext *stepContext,
     u8 direction);
+static void OverworldWildSpawns_PlayMovementCrashFeedback(
+    const OverworldWildBehaviorProfile *profile,
+    u8 spotState);
 static u8 __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_GetCurrentMovementLocomotion(
     const OverworldWildBehaviorPrimitives *primitives,
     u8 spotState);
@@ -1602,7 +1603,6 @@ static BOOL OverworldWildSpawns_UpdateSpawnerMovementCommandForSlot(
     int slot);
 #endif
 static void OverworldWildSpawns_TickFrameMovementDecisionCounter(void);
-static BOOL OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed(u8 speed);
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
 static void OverworldWildSpawns_FrameMovementTask(SysTask *task, void *data);
 static void OverworldWildSpawns_EnsureFrameMovementTask(OverworldWildSpawnState *state, FieldSystem *fieldSystem);
@@ -2483,59 +2483,15 @@ static void OverworldWildSpawns_CancelNativeHeldMovement(
     }
 }
 
-static u32 OverworldWildSpawns_GetBehaviorTypeGroupFlag(u8 type)
-{
-    if (type > TYPE_STELLAR) {
-        return OW_WILD_BEHAVIOR_GROUP_NONE;
-    }
-    return OW_WILD_BEHAVIOR_GROUP_TYPE_NORMAL << type;
-}
-
 static u32 OverworldWildSpawns_GetBehaviorGroupFlagsForTypes(
     u16 species,
     u8 type1,
     u8 type2)
 {
-    u32 flags = OW_WILD_BEHAVIOR_GROUP_NONE;
-
-    switch (species) {
-    case SPECIES_GASTLY:
-    case SPECIES_HAUNTER:
-    case SPECIES_GENGAR:
-    case SPECIES_MISDREAVUS:
-    case SPECIES_DUSKULL:
-        flags |= OW_WILD_BEHAVIOR_GROUP_GHOST;
-        break;
-    case SPECIES_PICHU:
-    case SPECIES_CLEFFA:
-    case SPECIES_IGGLYBUFF:
-    case SPECIES_TOGEPI:
-    case SPECIES_TYROGUE:
-    case SPECIES_SMOOCHUM:
-    case SPECIES_ELEKID:
-    case SPECIES_MAGBY:
-    case SPECIES_AZURILL:
-    case SPECIES_WYNAUT:
-    case SPECIES_BUDEW:
-    case SPECIES_CHINGLING:
-    case SPECIES_BONSLY:
-    case SPECIES_MIME_JR:
-    case SPECIES_HAPPINY:
-    case SPECIES_MUNCHLAX:
-    case SPECIES_RIOLU:
-    case SPECIES_MANTYKE:
-        flags |= OW_WILD_BEHAVIOR_GROUP_BABY;
-        break;
-    default:
-        break;
-    }
-
-    if (species != SPECIES_NONE) {
-        flags |= OverworldWildSpawns_GetBehaviorTypeGroupFlag(type1);
-        flags |= OverworldWildSpawns_GetBehaviorTypeGroupFlag(type2);
-    }
-
-    return flags;
+    return OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY->groupFlagsForTypes(
+        species,
+        type1,
+        type2);
 }
 
 static u32 OverworldWildSpawns_GetBehaviorGroupFlags(u16 species)
@@ -2581,35 +2537,6 @@ static OverworldWildBehaviorContext OverworldWildSpawns_BuildBehaviorContext(
     context.behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     context.conditionTerrainMask = 0;
     return context;
-}
-
-static u32 __attribute__((noinline, optimize("Os")))
-OverworldWildSpawns_SelectConditionalOverrideMask(
-    const OverworldWildBehaviorDataBlob *behaviorData,
-    const OverworldWildBehaviorContext *context,
-    u32 normalOverrideMask,
-    u8 movementSpeed)
-{
-    const OverworldWildBehaviorConditionalState *conditionalState =
-        &behaviorData->conditionalStates[0];
-    u16 explicitTerrainMask = conditionalState->terrainOverrideMask;
-    u16 acceptedTerrainMask = conditionalState->terrainMask
-        & explicitTerrainMask;
-
-    if ((normalOverrideMask & (1u << conditionalState->parentProfile)) == 0
-        || (explicitTerrainMask != 0
-            && (context->conditionTerrainMask == 0
-                || (acceptedTerrainMask != 0
-                    && (context->conditionTerrainMask & acceptedTerrainMask) == 0)
-                || (context->conditionTerrainMask
-                    & (explicitTerrainMask & ~acceptedTerrainMask)) != 0))
-        || (conditionalState->minMovementSpeed != 0
-            && movementSpeed < conditionalState->minMovementSpeed)
-        || (conditionalState->maxMovementSpeed != 0
-            && movementSpeed > conditionalState->maxMovementSpeed)) {
-        return 0;
-    }
-    return 1u << conditionalState->overrideProfile;
 }
 
 typedef char OverworldWildBehaviorTerrainMaskOffsetMustRemain32[
@@ -2746,7 +2673,8 @@ OverworldWildSpawns_ResolveBehaviorProfileForContext(
             }
         }
         conditionMovementSpeed = profileData.chillSpeed;
-        conditionalOverrideMask = OverworldWildSpawns_SelectConditionalOverrideMask(
+        conditionalOverrideMask = OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY
+                                      ->selectConditionalOverrideMask(
             behaviorData,
             context,
             normalApplicableOverrideMask,
@@ -3269,99 +3197,20 @@ static OverworldWildBehaviorProfile OverworldWildSpawns_GetMovementTickProfile(
     return profile;
 }
 
-static __attribute__((noinline)) void OverworldWildSpawns_NormalizeMovementPrimitives(
-    u8 behaviorKind,
-    u8 *locomotion,
-    u8 *target)
-{
-    if (behaviorKind < OW_WILD_BEHAVIOR_KIND_WANDER
-        || behaviorKind > OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP) {
-        *locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_NONE;
-        *target = OW_WILD_BEHAVIOR_TARGET_NONE;
-    } else if (*target == OW_WILD_BEHAVIOR_TARGET_NONE) {
-        *target = sOverworldWildDefaultTargetByBehaviorKind[behaviorKind];
-    }
-}
-
-static OverworldWildBehaviorPrimitives OverworldWildSpawns_ResolveBehaviorPrimitives(
+static OverworldWildBehaviorPrimitives __attribute__((naked)) OverworldWildSpawns_ResolveBehaviorPrimitives(
     const OverworldWildBehaviorProfile *profile)
 {
-    OverworldWildBehaviorPrimitives primitives = {
-        OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
-        OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
-        OW_WILD_BEHAVIOR_TARGET_NONE,
-        OW_WILD_BEHAVIOR_ALERT_LOGIC_NONE,
-        OW_WILD_BEHAVIOR_REACTION_NONE,
-        OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
-        OW_WILD_BEHAVIOR_TARGET_NONE,
-        OW_WILD_BEHAVIOR_REACTION_NONE,
-        OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
-        OW_WILD_BEHAVIOR_TARGET_NONE,
-        OW_WILD_BEHAVIOR_REACTION_NONE,
-    };
-
-    if (profile == NULL) {
-        return primitives;
-    }
-
-    if (profile->spawnState < NELEMS(sOverworldWildSpawnLocomotionBySpawnState)) {
-        primitives.spawnLocomotion =
-            sOverworldWildSpawnLocomotionBySpawnState[profile->spawnState];
-    }
-
-    primitives.chillLocomotion = profile->chillAction;
-    primitives.chillTarget = profile->chillTarget;
-    if (primitives.chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RAM) {
-        primitives.chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(primitives.chillLocomotion)) {
-        primitives.chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    OverworldWildSpawns_NormalizeMovementPrimitives(
-        profile->chillState,
-        &primitives.chillLocomotion,
-        &primitives.chillTarget);
-
-    primitives.attentiveLocomotion = profile->movementStyle;
-    primitives.attentiveTarget = profile->targetSelector;
-    if (primitives.attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RAM) {
-        primitives.attentiveLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(primitives.attentiveLocomotion)) {
-        primitives.attentiveLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    if (profile->attentiveState < NELEMS(sOverworldWildActiveReactionByBehaviorKind)) {
-        primitives.activeReaction =
-            sOverworldWildActiveReactionByBehaviorKind[profile->attentiveState];
-        if (profile->attentiveState >= OW_WILD_BEHAVIOR_KIND_WANDER
-            && primitives.attentiveTarget == OW_WILD_BEHAVIOR_TARGET_NONE) {
-            primitives.attentiveTarget =
-                sOverworldWildDefaultTargetByBehaviorKind[profile->attentiveState];
-        }
-    }
-
-    if (profile->alertness != 0 && profile->alertChance != 0) {
-        if (profile->alertRange <= OW_WILD_BEHAVIOR_ALERT_RANGE_TERRAIN_ONLY) {
-            primitives.alertLogic = profile->alertRange;
-            primitives.alertReaction = profile->alertRange == OW_WILD_BEHAVIOR_ALERT_RANGE_NONE
-                ? OW_WILD_BEHAVIOR_REACTION_NONE
-                : OW_WILD_BEHAVIOR_REACTION_EMOTE;
-        }
-    }
-    primitives.tiredLocomotion = profile->tired.chillAction;
-    primitives.tiredTarget = profile->tired.chillTarget;
-    if (primitives.tiredLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_RAM) {
-        primitives.tiredLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(primitives.tiredLocomotion)) {
-        primitives.tiredLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    OverworldWildSpawns_NormalizeMovementPrimitives(
-        profile->tiredState,
-        &primitives.tiredLocomotion,
-        &primitives.tiredTarget);
-    if (profile->tiredState != OW_WILD_BEHAVIOR_KIND_NONE) {
-        primitives.tiredReaction = OW_WILD_BEHAVIOR_REACTION_TIRED;
-    }
-
-    return primitives;
+    /* Struct-return ABI: r0 is the caller's result buffer, r1 is profile.
+     * The resident service accepts profile first and the result buffer second. */
+    __asm__(
+        "mov r2, r0\n"
+        "mov r0, r1\n"
+        "mov r1, r2\n"
+        "ldr r2, 1f\n"
+        "ldr r2, [r2, #8]\n"
+        "bx r2\n"
+        ".align 2\n"
+        "1: .word 0x023BF474\n");
 }
 
 static BOOL OverworldWildSpawns_TryBuildFollowerMountBinding(
@@ -3803,83 +3652,17 @@ static u8 OverworldWildSpawns_GetAlertStateFrameCount(
 
 static u32 OverworldWildSpawns_GetMovementWalkCommandForSpeed(u8 speed)
 {
-    switch (speed) {
-    case OW_WILD_SPAWNER_MOVEMENT_SPEED_2:
-        return OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND;
-    case OW_WILD_SPAWNER_MOVEMENT_SPEED_3:
-        return OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND;
-    case OW_WILD_SPAWNER_MOVEMENT_SPEED_4:
+    if (speed <= 2) {
         return OW_WILD_SPAWNER_MOVEMENT_SPEED_4_COMMAND;
-    case OW_WILD_SPAWNER_MOVEMENT_SPEED_1:
-    default:
-        return OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND;
     }
+    if (speed <= 4) {
+        return OW_WILD_SPAWNER_MOVEMENT_SPEED_3_COMMAND;
+    }
+    return speed <= 8
+        ? OW_WILD_SPAWNER_MOVEMENT_SPEED_2_COMMAND
+        : OW_WILD_SPAWNER_MOVEMENT_SPEED_1_COMMAND;
 }
 
-
-static u32 OverworldWildSpawns_GetMovementWalkCommandForProfile(
-    OverworldWildSpawnState *state,
-    int slot,
-    const OverworldWildBehaviorProfile *profile,
-    const OverworldWildBehaviorPrimitives *primitives)
-{
-    OverworldWildBehaviorProfile resolvedProfile;
-    OverworldWildBehaviorPrimitives resolvedPrimitives;
-    u8 speed;
-
-    if (profile == NULL) {
-        resolvedProfile = OverworldWildSpawns_GetBehaviorProfile(state, slot);
-        profile = &resolvedProfile;
-    }
-    if (primitives == NULL) {
-        resolvedPrimitives = OverworldWildSpawns_ResolveBehaviorPrimitives(profile);
-        primitives = &resolvedPrimitives;
-    }
-
-    if (state != NULL
-        && slot >= 0
-        && slot < OW_WILD_MAX_SPAWNS
-        && ((state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_CHILL
-                && primitives->chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP)
-            || (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-                && primitives->attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP)
-            || (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_TIRED
-                && primitives->tiredLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP))) {
-        return OW_WILD_SPAWNER_CANOPY_HOPPER_JUMP_1_COMMAND;
-    }
-
-    if (state != NULL
-        && slot >= 0
-        && slot < OW_WILD_MAX_SPAWNS
-        && state->movementSpawnRunActive[slot]) {
-        speed = OverworldWildSpawns_GetMovementSpeedForState(
-            profile,
-            OW_WILD_SPAWNER_SPOT_STATE_ACTIVE);
-    } else if (state != NULL
-        && slot >= 0
-        && slot < OW_WILD_MAX_SPAWNS
-        && OverworldWildSpawns_GetCurrentMovementLocomotion(
-                primitives,
-                state->movementSpotStates[slot])
-            == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
-        && OW_WILD_RUNTIME(state)->movementWalkMomentum[slot].speed != 0) {
-        speed = OW_WILD_RUNTIME(state)->movementWalkMomentum[slot].speed;
-    } else if (state != NULL
-        && slot >= 0
-        && slot < OW_WILD_MAX_SPAWNS
-        && (state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_CHILL
-            || state->movementSpotStates[slot] == OW_WILD_SPAWNER_SPOT_STATE_TIRED)) {
-        speed = OverworldWildSpawns_GetMovementSpeedForState(
-            profile,
-            state->movementSpotStates[slot]);
-    } else {
-        speed = OverworldWildSpawns_GetMovementSpeedForState(
-            profile,
-            OW_WILD_SPAWNER_SPOT_STATE_ACTIVE);
-    }
-
-    return OverworldWildSpawns_GetMovementWalkCommandForSpeed(speed);
-}
 
 static void OverworldWildSpawns_ClearMovementSlotInProgress(OverworldWildSpawnState *state, int slot)
 {
@@ -6072,22 +5855,34 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartM
     BOOL skidStep)
 {
     OverworldWildDirectionStepContext *stepContext = context;
+    u8 cardinalFacing;
     int targetX;
     int targetY;
-    u32 movementCommand;
 
     if (skidStep) {
-        OverworldWildSpawns_SetObjectFacing(stepContext->object, facingDirection);
+        cardinalFacing = facingDirection;
+        if (cardinalFacing > OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT) {
+            cardinalFacing = OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(
+                stepContext->object,
+                cardinalFacing,
+                OVERWORLD_WALK_MODULE_ENTRY->directionKey(cardinalFacing));
+        }
+        OverworldWildSpawns_SetObjectFacing(stepContext->object, cardinalFacing);
         MapObject_SetBits(stepContext->object, MAPOBJECTFLAG_UNK7);
     }
+    targetX = stepContext->object->xCurr
+        + OVERWORLD_WALK_MODULE_ENTRY->deltaX(direction);
+    targetY = stepContext->object->yCurr
+        + OVERWORLD_WALK_MODULE_ENTRY->deltaY(direction);
     if (validateStep) {
-        targetX = stepContext->object->xCurr
-            + OverworldWildSpawns_MovementDirectionDeltaX(direction);
-        targetY = stepContext->object->yCurr
-            + OverworldWildSpawns_MovementDirectionDeltaY(direction);
-        if (!OverworldWildSpawns_IsBehaviorAllowedMovementTile(
+        if (!OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
+                stepContext->state,
+                stepContext->slot,
                 stepContext->fieldSystem,
-                stepContext->allowedTile,
+                stepContext->allowedTile
+                    | OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER,
+                targetX,
+                targetY,
                 targetX,
                 targetY)
             || OverworldWildSpawns_IsTileReservedByOtherWild(
@@ -6102,30 +5897,42 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartM
                 stepContext->fieldSystem,
                 targetX,
                 targetY)
-            || (MapObject_IsMovementDirectionBlocked(
-                    stepContext->object,
-                    direction)
-                & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0) {
+            || (direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+                && (MapObject_IsMovementDirectionBlocked(
+                        stepContext->object,
+                        direction)
+                    & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0)) {
             goto validated_step_blocked;
         }
 #endif
+        validateStep = FALSE;
     }
 
-    movementCommand = MapObject_MovementCommandFromDirection(
-        direction,
-        OverworldWildSpawns_GetMovementWalkCommandForSpeed(speed));
-    OverworldWildSpawns_StartMovementCommandForSlot(
-        stepContext->state,
-        stepContext->slot,
-        stepContext->object,
-        movementCommand,
-        direction,
-        OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP);
+    OW_WILD_RUNTIME(stepContext->state)->movementWalkMomentum[
+        stepContext->slot].speed = OVERWORLD_WALK_MODULE_ENTRY->clampTime(speed);
+    if (!OverworldWildSpawns_StartPreparedCustomJumpCommand(
+            stepContext->state,
+            stepContext->fieldSystem,
+            stepContext->slot,
+            stepContext->object,
+            direction,
+            OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP,
+            targetX,
+            targetY,
+            stepContext->profile,
+            OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG)) {
+        goto validated_step_blocked;
+    }
     /* A skid uses state 2: still physically reserved, but not logical history. */
     stepContext->state->movementPreviousTileLocked[stepContext->slot] += skidStep;
     return TRUE;
 
 validated_step_blocked:
+    if (skidStep && validateStep) {
+        OverworldWildSpawns_PlayMovementCrashFeedback(
+            stepContext->profile,
+            stepContext->state->movementSpotStates[stepContext->slot]);
+    }
     if ((OverworldWildSpawns_GetBehaviorStateLane(
             stepContext->profile,
             stepContext->state->movementSpotStates[stepContext->slot])->walkOptions
@@ -6182,7 +5989,7 @@ static u8 __attribute__((naked)) OverworldWildWalkMomentum_GateTurnSkid(
         "cmp r3, r2\n"
         "bhs 2f\n"
         "1:\n"
-        "add r1, r1, #4\n"
+        "add r1, r1, #128\n"
         "2:\n"
         "movs r3, #0\n"
         "strb r3, [r0, #6]\n"
@@ -6197,16 +6004,20 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_TrySta
 {
     OverworldWildWalkMomentumState *momentum =
         &OW_WILD_RUNTIME(stepContext->state)->movementWalkMomentum[stepContext->slot];
-    u8 spotState = stepContext->state->movementSpotStates[stepContext->slot];
+    u8 spotState = stepContext->state->movementSpawnRunActive[stepContext->slot]
+        ? OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
+        : stepContext->state->movementSpotStates[stepContext->slot];
     const OverworldWildBehaviorProfileData *lane =
         OverworldWildSpawns_GetBehaviorStateLane(
             stepContext->profile,
             spotState);
 
-    direction = OverworldWildWalkMomentum_GateTurnSkid(
-        momentum,
-        direction,
-        lane->tilesBeforeTurnSkid);
+    direction = stepContext->state->movementSpawnRunActive[stepContext->slot]
+        ? direction | OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG
+        : OverworldWildWalkMomentum_GateTurnSkid(
+            momentum,
+            direction,
+            lane->tilesBeforeTurnSkid);
     return OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->walkMomentumStart(
         momentum,
         direction,
@@ -6505,20 +6316,21 @@ static OverworldWildDirectionStepResult __attribute__((optimize("Os"))) Overworl
             stepContext->fieldSystem,
             targetX,
             targetY)
-        || (MapObject_IsMovementDirectionBlocked(
-                stepContext->object,
-                direction)
-            & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0;
+        || (direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+            && (MapObject_IsMovementDirectionBlocked(
+                    stepContext->object,
+                    direction)
+                & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0);
     if (sOverworldWildMovementDiagnosticDirectionBlocked) {
         return OW_WILD_DIRECTION_STEP_BLOCKED;
     }
 #endif
 
-    if (!stepContext->state->movementSpawnRunActive[stepContext->slot]
-        && OverworldWildSpawns_GetCurrentMovementLocomotion(
+    if ((stepContext->state->movementSpawnRunActive[stepContext->slot]
+            || OverworldWildSpawns_GetCurrentMovementLocomotion(
                 stepContext->primitives,
                 stepContext->state->movementSpotStates[stepContext->slot])
-            == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER) {
+                == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER)) {
         return OverworldWildSpawns_TryStartAcceleratedWalkStep(
                    stepContext,
                    direction)
@@ -6529,11 +6341,15 @@ static OverworldWildDirectionStepResult __attribute__((optimize("Os"))) Overworl
         stepContext->state,
         stepContext->slot,
         stepContext->object);
-    walkCommand = OverworldWildSpawns_GetMovementWalkCommandForProfile(
-        stepContext->state,
-        stepContext->slot,
-        stepContext->profile,
-        stepContext->primitives);
+    walkCommand = OverworldWildSpawns_GetCurrentMovementLocomotion(
+                      stepContext->primitives,
+                      stepContext->state->movementSpotStates[stepContext->slot])
+            == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+        ? OW_WILD_SPAWNER_CANOPY_HOPPER_JUMP_1_COMMAND
+        : OverworldWildSpawns_GetMovementWalkCommandForSpeed(
+            OverworldWildSpawns_GetMovementSpeedForState(
+                stepContext->profile,
+                stepContext->state->movementSpotStates[stepContext->slot]));
     movementCommand = MapObject_MovementCommandFromDirection(
         direction,
         walkCommand);
@@ -7262,19 +7078,16 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartFrameDri
             OverworldWildSpawns_Abs(dx),
             OverworldWildSpawns_Abs(dy)) >= profile->attentiveChaseBoostDistance) {
         boostedProfile = *profile;
-        if (boostedProfile.attentiveSpeed < profile->attentiveChaseBoostSpeed) {
+        if (boostedProfile.attentiveSpeed > profile->attentiveChaseBoostSpeed) {
             boostedProfile.attentiveSpeed = profile->attentiveChaseBoostSpeed;
-        }
-        if (boostedProfile.attentiveSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4) {
-            boostedProfile.attentiveSpeed = OW_WILD_SPAWNER_MOVEMENT_SPEED_4;
         }
         movementProfile = &boostedProfile;
     }
 
     if (primitives->attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
         && movementTarget == OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY
-        && movementProfile->active.hopAllowNonCardinal
-            != OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY) {
+        && OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+            movementProfile->active.hopAllowNonCardinal)) {
         return OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
             state,
             fieldSystem,
@@ -7282,7 +7095,11 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartFrameDri
             movementProfile);
     }
 
-    if (primitives->attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
+    if (primitives->attentiveLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+        || (primitives->attentiveLocomotion
+                == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
+            && OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+                movementProfile->active.hopAllowNonCardinal))) {
         if (throwTarget != OW_WILD_SPAWNER_THROW_TARGET_NONE
             && (throwTarget & OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG) == 0) {
             sOverworldWildCollisionIgnoredObject = targetObject;
@@ -8150,20 +7967,24 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_Handle
         OverworldWildSpawns_ClearWalkMovementState(state, slot, NULL);
         return TRUE;
     }
-    baseSpeed = lane->chillSpeed;
-    maxSpeed = lane->maxWalkSpeed;
-    if (maxSpeed < baseSpeed) {
+    if (OW_WILD_RUNTIME(state)->movementCustomMotionModes[slot]
+        == OW_WILD_CUSTOM_MOTION_WALK) {
+        OverworldWildSpawns_ClearCustomJump(state, slot);
+    }
+    baseSpeed = OVERWORLD_WALK_MODULE_ENTRY->clampTime(lane->chillSpeed);
+    maxSpeed = OVERWORLD_WALK_MODULE_ENTRY->clampTime(lane->maxWalkSpeed);
+    if (maxSpeed > baseSpeed) {
         maxSpeed = baseSpeed;
     }
-    if (momentum->resumeSpeed > maxSpeed) {
+    if (momentum->resumeSpeed != 0 && momentum->resumeSpeed < maxSpeed) {
         momentum->resumeSpeed = maxSpeed;
     }
-    if (momentum->skidRemaining == 0 && momentum->speed > maxSpeed) {
+    if (momentum->skidRemaining == 0 && momentum->speed < maxSpeed) {
         momentum->speed = maxSpeed;
         momentum->tileCounter = 0;
     }
     completedSpeed = momentum->speed;
-    stompSpeed = OW_WILD_BEHAVIOR_WALK_STOMP_SPEED(lane->walkOptions);
+    stompSpeed = lane->walkStompTime;
     isWalk = OverworldWildSpawns_GetCurrentMovementLocomotion(
             primitives,
             spotState)
@@ -8173,8 +7994,9 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_Handle
         && state->movementLastDistances[slot] == OW_WILD_SPAWNER_MOVEMENT_DISTANCE_STEP
         && state->movementLastDirections[slot] == momentum->direction;
     playStomp = completedWalkTile
-        && stompSpeed >= OW_WILD_WALK_SPEED_MIN
-        && completedSpeed >= stompSpeed;
+        && OVERWORLD_WALK_MODULE_ENTRY->stompApplies(
+            completedSpeed,
+            stompSpeed);
     /* A continued skid can hit a blocked tile and inspect Walk options. */
     stepContext.state = state;
     stepContext.fieldSystem = state->movementFieldSystem;
@@ -8189,7 +8011,8 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_Handle
         momentum,
         baseSpeed,
         spotState,
-        momentum->speed >= maxSpeed
+        maxSpeed,
+        momentum->speed <= maxSpeed
                 || OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION(lane->walkOptions)
             ? 0
             : lane->tilesToAccelerate,
@@ -8598,10 +8421,10 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartChillWan
             return TRUE;
         }
     } else if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
-        && OverworldWildSpawns_GetBehaviorStateLane(
+        && OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+            OverworldWildSpawns_GetBehaviorStateLane(
                 profile,
-                state->movementSpotStates[slot])->hopAllowNonCardinal
-            != OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY) {
+                state->movementSpotStates[slot])->hopAllowNonCardinal)) {
         if (OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
                 state,
                 fieldSystem,
@@ -9410,9 +9233,6 @@ static void __attribute__((optimize("Os"))) OverworldWildSpawns_TickMovementPara
     FieldSystem *fieldSystem,
     BOOL frameTick,
     u16 frameWorkMask
-#if OW_WILD_SPAWNER_IMMEDIATE_AI_AFTER_COMMAND_COMPLETION
-    , u16 immediateDecisionMask
-#endif
 )
 {
     OverworldWildOverlayRuntimeState *runtime = OW_WILD_RUNTIME(state);
@@ -9489,8 +9309,7 @@ static void __attribute__((optimize("Os"))) OverworldWildSpawns_TickMovementPara
                 &profile,
                 &primitives);
             if (OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.owner.walkOptions)) {
-                ((OverworldWildFacePlayerFacingFunc)
-                    OVERWORLD_WILD_FACE_PLAYER_FACING_ADDR)(
+                OVERWORLD_WALK_FACE_MODULE_ENTRY->apply(
                     state,
                     i,
                     runtime->movementEmotePlayHopSound[i]);
@@ -9635,29 +9454,6 @@ static void __attribute__((optimize("Os"))) OverworldWildSpawns_TickMovementPara
                 state->movementSpotCooldowns[i]--;
             }
 #endif
-            if (frameTick
-                && throwTarget == OW_WILD_SPAWNER_THROW_TARGET_NONE
-                && cooldown == 0
-#if OW_WILD_SPAWNER_IMMEDIATE_AI_AFTER_COMMAND_COMPLETION
-                && (immediateDecisionMask
-                    & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) == 0
-#endif
-            ) {
-                u8 decisionSpeed = OverworldWildSpawns_GetMovementSpeedForState(
-                    &profile,
-                    state->movementSpotStates[i]);
-
-                if (OverworldWildSpawns_GetCurrentMovementLocomotion(
-                        &primitives,
-                        state->movementSpotStates[i])
-                        == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
-                    && runtime->movementWalkMomentum[i].speed != 0) {
-                    decisionSpeed = runtime->movementWalkMomentum[i].speed;
-                }
-                if (!OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed(decisionSpeed)) {
-                    continue;
-                }
-            }
             if (state->movementSpotStates[i] == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
                 if (shouldIssueLookCommand) {
                     BOOL movementStarted;
@@ -10277,30 +10073,6 @@ static void OverworldWildSpawns_TickFrameMovementDecisionCounter(void)
     sOverworldWildMovementFrameDecisionCounter++;
 }
 
-static u8 OverworldWildSpawns_GetFrameMovementDecisionIntervalForSpeed(u8 speed)
-{
-    switch (speed) {
-    case OW_WILD_SPAWNER_MOVEMENT_SPEED_3:
-        return OW_WILD_SPAWNER_MOVEMENT_SPEED_3_DECISION_INTERVAL;
-    default:
-        return OW_WILD_SPAWNER_MOVEMENT_FRAME_DECISION_INTERVAL;
-    }
-}
-
-static BOOL OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed(u8 speed)
-{
-    u8 interval = OverworldWildSpawns_GetFrameMovementDecisionIntervalForSpeed(speed);
-
-    if (interval <= 1) {
-        return TRUE;
-    }
-    if ((sOverworldWildMovementFrameDecisionCounter % interval) != 0) {
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static void OverworldWildSpawns_StopFrameMovementTask(void)
 {
     sOverworldWildMovementFrameTaskExecuting = FALSE;
@@ -10841,9 +10613,6 @@ static void __attribute__((optimize("Os"))) OverworldWildSpawns_FrameMovementTas
             fieldSystem,
             TRUE,
             frameWorkMask
-#if OW_WILD_SPAWNER_IMMEDIATE_AI_AFTER_COMMAND_COMPLETION
-            , selectedIdleMask
-#endif
         );
         sOverworldWildMovementFrameTaskExecuting = FALSE;
         return;
@@ -10872,10 +10641,6 @@ static void __attribute__((optimize("Os"))) OverworldWildSpawns_FrameMovementTas
         fieldSystem,
         TRUE,
         frameWorkMask
-#if OW_WILD_SPAWNER_IMMEDIATE_AI_AFTER_COMMAND_COMPLETION
-        , selectedIdleMask
-            | (movementInProgressBefore & ~state->movementInProgressMask)
-#endif
     );
     OverworldWildSpawns_UpdateMankeyTreeTopLayerProbe(state, fieldSystem);
     OverworldWildSpawns_UpdateMankeyTreeTopBubbleProbe(state, fieldSystem);
@@ -10894,11 +10659,6 @@ static void OverworldWildSpawns_TickFrameMovementDecisionCounter(void)
 {
 }
 
-static BOOL OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed(u8 speed)
-{
-    (void)speed;
-    return FALSE;
-}
 #endif
 
 static BOOL OverworldWildSpawns_RequestBattleScript(
@@ -11271,6 +11031,8 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_IsTileReservedBy
                 & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(i)) != 0
             && state->movementPreviousTileLocked[i]
             && state->movementPendingDistances[i] != 0
+            && state->movementPendingDirections[i]
+                <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
             && state->movementPreviousTileX[i]
                     + OverworldWildSpawns_MovementDirectionDeltaX(
                         state->movementPendingDirections[i])
@@ -11441,7 +11203,9 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartBehavior
     int finalTargetX,
     int finalTargetY)
 {
+    const OverworldWildBehaviorProfileData *lane;
     LocalMapObject *object;
+    OverworldWildDirectionStepContext stepContext;
     u8 direction;
     u8 distance;
     int objectX;
@@ -11449,32 +11213,50 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartBehavior
     u8 spotState;
     BOOL flatWalk;
 
+    object = state->spawns[slot].object;
+    objectX = MapObject_GetCurrentX(object);
+    objectY = MapObject_GetCurrentY(object);
+    spotState = state->movementSpotStates[slot];
+    lane = OverworldWildSpawns_GetBehaviorStateLane(profile, spotState);
+    flatWalk = lane->chillAction == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
     if (!OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
             state,
             slot,
             fieldSystem,
-            allowedTile,
+            allowedTile | (flatWalk
+                ? OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER
+                : 0),
             landingX,
             landingY,
             finalTargetX,
             finalTargetY)) {
         return FALSE;
     }
-
-    object = state->spawns[slot].object;
-    objectX = MapObject_GetCurrentX(object);
-    objectY = MapObject_GetCurrentY(object);
-    spotState = state->movementSpotStates[slot];
-    flatWalk = OverworldWildSpawns_GetBehaviorStateLane(
-            profile,
-            spotState)->chillAction == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
-    if (!OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->tryGetVector(
-            profile,
-            spotState,
+    if (flatWalk) {
+        if ((landingX == objectX && landingY == objectY)
+            || OverworldWildSpawns_Abs(landingX - objectX) > 1
+            || OverworldWildSpawns_Abs(landingY - objectY) > 1) {
+            return FALSE;
+        }
+        direction = OVERWORLD_WALK_MODULE_ENTRY->directionFromDelta(
             landingX - objectX,
-            landingY - objectY,
-            &direction,
-            &distance)) {
+            landingY - objectY);
+        if ((direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+                && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
+                    lane->hopAllowNonCardinal))
+            || (direction > OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+                && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+                    lane->hopAllowNonCardinal))) {
+            return FALSE;
+        }
+        distance = 1;
+    } else if (!OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->tryGetVector(
+                   profile,
+                   spotState,
+                   landingX - objectX,
+                   landingY - objectY,
+                   &direction,
+                   &distance)) {
         return FALSE;
     }
 
@@ -11485,7 +11267,22 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartBehavior
     state->movementStagedHopDistances[slot] = distance;
     state->movementStagedHopFinishWithTired[slot] = FALSE;
     state->movementStagedHopPending[slot] = TRUE;
-    if (OverworldWildSpawns_StartPreparedCustomJumpCommand(
+    if (flatWalk) {
+        stepContext.state = state;
+        stepContext.fieldSystem = fieldSystem;
+        stepContext.object = object;
+        stepContext.profile = profile;
+        stepContext.primitives = NULL;
+        stepContext.slot = (u8)slot;
+        stepContext.allowedTile = allowedTile;
+        stepContext.jumpLevel = profile->jumpLevel;
+        stepContext.avoidPreviousTile = FALSE;
+        if (OverworldWildSpawns_TryStartAcceleratedWalkStep(
+                &stepContext,
+                direction)) {
+            return TRUE;
+        }
+    } else if (OverworldWildSpawns_StartPreparedCustomJumpCommand(
             state,
             fieldSystem,
             slot,
@@ -11495,7 +11292,7 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartBehavior
             landingX,
             landingY,
             profile,
-            flatWalk)) {
+            FALSE)) {
         return TRUE;
     }
 
@@ -11518,6 +11315,7 @@ OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
 {
     const OverworldWildBehaviorDataBlob *behaviorData;
     const OverworldWildHelperOverlayEntry *helperEntry;
+    const OverworldWildBehaviorProfileData *lane;
     OverworldWildHelperHopConfig config;
     OverworldWildHelperHopResult result;
     OverworldWildBehaviorHopValidationContext validationContext;
@@ -11542,6 +11340,7 @@ OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
     objectX = MapObject_GetCurrentX(object);
     objectY = MapObject_GetCurrentY(object);
     spotState = state->movementSpotStates[slot];
+    lane = OverworldWildSpawns_GetBehaviorStateLane(profile, spotState);
     behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
     helperEntry = OverworldWildSpawns_GetHelperOverlayEntry();
     if (helperEntry == NULL) {
@@ -11559,6 +11358,10 @@ OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
         directionCount,
         stopOneHopAway,
         &config);
+    if (lane->chillAction == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER) {
+        config.minDistance = 1;
+        config.maxDistance = 1;
+    }
     validationContext.state = state;
     validationContext.fieldSystem = fieldSystem;
     validationContext.profile = profile;
@@ -11567,7 +11370,10 @@ OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(
     validationContext.baseValidator =
         OverworldWildSpawns_IsBehaviorAllowedHopLandingTile;
     validationContext.slot = slot;
-    validationContext.allowedTile = allowedTile;
+    validationContext.allowedTile = allowedTile
+        | (lane->chillAction == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
+            ? OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER
+            : 0);
     if (!helperEntry->planBehaviorHopStep(
             &config,
             OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->validateHopLanding,
@@ -11643,6 +11449,8 @@ OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
         FALSE,
         &config);
     if (flatWalk) {
+        config.minDistance = 1;
+        config.maxDistance = 1;
         if (!state->movementStagedHopAvoidValid[slot]) {
             if (OW_WILD_BEHAVIOR_WALK_USES_FIXED_FACING(lane->walkOptions)) {
                 OverworldWildSpawns_SetObjectFacing(object, (u8)(gf_rand() & 3));
@@ -11666,7 +11474,8 @@ OverworldWildSpawns_TryStartRandomBehaviorHopCommand(
     validationContext.baseValidator =
         OverworldWildSpawns_IsBehaviorAllowedHopLandingTile;
     validationContext.slot = slot;
-    validationContext.allowedTile = allowedTile;
+    validationContext.allowedTile = allowedTile
+        | (flatWalk ? OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER : 0);
     if (!helperEntry->pickRandomBehaviorHop(
             &config,
             OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->validateHopLanding,
@@ -11710,6 +11519,7 @@ static BOOL OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(
     int adjacentIndex;
     u8 minDistance;
     u8 maxDistance;
+    u8 movementDirections;
     u16 allowedTile;
     u8 spotState;
     BOOL avoidPlayerTarget;
@@ -11735,6 +11545,9 @@ static BOOL OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(
     targetX = objectX + dx;
     targetY = objectY + dy;
     spotState = state->movementSpotStates[slot];
+    movementDirections = OverworldWildSpawns_GetBehaviorStateLane(
+        profile,
+        spotState)->hopAllowNonCardinal;
     minDistance = OverworldWildSpawns_GetBehaviorHopMinDistance(profile, spotState);
     maxDistance = OverworldWildSpawns_GetBehaviorHopMaxDistance(profile, spotState);
     allowedTile = OverworldWildSpawns_GetAllowedTileForSpotState(
@@ -11841,9 +11654,7 @@ static BOOL OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(
         return TRUE;
     }
 
-    if (OverworldWildSpawns_GetBehaviorStateLane(
-            profile,
-            spotState)->hopAllowNonCardinal == OW_WILD_BEHAVIOR_BOOL_YES
+    if (OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(movementDirections)
         && dx != 0
         && dy != 0) {
         int stepX = dx > 0 ? 1 : -1;
@@ -11865,6 +11676,9 @@ static BOOL OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(
         }
     }
 
+    if (!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(movementDirections)) {
+        goto blocked;
+    }
     for (i = 0; i < directionCount; i++) {
         u8 direction = directions[i];
         int stepX = OverworldWildSpawns_MovementDirectionDeltaX(direction);
@@ -12045,6 +11859,9 @@ static void OverworldWildSpawns_ClearSpawnRunState(OverworldWildSpawnState *stat
     state->movementSpawnRunTargetX[slot] = 0;
     state->movementSpawnRunTargetY[slot] = 0;
     state->movementSpawnRunActive[slot] = FALSE;
+    if (state->movementRuntimeState != NULL) {
+        OW_WILD_RUNTIME(state)->movementWalkMomentum[slot].speed = 0;
+    }
 }
 
 static void __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_SetSpawnRunState(
@@ -12059,6 +11876,8 @@ static void __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_SetSpa
     state->movementSpawnRunTargetY[slot] = (s16)targetY;
     state->movementSpawnRunActive[slot] = TRUE;
     state->movementCooldowns[slot] = 0;
+    OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->walkMomentumReset(
+        &OW_WILD_RUNTIME(state)->movementWalkMomentum[slot]);
 }
 
 static void OverworldWildSpawns_StartSpawnRun(
@@ -12192,6 +12011,7 @@ static BOOL OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand(
     int targetX;
     int targetY;
     BOOL customJumpWasActive;
+    BOOL customWalkWasActive;
 
     if (state == NULL
         || slot < 0
@@ -12209,6 +12029,8 @@ static BOOL OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand(
     OverworldWildSpawns_RecordFinishedMovementHistory(state, slot);
     targetX = state->movementSpawnRunTargetX[slot];
     targetY = state->movementSpawnRunTargetY[slot];
+    customWalkWasActive = OW_WILD_RUNTIME(state)->movementCustomMotionModes[slot]
+        == OW_WILD_CUSTOM_MOTION_WALK;
     customJumpWasActive = OW_WILD_RUNTIME(state)->movementCustomJumpPrepActive[slot]
         || OW_WILD_RUNTIME(state)->movementCustomJumpActive[slot];
     if (customJumpWasActive) {
@@ -12221,7 +12043,15 @@ static BOOL OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand(
                 OW_WILD_SPAWNER_CANOPY_HOPPER_PARTNER_RESTORE_COMMAND);
             OW_WILD_RUNTIME(state)->movementCustomJumpPrepActive[slot] = FALSE;
         }
-        OverworldWildSpawns_SetObjectLandingTile(fieldSystem, object, targetX, targetY);
+        OverworldWildSpawns_SetObjectLandingTile(
+            fieldSystem,
+            object,
+            customWalkWasActive
+                ? OW_WILD_RUNTIME(state)->movementCustomJumpTargetX[slot]
+                : targetX,
+            customWalkWasActive
+                ? OW_WILD_RUNTIME(state)->movementCustomJumpTargetY[slot]
+                : targetY);
         OverworldWildSpawns_ApplyCustomJumpSpinFacing(state, slot, object);
         OverworldWildSpawns_ClearCustomJump(state, slot);
         MapObject_ClearBits(object, BIT_VANISH);
@@ -12761,6 +12591,7 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_IsBehaviorAllowe
     int repositionStepY;
     BOOL tileAllowed = FALSE;
     BOOL targetIsSurface = FALSE;
+    BOOL strictDiagonalWalk;
     LocalMapObject *movingObject = NULL;
 
     if (fieldSystem == NULL || x < 0 || y < 0) {
@@ -12775,8 +12606,35 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_IsBehaviorAllowe
         return FALSE;
     }
 
+    strictDiagonalWalk = (allowedTile
+        & OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER) != 0;
+    allowedTile &= ~OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER;
     if (state != NULL && state->spawns[slot].active) {
         movingObject = state->spawns[slot].object;
+    }
+    if (strictDiagonalWalk
+        && movingObject != NULL
+        && x != movingObject->xCurr
+        && y != movingObject->yCurr
+        && (!OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
+                state,
+                slot,
+                fieldSystem,
+                allowedTile & ~OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER,
+                x,
+                movingObject->yCurr,
+                finalTargetX,
+                finalTargetY)
+            || !OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
+                state,
+                slot,
+                fieldSystem,
+                allowedTile & ~OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER,
+                movingObject->xCurr,
+                y,
+                finalTargetX,
+                finalTargetY))) {
+        return FALSE;
     }
     if (movingObject != NULL) {
         repositionGrid = OW_WILD_RUNTIME(state)
@@ -13669,13 +13527,20 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartP
     lane = OverworldWildSpawns_GetBehaviorStateLane(
         profile,
         state->movementSpotStates[slot]);
-    flatWalk = lane->chillAction == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER
-        && lane->hopAllowNonCardinal
-            != OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+    flatWalk = !chainReposition
+        && suppressHopStartSound == OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG;
+    if (flatWalk
+        && direction > OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+        && (object->flags & MAPOBJECTFLAG_UNK7) == 0) {
+        spinStartFacing = OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(
+            object,
+            direction,
+            OVERWORLD_WALK_MODULE_ENTRY->directionKey(direction));
+    }
     playHopStartSound = !suppressHopStartSound
         && OverworldWildSpawns_IsHeadbuttTreeTopLocation(fieldSystem, objectX, objectY);
     startBaseY = (s32)object->posVec[1];
-    if (sOverworldWildSpawnHopPreparing) {
+    if (sOverworldWildSpawnHopPreparing && !flatWalk) {
         do {
             OverworldWildSpawns_ResolveObjectLandingHeight(
                 fieldSystem,
@@ -13696,30 +13561,32 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartP
             targetX,
             targetY);
     }
-    behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
-    if (!OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->resolve(
-            fieldSystem,
-            (const OverworldWildSurfaceCatalog *)behaviorData->surfaceModels,
-            lane,
-            object,
-            startBaseY,
-            targetBaseY,
-            objectX,
-            objectY,
-            targetX,
-            targetY,
-            distance,
-            &trajectory)) {
-        return FALSE;
+    if (flatWalk) {
+        frameCount = runtime->movementWalkMomentum[slot].speed;
+    } else {
+        behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
+        if (!OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY->resolve(
+                fieldSystem,
+                (const OverworldWildSurfaceCatalog *)behaviorData->surfaceModels,
+                lane,
+                object,
+                startBaseY,
+                targetBaseY,
+                objectX,
+                objectY,
+                targetX,
+                targetY,
+                distance,
+                &trajectory)) {
+            return FALSE;
+        }
+        frameCount = trajectory & 0xFFFF;
     }
-    frameCount = trajectory & 0xFFFF;
-    if (chainReposition) {
+    if (chainReposition && !repositionUsesArc) {
         frameCount = runtime->movementDeferredChainPauseTicks[slot];
         frameCount *= distance;
-    } else if (flatWalk) {
-        frameCount = 1u << (5u - lane->chillSpeed);
     }
-    spinSpeed = chainReposition
+    spinSpeed = chainReposition || flatWalk
         ? 0
         : OverworldWildSpawns_GetBehaviorHopSpinSpeed(
             profile,
@@ -13733,9 +13600,14 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartP
             ? spinStartFacing
             : (spinSpeed & OW_WILD_SPAWNER_CUSTOM_JUMP_SPIN_SPEED_MASK) != 0
             ? spinStartFacing
+            : flatWalk
+                && ((object->flags & MAPOBJECTFLAG_UNK7) != 0
+                    || direction > OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT)
+            ? spinStartFacing
             : direction);
     MapObject_ClearBits(object, BIT_VANISH | OW_WILD_SPAWNER_CUSTOM_JUMP_OWNED_BITS);
-    if (!OverworldWildSpawns_RunImmediateCanopyMovementCommand(
+    if (!flatWalk
+        && !OverworldWildSpawns_RunImmediateCanopyMovementCommand(
             object,
             OW_WILD_SPAWNER_CANOPY_HOPPER_PARTNER_PREP_COMMAND)) {
         (void)OverworldWildSpawns_RunImmediateCanopyMovementCommand(
@@ -13753,13 +13625,16 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartP
         startBaseY,
         targetBaseY,
         frameCount);
-    runtime->movementCustomJumpArcHeightsQ4[slot] = repositionUsesArc
+    runtime->movementCustomMotionModes[slot] = flatWalk
+        ? OW_WILD_CUSTOM_MOTION_WALK
+        : OW_WILD_CUSTOM_MOTION_JUMP;
+    runtime->movementCustomJumpArcHeightsQ4[slot] = !flatWalk && repositionUsesArc
         ? (u8)(trajectory >> 16)
         : 0;
-    runtime->movementCustomJumpPrepActive[slot] = TRUE;
+    runtime->movementCustomJumpPrepActive[slot] = !flatWalk;
     OverworldWildSpawns_ReconcileNativeShadow(fieldSystem, object);
     runtime->movementCustomJumpSpinTimers[slot] = spinSpeed;
-    swayWidth = chainReposition
+    swayWidth = chainReposition || flatWalk
         ? 0
         : lane->hopSwayWidth;
     runtime->movementCustomJumpSpinSpeeds[slot] = spinSpeed
@@ -13772,12 +13647,14 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_StartP
     movementCommand = OW_WILD_SPAWNER_CANOPY_HOPPER_FREEZE_COMMAND;
     MapObject_StartMovementCommand(object, movementCommand);
     MapObject_SetSingleMovementActive(object);
-    StopSE(OW_WILD_SPAWNER_SPOT_EMOTE_SE);
-    if (playHopStartSound) {
-        StopSE(OW_WILD_SPAWNER_HOP_START_SE);
-        OverworldWildSpawns_PlayCanopyHopSE(state);
-    } else {
-        OverworldWildSpawns_StartHopStartSoundSuppression(state, slot);
+    if (!flatWalk) {
+        StopSE(OW_WILD_SPAWNER_SPOT_EMOTE_SE);
+        if (playHopStartSound) {
+            StopSE(OW_WILD_SPAWNER_HOP_START_SE);
+            OverworldWildSpawns_PlayCanopyHopSE(state);
+        } else {
+            OverworldWildSpawns_StartHopStartSoundSuppression(state, slot);
+        }
     }
 
     OverworldWildSpawns_SetPreviousTile(state, slot, objectX, objectY);

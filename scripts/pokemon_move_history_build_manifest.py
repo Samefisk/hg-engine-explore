@@ -320,6 +320,7 @@ DEPENDENCY_FILES = (
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
+    "build/pokemon_move_history_overlay/overworld_walk_module.d",
     "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.d",
     "build/pokemon_move_history_task6_overlay/overworld_wild_hop_trajectory.d",
     "build/summary_move_relearn_overlay/summary_move_relearn.d",
@@ -347,6 +348,10 @@ FIXED_INPUTS = (
     "asm/pokemon_move_history_task6_overlay/entry.s",
     "asm/summary_move_relearn_overlay/entry.s",
     "src/pokemon_move_history_overlay/linker.ld",
+    "src/pokemon_move_history_overlay/overworld_walk_module.c",
+    "include/overworld_walk_module.h",
+    "include/overworld_walk_direction_policy.h",
+    "include/overworld_walk_timing_policy.h",
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/overworld_wild_runtime_overlay/linker.ld",
@@ -383,6 +388,8 @@ OUTPUTS = {
         "build/pokemon_move_history_overlay/pokemon_move_history.o",
     "relearn_object":
         "build/pokemon_move_history_overlay/pokemon_move_relearn.o",
+    "walk_module_object":
+        "build/pokemon_move_history_overlay/overworld_walk_module.o",
     "entry_object": "build/pokemon_move_history_overlay/entry.o",
     "thumb_help_object": "build/pokemon_move_history_overlay/thumb_help.o",
     "task6_object":
