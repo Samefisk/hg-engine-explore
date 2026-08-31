@@ -284,7 +284,7 @@ OverworldWild_RunChainReposition(
         *movesRemaining = 0;
         return FALSE;
     }
-    startIndex = gf_rand() & 3;
+    startIndex = gf_rand();
     if (remaining == 0) {
         goto finished;
     }
@@ -335,9 +335,6 @@ OverworldWild_RunChainReposition(
         break;
     }
 finished:
-    if (remaining == 0) {
-        object->curFacing = startIndex;
-    }
     *movesRemaining = 0;
     return FALSE;
 }

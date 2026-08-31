@@ -159,6 +159,10 @@ def main() -> int:
         REPO
         / "src/pokemon_move_history_overlay/overworld_walk_module.c"
     ).read_text()
+    hop_trajectory = (
+        REPO
+        / "src/pokemon_move_history_task6_overlay/overworld_wild_hop_trajectory.c"
+    ).read_text()
     runtime_sources = spawns + face_player_runtime
     for required in (
         "OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION",
@@ -174,6 +178,10 @@ def main() -> int:
             raise SystemExit(f"flat-Walk runtime is missing: {required}")
     if "pauseTicks = lane->chainRepositionSpeed;" not in mount:
         raise SystemExit("mounted flat Reposition does not use exact frame timing")
+    if "startIndex = gf_rand();" not in hop_trajectory \
+            or "directionIndex = (startIndex + attempt) & 7;" not in hop_trajectory \
+            or "startIndex = gf_rand() & 3;" in hop_trajectory:
+        raise SystemExit("Reposition direction search does not randomize all eight directions")
     if "OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(" not in walk_runtime \
             or "OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION" not in spawns:
         raise SystemExit("wild Walk completion does not use exact-frame acceleration")

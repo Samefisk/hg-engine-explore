@@ -49,6 +49,9 @@ SELECTOR_SYMBOLS = linked_symbols(
 )
 WILD_SYMBOLS = linked_symbols(REPO / "build/overworld_wild_spawns_overlay_linked.o")
 RUNTIME_SYMBOLS = linked_symbols(REPO / "build/overworld_wild_runtime_overlay_linked.o")
+TASK6_SYMBOLS = linked_symbols(
+    REPO / "build/pokemon_move_history_task6_overlay_linked.o"
+)
 
 MOUNT = MOUNT_SYMBOLS["sOverworldMountState"]
 UPDATE_MOUNT_MOTION = MOUNT_SYMBOLS["OverworldMount_UpdateCustomMotion"]
@@ -68,6 +71,16 @@ APPLY_WILD_RENDER = WILD_SYMBOLS["OverworldWildSpawns_ApplyCustomJumpRenderOffse
 CLEAR_WILD_JUMP = WILD_SYMBOLS["OverworldWildSpawns_ClearCustomJump"]
 LANDING_PARTICLE = RUNTIME_SYMBOLS["OverworldWildRuntime_PlayLandingHopParticle"]
 PLAY_SE = MOUNT_SYMBOLS["PlaySE"] & ~1
+PREPARE_CHAIN_PAUSE = MOUNT_SYMBOLS[
+    "OverworldWildMovementPolicy_PrepareChainPause"
+]
+APPLY_CHAIN_PAUSE = WILD_SYMBOLS[
+    "OverworldWildSpawns_ApplyUniversalChainMovementPause"
+]
+TRY_START_CHAIN_PAUSE_ACTION = WILD_SYMBOLS[
+    "OverworldWildSpawns_TryStartChainPauseAction"
+]
+RUN_CHAIN_REPOSITION = TASK6_SYMBOLS["OverworldWild_RunChainReposition"]
 
 WILD_RUNTIME_PTR_OFFSET = 0xE4
 WILD_MAP_ID_OFFSET = 0xD4
@@ -1091,6 +1104,192 @@ def scenario_wild_walk():
         )
     )
     return result
+
+
+def scenario_ledyba_chain_pause():
+    """Exercise Ledyba's configured reposition-skid action in the live ROM."""
+    trace = {
+        "profile": None,
+        "prepared": [],
+        "action_calls": [],
+        "reposition_calls": [],
+        "motions": [],
+    }
+    pending_prepare = {"target": False, "initialized": False}
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+        target_slot = next(
+            (
+                slot
+                for slot in range(6)
+                if wild_spawn(emu, slot)["active"]
+                and wild_spawn(emu, slot)["object"] != 0
+            ),
+            None,
+        )
+        if target_slot is None:
+            emu.destroy()
+            return {"passed": False, "error": "no active land spawn"}
+
+        spawn_base = WILD_STATE + target_slot * 20
+        write_u8(emu, spawn_base + 0x0A, 165)
+        write_u8(emu, spawn_base + 0x0B, 0)
+        target_object = wild_spawn(emu, target_slot)["object"]
+
+        def on_apply_chain_pause(_address, _size):
+            regs = emu.memory.register_arm9
+            if regs.r1 != target_slot:
+                return
+            profile = regs.r2
+            trace["profile"] = {
+                "chain_moves": unsigned(emu, profile + 29, 1),
+                "action": unsigned(emu, profile + 31, 1),
+                "variance": unsigned(emu, profile + 44, 1),
+                "reposition_count": unsigned(emu, profile + 57, 1),
+                "reposition_time": unsigned(emu, profile + 60, 1),
+                "reposition_distance": unsigned(emu, profile + 61, 1),
+                "allow_cardinal": unsigned(emu, profile + 63, 1),
+                "allow_diagonal": unsigned(emu, profile + 64, 1),
+                "action_chance": unsigned(emu, profile + 67, 1),
+            }
+            pending_prepare["target"] = True
+
+        def on_prepare_chain_pause(_address, _size):
+            if not pending_prepare["target"]:
+                return
+            pending_prepare["target"] = False
+            regs = emu.memory.register_arm9
+            lane = unsigned(emu, regs.sp + 4)
+            locomotion = unsigned(emu, regs.sp + 8) & 0xFF
+            if not pending_prepare["initialized"]:
+                # The borrowed live spawn can have a partial chain from its
+                # original species. Start Ledyba at a clean chain boundary.
+                write_u8(emu, regs.r0, 0)
+                pending_prepare["initialized"] = True
+            trace["prepared"].append(
+                {
+                    "steps_before": unsigned(emu, regs.r0, 1),
+                    "locomotion": locomotion,
+                    "action": unsigned(emu, lane + 31, 1),
+                }
+            )
+
+        def on_try_start_action(_address, _size):
+            regs = emu.memory.register_arm9
+            if regs.r1 != target_slot:
+                return
+            trace["action_calls"].append(
+                {
+                    "action": regs.r3 & 0xFF,
+                    "position": [
+                        object_state(emu, target_object)["x"],
+                        object_state(emu, target_object)["y"],
+                    ],
+                }
+            )
+
+        def on_run_reposition(_address, _size):
+            regs = emu.memory.register_arm9
+            if regs.r1 != target_slot:
+                return
+            trace["reposition_calls"].append(
+                {
+                    "remaining": unsigned(emu, regs.r3, 1),
+                    "position": [
+                        object_state(emu, target_object)["x"],
+                        object_state(emu, target_object)["y"],
+                    ],
+                }
+            )
+
+        def on_render(_address, _size):
+            regs = emu.memory.register_arm9
+            slot = regs.r1
+            if slot != target_slot or not trace["action_calls"]:
+                return
+            runtime = unsigned(emu, WILD_STATE + WILD_RUNTIME_PTR_OFFSET)
+            if runtime == 0:
+                return
+            elapsed = regs.r3
+            motion_key = (
+                signed(emu, runtime + WILD_START_X_OFFSET + slot * 2, 2),
+                signed(emu, runtime + WILD_START_Y_OFFSET + slot * 2, 2),
+                signed(emu, runtime + WILD_TARGET_X_OFFSET + slot * 2, 2),
+                signed(emu, runtime + WILD_TARGET_Y_OFFSET + slot * 2, 2),
+            )
+            if elapsed != 1:
+                return
+            trace["motions"].append(
+                {
+                    "start": list(motion_key[:2]),
+                    "target": list(motion_key[2:]),
+                    "frames": unsigned(
+                        emu,
+                        runtime + WILD_FRAME_COUNTS_OFFSET + slot * 2,
+                        2,
+                    ),
+                }
+            )
+
+        emu.memory.register_exec(APPLY_CHAIN_PAUSE, on_apply_chain_pause)
+        emu.memory.register_exec(PREPARE_CHAIN_PAUSE, on_prepare_chain_pause)
+        emu.memory.register_exec(
+            TRY_START_CHAIN_PAUSE_ACTION,
+            on_try_start_action,
+        )
+        emu.memory.register_exec(RUN_CHAIN_REPOSITION, on_run_reposition)
+        emu.memory.register_exec(APPLY_WILD_RENDER, on_render)
+        for _frame in range(12000):
+            h.cycle(emu, 1)
+            if len(trace["reposition_calls"]) >= 5:
+                break
+        trace["target"] = {
+            "slot": target_slot,
+            "species": wild_spawn(emu, target_slot)["species"],
+            "final": [
+                object_state(emu, target_object)["x"],
+                object_state(emu, target_object)["y"],
+            ],
+        }
+        trace["screenshot"] = h.save_screenshot(
+            emu,
+            "documentation/verification_screenshots/ledyba_chain_pause.png",
+        )
+        for address in (
+            APPLY_CHAIN_PAUSE,
+            PREPARE_CHAIN_PAUSE,
+            TRY_START_CHAIN_PAUSE_ACTION,
+            RUN_CHAIN_REPOSITION,
+            APPLY_WILD_RENDER,
+        ):
+            emu.memory.register_exec(address, None)
+        emu.destroy()
+
+    profile = trace["profile"] or {}
+    trace["passed"] = (
+        profile == {
+            "chain_moves": 8,
+            "action": 5,
+            "variance": 6,
+            "reposition_count": 4,
+            "reposition_time": 8,
+            "reposition_distance": 2,
+            "allow_cardinal": 0,
+            "allow_diagonal": 1,
+            "action_chance": 60,
+        }
+        and any(call["action"] == 5 for call in trace["action_calls"])
+        and len(trace["reposition_calls"]) >= 5
+        and len(trace["motions"]) == 4
+        and all(
+            motion["frames"] == 16
+            and abs(motion["target"][0] - motion["start"][0]) == 2
+            and abs(motion["target"][1] - motion["start"][1]) == 2
+            for motion in trace["motions"]
+        )
+    )
+    return trace
 
 
 def run_mankey_hop(emu, direction):
@@ -2648,6 +2847,7 @@ SCENARIOS = {
     "turn_skid": scenario_turn_skid,
     "diagonal_turn_skid": scenario_diagonal_turn_skid,
     "wild_walk": scenario_wild_walk,
+    "ledyba_chain_pause": scenario_ledyba_chain_pause,
     "mankey_hops": scenario_mankey_hops,
     "mankey_control_stress": scenario_mankey_control_stress,
     "mounted_walk_transition": scenario_mounted_walk_transition,
