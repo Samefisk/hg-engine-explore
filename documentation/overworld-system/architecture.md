@@ -1,10 +1,13 @@
 # Overworld Pokémon System Architecture
 
-## Accepted target design
+## Current design
 
-The target is one deep `OverworldActorSystem` module with a small external interface and private internal modules. It owns overworld Pokémon lifecycle and motion. Fixed-address overlay tables remain internal adapters for DS memory placement.
+The system has one deep `OverworldActorSystem` module with a small external
+interface and private internal modules. It is the stable home for overworld
+Pokémon lifecycle, observation, resolution, motion state, movement policy, and
+population timing. Fixed-address overlay tables are DS deployment adapters.
 
-The recommended facade is:
+The public facade is:
 
 ```c
 OverworldActorResult OverworldActorSystem_Apply(
@@ -22,9 +25,12 @@ OverworldActorResult OverworldActorSystem_Inspect(
 - `Apply` is the only external lifecycle request path. It accepts a bounded,
   value-only command and queues it for the next `Tick`. The reply acknowledges
   the sequence ID. A duplicate sequence returns the previous acknowledgement.
-- `Tick` runs once per usable field frame, applies queued commands, advances all
-  actors in a fixed order, and reports input ownership, retry, fallback, and
-  whether more frame work is pending.
+- `Tick` runs once per usable field frame, applies queued commands, establishes
+  the field boundary, publishes compatibility state, and reports whether more
+  frame work is pending. During migration, the legacy role adapters advance
+  motion through the private actor motion service. Moving that execution into
+  `Tick` is a later ownership switch and must not double-tick compatibility
+  motion.
 - `Inspect` is read-only and typed. A query can enumerate actors or inspect one
   actor, the trace ring, population state, or system state.
 
@@ -43,7 +49,11 @@ command and invoke `Tick` before returning to stock field processing.
 
 Callers should not need to know overlay addresses, movement flags, custom-jump arrays, mount `motionMode`, `MapObject` commands, terrain loader offsets, ARM/Thumb interworking, profile masks, or presentation offsets.
 
-Those details currently leak through several large entry tables. The new facade hides them while providing high leverage: three calls cover wild Pokémon, followers, mounted control, scripted actors, movement, transitions, and diagnosis. External callers include only the facade header. New domain code must not call fixed-address service tables directly.
+Compatibility adapters still contain some of those details. The facade hides
+them from new callers and gives three stable calls for wild Pokémon, followers,
+mounted control, scripted actors, transitions, and diagnosis. External callers
+include only the facade header. New domain code must not call fixed-address
+internal service tables directly.
 
 The actor facade must not become a new monolith. Its implementation is a tower of private modules with explicit ownership.
 
@@ -53,7 +63,9 @@ The actor facade must not become a new monolith. Its implementation is a tower o
 
 Owns profile field names, units, bounds, lane use, override operators, enum values, feature IDs, and binary layout generation.
 
-The long-term authoring source is named and nested. A generator emits the compact ROM blob and host metadata. Positional C records remain a generated compatibility output during migration.
+The field schema is named data and generates the C and host metadata. Positional
+C profile records remain the compatibility value source until the separate
+authoring-data migration is complete.
 
 ```text
 profile
@@ -102,9 +114,10 @@ Required order:
 10. Resolve mechanical primitives.
 11. Produce a fingerprint and ordered provenance.
 
-The resolver must become portable C compiled for both ARM and the host tools.
-Until that migration is complete, the ROM resolver is runtime truth and the
-Workshop resolver is a partial source preview that must be parity-checked.
+The resolver is portable C compiled for ARM and the Workshop V2 host adapter.
+Both read the same compact behavior layout. The Workshop parses source for
+editor labels and resolver context. Its legacy endpoints still have a Python
+compatibility resolver; deleting that second path is a pending Phase 2 gate.
 
 Current mount resolution first resolves the follower with the forced `Follower
 Pokemon` override layer. Mount begin then snapshots the resolved Owner lane.
@@ -243,7 +256,9 @@ The transition coordinator owns field epoch changes, suspend, canonicalize, rebi
 
 ### 10. Observation
 
-Observation is a first-class module, not temporary diagnostic code. `Inspect` and a bounded trace ring expose semantic state without changing behavior.
+Observation is a first-class module, not temporary diagnostic code. `Inspect`,
+the generated debug descriptor, and a bounded trace ring expose semantic state
+without changing behavior.
 
 ## Real seams and adapters
 
@@ -260,25 +275,29 @@ Planner families are private strategies, not public plugin APIs. Fixed overlay e
 
 ## Nintendo DS deployment topology
 
-The conceptual module does not require one large resident overlay.
+The conceptual module uses one small resident code home and several unloadable
+engine adapters.
 
-- A small resident facade thunk owns validation, command sequencing, and
-  load-aware dispatch.
-- Resident implementation pieces keep strict fixed addresses and
-  magic/version/size entry checks.
+- Overlay 158 is resident at `0x023B6B00-0x023BAB00`. Its first `0x3000` bytes
+  hold code and fixed entries; its last `0x1000` bytes hold bounded state.
+- The public facade, compatibility entry, debug layout, resolver, motion,
+  population, and movement-policy entries have fixed addresses and
+  magic/version/size checks.
 - Unloadable overlays receive bounded value inputs and return bounded values.
   No facade state retains pointers into an unloadable overlay.
 - ARM/Thumb interworking and `LONG_CALL` requirements remain explicit adapter
   contracts.
 - Every overlay has a byte budget checked from the linker map and packaged ROM.
-- Portable resolver and planner code are separated from ROM context adapters
+- Portable resolver and motion code are separated from ROM context adapters
   that read behavior blobs, `FieldSystem`, and map objects.
 - Host adapters compile the portable parts without Nintendo DS pointers or
   overlay assumptions.
 
-## Frame order
+## Target frame order
 
-Every usable field frame follows one order:
+After compatibility execution is retired, every usable field frame follows one
+order. The current facade performs the field-boundary and command phases, while
+legacy role adapters still advance motion through the private service:
 
 1. Validate field epoch and actor handles.
 2. Apply pending lifecycle commands.
@@ -333,7 +352,7 @@ Cancel is idempotent. It leaves authority on a complete tile, releases reservati
 
 ## Locality and deletion tests
 
-A successful target design passes these tests:
+A successful migration passes these tests:
 
 - Adding a locomotion changes one planner, the shared executor only when its lifecycle is genuinely new, profile schema, and scenarios. It does not add a mounted copy.
 - Adding a role changes one controller or presentation adapter. It does not copy movement mechanics.

@@ -2,9 +2,10 @@
 
 This directory is the canonical entry point for wild Pokémon, followers, mounts, behavior profiles, Walk, Hop, Teleport, terrain, streaming, and their verification.
 
-The current branch implements the listed paths, but its ownership and proof are
-split across memory-placement overlays and focused runtime checks. The target
-design treats those overlays as deployment details behind one deep actor system.
+The current roadmap branch adds a resident `OverworldActorSystem` facade,
+portable behavior and motion modules, semantic observation, and one host
+control command. Existing memory-placement overlays remain compatibility
+adapters while live behavior moves behind that seam.
 
 ## Read order
 
@@ -59,7 +60,7 @@ Wild AI / Follower AI / Rider input / Script
   across the traversed path. Warps cannot fire mid-motion.
 - Exact Walk travel time follows the active subordinate timing contract.
 
-## Accepted target contracts
+## System contracts
 
 - One actor has at most one motion owner.
 - A mounted player and Pokémon execute one motion. Actor state is authority;
@@ -81,32 +82,38 @@ Wild AI / Follower AI / Rider input / Script
 
 ## Current source map
 
-This map was audited at `34d7b9b83` on branch `feature/pokemon-mount`.
+This map describes `feature/overworld-actor-system-roadmap`.
 
-| Responsibility | Current source | Target owner |
+| Responsibility | Current source | System owner |
 | --- | --- | --- |
-| Authored profiles and surfaces | `data/OverworldWildBehaviorData.c` | Behavior Schema |
-| Behavior-data services, surface lookup, trajectory math, and cache dispatch | `src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c` | Resolver and world adapters |
-| Profile editor and compatibility parser | `scripts/overworld_behavior_profile_viewer.py` | Workshop adapter |
-| V2 editor and resolver preview | `tools/overworld-viewer-v2/` | Workshop adapter using the canonical resolver |
-| Profile composition and wild orchestration | `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` | Resolver, controllers, and actor facade |
-| Walk momentum, profile transforms, surface queries | `src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c` | Motion Module and Resolver |
-| Timing and direction policy | `src/pokemon_move_history_overlay/overworld_walk_module.c` | Motion Module |
-| Hop trajectory and vector helpers | `src/pokemon_move_history_task6_overlay/` | Motion planner helpers |
-| Hop candidate planning and execution | spawns, helper, behavior-data, and mount overlays | Motion Module |
-| Mount input, motion, streaming, and presentation | `src/overworld_mount_overlay/overworld_mount_overlay.c` | Mounted role and presentation adapters |
-| Spawn, capture, battle, and reconciliation helpers | `src/overworld_wild_helper_overlay/` | Population and reaction modules |
-| Resident lifecycle bridge | `src/overworld_wild_spawns.c`, `src/field/map_teleport.c` | Engine adapter |
-| Package and source checks | `scripts/verify_overworld_*.py` | Affected verification router |
-| Live checks | `scripts/headless-overworld-test.py` and focused harnesses | ROM scenario adapter |
+| Public actor lifecycle, handles, commands, snapshots, and trace | `include/overworld_actor_system.h`, `src/overworld_actor_system_overlay/` | Actor facade and Observation |
+| Profile field schema and generated metadata | `tools/overworld/behavior_schema.json`, `include/generated/`, `tools/overworld/generated/` | Behavior Schema |
+| Authored profile values and surfaces | `data/OverworldWildBehaviorData.c` | Behavior Schema compatibility data |
+| Profile composition | `lib/overworld/overworld_behavior_resolver.c` | Behavior Resolver |
+| Shared motion state and sampling | `lib/overworld/overworld_motion_model.c` | Motion Module |
+| Look, wander, chain-pause, and Ram policy | `src/overworld_actor_system_overlay/` | Movement Policy |
+| Workshop profile display and native resolution adapter | `scripts/overworld_behavior_profile_viewer.py`, `tools/overworld-viewer-v2/` | Workshop adapter |
+| Wild compatibility orchestration | `src/overworld_wild_spawns_overlay/` | Wild role and engine adapters |
+| Surface queries and feedback compatibility | `src/overworld_wild_runtime_overlay/` | World and effect adapters |
+| Exact Walk timing and direction helpers | `src/pokemon_move_history_overlay/overworld_walk_module.c` | Motion helpers |
+| Hop trajectory and vector helpers | `src/pokemon_move_history_task6_overlay/` | Motion helpers |
+| Rider input, streaming, and dependent presentation | `src/overworld_mount_overlay/` | Mounted role and presentation adapters |
+| Population scheduling | actor population entry plus wild spawn and helper overlays | Population module and engine adapter |
+| Host control, feature map, trace decode, and scenarios | `scripts/owctl`, `tools/overworld/`, `tests/overworld/` | Host adapter |
 
 Physical overlays can remain separate because Nintendo DS memory limits are real. They must stop being the conceptual module boundaries.
 
 ## Current capability status
 
-The branch contains profile resolution, follower selection, mount lifecycle, exact-frame Walk, acceleration, skids, stomp and crash feedback, cardinal and diagonal movement, custom Hop, Teleport, mounted presentation, and map-transition handling. This is a capability inventory, not a claim that every runtime path is free of regressions.
+The branch contains the resident facade, generated debug descriptor, portable
+resolver, portable motion state machine, native Workshop resolver adapter,
+movement-policy entry, population entry, feature manifest, trace decoder, and
+declarative scenario catalog. Walk, Hop, and Teleport compatibility paths now
+sample actor-owned motion state.
 
-The weak area is proof and diagnosis. Static verifiers protect ABI and package shape, but many live behaviors still depend on private memory offsets and one-off scenarios. The first roadmap phase adds semantic observation before further structural change.
+Package and compile proof exists. Seven scenario adapters are active and the
+remaining baseline scenarios are marked `planned`. Do not claim a runtime exit
+gate until its named ROM or visual scenario has run.
 
 ## Change protocol
 
@@ -115,8 +122,8 @@ For every overworld-system change:
 1. Name the affected contract and actor roles.
 2. Find its owner in the source map and feature map in [`verification.md`](verification.md).
 3. Add or update a scenario before changing ownership.
-4. Before semantic tracing exists, use focused current instrumentation and ROM
-   scenarios. After Phase 1, preserve old and new semantic traces during migration.
+4. Use `Inspect` and semantic traces first. Preserve old and new semantic
+   outcomes while a compatibility path is being removed.
 5. Remove the old path when the new interface-level scenario passes. Do not keep permanent dual ownership.
 6. Update the canonical document if an invariant, owner, interface, or failure reason changed.
 

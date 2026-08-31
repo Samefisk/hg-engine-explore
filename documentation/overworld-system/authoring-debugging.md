@@ -18,51 +18,58 @@ Start the Workshop from the repository root:
 OPEN_PAGE=0 scripts/keyboard-maestro-start-overworld-viewer.sh
 ```
 
-Open <http://127.0.0.1:8766/>. Treat its context resolution as a source
-preview. `/api/v2/resolve` does not yet reproduce the forced follower layer,
-conditional physical-surface selection, or complete Active/Tired linked-profile
-resolution exactly like the ROM.
+Open <http://127.0.0.1:8766/>. `/api/v2/resolve` calls the portable C resolver
+that the ROM uses. The Workshop still parses source for names, editor data, and
+context inputs. Older Workshop and source-editing endpoints still use the
+Python compatibility resolver. Phase 2 is complete only after those endpoints
+move to the portable resolver and the Python composition path is deleted.
 
 Use the existing focused live runner after an authorized build:
 
 ```bash
 python3 scripts/verify_overworld_walk_runtime.py --scenario mounted_diagonal_streaming
-python3 scripts/verify_overworld_walk_runtime.py --scenario mankey_control_stress --include-mankey
+python3 scripts/verify_overworld_walk_runtime.py --scenario mankey_control_stress
 python3 scripts/verify_overworld_mount.py --rom test.nds
 ```
 
-Mankey scenarios import the raw melonDS `test.sav`; they require
-`--include-mankey`. Other current live scenarios use the configured headless
-save path. These scripts use private symbols and offsets, so record the ROM,
-save, and source revision with the result.
+Mankey scenarios import the raw melonDS `test.sav`. The
+`--include-mankey-save` option adds those scenarios when running
+`--scenario all`; a named Mankey scenario does not need the option. Other
+current live scenarios use the configured headless save path. These scripts
+use private symbols and offsets, so record the ROM, save, and source revision
+with the result.
 
-## Target workflow
+## Agent control workflow
 
-The target host command is `scripts/owctl`. It is a facade over profile authoring, the portable resolver, scenario execution, trace decoding, and affected verification.
+`scripts/owctl` is the host facade for readiness, scenario contracts, trace
+decoding, and affected verification.
 
 ```bash
-scripts/owctl profile resolve SPECIES_CYNDAQUIL --forced-layer follower --projection wild,mounted --encounter-terrain land --surface-mask native-land
-scripts/owctl scenario run mounted.walk.accelerate --trace why
-scripts/owctl compare wild,mounted --contract motion --species SPECIES_MANKEY
-scripts/owctl verify affected
 scripts/owctl doctor
+scripts/owctl scenario list
+scripts/owctl scenario validate
+scripts/owctl scenario run mount.detach-restores-control --dry-run
+scripts/owctl trace decode tests/overworld/traces/semantic-trace-v1.json
+scripts/owctl verify affected
+scripts/owctl verify affected --run
 ```
 
-These commands are a design target in the active roadmap. They do not exist yet.
+Scenario runs and affected verification write identity-bearing run manifests
+when they execute. A scenario with status `planned` is a contract only and
+cannot be reported as runtime proof.
 
 ## One source model
 
-The current profile schema is repeated in C structs, masks, Python field lists, JavaScript metadata, bounds, migrations, and verifiers. The current Workshop also has a host resolver that can drift from the ROM resolver.
+The generated field schema lives in `tools/overworld/behavior_schema.json`.
+Its generator emits matching ROM and host metadata. The positional C profile
+data remains the current value source.
 
-The target is one generated Behavior Schema and one portable resolver:
-
-- Named source data is the authoring truth.
-- The schema generates C layout, binary masks, enum metadata, host types, editor fields, bounds, trace labels, and compatibility writers.
-- The same portable resolver source compiles for ARM and the host.
-- The resolver returns a complete `Resolved behavior`, a fingerprint, and ordered provenance.
-- The Workshop displays that result. It does not implement another resolver.
-
-During migration, the positional C data remains the ROM input. The ROM resolver is runtime truth. Workshop results must be labeled as previews and checked against golden resolver vectors.
+`lib/overworld/overworld_behavior_resolver.c` is the canonical composition
+implementation used by the ROM and `/api/v2/resolve`. It compiles for ARM and
+as `build/overworld_behavior_resolver_host`. It returns the resolved lanes,
+mechanical primitives, fingerprint, and ordered provenance. The Workshop V2
+endpoint decodes that result for display. The older compatibility endpoints
+still use the Python path named above.
 
 ## Resolution explanation
 
@@ -102,7 +109,7 @@ stay resolved but that controller does not consume them.
 
 ## Stable observation
 
-`OverworldActorSnapshot` must expose:
+`OverworldActorSnapshot` exposes:
 
 - Actor handle and field epoch.
 - Subject identity and role.
@@ -117,14 +124,15 @@ stay resolved but that controller does not consume them.
 - Last plan decision, commit sequence, and cancel reason.
 - Population scheduler state when requested.
 
-The target generator will emit snapshot layout and enum metadata to
-`build/overworld-system.debug.json`. Live tools will read that descriptor
-instead of hard-coded private offsets.
+`scripts/generate_overworld_actor_system_debug.py` emits snapshot layout,
+fixed entries, enum IDs, symbols, and offsets to
+`build/overworld-system.debug.json`. Live adapters must read that descriptor
+instead of adding private offsets.
 
 ## Semantic trace
 
-The target observation module will use a fixed-size binary ring. It will contain
-no strings and allocate no memory per frame. A host decoder will map stable
+The observation module uses a fixed-size binary ring. It contains
+no strings and allocates no memory per frame. A host decoder maps stable
 event and reason IDs to names.
 
 Core events:

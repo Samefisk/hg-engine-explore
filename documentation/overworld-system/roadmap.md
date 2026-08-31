@@ -6,9 +6,17 @@ Make the overworld Pokémon system easy to extend and cheap to diagnose without 
 
 The migration wraps, observes, compares, switches, and deletes. It is not a full rewrite.
 
+## Delivery state
+
+This branch implements the shared code home, portable resolver and motion
+models, resident actor facade, host control surface, and compatibility sampling
+for current movement paths. Ownership switches, legacy deletion, and live exit
+proof remain open where named below. A roadmap exit gate is complete only after
+its required runtime proof passes.
+
 ## Phase 0 - Canonical system map
 
-Status: complete in this documentation change.
+Status: complete.
 
 - Define one vocabulary.
 - Define one architecture, frame order, ownership model, and invariant set.
@@ -19,7 +27,7 @@ Exit gate: a new agent can find the current owner, target owner, required roles,
 
 ## Phase 1 - Observe current behavior
 
-Status: next.
+Status: implemented; live diagnostic exit proof is pending.
 
 - Add a read-only, versioned compatibility snapshot with stable semantic fields.
   Its private storage adapter can change in later phases.
@@ -37,6 +45,10 @@ Exit gate: a control lock, wrong target, wrong speed, presentation split, or str
 
 ## Phase 2 - One schema and one resolver
 
+Status: partly implemented. Portable C resolution is used by the ROM and the V2
+resolve endpoint. Legacy Workshop endpoints still retain the Python
+compatibility resolver. ROM/host parity and deletion remain pending.
+
 - Define a named Behavior Schema with field path, type, unit, bounds, lane, operators, and feature ID.
 - Generate the compact C layout, masks, editor metadata, validators, migration metadata, and trace labels.
 - Extract profile composition into portable C.
@@ -48,6 +60,9 @@ Exit gate: a control lock, wrong target, wrong speed, presentation split, or str
 Exit gate: deleting a profile rule from the portable resolver makes both ROM and Workshop resolution fail in the same tests. No second resolver remains.
 
 ## Phase 3 - Actor facade and compatibility views
+
+Status: implemented as a resident facade plus compatibility views; complete
+storage consolidation remains gated by later phases.
 
 - Put the existing lifecycle behind `Apply`, `Tick`, and `Inspect` without changing behavior.
 - Add `ActorView` adapters over `OverworldWildSpawnState`, its runtime sidecar,
@@ -62,6 +77,11 @@ state without exposing the underlying parallel arrays.
 
 ## Phase 4 - Motion Plan and shared Walk
 
+Status: compatibility shadow and sampling implemented. Wild and mounted Walk
+sample the shared actor motion state, but legacy adapters still construct plans,
+advance execution, and publish effects. The ownership switch, parity proof, and
+legacy deletion remain pending.
+
 - Introduce `Intent`, `Candidate`, `MotionPlan`, `Decision`, `PathAdvance`, and `Commit` around the working Walk path.
 - Add the deterministic world fixture and host executor.
 - Move wild Walk to the shared planner/executor.
@@ -75,6 +95,12 @@ Exit gate: exact Walk and all feedback pass wild/mounted parity. Only role inten
 
 ## Phase 5 - Hop and Teleport
 
+Status: compatibility shadow and sampling implemented. Hop and Teleport use the
+shared motion state for sampling, suspend, rebind, resume, path advances, and
+commit acknowledgement. Legacy arrays and role adapters still construct plans
+and own execution. The ownership switch, live parity, and deletion remain
+pending.
+
 - Move Hop planning into the Motion Module.
 - Reuse the shared executor for duration, arc, streaming, commit, cancel, pause, and presentation.
 - Move Teleport through the same lifecycle with visibility policy as data.
@@ -85,6 +111,10 @@ Exit gate: Walk, Hop, and Teleport share one motion state machine and terminal e
 
 ## Phase 6 - Roles, chains, and Ram
 
+Status: partly implemented. Look, wander, chain-pause, and Ram policy have one
+actor-owned entry. Wild and mounted adapters still contain engine-specific
+controller sequencing.
+
 - Move wild, follower, chain, and player input decisions behind role controllers.
 - Keep mounted control as a rebind of the current follower actor to rider input.
 - Make chain movement consume semantic commits only.
@@ -94,6 +124,10 @@ Exit gate: Walk, Hop, and Teleport share one motion state machine and terminal e
 Exit gate: a new role adds one controller or presentation adapter without copying motion code.
 
 ## Phase 7 - World lifecycle and population
+
+Status: partly implemented. Field epochs, motion rebind, path-advance signals,
+and population frame scheduling have actor-owned entries. Full transition and
+streaming soak proof is pending.
 
 - Centralize path advances, target reservation, surface occupancy, warp gates,
   and battle gates. Streaming and distance consume path advances; terminal
@@ -106,6 +140,10 @@ Exit gate: a new role adds one controller or presentation adapter without copyin
 Exit gate: no movement type has a private map-transition or terrain-streaming protocol.
 
 ## Phase 8 - Delete legacy surfaces
+
+Status: started. The duplicate runtime profile resolver was removed and its
+old ABI slots were retired. Remaining compatibility arrays and callbacks stay
+until their active ROM scenarios pass.
 
 - Consolidate migrated parallel arrays into one coherent actor slot only after
   Walk, Hop, Teleport, roles, and lifecycle ownership have moved.
