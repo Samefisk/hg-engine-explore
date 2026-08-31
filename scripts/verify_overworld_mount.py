@@ -26,7 +26,7 @@ PLAYER_STEP_RESIDENT_LITERAL = PLAYER_STEP_WRAPPER + 0x14
 FIELD_INPUT_WRAPPER = OVERLAY_ENTRY + 0xE0
 CRASH_SOUND_WRAPPER = OVERLAY_ENTRY + 0x140
 TOGGLE_LATCH_WRAPPER = OVERLAY_BASE + 0xC78
-TOGGLE_LATCH_ADDR = 0x023BC78A
+TOGGLE_LATCH_ADDR = 0x023BC7DA
 MOVE_CONTROL_CALL_SITES = (0x0203E1F0, 0x0203E260, 0x0203E2E4)
 FIELD_INPUT_CALL_SITE = 0x0203E270
 CRASH_SOUND_CALL_SITES = (0x0205D532, 0x0205D5C2)
@@ -419,13 +419,29 @@ def main() -> None:
         and "player->yCurr << 16" in mount_source
         and "OverworldMount_DrainLandStream" in mount_source
         and mounted_flat_walk is not None
-        and "stock land manager" in mounted_flat_walk.group(0)
-        and "motionStreamPreparing" not in mounted_flat_walk.group(0)
-        and "ov01_021F62E8" not in mounted_flat_walk.group(0)
+        and "Vanilla Walk changes one coordinate per tile"
+            in mounted_flat_walk.group(0)
+        and "direction >= WALK_DIRECTION_NORTH_WEST"
+            in mounted_flat_walk.group(0)
+        and "motionStreamPreparing" in mounted_flat_walk.group(0)
+        and "ov01_021F62E8" in mounted_flat_walk.group(0)
+        and diagonal_walk is not None
+        and "motionStreamPreparing" in diagonal_walk.group(0)
         and re.search(
             r"OverworldMount_UpdateLandStreamAnchor\(void\).*?"
             r"GetLandDataManager\(\) \+ 0xA0\) != 0\) \{\s*"
             r"return FALSE;",
+            mount_source,
+            re.DOTALL,
+        ) is not None
+        and "landDataManager + 0xD0" in mount_source
+        and "landDataManager + 0xD8" in mount_source
+        and mount_source.count(
+            "OverworldMount_LandStreamAnchorWasSampled()"
+        ) >= 2
+        and re.search(
+            r"OverworldMount_CanToggle\([^;]*?\).*?"
+            r"!sOverworldMountState\.motionStreamPreparing",
             mount_source,
             re.DOTALL,
         ) is not None
@@ -579,8 +595,8 @@ def main() -> None:
         "mounted Walk uses a fixed-delay boundary or has competing step consumers",
     )
     require(
-        "ASSERT(. <= ORIGIN(rom) + 0x1BF0" in mount_linker
-        and ". = ORIGIN(rom) + 0x1BF0;" in mount_linker,
+        "ASSERT(. <= ORIGIN(rom) + 0x1C40" in mount_linker
+        and ". = ORIGIN(rom) + 0x1C40;" in mount_linker,
         "mount overlay file size can drift from its packaged Y9/FAT metadata",
     )
     require(
@@ -723,7 +739,7 @@ def main() -> None:
         re.DOTALL,
     )
     require(
-        "OVERWORLD_MOUNT_TOGGLE_LATCH_ADDR 0x023BC78A" in mount_header
+        "OVERWORLD_MOUNT_TOGGLE_LATCH_ADDR 0x023BC7DA" in mount_header
         and "u8 bufferedTogglePending;" in mount_internal
         and "u8 bufferedToggleDown;" in mount_internal
         and "bufferedTogglePending) == 0x96" in mount_internal
@@ -752,6 +768,7 @@ def main() -> None:
         )
         and "section(\".overworld_mount_toggle_latch\")" in mount_source
         and "OverworldMount_TickLatched" in mount_source
+        and "__mount_state_start + 0x96 == 0x023BC7DA" in mount_linker
         and "OverworldMount_TickLatched," in mount_source
         and ". = ORIGIN(rom) + 0xC78;" in mount_linker
         and "KEEP(*(.overworld_mount_toggle_latch))" in mount_linker,

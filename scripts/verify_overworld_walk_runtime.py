@@ -70,6 +70,8 @@ SELECTOR_STATE = SELECTOR_SYMBOLS["sFollowerSelectorInputState"]
 APPLY_WILD_RENDER = WILD_SYMBOLS["OverworldWildSpawns_ApplyCustomJumpRenderOffset"]
 CLEAR_WILD_JUMP = WILD_SYMBOLS["OverworldWildSpawns_ClearCustomJump"]
 START_NATIVE_JUMP = 0x02062958
+# ov01_021F50F0 queues one cardinal rolling-land update at this instruction.
+LAND_STREAM_QUEUE = 0x021F526E
 LCRNG_STATE = 0x021D15A8
 LANDING_PARTICLE = RUNTIME_SYMBOLS["OverworldWildRuntime_PlayLandingHopParticle"]
 PLAY_SE = MOUNT_SYMBOLS["PlaySE"] & ~1
@@ -307,7 +309,8 @@ def walk_boundary_case(emu, name, travel_time, keys, trace):
     wait_until(
         emu,
         lambda: mount_state(emu)["mode"] == 0
-        and mount_state(emu)["pending"] == 0,
+        and mount_state(emu)["pending"] == 0
+        and mount_state(emu)["stream_preparing"] == 0,
         100,
     )
     reset_walk_state(emu, travel_time)
@@ -3359,6 +3362,172 @@ def scenario_cyndaquil_streaming_stress():
     return result
 
 
+def scenario_mounted_diagonal_streaming():
+    """Require both land axes for sustained mounted diagonal Walk."""
+    samples = []
+    load_directions = []
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+        mount = mount_party_slot(emu, 0, 155)
+        evacuate_wild_objects(emu)
+        evacuate_map_event_objects(emu)
+        approach = []
+        for direction, count in (("RIGHT", 10), ("DOWN", 3)):
+            for _ in range(count):
+                approach.append(run_mounted_walk_tile(emu, direction))
+
+        def on_land_stream_queue(_address, _size):
+            field_system = unsigned(emu, G_FIELD_SYS_PTR)
+            if field_system == 0:
+                return
+            land = unsigned(emu, field_system + 0x2C)
+            load_directions.append(unsigned(emu, land + 0xEC, 1))
+
+        emu.memory.register_exec(LAND_STREAM_QUEUE, on_land_stream_queue)
+        # Permit diagonal Walk for this Cyndaquil without changing profile
+        # data. Five frames keeps both loader work phases easy to observe.
+        write_u8(emu, MOUNT + 8 + 19, 1)
+        reset_walk_state(emu, 5)
+        start = object_state(emu, player_ptr(emu))
+        requested_steps = 2
+        diagonal = (
+            h.keymask(h.key_constant("RIGHT"))
+            | h.keymask(h.key_constant("DOWN"))
+        )
+        motions = []
+        previous_motion = None
+        hold_diagonal = True
+        stream_pointer_seen = False
+        toggle_injected_at = None
+        select_frames = 0
+        restored_before_dismount = False
+        dismounted_while_streaming = False
+        expected_land_target_pointer = player_ptr(emu) + 0x70
+        select = h.keymask(h.key_constant("SELECT"))
+        for frame in range(1200):
+            state = dict(mount_state(emu))
+            player = object_state(emu, player_ptr(emu))
+            field_system = unsigned(emu, G_FIELD_SYS_PTR)
+            land = unsigned(emu, field_system + 0x2C)
+            busy = unsigned(emu, land + 0xA0, 1)
+            load_direction = unsigned(emu, land + 0xEC, 1)
+            land_target_pointer = unsigned(emu, land + 0xDC)
+            motion = (
+                state["start_x"],
+                state["start_y"],
+                state["target_x"],
+                state["target_y"],
+            )
+            if state["mode"] == 4 and motion != previous_motion:
+                motions.append(list(motion))
+                previous_motion = motion
+                if len(motions) >= requested_steps:
+                    hold_diagonal = False
+            stream_pointer_seen |= land_target_pointer == MOUNT + 0xA8
+            if (
+                len(motions) >= requested_steps
+                and state["mode"] == 0
+                and state["stream_preparing"]
+                and toggle_injected_at is None
+            ):
+                # Queue Select at the exact drain window. Toggle handling must
+                # retain it until both land axes finish and the player pointer
+                # is safely restored.
+                toggle_injected_at = frame
+                select_frames = 4
+            if (
+                toggle_injected_at is not None
+                and state["phase"] == 2
+                and state["stream_preparing"] == 0
+                and land_target_pointer == expected_land_target_pointer
+            ):
+                restored_before_dismount = True
+            dismounted_while_streaming |= (
+                state["phase"] == 0 and state["stream_preparing"] != 0
+            )
+            samples.append({
+                "frame": frame,
+                "x": player["x"],
+                "y": player["y"],
+                "mode": state["mode"],
+                "pending": state["pending"],
+                "stream_preparing": state["stream_preparing"],
+                "land_busy": busy,
+                "land_direction": load_direction,
+                "land_target_x": signed(emu, land + 0xD0),
+                "land_target_z": signed(emu, land + 0xD8),
+                "land_target_pointer": land_target_pointer,
+            })
+            if toggle_injected_at is not None and state["phase"] == 0:
+                break
+            cycle_mask = diagonal if hold_diagonal else 0
+            if select_frames != 0:
+                cycle_mask = select
+                select_frames -= 1
+            h.cycle(emu, 1, cycle_mask)
+        h.set_key_mask(emu, 0)
+        final_player = object_state(emu, player_ptr(emu))
+        field_system = unsigned(emu, G_FIELD_SYS_PTR)
+        land = unsigned(emu, field_system + 0x2C)
+        final_state = dict(mount_state(emu))
+        avatar = avatar_ptr(emu)
+        horizontal_loads = sum(
+            direction in (1, 3) for direction in load_directions
+        )
+        vertical_loads = sum(
+            direction in (2, 4) for direction in load_directions
+        )
+        result = {
+            "mount": mount,
+            "approach_passed": all(step["passed"] for step in approach),
+            "start": [start["x"], start["y"]],
+            "requested_steps": requested_steps,
+            "motions": motions,
+            "final": [final_player["x"], final_player["y"]],
+            "stream_pointer_seen": stream_pointer_seen,
+            "load_directions": load_directions,
+            "horizontal_loads": horizontal_loads,
+            "vertical_loads": vertical_loads,
+            "toggle_injected_at": toggle_injected_at,
+            "restored_before_dismount": restored_before_dismount,
+            "dismounted_while_streaming": dismounted_while_streaming,
+            "final_phase": final_state["phase"],
+            "avatar_flags": unsigned(emu, avatar),
+            "avatar_move_state": unsigned(emu, avatar + 0x10),
+            "player_move_state": unsigned(emu, avatar + 0x14),
+            "mount_direction": unsigned(emu, MOUNT + 0x83, 1),
+            "mount_buffered_direction": unsigned(emu, MOUNT + 0x8A, 1),
+            "final_land_target_pointer": unsigned(emu, land + 0xDC),
+            "expected_land_target_pointer": expected_land_target_pointer,
+            "tail_samples": samples[-40:],
+            "screenshot": h.save_screenshot(
+                emu,
+                "documentation/verification_screenshots/"
+                "overworld_mounted_diagonal_streaming.png",
+            ),
+        }
+        emu.memory.register_exec(LAND_STREAM_QUEUE, None)
+        emu.destroy()
+    result["passed"] = (
+        mount["passed"]
+        and result["approach_passed"]
+        and len(motions) == requested_steps
+        and result["final"]
+            == [start["x"] + requested_steps, start["y"] + requested_steps]
+        and stream_pointer_seen
+        and horizontal_loads >= requested_steps
+        and vertical_loads >= requested_steps
+        and toggle_injected_at is not None
+        and restored_before_dismount
+        and not dismounted_while_streaming
+        and result["final_phase"] == 0
+        and result["final_land_target_pointer"]
+            == result["expected_land_target_pointer"]
+    )
+    return result
+
+
 SCENARIOS = {
     "mounted_frames": scenario_mounted_frames,
     "mounted_smoothness": scenario_mounted_smoothness,
@@ -3377,6 +3546,7 @@ SCENARIOS = {
     "cyndaquil_control_stress": scenario_cyndaquil_control_stress,
     "cyndaquil_step_taps": scenario_cyndaquil_step_taps,
     "cyndaquil_streaming_stress": scenario_cyndaquil_streaming_stress,
+    "mounted_diagonal_streaming": scenario_mounted_diagonal_streaming,
 }
 
 

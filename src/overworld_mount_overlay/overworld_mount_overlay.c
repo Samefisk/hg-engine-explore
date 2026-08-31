@@ -59,8 +59,10 @@ typedef struct OverworldMountFieldInput {
     u16 unkA;
 } OverworldMountFieldInput;
 
-static OverworldMountRuntimeState sOverworldMountState;
-static u32 sOverworldMountNextSessionGeneration;
+static OverworldMountRuntimeState sOverworldMountState
+    __attribute__((section(".overworld_mount_state")));
+static u32 sOverworldMountNextSessionGeneration
+    __attribute__((section(".overworld_mount_generation")));
 
 #define OW_WILD_POLICY_LOOK_PLAN_BASE_MASK 0x03
 #define OW_WILD_POLICY_LOOK_PLAN_FIRST_SHIFT 2
@@ -254,7 +256,7 @@ extern void LONG_CALL ov01_021F62E8(
     VecFx32 *position,
     void *landDataManager);
 
-static void * __attribute__((noinline, section(".overworld_mount_streaming")))
+static void * __attribute__((noinline))
 OverworldMount_GetLandDataManager(void)
 {
     return *(void **)((u8 *)sOverworldMountState.fieldSystem + 0x2C);
@@ -1064,6 +1066,17 @@ static void OverworldMount_CommitMotionTarget(LocalMapObject *player)
     player->unk88[1] = sOverworldMountState.playerBaseUnk88Y;
 }
 
+static BOOL __attribute__((noinline))
+OverworldMount_LandStreamAnchorWasSampled(void)
+{
+    void *landDataManager = OverworldMount_GetLandDataManager();
+
+    return *(s32 *)((u8 *)landDataManager + 0xD0)
+            == sOverworldMountState.motionStreamAnchor.x
+        && *(s32 *)((u8 *)landDataManager + 0xD8)
+            == sOverworldMountState.motionStreamAnchor.z;
+}
+
 static BOOL __attribute__((noinline, section(".overworld_mount_streaming")))
 OverworldMount_UpdateLandStreamAnchor(void)
 {
@@ -1115,6 +1128,13 @@ OverworldMount_UpdateLandStreamAnchor(void)
             : -0x10000;
         return FALSE;
     }
+    /* Do not expose the second axis until the land task has accepted the
+     * first. Its completed cardinal request copies the complete watched
+     * vector, so changing Z early would make that copy hide the missing
+     * vertical request. */
+    if (!OverworldMount_LandStreamAnchorWasSampled()) {
+        return FALSE;
+    }
     if (sOverworldMountState.motionStreamAnchor.z != targetZ) {
         sOverworldMountState.motionStreamAnchor.z +=
             sOverworldMountState.motionStreamAnchor.z < targetZ
@@ -1122,7 +1142,9 @@ OverworldMount_UpdateLandStreamAnchor(void)
             : -0x10000;
         return FALSE;
     }
-    return TRUE;
+    /* Reaching the target only changes the watched anchor. The land task must
+     * sample and finish that final axis before the live player is rebound. */
+    return OverworldMount_LandStreamAnchorWasSampled();
 }
 
 static void __attribute__((noinline)) OverworldMount_DrainLandStream(void)
@@ -1765,6 +1787,12 @@ OverworldMount_TryHandleDiagonalWalk(
          * acceleration state. */
         return TRUE;
     }
+    /* A diagonal tile streams X and Z as two cardinal land updates. Consume
+     * held input while that anchor drains so the next tile cannot overrun it
+     * or turn a loading wait into a false wall-crash response. */
+    if (sOverworldMountState.motionStreamPreparing) {
+        return TRUE;
+    }
     requestedDirection = OverworldMount_GetInputDirection(newKeys | heldKeys);
     if (requestedDirection == OVERWORLD_MOUNT_DIRECTION_NONE) {
         return FALSE;
@@ -1774,6 +1802,10 @@ OverworldMount_TryHandleDiagonalWalk(
             &sOverworldMountState,
             avatar,
             requestedDirection)) {
+        return TRUE;
+    }
+    if (requestedDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST
+        && *((u8 *)OverworldMount_GetLandDataManager() + 0xA0) != 0) {
         return TRUE;
     }
     facingDirection = requestedDirection;
@@ -1948,7 +1980,8 @@ static BOOL OverworldMount_CanToggle(FieldSystem *fieldSystem)
         return FALSE;
     }
     avatar = fieldSystem->playerAvatar;
-    return avatar->state == PLAYER_STATE_WALKING
+    return !sOverworldMountState.motionStreamPreparing
+        && avatar->state == PLAYER_STATE_WALKING
         && (avatar->unk0 & OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT) == 0
         && (avatar->unk14 == OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE
             || avatar->unk14 == OVERWORLD_MOUNT_PLAYER_MOVE_STATE_END);
@@ -2115,7 +2148,7 @@ OverworldMount_TickLatched(
         "ldr r3, 3f\n"
         "bx r3\n"
         ".align 2\n"
-        "2: .word 0x023BC78A\n"
+        "2: .word 0x023BC7DA\n"
         "3: .word OverworldMount_Tick + 1\n");
 }
 

@@ -16,9 +16,9 @@ SECTIONS {
                 KEEP(*(.overworld_mount_precode))
                 KEEP(*(.overworld_mount_hop_search))
                 KEEP(*(.overworld_mount_streaming))
-                ASSERT(. <= ORIGIN(rom) + 0x300,
+                ASSERT(. <= ORIGIN(rom) + 0x304,
                     "overworld mount precode exceeds expanded reserve");
-                . = ORIGIN(rom) + 0x300;
+                . = ORIGIN(rom) + 0x304;
                 __text_start = . ;
                 KEEP(*(.overworld_mount_motion))
                 build/thumb_help.o(.text)
@@ -62,21 +62,26 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 . = ALIGN(4);
-                ASSERT(. <= ORIGIN(rom) + 0x1BF0,
+                ASSERT(. <= ORIGIN(rom) + 0x1C40,
                     "overworld mount code exceeds stable packaged size");
                 /* Overlay 157 is boot-resident. Keep its file size stable so
                  * the Y9/FAT metadata sealed into the ROM cannot drift when
                  * a compiler change makes the code smaller. */
-                . = ORIGIN(rom) + 0x1BF0;
+                . = ORIGIN(rom) + 0x1C40;
                 __text_end = . ;
         } >rom = 0xff
 
         .bss (NOLOAD) : {
                 __bss_start__ = . ;
+                KEEP(*(.overworld_mount_generation))
+                __mount_state_start = ABSOLUTE(.);
+                KEEP(*(.overworld_mount_state))
                 *(.bss)
                 *(COMMON)
                 . = ALIGN(4);
                 __bss_end__ = . ;
+                ASSERT(__mount_state_start + 0x96 == 0x023BC7DA,
+                    "resident mount toggle latch address drifted");
                 ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
                     "overworld mount overlay exceeds reserved RAM");
                 _end = __bss_end__ ;
