@@ -74,7 +74,9 @@ OverworldWildSpawns_IsPokemonPaletteObjectId:
 
 .org 0x021F8E68
 .area 0x04, 0x00
-    bl 0x0205F97C
+    // Mounted followers use the controller's shared facing vector. Every
+    // other object still tail-calls the retail MapObject_SetFacingVector.
+    bl 0x023BD3EC
 .endarea
 
 // ov01_021F8E70 resolves a sprite's render-offset mode with a linear scan on

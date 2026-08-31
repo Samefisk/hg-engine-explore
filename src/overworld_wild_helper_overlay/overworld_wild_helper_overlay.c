@@ -1182,7 +1182,7 @@ static int OverworldWildHelper_BuildDirections(int dx, int dy, u8 *directions)
 {
     int count = 0;
 
-    if (directions == NULL || (dx == 0 && dy == 0)) {
+    if (dx == 0 && dy == 0) {
         return 0;
     }
 
@@ -1190,13 +1190,13 @@ static int OverworldWildHelper_BuildDirections(int dx, int dy, u8 *directions)
         if (dx > 0) {
             directions[count++] = OW_WILD_HELPER_DIRECTION_RIGHT;
         }
-        if (dx < 0 && count < 4) {
+        if (dx < 0) {
             directions[count++] = OW_WILD_HELPER_DIRECTION_LEFT;
         }
-        if (dy > 0 && count < 4) {
+        if (dy > 0) {
             directions[count++] = OW_WILD_HELPER_DIRECTION_DOWN;
         }
-        if (dy < 0 && count < 4) {
+        if (dy < 0) {
             directions[count++] = OW_WILD_HELPER_DIRECTION_UP;
         }
         return count;
@@ -1205,13 +1205,13 @@ static int OverworldWildHelper_BuildDirections(int dx, int dy, u8 *directions)
     if (dy > 0) {
         directions[count++] = OW_WILD_HELPER_DIRECTION_DOWN;
     }
-    if (dy < 0 && count < 4) {
+    if (dy < 0) {
         directions[count++] = OW_WILD_HELPER_DIRECTION_UP;
     }
-    if (dx > 0 && count < 4) {
+    if (dx > 0) {
         directions[count++] = OW_WILD_HELPER_DIRECTION_RIGHT;
     }
-    if (dx < 0 && count < 4) {
+    if (dx < 0) {
         directions[count++] = OW_WILD_HELPER_DIRECTION_LEFT;
     }
 
@@ -1230,10 +1230,9 @@ static BOOL OverworldWildHelper_IsHopVectorShape(
         return FALSE;
     }
     if (absDx == 0 || absDy == 0) {
-        return TRUE;
+        return config->allowNonCardinal < 2;
     }
-    return config != NULL
-        && config->allowNonCardinal
+    return config->allowNonCardinal
         && absDx == absDy;
 }
 
@@ -1247,10 +1246,7 @@ static BOOL OverworldWildHelper_TryGetHopVector(
     int jumpDistance;
     u8 directions[4];
 
-    if (config == NULL
-        || config->minDistance == 0
-        || config->maxDistance < config->minDistance
-        || !OverworldWildHelper_IsHopVectorShape(config, dx, dy)
+    if (!OverworldWildHelper_IsHopVectorShape(config, dx, dy)
         || OverworldWildHelper_BuildDirections(dx, dy, directions) == 0) {
         return FALSE;
     }
@@ -1278,14 +1274,12 @@ static BOOL OverworldWildHelper_IsLandingAllowed(
     int landingX,
     int landingY)
 {
-    return config != NULL
-        && validator != NULL
-        && validator(
-            landingX,
-            landingY,
-            config->targetX,
-            config->targetY,
-            context);
+    return validator(
+        landingX,
+        landingY,
+        config->targetX,
+        config->targetY,
+        context);
 }
 
 static BOOL OverworldWildHelper_SetHopResult(
@@ -1300,16 +1294,12 @@ static BOOL OverworldWildHelper_SetHopResult(
     u8 direction;
     u8 distance;
 
-    if (config == NULL
-        || result == NULL
-        || !OverworldWildHelper_TryGetHopVector(
-            config,
-            landingX - config->objectX,
-            landingY - config->objectY,
-            &direction,
-            &distance)) {
-        return FALSE;
-    }
+    (void)OverworldWildHelper_TryGetHopVector(
+        config,
+        landingX - config->objectX,
+        landingY - config->objectY,
+        &direction,
+        &distance);
 
     result->landingX = landingX;
     result->landingY = landingY;
@@ -1318,7 +1308,6 @@ static BOOL OverworldWildHelper_SetHopResult(
     result->direction = direction;
     result->distance = distance;
     result->flags = flags;
-    result->reserved = 0;
     return TRUE;
 }
 
@@ -1331,10 +1320,8 @@ static void OverworldWildHelper_AddHopPlanDirection(
 {
     int i;
 
-    if (stepXs == NULL
-        || stepYs == NULL
-        || directionCount == NULL
-        || (stepX == 0 && stepY == 0)) {
+    /* This private helper is only called with the local plan buffers. */
+    if (stepX == 0 && stepY == 0) {
         return;
     }
 
@@ -1366,10 +1353,6 @@ static int OverworldWildHelper_BuildHopPlanDirections(
     u8 targetDirections[4];
     int targetDirectionCount;
     int i;
-
-    if (config == NULL || stepXs == NULL || stepYs == NULL) {
-        return 0;
-    }
 
     dx = config->targetX - fromX;
     dy = config->targetY - fromY;
@@ -1486,7 +1469,8 @@ static BOOL OverworldWildHelper_IsHopPlanCandidate(
             toY);
 }
 
-static BOOL OverworldWildHelper_PickRandomBehaviorHop(
+static BOOL __attribute__((optimize("Os", "tree-dominator-opts", "if-conversion")))
+OverworldWildHelper_PickRandomBehaviorHop(
     const OverworldWildHelperHopConfig *config,
     OverworldWildHelperHopTileValidator validator,
     void *context,
@@ -1497,14 +1481,7 @@ static BOOL OverworldWildHelper_PickRandomBehaviorHop(
     int targetX = 0;
     int targetY = 0;
     u32 candidateCount = 0;
-
-    if (config == NULL
-        || validator == NULL
-        || result == NULL
-        || config->minDistance == 0
-        || config->maxDistance < config->minDistance) {
-        return FALSE;
-    }
+    BOOL hasBacktrack = FALSE;
 
     for (dy = -config->maxDistance; dy <= config->maxDistance; dy++) {
         for (dx = -config->maxDistance; dx <= config->maxDistance; dx++) {
@@ -1518,15 +1495,38 @@ static BOOL OverworldWildHelper_PickRandomBehaviorHop(
             candidateX = config->objectX + dx;
             candidateY = config->objectY + dy;
             if (!OverworldWildHelper_TryGetHopVector(config, dx, dy, NULL, NULL)
-                || !OverworldWildHelper_IsLandingAllowed(
-                    config,
-                    validator,
-                    context,
+                || !validator(
                     candidateX,
-                    candidateY)) {
+                    candidateY,
+                    candidateX,
+                    candidateY,
+                    context)) {
                 continue;
             }
+            if ((config->directionCount & 0x80) != 0) {
+                int straightX = config->objectX * 2 - config->targetX;
+                int straightY = config->objectY * 2 - config->targetY;
 
+                if (candidateX == straightX && candidateY == straightY) {
+                    if (config->stopOneHopAway) {
+                        return OverworldWildHelper_SetHopResult(
+                            config,
+                            candidateX,
+                            candidateY,
+                            candidateX,
+                            candidateY,
+                            OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT,
+                            result);
+                    }
+                    continue;
+                }
+                if ((config->directionCount & 0x40) != 0
+                    && candidateX == config->targetX
+                    && candidateY == config->targetY) {
+                    hasBacktrack = TRUE;
+                    continue;
+                }
+            }
             candidateCount++;
             if ((gf_rand() % candidateCount) == 0) {
                 targetX = candidateX;
@@ -1536,7 +1536,11 @@ static BOOL OverworldWildHelper_PickRandomBehaviorHop(
     }
 
     if (candidateCount == 0) {
-        return FALSE;
+        if (!hasBacktrack) {
+            return FALSE;
+        }
+        targetX = config->targetX;
+        targetY = config->targetY;
     }
 
     return OverworldWildHelper_SetHopResult(
@@ -3835,6 +3839,8 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
         return;
     }
     if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME) {
+        OVERWORLD_MOUNT_OVERLAY_ENTRY->prepareMapTransition(
+            OW_WILD_MAP_HEADER_CHANGE_RESUME_PRESENTATION);
         if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
             return;
         }
@@ -3937,16 +3943,13 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
     object = state->spawns[slot].object;
     x = MapObject_GetCurrentX(object);
     y = MapObject_GetCurrentY(object);
-    MapObject_SetCurrentX(object, (u32)x);
-    MapObject_SetCurrentY(object, (u32)y);
     object->xInit = x;
     object->yInit = y;
     object->xPrev = x;
     object->yPrev = y;
     object->posVec[0] = (u32)((s32)x * 0x10000 + 0x8000);
     object->posVec[2] = (u32)((s32)y * 0x10000 + 0x8000);
-    /* Retained objects already carry their exact cross-route elevation. */
-    __asm__("nop\n\tnop");
+    /* Retained objects already carry their current coordinates and elevation. */
     object->faceVec[0] = 0;
     object->faceVec[1] = 0;
     object->faceVec[2] = 0;
@@ -4996,14 +4999,16 @@ static BOOL OverworldWildHelper_EntriesMatch(
 
 static BOOL OverworldWildHelper_IsBehaviorOverlayAuthenticated(BOOL warmLearnsets)
     __attribute__((noinline, noclone));
+typedef u32 OverworldWildHelperAliasU32 __attribute__((may_alias));
 static BOOL OverworldWildHelper_IsBehaviorOverlayAuthenticated(BOOL warmLearnsets)
 {
     const OverworldWildBehaviorOverlayEntry *entry =
         OVERWORLD_WILD_BEHAVIOR_OVERLAY_ENTRY;
 
     if (entry->magic != OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC
-        || entry->version != OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION
-        || entry->size != sizeof(*entry)) {
+        || *(const OverworldWildHelperAliasU32 *)&entry->version
+            != ((u32)sizeof(*entry) << 16
+                | OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION)) {
         return FALSE;
     }
     if (!OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE()) {

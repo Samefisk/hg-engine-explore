@@ -3,8 +3,18 @@
 V2 is a shareable Pokédex Workshop application with optional overworld tools.
 Its frontend is built from a clean DOM and purpose-built workflows;
 it does not render or skin the legacy UI. Behind that frontend it reuses the
-proven parser, writers, build controls, ROM launcher, and audio renderer so data
-semantics do not drift. The existing viewer remains unchanged.
+current compatibility parser, writers, build controls, ROM launcher, and audio
+renderer to avoid duplicating source mutation logic. The existing viewer
+remains unchanged.
+
+The canonical system model and vocabulary live in
+[`documentation/overworld-system/`](../../documentation/overworld-system/README.md)
+and [`CONTEXT.md`](../../CONTEXT.md). The current Python/V2 resolver is a
+compatibility preview until the portable resolver in the active roadmap is
+complete. `/api/v2/resolve` does not yet model the forced follower layer,
+conditional physical-surface selection, or complete Active/Tired linked-profile
+resolution exactly like the ROM. For runtime truth, validate its result against
+the ROM resolver; do not add another independent resolver to V2.
 
 ## Run
 
@@ -73,7 +83,7 @@ sources themselves.
   start disabled until members or an all-Pokémon shared condition is selected.
 - Documents the resolver contract in the UI: evaluation is top to bottom and
   the last matching override applies last.
-- Adds an exact context resolver for Pokémon, terrain, level, and shiny state.
+- Adds a source-context resolution preview for Pokémon, terrain, level, and shiny state.
   It shows matched layers, skipped-layer count, effective values, and base
   values in parentheses.
 - Protects every source mutation with a deterministic content revision.
@@ -99,10 +109,15 @@ sources themselves.
 
 ## Architecture
 
+The target authoring and diagnosis flow is defined in
+[`authoring-debugging.md`](../../documentation/overworld-system/authoring-debugging.md).
+V2 should become a client of the generated Behavior Schema, portable resolver,
+semantic trace, and declarative scenario runner described there.
+
 - `server.py` serves the standalone V2 app, preserves the proven backend
   endpoints, and exposes the V2 APIs.
 - `reliability.py` owns revisions, mutation locking, transactions, rollback,
-  and context-accurate resolution.
+  and the current source-resolution preview.
 - `static/index.html` and `static/v2.css` define the new semantic UI and visual
   system.
 - `static/v2.js` orchestrates navigation, atomic saves, builds, ROM launching,
@@ -111,7 +126,8 @@ sources themselves.
   implement the focused profile, route, and sound workflows without copying
   the legacy DOM.
 - `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
-  same profile-first, apply-once resolution contract in the game runtime.
+  authoritative game-runtime resolver, including layers and lifecycle state
+  that the current source preview does not fully reproduce.
 
 The V2-only API surface is:
 

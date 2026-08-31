@@ -183,7 +183,6 @@ typedef enum OverworldFollowerRecallPhase {
 } OverworldFollowerRecallPhase;
 
 typedef struct OverworldFollowerRecallState {
-    FieldSystem *fieldSystem;
     MapObjectMan *manager;
     LocalMapObject *objects;
     LocalMapObject *follower;
@@ -196,7 +195,6 @@ typedef struct OverworldFollowerRecallState {
     u32 originalUnk88[3];
     u32 originalUnk94[3];
     VecFx32 originalScale;
-    u16 mapId;
     u16 mapGeneration;
     u16 encounterGeneration;
     u8 originalMovementCooldown;
@@ -206,6 +204,8 @@ typedef struct OverworldFollowerRecallState {
     u8 frame;
     u8 phase;
     u8 pullFrames;
+    /* Reuse the recall state's former tail padding while the menu owns it. */
+    u8 selectorHighlightedSlot;
 } OverworldFollowerRecallState;
 
 static OverworldFollowerRecallState sFollowerRecall;
@@ -235,7 +235,6 @@ typedef enum OverworldFollowerSelectorInputState {
 static FieldSystem *sFollowerSelectorFieldSystem;
 static SysTask *sFollowerSelectorTask;
 static u16 sFollowerSelectorMapId;
-static u8 sFollowerSelectorHighlightedSlot;
 static u8 sFollowerSelectorInputState;
 
 static void OverworldFollowerSelectorInput_ResetState(void)
@@ -243,7 +242,8 @@ static void OverworldFollowerSelectorInput_ResetState(void)
     sFollowerSelectorFieldSystem = NULL;
     sFollowerSelectorTask = NULL;
     sFollowerSelectorMapId = 0;
-    sFollowerSelectorHighlightedSlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
+    sFollowerRecall.selectorHighlightedSlot =
+        CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
     sFollowerSelectorInputState = FOLLOWER_SELECTOR_INPUT_IDLE;
     OverworldFollowerSelector_ClearActiveFlag();
 }
@@ -356,7 +356,7 @@ static BOOL OverworldFollowerRecall_ObjectIsCurrent(
 
     if (fieldSystem == NULL
         || fieldSystem != gFieldSysPtr
-        || fieldSystem != sFollowerRecall.fieldSystem
+        || fieldSystem != sFollowerSelectorFieldSystem
         || sFollowerRecall.manager == NULL
         || fieldSystem->mapObjectMan != sFollowerRecall.manager) {
         return FALSE;
@@ -379,14 +379,14 @@ static BOOL OverworldFollowerRecall_FollowerIsCurrent(FieldSystem *fieldSystem)
     return sFollowerRecall.phase != FOLLOWER_RECALL_PHASE_NONE
         && fieldSystem != NULL
         && fieldSystem == gFieldSysPtr
-        && fieldSystem == sFollowerRecall.fieldSystem
+        && fieldSystem == sFollowerSelectorFieldSystem
         && fieldSystem->location != NULL
         && fieldSystem->mapObjectMan == sFollowerRecall.manager
-        && (u16)fieldSystem->location->mapId == sFollowerRecall.mapId
+        && (u16)fieldSystem->location->mapId == sFollowerSelectorMapId
         && sOverworldWildSpawnState.mapGeneration
             == sFollowerRecall.mapGeneration
         && spawn->active
-        && spawn->mapId == sFollowerRecall.mapId
+        && spawn->mapId == sFollowerSelectorMapId
         && spawn->encounterGeneration == sFollowerRecall.encounterGeneration
         && spawn->object == sFollowerRecall.follower
         && spawn->objectId == OW_WILD_OBJECT_ID_START + OW_WILD_FOLLOWER_SLOT
@@ -681,7 +681,7 @@ static BOOL OverworldFollowerRecall_CleanupStaleBall(FieldSystem *fieldSystem)
     if (!OverworldFollowerSelector_IsStaleBallCleanupPending()) {
         return TRUE;
     }
-    if (sFollowerRecall.fieldSystem == NULL) {
+    if (sFollowerSelectorFieldSystem == NULL) {
         if (fieldSystem == NULL
             || fieldSystem != gFieldSysPtr
             || fieldSystem->taskman != NULL
@@ -714,9 +714,9 @@ static BOOL OverworldFollowerRecall_CleanupStaleBall(FieldSystem *fieldSystem)
     }
     if (fieldSystem == NULL
         || fieldSystem != gFieldSysPtr
-        || fieldSystem != sFollowerRecall.fieldSystem
+        || fieldSystem != sFollowerSelectorFieldSystem
         || fieldSystem->location == NULL
-        || (u16)fieldSystem->location->mapId != sFollowerRecall.mapId
+        || (u16)fieldSystem->location->mapId != sFollowerSelectorMapId
         || sOverworldWildSpawnState.mapGeneration
             != sFollowerRecall.mapGeneration
         || fieldSystem->mapObjectMan != sFollowerRecall.manager) {
@@ -817,7 +817,6 @@ OverworldFollowerRecall_Begin(FieldSystem *fieldSystem)
     OverworldFollowerSelector_ClearMemory(
         &sFollowerRecall,
         sizeof(sFollowerRecall));
-    sFollowerRecall.fieldSystem = fieldSystem;
     sFollowerRecall.manager = manager;
     sFollowerRecall.objects = manager->objects;
     sFollowerRecall.follower = follower;
@@ -839,7 +838,6 @@ OverworldFollowerRecall_Begin(FieldSystem *fieldSystem)
         follower->unk94,
         sizeof(sFollowerRecall.originalUnk94));
     sFollowerRecall.originalScale = *scale;
-    sFollowerRecall.mapId = (u16)fieldSystem->location->mapId;
     sFollowerRecall.mapGeneration = sOverworldWildSpawnState.mapGeneration;
     sFollowerRecall.encounterGeneration = spawn->encounterGeneration;
     sFollowerRecall.originalMovementCooldown =
@@ -982,12 +980,6 @@ OverworldFollowerRecall_Tick(FieldSystem *fieldSystem)
     return TRUE;
 }
 
-static BOOL OverworldFollowerTransitionQueue_HasRoom(u8 commandCount)
-{
-    return OVERWORLD_FOLLOWER_TRANSITION_QUEUE->count + commandCount
-        <= OVERWORLD_FOLLOWER_TRANSITION_QUEUE_CAPACITY;
-}
-
 static u8 OverworldFollowerTransitionQueue_Peek(void)
 {
     return (u8)(OVERWORLD_FOLLOWER_TRANSITION_QUEUE->commands
@@ -996,10 +988,8 @@ static u8 OverworldFollowerTransitionQueue_Peek(void)
 
 static void OverworldFollowerTransitionQueue_Clear(void)
 {
-    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->commands = 0;
-    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->count = 0;
-    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued = FALSE;
-    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headRetries = 0;
+    *OVERWORLD_FOLLOWER_TRANSITION_QUEUE =
+        (OverworldFollowerTransitionQueueStorage){ 0 };
 }
 
 static void OverworldFollowerTransitionQueue_Tick(
@@ -1159,8 +1149,7 @@ static void OverworldFollowerSelectorInput_Close(SysTask *task)
 {
     OverworldFollowerTransitionQueue_Clear();
     OverworldFollowerRecall_Cancel(sFollowerSelectorFieldSystem);
-    if (sFollowerSelectorInputState == FOLLOWER_SELECTOR_INPUT_PREPARING
-        || sFollowerSelectorInputState == FOLLOWER_SELECTOR_INPUT_VISIBLE
+    if (sFollowerSelectorInputState != FOLLOWER_SELECTOR_INPUT_IDLE
         || OverworldFollowerSelectorUI_IsOpen()) {
         OverworldFollowerSelectorUI_Close();
     }
@@ -1197,7 +1186,7 @@ static void OverworldFollowerSelectorInput_Task(SysTask *task, void *data)
         if (OverworldFollowerSelectorUI_IsOpen()) {
             OverworldFollowerSelectorUI_Close();
         }
-        sFollowerSelectorHighlightedSlot =
+        sFollowerRecall.selectorHighlightedSlot =
             OverworldWildSpawns_GetSelectedFollowerPartySlot(fieldSystem);
         OverworldFollowerSelectorUI_BeginPartySnapshot();
         OverworldFollowerSelector_ClearPartySnapshotDirty();
@@ -1217,17 +1206,18 @@ static void OverworldFollowerSelectorInput_Task(SysTask *task, void *data)
             }
             return;
         }
-        if (sFollowerSelectorHighlightedSlot
+        if (sFollowerRecall.selectorHighlightedSlot
                 >= CUSTOM_FOLLOWER_PARTY_SLOT_COUNT
-            || (eligibleMask & (1 << sFollowerSelectorHighlightedSlot))
+            || (eligibleMask
+                & (1 << sFollowerRecall.selectorHighlightedSlot))
                 == 0) {
-            sFollowerSelectorHighlightedSlot =
+            sFollowerRecall.selectorHighlightedSlot =
                 OverworldFollowerSelectorInput_FirstEligibleSlot(
                     eligibleMask);
         }
         if (!OverworldFollowerSelectorUI_Open(
                 fieldSystem,
-                sFollowerSelectorHighlightedSlot)) {
+                sFollowerRecall.selectorHighlightedSlot)) {
             if (sFollowerSelectorInputState
                     != FOLLOWER_SELECTOR_INPUT_IDLE) {
                 OverworldFollowerSelector_SetReleaseGate();
@@ -1239,9 +1229,8 @@ static void OverworldFollowerSelectorInput_Task(SysTask *task, void *data)
     while (!OverworldFollowerSelectorUI_Update()) {
         if (OverworldFollowerSelectorUI_IsOpen()) {
             /*
-             * Load one unit per frame even during idle preloading. This
-             * prevents NARC/VRAM setup from monopolizing a field frame;
-             * sprites are still submitted together only after READY.
+             * Idle preloading advances one unit per task frame. An active
+             * Y request drives this task to READY from the input filter.
              */
             return;
         }
@@ -1286,7 +1275,7 @@ static BOOL OverworldFollowerSelectorInput_Begin(
         }
         sFollowerSelectorFieldSystem = fieldSystem;
         sFollowerSelectorMapId = (u16)fieldSystem->location->mapId;
-        sFollowerSelectorHighlightedSlot =
+        sFollowerRecall.selectorHighlightedSlot =
             OverworldWildSpawns_GetSelectedFollowerPartySlot(fieldSystem);
         OverworldFollowerSelectorUI_BeginPartySnapshot();
     }
@@ -1302,6 +1291,7 @@ void OverworldFollowerSelectorInput_Filter(FieldSystem *fieldSystem)
     u16 physicalNewKeys;
     u8 eligibleMask;
     u8 nextSlot;
+    BOOL mountSelection;
 
     physicalNewKeys = OverworldFollowerSelectorInput_ReadNewKeys();
     if (sFollowerSelectorInputState == FOLLOWER_SELECTOR_INPUT_IDLE) {
@@ -1312,19 +1302,20 @@ void OverworldFollowerSelectorInput_Filter(FieldSystem *fieldSystem)
                 sFollowerSelectorTask,
                 fieldSystem);
         }
-        if (!OverworldFollowerSelector_IsYPressPending()
-            || !OverworldFollowerTransitionQueue_HasRoom(2)) {
+        if (!OverworldFollowerSelector_IsYPressPending()) {
             return;
         }
         if (!OverworldFollowerSelectorInput_Begin(fieldSystem, TRUE)) {
             return;
         }
-        if (!OVERWORLD_FOLLOWER_TRANSITION_QUEUE_APPEND(
-                FOLLOWER_TRANSITION_COMMAND_DESPAWN)) {
-            OverworldFollowerSelectorInput_Close(sFollowerSelectorTask);
-            return;
-        }
         OverworldFollowerSelector_ClearYPressPending();
+        while (sFollowerSelectorInputState
+                == FOLLOWER_SELECTOR_INPUT_PREPARING) {
+            /* Make an active Y request visible in this field frame. */
+            OverworldFollowerSelectorInput_Task(
+                sFollowerSelectorTask,
+                fieldSystem);
+        }
     }
     if (fieldSystem != sFollowerSelectorFieldSystem
         || !OverworldFollowerSelectorInput_IsFieldContextCurrent(fieldSystem)) {
@@ -1341,13 +1332,15 @@ void OverworldFollowerSelectorInput_Filter(FieldSystem *fieldSystem)
         return;
     }
 
-    if (OverworldFollowerSelector_IsYReleasePending()) {
-        if (!OVERWORLD_FOLLOWER_TRANSITION_QUEUE_APPEND(
-                FOLLOWER_TRANSITION_COMMAND_SPAWN_BASE
-                    + sFollowerSelectorHighlightedSlot)) {
-            return;
-        }
-        /* Keep a still-held shoulder from leaking into the Player Ball. */
+    mountSelection = (physicalNewKeys & PAD_BUTTON_SELECT) != 0;
+    if (OverworldFollowerSelector_IsYPressPending() || mountSelection) {
+        OVERWORLD_FOLLOWER_TRANSITION_QUEUE->reserved =
+            OVERWORLD_FOLLOWER_SELECTION_REQUEST_PENDING
+            | (mountSelection
+                ? OVERWORLD_FOLLOWER_SELECTION_REQUEST_MOUNT
+                : 0)
+            | sFollowerRecall.selectorHighlightedSlot;
+        /* Keep the confirming button from leaking into field controls. */
         OverworldFollowerSelector_SetReleaseGate();
         OverworldFollowerSelectorInput_Hide();
         return;
@@ -1358,25 +1351,26 @@ void OverworldFollowerSelectorInput_Filter(FieldSystem *fieldSystem)
         OverworldFollowerSelectorInput_Cancel(fieldSystem);
         return;
     }
-    if ((eligibleMask & (1 << sFollowerSelectorHighlightedSlot)) == 0) {
+    if ((eligibleMask
+            & (1 << sFollowerRecall.selectorHighlightedSlot)) == 0) {
         nextSlot = OverworldFollowerSelectorInput_FirstEligibleSlot(eligibleMask);
     } else if ((physicalNewKeys & (PAD_BUTTON_L | PAD_BUTTON_R))
             == PAD_BUTTON_L) {
         nextSlot = OverworldFollowerSelectorInput_CycleSlot(
             eligibleMask,
-            sFollowerSelectorHighlightedSlot,
+            sFollowerRecall.selectorHighlightedSlot,
             -1);
     } else if ((physicalNewKeys & (PAD_BUTTON_L | PAD_BUTTON_R))
             == PAD_BUTTON_R) {
         nextSlot = OverworldFollowerSelectorInput_CycleSlot(
             eligibleMask,
-            sFollowerSelectorHighlightedSlot,
+            sFollowerRecall.selectorHighlightedSlot,
             1);
     } else {
-        nextSlot = sFollowerSelectorHighlightedSlot;
+        nextSlot = sFollowerRecall.selectorHighlightedSlot;
     }
-    if (nextSlot != sFollowerSelectorHighlightedSlot) {
-        sFollowerSelectorHighlightedSlot = nextSlot;
+    if (nextSlot != sFollowerRecall.selectorHighlightedSlot) {
+        sFollowerRecall.selectorHighlightedSlot = nextSlot;
         OverworldFollowerSelectorUI_SetSelection(nextSlot);
     }
 }
@@ -1417,6 +1411,7 @@ BOOL OverworldFollowerSelectorInput_Cancel(FieldSystem *fieldSystem)
 BOOL OverworldFollowerSelectorInput_IsActive(void)
 {
     return sFollowerSelectorInputState != FOLLOWER_SELECTOR_INPUT_IDLE
-        || OVERWORLD_FOLLOWER_TRANSITION_QUEUE->count != 0
+        || (OVERWORLD_FOLLOWER_TRANSITION_QUEUE->count
+            | OVERWORLD_FOLLOWER_TRANSITION_QUEUE->reserved) != 0
         || sFollowerRecall.phase != FOLLOWER_RECALL_PHASE_NONE;
 }

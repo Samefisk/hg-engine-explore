@@ -70,4 +70,7 @@ SECTIONS {
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
         } >rom = 0xff
+
+        ASSERT(ADDR(.data) + SIZEOF(.data) <= 0x023CCFD8,
+            "field overlay overlaps overworld wild overlay prefix")
 }

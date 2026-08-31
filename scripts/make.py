@@ -165,6 +165,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         'OverworldWildSpawns_PrepareMapHeaderChange',
         'OverworldWildSpawns_IsBehaviorAllowedHopLandingTile',
         'OverworldWildSpawns_StartPreparedCustomJumpCommand',
+        'OverworldWildSpawns_BeginMountSelectedFollower',
     ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
@@ -467,7 +468,7 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError('overlay 156 is shorter than its exported ABI entry')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 5, expected_entry_size)
+    expected_header = (0x3152574F, 9, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'

@@ -25,6 +25,7 @@ import zipfile
 from pathlib import Path
 
 
+REPO = Path(__file__).resolve().parents[1]
 OVERLAY_ID = 154
 OVERLAY_BASE = 0x023C0400
 OVERLAY_LIMIT = 0x1EA0
@@ -38,7 +39,13 @@ ARM9_BASE = 0x02000000
 OVERLAY129_BASE = 0x023D8000
 OVERLAY129_END = 0x023E0000
 OVERLAY153_ID = 153
-OVERLAY153_LIMIT = 0x1000
+OVERLAY153_BASE = 0x023BE400
+OVERLAY153_LIMIT = 0x1C00
+OVERLAY153_WALK_ENTRY = OVERLAY153_BASE + 0x1000
+OVERLAY153_PROFILE_ENTRY = OVERLAY153_BASE + 0x1040
+OVERLAY153_MOUNT_ENTRY = OVERLAY153_BASE + 0x1058
+OVERLAY153_FACE_ENTRY = OVERLAY153_BASE + 0x1068
+OVERLAY152_BASE = 0x023C0400
 MAX_CANDIDATES = 458
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
     "0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
@@ -4835,9 +4842,31 @@ def binary_contracts(args: argparse.Namespace) -> None:
         rows[OVERLAY153_ID][2] <= OVERLAY153_LIMIT,
         "read-only query growth exceeded overlay 153's guard",
     )
+    overlay153_linked = (
+        REPO / "build/pokemon_move_history_overlay_linked.o"
+    )
     require(
-        args.overlay129.stat().st_size <= 0x7FC0,
-        "task4 consumed the prior 0x40-byte overlay-129 headroom",
+        symbol_address(overlay153_linked, "gOverworldWalkModuleEntry")
+            == OVERLAY153_WALK_ENTRY
+        and symbol_address(
+            overlay153_linked,
+            "gOverworldWalkProfileModuleEntry",
+        ) == OVERLAY153_PROFILE_ENTRY
+        and symbol_address(
+            overlay153_linked,
+            "gOverworldWalkMountModuleEntry",
+        ) == OVERLAY153_MOUNT_ENTRY
+        and symbol_address(
+            overlay153_linked,
+            "gOverworldWalkFaceModuleEntry",
+        ) == OVERLAY153_FACE_ENTRY
+        and OVERLAY153_BASE + OVERLAY153_LIMIT + 0x400
+            <= OVERLAY152_BASE,
+        "overlay 153 Walk entries or upper guard moved",
+    )
+    require(
+        args.overlay129.stat().st_size <= 0x7FD0,
+        "task4 consumed the required 0x30-byte overlay-129 headroom",
     )
 
     relocations = subprocess.check_output(

@@ -1,6 +1,13 @@
 # Overworld Wild Movement Investigation
 
-Before trying a new fix, read `documentation/overworld_wild_movement_attempt_log.md` and verify the approach has not already been tried.
+> **Status: superseded historical checkpoint.** Movement type `47` and the
+> milestone below are not a description of the current branch. Start at
+> [`documentation/overworld-system/README.md`](overworld-system/README.md), and
+> consult this file only when researching an old failed path.
+
+For old movement-type experiments, use
+[`overworld_wild_movement_index.md`](overworld_wild_movement_index.md) to verify
+that an approach was not already tried.
 
 ## Current Milestone
 

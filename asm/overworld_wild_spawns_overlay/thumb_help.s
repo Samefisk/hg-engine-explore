@@ -95,3 +95,31 @@ __wrap_memcpy:
     blx 0x020E5AD8
     pop {pc}
 .size __wrap_memcpy, . - __wrap_memcpy
+
+// The resident Walk module owns cardinal and diagonal direction encoding.
+// Load its fixed dispatch slots instead of calling stock cardinal-only code.
+.align 2
+.global OverworldWildSpawns_MovementDirectionDeltaX
+.thumb_func
+.type OverworldWildSpawns_MovementDirectionDeltaX, function
+OverworldWildSpawns_MovementDirectionDeltaX:
+    // Thumb-1 literal load. Do not let unified syntax select Thumb-2 LDR.W;
+    // ARM946E-S cannot execute it.
+    .hword 0x4B01
+    ldr r3, [r3]
+    bx r3
+    nop
+1:  .word 0x023BF424
+.size OverworldWildSpawns_MovementDirectionDeltaX, . - OverworldWildSpawns_MovementDirectionDeltaX
+
+.align 2
+.global OverworldWildSpawns_MovementDirectionDeltaY
+.thumb_func
+.type OverworldWildSpawns_MovementDirectionDeltaY, function
+OverworldWildSpawns_MovementDirectionDeltaY:
+    .hword 0x4B01
+    ldr r3, [r3]
+    bx r3
+    nop
+2:  .word 0x023BF428
+.size OverworldWildSpawns_MovementDirectionDeltaY, . - OverworldWildSpawns_MovementDirectionDeltaY

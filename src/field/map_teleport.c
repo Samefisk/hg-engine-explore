@@ -126,15 +126,14 @@ OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
     if (!releaseGated) {
         if (yDown
             && !sOverworldFollowerSelectorYWasDown
-            && !OverworldFollowerSelector_IsActiveFlagSet()
             && !OverworldFollowerSelector_IsYPressPending()) {
             OverworldFollowerSelector_ClearYReleasePending();
             OverworldFollowerSelector_SetYPressPending();
         } else if (!yDown
-            && sOverworldFollowerSelectorYWasDown
-            && (OverworldFollowerSelector_IsActiveFlagSet()
-                || OverworldFollowerSelector_IsYPressPending())) {
-            OverworldFollowerSelector_SetYReleasePending();
+            && sOverworldFollowerSelectorYWasDown) {
+            /* Confirmation is press-driven. Never turn the opening Y
+             * release into an implicit follower selection. */
+            OverworldFollowerSelector_ClearYReleasePending();
         }
     }
     sOverworldFollowerSelectorYWasDown = (u8)yDown;
@@ -147,7 +146,8 @@ OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
     if (releaseGated
         && !OverworldFollowerSelector_IsUnloadPending()
         && (physicalKeys
-            & (PAD_BUTTON_A | PAD_BUTTON_L | PAD_BUTTON_R | PAD_BUTTON_Y))
+            & (PAD_BUTTON_A | PAD_BUTTON_SELECT | PAD_BUTTON_L
+                | PAD_BUTTON_R | PAD_BUTTON_Y))
             == 0) {
         OverworldFollowerSelector_ClearReleaseGate();
     }
@@ -325,7 +325,9 @@ static void OverworldFieldService_DiscardRetainedPrimaries(
     if (state == NULL) {
         return;
     }
-    state->battleGraceSteps = OW_WILD_FIELD_READY_DELAY_FRAMES;
+    /* Map-header reconciliation already fences one full field frame. Do not
+     * turn the refill request into a 90-frame input stall. */
+    state->battleGraceSteps = 0;
     gOverworldWildFieldIdleRearmPending |=
         OW_WILD_FIELD_IDLE_REARM_PENDING
         | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
@@ -487,9 +489,9 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
 }
 
 /*
- * Preserve the old field-overlay frame pump: R or Y wakes the linked
- * overworld services, while an in-progress player-ball or selector action
- * keeps receiving frames after the button is released.
+ * Preserve the old field-overlay frame pump: R, Y, or Select wakes the linked
+ * overworld services, while an in-progress player-ball, selector, or mount
+ * action keeps receiving frames after the button is released.
  */
 static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
 {
@@ -503,26 +505,27 @@ static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
         return TRUE;
     }
 
-    if (IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
-        if (OverworldFollowerSelector_IsDirectLoaded()) {
-            goto runFieldService;
+    if (!OverworldFollowerSelector_IsDirectLoaded()) {
+        if (!sOverworldWildPlayerFrameServiceActive
+            && (reg_PAD_KEYINPUT
+                    & (PAD_BUTTON_R | PAD_BUTTON_Y | PAD_BUTTON_SELECT))
+                == (PAD_BUTTON_R | PAD_BUTTON_Y | PAD_BUTTON_SELECT)
+            && !OverworldFollowerSelector_IsYPressPending()) {
+            return TRUE;
         }
-    } else if (!sOverworldWildPlayerFrameServiceActive
-        && (reg_PAD_KEYINPUT & (PAD_BUTTON_R | PAD_BUTTON_Y))
-            == (PAD_BUTTON_R | PAD_BUTTON_Y)
-        && !OverworldFollowerSelector_IsYPressPending()) {
-        return TRUE;
+        if (!HandleLoadOverlay(
+                OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION,
+                0)) {
+            return FALSE;
+        }
     }
-    (void)HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0);
+
     if (OverworldFollowerSelector_IsYPressPending()
         && !OverworldFollowerSelector_IsReleaseGated()
         && OverworldFollowerSelector_IsDirectLoaded()
         && OverworldFollowerSelector_ValidateLoaded()) {
         OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->inputFilter(fieldSystem);
     }
-    return TRUE;
-
-runFieldService:
     entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
     sOverworldWildPlayerFrameServiceActive = entry->onPlayerFrame(
         fieldSystem,

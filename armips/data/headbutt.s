@@ -737,18 +737,18 @@ headbuttheader  32,  15,   0   // Route 28
 
 headbuttheader  33,  35,   0   // Route 29
     // normal slots
-    headbuttencounter SPECIES_HOOTHOOT, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_HOOTHOOT, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 2, 3
+    headbuttencounter SPECIES_RATTATA, 4, 5
+    headbuttencounter SPECIES_RATTATA, 4, 5
+    headbuttencounter SPECIES_RATTATA, 4, 5
+    headbuttencounter SPECIES_RATTATA, 4, 5
+    headbuttencounter SPECIES_RATTATA, 4, 5
+    headbuttencounter SPECIES_RATTATA, 4, 5
     // special slots
     headbuttencounter SPECIES_NONE, 0, 0
     headbuttencounter SPECIES_NONE, 0, 0
@@ -796,18 +796,18 @@ headbuttheader  33,  35,   0   // Route 29
 
 headbuttheader  34,  30,   0   // Route 30
     // normal slots
-    headbuttencounter SPECIES_HOOTHOOT, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_PINECO, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_EXEGGCUTE, 2, 3
-    headbuttencounter SPECIES_HOOTHOOT, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_SPINARAK, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
-    headbuttencounter SPECIES_EXEGGCUTE, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 2, 3
+    headbuttencounter SPECIES_LEDYBA, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 4, 5
+    headbuttencounter SPECIES_LEDYBA, 4, 5
     // special slots
     headbuttencounter SPECIES_NONE, 0, 0
     headbuttencounter SPECIES_NONE, 0, 0

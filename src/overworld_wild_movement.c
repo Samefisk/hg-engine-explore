@@ -1,5 +1,7 @@
 #include "../include/map_events_internal.h"
+#include "../include/overworld_wild_behavior_data.h"
 #include "../include/overworld_wild_movement.h"
+#include "../include/overworld_wild_spawns_internal.h"
 
 #define OW_WILD_DIRECTION_UP 0
 #define OW_WILD_DIRECTION_DOWN 1
@@ -25,13 +27,47 @@ typedef struct OverworldWildMovementDescriptor {
 static FieldSystem *sOverworldWildCustomMovementFieldSystem;
 #endif
 
-void LONG_CALL OverworldWildCustomMovement_SetFieldSystem(FieldSystem *fieldSystem)
+void __attribute__((optimize("Os")))
+OverworldWildSpawns_ApplyFacePlayerFacing(
+    OverworldWildSpawnState *state,
+    int slot,
+    u8 emotePlayHopSound)
 {
-#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
-    (void)fieldSystem;
-#else
-    sOverworldWildCustomMovementFieldSystem = fieldSystem;
-#endif
+    FieldSystem *fieldSystem;
+    LocalMapObject *object;
+    LocalMapObject *playerObject;
+    int dx;
+    int dy;
+    u8 horizontal;
+    u8 vertical;
+    u8 direction;
+
+    object = state->spawns[slot].object;
+    if (!emotePlayHopSound) {
+        return;
+    }
+    fieldSystem = state->movementFieldSystem;
+    playerObject = fieldSystem->playerAvatar->mapObject;
+    if (playerObject == NULL) {
+        return;
+    }
+    dx = playerObject->xCurr - object->xCurr;
+    dy = playerObject->yCurr - object->yCurr;
+    if (dx > 0) {
+        horizontal = OW_WILD_DIRECTION_RIGHT;
+    } else {
+        horizontal = OW_WILD_DIRECTION_LEFT;
+        dx = -dx;
+    }
+    if (dy > 0) {
+        vertical = OW_WILD_DIRECTION_DOWN;
+    } else {
+        vertical = OW_WILD_DIRECTION_UP;
+        dy = -dy;
+    }
+    direction = dx >= dy ? horizontal : vertical;
+
+    object->curFacing = direction;
 }
 
 #if !OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
@@ -146,11 +182,16 @@ void OverworldWildCustomMovement_Init(LocalMapObject *object)
 #endif
 }
 
+#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
+void OverworldWildCustomMovement_Update(LocalMapObject *object)
+    __attribute__((alias("OverworldWildCustomMovement_Init")));
+void OverworldWildCustomMovement_Finish(LocalMapObject *object)
+    __attribute__((alias("OverworldWildCustomMovement_Init")));
+void OverworldWildCustomMovement_Cleanup(LocalMapObject *object)
+    __attribute__((alias("OverworldWildCustomMovement_Init")));
+#else
 void OverworldWildCustomMovement_Update(LocalMapObject *object)
 {
-#if OW_WILD_CUSTOM_MOVEMENT_DIAGNOSTIC_IDLE
-    (void)object;
-#else
     int cooldown;
 
     if (MapObject_IsSingleMovementActive(object)) {
@@ -168,7 +209,6 @@ void OverworldWildCustomMovement_Update(LocalMapObject *object)
 
     MapObject_SetParam(object, OW_WILD_CUSTOM_MOVE_DECISION_COOLDOWN, OW_WILD_MOVEMENT_PARAM_COOLDOWN);
     OverworldWildCustomMovement_TryStartStep(object);
-#endif
 }
 
 void OverworldWildCustomMovement_Finish(LocalMapObject *object)
@@ -180,6 +220,7 @@ void OverworldWildCustomMovement_Cleanup(LocalMapObject *object)
 {
     (void)object;
 }
+#endif
 
 OverworldWildMovementDescriptor ALIGN4 gOverworldWildCustomMovementDescriptor = {
     OW_WILD_MOVEMENT_DESCRIPTOR_CLASS_STEP,

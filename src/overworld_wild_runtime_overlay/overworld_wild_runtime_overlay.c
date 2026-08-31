@@ -2,6 +2,9 @@
 
 #include "../../include/constants/species.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_walk_module.h"
+
+#pragma GCC optimize("no-if-conversion")
 
 #define OW_WILD_RUNTIME_FX32_ONE (1 << FX32_SHIFT)
 #define OW_WILD_RUNTIME_MATCH_ANY_SPECIES SPECIES_NONE
@@ -19,7 +22,43 @@
 #define OW_WILD_RUNTIME_CIRCLE_RADIUS_MAX 8
 #define OW_WILD_RUNTIME_BATTLE_TRIGGER_MAX 2
 #define OW_WILD_RUNTIME_SURFACE_MODEL_NONE 0xFF
-static OverworldWildSurfaceBlockCache sFollowerSelectorSurfaceBlockCache;
+/* Vanilla sub_02061248 queries terrain height into a caller-owned vector. */
+#define OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT \
+    ((BOOL (*)(FieldSystem *, VecFx32 *, BOOL))0x02061249)
+
+typedef struct OverworldWildRuntimeSurfaceBlockCache {
+    u16 blockIndex;
+    u8 matrixId;
+    u8 modelIndex;
+} OverworldWildRuntimeSurfaceBlockCache;
+
+/* The behavior-data overlay owns one fixed surface catalog. Matrix identity
+ * is therefore sufficient to invalidate this compact per-block cache. */
+static OverworldWildRuntimeSurfaceBlockCache sOverworldWildSurfaceBlockCache = {
+    0,
+    0xFF,
+    OW_WILD_RUNTIME_SURFACE_MODEL_NONE,
+};
+
+/* Overlay 1 normally owns each object-facing vector. A mounted follower is a
+ * presentation child of the player, so its controller-owned vector must not
+ * be replaced later in the same frame. UNK31 is reserved for that one state. */
+void __attribute__((naked, noinline, used,
+        section(".overworld_wild_runtime_mount_facing")))
+OverworldWildRuntime_SetFacingVectorUnlessMounted(
+    LocalMapObject *object,
+    VecFx32 *facingVector)
+{
+    __asm__(
+        "ldr r2, [r0, #0]\n"
+        "cmp r2, #0\n"
+        "bmi 1f\n"
+        "ldr r3, 2f\n"
+        "bx r3\n"
+        "1: bx lr\n"
+        ".align 2\n"
+        "2: .word 0x0205F97D\n");
+}
 
 void OverworldWildRuntime_PlayStepDirtParticle(LocalMapObject *object)
 {
@@ -42,7 +81,7 @@ void OverworldWildRuntime_PlayLandingHopParticle(LocalMapObject *object)
     ov01_021FF74C(object);
 }
 
-BOOL __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "if-conversion", "tree-pre", "tree-copy-prop")))
+BOOL __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "tree-pre", "tree-copy-prop")))
 OverworldWildRuntime_QuerySurface(
     FieldSystem *fieldSystem,
     const OverworldWildSurfaceCatalog *catalog,
@@ -62,9 +101,7 @@ OverworldWildRuntime_QuerySurface(
     int i;
 
     if (fieldSystem == NULL
-        || fieldSystem->map_matrix == NULL
-        || catalog == NULL
-        || hit == NULL) {
+        || fieldSystem->map_matrix == NULL) {
         return FALSE;
     }
     matrix = (const u8 *)fieldSystem->map_matrix;
@@ -73,10 +110,9 @@ OverworldWildRuntime_QuerySurface(
         return FALSE;
     }
     blockIndex = blockX + blockY * matrix[0];
-    if (sFollowerSelectorSurfaceBlockCache.catalog == catalog
-        && sFollowerSelectorSurfaceBlockCache.matrixId == matrix[2]
-        && sFollowerSelectorSurfaceBlockCache.blockIndex == blockIndex) {
-        modelIndex = sFollowerSelectorSurfaceBlockCache.modelIndex;
+    if (sOverworldWildSurfaceBlockCache.matrixId == matrix[2]
+        && sOverworldWildSurfaceBlockCache.blockIndex == blockIndex) {
+        modelIndex = sOverworldWildSurfaceBlockCache.modelIndex;
     } else {
         u16 landDataId = *(const u16 *)(matrix
             + OW_WILD_MAP_MATRIX_MODELS_OFFSET
@@ -93,10 +129,9 @@ OverworldWildRuntime_QuerySurface(
         } else {
             modelIndex = (u8)i;
         }
-        sFollowerSelectorSurfaceBlockCache.catalog = catalog;
-        sFollowerSelectorSurfaceBlockCache.blockIndex = blockIndex;
-        sFollowerSelectorSurfaceBlockCache.matrixId = matrix[2];
-        sFollowerSelectorSurfaceBlockCache.modelIndex = modelIndex;
+        sOverworldWildSurfaceBlockCache.blockIndex = blockIndex;
+        sOverworldWildSurfaceBlockCache.matrixId = matrix[2];
+        sOverworldWildSurfaceBlockCache.modelIndex = modelIndex;
     }
     if (modelIndex == OW_WILD_RUNTIME_SURFACE_MODEL_NONE) {
         return FALSE;
@@ -132,7 +167,7 @@ OverworldWildRuntime_QuerySurface(
     return TRUE;
 }
 
-static s32 __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "if-conversion", "tree-pre", "tree-copy-prop")))
+static s32 __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "tree-pre", "tree-copy-prop")))
 OverworldWildRuntime_GetGroundBaseY(
     FieldSystem *fieldSystem,
     const OverworldWildSurfaceCatalog *catalog,
@@ -141,15 +176,7 @@ OverworldWildRuntime_GetGroundBaseY(
     int y)
 {
     OverworldWildSurfaceHit hit;
-    u32 savedFlags;
-    u32 savedFlags2;
-    u32 savedPosX;
-    u32 savedPosY;
-    u32 savedPosZ;
-    int savedHInit;
-    int savedHPrev;
-    int savedHCurr;
-    s32 baseY;
+    VecFx32 targetPosition;
 
     if (OverworldWildRuntime_QuerySurface(
             fieldSystem,
@@ -161,44 +188,19 @@ OverworldWildRuntime_GetGroundBaseY(
         return hit.height;
     }
 
-    savedFlags = object->flags;
-    savedFlags2 = object->flags2;
-    savedPosX = object->posVec[0];
-    savedPosY = object->posVec[1];
-    savedPosZ = object->posVec[2];
-    savedHInit = object->hInit;
-    savedHPrev = object->hPrev;
-    savedHCurr = object->hCurr;
-    baseY = (s32)savedPosY;
-
-    object->posVec[0] = (u32)((x << 4) * OW_WILD_RUNTIME_FX32_ONE
-        + (OW_WILD_RUNTIME_FX32_ONE << 3));
-    object->posVec[2] = (u32)((y << 4) * OW_WILD_RUNTIME_FX32_ONE
-        + (OW_WILD_RUNTIME_FX32_ONE << 3));
-    if (MapObject_RefreshHeightFromTerrain(object)) {
-        baseY = (s32)object->posVec[1];
+    targetPosition.x = (x << 4) * OW_WILD_RUNTIME_FX32_ONE
+        + (OW_WILD_RUNTIME_FX32_ONE << 3);
+    targetPosition.y = (s32)object->posVec[1];
+    targetPosition.z = (y << 4) * OW_WILD_RUNTIME_FX32_ONE
+        + (OW_WILD_RUNTIME_FX32_ONE << 3);
+    if ((object->flags & MAPOBJECTFLAG_UNK23) == 0
+        && OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(
+            fieldSystem,
+            &targetPosition,
+            (object->flags & MAPOBJECTFLAG_UNK29) != 0)) {
+        return targetPosition.y;
     }
-
-    object->flags = savedFlags;
-    object->flags2 = savedFlags2;
-    object->posVec[0] = savedPosX;
-    object->posVec[1] = savedPosY;
-    object->posVec[2] = savedPosZ;
-    object->hInit = savedHInit;
-    object->hPrev = savedHPrev;
-    object->hCurr = savedHCurr;
-    return baseY;
-}
-
-static u8 OverworldWildRuntime_ClampWalkSpeed(u8 speed)
-{
-    if (speed < OW_WILD_WALK_SPEED_MIN) {
-        return OW_WILD_WALK_SPEED_MIN;
-    }
-    if (speed > OW_WILD_WALK_SPEED_MAX) {
-        return OW_WILD_WALK_SPEED_MAX;
-    }
-    return speed;
+    return (s32)object->posVec[1];
 }
 
 void OverworldWildRuntime_WalkMomentumReset(
@@ -214,8 +216,37 @@ void OverworldWildRuntime_WalkMomentumReset(
     state->baseSpeed = 0;
     state->spotState = OW_WILD_WALK_DIRECTION_NONE;
     state->skidRemaining = 0;
-    state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
+    state->turnDirection = 0;
     state->resumeSpeed = 0;
+}
+
+static void __attribute__((noinline)) OverworldWildRuntime_ApplyWalkEffect(
+    OverworldWildWalkEffectCallback effect,
+    void *context,
+    u8 direction,
+    BOOL skid)
+{
+    if (effect != NULL) {
+        effect(context, direction, skid);
+    }
+}
+
+static void OverworldWildRuntime_SetWalkMomentum(
+    OverworldWildWalkMomentumState *state,
+    u8 baseSpeed,
+    u8 spotState,
+    OverworldWildWalkEffectCallback effect,
+    void *context)
+{
+    OverworldWildRuntime_WalkMomentumReset(state);
+    state->speed = baseSpeed;
+    state->baseSpeed = baseSpeed;
+    state->spotState = spotState;
+    OverworldWildRuntime_ApplyWalkEffect(
+        effect,
+        context,
+        OW_WILD_WALK_DIRECTION_NONE,
+        FALSE);
 }
 
 static void OverworldWildRuntime_EnsureWalkMomentum(
@@ -225,35 +256,15 @@ static void OverworldWildRuntime_EnsureWalkMomentum(
     OverworldWildWalkEffectCallback effect,
     void *context)
 {
-    baseSpeed = OverworldWildRuntime_ClampWalkSpeed(baseSpeed);
-    if (state->speed != 0
-        && state->baseSpeed == baseSpeed
-        && state->spotState == spotState) {
-        return;
-    }
-
-    OverworldWildRuntime_WalkMomentumReset(state);
-    state->speed = baseSpeed;
-    state->baseSpeed = baseSpeed;
-    state->spotState = spotState;
-    if (effect != NULL) {
-        effect(context, OW_WILD_WALK_DIRECTION_NONE, FALSE);
-    }
-}
-
-static void OverworldWildRuntime_StopWalkMomentum(
-    OverworldWildWalkMomentumState *state,
-    u8 baseSpeed,
-    u8 spotState,
-    OverworldWildWalkEffectCallback effect,
-    void *context)
-{
-    OverworldWildRuntime_WalkMomentumReset(state);
-    state->speed = OverworldWildRuntime_ClampWalkSpeed(baseSpeed);
-    state->baseSpeed = state->speed;
-    state->spotState = spotState;
-    if (effect != NULL) {
-        effect(context, OW_WILD_WALK_DIRECTION_NONE, FALSE);
+    if (state->speed == 0
+        || state->baseSpeed != baseSpeed
+        || state->spotState != spotState) {
+        OverworldWildRuntime_SetWalkMomentum(
+            state,
+            baseSpeed,
+            spotState,
+            effect,
+            context);
     }
 }
 
@@ -266,8 +277,10 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     OverworldWildWalkEffectCallback effect,
     void *context)
 {
+    BOOL preventTurnSkid = FALSE;
+    BOOL fortyFiveDegreeTurn;
     u8 oldDirection;
-    u8 speedGain;
+    u8 skidTiles;
 
     if (state == NULL || startStep == NULL) {
         return FALSE;
@@ -275,6 +288,13 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     if (state->skidRemaining != 0) {
         /* The direction selected when the skid began owns the full skid. */
         return TRUE;
+    }
+    baseSpeed = OVERWORLD_WALK_MODULE_ENTRY->clampTime(baseSpeed);
+    if (requestedDirection != OW_WILD_WALK_DIRECTION_NONE) {
+        preventTurnSkid = (requestedDirection
+            & OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG) != 0;
+        requestedDirection &=
+            ~OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG;
     }
 
     OverworldWildRuntime_EnsureWalkMomentum(
@@ -286,13 +306,12 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     oldDirection = state->direction;
     if (requestedDirection == OW_WILD_WALK_DIRECTION_NONE) {
         state->tileCounter = 0;
-        speedGain = state->speed - state->baseSpeed;
-        if (oldDirection != OW_WILD_WALK_DIRECTION_NONE && speedGain != 0) {
-            /* Acceleration gains 1/2/3 map to 1/2/4 skid tiles. */
-            state->skidRemaining = 1u << (speedGain - 1u);
+        skidTiles = OVERWORLD_WALK_MODULE_ENTRY->skidTiles(state->speed);
+        if (oldDirection != OW_WILD_WALK_DIRECTION_NONE && skidTiles != 0) {
+            state->skidRemaining = skidTiles;
             state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
             state->resumeSpeed = state->baseSpeed;
-            state->speed--;
+            state->speed = OVERWORLD_WALK_MODULE_ENTRY->skidTime(state->speed);
             if (startStep(
                     context,
                     oldDirection,
@@ -303,7 +322,7 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
                 return TRUE;
             }
         }
-        OverworldWildRuntime_StopWalkMomentum(
+        OverworldWildRuntime_SetWalkMomentum(
             state,
             baseSpeed,
             spotState,
@@ -329,12 +348,18 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     }
 
     state->tileCounter = 0;
-    speedGain = state->speed - state->baseSpeed;
-    if (speedGain != 0) {
-        state->skidRemaining = 1u << (speedGain - 1u);
+    fortyFiveDegreeTurn =
+        OVERWORLD_WALK_MODULE_ENTRY->isFortyFiveDegreeTurn(
+            oldDirection,
+            requestedDirection);
+    skidTiles = fortyFiveDegreeTurn
+        ? 0
+        : OVERWORLD_WALK_MODULE_ENTRY->skidTiles(state->speed);
+    if (skidTiles != 0 && !preventTurnSkid) {
+        state->skidRemaining = skidTiles;
         state->turnDirection = requestedDirection;
-        state->resumeSpeed = state->speed - 1u;
-        state->speed--;
+        state->resumeSpeed = state->speed;
+        state->speed = OVERWORLD_WALK_MODULE_ENTRY->skidTime(state->speed);
         if (startStep(
                 context,
                 oldDirection,
@@ -344,7 +369,7 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
                 TRUE)) {
             return TRUE;
         }
-        OverworldWildRuntime_StopWalkMomentum(
+        OverworldWildRuntime_SetWalkMomentum(
             state,
             baseSpeed,
             spotState,
@@ -355,9 +380,11 @@ BOOL OverworldWildRuntime_WalkMomentumStart(
     }
     state->resumeSpeed = 0;
 
-    if (effect != NULL) {
-        effect(context, requestedDirection, FALSE);
-    }
+    OverworldWildRuntime_ApplyWalkEffect(
+        effect,
+        context,
+        requestedDirection,
+        FALSE);
     state->direction = requestedDirection;
     return startStep(
         context,
@@ -372,6 +399,7 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
     OverworldWildWalkMomentumState *state,
     u8 baseSpeed,
     u8 spotState,
+    u8 fastestTravelTime,
     u8 tilesToAccelerate,
     u8 completedDirection,
     u8 completedDistance,
@@ -387,29 +415,39 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
         return FALSE;
     }
 
-    baseSpeed = OverworldWildRuntime_ClampWalkSpeed(baseSpeed);
+    baseSpeed = OVERWORLD_WALK_MODULE_ENTRY->clampTime(baseSpeed);
+    fastestTravelTime = OVERWORLD_WALK_MODULE_ENTRY->clampTime(
+        fastestTravelTime);
+    if (fastestTravelTime > baseSpeed) {
+        fastestTravelTime = baseSpeed;
+    }
     wasSkidding = state->skidRemaining != 0;
     if (!walkStillActive
         || state->speed == 0
         || state->baseSpeed != baseSpeed
         || state->spotState != spotState) {
         OverworldWildRuntime_WalkMomentumReset(state);
-        if (effect != NULL) {
-            effect(context, OW_WILD_WALK_DIRECTION_NONE, FALSE);
-        }
+        OverworldWildRuntime_ApplyWalkEffect(
+            effect,
+            context,
+            OW_WILD_WALK_DIRECTION_NONE,
+            FALSE);
         return wasSkidding;
     }
 
     if (wasSkidding) {
         turnDirection = state->turnDirection;
-        if (effect != NULL) {
-            effect(context, turnDirection, TRUE);
+        /* A multi-tile skid is one maneuver. Emit its landing feedback once,
+         * on the final tile, instead of allocating one effect per tile. */
+        if (state->skidRemaining == 1) {
+            OverworldWildRuntime_ApplyWalkEffect(
+                effect,
+                context,
+                turnDirection,
+                TRUE);
         }
         state->skidRemaining--;
         if (state->skidRemaining != 0) {
-            if (state->speed > state->baseSpeed) {
-                state->speed--;
-            }
             if (startStep(
                     context,
                     state->direction,
@@ -421,7 +459,7 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
                     TRUE)) {
                 return TRUE;
             }
-            OverworldWildRuntime_StopWalkMomentum(
+            OverworldWildRuntime_SetWalkMomentum(
                 state,
                 baseSpeed,
                 spotState,
@@ -431,7 +469,7 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
         }
 
         if (turnDirection == OW_WILD_WALK_DIRECTION_NONE) {
-            OverworldWildRuntime_StopWalkMomentum(
+            OverworldWildRuntime_SetWalkMomentum(
                 state,
                 baseSpeed,
                 spotState,
@@ -446,11 +484,13 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
         state->speed = state->resumeSpeed;
         state->resumeSpeed = 0;
         state->direction = turnDirection;
-        state->turnDirection = OW_WILD_WALK_DIRECTION_NONE;
+        state->turnDirection = 0;
         state->tileCounter = 0;
-        if (effect != NULL) {
-            effect(context, turnDirection, FALSE);
-        }
+        OverworldWildRuntime_ApplyWalkEffect(
+            effect,
+            context,
+            turnDirection,
+            FALSE);
         if (startStep(
                 context,
                 turnDirection,
@@ -458,11 +498,11 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
                 turnDirection,
                 TRUE,
                 FALSE)) {
-            /* Mark the committed post-skid step so it cannot immediately
-             * accelerate away the turn's one-speed momentum loss. */
+            /* Mark the committed post-skid step so it completes the turn
+             * before normal acceleration accounting resumes. */
             state->resumeSpeed = state->speed;
         } else {
-            OverworldWildRuntime_StopWalkMomentum(
+            OverworldWildRuntime_SetWalkMomentum(
                 state,
                 baseSpeed,
                 spotState,
@@ -485,9 +525,9 @@ BOOL OverworldWildRuntime_WalkMomentumFinish(
     if (tilesToAccelerate != 0
         && state->tileCounter >= tilesToAccelerate) {
         state->tileCounter = 0;
-        if (state->speed < OW_WILD_WALK_SPEED_MAX) {
-            state->speed++;
-        }
+        state->speed = OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(
+            state->speed,
+            fastestTravelTime);
     }
     return FALSE;
 }
@@ -567,16 +607,16 @@ BOOL OverworldWildRuntime_OverrideTargetsContext(
 }
 
 static const u8 sOverworldWildRuntimeBehaviorRelativeFieldMaximums[] = {
-    0, 0, 0, 255, 64, 64, 64, 4, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
-    0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 4,
-    15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 4, 0, 0, 0, 8, 8, 8, 4,
-    5, 0, 0, 0, 0,
+    0, 0, 0, 255, 64, 64, 64, 32, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
+    0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 32,
+    15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 32, 0, 0, 0, 8, 8, 8, 32,
+    5, 0, 0, 0, 0, 0, 0, 255, 32, 32,
 };
 
-typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain62[
-    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 62 ? 1 : -1];
-typedef char OverworldWildRuntimeBehaviorProfileDataSizeMustRemain66[
-    sizeof(OverworldWildBehaviorProfileData) == 66 ? 1 : -1];
+typedef char OverworldWildRuntimeBehaviorRelativeFieldCountMustRemain67[
+    NELEMS(sOverworldWildRuntimeBehaviorRelativeFieldMaximums) == 67 ? 1 : -1];
+typedef char OverworldWildRuntimeBehaviorProfileDataSizeMustRemain72[
+    sizeof(OverworldWildBehaviorProfileData) == 72 ? 1 : -1];
 typedef char OverworldWildRuntimeBehaviorFieldsBeforeTerrainMustRemain32[
     __builtin_offsetof(OverworldWildBehaviorProfileData, chainPauseAction) == 31
         && __builtin_offsetof(OverworldWildBehaviorProfileData,
@@ -618,6 +658,16 @@ typedef char OverworldWildRuntimeBehaviorVerticalObstacleOptionMustRemain56[
                chainRepositionAllowDiagonal) == 64
             && __builtin_offsetof(OverworldWildBehaviorProfileData,
                walkOptions) == 65
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               wanderStraightChance) == 66
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               chainPauseActionChance) == 67
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               walkPause) == 68
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               tilesBeforeTurnSkid) == 69
+            && __builtin_offsetof(OverworldWildBehaviorProfileData,
+               walkStompTime) == 70
         ? 1
         : -1];
 
@@ -631,39 +681,12 @@ static u8 OverworldWildRuntime_GetBehaviorOverrideFieldOffset(u8 fieldIndex)
 
 #define OW_WILD_RUNTIME_BOUNDED_FIELDS_1 0x01C00180u
 #define OW_WILD_RUNTIME_BOUNDED_FIELDS_2 0x00001F84u
-#define OW_WILD_RUNTIME_BOUNDED_FIELDS_3 0x0000F8F3u
+#define OW_WILD_RUNTIME_BOUNDED_FIELDS_3 0x0140F8F3u
 
-static BOOL OverworldWildRuntime_AreProfileMovementSpeedsValid(
-    const OverworldWildBehaviorProfileData *profile)
-{
-    return profile != NULL
-        && profile->chillSpeed >= OW_WILD_WALK_SPEED_MIN
-        && profile->chillSpeed <= OW_WILD_WALK_SPEED_MAX;
-}
-
-static BOOL OverworldWildRuntime_AreExactOverrideMovementSpeedsValid(
-    const OverworldWildBehaviorOverrideProfile *profile)
-{
-    u32 operatorMask;
-
-    if (profile == NULL) {
-        return FALSE;
-    }
-    operatorMask = profile->relativeMask | profile->atLeastMask
-        | profile->atMostMask;
-    if ((profile->mask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
-        && !(operatorMask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
-        && (profile->profile.chillSpeed < OW_WILD_WALK_SPEED_MIN
-            || profile->profile.chillSpeed > OW_WILD_WALK_SPEED_MAX)) {
-        return FALSE;
-    }
-    return TRUE;
-}
 
 static BOOL OverworldWildRuntime_IsMovementSpeedField(u8 fieldIndex)
 {
-    return fieldIndex == 7 || fieldIndex == 49 || fieldIndex == 53
-        || fieldIndex == 56;
+    return fieldIndex == 7 || fieldIndex == 49 || fieldIndex == 56;
 }
 
 static BOOL OverworldWildRuntime_IsOverrideOperatorMaskValid(
@@ -748,7 +771,7 @@ static BOOL OverworldWildRuntime_IsOverrideOperatorFamilyValid(
         && OverworldWildRuntime_IsOverrideOperatorMaskValid(
             profile->mask3,
             operatorMask3,
-            0x000FFFFF,
+            0x01FFFFFF,
             42,
             profile,
             compoundMask3,
@@ -805,7 +828,7 @@ BOOL OverworldWildRuntime_ValidateBehaviorDataBlob(
     }
 
     for (i = 0; i < OWBD_CLASS_PROFILE_COUNT; i++) {
-        if (!OverworldWildRuntime_AreProfileMovementSpeedsValid(
+        if (!OVERWORLD_WALK_PROFILE_MODULE_ENTRY->validateProfileData(
                 &blob->classProfiles[i])) {
             return FALSE;
         }
@@ -815,8 +838,8 @@ BOOL OverworldWildRuntime_ValidateBehaviorDataBlob(
             &blob->overrideProfiles[i];
 
         if (!OverworldWildRuntime_AreOverrideOperatorMasksValid(profile)
-            || !OverworldWildRuntime_AreExactOverrideMovementSpeedsValid(
-                profile)) {
+            || !OVERWORLD_WALK_PROFILE_MODULE_ENTRY
+                ->validateExactOverrideProfile(profile)) {
             return FALSE;
         }
     }
@@ -825,6 +848,20 @@ BOOL OverworldWildRuntime_ValidateBehaviorDataBlob(
 
 static u16 OverworldWildRuntime_GetLegacySpawnDestinationMask(u8 destination)
 {
+    if (destination >= OW_WILD_SPAWN_DESTINATION_ROOFTOP
+        && destination <= OW_WILD_SPAWN_DESTINATION_FLOWERBED) {
+        return 1u << (destination - OW_WILD_SPAWN_DESTINATION_ROOFTOP + 6u);
+    }
+    if (destination == OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER
+        || (destination >= OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER
+            && destination <= OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER)) {
+        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER;
+    }
+    if (destination >= OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER
+        && destination
+            <= OW_WILD_SPAWN_DESTINATION_FIVE_TILES_FRONT_OF_PLAYER) {
+        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT;
+    }
     switch ((OverworldWildSpawnDestination)destination) {
     case OW_WILD_SPAWN_DESTINATION_CANOPY:
         return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY;
@@ -835,27 +872,6 @@ static u16 OverworldWildRuntime_GetLegacySpawnDestinationMask(u8 destination)
     case OW_WILD_SPAWN_DESTINATION_SHORE:
     case OW_WILD_SPAWN_DESTINATION_WATER:
         return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER;
-    case OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_TWO_TILES_FRONT_OF_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_THREE_TILES_FRONT_OF_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_FOUR_TILES_FRONT_OF_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_FIVE_TILES_FRONT_OF_PLAYER:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT;
-    case OW_WILD_SPAWN_DESTINATION_FIVE_TILES_BEHIND_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_TWO_TILES_BEHIND_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_THREE_TILES_BEHIND_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_FOUR_TILES_BEHIND_PLAYER:
-    case OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER;
-    case OW_WILD_SPAWN_DESTINATION_ROOFTOP:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP;
-    case OW_WILD_SPAWN_DESTINATION_SIGNPOST:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST;
-    case OW_WILD_SPAWN_DESTINATION_MAILBOX:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX;
-    case OW_WILD_SPAWN_DESTINATION_FLOWERBED:
-        return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED;
     case OW_WILD_SPAWN_DESTINATION_POOL:
     default:
         return OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND
@@ -983,11 +999,12 @@ static void OverworldWildRuntime_ApplyBehaviorOverride(
     }
 }
 
-void __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "if-conversion", "tree-pre", "tree-copy-prop")))
+void __attribute__((noinline, optimize("Os", "expensive-optimizations", "tree-dominator-opts", "tree-pre", "tree-copy-prop")))
 OverworldWildRuntime_NormalizeMovementProfile(
     OverworldWildBehaviorProfileData *profile,
     u8 invalidState)
 {
+    OVERWORLD_WALK_PROFILE_MODULE_ENTRY->normalizeProfileData(profile);
     if (profile->chillState > OW_WILD_RUNTIME_BEHAVIOR_KIND_MAX) {
         profile->chillState = invalidState;
     }
@@ -997,8 +1014,10 @@ OverworldWildRuntime_NormalizeMovementProfile(
     if (profile->chillTarget > OW_WILD_RUNTIME_TARGET_MAX) {
         profile->chillTarget = OW_WILD_RUNTIME_TARGET_NONE;
     }
-    if (profile->hopAllowNonCardinal > OW_WILD_RUNTIME_BOOL_YES) {
-        profile->hopAllowNonCardinal = OW_WILD_RUNTIME_BOOL_YES;
+    if (profile->hopAllowNonCardinal
+        > OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_MAX) {
+        profile->hopAllowNonCardinal =
+            OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
     }
     if (profile->hopMaxDistance < profile->hopMinDistance) {
         profile->hopMaxDistance = profile->hopMinDistance;

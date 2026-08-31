@@ -389,6 +389,7 @@ u8 LONG_CALL GetMetatileBehaviorAt(FieldSystem *fieldSystem, int x, int y);
 int LONG_CALL GetPlayerXCoord(FIELD_PLAYER_AVATAR *avatar);
 int LONG_CALL GetPlayerYCoord(FIELD_PLAYER_AVATAR *avatar);
 BOOL LONG_CALL MapObject_IsSingleMovementActive(LocalMapObject *obj);
+BOOL LONG_CALL MapObject_IsMovementPaused(LocalMapObject *obj);
 void LONG_CALL MapObject_SetSingleMovementActive(LocalMapObject *obj);
 void LONG_CALL MapObject_ClearSingleMovementActive(LocalMapObject *obj);
 BOOL LONG_CALL MapObject_IsMovementDirectionBlocked(LocalMapObject *obj, u32 direction);
@@ -396,6 +397,10 @@ void LONG_CALL MapObject_StartMovementCommandInternal(LocalMapObject *obj, u32 m
 void LONG_CALL MapObject_StartMovementCommand(LocalMapObject *obj, u32 movementCommand);
 BOOL LONG_CALL MapObject_ClearHeldMovementIfActive(LocalMapObject *obj);
 void LONG_CALL MapObject_ClearHeldMovement(LocalMapObject *obj);
+void LONG_CALL MapObject_SetPositionFromVectorAndDirection(
+    LocalMapObject *obj,
+    VecFx32 *position,
+    u32 direction);
 u32 LONG_CALL MapObject_MovementCommandFromDirection(u32 direction, u32 movementCommand);
 BOOL LONG_CALL MapObject_UpdateMovementCommand(LocalMapObject *obj);
 BOOL LONG_CALL MapObject_RefreshHeightFromTerrain(LocalMapObject *obj);
@@ -411,5 +416,14 @@ void LONG_CALL MapObject_StartJumpMovementInternal(
     s32 arcTableId,
     u32 arcStep);
 void LONG_CALL MapObject_PauseMovement(LocalMapObject *obj);
+void LONG_CALL MapObject_UnpauseMovement(LocalMapObject *obj);
+void LONG_CALL PlayerAvatar_MoveControl(
+    FIELD_PLAYER_AVATAR *avatar,
+    u32 param1,
+    s32 direction,
+    u32 newKeys,
+    u32 heldKeys,
+    u32 param5);
+void LONG_CALL PlayerAvatar_ResetMovement(FIELD_PLAYER_AVATAR *avatar);
 
 #endif //POKEHEARTGOLD_MAP_EVENTS_INTERNAL_H

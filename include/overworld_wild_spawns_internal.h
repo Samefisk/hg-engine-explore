@@ -3,10 +3,48 @@
 
 #include "overworld_wild_spawns.h"
 #include "overworld_wild_behavior_data.h"
+#include "overworld_wild_movement.h"
+#include "overworld_mount.h"
 #include "constants/maps.h"
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR 0x023CD000
 #define OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY_ADDR 0x023BD4D8
+#define OVERWORLD_WILD_MOVEMENT_POLICY_ENTRY_ADDR 0x023BB5E0
+
+#define OW_WILD_MOVEMENT_POLICY_LOOK_FIRST 0
+#define OW_WILD_MOVEMENT_POLICY_LOOK_SECOND 1
+#define OW_WILD_MOVEMENT_POLICY_LOOK_RETURN 2
+
+typedef u8 (*OverworldWildMovementPolicyBuildLookPlanFunc)(u8 baseDirection);
+typedef int (*OverworldWildMovementPolicyResolveLookFunc)(
+    u8 lookPlan,
+    u8 phase,
+    u8 totalFrames,
+    u8 remainingFrames);
+typedef int (*OverworldWildMovementPolicyChooseWanderDirectionFunc)(
+    const u8 *directions,
+    int directionCount,
+    u8 previousDirection,
+    u8 chance);
+typedef BOOL (*OverworldWildMovementPolicyPrepareChainPauseFunc)(
+    u8 *stepsRemaining,
+    u8 *deferredPauseTicks,
+    u8 *deferredPauseAction,
+    u8 *variancePhase,
+    OverworldWildWalkMomentumState *walkMomentum,
+    const OverworldWildBehaviorProfileData *lane,
+    u8 locomotion);
+
+typedef struct OverworldWildMovementPolicyEntry {
+    OverworldWildMovementPolicyBuildLookPlanFunc buildLookPlan;
+    OverworldWildMovementPolicyResolveLookFunc resolveLook;
+    OverworldWildMovementPolicyChooseWanderDirectionFunc chooseWanderDirection;
+    OverworldWildMovementPolicyPrepareChainPauseFunc prepareChainPause;
+} OverworldWildMovementPolicyEntry;
+
+#define OVERWORLD_WILD_MOVEMENT_POLICY_ENTRY \
+    ((const OverworldWildMovementPolicyEntry *) \
+        OVERWORLD_WILD_MOVEMENT_POLICY_ENTRY_ADDR)
 #define OVERWORLD_WILD_NATIVE_SHADOW_POLICY_ENTRY_ADDR 0x023BE3D8
 #define OVERWORLD_WILD_NATIVE_SHADOW_POLICY_MASK_ADDR 0x023BE3FC
 #define OW_WILD_LAND_SURF_MAX_SPAWNS 6
@@ -32,6 +70,14 @@
 #define OW_WILD_FIELD_IDLE_REARM_PENDING 0x01
 #define OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING 0x02
 #define OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING 0x04
+#define OW_WILD_REFILL_TIMER_PENDING 0xFF
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_NONE 0
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_QUEUED 1
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_DESPAWN 2
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_REFILL 3
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_REVEAL 4
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_PHASE_MASK 0x0F
+#define OW_WILD_PLAYER_STEP_MAINTENANCE_DIRTY 0x80
 #define OW_WILD_SPAWN_AGGRO_FLAG 0x02
 #define OW_WILD_SPAWN_AGGRO_PENDING_FLAG 0x04
 #define OW_WILD_SPOT_STATE_ACTIVE 2
@@ -273,6 +319,7 @@ typedef enum OverworldWildMapHeaderChangeMode {
     OW_WILD_MAP_HEADER_CHANGE_PRESERVE = 0,
     OW_WILD_MAP_HEADER_CHANGE_DISCARD,
     OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE,
+    OW_WILD_MAP_HEADER_CHANGE_RESUME_PRESENTATION,
 } OverworldWildMapHeaderChangeMode;
 
 typedef BOOL (*OverworldWildHopLandingBaseValidatorFunc)(
@@ -317,10 +364,13 @@ typedef struct OverworldWildSpawnsOverlayEntry {
         OverworldWildMapHeaderChangeMode mode);
     OverworldWildHopLandingBaseValidatorFunc validateHopLanding;
     OverworldWildStartPreparedCustomJumpFunc startPreparedCustomJump;
+    BOOL (*beginMountSelectedFollower)(
+        FieldSystem *fieldSystem,
+        OverworldWildSpawnState *state);
 } OverworldWildSpawnsOverlayEntry;
 
-typedef char OverworldWildSpawnsOverlayEntrySizeMustRemain36Bytes[
-    sizeof(OverworldWildSpawnsOverlayEntry) == 36 ? 1 : -1];
+typedef char OverworldWildSpawnsOverlayEntrySizeMustRemain40Bytes[
+    sizeof(OverworldWildSpawnsOverlayEntry) == 40 ? 1 : -1];
 
 extern OverworldWildSpawnState sOverworldWildSpawnState;
 
@@ -415,6 +465,7 @@ typedef struct OverworldWildBehaviorHopValidationContext {
     int slot;
     u16 allowedTile;
 } OverworldWildBehaviorHopValidationContext;
+
 
 typedef struct OverworldWildHopTrajectoryEntry {
     OverworldWildResolveHopTrajectoryFunc resolve;
