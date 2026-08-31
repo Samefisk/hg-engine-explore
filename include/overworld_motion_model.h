@@ -205,6 +205,10 @@ u16 OverworldMotion_Tick(
     OverworldMotionState *state,
     u16 fieldEpoch,
     OverworldMotionSample *sample);
+OverworldMotionDecision OverworldMotion_Read(
+    const OverworldMotionState *state,
+    u16 fieldEpoch,
+    OverworldMotionSample *sample);
 OverworldMotionDecision OverworldMotion_AcknowledgeCommit(
     OverworldMotionState *state,
     u16 fieldEpoch);

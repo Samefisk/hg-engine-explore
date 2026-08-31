@@ -62,6 +62,7 @@ typedef enum OverworldActorReason {
     OVERWORLD_ACTOR_REASON_INVALID_ARGUMENT = 17,
     OVERWORLD_ACTOR_REASON_QUEUE_FULL = 18,
     OVERWORLD_ACTOR_REASON_UNSUPPORTED_COMMAND = 19,
+    OVERWORLD_ACTOR_REASON_STALE_SEQUENCE = 20,
 } OverworldActorReason;
 
 typedef enum OverworldActorRole {
@@ -90,6 +91,19 @@ typedef enum OverworldActorMotionPhase {
     OVERWORLD_ACTOR_PHASE_SUSPENDED = 5,
     OVERWORLD_ACTOR_PHASE_CANCELED = 6,
 } OverworldActorMotionPhase;
+
+typedef enum OverworldActorStreamState {
+    OVERWORLD_ACTOR_STREAM_IDLE = 0,
+    OVERWORLD_ACTOR_STREAM_WAITING = 1,
+    OVERWORLD_ACTOR_STREAM_ADVANCED = 2,
+} OverworldActorStreamState;
+
+typedef enum OverworldActorWorldEffect {
+    OVERWORLD_ACTOR_WORLD_EFFECT_NONE = 0,
+    OVERWORLD_ACTOR_WORLD_EFFECT_STOMP = 1,
+    OVERWORLD_ACTOR_WORLD_EFFECT_SKID_DUST = 2,
+    OVERWORLD_ACTOR_WORLD_EFFECT_CRASH = 3,
+} OverworldActorWorldEffect;
 
 typedef enum OverworldActorEvent {
     OVERWORLD_ACTOR_EVENT_NONE = 0,
@@ -302,6 +316,59 @@ typedef char OverworldActorFrameSizeMustRemain12Bytes[
     sizeof(OverworldActorFrame) == 12 ? 1 : -1];
 typedef char OverworldActorStateSnapshotSizeMustRemain88Bytes[
     sizeof(OverworldActorStateSnapshot) == 88 ? 1 : -1];
+/* The host probe decodes this public value object from raw emulator memory.
+ * Lock every decoded field boundary, not only the total size, so a same-size
+ * C reorder cannot silently turn valid bytes into false semantic evidence. */
+#define OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(name, field, expected) \
+    typedef char name[offsetof(OverworldActorStateSnapshot, field) \
+        == (expected) ? 1 : -1]
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateVersionOffsetMustRemain0, version, 0);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateHandleOffsetMustRemain4, handle, 4);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateSubjectOffsetMustRemain16, subjectIdentity, 16);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateFingerprintOffsetMustRemain20, behaviorFingerprint, 20);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateMatchedMaskOffsetMustRemain24, matchedLayerMask, 24);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateLastCommandOffsetMustRemain28, lastCommandSequence, 28);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateCommitOffsetMustRemain32, commitSequence, 32);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateAuthorityOffsetMustRemain36, authorityGeneration, 36);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateAnchorOffsetMustRemain40, engineAnchorGeneration, 40);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStatePresentationOffsetMustRemain44, presentationGeneration, 44);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateLogicalXOffsetMustRemain48, logicalX, 48);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateRenderXOffsetMustRemain52, renderX, 52);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateOriginXOffsetMustRemain56, originX, 56);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateTargetXOffsetMustRemain60, targetX, 60);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateMotionElapsedOffsetMustRemain64, motionElapsed, 64);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateReservationOffsetMustRemain68, reservationId, 68);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateSpeciesOffsetMustRemain70, species, 70);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateFormOffsetMustRemain72, form, 72);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateRoleOffsetMustRemain74, role, 74);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateMotionKindOffsetMustRemain76, motionKind, 76);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateInputOwnerOffsetMustRemain78, inputOwnership, 78);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateControllerOffsetMustRemain80, controllerState, 80);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStateActiveOffsetMustRemain84, active, 84);
+#undef OVERWORLD_ACTOR_STATE_OFFSET_ASSERT
 typedef char OverworldActorTraceHeaderSizeMustRemain36Bytes[
     sizeof(OverworldActorTraceHeader) == 36 ? 1 : -1];
 typedef char OverworldActorTraceEventSizeMustRemain32Bytes[

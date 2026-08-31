@@ -108,8 +108,11 @@ The scenario catalog includes:
 Seven of these contracts have active legacy command adapters. They prove the
 named runtime behavior through the existing focused runners. They do not yet
 decode the actor snapshot or semantic trace, so they must not claim semantic
-event proof. The remaining contracts are marked `planned`. A planned scenario
-is useful design data, but it is not runtime proof.
+event proof. New and migrated scenarios can use the `actor-observation`
+adapter with evidence from `scripts/owctl actor capture`; that adapter checks
+public snapshot and trace semantics without private offsets. The remaining
+contracts are marked `planned`. A planned scenario is useful design data, but
+it is not runtime proof.
 
 Every past high-impact bug should map to one of these scenarios or add a narrower permanent scenario.
 
@@ -125,7 +128,8 @@ Required invariant assertions:
 - Each accepted intent has one terminal result.
 - Each motion has ordered path advances and at most one terminal commit.
 - No commit occurs after cancel.
-- Input ownership returns after finish or cancel.
+- Input ownership returns after finish or cancel. Actor detach is also a
+  terminal release because the actor and its input claim no longer exist.
 - Chain and acceleration counters change only for eligible commits.
 - Path advances and stream anchors do not skip required tile updates.
 - Warps do not fire during ineligible motion phases.
@@ -156,6 +160,24 @@ Headless scripts and saved scenarios prove real engine behavior, but some still
 use private offsets and bespoke input loops. New adapters use the generated
 debug descriptor and semantic events. Remove a private assertion when its
 public replacement covers the same behavior.
+
+The public host probe has three commands:
+
+- `scripts/owctl actor inspect <capture>` reads public actor snapshots.
+- `scripts/owctl actor trace <capture>` reads the semantic trace ring.
+- `scripts/owctl actor capture <memory> --scenario-id <id> --rom <rom>` with
+  `--save <save> --seed <seed> --output <evidence>` creates reusable input for
+  an `actor-observation` scenario adapter.
+
+The generated descriptor owns all state addresses, strides, capacities,
+public structure formats, and enum IDs used by these commands. A descriptor
+and runtime image mismatch is invalid proof.
+
+Actor-observation evidence is accepted only when its explicit ROM, save, seed,
+scenario, and descriptor identity match the requested scenario. Required and
+forbidden events apply to one uniquely selected actor motion window and retain
+their declared order. Every invariant string must map to registered executable
+checks; unsupported prose keeps the scenario invalid.
 
 ## Completion gate
 

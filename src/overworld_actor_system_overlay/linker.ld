@@ -42,19 +42,19 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 *(COMMON)
-                ASSERT(. <= ORIGIN(rom) + 0x3000,
+                ASSERT(. <= ORIGIN(rom) + 0x3100,
                     "overworld actor code exceeds resident code reserve");
                 /*
                  * Portable modules and later implementations link before this
-                 * boundary. Only the last 0x1000 is the fixed state reserve.
+                 * boundary. The final 0xF00 bytes are the fixed state reserve.
                  */
-                . = ORIGIN(rom) + 0x3000;
+                . = ORIGIN(rom) + 0x3100;
                 __text_end = . ;
         } >rom = 0xff
 
         .bss (NOLOAD) : {
                 __bss_start__ = . ;
-                ASSERT(__bss_start__ == ORIGIN(rom) + 0x3000,
+                ASSERT(__bss_start__ == ORIGIN(rom) + 0x3100,
                     "overworld actor state base moved");
                 KEEP(*(.overworld_actor_system_state))
                 *(.bss)

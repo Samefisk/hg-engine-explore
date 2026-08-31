@@ -48,6 +48,37 @@ EXACT_KEYS = (
 )
 
 
+def _verify_shared_source_contract(root: Path) -> None:
+    """Prove the ROM and host adapters compile and publish one C resolver."""
+
+    resolver_source = "lib/overworld/overworld_behavior_resolver.c"
+    overlays = (root / "overlays.mk").read_text(encoding="utf-8")
+    native_adapter = (
+        root / "tools/overworld-viewer-v2/native_resolver.py"
+    ).read_text(encoding="utf-8")
+    actor_adapter = (
+        root
+        / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c"
+    ).read_text(encoding="utf-8")
+
+    if overlays.count(resolver_source) != 1:
+        raise AssertionError(
+            "the ROM overlay must compile the canonical resolver source exactly once"
+        )
+    if f'root / "{resolver_source}"' not in native_adapter:
+        raise AssertionError(
+            "the Workshop host must compile the canonical resolver source"
+        )
+    required_exports = (
+        "BehaviorResolver_Resolve,",
+        "BehaviorResolver_InspectClass,",
+    )
+    if any(export not in actor_adapter for export in required_exports):
+        raise AssertionError(
+            "the actor resolver service does not publish the canonical callbacks"
+        )
+
+
 def _load_adapter(root: Path) -> Any:
     path = root / "tools/overworld-viewer-v2/native_resolver.py"
     specification = importlib.util.spec_from_file_location(
@@ -198,9 +229,20 @@ def main() -> int:
         parser.error("golden vector file has no vectors")
 
     adapter = _load_adapter(root)
+    _verify_shared_source_contract(root)
     executable = adapter.build(root, force=arguments.force_host_build)
+    try:
+        batch_results = adapter.resolve_many(
+            blob,
+            [vector["request"] for vector in vectors],
+            root=root,
+            executable=executable,
+        )
+    except (KeyError, TypeError, ValueError, RuntimeError) as error:
+        print(f"FAIL batch resolver: {error}", file=sys.stderr)
+        return 1
     failures: list[str] = []
-    for vector in vectors:
+    for vector, batch_result in zip(vectors, batch_results):
         name = vector.get("name", "unnamed")
         try:
             first = adapter.resolve(
@@ -217,6 +259,8 @@ def main() -> int:
             )
             if first != second:
                 raise AssertionError("the same request produced different output")
+            if first != batch_result:
+                raise AssertionError("single and batch Workshop adapters differ")
             _verify_result(first, vector["expected"])
         except (AssertionError, KeyError, TypeError, ValueError, RuntimeError) as error:
             failures.append(f"{name}: {error}")

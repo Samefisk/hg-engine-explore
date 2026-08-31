@@ -88,10 +88,11 @@ This map describes `feature/overworld-actor-system-roadmap`.
 | --- | --- | --- |
 | Public actor lifecycle, handles, commands, snapshots, and trace | `include/overworld_actor_system.h`, `src/overworld_actor_system_overlay/` | Actor facade and Observation |
 | Profile field schema and generated metadata | `tools/overworld/behavior_schema.json`, `include/generated/`, `tools/overworld/generated/` | Behavior Schema |
-| Authored profile values and surfaces | `data/OverworldWildBehaviorData.c` | Behavior Schema compatibility data |
+| Named authored profile values and rules | `data/overworld_behavior_profiles.json` | Behavior Schema |
+| Generated compact profile blob and surfaces | `data/OverworldWildBehaviorData.c` | Behavior Schema compatibility data |
 | Profile composition | `lib/overworld/overworld_behavior_resolver.c` | Behavior Resolver |
 | Shared motion state and sampling | `lib/overworld/overworld_motion_model.c` | Motion Module |
-| Look, wander, chain-pause, and Ram policy | `src/overworld_actor_system_overlay/` | Movement Policy |
+| Look, wander, and chain-pause policy primitives plus actor policy state | `src/overworld_actor_system_overlay/` | Movement Policy |
 | Workshop profile display and native resolution adapter | `scripts/overworld_behavior_profile_viewer.py`, `tools/overworld-viewer-v2/` | Workshop adapter |
 | Wild compatibility orchestration | `src/overworld_wild_spawns_overlay/` | Wild role and engine adapters |
 | Surface queries and feedback compatibility | `src/overworld_wild_runtime_overlay/` | World and effect adapters |
@@ -108,8 +109,9 @@ Physical overlays can remain separate because Nintendo DS memory limits are real
 The branch contains the resident facade, generated debug descriptor, portable
 resolver, portable motion state machine, native Workshop resolver adapter,
 movement-policy entry, population entry, feature manifest, trace decoder, and
-declarative scenario catalog. Walk, Hop, and Teleport compatibility paths now
-sample actor-owned motion state.
+declarative scenario catalog. `OverworldActorSystem_Tick` is the only motion
+clock. Walk, Hop, and Teleport compatibility adapters read that actor-owned
+timeline and apply its samples to engine objects.
 
 Package and compile proof exists. Seven scenario adapters are active and the
 remaining baseline scenarios are marked `planned`. Do not claim a runtime exit

@@ -12,6 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tools.overworld.actor_probe import (
+    build_evidence_provenance,
+    capture_memory_file,
+    evaluate_scenario_evidence,
+    load_debug_descriptor,
+    load_evidence,
+    require_descriptor_identity,
+    require_scenario_provenance,
+    write_evidence,
+)
 from tools.overworld.runs import make_run_manifest, utc_now, write_run_manifest
 from tools.overworld.trace import decode_trace, filter_events, load_trace_schema
 from tools.overworld.validation import (
@@ -27,6 +37,7 @@ REPO = Path(__file__).resolve().parents[2]
 FEATURE_MANIFEST = REPO / "tools/overworld/system_features.yaml"
 SCENARIO_DIRECTORY = REPO / "tests/overworld/scenarios"
 TRACE_SCHEMA = REPO / "tools/overworld/schemas/semantic-trace-v1.json"
+DEBUG_DESCRIPTOR = REPO / "build/overworld-system.debug.json"
 
 
 def _json(value: Any) -> None:
@@ -153,10 +164,22 @@ def _doctor(args: argparse.Namespace) -> int:
         ("dsv", REPO / "test.dsv"),
         ("sav", REPO / "test.sav"),
         ("build-manifest", REPO / "build/pokemon_move_history_capture_build.json"),
-        ("debug-descriptor", REPO / "build/overworld-system.debug.json"),
     )
     for name, path in optional:
         add(name, "ok" if path.is_file() else "warning", _relative(path))
+    if not DEBUG_DESCRIPTOR.is_file():
+        add("debug-descriptor", "warning", _relative(DEBUG_DESCRIPTOR))
+    else:
+        try:
+            descriptor = load_debug_descriptor(DEBUG_DESCRIPTOR)
+        except ValidationFailure as error:
+            add("debug-descriptor", "error", str(error))
+        else:
+            add(
+                "debug-descriptor",
+                "ok",
+                f"overlay {descriptor['overlay']['sha256'][:12]} facade v{descriptor['facade']['version']}",
+            )
     emulator = importlib.util.find_spec("desmume")
     add(
         "emulator-python",
@@ -232,7 +255,13 @@ def _scenario_run(args: argparse.Namespace) -> int:
         raise ValidationFailure(
             f"scenario is planned and has no truthful runtime adapter: {args.scenario_id}"
         )
-    commands = [_expand_command(command) for command in scenario["adapter"]["commands"]]
+    adapter = scenario["adapter"]
+    if adapter["kind"] == "command-sequence":
+        if args.evidence is not None:
+            raise ValidationFailure("--evidence needs an actor-observation adapter")
+        commands = [_expand_command(command) for command in adapter["commands"]]
+    else:
+        commands = []
     if args.dry_run:
         result = {
             "schemaVersion": 1,
@@ -240,23 +269,47 @@ def _scenario_run(args: argparse.Namespace) -> int:
             "proofLevel": scenario["proofLevel"],
             "costTier": scenario["costTier"],
             "commands": commands,
+            "evidenceRequired": adapter["kind"] == "actor-observation",
             "executed": False,
         }
         if args.json:
             _json(result)
         else:
             print(f"DRY RUN {args.scenario_id}")
-            for command in commands:
-                print("  " + " ".join(command))
+            if commands:
+                for command in commands:
+                    print("  " + " ".join(command))
+            else:
+                print("  supply --evidence <actor-observation.json>")
         return 0
 
     started_at = utc_now()
     results = []
-    for command in commands:
-        result = _run_command(command, scenario["adapter"]["result"])
+    if adapter["kind"] == "actor-observation":
+        if args.evidence is None:
+            raise ValidationFailure(
+                f"scenario needs --evidence from scripts/owctl actor capture: {args.scenario_id}"
+            )
+        evidence_path = args.evidence if args.evidence.is_absolute() else REPO / args.evidence
+        trace_schema = load_trace_schema(TRACE_SCHEMA)
+        evidence = load_evidence(evidence_path, trace_schema)
+        descriptor = load_debug_descriptor(DEBUG_DESCRIPTOR)
+        require_descriptor_identity(evidence, descriptor)
+        require_scenario_provenance(evidence, scenario, REPO)
+        result = evaluate_scenario_evidence(scenario, evidence, trace_schema)
+        evidence_bytes = evidence_path.read_bytes()
+        result["evidence"] = {
+            "path": _relative(evidence_path),
+            "size": len(evidence_bytes),
+            "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+        }
         results.append(result)
-        if not result["passed"]:
-            break
+    else:
+        for command in commands:
+            result = _run_command(command, adapter["result"])
+            results.append(result)
+            if not result["passed"]:
+                break
     document = make_run_manifest(
         repo=REPO,
         kind="scenario",
@@ -306,6 +359,138 @@ def _trace_decode(args: argparse.Namespace) -> int:
                 f"a={event['valueA']} b={event['valueB']}"
             )
     return 0
+
+
+def _actor_source(args: argparse.Namespace) -> dict[str, Any]:
+    source = args.source if args.source.is_absolute() else REPO / args.source
+    data = source.read_bytes()
+    schema = load_trace_schema(TRACE_SCHEMA)
+    descriptor_path = (
+        args.descriptor if args.descriptor.is_absolute() else REPO / args.descriptor
+    )
+    descriptor = load_debug_descriptor(descriptor_path)
+    if data.lstrip().startswith(b"{"):
+        evidence = load_evidence(source, schema)
+        require_descriptor_identity(evidence, descriptor)
+        return evidence
+    base = args.base if args.base is not None else descriptor["state"]["address"]
+    return capture_memory_file(
+        source,
+        base,
+        descriptor,
+        schema,
+        include_inactive=args.include_inactive,
+    )
+
+
+def _actor_inspect(args: argparse.Namespace) -> int:
+    evidence = _actor_source(args)
+    actors = evidence["observation"]["actors"]
+    if args.index is not None:
+        actors = [actor for actor in actors if actor["index"] == args.index]
+        if not actors:
+            raise ValidationFailure(f"actor index is not present in the capture: {args.index}")
+    if args.json:
+        _json(
+            {
+                "schemaVersion": 1,
+                "fieldEpoch": evidence["observation"]["fieldEpoch"],
+                "actors": actors,
+            }
+        )
+    else:
+        print(
+            f"fieldEpoch={evidence['observation']['fieldEpoch']} actors={len(actors)}"
+        )
+        for actor in actors:
+            handle = actor["handle"]
+            print(
+                f"[{actor['index']:>2}] 0x{handle['value']:08X} "
+                f"{actor['role']:<9} species={actor['species']:<3} "
+                f"motion={actor['motionKind']}/{actor['motionPhase']} "
+                f"logical=({actor['logical']['x']},{actor['logical']['y']}) "
+                f"render=({actor['render']['x']},{actor['render']['y']}) "
+                f"input={actor['inputOwnership']} commit={actor['commitSequence']}"
+            )
+    return 0
+
+
+def _actor_trace(args: argparse.Namespace) -> int:
+    evidence = _actor_source(args)
+    document = filter_events(
+        evidence["observation"]["trace"], args.actor, args.event
+    )
+    if args.json:
+        _json(document)
+    else:
+        header = document["header"]
+        print(
+            f"events={len(document['events'])} fieldEpoch={header['fieldEpoch']} "
+            f"overwritten={header['overwrittenCount']}"
+        )
+        for event in document["events"]:
+            print(
+                f"{event['sequence']:>6} f={event['frame']:<7} "
+                f"actor=0x{event['actorHandle']:08X} "
+                f"{event['event']:<22} {event['reason']:<18} "
+                f"a={event['valueA']} b={event['valueB']}"
+            )
+    return 0
+
+
+def _actor_capture(args: argparse.Namespace) -> int:
+    source = args.source if args.source.is_absolute() else REPO / args.source
+    descriptor_path = (
+        args.descriptor if args.descriptor.is_absolute() else REPO / args.descriptor
+    )
+    descriptor = load_debug_descriptor(descriptor_path)
+    schema = load_trace_schema(TRACE_SCHEMA)
+    base = args.base if args.base is not None else descriptor["state"]["address"]
+    provenance = None
+    provenance_arguments = (args.scenario_id, args.rom, args.save, args.seed)
+    if any(value is not None for value in provenance_arguments):
+        if args.scenario_id is None or args.rom is None or args.seed is None:
+            raise ValidationFailure(
+                "reusable evidence provenance needs --scenario-id, --rom, and --seed"
+            )
+        rom = args.rom if args.rom is None or args.rom.is_absolute() else REPO / args.rom
+        save = (
+            args.save if args.save is None or args.save.is_absolute() else REPO / args.save
+        )
+        provenance = build_evidence_provenance(
+            scenario_id=args.scenario_id,
+            rom=rom,
+            save=save,
+            seed=args.seed,
+        )
+    if args.output is not None and provenance is None:
+        raise ValidationFailure(
+            "reusable evidence output needs explicit --scenario-id, --rom, and --seed provenance"
+        )
+    evidence = capture_memory_file(
+        source,
+        base,
+        descriptor,
+        schema,
+        include_inactive=args.include_inactive,
+        provenance=provenance,
+    )
+    if args.output is None:
+        _json(evidence)
+    else:
+        output = args.output if args.output.is_absolute() else REPO / args.output
+        write_evidence(evidence, output)
+        print(_relative(output))
+    return 0
+
+
+def _add_actor_source_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("source", type=Path, help="Actor evidence or raw memory dump")
+    parser.add_argument(
+        "--descriptor", type=Path, default=DEBUG_DESCRIPTOR, help="Generated debug descriptor"
+    )
+    parser.add_argument("--base", type=lambda value: int(value, 0))
+    parser.add_argument("--include-inactive", action="store_true")
 
 
 def _git_changed_paths(base: str | None) -> list[str]:
@@ -509,6 +694,7 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_run = scenario_commands.add_parser("run")
     scenario_run.add_argument("scenario_id")
     scenario_run.add_argument("--dry-run", action="store_true")
+    scenario_run.add_argument("--evidence", type=Path)
     scenario_run.add_argument("--json", action="store_true")
     scenario_run.add_argument("--manifest-output", type=Path)
     scenario_run.set_defaults(handler=_scenario_run)
@@ -522,6 +708,30 @@ def build_parser() -> argparse.ArgumentParser:
     trace_decode.add_argument("--event")
     trace_decode.add_argument("--json", action="store_true")
     trace_decode.set_defaults(handler=_trace_decode)
+
+    actor = commands.add_parser("actor", help="Inspect public actor observation")
+    actor_commands = actor.add_subparsers(dest="actor_command", required=True)
+    actor_inspect = actor_commands.add_parser("inspect", help="Inspect actor snapshots")
+    _add_actor_source_arguments(actor_inspect)
+    actor_inspect.add_argument("--index", type=int)
+    actor_inspect.add_argument("--json", action="store_true")
+    actor_inspect.set_defaults(handler=_actor_inspect)
+    actor_trace = actor_commands.add_parser("trace", help="Inspect actor semantic trace")
+    _add_actor_source_arguments(actor_trace)
+    actor_trace.add_argument("--actor", type=lambda value: int(value, 0))
+    actor_trace.add_argument("--event")
+    actor_trace.add_argument("--json", action="store_true")
+    actor_trace.set_defaults(handler=_actor_trace)
+    actor_capture = actor_commands.add_parser(
+        "capture", help="Create reusable actor observation evidence"
+    )
+    _add_actor_source_arguments(actor_capture)
+    actor_capture.add_argument("--scenario-id")
+    actor_capture.add_argument("--rom", type=Path)
+    actor_capture.add_argument("--save", type=Path)
+    actor_capture.add_argument("--seed", type=lambda value: int(value, 0))
+    actor_capture.add_argument("--output", type=Path)
+    actor_capture.set_defaults(handler=_actor_capture)
 
     verify = commands.add_parser("verify", help="Select proof from the feature map")
     verify_commands = verify.add_subparsers(dest="verify_command", required=True)

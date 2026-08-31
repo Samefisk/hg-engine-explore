@@ -217,10 +217,15 @@ def _decode_json(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
     return {**document, "events": normalized}
 
 
-def decode_trace(path: Path, schema: dict[str, Any]) -> dict[str, Any]:
-    data = path.read_bytes()
+def decode_trace_bytes(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
+    """Decode one trace capture without requiring a temporary file."""
+
     stripped = data.lstrip()
     return _decode_json(data, schema) if stripped.startswith(b"{") else _decode_binary(data, schema)
+
+
+def decode_trace(path: Path, schema: dict[str, Any]) -> dict[str, Any]:
+    return decode_trace_bytes(path.read_bytes(), schema)
 
 
 def filter_events(

@@ -27,6 +27,10 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 . = ALIGN(4);
+                ASSERT(. <= ORIGIN(rom) + 0xB000,
+                    "overworld wild spawns overlay exceeds stable file slot");
+                /* Keep later overlay FAT offsets stable when code shrinks. */
+                . = ORIGIN(rom) + 0xB000;
                 __text_end  = . ;
         } >rom = 0xff
 

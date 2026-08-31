@@ -29,7 +29,16 @@
       "costTier": 0,
       "command": ["{python}", "scripts/verify_overworld_behavior_schema.py"],
       "requires": ["source"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "tools/overworld/behavior_schema.py", "tools/overworld/generated/**", "include/overworld_behavior_schema_generated.h", "include/overworld_wild_behavior_data.h"]
+      "sourcePatterns": ["tools/overworld/behavior_schema.json", "tools/overworld/behavior_schema.py", "tools/overworld/generated/**", "include/generated/overworld_behavior_schema.h", "include/overworld_wild_behavior_data.h"]
+    },
+    {
+      "id": "host.behavior-catalog",
+      "title": "Check named behavior authoring data and generated C compatibility output",
+      "proofLevel": "S0",
+      "costTier": 0,
+      "command": ["{python}", "scripts/generate_overworld_behavior_catalog.py", "--check"],
+      "requires": ["source"],
+      "sourcePatterns": ["data/overworld_behavior_profiles.json", "data/OverworldWildBehaviorData.c", "scripts/generate_overworld_behavior_catalog.py", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld/schemas/behavior-authoring-v1.schema.json"]
     },
     {
       "id": "host.behavior-resolver",
@@ -38,7 +47,7 @@
       "costTier": 1,
       "command": ["{python}", "scripts/verify_overworld_behavior_resolver.py"],
       "requires": ["source"],
-      "sourcePatterns": ["include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "tools/overworld-viewer-v2/native/**", "tools/overworld-viewer-v2/native_resolver.py", "tests/overworld/resolver/**"]
+      "sourcePatterns": ["include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c", "overlays.mk", "tools/overworld-viewer-v2/native/**", "tools/overworld-viewer-v2/native_resolver.py", "tools/overworld/native/behavior_resolver_golden.json", "scripts/verify_overworld_behavior_resolver.py"]
     },
     {
       "id": "host.motion-model",
@@ -311,8 +320,8 @@
       "title": "Profile composition",
       "owner": "Resolver",
       "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "include/overworld_wild_behavior_data.h", "include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "tools/overworld/behavior_schema*", "tools/overworld/generated/**", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld-viewer-v2/**", "tests/overworld/resolver/**"],
-      "checks": ["host.contracts", "host.behavior-schema", "host.behavior-resolver", "host.feature-table", "profile.walk-timing", "walk.flying-insect", "package.actor"],
+      "sourcePatterns": ["data/overworld_behavior_profiles.json", "data/OverworldWildBehaviorData.c", "include/overworld_wild_behavior_data.h", "include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "tools/overworld/behavior_schema*", "tools/overworld/generated/**", "tools/overworld/native/behavior_resolver_golden.json", "tools/overworld/schemas/behavior-authoring-v1.schema.json", "scripts/generate_overworld_behavior_catalog.py", "scripts/verify_overworld_behavior_resolver.py", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld-viewer-v2/**"],
+      "checks": ["host.contracts", "host.behavior-schema", "host.behavior-catalog", "host.behavior-resolver", "host.feature-table", "profile.walk-timing", "walk.flying-insect", "package.actor"],
       "scenarios": ["profile.resolve.override-order", "profile.resolve.follower-mounted-parity"],
       "docs": ["documentation/overworld-system/architecture.md", "documentation/overworld-system/authoring-debugging.md"],
       "traceGroups": ["profile"],

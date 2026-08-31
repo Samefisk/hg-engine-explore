@@ -697,6 +697,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Let native DeSmuME stdout/stderr logs pass through.",
     )
+    parser.add_argument(
+        "--actor-evidence",
+        help="Write public actor snapshot and bounded trace evidence after the actions.",
+    )
+    parser.add_argument("--actor-scenario-id")
+    parser.add_argument("--actor-seed", type=parse_int, default=0)
+    parser.add_argument("--actor-event-mask", type=parse_int, default=0)
+    parser.add_argument("--actor-trace-frames", type=int, default=0xFFFF)
     return parser.parse_args()
 
 
@@ -721,6 +729,8 @@ def main() -> int:
         raw_save = extract_raw_save(dsv)
 
     parsed_reads = [parse_read(spec) for spec in args.read]
+    if args.actor_evidence and not args.actor_scenario_id:
+        raise ValueError("--actor-evidence needs --actor-scenario-id")
     started_at = time.monotonic()
 
     with silence_native_output(not args.show_emulator_log):
@@ -733,6 +743,34 @@ def main() -> int:
             emu.backup.import_file(raw_file.name, force_size=0)
 
             ready_frames = boot_to_ready(args, emu)
+            actor_probe = None
+            actor_descriptor = None
+            actor_schema = None
+            actor_read = lambda address, size: bytes(
+                emu.memory.unsigned[address:address + size:1]
+            )
+
+            def actor_write(address, data):
+                emu.memory.unsigned[address:address + len(data):1] = list(data)
+            if args.actor_evidence:
+                sys.path.insert(0, str(REPO_ROOT))
+                from tools.overworld import actor_probe as actor_probe_module
+                from tools.overworld.trace import load_trace_schema
+
+                actor_probe = actor_probe_module
+                actor_descriptor = actor_probe.load_debug_descriptor(
+                    REPO_ROOT / "build/overworld-system.debug.json"
+                )
+                actor_schema = load_trace_schema(
+                    REPO_ROOT / "tools/overworld/schemas/semantic-trace-v1.json"
+                )
+                actor_probe.configure_runtime_trace(
+                    actor_read,
+                    actor_write,
+                    actor_descriptor,
+                    event_mask=args.actor_event_mask,
+                    frame_budget=args.actor_trace_frames,
+                )
             completed_actions = [
                 run_action(emu, action, parsed_reads) for action in args.action
             ]
@@ -740,6 +778,24 @@ def main() -> int:
             screenshot = None
             if not args.no_screenshot:
                 screenshot = save_screenshot(emu, args.screenshot)
+            actor_evidence = None
+            if actor_probe is not None:
+                actor_probe.finish_runtime_trace(
+                    actor_read, actor_write, actor_descriptor
+                )
+                actor_evidence = actor_probe.capture_observation(
+                    actor_read,
+                    actor_descriptor,
+                    actor_schema,
+                    provenance=actor_probe.build_evidence_provenance(
+                        scenario_id=args.actor_scenario_id,
+                        rom=rom,
+                        save=sav if sav is not None else dsv,
+                        seed=args.actor_seed,
+                    ),
+                )
+                evidence_path = repo_path(args.actor_evidence)
+                actor_probe.write_evidence(actor_evidence, evidence_path)
             emu.destroy()
 
     expectations = check_expectations(reads, args.expect)
@@ -756,6 +812,8 @@ def main() -> int:
         "expectations": expectations,
         "passed": all(expectation["passed"] for expectation in expectations),
         "screenshot": screenshot,
+        "actor_evidence": str(repo_path(args.actor_evidence))
+            if args.actor_evidence else None,
     }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["passed"] else 1

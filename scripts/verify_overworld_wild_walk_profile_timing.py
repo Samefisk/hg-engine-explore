@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import copy
 import importlib.util
 from pathlib import Path
 
@@ -183,15 +182,18 @@ def main() -> None:
     require(viewer.numeric(migrated["walkStompTime"]) == 4, "legacy stomp tier did not migrate to time")
 
     data = viewer.build_data(include_routes=False, include_spawn_settings=False)
-    base_profile = copy.deepcopy(data["classes"][0]["profile"])
     relative_override = data["variableOverrides"][8]["behavior"]
     require(
         relative_override["profile"]["chillSpeed"]["raw"] == "-8",
         "legacy relative speed override retained its old signed tier delta",
     )
-    viewer.merge_profile(base_profile, relative_override)
+    mewtwo = next(
+        assignment
+        for assignment in data["assignments"]
+        if assignment["species"]["symbol"] == "SPECIES_MEWTWO"
+    )
     require(
-        viewer.numeric(base_profile["chillSpeed"]) == 8,
+        viewer.numeric(mewtwo["profile"]["chillSpeed"]) == 8,
         "migrated relative Walk-time override does not resolve from 16 to 8 frames",
     )
     data_source = DATA_PATH.read_text()

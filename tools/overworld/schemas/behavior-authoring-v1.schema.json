@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "behavior-authoring-v1.schema.json",
+  "title": "Named overworld behavior authoring catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "catalogVersion",
+    "schema",
+    "generatedCompatibilityOutput",
+    "classProfiles",
+    "classRules",
+    "speciesClassRules",
+    "overrideProfiles",
+    "conditionalStates"
+  ],
+  "properties": {
+    "catalogVersion": { "const": 1 },
+    "schema": { "const": "../tools/overworld/behavior_schema.json" },
+    "generatedCompatibilityOutput": { "const": "OverworldWildBehaviorData.c" },
+    "classProfiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["symbol", "fields"],
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "pattern": "^OW_WILD_BEHAVIOR_CLASS_[A-Za-z0-9_]+$"
+          },
+          "fields": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "$ref": "#/$defs/expression" }
+          }
+        }
+      }
+    },
+    "classRules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/classRule" }
+    },
+    "speciesClassRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["species", "profile"],
+        "properties": {
+          "species": { "$ref": "#/$defs/expression" },
+          "profile": { "$ref": "#/$defs/expression" }
+        }
+      }
+    },
+    "overrideProfiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/overrideProfile" }
+    },
+    "conditionalStates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parentProfile",
+          "overrideProfile",
+          "terrainMask",
+          "terrainOverrideMask",
+          "minMovementSpeed",
+          "maxMovementSpeed"
+        ],
+        "properties": {
+          "parentProfile": { "$ref": "#/$defs/expression" },
+          "overrideProfile": { "$ref": "#/$defs/expression" },
+          "terrainMask": { "$ref": "#/$defs/expression" },
+          "terrainOverrideMask": { "$ref": "#/$defs/expression" },
+          "minMovementSpeed": { "$ref": "#/$defs/expression" },
+          "maxMovementSpeed": { "$ref": "#/$defs/expression" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "expression": {
+      "oneOf": [
+        { "type": "integer" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "groupMask",
+        "species",
+        "terrain",
+        "minLevel",
+        "maxLevel",
+        "shiny",
+        "behaviorClass"
+      ],
+      "properties": {
+        "groupMask": { "$ref": "#/$defs/expression" },
+        "species": { "$ref": "#/$defs/expression" },
+        "terrain": { "$ref": "#/$defs/expression" },
+        "minLevel": { "$ref": "#/$defs/expression" },
+        "maxLevel": { "$ref": "#/$defs/expression" },
+        "shiny": { "$ref": "#/$defs/expression" },
+        "behaviorClass": { "$ref": "#/$defs/expression" }
+      }
+    },
+    "classRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["match", "profile"],
+      "properties": {
+        "match": { "$ref": "#/$defs/match" },
+        "profile": { "$ref": "#/$defs/expression" }
+      }
+    },
+    "operatorValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator", "value"],
+      "properties": {
+        "operator": {
+          "enum": [
+            "replace",
+            "relative",
+            "atLeast",
+            "atMost",
+            "relativeThenAtLeast",
+            "relativeThenAtMost"
+          ]
+        },
+        "value": { "$ref": "#/$defs/expression" },
+        "threshold": { "type": "integer" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["relativeThenAtLeast", "relativeThenAtMost"]
+              }
+            }
+          },
+          "then": {
+            "required": ["threshold"],
+            "properties": { "value": { "type": "integer" } }
+          },
+          "else": { "not": { "required": ["threshold"] } }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["relative", "atLeast", "atMost"]
+              }
+            }
+          },
+          "then": { "properties": { "value": { "type": "integer" } } }
+        }
+      ]
+    },
+    "overrideProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "target", "fields"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "match", "members"],
+          "properties": {
+            "mode": { "enum": ["disabled", "members", "all"] },
+            "match": { "$ref": "#/$defs/match" },
+            "members": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/expression" }
+            }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/operatorValue" }
+        }
+      }
+    }
+  }
+}

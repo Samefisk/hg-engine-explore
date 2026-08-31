@@ -20,20 +20,14 @@ typedef struct OverworldMountRuntimeState {
     u8 presentationAttached;
     u8 previousToggleDown;
     u16 savedPlayerGfxId;
-    u8 baseSpeed;
+    /* Retained only to preserve the fixed mount overlay layout. Live Walk
+     * controller state is owned by the follower actor policy slot. */
+    u8 reservedPolicyBaseSpeed;
     u8 maxSpeed;
-    u8 speed;
+    u8 reservedPolicySpeed;
     u8 tilesToAccelerate;
     u8 walkOptions;
-    u8 direction;
-    u8 tileCounter;
-    u8 skidRemaining;
-    u8 turnDirection;
-    u8 resumeSpeed;
-    u8 pendingStep;
-    u8 pendingSkid;
-    u8 bufferedDirection;
-    u8 stopPending;
+    u8 reservedPolicyState[9];
     u8 motionDirection;
     u8 motionArcHeightQ4;
     u8 motionFlicker;

@@ -99,37 +99,52 @@ def main() -> int:
         for item in overview["assignments"]
         if item["species"]["symbol"] == "SPECIES_LEDYBA"
     )
-    for lane_name, lane in (
-        ("Chill", ledyba["profile"]),
-        ("Active", ledyba["profile"]["_activeProfileData"]),
-        ("Tired", ledyba["profile"]["_tiredProfileData"]),
-    ):
-        resolved_follower_lane = profile_viewer.clone_profile(lane)
-        profile_viewer.merge_profile(
-            resolved_follower_lane,
-            follower_entry["override"],
-        )
-        profile_viewer.normalize_profile(resolved_follower_lane, macros)
-        if profile_viewer.numeric(resolved_follower_lane["chillSpeed"]) != 8:
-            raise SystemExit(
-                f"Flying insect follower {lane_name} lane does not start at 8 frames"
-            )
-        if profile_viewer.numeric(resolved_follower_lane["maxWalkSpeed"]) != 2:
-            raise SystemExit(
-                f"Flying insect follower {lane_name} lane does not keep its 2-frame fastest time"
-            )
-        if not profile_viewer.numeric(resolved_follower_lane["walkOptions"]) & 0x20:
-            raise SystemExit(
-                f"Flying insect follower {lane_name} lane loses Disable acceleration"
-            )
     rattata = next(
         item
         for item in overview["assignments"]
         if item["species"]["symbol"] == "SPECIES_RATTATA"
     )
-    resolved_rattata_follower = profile_viewer.clone_profile(rattata["profile"])
-    profile_viewer.merge_profile(resolved_rattata_follower, follower_entry["override"])
-    profile_viewer.normalize_profile(resolved_rattata_follower, macros)
+    follower_mask = 1 << (int(follower_entry["order"]) - 1)
+    default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
+    forced_results = profile_viewer.resolve_native_requests(
+        [
+            {
+                "species": assignment["species"]["value"],
+                "level": 1,
+                "terrain": default_terrain,
+                "shiny": 0,
+                "groupFlags": 0,
+                "forcedOverrideMask": follower_mask,
+                "behaviorClass": "auto",
+            }
+            for assignment in (ledyba, rattata)
+        ]
+    )
+    resolved_ledyba_follower = profile_viewer.decode_native_resolved_profile(
+        macros,
+        forced_results[0]["profileHex"],
+    )
+    for lane_name, lane in (
+        ("Chill", resolved_ledyba_follower),
+        ("Active", resolved_ledyba_follower["_activeProfileData"]),
+        ("Tired", resolved_ledyba_follower["_tiredProfileData"]),
+    ):
+        if profile_viewer.numeric(lane["chillSpeed"]) != 8:
+            raise SystemExit(
+                f"Flying insect follower {lane_name} lane does not start at 8 frames"
+            )
+        if profile_viewer.numeric(lane["maxWalkSpeed"]) != 2:
+            raise SystemExit(
+                f"Flying insect follower {lane_name} lane does not keep its 2-frame fastest time"
+            )
+        if not profile_viewer.numeric(lane["walkOptions"]) & 0x20:
+            raise SystemExit(
+                f"Flying insect follower {lane_name} lane loses Disable acceleration"
+            )
+    resolved_rattata_follower = profile_viewer.decode_native_resolved_profile(
+        macros,
+        forced_results[1]["profileHex"],
+    )
     if profile_viewer.numeric(resolved_rattata_follower["walkOptions"]) & 0x20:
         raise SystemExit("Disable acceleration leaked into another follower profile")
 

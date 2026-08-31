@@ -10,9 +10,11 @@ The migration wraps, observes, compares, switches, and deletes. It is not a full
 
 This branch implements the shared code home, portable resolver and motion
 models, resident actor facade, host control surface, and compatibility sampling
-for current movement paths. Ownership switches, legacy deletion, and live exit
-proof remain open where named below. A roadmap exit gate is complete only after
-its required runtime proof passes.
+for current movement paths. The actor is now the sole motion clock and owns the
+shared motion and policy state. Engine-boundary ownership, role-policy reducers,
+transition coordination, legacy deletion, and live exit proof remain open where
+named below. A roadmap exit gate is complete only after its required runtime
+proof passes.
 
 ## Phase 0 - Canonical system map
 
@@ -27,7 +29,8 @@ Exit gate: a new agent can find the current owner, target owner, required roles,
 
 ## Phase 1 - Observe current behavior
 
-Status: implemented; live diagnostic exit proof is pending.
+Status: implemented; live diagnostic exit proof is pending. The public live
+driver can now arm, close, and capture one descriptor-driven bounded window.
 
 - Add a read-only, versioned compatibility snapshot with stable semantic fields.
   Its private storage adapter can change in later phases.
@@ -40,14 +43,21 @@ Status: implemented; live diagnostic exit proof is pending.
 - Create the machine-readable feature/impact manifest at
   `tools/overworld/system_features.yaml` and generate the human table from it.
 - Add `scripts/owctl trace`, `scenario`, `doctor`, and `verify affected` as one host facade.
+- Add descriptor-driven `scripts/owctl actor inspect`, `actor trace`, and
+  reusable semantic scenario evidence. Active legacy scenarios migrate only
+  after their public event windows cover the old assertions.
 
 Exit gate: a control lock, wrong target, wrong speed, presentation split, or stream wait can be explained from one bounded trace without private offset hunting.
 
 ## Phase 2 - One schema and one resolver
 
-Status: partly implemented. Portable C resolution is used by the ROM and the V2
-resolve endpoint. Legacy Workshop endpoints still retain the Python
-compatibility resolver. ROM/host parity and deletion remain pending.
+Status: implementation complete; packaged ROM parity proof remains pending.
+The ROM, V1 data projection, V2 resolve endpoint, and profile membership tools
+all call one portable C resolver. Named JSON is the authoring source and the
+positional C blob is generated compatibility output. Golden vectors cover
+class selection, ordered and forced layers, conditional replay, lane links,
+operators, primitives, fingerprints, and provenance. The verifier also proves
+that the ARM overlay and host adapter compile and publish the same C source.
 
 - Define a named Behavior Schema with field path, type, unit, bounds, lane, operators, and feature ID.
 - Generate the compact C layout, masks, editor metadata, validators, migration metadata, and trace labels.
@@ -57,7 +67,7 @@ compatibility resolver. ROM/host parity and deletion remain pending.
 - Make the Workshop use the canonical resolver.
 - Keep the current binary blob as generated compatibility output.
 
-Exit gate: deleting a profile rule from the portable resolver makes both ROM and Workshop resolution fail in the same tests. No second resolver remains.
+Exit gate: deleting a profile rule from the portable resolver makes both ROM and Workshop resolution fail in the same tests. No second resolver remains. The source and host sides of this gate are implemented; the named packaged-ROM parity run is still required before runtime completion is claimed.
 
 ## Phase 3 - Actor facade and compatibility views
 
@@ -69,7 +79,9 @@ storage consolidation remains gated by later phases.
   and the separate player engine anchor. Do not move storage yet.
 - Bind mount handles to the player anchor, follower actor, field epoch, map
   generation, and encounter generation.
-- Make command and cancel paths idempotent with typed reasons.
+- Make command and cancel paths idempotent with typed reasons. Commands use a
+  strictly increasing wrap-safe sequence; in-window duplicates replay their
+  acknowledgement and older out-of-window commands fail as `STALE_SEQUENCE`.
 - Keep old state behind internal adapters only while a capability is migrating.
 
 Exit gate: one actor snapshot can read all movement ownership and lifecycle
@@ -77,10 +89,12 @@ state without exposing the underlying parallel arrays.
 
 ## Phase 4 - Motion Plan and shared Walk
 
-Status: compatibility shadow and sampling implemented. Wild and mounted Walk
-sample the shared actor motion state, but legacy adapters still construct plans,
-advance execution, and publish effects. The ownership switch, parity proof, and
-legacy deletion remain pending.
+Status: shared clock and policy storage switched. Wild and mounted Walk sample
+one actor-owned motion timeline, and actor path advances update the public
+logical tile. Adapters still prepare targets, apply samples to engine objects,
+run separate completion reducers, stream terrain, and publish effects. Mounted
+Walk now acknowledges actor commit at the real vanilla movement-END boundary.
+Planner, reducer, engine-boundary, parity, and deletion work remains pending.
 
 - Introduce `Intent`, `Candidate`, `MotionPlan`, `Decision`, `PathAdvance`, and `Commit` around the working Walk path.
 - Add the deterministic world fixture and host executor.
@@ -95,11 +109,17 @@ Exit gate: exact Walk and all feedback pass wild/mounted parity. Only role inten
 
 ## Phase 5 - Hop and Teleport
 
-Status: compatibility shadow and sampling implemented. Hop and Teleport use the
-shared motion state for sampling, suspend, rebind, resume, path advances, and
-commit acknowledgement. Legacy arrays and role adapters still construct plans
-and own execution. The ownership switch, live parity, and deletion remain
+Status: shared timeline and presentation math implemented. Hop and Teleport use
+the actor state for elapsed time, arc, spin, visibility, path advances, suspend,
+rebind, resume, and terminal state. Wild and mounted adapters still choose
+candidates, apply samples, control streaming and landing, and decide when the
+engine boundary is ready to acknowledge. Live parity and adapter deletion remain
 pending.
+
+Successful wild Hop and Teleport cleanup no longer cancels the acknowledged
+shared motion. Cancel is idempotent for direct and queued callers, stale
+suspended replacement publishes its terminal cancel, and actor detach is an
+explicit terminal release.
 
 - Move Hop planning into the Motion Module.
 - Reuse the shared executor for duration, arc, streaming, commit, cancel, pause, and presentation.
@@ -111,9 +131,11 @@ Exit gate: Walk, Hop, and Teleport share one motion state machine and terminal e
 
 ## Phase 6 - Roles, chains, and Ram
 
-Status: partly implemented. Look, wander, chain-pause, and Ram policy have one
-actor-owned entry. Wild and mounted adapters still contain engine-specific
-controller sequencing.
+Status: policy storage and pure look, wander, and chain-pause helpers are
+implemented in the actor system. Wild and mounted Walk use the same actor policy
+slot, but their commit reducers still differ. Wild role sequencing still owns
+chain action publication and Ram crash/battle reactions. Ram is not yet an
+actor-owned controller.
 
 - Move wild, follower, chain, and player input decisions behind role controllers.
 - Keep mounted control as a rebind of the current follower actor to rider input.
@@ -125,9 +147,11 @@ Exit gate: a new role adds one controller or presentation adapter without copyin
 
 ## Phase 7 - World lifecycle and population
 
-Status: partly implemented. Field epochs, motion rebind, path-advance signals,
-and population frame scheduling have actor-owned entries. Full transition and
-streaming soak proof is pending.
+Status: field epochs, motion suspend/rebind, authoritative path-advance signals,
+public logical-tile updates, and the population timer tick have actor-owned
+entries. Terrain streaming, reservation checks, transition order, warp/battle
+gates, and bounded population maintenance still live in role or engine adapters.
+Full transition and streaming soak proof is pending.
 
 - Centralize path advances, target reservation, surface occupancy, warp gates,
   and battle gates. Streaming and distance consume path advances; terminal
@@ -166,6 +190,35 @@ Exit gate: deleting the actor system facade would reveal substantial hidden comp
 - Do not mix a schema migration with a motion migration in the same change.
 - Do not claim parity from static source checks.
 - Preserve the user's current game feel unless a separate behavior change is requested.
+
+## Remaining completion sequence
+
+Overlay 158, the mount overlay, and the wild overlay have only a few bytes of
+free code. Completion must replace and delete existing paths; it cannot add a
+second orchestration layer.
+
+1. Replace the broad motion dispatcher with one request call and one engine-
+   boundary call in the same fixed service slot. The boundary owns unapplied
+   path advances, stream wait/ready, presentation acknowledgement, engine-END
+   acknowledgement, suspend/rebind/resume, and cancel. Proof: model ordering,
+   package ABI, then one focused Walk ROM scenario.
+2. Move Walk commit reduction into the actor policy service. Wild and mounted
+   adapters consume one reducer result and only publish engine effects. Delete
+   their duplicate acceleration/skid completion paths. Proof: exact timing,
+   acceleration, turn/stop skid, stomp, and crash parity scenarios.
+3. Route Hop and Teleport through the same boundary. Keep collision and terrain
+   queries in the world adapter, but pass ordered candidates and typed rejection
+   reasons to the planner. Delete adapter-local elapsed and terminal gates.
+   Proof: cardinal/diagonal, ledge, mounted-single-motion, fixed/per-tile,
+   transition, and presentation scenarios.
+4. Replace the implicit map-change sequence with one transition command:
+   suspend, canonicalize, advance epoch, rebind, then resume or discard. Feed
+   player path advances and transition events into the bounded population work
+   queue. Proof: transition, streaming, population, and long-soak scenarios.
+5. Migrate active scenarios to public actor evidence. After each public scenario
+   passes, delete the covered private arrays, fixed callbacks, source-string
+   assertions, and positional writer transforms. Keep only fixed thunks required
+   by ROM layout.
 
 ## Deferred ideas
 

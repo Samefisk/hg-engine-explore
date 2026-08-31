@@ -4,6 +4,7 @@
 #include "../../include/constants/species.h"
 #include "../../include/battle.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/overworld_wild_runtime.h"
@@ -388,19 +389,22 @@ static void WALK_CODE Walk_MountForceDirection(
     *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | key;
 }
 
-static void WALK_CODE Walk_MountResetMomentum(
-    OverworldMountRuntimeState *state)
+static void WALK_CODE Walk_MountResetMomentum(void)
 {
-    state->speed = state->baseSpeed;
-    state->direction = WALK_DIRECTION_NONE;
-    state->tileCounter = 0;
-    state->skidRemaining = 0;
-    state->turnDirection = 0;
-    state->resumeSpeed = 0;
-    state->pendingStep = FALSE;
-    state->pendingSkid = FALSE;
-    state->bufferedDirection = WALK_DIRECTION_NONE;
-    state->stopPending = FALSE;
+    OverworldActorPolicyState *policy =
+        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
+            ->states[OW_WILD_FOLLOWER_SLOT];
+
+    policy->walkMomentum.speed = policy->walkMomentum.baseSpeed;
+    policy->walkMomentum.direction = WALK_DIRECTION_NONE;
+    policy->walkMomentum.tileCounter = 0;
+    policy->walkMomentum.skidRemaining = 0;
+    policy->walkMomentum.turnDirection = 0;
+    policy->walkMomentum.resumeSpeed = 0;
+    policy->pendingStep = FALSE;
+    policy->pendingSkid = FALSE;
+    policy->bufferedDirection = WALK_DIRECTION_NONE;
+    policy->stopPending = FALSE;
 }
 
 static void WALK_CODE Walk_MountFilterInput(
@@ -409,6 +413,10 @@ static void WALK_CODE Walk_MountFilterInput(
     u32 *newKeys,
     u32 *heldKeys)
 {
+    OverworldActorPolicyState *policy =
+        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
+            ->states[OW_WILD_FOLLOWER_SLOT];
+    OverworldWildWalkMomentumState *momentum = &policy->walkMomentum;
     u8 requestedDirection;
     u8 skidTiles;
 
@@ -425,95 +433,95 @@ static void WALK_CODE Walk_MountFilterInput(
         *heldKeys &= ~PAD_PLUS_KEY_MASK;
         requestedDirection = WALK_DIRECTION_NONE;
     }
-    if (state->bufferedDirection != WALK_DIRECTION_NONE
-        && state->bufferedDirection != state->direction) {
-        if ((state->bufferedDirection < WALK_DIRECTION_NORTH_WEST
+    if (policy->bufferedDirection != WALK_DIRECTION_NONE
+        && policy->bufferedDirection != momentum->direction) {
+        if ((policy->bufferedDirection < WALK_DIRECTION_NORTH_WEST
                 && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
                     state->snapshot.profile.hopAllowNonCardinal))
-            || (state->bufferedDirection >= WALK_DIRECTION_NORTH_WEST
+            || (policy->bufferedDirection >= WALK_DIRECTION_NORTH_WEST
                 && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
                     state->snapshot.profile.hopAllowNonCardinal))) {
             /* A queued direction cannot bypass the profile's movement mode. */
-            state->bufferedDirection = WALK_DIRECTION_NONE;
+            policy->bufferedDirection = WALK_DIRECTION_NONE;
         } else {
             /* The newest valid queued direction owns the next tile boundary. */
-            requestedDirection = state->bufferedDirection;
+            requestedDirection = policy->bufferedDirection;
             Walk_MountForceDirection(
                 newKeys,
                 heldKeys,
                 requestedDirection);
         }
     }
-    if (state->skidRemaining != 0) {
+    if (momentum->skidRemaining != 0) {
         Walk_MountForceDirection(
             newKeys,
             heldKeys,
-            state->direction);
+            momentum->direction);
         return;
     }
     if (requestedDirection == WALK_DIRECTION_NONE) {
-        skidTiles = Walk_SkidTiles(state->speed);
-        if (state->direction != WALK_DIRECTION_NONE && skidTiles != 0) {
-            if (!state->stopPending) {
+        skidTiles = Walk_SkidTiles(momentum->speed);
+        if (momentum->direction != WALK_DIRECTION_NONE && skidTiles != 0) {
+            if (!policy->stopPending) {
                 /* Defer stop skid for one sample so a physical reversal can
                  * become a turn skid on its following key state. */
-                state->stopPending = TRUE;
+                policy->stopPending = TRUE;
                 *newKeys &= ~PAD_PLUS_KEY_MASK;
                 *heldKeys &= ~PAD_PLUS_KEY_MASK;
                 return;
             }
-            state->skidRemaining = skidTiles;
-            state->turnDirection = WALK_DIRECTION_NONE;
-            state->resumeSpeed = state->baseSpeed;
-            state->stopPending = FALSE;
-            state->speed = Walk_SkidTime(state->speed);
+            momentum->skidRemaining = skidTiles;
+            momentum->turnDirection = WALK_DIRECTION_NONE;
+            momentum->resumeSpeed = momentum->baseSpeed;
+            policy->stopPending = FALSE;
+            momentum->speed = Walk_SkidTime(momentum->speed);
             Walk_MountForceDirection(
                 newKeys,
                 heldKeys,
-                state->direction);
+                momentum->direction);
         } else {
-            Walk_MountResetMomentum(state);
+            Walk_MountResetMomentum();
         }
         return;
     }
-    state->stopPending = FALSE;
-    if (state->direction == WALK_DIRECTION_NONE) {
-        state->direction = requestedDirection;
-        state->bufferedDirection = WALK_DIRECTION_NONE;
+    policy->stopPending = FALSE;
+    if (momentum->direction == WALK_DIRECTION_NONE) {
+        momentum->direction = requestedDirection;
+        policy->bufferedDirection = WALK_DIRECTION_NONE;
         return;
     }
-    if (requestedDirection == state->direction) {
-        state->bufferedDirection = WALK_DIRECTION_NONE;
+    if (requestedDirection == momentum->direction) {
+        policy->bufferedDirection = WALK_DIRECTION_NONE;
         return;
     }
     if (!OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(state->walkOptions)) {
-        Walk_MountForceDirection(newKeys, heldKeys, state->direction);
-        state->bufferedDirection = WALK_DIRECTION_NONE;
+        Walk_MountForceDirection(newKeys, heldKeys, momentum->direction);
+        policy->bufferedDirection = WALK_DIRECTION_NONE;
         return;
     }
-    state->tileCounter = 0;
-    if (Walk_IsFortyFiveDegreeTurn(state->direction, requestedDirection)) {
-        state->turnDirection = 0;
-        state->direction = requestedDirection;
-        state->bufferedDirection = WALK_DIRECTION_NONE;
+    momentum->tileCounter = 0;
+    if (Walk_IsFortyFiveDegreeTurn(momentum->direction, requestedDirection)) {
+        momentum->turnDirection = 0;
+        momentum->direction = requestedDirection;
+        policy->bufferedDirection = WALK_DIRECTION_NONE;
         return;
     }
-    skidTiles = Walk_SkidTiles(state->speed);
+    skidTiles = Walk_SkidTiles(momentum->speed);
     if (skidTiles != 0
         && state->snapshot.profile.tilesBeforeTurnSkid != 0
-        && state->turnDirection
+        && momentum->turnDirection
             >= state->snapshot.profile.tilesBeforeTurnSkid) {
-        state->skidRemaining = skidTiles;
-        state->turnDirection = requestedDirection;
-        state->bufferedDirection = WALK_DIRECTION_NONE;
-        state->resumeSpeed = state->speed;
-        state->speed = Walk_SkidTime(state->speed);
-        Walk_MountForceDirection(newKeys, heldKeys, state->direction);
+        momentum->skidRemaining = skidTiles;
+        momentum->turnDirection = requestedDirection;
+        policy->bufferedDirection = WALK_DIRECTION_NONE;
+        momentum->resumeSpeed = momentum->speed;
+        momentum->speed = Walk_SkidTime(momentum->speed);
+        Walk_MountForceDirection(newKeys, heldKeys, momentum->direction);
         return;
     }
-    state->turnDirection = 0;
-    state->direction = requestedDirection;
-    state->bufferedDirection = WALK_DIRECTION_NONE;
+    momentum->turnDirection = 0;
+    momentum->direction = requestedDirection;
+    policy->bufferedDirection = WALK_DIRECTION_NONE;
 }
 
 static void WALK_CODE Walk_SetFacing(LocalMapObject *object, u8 direction)
@@ -536,6 +544,10 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
     u8 direction,
     u8 facingDirection)
 {
+    OverworldActorPolicyState *policy =
+        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
+            ->states[OW_WILD_FOLLOWER_SLOT];
+    OverworldWildWalkMomentumState *momentum = &policy->walkMomentum;
     LocalMapObject *player;
     int targetX;
     int targetY;
@@ -570,10 +582,10 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
         (follower->flags & MAPOBJECTFLAG_UNK20) != 0;
     state->motionCooldown = 0;
     state->motionLandingPauseStarted = FALSE;
-    state->motionFrameCount = Walk_ClampTime(state->speed);
+    state->motionFrameCount = Walk_ClampTime(momentum->speed);
     state->motionElapsed = 0;
-    state->pendingStep = FALSE;
-    state->pendingSkid = state->skidRemaining != 0;
+    policy->pendingStep = FALSE;
+    policy->pendingSkid = momentum->skidRemaining != 0;
     avatar->unk8 = WALK_MOUNT_FREEZE_COMMAND;
     avatar->unk10 = 1;
     avatar->unk14 = 2;

@@ -9,12 +9,11 @@ remains unchanged.
 
 The canonical system model and vocabulary live in
 [`documentation/overworld-system/`](../../documentation/overworld-system/README.md)
-and [`CONTEXT.md`](../../CONTEXT.md). The current Python/V2 resolver is a
-compatibility preview until the portable resolver in the active roadmap is
-complete. `/api/v2/resolve` does not yet model the forced follower layer,
-conditional physical-surface selection, or complete Active/Tired linked-profile
-resolution exactly like the ROM. For runtime truth, validate its result against
-the ROM resolver; do not add another independent resolver to V2.
+and [`CONTEXT.md`](../../CONTEXT.md). `/api/v2/resolve` calls the same portable C
+resolver source as the ROM. It supports forced layers, conditional physical
+surfaces, explicit or automatic behavior classes, and complete Owner, Active,
+and Tired lane resolution. Python prepares context and presents provenance; it
+does not compose profiles.
 
 ## Run
 
@@ -75,7 +74,7 @@ sources themselves.
 - Keeps base profiles and override profiles visually distinct.
 - Keeps drag handles and keyboard move controls for override ordering.
 - Treats each override profile as one runtime layer with one explicit member
-  set and one optional shared condition. The profile is evaluated and applied
+  set and one shared target match. The profile is evaluated and applied
   at most once for a Pokémon context.
 - Adds member-set shortcuts for individual Pokémon, evolution families, types,
   and live encounter pools. These shortcuts materialize members in the same
@@ -111,13 +110,19 @@ sources themselves.
 
 The target authoring and diagnosis flow is defined in
 [`authoring-debugging.md`](../../documentation/overworld-system/authoring-debugging.md).
-V2 should become a client of the generated Behavior Schema, portable resolver,
-semantic trace, and declarative scenario runner described there.
+
+Behavior profile saves now write named fields and explicit operators to
+`data/overworld_behavior_profiles.json`. The expanded positional arrays in
+`data/OverworldWildBehaviorData.c` are generated ROM compatibility output.
+Use `python3 scripts/generate_overworld_behavior_catalog.py --check` to find
+catalog/output drift. V2 is a client of the generated Behavior Schema and
+portable resolver. Semantic trace and scenario work use the separate host
+control surface described in the system documents.
 
 - `server.py` serves the standalone V2 app, preserves the proven backend
   endpoints, and exposes the V2 APIs.
 - `reliability.py` owns revisions, mutation locking, transactions, rollback,
-  and the current source-resolution preview.
+  and projection of canonical resolver results into the editor response.
 - `static/index.html` and `static/v2.css` define the new semantic UI and visual
   system.
 - `static/v2.js` orchestrates navigation, atomic saves, builds, ROM launching,
@@ -125,15 +130,14 @@ semantic trace, and declarative scenario runner described there.
 - `static/profiles.js`, `static/routes.js`, and `static/routes-sounds.js`
   implement the focused profile, route, and sound workflows without copying
   the legacy DOM.
-- `src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c` uses the
-  authoritative game-runtime resolver, including layers and lifecycle state
-  that the current source preview does not fully reproduce.
+- `lib/overworld/overworld_behavior_resolver.c` is the only composition policy.
+  The ROM actor service and Workshop native adapter compile that same file.
 
 The V2-only API surface is:
 
 - `GET /api/v2/health`
 - `GET /api/v2/workspace-meta`
-- `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...`
+- `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...&conditionTerrainMask=...&forcedOverrideMask=...&behaviorClass=auto|...`
 - `POST /api/v2/commit`
 
 The health response includes `serverInstanceId` and `restartRequired`. The

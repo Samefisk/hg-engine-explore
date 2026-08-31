@@ -275,6 +275,20 @@ def main() -> None:
         / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c"
     ).read_text()
     require(
+        re.search(
+            r"if \(actorSlot->snapshot\.active\s*"
+            r"&& motion->phase != OVERWORLD_MOTION_PHASE_IDLE\s*"
+            r"&& motion->phase != OVERWORLD_MOTION_PHASE_CANCELED\) \{.*?"
+            r"view->logicalX = actorSlot->snapshot\.logicalX;.*?"
+            r"view->logicalY = actorSlot->snapshot\.logicalY;.*?"
+            r"\} else \{.*?view->logicalX = \(s16\)object->xCurr;.*?"
+            r"view->logicalY = \(s16\)object->yCurr;",
+            actor_source,
+            re.DOTALL,
+        ) is not None,
+        "active mounted motion can lose actor-owned logical path advances",
+    )
+    require(
         "OverworldWildSpawns_BeginMountSelectedFollower" in spawns
         and "OverworldWildSpawns_ResolveBehaviorProfileForContext" in spawns
         and "OVERWORLD_MOUNT_OVERLAY_ENTRY->begin" in spawns,
@@ -545,9 +559,14 @@ def main() -> None:
             re.DOTALL,
         ) is not None
         and "avatar,\n            &newKeys,\n            &heldKeys" in mount_source
-        and "state->motionFrameCount = Walk_ClampTime(state->speed);"
-            in walk_module_source
-        and "state->motionArcHeightQ4 = 0;" in walk_module_source
+        and mounted_flat_walk is not None
+        and "OverworldActorPolicyState *policy ="
+            in mounted_flat_walk.group(0)
+        and "OverworldWildWalkMomentumState *momentum = &policy->walkMomentum;"
+            in mounted_flat_walk.group(0)
+        and "state->motionFrameCount = Walk_ClampTime(momentum->speed);"
+            in mounted_flat_walk.group(0)
+        and "state->motionArcHeightQ4 = 0;" in mounted_flat_walk.group(0)
         and "Walk_StrictDiagonalAllowed" in walk_module_source
         and "Walk_CanCardinal(avatar, vertical)" in walk_module_source
         and "Walk_CanCardinal(avatar, horizontal)" in walk_module_source
@@ -557,7 +576,7 @@ def main() -> None:
             in walk_module_source
         and "A queued direction cannot bypass the profile's movement mode."
             in walk_module_source
-        and "state->bufferedDirection < WALK_DIRECTION_NORTH_WEST"
+        and "policy->bufferedDirection < WALK_DIRECTION_NORTH_WEST"
             in walk_module_source
         and "state->snapshot.profile.tilesBeforeTurnSkid" in walk_module_source
         and diagonal_walk is not None
@@ -611,7 +630,7 @@ def main() -> None:
             r"player->posVec\[2\].*?"
             r"OverworldMount_ClearObjectCommand\(follower\);\s*\}.*?"
             r"if \(walkMotion\) \{.*?"
-            r"sOverworldMountState\.pendingStep = TRUE;.*?\}.*?"
+            r"OVERWORLD_MOUNT_ACTOR_POLICY->pendingStep = TRUE;.*?\}.*?"
             r"OverworldMount_SyncPresentation\(\);",
             mount_source,
             re.DOTALL,

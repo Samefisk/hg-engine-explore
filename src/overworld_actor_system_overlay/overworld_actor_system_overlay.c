@@ -4,18 +4,17 @@
 
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #define TRACE_INDEX_MASK (OVERWORLD_ACTOR_SYSTEM_TRACE_CAPACITY - 1)
-#define ACTOR_LEGACY_SPIN_SPEED_MASK 0x0F
-#define ACTOR_LEGACY_SWAY_WIDTH_SHIFT 4
-
+#define ACTOR_WILD_SPIN_SPEED_MASK 0x0F
+#define ACTOR_WILD_SWAY_WIDTH_SHIFT 4
 OverworldActorSystemState gOverworldActorSystemState
     __attribute__((section(".overworld_actor_system_state"), used));
 
-typedef struct OverworldActorLegacyMotionPrefix {
+typedef struct OverworldActorWildMotionPrefix {
     OVERWORLD_WILD_CUSTOM_JUMP_RUNTIME_PREFIX_FIELDS;
-} OverworldActorLegacyMotionPrefix;
+} OverworldActorWildMotionPrefix;
 
-#define ACTOR_LEGACY_RUNTIME(state) \
-    ((OverworldActorLegacyMotionPrefix *)((state)->movementRuntimeState))
+#define ACTOR_WILD_RUNTIME(state) \
+    ((OverworldActorWildMotionPrefix *)((state)->movementRuntimeState))
 
 OverworldActorFrameResult OverworldActorSystem_TickImpl(
     const OverworldActorFrame *frame);
@@ -87,7 +86,7 @@ static OverworldActorStateSnapshot *ActorSystem_FindActor(
         return NULL;
     }
 
-    actor = &gOverworldActorSystemState.actors[handle->slot];
+    actor = &gOverworldActorSystemState.slots[handle->slot].snapshot;
     if (actor->active == 0 || !ActorSystem_HandleEquals(&actor->handle, handle)) {
         return NULL;
     }
@@ -156,6 +155,42 @@ static void ActorSystem_WriteTrace(
     }
 }
 
+static void ActorSystem_WriteTerminalTrace(
+    OverworldActorStateSnapshot *actor,
+    u16 event,
+    u16 reason,
+    u32 valueA,
+    u32 valueB)
+{
+    ActorSystem_WriteTrace(&actor->handle, event, reason, valueA, valueB);
+    ActorSystem_WriteTrace(&actor->handle,
+        OVERWORLD_ACTOR_EVENT_CONTROL_RETURNED, reason,
+        actor->inputOwnership, actor->commitSequence);
+}
+
+static void ActorSystem_CancelActor(
+    OverworldActorStateSnapshot *actor,
+    u16 reason)
+{
+    OverworldActorRuntimeSlot *slot =
+        &gOverworldActorSystemState.slots[actor->handle.slot];
+
+    if (slot->motion.phase == OVERWORLD_MOTION_PHASE_IDLE
+        || slot->motion.phase == OVERWORLD_MOTION_PHASE_CANCELED) {
+        return;
+    }
+    OverworldMotion_Cancel(&slot->motion, (u8)reason);
+    slot->pendingFirstPathAdvance = 0;
+    slot->pendingLastPathAdvance = 0;
+    actor->motionPhase = OVERWORLD_ACTOR_PHASE_CANCELED;
+    actor->inputOwnership = 0;
+    actor->reservationId = 0;
+    actor->lastCancelReason = (u8)reason;
+    ActorSystem_WriteTerminalTrace(actor,
+        OVERWORLD_ACTOR_EVENT_MOTION_CANCELED, reason,
+        actor->motionKind, actor->commitSequence);
+}
+
 static void ActorSystem_FillReply(
     OverworldActorReply *reply,
     const OverworldActorCommand *command,
@@ -173,6 +208,11 @@ static void ActorSystem_FillReply(
     reply->reason = reason;
 }
 
+static BOOL ActorSystem_SequenceIsNewer(u32 sequence, u32 reference)
+{
+    return reference == 0 || (s32)(sequence - reference) > 0;
+}
+
 static void ActorSystem_RememberReply(const OverworldActorReply *reply)
 {
     OverworldActorSystemState *state = &gOverworldActorSystemState;
@@ -180,6 +220,10 @@ static void ActorSystem_RememberReply(const OverworldActorReply *reply)
     state->acknowledgements[state->ackWriteIndex] = *reply;
     state->ackWriteIndex = (state->ackWriteIndex + 1)
         % OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY;
+    if (ActorSystem_SequenceIsNewer(
+            reply->sequence, state->lastAcknowledgedSequence)) {
+        state->lastAcknowledgedSequence = reply->sequence;
+    }
 }
 
 static const OverworldActorReply *ActorSystem_FindReply(u32 sequence)
@@ -201,9 +245,11 @@ OverworldActorResult OverworldActorSystem_CompatibilityBindImpl(
     OverworldActorHandle *handle)
 {
     OverworldActorSystemState *system;
+    OverworldActorRuntimeSlot *runtimeSlot;
     OverworldActorStateSnapshot *actor;
     u16 slot;
     u16 generation;
+    BOOL resetPolicy;
 
     ActorSystem_EnsureInitialized();
     system = &gOverworldActorSystemState;
@@ -216,13 +262,13 @@ OverworldActorResult OverworldActorSystem_CompatibilityBindImpl(
 
     slot = initial->handle.slot;
     if (slot < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
-        && system->actors[slot].active != 0) {
+        && system->slots[slot].snapshot.active != 0) {
         system->lastReason = OVERWORLD_ACTOR_REASON_RETRY_WORLD_BUSY;
         return OVERWORLD_ACTOR_RESULT_RETRY;
     }
     if (slot >= OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS) {
         for (slot = 0; slot < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS; slot++) {
-            if (system->actors[slot].active == 0) {
+            if (system->slots[slot].snapshot.active == 0) {
                 break;
             }
         }
@@ -236,19 +282,48 @@ OverworldActorResult OverworldActorSystem_CompatibilityBindImpl(
     if (generation == 0) {
         generation = ++system->actorGenerations[slot];
     }
-    actor = &system->actors[slot];
+    runtimeSlot = &system->slots[slot];
+    actor = &runtimeSlot->snapshot;
+    resetPolicy = slot != OW_WILD_FOLLOWER_SLOT
+        || actor->subjectIdentity != initial->subjectIdentity;
+    if (resetPolicy) {
+        ActorSystem_Zero(&runtimeSlot->motion, sizeof(runtimeSlot->motion));
+        ActorSystem_Zero(
+            &system->policies[slot],
+            sizeof(system->policies[slot]));
+        runtimeSlot->pendingFirstPathAdvance = 0;
+        runtimeSlot->pendingLastPathAdvance = 0;
+        runtimeSlot->lastWorldEffectSequence = 0;
+    }
     *actor = *initial;
+    if (resetPolicy) {
+        actor->behaviorFingerprint = 0;
+        actor->matchedLayerMask = 0;
+        actor->streamState = OVERWORLD_ACTOR_STREAM_IDLE;
+    }
     actor->version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
     actor->size = sizeof(*actor);
     actor->handle.slot = slot;
     actor->handle.generation = generation;
     actor->handle.fieldEpoch = system->fieldEpoch;
+    actor->authorityGeneration = generation;
+    actor->engineAnchorGeneration = generation;
+    actor->presentationGeneration = actor->presentationAttached
+        ? generation
+        : 0;
     actor->active = 1;
     *handle = actor->handle;
     system->actorCount++;
     system->lastReason = OVERWORLD_ACTOR_REASON_OK;
     ActorSystem_WriteTrace(handle, OVERWORLD_ACTOR_EVENT_ACTOR_ATTACHED,
         OVERWORLD_ACTOR_REASON_OK, actor->role, actor->subjectIdentity);
+    if (actor->behaviorFingerprint != 0) {
+        ActorSystem_WriteTrace(handle,
+            OVERWORLD_ACTOR_EVENT_PROFILE_RESOLVED,
+            OVERWORLD_ACTOR_REASON_OK,
+            actor->behaviorFingerprint,
+            actor->matchedLayerMask);
+    }
     return OVERWORLD_ACTOR_RESULT_OK;
 }
 
@@ -286,6 +361,7 @@ OverworldActorResult OverworldActorSystem_CompatibilityUnbindImpl(
     const OverworldActorHandle *handle,
     u16 reason)
 {
+    OverworldActorRuntimeSlot *runtimeSlot;
     OverworldActorStateSnapshot *actor;
 
     ActorSystem_EnsureInitialized();
@@ -295,6 +371,10 @@ OverworldActorResult OverworldActorSystem_CompatibilityUnbindImpl(
         return OVERWORLD_ACTOR_RESULT_REJECTED;
     }
 
+    runtimeSlot = &gOverworldActorSystemState.slots[handle->slot];
+    OverworldMotion_Reset(&runtimeSlot->motion);
+    runtimeSlot->pendingFirstPathAdvance = 0;
+    runtimeSlot->pendingLastPathAdvance = 0;
     ActorSystem_WriteTrace(handle, OVERWORLD_ACTOR_EVENT_ACTOR_DETACHED,
         reason, actor->role, actor->subjectIdentity);
     actor->active = 0;
@@ -302,9 +382,7 @@ OverworldActorResult OverworldActorSystem_CompatibilityUnbindImpl(
     actor->reservationId = 0;
     actor->motionKind = OVERWORLD_ACTOR_MOTION_NONE;
     actor->motionPhase = OVERWORLD_ACTOR_PHASE_IDLE;
-    if (gOverworldActorSystemState.actorCount != 0) {
-        gOverworldActorSystemState.actorCount--;
-    }
+    gOverworldActorSystemState.actorCount--;
     gOverworldActorSystemState.lastReason = reason;
     return OVERWORLD_ACTOR_RESULT_OK;
 }
@@ -317,13 +395,13 @@ u16 OverworldActorSystem_CompatibilityAdvanceFieldEpochImpl(u16 reason)
     ActorSystem_EnsureInitialized();
     state = &gOverworldActorSystemState;
     for (index = 0; index < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS; index++) {
-        if (state->actors[index].active != 0) {
-            ActorSystem_WriteTrace(&state->actors[index].handle,
+        if (state->slots[index].snapshot.active != 0) {
+            ActorSystem_WriteTrace(&state->slots[index].snapshot.handle,
                 OVERWORLD_ACTOR_EVENT_CONTEXT_CHANGED, reason,
                 state->fieldEpoch, state->fieldEpoch + 1);
-            state->actors[index].active = 0;
+            state->slots[index].snapshot.active = 0;
         }
-        OverworldMotion_Suspend(&state->motions[index]);
+        OverworldMotion_Suspend(&state->slots[index].motion);
     }
     state->fieldEpoch++;
     if (state->fieldEpoch == 0) {
@@ -363,12 +441,17 @@ u16 OverworldActorSystem_CompatibilityGetFieldEpochImpl(void)
 OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
     OverworldActorMotionServiceCall *call)
 {
+    OverworldActorRuntimeSlot *runtimeSlot = NULL;
+    OverworldActorStateSnapshot *actor = NULL;
     OverworldMotionState *motionState;
+    OverworldMotionPlan localPlan;
+    OverworldMotionPlan *plan;
+    u8 phaseBefore;
 
     if (call == NULL
         || call->version != OVERWORLD_ACTOR_MOTION_CALL_VERSION
         || call->size != sizeof(*call)
-        || call->operation > OVERWORLD_ACTOR_MOTION_SERVICE_REBIND_FIELD) {
+        || call->operation > OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST) {
         return OVERWORLD_ACTOR_RESULT_REJECTED;
     }
 
@@ -376,7 +459,9 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
     if (motionState == NULL
         && call->actorSlot < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS) {
         ActorSystem_EnsureInitialized();
-        motionState = &gOverworldActorSystemState.motions[call->actorSlot];
+        runtimeSlot = &gOverworldActorSystemState.slots[call->actorSlot];
+        motionState = &runtimeSlot->motion;
+        actor = &runtimeSlot->snapshot;
     }
 
     call->selectedIndex = 0xFF;
@@ -388,6 +473,15 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
             return OVERWORLD_ACTOR_RESULT_REJECTED;
         }
         OverworldMotion_Reset(motionState);
+        if (runtimeSlot != NULL) {
+            runtimeSlot->pendingFirstPathAdvance = 0;
+            runtimeSlot->pendingLastPathAdvance = 0;
+            runtimeSlot->snapshot.motionKind = OVERWORLD_ACTOR_MOTION_NONE;
+            runtimeSlot->snapshot.motionPhase = OVERWORLD_ACTOR_PHASE_IDLE;
+            runtimeSlot->snapshot.motionElapsed = 0;
+            runtimeSlot->snapshot.motionDuration = 0;
+            runtimeSlot->snapshot.reservationId = 0;
+        }
         call->decision = OVERWORLD_MOTION_DECISION_ACCEPTED;
         break;
     case OVERWORLD_ACTOR_MOTION_SERVICE_SELECT_PLAN:
@@ -406,31 +500,64 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
             return OVERWORLD_ACTOR_RESULT_REJECTED;
         }
         call->decision = OverworldMotion_Begin(motionState, call->plan);
+        if (call->decision == OVERWORLD_MOTION_DECISION_ACCEPTED
+            && actor != NULL && actor->active) {
+            ActorSystem_WriteTrace(&actor->handle,
+                OVERWORLD_ACTOR_EVENT_MOTION_STARTED,
+                OVERWORLD_ACTOR_REASON_OK,
+                motionState->plan.kind,
+                motionState->plan.duration);
+        }
         break;
-    case OVERWORLD_ACTOR_MOTION_SERVICE_TICK:
-    {
-        u8 phaseBeforeTick;
-
+    case OVERWORLD_ACTOR_MOTION_SERVICE_READ_SAMPLE:
         if (motionState == NULL || call->sample == NULL) {
             return OVERWORLD_ACTOR_RESULT_REJECTED;
         }
-        phaseBeforeTick = motionState->phase;
-        call->tickFlags = OverworldMotion_Tick(
+        call->decision = OverworldMotion_Read(
             motionState,
             call->fieldEpoch,
             call->sample);
-        call->decision = phaseBeforeTick == OVERWORLD_MOTION_PHASE_IDLE
-                || phaseBeforeTick == OVERWORLD_MOTION_PHASE_CANCELED
-            ? OVERWORLD_MOTION_DECISION_NO_CANDIDATE
-            : motionState->plan.fieldEpoch != call->fieldEpoch
-            ? OVERWORLD_MOTION_DECISION_STALE_FIELD
-            : OVERWORLD_MOTION_DECISION_ACCEPTED;
+        if (call->decision == OVERWORLD_MOTION_DECISION_ACCEPTED
+            && runtimeSlot != NULL
+            && runtimeSlot->pendingFirstPathAdvance != 0) {
+            call->sample->firstPathAdvance =
+                runtimeSlot->pendingFirstPathAdvance;
+            call->sample->lastPathAdvance =
+                runtimeSlot->pendingLastPathAdvance;
+            call->sample->flags |= OVERWORLD_MOTION_TICK_PATH_ADVANCED;
+            call->tickFlags |= OVERWORLD_MOTION_TICK_PATH_ADVANCED;
+            runtimeSlot->pendingFirstPathAdvance = 0;
+            runtimeSlot->pendingLastPathAdvance = 0;
+        }
         break;
-    }
     case OVERWORLD_ACTOR_MOTION_SERVICE_ACKNOWLEDGE_COMMIT:
+        if (motionState == NULL) {
+            return OVERWORLD_ACTOR_RESULT_REJECTED;
+        }
+        phaseBefore = motionState->phase;
         call->decision = OverworldMotion_AcknowledgeCommit(
             motionState,
             call->fieldEpoch);
+        if (call->decision == OVERWORLD_MOTION_DECISION_ACCEPTED
+            && phaseBefore == OVERWORLD_MOTION_PHASE_COMMIT_PENDING
+            && actor != NULL && actor->active) {
+            actor->commitSequence = motionState->commitSequence;
+            ActorSystem_WriteTrace(&actor->handle,
+                OVERWORLD_ACTOR_EVENT_LOGICAL_COMMIT,
+                OVERWORLD_ACTOR_REASON_OK,
+                actor->commitSequence,
+                motionState->plan.kind);
+            if (motionState->phase == OVERWORLD_MOTION_PHASE_IDLE) {
+                actor->motionKind = OVERWORLD_ACTOR_MOTION_NONE;
+                actor->motionPhase = OVERWORLD_ACTOR_PHASE_IDLE;
+                actor->reservationId = 0;
+                ActorSystem_WriteTerminalTrace(actor,
+                    OVERWORLD_ACTOR_EVENT_MOTION_FINISHED,
+                    OVERWORLD_ACTOR_REASON_OK,
+                    actor->commitSequence,
+                    motionState->plan.kind);
+            }
+        }
         break;
     case OVERWORLD_ACTOR_MOTION_SERVICE_SUSPEND:
         if (motionState == NULL) {
@@ -440,6 +567,9 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
         call->decision = OVERWORLD_MOTION_DECISION_ACCEPTED;
         break;
     case OVERWORLD_ACTOR_MOTION_SERVICE_RESUME:
+        if (motionState == NULL) {
+            return OVERWORLD_ACTOR_RESULT_REJECTED;
+        }
         call->decision = OverworldMotion_Resume(
             motionState,
             call->fieldEpoch);
@@ -448,7 +578,16 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
         if (motionState == NULL) {
             return OVERWORLD_ACTOR_RESULT_REJECTED;
         }
-        OverworldMotion_Cancel(motionState, call->cancelReason);
+        if (motionState->phase == OVERWORLD_MOTION_PHASE_IDLE
+            || motionState->phase == OVERWORLD_MOTION_PHASE_CANCELED) {
+            call->decision = OVERWORLD_MOTION_DECISION_ACCEPTED;
+            break;
+        }
+        if (actor != NULL && actor->active) {
+            ActorSystem_CancelActor(actor, call->cancelReason);
+        } else {
+            OverworldMotion_Cancel(motionState, call->cancelReason);
+        }
         call->decision = OVERWORLD_MOTION_DECISION_ACCEPTED;
         break;
     case OVERWORLD_ACTOR_MOTION_SERVICE_REBIND_FIELD:
@@ -460,13 +599,99 @@ OverworldActorResult OverworldActorSystem_MotionDispatchImpl(
             motionState->plan.fieldEpoch,
             call->fieldEpoch);
         break;
+    case OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST:
+        if (motionState == NULL || call->intent == NULL
+            || call->candidates == NULL) {
+            return OVERWORLD_ACTOR_RESULT_REJECTED;
+        }
+        if (motionState->phase == OVERWORLD_MOTION_PHASE_SUSPENDED
+            && motionState->plan.fieldEpoch != call->intent->fieldEpoch) {
+            if (actor != NULL && actor->active) {
+                ActorSystem_CancelActor(
+                    actor,
+                    OVERWORLD_ACTOR_REASON_STALE_FIELD);
+            } else {
+                OverworldMotion_Cancel(
+                    motionState,
+                    OVERWORLD_ACTOR_REASON_STALE_FIELD);
+            }
+        }
+        if (actor != NULL && actor->active) {
+            actor->lastIntent = call->intent->kind;
+            ActorSystem_WriteTrace(&actor->handle,
+                OVERWORLD_ACTOR_EVENT_INTENT_CREATED,
+                OVERWORLD_ACTOR_REASON_OK,
+                call->intent->kind,
+                call->candidateCount);
+        }
+        plan = call->plan != NULL ? call->plan : &localPlan;
+        call->decision = OverworldMotion_SelectPlan(
+            call->intent,
+            call->startX,
+            call->startY,
+            call->startBaseY,
+            call->candidates,
+            call->candidateCount,
+            plan,
+            &call->selectedIndex);
+        if (call->decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
+            if (actor != NULL && actor->active) {
+                actor->lastDecision = (u8)call->decision;
+                ActorSystem_WriteTrace(&actor->handle,
+                    OVERWORLD_ACTOR_EVENT_CANDIDATE_REJECTED,
+                    call->decision,
+                    call->selectedIndex,
+                    call->candidateCount);
+            }
+            break;
+        }
+        if (actor != NULL && actor->active) {
+            if (plan->behaviorFingerprint == 0) {
+                plan->behaviorFingerprint = (u16)actor->behaviorFingerprint;
+            }
+            if (plan->reservationId == 0) {
+                gOverworldActorSystemState.nextReservationId++;
+                if (gOverworldActorSystemState.nextReservationId == 0) {
+                    gOverworldActorSystemState.nextReservationId++;
+                }
+                plan->reservationId =
+                    gOverworldActorSystemState.nextReservationId;
+            }
+        }
+        call->decision = OverworldMotion_Begin(motionState, plan);
+        if (actor != NULL && actor->active) {
+            actor->lastDecision = (u8)call->decision;
+        }
+        if (call->decision == OVERWORLD_MOTION_DECISION_ACCEPTED
+            && actor != NULL && actor->active) {
+            actor->originX = plan->startX;
+            actor->originY = plan->startY;
+            actor->targetX = plan->targetX;
+            actor->targetY = plan->targetY;
+            actor->motionKind = plan->kind;
+            actor->motionPhase = OVERWORLD_ACTOR_PHASE_MOVING;
+            actor->motionElapsed = 0;
+            actor->motionDuration = plan->duration;
+            actor->reservationId = plan->reservationId;
+            ActorSystem_WriteTrace(&actor->handle,
+                OVERWORLD_ACTOR_EVENT_PLAN_ACCEPTED,
+                OVERWORLD_ACTOR_REASON_OK,
+                ((u32)(u16)plan->targetX << 16) | (u16)plan->targetY,
+                plan->duration);
+            ActorSystem_WriteTrace(&actor->handle,
+                OVERWORLD_ACTOR_EVENT_MOTION_STARTED,
+                OVERWORLD_ACTOR_REASON_OK,
+                plan->kind,
+                plan->duration);
+        }
+        break;
     default:
         return OVERWORLD_ACTOR_RESULT_REJECTED;
     }
     return OVERWORLD_ACTOR_RESULT_OK;
 }
 
-OverworldMotionDecision OverworldActorSystem_BeginLegacyMotion(
+OverworldMotionDecision OverworldActorSystem_RequestWildMotion(
     OverworldWildSpawnState *state,
     int slot,
     const OverworldWildBehaviorProfileData *lane,
@@ -475,8 +700,10 @@ OverworldMotionDecision OverworldActorSystem_BeginLegacyMotion(
     u8 arcHeightQ4,
     u8 facing)
 {
-    OverworldActorLegacyMotionPrefix *runtime;
-    OverworldMotionPlan plan;
+    OverworldActorWildMotionPrefix *runtime;
+    OverworldActorMotionServiceCall call;
+    OverworldMotionIntent intent;
+    OverworldMotionCandidate candidate;
 
     if (state == NULL || state->movementRuntimeState == NULL || lane == NULL
         || (u32)slot >= OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
@@ -485,69 +712,52 @@ OverworldMotionDecision OverworldActorSystem_BeginLegacyMotion(
         return OVERWORLD_MOTION_DECISION_PROFILE;
     }
     ActorSystem_EnsureInitialized();
-    runtime = ACTOR_LEGACY_RUNTIME(state);
-    ActorSystem_Zero(&plan, sizeof(plan));
-    plan.version = OVERWORLD_MOTION_MODEL_VERSION;
-    plan.kind = kind;
-    plan.facing = facing;
-    plan.fieldEpoch = gOverworldActorSystemState.fieldEpoch;
-    plan.startX = runtime->movementCustomJumpStartX[slot];
-    plan.startY = runtime->movementCustomJumpStartY[slot];
-    plan.targetX = runtime->movementCustomJumpTargetX[slot];
-    plan.targetY = runtime->movementCustomJumpTargetY[slot];
-    plan.startBaseY = runtime->movementCustomJumpStartBaseY[slot];
-    plan.targetBaseY = runtime->movementCustomJumpTargetBaseY[slot];
-    plan.duration = runtime->movementCustomJumpFrameCounts[slot];
-    plan.direction = state->movementPendingDirections[slot];
-    plan.distance = state->movementPendingDistances[slot];
-    plan.arcHeightQ4 = arcHeightQ4;
-    plan.spinSpeed = runtime->movementCustomJumpSpinSpeeds[slot]
-        & ACTOR_LEGACY_SPIN_SPEED_MASK;
-    plan.swayWidth = runtime->movementCustomJumpSpinSpeeds[slot]
-        >> ACTOR_LEGACY_SWAY_WIDTH_SHIFT;
-    plan.visibilityPolicy = visibilityPolicy;
-    plan.pauseFrames = kind == OVERWORLD_MOTION_KIND_WALK
+    runtime = ACTOR_WILD_RUNTIME(state);
+    ActorSystem_Zero(&intent, sizeof(intent));
+    intent.version = OVERWORLD_MOTION_MODEL_VERSION;
+    intent.kind = kind;
+    intent.facing = facing;
+    intent.fieldEpoch = gOverworldActorSystemState.fieldEpoch;
+    intent.duration = runtime->movementCustomJumpFrameCounts[slot];
+    intent.arcHeightQ4 = arcHeightQ4;
+    intent.spinSpeed = runtime->movementCustomJumpSpinSpeeds[slot]
+        & ACTOR_WILD_SPIN_SPEED_MASK;
+    intent.swayWidth = runtime->movementCustomJumpSpinSpeeds[slot]
+        >> ACTOR_WILD_SWAY_WIDTH_SHIFT;
+    intent.visibilityPolicy = visibilityPolicy;
+    intent.pauseFrames = kind == OVERWORLD_MOTION_KIND_WALK
         ? lane->walkPause
         : kind == OVERWORLD_MOTION_KIND_TELEPORT
             ? lane->teleportPause
             : lane->hopPause;
-    plan.pathAdvancePolicy = OVERWORLD_MOTION_PATH_ADVANCE_AUTHORITY;
-    plan.commitPolicy = kind == OVERWORLD_MOTION_KIND_REPOSITION
+    intent.pathAdvancePolicy = OVERWORLD_MOTION_PATH_ADVANCE_AUTHORITY;
+    intent.commitPolicy = kind == OVERWORLD_MOTION_KIND_REPOSITION
         ? OVERWORLD_MOTION_COMMIT_NO_CHAIN
         : OVERWORLD_MOTION_COMMIT_NORMAL;
-    if (gOverworldActorSystemState.motions[slot].phase
-            == OVERWORLD_MOTION_PHASE_SUSPENDED
-        && gOverworldActorSystemState.motions[slot].plan.fieldEpoch
-            != gOverworldActorSystemState.fieldEpoch) {
-        OverworldMotion_Cancel(
-            &gOverworldActorSystemState.motions[slot],
-            OVERWORLD_ACTOR_REASON_STALE_FIELD);
-    }
-    return OverworldMotion_Begin(
-        &gOverworldActorSystemState.motions[slot],
-        &plan);
-}
 
-static u8 ActorSystem_LegacyMotionKind(
-    const OverworldWildSpawnState *state,
-    int slot)
-{
-    const OverworldActorLegacyMotionPrefix *runtime;
+    ActorSystem_Zero(&candidate, sizeof(candidate));
+    candidate.targetX = runtime->movementCustomJumpTargetX[slot];
+    candidate.targetY = runtime->movementCustomJumpTargetY[slot];
+    candidate.targetBaseY = runtime->movementCustomJumpTargetBaseY[slot];
+    candidate.direction = state->movementPendingDirections[slot];
+    candidate.distance = state->movementPendingDistances[slot];
 
-    if (state->movementRuntimeState == NULL) {
-        return OVERWORLD_ACTOR_MOTION_NONE;
+    ActorSystem_Zero(&call, sizeof(call));
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST;
+    call.actorSlot = (u8)slot;
+    call.candidateCount = 1;
+    call.startX = runtime->movementCustomJumpStartX[slot];
+    call.startY = runtime->movementCustomJumpStartY[slot];
+    call.startBaseY = runtime->movementCustomJumpStartBaseY[slot];
+    call.intent = &intent;
+    call.candidates = &candidate;
+    if (OverworldActorSystem_MotionDispatchImpl(&call)
+        != OVERWORLD_ACTOR_RESULT_OK) {
+        return OVERWORLD_MOTION_DECISION_PROFILE;
     }
-    runtime = ACTOR_LEGACY_RUNTIME(state);
-    if (runtime->movementCustomJumpActive[slot]
-        || runtime->movementCustomJumpPrepActive[slot]) {
-        return state->movementTeleportHidden[slot]
-                || state->movementTeleportFlickerObjects[slot] != NULL
-            ? OVERWORLD_ACTOR_MOTION_TELEPORT
-            : OVERWORLD_ACTOR_MOTION_HOP;
-    }
-    return (state->movementInProgressMask & (1u << slot)) != 0
-        ? OVERWORLD_ACTOR_MOTION_WALK
-        : OVERWORLD_ACTOR_MOTION_NONE;
+    return (OverworldMotionDecision)call.decision;
 }
 
 static void ActorSystem_FillLegacyActorView(
@@ -556,11 +766,13 @@ static void ActorSystem_FillLegacyActorView(
     int slot,
     OverworldActorStateSnapshot *view)
 {
+    OverworldActorRuntimeSlot *actorSlot =
+        &gOverworldActorSystemState.slots[slot];
+    const OverworldMotionState *motion = &actorSlot->motion;
     OverworldWildSpawn *spawn = &state->spawns[slot];
     LocalMapObject *object = spawn->object;
     BOOL mounted = slot == OW_WILD_FOLLOWER_SLOT
         && OVERWORLD_MOUNT_OVERLAY_ENTRY->isActive();
-    u8 motionKind;
 
     ActorSystem_Zero(view, sizeof(*view));
     view->version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
@@ -579,6 +791,12 @@ static void ActorSystem_FillLegacyActorView(
             : OVERWORLD_ACTOR_ROLE_WILD;
     view->lane = state->movementSpotStates[slot];
     view->controllerState = state->movementSpotStates[slot];
+    view->behaviorFingerprint =
+        gOverworldActorSystemState.policies[slot].behaviorFingerprint;
+    view->matchedLayerMask =
+        gOverworldActorSystemState.policies[slot].matchedLayerMask;
+    view->streamState =
+        gOverworldActorSystemState.policies[slot].streamState;
     view->presentationAttached = object != NULL
         && spawn->mapId == fieldSystem->location->mapId;
     view->active = TRUE;
@@ -590,26 +808,31 @@ static void ActorSystem_FillLegacyActorView(
     if (object == NULL) {
         return;
     }
-    view->logicalX = (s16)object->xCurr;
-    view->logicalY = (s16)object->yCurr;
+    if (actorSlot->snapshot.active
+        && motion->phase != OVERWORLD_MOTION_PHASE_IDLE
+        && motion->phase != OVERWORLD_MOTION_PHASE_CANCELED) {
+        /* The actor model owns logical position until the engine reaches its
+         * real movement boundary. Do not let an older engine tile undo a
+         * shared path advance while the motion is active. */
+        view->logicalX = actorSlot->snapshot.logicalX;
+        view->logicalY = actorSlot->snapshot.logicalY;
+    } else {
+        view->logicalX = (s16)object->xCurr;
+        view->logicalY = (s16)object->yCurr;
+    }
     view->renderX = (s16)((s32)object->posVec[0] >> 16);
     view->renderY = (s16)((s32)object->posVec[2] >> 16);
-    motionKind = ActorSystem_LegacyMotionKind(state, slot);
-    view->motionKind = motionKind;
-    view->motionPhase = motionKind == OVERWORLD_ACTOR_MOTION_NONE
-        ? OVERWORLD_ACTOR_PHASE_IDLE
-        : OVERWORLD_ACTOR_PHASE_MOVING;
-    if (state->movementRuntimeState != NULL
-        && ACTOR_LEGACY_RUNTIME(state)->movementCustomJumpActive[slot]) {
-        const OverworldActorLegacyMotionPrefix *runtime =
-            ACTOR_LEGACY_RUNTIME(state);
-
-        view->originX = runtime->movementCustomJumpStartX[slot];
-        view->originY = runtime->movementCustomJumpStartY[slot];
-        view->targetX = runtime->movementCustomJumpTargetX[slot];
-        view->targetY = runtime->movementCustomJumpTargetY[slot];
-        view->motionElapsed = runtime->movementCustomJumpElapsedFrames[slot];
-        view->motionDuration = runtime->movementCustomJumpFrameCounts[slot];
+    view->motionPhase = motion->phase;
+    if (motion->phase != OVERWORLD_MOTION_PHASE_IDLE
+        && motion->phase != OVERWORLD_MOTION_PHASE_CANCELED) {
+        view->motionKind = motion->plan.kind;
+        view->originX = motion->plan.startX;
+        view->originY = motion->plan.startY;
+        view->targetX = motion->plan.targetX;
+        view->targetY = motion->plan.targetY;
+        view->motionElapsed = motion->elapsed;
+        view->motionDuration = motion->plan.duration;
+        view->reservationId = motion->plan.reservationId;
     }
 }
 
@@ -621,7 +844,7 @@ static void ActorSystem_SyncLegacyActor(
     OverworldActorStateSnapshot view;
     OverworldActorStateSnapshot previous;
     OverworldActorStateSnapshot *current =
-        &gOverworldActorSystemState.actors[slot];
+        &gOverworldActorSystemState.slots[slot].snapshot;
     OverworldActorHandle handle;
 
     if (!state->spawns[slot].active) {
@@ -651,43 +874,79 @@ static void ActorSystem_SyncLegacyActor(
 
     previous = *current;
     view.handle = current->handle;
+    if (view.behaviorFingerprint == 0) {
+        view.behaviorFingerprint = current->behaviorFingerprint;
+        view.matchedLayerMask = current->matchedLayerMask;
+    }
     view.commitSequence = current->commitSequence;
     view.lastCommandSequence = current->lastCommandSequence;
+    view.authorityGeneration = current->authorityGeneration;
+    view.engineAnchorGeneration = current->engineAnchorGeneration;
+    view.presentationGeneration = current->presentationGeneration;
+    if (previous.role != view.role) {
+        view.authorityGeneration++;
+        view.engineAnchorGeneration++;
+    }
+    if (previous.presentationAttached != view.presentationAttached) {
+        view.presentationGeneration++;
+    }
+    view.lastIntent = current->lastIntent;
+    view.lastDecision = current->lastDecision;
+    view.lastCancelReason = current->lastCancelReason;
     (void)OverworldActorSystem_CompatibilityUpdateImpl(
         &current->handle,
         &view);
-    if (previous.motionPhase == OVERWORLD_ACTOR_PHASE_IDLE
-        && view.motionPhase == OVERWORLD_ACTOR_PHASE_MOVING) {
+    if (previous.lane != view.lane) {
         ActorSystem_WriteTrace(&view.handle,
-            OVERWORLD_ACTOR_EVENT_MOTION_STARTED,
+            OVERWORLD_ACTOR_EVENT_LANE_CHANGED,
             OVERWORLD_ACTOR_REASON_OK,
-            view.motionKind,
-            view.motionDuration);
+            previous.lane,
+            view.lane);
     }
-    if (previous.logicalX != view.logicalX
-        || previous.logicalY != view.logicalY) {
+    if (previous.behaviorFingerprint != view.behaviorFingerprint
+        || previous.matchedLayerMask != view.matchedLayerMask) {
         ActorSystem_WriteTrace(&view.handle,
-            OVERWORLD_ACTOR_EVENT_PATH_ADVANCED,
+            OVERWORLD_ACTOR_EVENT_PROFILE_RESOLVED,
             OVERWORLD_ACTOR_REASON_OK,
-            ((u32)(u16)view.logicalX << 16) | (u16)view.logicalY,
-            view.motionKind);
+            view.behaviorFingerprint,
+            view.matchedLayerMask);
     }
-    if (previous.motionPhase == OVERWORLD_ACTOR_PHASE_MOVING
-        && view.motionPhase == OVERWORLD_ACTOR_PHASE_IDLE) {
-        current->commitSequence++;
+    if (previous.streamState != view.streamState) {
         ActorSystem_WriteTrace(&view.handle,
-            OVERWORLD_ACTOR_EVENT_LOGICAL_COMMIT,
+            view.streamState == OVERWORLD_ACTOR_STREAM_WAITING
+                ? OVERWORLD_ACTOR_EVENT_STREAM_WAITING
+                : OVERWORLD_ACTOR_EVENT_STREAM_ADVANCED,
             OVERWORLD_ACTOR_REASON_OK,
-            current->commitSequence,
-            previous.motionKind);
-        ActorSystem_WriteTrace(&view.handle,
-            OVERWORLD_ACTOR_EVENT_MOTION_FINISHED,
-            OVERWORLD_ACTOR_REASON_OK,
-            current->commitSequence,
-            previous.motionKind);
+            previous.streamState,
+            view.streamState);
     }
-    if (previous.renderX != view.renderX
-        || previous.renderY != view.renderY) {
+    if (gOverworldActorSystemState.slots[slot].lastWorldEffectSequence
+        != gOverworldActorSystemState.policies[slot].worldEffectSequence) {
+        gOverworldActorSystemState.slots[slot].lastWorldEffectSequence =
+            gOverworldActorSystemState.policies[slot].worldEffectSequence;
+        ActorSystem_WriteTrace(&view.handle,
+            OVERWORLD_ACTOR_EVENT_WORLD_EFFECT,
+            OVERWORLD_ACTOR_REASON_OK,
+            gOverworldActorSystemState.policies[slot].worldEffectId,
+            gOverworldActorSystemState.policies[slot].worldEffectSequence);
+    }
+    if (previous.role != view.role) {
+        ActorSystem_WriteTrace(&view.handle,
+            OVERWORLD_ACTOR_EVENT_ACTOR_REBOUND,
+            OVERWORLD_ACTOR_REASON_OK,
+            previous.role,
+            view.role);
+    }
+    if (previous.inputOwnership != view.inputOwnership) {
+        ActorSystem_WriteTrace(&view.handle,
+            OVERWORLD_ACTOR_EVENT_CONTROL_REBOUND,
+            OVERWORLD_ACTOR_REASON_OK,
+            previous.inputOwnership,
+            view.inputOwnership);
+    }
+    if (previous.presentationAttached != view.presentationAttached
+        || (view.presentationAttached
+            && previous.motionPhase != view.motionPhase)) {
         ActorSystem_WriteTrace(&view.handle,
             OVERWORLD_ACTOR_EVENT_PRESENTATION_SYNCED,
             OVERWORLD_ACTOR_REASON_OK,
@@ -909,14 +1168,6 @@ static const OverworldWildMovementPolicyEntry sActorMovementPolicy = {
     ActorSystem_PrepareChainPause,
 };
 
-static BOOL ActorSystem_ValidateMovementPolicy(void)
-{
-    return sActorMovementPolicy.buildLookPlan != NULL
-        && sActorMovementPolicy.resolveLook != NULL
-        && sActorMovementPolicy.chooseWanderDirection != NULL
-        && sActorMovementPolicy.prepareChainPause != NULL;
-}
-
 OverworldActorResult OverworldActorSystem_ValidateImpl(void)
 {
     ActorSystem_EnsureInitialized();
@@ -959,6 +1210,12 @@ OverworldActorResult OverworldActorSystem_ValidateImpl(void)
             != sizeof(OverworldActorMovementPolicyServiceEntry)
         || OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->version
             != OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION
+        || OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->states
+            != gOverworldActorSystemState.policies
+        || sActorMovementPolicy.buildLookPlan == NULL
+        || sActorMovementPolicy.resolveLook == NULL
+        || sActorMovementPolicy.chooseWanderDirection == NULL
+        || sActorMovementPolicy.prepareChainPause == NULL
         || gOverworldActorSystemState.magic
             != OVERWORLD_ACTOR_SYSTEM_STATE_MAGIC
         || gOverworldActorSystemState.size != sizeof(gOverworldActorSystemState)
@@ -995,6 +1252,15 @@ OverworldActorResult OverworldActorSystem_ApplyImpl(
     if (prior != NULL) {
         *reply = *prior;
         return (OverworldActorResult)reply->result;
+    }
+    if (!ActorSystem_SequenceIsNewer(
+            command->sequence, state->lastAcknowledgedSequence)) {
+        reason = OVERWORLD_ACTOR_REASON_STALE_SEQUENCE;
+        ActorSystem_FillReply(reply, command, OVERWORLD_ACTOR_RESULT_REJECTED,
+            reason);
+        ActorSystem_RememberReply(reply);
+        state->lastReason = reason;
+        return OVERWORLD_ACTOR_RESULT_REJECTED;
     }
     if (command->expectedFieldEpoch != 0
         && command->expectedFieldEpoch != state->fieldEpoch) {
@@ -1058,16 +1324,8 @@ static u16 ActorSystem_RunCommand(const OverworldActorCommand *command)
         }
         reason = (u16)command->valueA;
         actor->lastCommandSequence = command->sequence;
-        actor->motionPhase = OVERWORLD_ACTOR_PHASE_CANCELED;
-        actor->inputOwnership = 0;
-        actor->reservationId = 0;
-        actor->lastCancelReason = (u8)reason;
         actor->lastDecision = (u8)reason;
-        ActorSystem_WriteTrace(&actor->handle,
-            OVERWORLD_ACTOR_EVENT_MOTION_CANCELED, reason,
-            actor->motionKind, actor->commitSequence);
-        ActorSystem_WriteTrace(&actor->handle,
-            OVERWORLD_ACTOR_EVENT_CONTROL_RETURNED, reason, 0, 0);
+        ActorSystem_CancelActor(actor, reason);
         break;
     case OVERWORLD_ACTOR_COMMAND_DETACH:
         actor = ActorSystem_FindActor(&command->actor);
@@ -1124,9 +1382,18 @@ OverworldActorFrameResult OverworldActorSystem_TickImpl(
     const OverworldActorFrame *frame)
 {
     OverworldActorSystemState *state;
+    OverworldActorRuntimeSlot *slot;
+    OverworldActorStateSnapshot *actor;
+    OverworldMotionSample sample;
     OverworldActorCommand command;
     BOOL traceWasArmed;
+    BOOL advanceMotion;
+    BOOL motionPending = FALSE;
     u16 reason;
+    u16 tickFlags;
+    u8 phaseBefore;
+    s16 logicalX;
+    s16 logicalY;
     u32 index;
 
     ActorSystem_EnsureInitialized();
@@ -1141,7 +1408,12 @@ OverworldActorFrameResult OverworldActorSystem_TickImpl(
         state->lastReason = OVERWORLD_ACTOR_REASON_CONTEXT_LOST;
         return OVERWORLD_ACTOR_FRAME_CONTEXT_LOST;
     }
+    if (frame->frame < state->frame) {
+        state->lastReason = OVERWORLD_ACTOR_REASON_INVALID_ARGUMENT;
+        return OVERWORLD_ACTOR_FRAME_INVALID;
+    }
 
+    advanceMotion = frame->frame != state->frame;
     state->frame = frame->frame;
     traceWasArmed = state->trace.armed != 0;
     while (state->queueCount != 0) {
@@ -1160,14 +1432,72 @@ OverworldActorFrameResult OverworldActorSystem_TickImpl(
     }
 
     for (index = 0; index < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS; index++) {
-        if (state->actors[index].active != 0
-            && state->actors[index].motionPhase != OVERWORLD_ACTOR_PHASE_IDLE
-            && state->actors[index].motionPhase
-                != OVERWORLD_ACTOR_PHASE_CANCELED) {
-            return OVERWORLD_ACTOR_FRAME_PENDING;
+        slot = &state->slots[index];
+        actor = &slot->snapshot;
+        phaseBefore = slot->motion.phase;
+        tickFlags = 0;
+        if (advanceMotion) {
+            tickFlags = OverworldMotion_Tick(
+                &slot->motion,
+                state->fieldEpoch,
+                &sample);
+            if ((tickFlags & OVERWORLD_MOTION_TICK_PATH_ADVANCED) != 0) {
+                if (slot->pendingFirstPathAdvance == 0) {
+                    slot->pendingFirstPathAdvance = sample.firstPathAdvance;
+                }
+                slot->pendingLastPathAdvance = sample.lastPathAdvance;
+                if (actor->active) {
+                    if (OverworldMotion_GetPathAdvanceTile(
+                            &slot->motion.plan,
+                            sample.lastPathAdvance,
+                            &logicalX,
+                            &logicalY)) {
+                        actor->logicalX = logicalX;
+                        actor->logicalY = logicalY;
+                    }
+                    ActorSystem_WriteTrace(&actor->handle,
+                        OVERWORLD_ACTOR_EVENT_PATH_ADVANCED,
+                        OVERWORLD_ACTOR_REASON_OK,
+                        ((u32)sample.firstPathAdvance << 16)
+                            | sample.lastPathAdvance,
+                        slot->motion.plan.kind);
+                }
+            }
+        }
+        actor->motionPhase = slot->motion.phase;
+        actor->motionElapsed = slot->motion.elapsed;
+        actor->motionDuration = slot->motion.plan.duration;
+        if (slot->motion.phase != OVERWORLD_MOTION_PHASE_IDLE
+            && slot->motion.phase != OVERWORLD_MOTION_PHASE_CANCELED) {
+            actor->motionKind = slot->motion.plan.kind;
+            actor->originX = slot->motion.plan.startX;
+            actor->originY = slot->motion.plan.startY;
+            actor->targetX = slot->motion.plan.targetX;
+            actor->targetY = slot->motion.plan.targetY;
+            actor->reservationId = slot->motion.plan.reservationId;
+        } else {
+            actor->motionKind = OVERWORLD_ACTOR_MOTION_NONE;
+            actor->reservationId = 0;
+            actor->streamState = OVERWORLD_ACTOR_STREAM_IDLE;
+            state->policies[index].streamState = OVERWORLD_ACTOR_STREAM_IDLE;
+        }
+        if (advanceMotion
+            && phaseBefore == OVERWORLD_MOTION_PHASE_SETTLING
+            && slot->motion.phase == OVERWORLD_MOTION_PHASE_IDLE
+            && actor->active) {
+            ActorSystem_WriteTerminalTrace(actor,
+                OVERWORLD_ACTOR_EVENT_MOTION_FINISHED,
+                OVERWORLD_ACTOR_REASON_OK,
+                actor->commitSequence,
+                slot->motion.plan.kind);
+        }
+        if (actor->active != 0
+            && actor->motionPhase != OVERWORLD_ACTOR_PHASE_IDLE
+            && actor->motionPhase != OVERWORLD_ACTOR_PHASE_CANCELED) {
+            motionPending = TRUE;
         }
     }
-    return state->queueCount != 0
+    return motionPending || state->queueCount != 0
         ? OVERWORLD_ACTOR_FRAME_PENDING
         : OVERWORLD_ACTOR_FRAME_OK;
 }
@@ -1234,8 +1564,9 @@ OverworldActorResult OverworldActorSystem_InspectImpl(
         break;
     case OVERWORLD_ACTOR_INSPECT_ACTOR_INDEX:
         if (query->index < OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
-            && gOverworldActorSystemState.actors[query->index].active != 0) {
-            actor = &gOverworldActorSystemState.actors[query->index];
+            && gOverworldActorSystemState.slots[query->index]
+                .snapshot.active != 0) {
+            actor = &gOverworldActorSystemState.slots[query->index].snapshot;
         }
         break;
     case OVERWORLD_ACTOR_INSPECT_TRACE_EVENT:
@@ -1303,7 +1634,7 @@ const OverworldActorSystemDebugLayout gOverworldActorSystemDebugLayout
         sizeof(OverworldActorTraceEvent),
         sizeof(OverworldActorSystemState),
         __builtin_offsetof(OverworldActorSystemState, fieldEpoch),
-        __builtin_offsetof(OverworldActorSystemState, actors),
+        __builtin_offsetof(OverworldActorSystemState, slots),
         __builtin_offsetof(OverworldActorSystemState, trace),
         __builtin_offsetof(OverworldActorSystemState, events),
         __builtin_offsetof(OverworldActorSystemState, commands),
@@ -1311,8 +1642,8 @@ const OverworldActorSystemDebugLayout gOverworldActorSystemDebugLayout
             - OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE,
         sizeof(OverworldActorReservedServiceEntry),
         OVERWORLD_ACTOR_SYSTEM_SERVICE_COUNT,
-        0x1000,
-        0,
+        0xF00,
+        sizeof(OverworldActorRuntimeSlot),
     };
 
 const OverworldActorResolverServiceEntry
@@ -1331,7 +1662,7 @@ const OverworldActorMotionServiceEntry gOverworldActorSystemMotionServiceEntry
         OVERWORLD_ACTOR_MOTION_SERVICE_VERSION,
         sizeof(OverworldActorMotionServiceEntry),
         OverworldActorSystem_MotionDispatchImpl,
-        OverworldActorSystem_BeginLegacyMotion,
+        OverworldActorSystem_RequestWildMotion,
     };
 
 const OverworldActorPopulationServiceEntry
@@ -1351,5 +1682,5 @@ const OverworldActorMovementPolicyServiceEntry
         OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION,
         sizeof(OverworldActorMovementPolicyServiceEntry),
         &sActorMovementPolicy,
-        ActorSystem_ValidateMovementPolicy,
+        gOverworldActorSystemState.policies,
     };

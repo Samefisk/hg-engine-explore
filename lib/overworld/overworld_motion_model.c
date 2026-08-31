@@ -411,6 +411,27 @@ static void OverworldMotion_Sample(
             : TRUE;
 }
 
+OverworldMotionDecision OverworldMotion_Read(
+    const OverworldMotionState *state,
+    u16 fieldEpoch,
+    OverworldMotionSample *sample)
+{
+    if (sample == NULL) {
+        return OVERWORLD_MOTION_DECISION_PROFILE;
+    }
+    memset(sample, 0, sizeof(*sample));
+    if (state == NULL
+        || state->phase == OVERWORLD_MOTION_PHASE_IDLE
+        || state->phase == OVERWORLD_MOTION_PHASE_CANCELED) {
+        return OVERWORLD_MOTION_DECISION_NO_CANDIDATE;
+    }
+    if (state->plan.fieldEpoch != fieldEpoch) {
+        return OVERWORLD_MOTION_DECISION_STALE_FIELD;
+    }
+    OverworldMotion_Sample(state, sample);
+    return OVERWORLD_MOTION_DECISION_ACCEPTED;
+}
+
 u16 OverworldMotion_Tick(
     OverworldMotionState *state,
     u16 fieldEpoch,

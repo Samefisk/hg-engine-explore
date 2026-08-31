@@ -164,3 +164,72 @@ def resolve(
     if not isinstance(result, dict):
         raise RuntimeError("resolver host did not return a JSON object")
     return result
+
+
+def resolve_many(
+    blob: Path | None,
+    requests: list[Mapping[str, Any]],
+    *,
+    root: Path | None = None,
+    executable: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Resolve many requests in one native process and one blob load."""
+
+    if not requests:
+        return []
+    root = (root or _repo_root()).resolve()
+    executable = executable or build(root)
+    arguments = [str(executable), "--batch"]
+    if blob is not None:
+        blob = blob.resolve()
+        if not blob.is_file():
+            raise FileNotFoundError(f"behavior blob does not exist: {blob}")
+        arguments.extend(["--blob", str(blob)])
+
+    lines: list[str] = []
+    for request in requests:
+        behavior_class = request.get("behaviorClass", "auto")
+        if behavior_class == "auto":
+            behavior_class = 0xFF
+        values = (
+            request.get("species", 0),
+            request.get("level", 1),
+            request.get("terrain", 0),
+            request.get("shiny", 0),
+            request.get("groupFlags", 0),
+            request.get("conditionTerrainMask", 0),
+            request.get("forcedOverrideMask", 0),
+            behavior_class,
+        )
+        try:
+            lines.append(" ".join(str(int(value)) for value in values))
+        except (TypeError, ValueError) as error:
+            raise ValueError("native resolver request values must be integers") from error
+
+    completed = subprocess.run(
+        arguments,
+        cwd=root,
+        input="\n".join(lines) + "\n",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(f"resolver host batch failed: {detail}")
+    output_lines = [line for line in completed.stdout.splitlines() if line.strip()]
+    if len(output_lines) != len(requests):
+        raise RuntimeError(
+            "resolver host returned "
+            f"{len(output_lines)} batch results for {len(requests)} requests"
+        )
+    results: list[dict[str, Any]] = []
+    for line in output_lines:
+        try:
+            result = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise RuntimeError("resolver host returned invalid batch JSON") from error
+        if not isinstance(result, dict):
+            raise RuntimeError("resolver host batch result was not a JSON object")
+        results.append(result)
+    return results

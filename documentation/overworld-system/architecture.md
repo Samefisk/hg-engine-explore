@@ -1,6 +1,12 @@
 # Overworld Pokémon System Architecture
 
-## Current design
+## Target design and current migration boundary
+
+This document defines the target ownership model. It is not a claim that every
+adapter has migrated. The phase status and current owners are recorded in
+[`roadmap.md`](roadmap.md). Until a roadmap exit gate passes, the named legacy
+adapter remains the current engine owner even when this document uses the
+present tense to define the target contract.
 
 The system has one deep `OverworldActorSystem` module with a small external
 interface and private internal modules. It is the stable home for overworld
@@ -24,21 +30,22 @@ OverworldActorResult OverworldActorSystem_Inspect(
 
 - `Apply` is the only external lifecycle request path. It accepts a bounded,
   value-only command and queues it for the next `Tick`. The reply acknowledges
-  the sequence ID. A duplicate sequence returns the previous acknowledgement.
+  the sequence ID. Commands use one strictly increasing, wrap-safe sequence.
+  A duplicate still in the acknowledgement ring returns its previous reply;
+  an older replay outside that bounded ring is rejected as `STALE_SEQUENCE`.
 - `Tick` runs once per usable field frame, applies queued commands, establishes
-  the field boundary, publishes compatibility state, and reports whether more
-  frame work is pending. During migration, the legacy role adapters advance
-  motion through the private actor motion service. Moving that execution into
-  `Tick` is a later ownership switch and must not double-tick compatibility
-  motion.
+  the field boundary, advances every actor motion timeline exactly once, and
+  reports whether more frame work is pending. Engine adapters read the shared
+  sample, apply it to field objects, and acknowledge the real engine completion
+  boundary. They do not advance elapsed motion time.
 - `Inspect` is read-only and typed. A query can enumerate actors or inspect one
   actor, the trace ring, population state, or system state.
 
 Production uses a resident singleton. Host instance creation is private to the
 test adapter. Public commands use actor handles, field epochs, and semantic
 values. They never contain `FieldSystem *`, `LocalMapObject *`, overlay pointers,
-or private runtime offsets. The facade rejects reentrant calls. Invalid context
-fails closed and returns normal player control.
+or private runtime offsets. Invalid context fails closed and returns normal
+player control.
 
 A retryable `Apply` result means the command was not queued or acknowledged.
 A retryable motion decision leaves the intent pending and does not consume
@@ -63,9 +70,10 @@ The actor facade must not become a new monolith. Its implementation is a tower o
 
 Owns profile field names, units, bounds, lane use, override operators, enum values, feature IDs, and binary layout generation.
 
-The field schema is named data and generates the C and host metadata. Positional
-C profile records remain the compatibility value source until the separate
-authoring-data migration is complete.
+The field schema is named data and generates C and host metadata. Named profile
+values, rules, targets, members, operators, and conditional states live in
+`data/overworld_behavior_profiles.json`. Positional C profile records are
+generated ROM compatibility output and are not an authoring source.
 
 ```text
 profile
@@ -114,10 +122,10 @@ Required order:
 10. Resolve mechanical primitives.
 11. Produce a fingerprint and ordered provenance.
 
-The resolver is portable C compiled for ARM and the Workshop V2 host adapter.
-Both read the same compact behavior layout. The Workshop parses source for
-editor labels and resolver context. Its legacy endpoints still have a Python
-compatibility resolver; deleting that second path is a pending Phase 2 gate.
+The resolver is one portable C source compiled for ARM and for the Workshop
+host adapter. Both read the same generated compact behavior layout. The
+Workshop uses Python only to collect context and project the C result into
+editor labels; it contains no second profile-composition policy.
 
 Current mount resolution first resolves the follower with the forced `Follower
 Pokemon` override layer. Mount begin then snapshots the resolved Owner lane.
@@ -278,8 +286,8 @@ Planner families are private strategies, not public plugin APIs. Fixed overlay e
 The conceptual module uses one small resident code home and several unloadable
 engine adapters.
 
-- Overlay 158 is resident at `0x023B6B00-0x023BAB00`. Its first `0x3000` bytes
-  hold code and fixed entries; its last `0x1000` bytes hold bounded state.
+- Overlay 158 is resident at `0x023B6B00-0x023BAB00`. Its first `0x3100` bytes
+  hold code and fixed entries; its last `0x0F00` bytes hold bounded state.
 - The public facade, compatibility entry, debug layout, resolver, motion,
   population, and movement-policy entries have fixed addresses and
   magic/version/size checks.
@@ -295,9 +303,10 @@ engine adapters.
 
 ## Target frame order
 
-After compatibility execution is retired, every usable field frame follows one
-order. The current facade performs the field-boundary and command phases, while
-legacy role adapters still advance motion through the private service:
+Every usable field frame targets one order. The current facade owns the
+field-boundary, command, and motion-clock phases. Compatibility adapters still
+own some candidate preparation, engine application, transition, and reaction
+steps named below:
 
 1. Validate field epoch and actor handles.
 2. Apply pending lifecycle commands.
@@ -336,6 +345,7 @@ The minimum stable reasons are:
 - `DATA_UNAVAILABLE`
 - `NO_MEMORY`
 - `CONTEXT_LOST`
+- `STALE_SEQUENCE`
 
 Cancel is idempotent. It leaves authority on a complete tile, releases reservations, clears engine movement ownership, restores engine anchors and presentation, and records one reason.
 

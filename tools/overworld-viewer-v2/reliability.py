@@ -1,9 +1,9 @@
 """Reliability primitives for the V2 overworld behavior editor.
 
 The legacy viewer remains the source of truth for parsing and writing the game
-sources.  This module adds the guarantees an editor needs around those calls:
-content revisions, one-writer transactions with rollback, and context-accurate
-profile resolution.
+sources. The portable C resolver is the only profile-composition policy. This
+module adds content revisions, one-writer transactions with rollback, and
+context-accurate profile resolution around those adapters.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import fcntl
-import struct
 import tempfile
 import threading
 import time
@@ -113,7 +112,7 @@ PROFILE_COMMIT_DOMAINS = {"profiles", "profileMemberships", "profileOverrides"}
 
 
 def validate_commit_domains(legacy: ModuleType, domains: set[str]) -> None:
-    """Reparse only the optional source systems touched by a transaction."""
+    """Reparse touched sources and resolve profile writes through canonical C."""
 
     if domains & PROFILE_COMMIT_DOMAINS:
         legacy.validate_override_profile_source()
@@ -162,6 +161,7 @@ def mutation_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
     """Return all files that any atomic V2 commit domain can write."""
 
     paths = {
+        legacy.BEHAVIOR_CATALOG_SOURCE,
         legacy.BEHAVIOR_DATA_SOURCE,
         legacy.BEHAVIOR_DATA_HEADER,
         legacy.ENCOUNTERS_SOURCE,
@@ -783,92 +783,12 @@ def _stable_layer_id(name: str, override: dict[str, Any], occurrence: int) -> st
     return f"override:{digest}"
 
 
-_NATIVE_PROFILE_LANE_SIZE = 72
-_NATIVE_PRIMITIVE_KEYS = (
-    "spawnLocomotion", "chillLocomotion", "chillTarget", "alertLogic",
-    "alertReaction", "attentiveLocomotion", "attentiveTarget",
-    "activeReaction", "tiredLocomotion", "tiredTarget", "tiredReaction",
-)
+def _override_source_index(profile_order: int) -> int:
+    """Translate the Workshop's one-based order to the resolver's zero-based ID."""
 
-
-def _native_profile_value(
-    legacy: ModuleType,
-    macros: dict[str, int],
-    field: str,
-    value: int,
-) -> dict[str, Any]:
-    for raw in legacy.CANONICAL_PROFILE_FIELD_RAWS.get(field, ()):
-        try:
-            if legacy.eval_c_expr(raw, macros) == value:
-                return legacy.make_value(raw, field, macros)
-        except Exception:
-            continue
-    return legacy.make_value(str(value), field, macros)
-
-
-def _decode_native_profile(
-    legacy: ModuleType,
-    macros: dict[str, int],
-    encoded: str,
-    lane: int = 0,
-) -> dict[str, dict[str, Any]]:
-    try:
-        raw = bytes.fromhex(encoded)
-    except ValueError as exc:
-        raise RuntimeError("canonical resolver returned invalid profile bytes") from exc
-    start = lane * _NATIVE_PROFILE_LANE_SIZE
-    payload = raw[start:start + _NATIVE_PROFILE_LANE_SIZE]
-    if len(payload) != _NATIVE_PROFILE_LANE_SIZE:
-        raise RuntimeError("canonical resolver returned a truncated profile")
-    result: dict[str, dict[str, Any]] = {}
-    for field in legacy._BEHAVIOR_SCHEMA["fields"]:
-        offset = int(field["offset"])
-        value = payload[offset]
-        if field["cType"] == "u16":
-            value = struct.unpack_from("<H", payload, offset)[0]
-        result[field["key"]] = _native_profile_value(
-            legacy, macros, field["key"], value
-        )
-    return result
-
-
-def _native_profile_changes(
-    legacy: ModuleType,
-    before: dict[str, dict[str, Any]],
-    after: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    changes = []
-    for field in legacy.PROFILE_FIELDS:
-        if legacy.numeric(before[field]) == legacy.numeric(after[field]):
-            continue
-        changes.append({
-            "field": field,
-            "label": legacy.FIELD_LABELS[field],
-            "before": before[field],
-            "after": after[field],
-            "relative": False,
-            "delta": None,
-            "operator": "resolved",
-            "operand": None,
-        })
-    return changes
-
-
-def _decode_native_primitives(
-    legacy: ModuleType,
-    macros: dict[str, int],
-    encoded: str,
-) -> dict[str, dict[str, Any]]:
-    try:
-        raw = bytes.fromhex(encoded)
-    except ValueError as exc:
-        raise RuntimeError("canonical resolver returned invalid primitive bytes") from exc
-    if len(raw) != len(_NATIVE_PRIMITIVE_KEYS):
-        raise RuntimeError("canonical resolver returned a truncated primitive set")
-    return {
-        key: legacy.make_value(str(value), key, macros)
-        for key, value in zip(_NATIVE_PRIMITIVE_KEYS, raw)
-    }
+    if profile_order < 1:
+        raise ValueError(f"override profile order must be positive: {profile_order}")
+    return profile_order - 1
 
 
 def resolve_context(
@@ -877,6 +797,9 @@ def resolve_context(
     level_value: str | None,
     terrain_value: str | None,
     shiny_value: str | None,
+    condition_terrain_mask_value: str | None = None,
+    forced_override_mask_value: str | None = None,
+    behavior_class_value: str | None = None,
 ) -> dict[str, Any]:
     """Resolve one real runtime context and expose the complete layer stack."""
 
@@ -928,6 +851,46 @@ def resolve_context(
     if terrain not in set(terrain_values.values()):
         raise ValueError(f"unknown terrain value: {terrain}")
 
+    def resolver_integer(
+        raw_value: str | None,
+        label: str,
+        *,
+        default: int,
+        maximum: int,
+    ) -> int:
+        raw = str(raw_value or "").strip()
+        if not raw:
+            return default
+        try:
+            value = legacy.eval_c_expr(raw, macros)
+        except Exception as exc:
+            raise ValueError(f"invalid {label}: {raw}") from exc
+        if value < 0 or value > maximum:
+            raise ValueError(f"{label} must be from 0 to {maximum}")
+        return value
+
+    condition_terrain_mask = resolver_integer(
+        condition_terrain_mask_value,
+        "condition terrain mask",
+        default=0,
+        maximum=0xFFFF,
+    )
+    forced_override_mask = resolver_integer(
+        forced_override_mask_value,
+        "forced override mask",
+        default=0,
+        maximum=0xFFFFFFFF,
+    )
+    behavior_class_raw = str(behavior_class_value or "").strip()
+    requested_behavior_class: str | int = "auto"
+    if behavior_class_raw and behavior_class_raw.lower() != "auto":
+        requested_behavior_class = resolver_integer(
+            behavior_class_raw,
+            "behavior class",
+            default=macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
+            maximum=0xFF,
+        )
+
     context = {
         "species": species_entry["value"],
         "symbol": symbol,
@@ -937,7 +900,7 @@ def resolve_context(
         "groupFlags": legacy.group_flags_for_species(
             symbol, group_species, species_by_symbol, macros
         ),
-        "behaviorClass": macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
+        "behaviorClass": requested_behavior_class,
     }
     canonical = native_resolver.resolve(
         None,
@@ -947,7 +910,9 @@ def resolve_context(
             "terrain": context["terrain"],
             "shiny": context["shiny"],
             "groupFlags": context["groupFlags"],
-            "behaviorClass": "auto",
+            "conditionTerrainMask": condition_terrain_mask,
+            "forcedOverrideMask": forced_override_mask,
+            "behaviorClass": requested_behavior_class,
         },
         root=legacy.ROOT,
     )
@@ -970,18 +935,18 @@ def resolve_context(
     )
     if owner_base_step is None:
         raise RuntimeError("canonical resolver did not report its owner base profile")
-    base_profile = _decode_native_profile(
-        legacy, macros, owner_base_step["profileHex"]
+    base_profile = legacy.decode_native_profile(
+        macros, owner_base_step["profileHex"]
     )
-    resolved_profile = _decode_native_profile(
-        legacy, macros, canonical["profileHex"], lane=0
+    resolved_profile = legacy.decode_native_profile(
+        macros, canonical["profileHex"], lane=0
     )
     matched_mask = int(canonical.get("matchedOverrideMask", 0))
     applied_mask = int(canonical.get("appliedOverrideMask", 0))
     matched_override_orders = [
         int(override["order"])
         for override in variable_overrides
-        if matched_mask & (1 << int(override["order"]))
+        if matched_mask & (1 << _override_source_index(int(override["order"])))
     ]
 
     runtime_layers: list[dict[str, Any]] = []
@@ -1002,10 +967,10 @@ def resolve_context(
         encoded = step.get("profileHex")
         if lane not in lane_names or not isinstance(encoded, str):
             continue
-        current = _decode_native_profile(legacy, macros, encoded)
+        current = legacy.decode_native_profile(macros, encoded)
         previous = previous_by_lane.get(lane)
-        changes = [] if previous is None else _native_profile_changes(
-            legacy, previous, current
+        changes = [] if previous is None else legacy.native_profile_changes(
+            previous, current
         )
         previous_by_lane[lane] = current
         if kind == 3 and lane == 0:
@@ -1015,11 +980,11 @@ def resolve_context(
         source_index = int(step.get("sourceIndex", -1))
         if kind == 3:
             source_name = override_names.get(
-                source_index, f"Override profile #{source_index}"
+                source_index + 1, f"Override profile #{source_index + 1}"
             )
         elif kind == 4:
             source_name = override_names.get(
-                source_index, f"Conditional profile #{source_index}"
+                source_index + 1, f"Conditional profile #{source_index + 1}"
             )
         else:
             source_name = kind_names.get(kind, f"Resolver step {kind}")
@@ -1048,8 +1013,9 @@ def resolve_context(
         name = override_names.get(
             profile_order, ""
         ) or f"Override profile #{profile_order}"
-        matched = bool(matched_mask & (1 << profile_order))
-        applied = bool(applied_mask & (1 << profile_order))
+        source_index = _override_source_index(profile_order)
+        matched = bool(matched_mask & (1 << source_index))
+        applied = bool(applied_mask & (1 << source_index))
         members = override.get("memberSymbols") or []
         matched_member = symbol if matched and symbol in members else ""
         resolver_layers.append({
@@ -1070,7 +1036,7 @@ def resolve_context(
             "fields": legacy.behavior_override_mask_summary(
                 override["behavior"]
             )["labels"],
-            "changes": changes_by_override.get(profile_order, []),
+            "changes": changes_by_override.get(source_index, []),
         })
 
     class_hits = []
@@ -1114,6 +1080,9 @@ def resolve_context(
             "terrain": {"symbol": terrain_symbol, "value": terrain},
             "shiny": bool(context["shiny"]),
             "groups": group_names,
+            "conditionTerrainMask": condition_terrain_mask,
+            "forcedOverrideMask": forced_override_mask,
+            "requestedBehaviorClass": requested_behavior_class,
         },
         "behaviorClass": class_label,
         "classRuleHits": [
@@ -1126,8 +1095,8 @@ def resolve_context(
         ],
         "baseProfile": legacy.profile_numeric_view(base_profile),
         "resolvedProfile": legacy.profile_numeric_view(resolved_profile),
-        "resolvedPrimitives": _decode_native_primitives(
-            legacy, macros, canonical["primitivesHex"]
+        "resolvedPrimitives": legacy.decode_native_primitives(
+            macros, canonical["primitivesHex"]
         ),
         "resolverLayers": resolver_layers,
         "matchedOverrideOrders": matched_override_orders,

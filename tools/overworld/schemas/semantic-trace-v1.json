@@ -45,6 +45,7 @@
     "16": "CONTEXT_LOST",
     "17": "INVALID_ARGUMENT",
     "18": "QUEUE_FULL",
-    "19": "UNSUPPORTED_COMMAND"
+    "19": "UNSUPPORTED_COMMAND",
+    "20": "STALE_SEQUENCE"
   }
 }

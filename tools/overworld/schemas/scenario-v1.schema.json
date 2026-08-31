@@ -108,6 +108,30 @@
             },
             "result": {"enum": ["exit-zero", "json-passed"]}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "checks"],
+          "properties": {
+            "kind": {"const": "actor-observation"},
+            "checks": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "trace-window-complete",
+                  "terminal-result",
+                  "no-commit-after-cancel",
+                  "control-returned",
+                  "single-motion-owner",
+                  "field-epoch-current",
+                  "presentation-attached"
+                ]
+              }
+            }
+          }
         }
       ]
     }

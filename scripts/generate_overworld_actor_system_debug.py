@@ -15,13 +15,14 @@ import tempfile
 OVERLAY_ID = 158
 OVERLAY_BASE = 0x023B6B00
 OVERLAY_END = 0x023BAB00
-FILE_SIZE = 0x3000
+FILE_SIZE = 0x3100
 STATE_ADDRESS = OVERLAY_BASE + FILE_SIZE
 ENTRY_ADDRESS = OVERLAY_BASE
 COMPAT_ADDRESS = OVERLAY_BASE + 0x18
 DEBUG_ADDRESS = OVERLAY_BASE + 0x38
 SERVICE_DIRECTORY_ADDRESS = OVERLAY_BASE + 0x78
 SERVICE_ENTRY_SIZE = 0x10
+POLICY_STATE_SIZE = 32
 SERVICE_NAMES = ("resolver", "motion", "population", "movementPolicy")
 SERVICE_MAGICS = (0x5250574F, 0x534D574F, 0x5450574F, 0x504D574F)
 RESOLVER_CALLBACKS = (
@@ -30,7 +31,7 @@ RESOLVER_CALLBACKS = (
 )
 MOTION_CALLBACKS = (
     "OverworldActorSystem_MotionDispatchImpl",
-    "OverworldActorSystem_BeginLegacyMotion",
+    "OverworldActorSystem_RequestWildMotion",
 )
 POPULATION_CALLBACKS = (
     "OverworldActorSystem_PopulationFrameImpl",
@@ -38,7 +39,6 @@ POPULATION_CALLBACKS = (
 )
 MOVEMENT_POLICY_SYMBOLS = (
     "sActorMovementPolicy",
-    "ActorSystem_ValidateMovementPolicy",
 )
 
 MAIN_CALLBACKS = (
@@ -69,6 +69,10 @@ FIXED_SYMBOLS = {
         SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 3, SERVICE_ENTRY_SIZE),
 }
 STATE_SYMBOL = "gOverworldActorSystemState"
+PUBLIC_LAYOUTS = {
+    "handle": {"format": "<6H", "size": 12},
+    "actorState": {"format": "<HH6H8I8h4H16B", "size": 88},
+}
 
 
 def parse_arguments():
@@ -172,7 +176,7 @@ def verify_binary(binary, packaged, symbols):
         raise RuntimeError("actor facade capacities changed")
     if debug[9:17] != (12, 32, 24, 24, 176, 88, 36, 32):
         raise RuntimeError("actor facade value-object sizes changed")
-    if debug[23:27] != (0x78, SERVICE_ENTRY_SIZE, 4, 0x1000):
+    if debug[23:27] != (0x78, SERVICE_ENTRY_SIZE, 4, 0xF00):
         raise RuntimeError("actor private service directory layout changed")
     if debug[17] != symbols[STATE_SYMBOL]["size"]:
         raise RuntimeError("debug layout state size differs from linked state symbol")
@@ -197,7 +201,7 @@ def verify_binary(binary, packaged, symbols):
     })
 
     motion = struct.unpack_from("<IHHII", image, 0x88)
-    if motion[:3] != (SERVICE_MAGICS[1], 1, SERVICE_ENTRY_SIZE):
+    if motion[:3] != (SERVICE_MAGICS[1], 2, SERVICE_ENTRY_SIZE):
         raise RuntimeError("motion service entry header changed")
     for pointer, symbol in zip(motion[3:], MOTION_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -205,12 +209,11 @@ def verify_binary(binary, packaged, symbols):
         "name": SERVICE_NAMES[1],
         "address": SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 1,
+        "version": 2,
         "status": "available",
         "callbacks": {
             name: symbols[symbol]["address"] | 1
-            for name, symbol in zip(
-                ("dispatch", "beginLegacy"), MOTION_CALLBACKS)
+            for name, symbol in zip(("dispatch", "requestWild"), MOTION_CALLBACKS)
         },
     })
 
@@ -237,7 +240,10 @@ def verify_binary(binary, packaged, symbols):
     expected_policy = symbols[MOVEMENT_POLICY_SYMBOLS[0]]["address"]
     if movement[3] != expected_policy:
         raise RuntimeError("movement-policy data pointer changed")
-    verify_pointer(movement[4], MOVEMENT_POLICY_SYMBOLS[1], symbols)
+    state_address = symbols[STATE_SYMBOL]["address"]
+    state_end = state_address + symbols[STATE_SYMBOL]["size"]
+    if not state_address <= movement[4] < state_end:
+        raise RuntimeError("movement-policy state table escaped actor state")
     services.append({
         "name": SERVICE_NAMES[3],
         "address": OVERLAY_BASE + 0xA8,
@@ -245,9 +251,9 @@ def verify_binary(binary, packaged, symbols):
         "version": 1,
         "status": "available",
         "policy": expected_policy,
-        "callbacks": {
-            "validate": symbols[MOVEMENT_POLICY_SYMBOLS[1]]["address"] | 1,
-        },
+        "stateTable": movement[4],
+        "stateSize": POLICY_STATE_SIZE,
+        "stateCapacity": 12,
     })
     return image, debug, services
 
@@ -296,7 +302,7 @@ def parse_enums(headers):
 
 def write_descriptor(path, image, symbols, debug, services, row, enums):
     descriptor = {
-        "formatVersion": 1,
+        "formatVersion": 2,
         "overlay": {
             "id": OVERLAY_ID,
             "base": OVERLAY_BASE,
@@ -336,6 +342,7 @@ def write_descriptor(path, image, symbols, debug, services, row, enums):
             "address": STATE_ADDRESS,
             "size": symbols[STATE_SYMBOL]["size"],
             "capacity": debug[26],
+            "actorStride": debug[27],
             "offsets": {
                 "fieldEpoch": debug[18],
                 "actors": debug[19],
@@ -366,6 +373,7 @@ def write_descriptor(path, image, symbols, debug, services, row, enums):
             "motionState": 52,
             "motionSample": 36,
         },
+        "publicLayouts": PUBLIC_LAYOUTS,
         "privateServices": services,
         "enums": enums,
     }

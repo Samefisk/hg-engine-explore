@@ -35,6 +35,33 @@ SCENARIO_STATUSES = ("active", "planned")
 CAPTURE_POLICIES = ("none", "failure", "always")
 EVENT_KINDS = ("input", "lifecycle", "setup")
 RESULT_KINDS = ("exit-zero", "json-passed")
+ACTOR_SEMANTIC_CHECKS = (
+    "trace-window-complete",
+    "terminal-result",
+    "no-commit-after-cancel",
+    "control-returned",
+    "single-motion-owner",
+    "field-epoch-current",
+    "presentation-attached",
+)
+ACTOR_INVARIANT_CHECKS = {
+    "Each accepted motion has exactly one terminal result": ("terminal-result",),
+    "No logical commit occurs after motion cancellation": (
+        "no-commit-after-cancel",
+    ),
+    "Control returns after the selected motion finishes or cancels": (
+        "control-returned",
+    ),
+    "No active actors share a nonzero target reservation": (
+        "single-motion-owner",
+    ),
+    "Every active actor handle uses the current field epoch": (
+        "field-epoch-current",
+    ),
+    "Every active actor has an attached presentation": (
+        "presentation-attached",
+    ),
+}
 SEMANTIC_EVENTS = (
     "ACTOR_ATTACHED",
     "ACTOR_DETACHED",
@@ -498,10 +525,16 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
     else:
         if status == "planned":
             _fail(errors, f"{path}.adapter", "planned scenarios must not claim a live adapter")
+        adapter_kind_value = adapter.get("kind") if isinstance(adapter, dict) else None
+        adapter_keys = (
+            ("kind", "checks")
+            if adapter_kind_value == "actor-observation"
+            else ("kind", "commands", "result")
+        )
         adapter_object = _object(
             adapter,
             f"{path}.adapter",
-            ("kind", "commands", "result"),
+            adapter_keys,
             errors,
         )
         if adapter_object is not None:
@@ -509,7 +542,7 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
                 adapter_object.get("kind"),
                 f"{path}.adapter.kind",
                 errors,
-                choices=("command-sequence",),
+                choices=("command-sequence", "actor-observation"),
             )
             if adapter_kind == "command-sequence" and expect is not None:
                 if expect.get("requiredEvents") or expect.get("forbiddenEvents"):
@@ -518,18 +551,62 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
                         f"{path}.expect",
                         "command-sequence adapters do not inspect semantic events",
                     )
-            commands = adapter_object.get("commands")
-            if not isinstance(commands, list) or not commands:
-                _fail(errors, f"{path}.adapter.commands", "must be a non-empty array")
-            else:
-                for index, command in enumerate(commands):
-                    _command(command, f"{path}.adapter.commands[{index}]", errors)
-            _string(
-                adapter_object.get("result"),
-                f"{path}.adapter.result",
-                errors,
-                choices=RESULT_KINDS,
-            )
+            if adapter_kind == "command-sequence":
+                commands = adapter_object.get("commands")
+                if not isinstance(commands, list) or not commands:
+                    _fail(errors, f"{path}.adapter.commands", "must be a non-empty array")
+                else:
+                    for index, command in enumerate(commands):
+                        _command(command, f"{path}.adapter.commands[{index}]", errors)
+                _string(
+                    adapter_object.get("result"),
+                    f"{path}.adapter.result",
+                    errors,
+                    choices=RESULT_KINDS,
+                )
+            elif adapter_kind == "actor-observation":
+                if fixture is not None and fixture.get("rom") is None:
+                    _fail(
+                        errors,
+                        f"{path}.fixture.rom",
+                        "actor observation needs an explicit ROM fixture",
+                    )
+                checks = _string_list(
+                    adapter_object.get("checks"),
+                    f"{path}.adapter.checks",
+                    errors,
+                    choices=ACTOR_SEMANTIC_CHECKS,
+                    allow_empty=False,
+                )
+                if checks is not None and "trace-window-complete" not in checks:
+                    _fail(
+                        errors,
+                        f"{path}.adapter.checks",
+                        "actor observation requires trace-window-complete",
+                    )
+                if expect is not None and checks is not None:
+                    invariants = expect.get("invariants")
+                    if isinstance(invariants, list):
+                        for index, invariant in enumerate(invariants):
+                            registered = ACTOR_INVARIANT_CHECKS.get(invariant)
+                            location = f"{path}.expect.invariants[{index}]"
+                            if registered is None:
+                                _fail(
+                                    errors,
+                                    location,
+                                    "actor observation needs an exact registered invariant",
+                                )
+                                continue
+                            missing_checks = [
+                                check for check in registered if check not in checks
+                            ]
+                            if missing_checks:
+                                _fail(
+                                    errors,
+                                    location,
+                                    "needs adapter checks: "
+                                    + ", ".join(missing_checks),
+                                )
 
     if errors:
         raise ValidationFailure("\n".join(errors))

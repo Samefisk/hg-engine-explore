@@ -12,9 +12,11 @@ extern const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob;
 static void print_usage(const char *program)
 {
     fprintf(stderr,
-        "usage: %s [--blob FILE] [--species N] [--level N] [--terrain N] "
+        "usage: %s [--blob FILE] [--batch] [--species N] [--level N] [--terrain N] "
         "[--shiny 0|1] [--groups MASK] [--condition-terrain-mask MASK] "
-        "[--forced-override-mask MASK] [--behavior-class auto|N]\n",
+        "[--forced-override-mask MASK] [--behavior-class auto|N]\n"
+        "batch input: species level terrain shiny groups condition-mask "
+        "forced-mask behavior-class\n",
         program);
 }
 
@@ -73,17 +75,124 @@ static void *read_file(const char *path, u32 *sizeOut)
     return bytes;
 }
 
-int main(int argc, char **argv)
+static int resolve_and_print(
+    const void *blobBytes,
+    u32 blobSize,
+    const BehaviorResolveRequest *request)
 {
-    const char *blobPath = NULL;
-    BehaviorResolveRequest request;
     BehaviorResolveResult result;
     BehaviorResolutionStep traceSteps[HOST_TRACE_CAPACITY];
     BehaviorResolutionTrace trace;
     BehaviorResolveStatus status;
+    int i;
+
+    trace.steps = traceSteps;
+    trace.capacity = HOST_TRACE_CAPACITY;
+    trace.count = 0;
+    trace.dropped = 0;
+    trace.reserved = 0;
+    status = BehaviorResolver_Resolve(
+        blobBytes,
+        blobSize,
+        request,
+        &result,
+        &trace);
+
+    printf("{\"status\":%u,\"behaviorClass\":%u,\"behaviorLimitKey\":%u,",
+        (unsigned)status,
+        (unsigned)result.behaviorClass,
+        (unsigned)result.behaviorLimitKey);
+    printf("\"speciesClassRuleIndex\":%u,\"matchedClassRuleMask\":%u,",
+        (unsigned)result.speciesClassRuleIndex,
+        (unsigned)result.matchedClassRuleMask);
+    printf("\"matchedOverrideMask\":%u,\"forcedOverrideMask\":%u,",
+        (unsigned)result.matchedOverrideMask,
+        (unsigned)result.forcedOverrideMask);
+    printf("\"conditionalOverrideMask\":%u,\"appliedOverrideMask\":%u,",
+        (unsigned)result.conditionalOverrideMask,
+        (unsigned)result.appliedOverrideMask);
+    printf("\"fingerprint\":%u,\"profileHex\":\"",
+        (unsigned)result.fingerprint);
+    print_hex(&result.profile, sizeof(result.profile));
+    printf("\",\"primitivesHex\":\"");
+    print_hex(&result.primitives, sizeof(result.primitives));
+    printf("\",\"traceDropped\":%u,\"trace\":[", (unsigned)trace.dropped);
+    for (i = 0; i < trace.count; i++) {
+        const BehaviorResolutionStep *step = &trace.steps[i];
+
+        if (i != 0) {
+            putchar(',');
+        }
+        printf("{\"sourceIndex\":%u,\"lane\":%u,\"kind\":%u,\"flags\":%u,"
+               "\"profileHex\":\"",
+            (unsigned)step->sourceIndex,
+            (unsigned)step->lane,
+            (unsigned)step->kind,
+            (unsigned)step->flags);
+        print_hex(&step->profile, sizeof(step->profile));
+        printf("\"}");
+    }
+    printf("]}\n");
+    return status == BEHAVIOR_RESOLVE_OK
+            || status == BEHAVIOR_RESOLVE_TRACE_TRUNCATED
+        ? 0
+        : 1;
+}
+
+static int run_batch(const void *blobBytes, u32 blobSize)
+{
+    char line[512];
+    int failed = 0;
+
+    while (fgets(line, sizeof(line), stdin) != NULL) {
+        unsigned long values[8];
+        char extra;
+        BehaviorResolveRequest request;
+
+        if (sscanf(line, "%lu %lu %lu %lu %lu %lu %lu %lu %c",
+                &values[0], &values[1], &values[2], &values[3],
+                &values[4], &values[5], &values[6], &values[7],
+                &extra) != 8
+            || values[0] > 0xFFFFul
+            || values[1] > 0xFFul
+            || values[2] > 0xFFul
+            || values[3] > 0xFFul
+            || values[4] > 0xFFFFFFFFul
+            || values[5] > 0xFFFFul
+            || values[6] > 0xFFFFFFFFul
+            || values[7] > 0xFFul) {
+            fprintf(stderr, "invalid batch request: %s", line);
+            return 2;
+        }
+        memset(&request, 0, sizeof(request));
+        request.context.species = (u16)values[0];
+        request.context.level = (u8)values[1];
+        request.context.terrain = (u8)values[2];
+        request.context.shiny = (u8)values[3];
+        request.context.groupFlags = (u32)values[4];
+        request.context.conditionTerrainMask = (u16)values[5];
+        request.forcedOverrideMask = (u32)values[6];
+        request.behaviorClass = (u8)values[7];
+        if (resolve_and_print(blobBytes, blobSize, &request) != 0) {
+            failed = 1;
+        }
+    }
+    if (ferror(stdin)) {
+        fprintf(stderr, "could not read batch input\n");
+        return 2;
+    }
+    return failed;
+}
+
+int main(int argc, char **argv)
+{
+    const char *blobPath = NULL;
+    BehaviorResolveRequest request;
     const void *blobBytes;
     u32 blobSize;
     int ownsBlob = 0;
+    int batch = 0;
+    int resultCode;
     int i;
 
     memset(&request, 0, sizeof(request));
@@ -95,6 +204,10 @@ int main(int argc, char **argv)
         const char *value;
         u32 parsed;
 
+        if (strcmp(option, "--batch") == 0) {
+            batch = 1;
+            continue;
+        }
         if (i + 1 >= argc) {
             print_usage(argv[0]);
             return 2;
@@ -148,58 +261,11 @@ int main(int argc, char **argv)
         blobBytes = &gOverworldWildBehaviorDataBlob;
         blobSize = sizeof(gOverworldWildBehaviorDataBlob);
     }
-    trace.steps = traceSteps;
-    trace.capacity = HOST_TRACE_CAPACITY;
-    trace.count = 0;
-    trace.dropped = 0;
-    trace.reserved = 0;
-    status = BehaviorResolver_Resolve(
-        blobBytes,
-        blobSize,
-        &request,
-        &result,
-        &trace);
+    resultCode = batch
+        ? run_batch(blobBytes, blobSize)
+        : resolve_and_print(blobBytes, blobSize, &request);
     if (ownsBlob) {
         free((void *)blobBytes);
     }
-
-    printf("{\"status\":%u,\"behaviorClass\":%u,\"behaviorLimitKey\":%u,",
-        (unsigned)status,
-        (unsigned)result.behaviorClass,
-        (unsigned)result.behaviorLimitKey);
-    printf("\"speciesClassRuleIndex\":%u,\"matchedClassRuleMask\":%u,",
-        (unsigned)result.speciesClassRuleIndex,
-        (unsigned)result.matchedClassRuleMask);
-    printf("\"matchedOverrideMask\":%u,\"forcedOverrideMask\":%u,",
-        (unsigned)result.matchedOverrideMask,
-        (unsigned)result.forcedOverrideMask);
-    printf("\"conditionalOverrideMask\":%u,\"appliedOverrideMask\":%u,",
-        (unsigned)result.conditionalOverrideMask,
-        (unsigned)result.appliedOverrideMask);
-    printf("\"fingerprint\":%u,\"profileHex\":\"",
-        (unsigned)result.fingerprint);
-    print_hex(&result.profile, sizeof(result.profile));
-    printf("\",\"primitivesHex\":\"");
-    print_hex(&result.primitives, sizeof(result.primitives));
-    printf("\",\"traceDropped\":%u,\"trace\":[", (unsigned)trace.dropped);
-    for (i = 0; i < trace.count; i++) {
-        const BehaviorResolutionStep *step = &trace.steps[i];
-
-        if (i != 0) {
-            putchar(',');
-        }
-        printf("{\"sourceIndex\":%u,\"lane\":%u,\"kind\":%u,\"flags\":%u,"
-               "\"profileHex\":\"",
-            (unsigned)step->sourceIndex,
-            (unsigned)step->lane,
-            (unsigned)step->kind,
-            (unsigned)step->flags);
-        print_hex(&step->profile, sizeof(step->profile));
-        printf("\"}");
-    }
-    printf("]}\n");
-    return status == BEHAVIOR_RESOLVE_OK
-            || status == BEHAVIOR_RESOLVE_TRACE_TRUNCATED
-        ? 0
-        : 1;
+    return resultCode;
 }
