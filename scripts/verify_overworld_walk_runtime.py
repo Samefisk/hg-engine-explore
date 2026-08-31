@@ -70,6 +70,7 @@ SELECTOR_STATE = SELECTOR_SYMBOLS["sFollowerSelectorInputState"]
 APPLY_WILD_RENDER = WILD_SYMBOLS["OverworldWildSpawns_ApplyCustomJumpRenderOffset"]
 CLEAR_WILD_JUMP = WILD_SYMBOLS["OverworldWildSpawns_ClearCustomJump"]
 START_NATIVE_JUMP = 0x02062958
+LCRNG_STATE = 0x021D15A8
 LANDING_PARTICLE = RUNTIME_SYMBOLS["OverworldWildRuntime_PlayLandingHopParticle"]
 PLAY_SE = MOUNT_SYMBOLS["PlaySE"] & ~1
 PREPARE_CHAIN_PAUSE = MOUNT_SYMBOLS[
@@ -97,6 +98,10 @@ WILD_TARGET_X_OFFSET = 0x64
 WILD_TARGET_Y_OFFSET = 0x78
 WILD_MOVEMENT_COOLDOWNS_OFFSET = 0xEE
 WILD_MOVEMENT_IN_PROGRESS_MASK_OFFSET = 0xF8
+
+MAP_CHERRYGROVE = 67
+SPECIES_TENTACOOL = 72
+SPAWN_TERRAIN_SURF = 1
 
 
 def unsigned(emu, address, size=4):
@@ -1021,6 +1026,122 @@ def wild_spawn(emu, slot):
         "species": unsigned(emu, base + 0x0A, 2),
         "active": unsigned(emu, base + 0x10, 1),
     }
+
+
+def scenario_cherrygrove_surf_spawn_terrain():
+    """Reject a Cherrygrove Surf encounter when no Surf tile was prepared."""
+    finalize_attempts = []
+    spawn_events = []
+    reached_cherrygrove = False
+    finalize_prepared = WILD_SYMBOLS[
+        "OverworldWildSpawns_FinalizePreparedSpawn"
+    ]
+    spawn_prepared = WILD_SYMBOLS["OverworldWildSpawns_SpawnPreparedEncounter"]
+    try_refill = WILD_SYMBOLS["OverworldWildSpawns_TryRefill"]
+    try_pick_destination = WILD_SYMBOLS[
+        "OverworldWildSpawns_TryPickSpawnDestinationMask"
+    ]
+
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+
+        def current_map_id():
+            return unsigned(emu, WILD_STATE + WILD_MAP_ID_OFFSET, 2)
+
+        def on_spawn_prepared(_address, _size):
+            regs = emu.memory.register_arm9
+            prepared = unsigned(emu, regs.sp)
+            if prepared == 0 or current_map_id() != MAP_CHERRYGROVE:
+                return
+            spawn_events.append({
+                "terrain": regs.r2,
+                "slot": regs.r3,
+                "x": signed(emu, prepared),
+                "y": signed(emu, prepared + 4),
+                "species": unsigned(emu, prepared + 16, 2),
+                "level": unsigned(emu, prepared + 19, 1),
+            })
+
+        def on_finalize_prepared(_address, _size):
+            regs = emu.memory.register_arm9
+            prepared = unsigned(emu, regs.sp)
+            if prepared == 0 or current_map_id() != MAP_CHERRYGROVE:
+                return
+            finalize_attempts.append({
+                "terrain": regs.r2,
+                "slot": regs.r3,
+                "x": signed(emu, prepared),
+                "y": signed(emu, prepared + 4),
+                "species": unsigned(emu, prepared + 16, 2),
+                "level": unsigned(emu, prepared + 19, 1),
+            })
+
+        def on_try_refill(_address, _size):
+            if current_map_id() == MAP_CHERRYGROVE:
+                write_u32(emu, LCRNG_STATE, 0)
+
+        def on_try_pick_destination(_address, _size):
+            write_u32(emu, LCRNG_STATE, 0)
+
+        emu.memory.register_exec(finalize_prepared, on_finalize_prepared)
+        emu.memory.register_exec(spawn_prepared, on_spawn_prepared)
+        emu.memory.register_exec(try_refill, on_try_refill)
+        emu.memory.register_exec(
+            try_pick_destination,
+            on_try_pick_destination,
+        )
+
+        # The deterministic save starts just east of Cherrygrove with its menu
+        # open. Close it and cross the west map boundary.
+        h.cycle(emu, 2, h.keymask(h.key_constant("B")))
+        h.cycle(emu, 30, 0)
+        for _ in range(500):
+            if current_map_id() == MAP_CHERRYGROVE:
+                reached_cherrygrove = True
+                break
+            h.cycle(emu, 1, h.keymask(h.key_constant("LEFT")))
+
+        for _ in range(600):
+            h.cycle(emu, 1, 0)
+            if any(
+                attempt["species"] == SPECIES_TENTACOOL
+                for attempt in finalize_attempts
+            ):
+                break
+
+        emu.memory.register_exec(finalize_prepared, None)
+        emu.memory.register_exec(spawn_prepared, None)
+        emu.memory.register_exec(try_refill, None)
+        emu.memory.register_exec(try_pick_destination, None)
+        emu.destroy()
+
+    tentacool_attempts = [
+        attempt
+        for attempt in finalize_attempts
+        if attempt["species"] == SPECIES_TENTACOOL
+    ]
+    tentacool_events = [
+        event
+        for event in spawn_events
+        if event["species"] == SPECIES_TENTACOOL
+    ]
+    result = {
+        "reached_cherrygrove": reached_cherrygrove,
+        "tentacool_attempts": tentacool_attempts,
+        "tentacool_events": tentacool_events,
+    }
+    result["passed"] = (
+        reached_cherrygrove
+        and any(
+            attempt["terrain"] == SPAWN_TERRAIN_SURF
+            and attempt["x"] < 0
+            and attempt["y"] < 0
+            for attempt in tentacool_attempts
+        )
+        and not tentacool_events
+    )
+    return result
 
 
 def scenario_wild_walk():
@@ -3243,6 +3364,7 @@ SCENARIOS = {
     "mounted_smoothness": scenario_mounted_smoothness,
     "turn_skid": scenario_turn_skid,
     "diagonal_turn_skid": scenario_diagonal_turn_skid,
+    "cherrygrove_surf_spawn_terrain": scenario_cherrygrove_surf_spawn_terrain,
     "wild_walk": scenario_wild_walk,
     "wild_ledge_hop": scenario_wild_ledge_hop,
     "ledyba_chain_pause": scenario_ledyba_chain_pause,
