@@ -56,8 +56,6 @@ typedef struct OverworldMountRuntimeState {
     u8 savedFollowerShadowSuppressed;
     u8 motionLandingPauseStarted;
     u8 preserveTransitionPrepared;
-    /* The prior Walk time marks one derived acceleration transition tile. */
-    u8 walkTransitionTime;
 } OverworldMountRuntimeState;
 
 typedef char OverworldMountMotionStartXOffsetMustRemain98[

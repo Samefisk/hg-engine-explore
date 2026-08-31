@@ -22,6 +22,9 @@
 #define OW_WILD_RUNTIME_CIRCLE_RADIUS_MAX 8
 #define OW_WILD_RUNTIME_BATTLE_TRIGGER_MAX 2
 #define OW_WILD_RUNTIME_SURFACE_MODEL_NONE 0xFF
+/* Vanilla sub_02061248 queries terrain height into a caller-owned vector. */
+#define OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT \
+    ((BOOL (*)(FieldSystem *, VecFx32 *, BOOL))0x02061249)
 
 typedef struct OverworldWildRuntimeSurfaceBlockCache {
     u16 blockIndex;
@@ -173,15 +176,7 @@ OverworldWildRuntime_GetGroundBaseY(
     int y)
 {
     OverworldWildSurfaceHit hit;
-    u32 savedFlags;
-    u32 savedFlags2;
-    u32 savedPosX;
-    u32 savedPosY;
-    u32 savedPosZ;
-    int savedHInit;
-    int savedHPrev;
-    int savedHCurr;
-    s32 baseY;
+    VecFx32 targetPosition;
 
     if (OverworldWildRuntime_QuerySurface(
             fieldSystem,
@@ -193,33 +188,19 @@ OverworldWildRuntime_GetGroundBaseY(
         return hit.height;
     }
 
-    savedFlags = object->flags;
-    savedFlags2 = object->flags2;
-    savedPosX = object->posVec[0];
-    savedPosY = object->posVec[1];
-    savedPosZ = object->posVec[2];
-    savedHInit = object->hInit;
-    savedHPrev = object->hPrev;
-    savedHCurr = object->hCurr;
-    baseY = (s32)savedPosY;
-
-    object->posVec[0] = (u32)((x << 4) * OW_WILD_RUNTIME_FX32_ONE
-        + (OW_WILD_RUNTIME_FX32_ONE << 3));
-    object->posVec[2] = (u32)((y << 4) * OW_WILD_RUNTIME_FX32_ONE
-        + (OW_WILD_RUNTIME_FX32_ONE << 3));
-    if (MapObject_RefreshHeightFromTerrain(object)) {
-        baseY = (s32)object->posVec[1];
+    targetPosition.x = (x << 4) * OW_WILD_RUNTIME_FX32_ONE
+        + (OW_WILD_RUNTIME_FX32_ONE << 3);
+    targetPosition.y = (s32)object->posVec[1];
+    targetPosition.z = (y << 4) * OW_WILD_RUNTIME_FX32_ONE
+        + (OW_WILD_RUNTIME_FX32_ONE << 3);
+    if ((object->flags & MAPOBJECTFLAG_UNK23) == 0
+        && OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(
+            fieldSystem,
+            &targetPosition,
+            (object->flags & MAPOBJECTFLAG_UNK29) != 0)) {
+        return targetPosition.y;
     }
-
-    object->flags = savedFlags;
-    object->flags2 = savedFlags2;
-    object->posVec[0] = savedPosX;
-    object->posVec[1] = savedPosY;
-    object->posVec[2] = savedPosZ;
-    object->hInit = savedHInit;
-    object->hPrev = savedHPrev;
-    object->hCurr = savedHCurr;
-    return baseY;
+    return (s32)object->posVec[1];
 }
 
 void OverworldWildRuntime_WalkMomentumReset(

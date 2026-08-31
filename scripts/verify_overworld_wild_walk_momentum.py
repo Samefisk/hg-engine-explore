@@ -231,17 +231,6 @@ def main() -> int:
         ),
         "Walk half-step acceleration",
     )
-    transition_time = function_body(
-        timing_policy,
-        "OverworldWalkTimingPolicy_TransitionTime",
-    )
-    require(
-        transition_time,
-        (
-            "previousTravelTime + currentTravelTime + 1u",
-        ),
-        "Walk acceleration transition time",
-    )
     skid_tiles = function_body(
         timing_policy,
         "OverworldWalkTimingPolicy_SkidTiles",

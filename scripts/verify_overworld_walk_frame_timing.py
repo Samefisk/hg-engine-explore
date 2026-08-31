@@ -33,11 +33,6 @@ int main(void)
     }
     CHECK(OverworldWalkTimingPolicy_Accelerate(5, 4) == 4);
     CHECK(OverworldWalkTimingPolicy_Accelerate(4, 4) == 4);
-    CHECK(OverworldWalkTimingPolicy_TransitionTime(8, 4) == 6);
-    CHECK(OverworldWalkTimingPolicy_TransitionTime(4, 2) == 3);
-    CHECK(OverworldWalkTimingPolicy_TransitionTime(5, 3) == 4);
-    CHECK(OverworldWalkTimingPolicy_TransitionTime(2, 1) == 2);
-
     CHECK(OverworldWalkTimingPolicy_SkidTiles(32) == 0);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(5) == 0);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(4) == 1);

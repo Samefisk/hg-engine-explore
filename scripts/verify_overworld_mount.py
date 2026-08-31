@@ -353,6 +353,20 @@ def main() -> None:
         and "bl 0x023BD3EC" in overworld_patch,
         "mounted facing-vector ownership is incomplete",
     )
+    ground_probe = re.search(
+        r"OverworldWildRuntime_GetGroundBaseY\([^;]*?\)\s*"
+        r"\{.*?^\}",
+        runtime_source,
+        re.DOTALL | re.MULTILINE,
+    )
+    require(
+        ground_probe is not None
+        and "VecFx32 targetPosition;" in ground_probe.group(0)
+        and "OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(" in ground_probe.group(0)
+        and "object->posVec[0] =" not in ground_probe.group(0)
+        and "object->posVec[2] =" not in ground_probe.group(0),
+        "mounted ground-height probe mutates the live render object",
+    )
     require(
         "snapshot.profile.chillAction" in mount_source
         and "OVERWORLD_MOUNT_MOTION_HOP" in mount_source
@@ -509,10 +523,7 @@ def main() -> None:
             re.DOTALL,
         ) is not None
         and "avatar,\n            &newKeys,\n            &heldKeys" in mount_source
-        and "if (state->walkTransitionTime != 0)"
-            in walk_module_source
-        and "walkTransitionTime" in mount_runtime_source
-        and "OverworldWalkTimingPolicy_TransitionTime("
+        and "state->motionFrameCount = Walk_ClampTime(state->speed);"
             in walk_module_source
         and "state->motionArcHeightQ4 = 0;" in walk_module_source
         and "Walk_StrictDiagonalAllowed" in walk_module_source

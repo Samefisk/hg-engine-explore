@@ -570,15 +570,7 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
         (follower->flags & MAPOBJECTFLAG_UNK20) != 0;
     state->motionCooldown = 0;
     state->motionLandingPauseStarted = FALSE;
-    if (state->walkTransitionTime != 0) {
-        state->motionFrameCount =
-            OverworldWalkTimingPolicy_TransitionTime(
-                state->walkTransitionTime,
-                state->speed);
-        state->walkTransitionTime = 0;
-    } else {
-        state->motionFrameCount = Walk_ClampTime(state->speed);
-    }
+    state->motionFrameCount = Walk_ClampTime(state->speed);
     state->motionElapsed = 0;
     state->pendingStep = FALSE;
     state->pendingSkid = state->skidRemaining != 0;

@@ -140,7 +140,9 @@ def object_state(emu, obj):
         "face_y": signed(emu, obj + 0x80),
         "face_z": signed(emu, obj + 0x84),
         "unk88_y": signed(emu, obj + 0x8C),
+        "unk88_x": signed(emu, obj + 0x88),
         "unk94_y": signed(emu, obj + 0x98),
+        "unk94_x": signed(emu, obj + 0x94),
         "movement_cmd": unsigned(emu, obj + 0xA4),
         "movement_step": unsigned(emu, obj + 0xA8),
         "facing": signed(emu, obj + 0x28),
@@ -498,6 +500,7 @@ def scenario_mounted_frames():
 
 def scenario_mounted_smoothness():
     events = []
+    video_frames = []
     active = {"value": False, "vblank": 0}
     with h.silence_native_output(True):
         emu = h.create_desmume()
@@ -548,7 +551,23 @@ def scenario_mounted_smoothness():
         for frame in range(600):
             active["vblank"] = frame
             h.cycle(emu, 1, right)
-            if object_state(emu, player_ptr(emu))["x"] >= start_x + 9:
+            player = object_state(emu, player_ptr(emu))
+            follower = object_state(emu, unsigned(emu, FOLLOWER_SLOT))
+            player_render_x = (
+                player["pos_x"] + player["face_x"]
+                + player["unk88_x"] + player["unk94_x"]
+            )
+            follower_render_x = (
+                follower["pos_x"] + follower["face_x"]
+                + follower["unk88_x"] + follower["unk94_x"]
+            )
+            video_frames.append({
+                "vblank": frame,
+                "player_render_x": player_render_x,
+                "follower_render_x": follower_render_x,
+                "separation_x": player_render_x - follower_render_x,
+            })
+            if object_state(emu, player_ptr(emu))["x"] >= start_x + 7:
                 break
         h.set_key_mask(emu, 0)
         settled_after = wait_until(
@@ -679,6 +698,23 @@ def scenario_mounted_smoothness():
         abs(movement_deltas[index] - movement_deltas[index - 1])
         for index in range(1, len(movement_deltas))
     ]
+    pair_delta_mismatches = []
+    for index in range(1, len(video_frames)):
+        player_delta = (
+            video_frames[index]["player_render_x"]
+            - video_frames[index - 1]["player_render_x"]
+        )
+        follower_delta = (
+            video_frames[index]["follower_render_x"]
+            - video_frames[index - 1]["follower_render_x"]
+        )
+        if player_delta != follower_delta:
+            pair_delta_mismatches.append({
+                "vblank": video_frames[index]["vblank"],
+                "player_delta": player_delta,
+                "follower_delta": follower_delta,
+                "separation_x": video_frames[index]["separation_x"],
+            })
     result = {
         "mount": mount,
         "start_x": start_x,
@@ -691,43 +727,50 @@ def scenario_mounted_smoothness():
         "boundary_gaps": boundary_gaps,
         "movement_deltas": movement_deltas,
         "max_acceleration_delta": max(acceleration_deltas, default=0),
+        "pair_delta_mismatches": pair_delta_mismatches,
+        "separation_values": sorted({
+            frame["separation_x"] for frame in video_frames
+        }),
         "screenshot": screenshot,
     }
     result["passed"] = (
         mount["passed"]
-        and end_x == start_x + 9
+        and end_x == start_x + 7
         and settled_after is not None
         and recovery["passed"]
         and recovery["before"] == [end_x, initial_player["y"]]
         and recovery["final"] == [end_x + 1, initial_player["y"]]
         and (recovered_avatar["flags"] & 1) == 0
         and recovered_avatar["player_move_state"] in (0, 3)
-        and [motion["frames"] for motion in summaries[:9]]
-            == [8, 8, 8, 6, 4, 4, 3, 2, 2]
+        and [motion["frames"] for motion in summaries[:7]]
+            == [8, 8, 8, 4, 4, 4, 2]
         and all(
             summaries[index]["logical_positions"][0]
                 == [
                     summaries[index - 1]["target_x"],
                     summaries[index - 1]["target_y"],
                 ]
-            for index in range(1, 9)
+            for index in range(1, 7)
         )
         and [end_x, initial_player["y"]]
-            == [summaries[8]["target_x"], summaries[8]["target_y"]]
+            == [summaries[6]["target_x"], summaries[6]["target_y"]]
         and all(
             motion["elapsed"] == list(range(motion["frames"]))
             and motion["positions"] == motion["expected_positions"]
             and motion["pair_synced"]
             and motion["logical_stable"]
             and motion["lane_stable"]
-            for motion in summaries[:9]
+            for motion in summaries[:7]
         )
         and callback_gaps
         and max(callback_gaps) <= 3
         and boundary_gaps
         and max(boundary_gaps) <= 3
-        and acceleration_deltas
-        and max(acceleration_deltas) < 0x4000
+        and not pair_delta_mismatches
+        and all(
+            frame["separation_x"] == -0x8000
+            for frame in video_frames
+        )
     )
     return result
 
