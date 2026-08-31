@@ -2474,6 +2474,162 @@ def scenario_cyndaquil_control_stress():
     return result
 
 
+def scenario_cyndaquil_step_taps():
+    target_steps = int(os.environ.get("CYNDAQUIL_TAP_STEPS", "100"))
+    steps = []
+    failure = None
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+        mount = mount_party_slot(emu, 0, 155)
+        evacuate_wild_objects(emu)
+        initial = object_state(emu, player_ptr(emu))
+        lower_x = initial["x"] + 2
+        upper_x = initial["x"] + 8
+        direction = "RIGHT"
+
+        for index in range(target_steps):
+            player = object_state(emu, player_ptr(emu))
+            if direction == "RIGHT" and player["x"] >= upper_x:
+                direction = "LEFT"
+            elif direction == "LEFT" and player["x"] <= lower_x:
+                direction = "RIGHT"
+            step = run_mounted_walk_tile(emu, direction)
+            step["index"] = index
+            step["direction"] = direction
+            steps.append(step)
+            if not step["passed"]:
+                avatar = avatar_ptr(emu)
+                failure = {
+                    "step": index,
+                    "direction": direction,
+                    "mount": dict(mount_state(emu)),
+                    "avatar_flags": unsigned(emu, avatar),
+                    "avatar_move_state": unsigned(emu, avatar + 0x10),
+                    "player_move_state": unsigned(emu, avatar + 0x14),
+                    "player": object_state(emu, player_ptr(emu)),
+                    "follower": object_state(emu, unsigned(emu, FOLLOWER_SLOT)),
+                }
+                break
+            h.cycle(emu, 3, 0)
+
+        result = {
+            "mount": mount,
+            "target_steps": target_steps,
+            "completed_steps": len([step for step in steps if step["passed"]]),
+            "failure": failure,
+            "last_steps": steps[-5:],
+            "screenshot": h.save_screenshot(
+                emu,
+                "documentation/verification_screenshots/"
+                "overworld_cyndaquil_step_taps.png",
+            ),
+        }
+        emu.destroy()
+
+    result["passed"] = (
+        mount["passed"]
+        and failure is None
+        and result["completed_steps"] == target_steps
+    )
+    return result
+
+
+def scenario_cyndaquil_streaming_stress():
+    samples = []
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+        mount = mount_party_slot(emu, 0, 155)
+        evacuate_wild_objects(emu)
+        evacuate_map_event_objects(emu)
+
+        approach = []
+        for direction, count in (("RIGHT", 10), ("DOWN", 3)):
+            for _ in range(count):
+                approach.append(run_mounted_walk_tile(emu, direction))
+
+        start = object_state(emu, player_ptr(emu))
+        target_x = start["x"] + 32
+        right = h.keymask(h.key_constant("RIGHT"))
+        last_x = start["x"]
+        last_change_frame = 0
+        failure = None
+        native_stream_bound = True
+        for frame in range(1200):
+            h.cycle(emu, 1, right)
+            player = object_state(emu, player_ptr(emu))
+            state = dict(mount_state(emu))
+            field_system = unsigned(emu, G_FIELD_SYS_PTR)
+            land = unsigned(emu, field_system + 0x2C)
+            land_target_pointer = unsigned(emu, land + 0xDC)
+            native_stream_bound &= (
+                state["stream_preparing"] == 0
+                and land_target_pointer == player_ptr(emu) + 0x70
+            )
+            if player["x"] != last_x:
+                last_x = player["x"]
+                last_change_frame = frame
+            samples.append({
+                "frame": frame,
+                "x": player["x"],
+                "mode": state["mode"],
+                "pending": state["pending"],
+                "stream_preparing": state["stream_preparing"],
+                "stream_anchor_x": signed(emu, MOUNT + 0xA8),
+                "land_busy": unsigned(emu, land + 0xA0, 1),
+                "land_target_x": signed(emu, land + 0xD0),
+                "land_target_pointer": land_target_pointer,
+            })
+            if player["x"] >= target_x:
+                break
+            if frame - last_change_frame > 120:
+                avatar = avatar_ptr(emu)
+                failure = {
+                    "reason": "held Walk stopped before the clear-route target",
+                    "frame": frame,
+                    "player": player,
+                    "mount": state,
+                    "avatar_flags": unsigned(emu, avatar),
+                    "avatar_move_state": unsigned(emu, avatar + 0x10),
+                    "player_move_state": unsigned(emu, avatar + 0x14),
+                    "land_busy": unsigned(emu, land + 0xA0, 1),
+                    "land_target": [
+                        signed(emu, land + 0xD0),
+                        signed(emu, land + 0xD4),
+                        signed(emu, land + 0xD8),
+                    ],
+                }
+                break
+        h.set_key_mask(emu, 0)
+        final_player = object_state(emu, player_ptr(emu))
+        result = {
+            "mount": mount,
+            "approach_passed": all(step["passed"] for step in approach),
+            "start": [start["x"], start["y"]],
+            "target_x": target_x,
+            "final": [final_player["x"], final_player["y"]],
+            "failure": failure,
+            "native_stream_bound": native_stream_bound,
+            "tail_samples": samples[-20:],
+            "screenshot": h.save_screenshot(
+                emu,
+                "documentation/verification_screenshots/"
+                "overworld_cyndaquil_streaming_stress.png",
+            ),
+        }
+        emu.destroy()
+
+    result["passed"] = (
+        mount["passed"]
+        and result["approach_passed"]
+        and failure is None
+        and result["final"][0] >= target_x
+        and native_stream_bound
+    )
+    return result
+
+
 SCENARIOS = {
     "mounted_frames": scenario_mounted_frames,
     "mounted_smoothness": scenario_mounted_smoothness,
@@ -2487,6 +2643,8 @@ SCENARIOS = {
     "stomp": scenario_stomp,
     "crash": scenario_crash,
     "cyndaquil_control_stress": scenario_cyndaquil_control_stress,
+    "cyndaquil_step_taps": scenario_cyndaquil_step_taps,
+    "cyndaquil_streaming_stress": scenario_cyndaquil_streaming_stress,
 }
 
 

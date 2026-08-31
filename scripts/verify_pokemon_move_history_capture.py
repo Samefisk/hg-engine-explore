@@ -63,7 +63,7 @@ OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
 OVERLAY_GUARDED_END = OVERLAY_BASE + OVERLAY_LIMIT
 OVERLAY152_BASE = 0x023C0400
 OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "3282bffcabf0c02cfe051fc2c6bc5e92884780c45504dc968ae0e777a4d7b322"
+    "64af1281d9b798b3cc88bba16368713420f14e82ed71edef40e230917c72175c"
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
@@ -6665,11 +6665,11 @@ def binary_contracts(
     require(
         linked_overlay == packaged_ov153
         and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 144
+        and len(packaged_call_inventory) == 143
         and sum(
             kind == "bl" for _address, kind, _target
             in packaged_call_inventory
-        ) == 140
+        ) == 139
         and sum(
             kind == "blx" for _address, kind, _target
             in packaged_call_inventory

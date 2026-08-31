@@ -588,11 +588,11 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
      * and mirrors the player every field tick. Giving it an independent stock
      * command lets that command write the previous render tile after the
      * player commits, causing a one-frame full-tile split at every boundary. */
-    if (!state->motionStreamPreparing) {
-        state->motionStreamAnchor = *(VecFx32 *)player->posVec;
-        state->motionStreamPreparing = TRUE;
-        ov01_021F62E8(&state->motionStreamAnchor, landDataManager);
-    }
+    /* A flat Walk visits each world coordinate, so the stock land manager
+     * must stay bound to the player's live position vector. The private
+     * stepped anchor is only for long Hop/Teleport motion that skips tiles;
+     * using it here lets a fast mounted Walk outrun the rolling land window. */
+    (void)landDataManager;
     return TRUE;
 }
 

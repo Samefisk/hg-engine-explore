@@ -330,6 +330,12 @@ def main() -> None:
         mount_source,
         re.DOTALL | re.MULTILINE,
     )
+    mounted_flat_walk = re.search(
+        r"Walk_StartMountedFlatMotion\([^;]*?\)\s*"
+        r"\{.*?^\}",
+        walk_module_source,
+        re.DOTALL | re.MULTILINE,
+    )
     require(
         "profile->owner.chillSpeed" in mount_source
         and "profile->owner.tilesToAccelerate" in mount_source
@@ -398,6 +404,10 @@ def main() -> None:
         and "player->xCurr << 16" in mount_source
         and "player->yCurr << 16" in mount_source
         and "OverworldMount_DrainLandStream" in mount_source
+        and mounted_flat_walk is not None
+        and "stock land manager" in mounted_flat_walk.group(0)
+        and "motionStreamPreparing" not in mounted_flat_walk.group(0)
+        and "ov01_021F62E8" not in mounted_flat_walk.group(0)
         and re.search(
             r"OverworldMount_UpdateLandStreamAnchor\(void\).*?"
             r"GetLandDataManager\(\) \+ 0xA0\) != 0\) \{\s*"
