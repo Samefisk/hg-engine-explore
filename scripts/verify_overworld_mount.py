@@ -509,7 +509,10 @@ def main() -> None:
             re.DOTALL,
         ) is not None
         and "avatar,\n            &newKeys,\n            &heldKeys" in mount_source
-        and "state->motionFrameCount = Walk_ClampTime(state->speed);"
+        and "if (state->walkTransitionTime != 0)"
+            in walk_module_source
+        and "walkTransitionTime" in mount_runtime_source
+        and "OverworldWalkTimingPolicy_TransitionTime("
             in walk_module_source
         and "state->motionArcHeightQ4 = 0;" in walk_module_source
         and "Walk_StrictDiagonalAllowed" in walk_module_source

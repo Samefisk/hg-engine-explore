@@ -522,7 +522,7 @@ def scenario_mounted_smoothness():
         for frame in range(600):
             active["vblank"] = frame
             h.cycle(emu, 1, right)
-            if object_state(emu, player_ptr(emu))["x"] >= start_x + 7:
+            if object_state(emu, player_ptr(emu))["x"] >= start_x + 9:
                 break
         h.set_key_mask(emu, 0)
         settled_after = wait_until(
@@ -645,6 +645,14 @@ def scenario_mounted_smoothness():
         - summaries[index - 1]["vblanks"][-1]
         for index in range(1, len(summaries))
     ]
+    movement_deltas = [
+        events[index]["pos_x"] - events[index - 1]["pos_x"]
+        for index in range(1, len(events))
+    ]
+    acceleration_deltas = [
+        abs(movement_deltas[index] - movement_deltas[index - 1])
+        for index in range(1, len(movement_deltas))
+    ]
     result = {
         "mount": mount,
         "start_x": start_x,
@@ -655,41 +663,45 @@ def scenario_mounted_smoothness():
         "motions": summaries,
         "callback_gaps": callback_gaps,
         "boundary_gaps": boundary_gaps,
+        "movement_deltas": movement_deltas,
+        "max_acceleration_delta": max(acceleration_deltas, default=0),
         "screenshot": screenshot,
     }
     result["passed"] = (
         mount["passed"]
-        and end_x == start_x + 7
+        and end_x == start_x + 9
         and settled_after is not None
         and recovery["passed"]
         and recovery["before"] == [end_x, initial_player["y"]]
         and recovery["final"] == [end_x + 1, initial_player["y"]]
         and (recovered_avatar["flags"] & 1) == 0
         and recovered_avatar["player_move_state"] in (0, 3)
-        and [motion["frames"] for motion in summaries[:7]]
-            == [8, 8, 8, 4, 4, 4, 2]
+        and [motion["frames"] for motion in summaries[:9]]
+            == [8, 8, 8, 6, 4, 4, 3, 2, 2]
         and all(
             summaries[index]["logical_positions"][0]
                 == [
                     summaries[index - 1]["target_x"],
                     summaries[index - 1]["target_y"],
                 ]
-            for index in range(1, 7)
+            for index in range(1, 9)
         )
         and [end_x, initial_player["y"]]
-            == [summaries[6]["target_x"], summaries[6]["target_y"]]
+            == [summaries[8]["target_x"], summaries[8]["target_y"]]
         and all(
             motion["elapsed"] == list(range(motion["frames"]))
             and motion["positions"] == motion["expected_positions"]
             and motion["pair_synced"]
             and motion["logical_stable"]
             and motion["lane_stable"]
-            for motion in summaries[:7]
+            for motion in summaries[:9]
         )
         and callback_gaps
         and max(callback_gaps) <= 3
         and boundary_gaps
         and max(boundary_gaps) <= 3
+        and acceleration_deltas
+        and max(acceleration_deltas) < 0x4000
     )
     return result
 

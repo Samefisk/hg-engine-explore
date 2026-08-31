@@ -35,6 +35,14 @@ OVERWORLD_WALK_TIMING_INLINE u8 OverworldWalkTimingPolicy_Accelerate(
 }
 
 OVERWORLD_WALK_TIMING_INLINE u8
+OverworldWalkTimingPolicy_TransitionTime(
+    u8 previousTravelTime,
+    u8 currentTravelTime)
+{
+    return (previousTravelTime + currentTravelTime + 1u) / 2u;
+}
+
+OVERWORLD_WALK_TIMING_INLINE u8
 OverworldWalkTimingPolicy_SkidTiles(u8 travelTime)
 {
     travelTime = OverworldWalkTimingPolicy_Clamp(travelTime);

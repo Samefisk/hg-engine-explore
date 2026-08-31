@@ -319,6 +319,7 @@ static void OverworldMount_ResetMomentum(void)
     /* Outside a skid, turnDirection stores uninterrupted Walk tile buildup. */
     sOverworldMountState.turnDirection = 0;
     sOverworldMountState.resumeSpeed = 0;
+    sOverworldMountState.walkTransitionTime = 0;
     sOverworldMountState.pendingStep = FALSE;
     sOverworldMountState.pendingSkid = FALSE;
     sOverworldMountState.bufferedDirection =
@@ -410,7 +411,7 @@ OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
     }
 }
 
-static void __attribute__((naked, noinline, section(".overworld_mount_crash_extra")))
+static void __attribute__((naked, noinline, section(".overworld_mount_field_input_extra")))
 OverworldMount_ClearObjectCommand(LocalMapObject *player)
 {
     __asm__(
@@ -959,6 +960,8 @@ OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar)
         if (sOverworldMountState.tileCounter
             >= sOverworldMountState.tilesToAccelerate) {
             sOverworldMountState.tileCounter = 0;
+            sOverworldMountState.walkTransitionTime =
+                sOverworldMountState.speed;
             sOverworldMountState.speed =
                 OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(
                     sOverworldMountState.speed,
