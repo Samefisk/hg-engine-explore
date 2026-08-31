@@ -69,6 +69,7 @@ SELECTOR_HIGHLIGHT = SELECTOR_SYMBOLS["sFollowerRecall"] + 0x63
 SELECTOR_STATE = SELECTOR_SYMBOLS["sFollowerSelectorInputState"]
 APPLY_WILD_RENDER = WILD_SYMBOLS["OverworldWildSpawns_ApplyCustomJumpRenderOffset"]
 CLEAR_WILD_JUMP = WILD_SYMBOLS["OverworldWildSpawns_ClearCustomJump"]
+START_NATIVE_JUMP = 0x02062958
 LANDING_PARTICLE = RUNTIME_SYMBOLS["OverworldWildRuntime_PlayLandingHopParticle"]
 PLAY_SE = MOUNT_SYMBOLS["PlaySE"] & ~1
 PREPARE_CHAIN_PAUSE = MOUNT_SYMBOLS[
@@ -88,11 +89,14 @@ WILD_FRAME_COUNTS_OFFSET = 0xDC
 WILD_ELAPSED_OFFSET = 0xF0
 WILD_ARC_OFFSET = 0x438
 WILD_MOTION_MODES_OFFSET = 0x442
+WILD_PREP_ACTIVE_OFFSET = 0x00
 WILD_ACTIVE_OFFSET = 0x0A
 WILD_START_X_OFFSET = 0x3C
 WILD_START_Y_OFFSET = 0x50
 WILD_TARGET_X_OFFSET = 0x64
 WILD_TARGET_Y_OFFSET = 0x78
+WILD_MOVEMENT_COOLDOWNS_OFFSET = 0xEE
+WILD_MOVEMENT_IN_PROGRESS_MASK_OFFSET = 0xF8
 
 
 def unsigned(emu, address, size=4):
@@ -247,6 +251,15 @@ def reset_walk_state(emu, travel_time):
 def set_object_facing(emu, obj, direction):
     for offset in (0x28, 0x2C, 0x30, 0x34):
         write_u32(emu, obj + offset, direction)
+
+
+def place_object_on_tile(emu, obj, x, y):
+    for offset in (0x4C, 0x58, 0x64):
+        write_u32(emu, obj + offset, x)
+    for offset in (0x54, 0x60, 0x6C):
+        write_u32(emu, obj + offset, y)
+    write_u32(emu, obj + 0x70, (x << 16) + 0x8000)
+    write_u32(emu, obj + 0x78, (y << 16) + 0x8000)
 
 
 def evacuate_wild_objects(emu):
@@ -1106,6 +1119,285 @@ def scenario_wild_walk():
     return result
 
 
+def scenario_wild_ledge_hop():
+    """Exercise a real south-facing Route 29 ledge with a wild Rattata."""
+    origin = [590, 395]
+    target = [590, 397]
+    slot = 0
+    native_jump_calls = []
+    ledge_samples = []
+    custom_ledge_started = False
+    completed = False
+    slot_stable = True
+    screenshot = None
+    with h.silence_native_output(True):
+        emu = h.create_desmume()
+        boot(emu, REPO / "test.dsv", True)
+
+        def slot_is_clean_and_idle():
+            current = wild_spawn(emu, slot)
+            runtime = unsigned(emu, WILD_STATE + WILD_RUNTIME_PTR_OFFSET)
+            if (
+                runtime == 0
+                or not current["active"]
+                or current["species"] != 19
+                or current["object"] == 0
+            ):
+                return False
+            state = object_state(emu, current["object"])
+            return (
+                (unsigned(
+                    emu,
+                    WILD_STATE + WILD_MOVEMENT_IN_PROGRESS_MASK_OFFSET,
+                    2,
+                ) & (1 << slot)) == 0
+                and unsigned(emu, runtime + WILD_PREP_ACTIVE_OFFSET + slot, 1) == 0
+                and unsigned(emu, runtime + WILD_ACTIVE_OFFSET + slot, 1) == 0
+                and unsigned(
+                    emu,
+                    runtime + WILD_MOTION_MODES_OFFSET + slot,
+                    1,
+                ) == 0
+                and state["unk88_y"] == 0
+                and state["unk94_y"] == 0
+                and state["movement_cmd"] == 0xFF
+            )
+
+        ready = wait_until(
+            emu,
+            slot_is_clean_and_idle,
+            600,
+        )
+        spawn = wild_spawn(emu, slot)
+        obj = spawn["object"]
+        initial = object_state(emu, obj) if obj else None
+
+        def on_start_native_jump(_address, _size):
+            regs = emu.memory.register_arm9
+            if regs.r0 != obj:
+                return
+            native_jump_calls.append({
+                "direction": regs.r1,
+                "delta": regs.r2,
+                "frames": regs.r3,
+                "jump_type": unsigned(emu, regs.r13),
+                "arc_table": signed(emu, regs.r13 + 4),
+                "arc_step": unsigned(emu, regs.r13 + 8),
+            })
+
+        emu.memory.register_exec(START_NATIVE_JUMP, on_start_native_jump)
+        if ready is not None:
+            place_object_on_tile(emu, obj, *origin)
+            set_object_facing(emu, obj, 1)
+            write_u8(
+                emu,
+                WILD_STATE + WILD_MOVEMENT_COOLDOWNS_OFFSET + slot,
+                0,
+            )
+
+            for _ in range(1200):
+                current_spawn = wild_spawn(emu, slot)
+                runtime = unsigned(emu, WILD_STATE + WILD_RUNTIME_PTR_OFFSET)
+                state = object_state(emu, obj)
+                if (
+                    not current_spawn["active"]
+                    or current_spawn["species"] != 19
+                    or current_spawn["object"] != obj
+                ):
+                    slot_stable = False
+                    break
+                mode = unsigned(
+                    emu,
+                    runtime + WILD_MOTION_MODES_OFFSET + slot,
+                    1,
+                )
+                if (
+                    mode == 2
+                    and signed(
+                        emu,
+                        runtime + WILD_TARGET_X_OFFSET + slot * 2,
+                        2,
+                    ) == target[0]
+                    and signed(
+                        emu,
+                        runtime + WILD_TARGET_Y_OFFSET + slot * 2,
+                        2,
+                    ) == target[1]
+                ):
+                    custom_ledge_started = True
+                in_progress = unsigned(
+                    emu,
+                    WILD_STATE + WILD_MOVEMENT_IN_PROGRESS_MASK_OFFSET,
+                    2,
+                ) & (1 << slot)
+                if custom_ledge_started and mode == 2:
+                    sample = {
+                        "elapsed": unsigned(
+                            emu,
+                            runtime + WILD_ELAPSED_OFFSET + slot * 2,
+                            2,
+                        ),
+                        "frames": unsigned(
+                            emu,
+                            runtime + WILD_FRAME_COUNTS_OFFSET + slot * 2,
+                            2,
+                        ),
+                        "arc": unsigned(
+                            emu,
+                            runtime + WILD_ARC_OFFSET + slot,
+                            1,
+                        ),
+                        "start_x": signed(
+                            emu,
+                            runtime + WILD_START_X_OFFSET + slot * 2,
+                            2,
+                        ),
+                        "start_y": signed(
+                            emu,
+                            runtime + WILD_START_Y_OFFSET + slot * 2,
+                            2,
+                        ),
+                        "x": state["x"],
+                        "y": state["y"],
+                        "pos_x": state["pos_x"],
+                        "pos_y": state["pos_y"],
+                        "pos_z": state["pos_z"],
+                        "unk88_y": state["unk88_y"],
+                        "unk94_y": state["unk94_y"],
+                        "flags": state["flags"],
+                    }
+                    ledge_samples.append(sample)
+                    if (
+                        screenshot is None
+                        and sample["frames"] > 0
+                        and sample["elapsed"] * 2 >= sample["frames"] - 1
+                        and sample["unk88_y"] > 0
+                    ):
+                        screenshot = h.save_screenshot(
+                            emu,
+                            "documentation/verification_screenshots/overworld_wild_ledge_hop.png",
+                        )
+                elif custom_ledge_started:
+                    completed = (
+                        not in_progress
+                        and [state["x"], state["y"]] == target
+                        and state["pos_x"] == (target[0] << 16) + 0x8000
+                        and state["pos_z"] == (target[1] << 16) + 0x8000
+                        and state["unk88_y"] == 0
+                        and state["unk94_y"] == 0
+                        and state["movement_cmd"] == 0xFF
+                        and state["movement_step"] == 0
+                        and unsigned(
+                            emu,
+                            runtime + WILD_PREP_ACTIVE_OFFSET + slot,
+                            1,
+                        ) == 0
+                        and unsigned(
+                            emu,
+                            runtime + WILD_ACTIVE_OFFSET + slot,
+                            1,
+                        ) == 0
+                        and mode == 0
+                    )
+                    if completed:
+                        break
+                elif not in_progress and [state["x"], state["y"]] != origin:
+                    place_object_on_tile(emu, obj, *origin)
+                    set_object_facing(emu, obj, 1)
+                    write_u8(
+                        emu,
+                        WILD_STATE + WILD_MOVEMENT_COOLDOWNS_OFFSET + slot,
+                        0,
+                    )
+                h.cycle(emu, 1, 0)
+
+        final = object_state(emu, obj) if obj else None
+        final_spawn = wild_spawn(emu, slot)
+        if screenshot is None:
+            screenshot = h.save_screenshot(
+                emu,
+                "documentation/verification_screenshots/overworld_wild_ledge_hop.png",
+            )
+        emu.memory.register_exec(START_NATIVE_JUMP, None)
+        emu.destroy()
+
+    unique_samples = [
+        sample
+        for index, sample in enumerate(ledge_samples)
+        if index == 0
+        or sample["elapsed"] != ledge_samples[index - 1]["elapsed"]
+    ]
+    frame_count = unique_samples[0]["frames"] if unique_samples else 0
+    arc_height = unique_samples[0]["arc"] if unique_samples else 0
+    expected_arc_samples = [
+        [
+            elapsed,
+            arc_height * (((
+                4 * elapsed * (frame_count - elapsed) // frame_count
+            ) << 12) // frame_count),
+        ]
+        for elapsed in range(frame_count)
+    ] if frame_count else []
+    actual_arc_samples = [
+        [sample["elapsed"], sample["unk88_y"]]
+        for sample in unique_samples
+    ]
+    expected_render_positions = [
+        [
+            (origin[0] << 16) + 0x8000,
+            (origin[1] << 16) + 0x8000
+                + ((target[1] - origin[1]) << 16) * elapsed
+                // frame_count,
+        ]
+        for elapsed in range(frame_count)
+    ] if frame_count else []
+    actual_render_positions = [
+        [sample["pos_x"], sample["pos_z"]]
+        for sample in unique_samples
+    ]
+    result = {
+        "ready": ready,
+        "spawn": spawn,
+        "initial": initial,
+        "origin": origin,
+        "target": target,
+        "native_jump_calls": native_jump_calls,
+        "custom_ledge_started": custom_ledge_started,
+        "completed": completed,
+        "slot_stable": slot_stable,
+        "arc_samples": actual_arc_samples,
+        "expected_arc_samples": expected_arc_samples,
+        "render_positions": actual_render_positions,
+        "expected_render_positions": expected_render_positions,
+        "final_spawn": final_spawn,
+        "final": final,
+        "screenshot": screenshot,
+    }
+    result["passed"] = (
+        ready is not None
+        and spawn["active"]
+        and spawn["species"] == 19
+        and initial is not None
+        and custom_ledge_started
+        and completed
+        and slot_stable
+        and not native_jump_calls
+        and frame_count == 7
+        and arc_height == 16
+        and [unique_samples[0]["start_x"], unique_samples[0]["start_y"]]
+            == origin
+        and actual_arc_samples == expected_arc_samples
+        and actual_render_positions == expected_render_positions
+        and all((sample["flags"] & (1 << 9)) == 0 for sample in unique_samples)
+        and final_spawn["active"]
+        and final_spawn["species"] == 19
+        and final_spawn["object"] == obj
+        and final is not None
+        and [final["x"], final["y"]] == target
+    )
+    return result
+
+
 def scenario_ledyba_chain_pause():
     """Exercise Ledyba's configured reposition-skid action in the live ROM."""
     trace = {
@@ -1114,8 +1406,9 @@ def scenario_ledyba_chain_pause():
         "action_calls": [],
         "reposition_calls": [],
         "motions": [],
+        "natural_steps_before": None,
     }
-    pending_prepare = {"target": False, "initialized": False}
+    pending_prepare = {"target": False, "phase": 0}
     with h.silence_native_output(True):
         emu = h.create_desmume()
         boot(emu, REPO / "test.dsv", True)
@@ -1136,6 +1429,14 @@ def scenario_ledyba_chain_pause():
         write_u8(emu, spawn_base + 0x0A, 165)
         write_u8(emu, spawn_base + 0x0B, 0)
         target_object = wild_spawn(emu, target_slot)["object"]
+        evacuate_wild_objects(emu)
+        place_object_on_tile(emu, target_object, 587, 399)
+        set_object_facing(emu, target_object, 1)
+        write_u8(
+            emu,
+            WILD_STATE + WILD_MOVEMENT_COOLDOWNS_OFFSET + target_slot,
+            0,
+        )
 
         def on_apply_chain_pause(_address, _size):
             regs = emu.memory.register_arm9
@@ -1162,14 +1463,21 @@ def scenario_ledyba_chain_pause():
             regs = emu.memory.register_arm9
             lane = unsigned(emu, regs.sp + 4)
             locomotion = unsigned(emu, regs.sp + 8) & 0xFF
-            if not pending_prepare["initialized"]:
-                # The borrowed live spawn can have a partial chain from its
-                # original species. Start Ledyba at a clean chain boundary.
+            steps_before = unsigned(emu, regs.r0, 1)
+            if pending_prepare["phase"] == 0:
+                # Reset the borrowed live spawn's old counter. Let the policy
+                # sample Ledyba's real 8+variance chain on this completion.
                 write_u8(emu, regs.r0, 0)
-                pending_prepare["initialized"] = True
+                pending_prepare["phase"] = 1
+            elif pending_prepare["phase"] == 1:
+                trace["natural_steps_before"] = steps_before
+                # Trigger the action on this completion after proving the
+                # naturally sampled counter used the configured range.
+                write_u8(emu, regs.r0, 1)
+                pending_prepare["phase"] = 2
             trace["prepared"].append(
                 {
-                    "steps_before": unsigned(emu, regs.r0, 1),
+                    "steps_before": steps_before,
                     "locomotion": locomotion,
                     "action": unsigned(emu, lane + 31, 1),
                 }
@@ -1196,6 +1504,11 @@ def scenario_ledyba_chain_pause():
             trace["reposition_calls"].append(
                 {
                     "remaining": unsigned(emu, regs.r3, 1),
+                    "pending_direction": unsigned(
+                        emu,
+                        WILD_STATE + 0x1B2 + target_slot,
+                        1,
+                    ),
                     "position": [
                         object_state(emu, target_object)["x"],
                         object_state(emu, target_object)["y"],
@@ -1267,6 +1580,41 @@ def scenario_ledyba_chain_pause():
         emu.destroy()
 
     profile = trace["profile"] or {}
+    motions = trace["motions"]
+    origin = trace["action_calls"][0]["position"] \
+        if trace["action_calls"] else None
+    continuous_reposition = (
+        len(motions) == 4
+        and origin is not None
+        and motions[0]["start"] == origin
+        and all(
+            motions[index]["start"] == motions[index - 1]["target"]
+            for index in range(1, len(motions))
+        )
+        and trace["target"]["final"] == motions[-1]["target"]
+    )
+    canonical_directions = {
+        (0, -2): 0,
+        (0, 2): 1,
+        (-2, 0): 2,
+        (2, 0): 3,
+        (-2, -2): 4,
+        (2, -2): 5,
+        (-2, 2): 6,
+        (2, 2): 7,
+    }
+    directions_match = len(trace["reposition_calls"]) >= len(motions) + 1 \
+        and all(
+            trace["reposition_calls"][index + 1]["pending_direction"]
+            == canonical_directions.get(
+                (
+                    motion["target"][0] - motion["start"][0],
+                    motion["target"][1] - motion["start"][1],
+                )
+            )
+            for index, motion in enumerate(motions)
+        )
+    trace["directions_match"] = directions_match
     trace["passed"] = (
         profile == {
             "chain_moves": 8,
@@ -1280,13 +1628,19 @@ def scenario_ledyba_chain_pause():
             "action_chance": 60,
         }
         and any(call["action"] == 5 for call in trace["action_calls"])
+        and trace["natural_steps_before"] in range(7, 14)
         and len(trace["reposition_calls"]) >= 5
-        and len(trace["motions"]) == 4
+        and [
+            call["remaining"] & 0x0F
+            for call in trace["reposition_calls"][1:5]
+        ] == [4, 3, 2, 1]
+        and continuous_reposition
+        and directions_match
         and all(
             motion["frames"] == 16
             and abs(motion["target"][0] - motion["start"][0]) == 2
             and abs(motion["target"][1] - motion["start"][1]) == 2
-            for motion in trace["motions"]
+            for motion in motions
         )
     )
     return trace
@@ -2847,6 +3201,7 @@ SCENARIOS = {
     "turn_skid": scenario_turn_skid,
     "diagonal_turn_skid": scenario_diagonal_turn_skid,
     "wild_walk": scenario_wild_walk,
+    "wild_ledge_hop": scenario_wild_ledge_hop,
     "ledyba_chain_pause": scenario_ledyba_chain_pause,
     "mankey_hops": scenario_mankey_hops,
     "mankey_control_stress": scenario_mankey_control_stress,
