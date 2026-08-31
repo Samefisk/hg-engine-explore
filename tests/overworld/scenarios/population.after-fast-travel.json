@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "population.after-fast-travel",
+  "title": "Population catches up after fast movement",
+  "status": "planned",
+  "capabilities": ["population", "world.streaming"],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "input", "value": "Travel quickly through repeated long Hops and area changes"},
+    {"at": 1, "kind": "lifecycle", "value": "Remain idle while the refill scheduler processes the current map"}
+  ],
+  "stop": {"frameBudget": 30000, "condition": "Population reaches the eligible target or the bounded scheduler window ends"},
+  "expect": {
+    "requiredEvents": ["PATH_ADVANCED", "CONTEXT_CHANGED", "ACTOR_ATTACHED"],
+    "forbiddenEvents": [],
+    "invariants": ["Path advances update the player-centered population region", "Refill work remains frame-capped", "Idle time can refill eligible population", "No actor from the old field epoch is retained"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

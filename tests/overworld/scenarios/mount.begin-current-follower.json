@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.begin-current-follower",
+  "title": "Mount begin binds the current follower",
+  "status": "planned",
+  "capabilities": ["actor.system", "mount.lifecycle"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Select a follower different from the previous follower"},
+    {"at": 1, "kind": "input", "value": "Press Select to mount"}
+  ],
+  "stop": {"frameBudget": 600, "condition": "Mount begin accepts or returns a typed rejection"},
+  "expect": {
+    "requiredEvents": ["ACTOR_ATTACHED", "PROFILE_RESOLVED", "CONTROL_REBOUND"],
+    "forbiddenEvents": [],
+    "invariants": ["The mounted actor identity equals the current follower identity", "Mount begin does not respawn a second follower", "One actor owns mounted motion"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

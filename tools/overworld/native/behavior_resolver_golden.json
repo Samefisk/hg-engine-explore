@@ -1,0 +1,163 @@
+{
+  "formatVersion": 1,
+  "blobVersion": 72,
+  "vectors": [
+    {
+      "name": "default-class-and-lanes",
+      "request": {
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 0,
+        "behaviorLimitKey": 0,
+        "conditionalOverrideMask": 0,
+        "profileFields": {
+          "owner.chillSpeed": 16,
+          "active.chillSpeed": 16,
+          "tired.chillSpeed": 16
+        },
+        "primitiveFields": {
+          "spawnLocomotion": 7,
+          "chillLocomotion": 1,
+          "chillTarget": 1,
+          "tiredReaction": 5
+        },
+        "requiredAppliedOverrideMask": 98304,
+        "traceContains": [
+          {"lane": 0, "kind": 2, "sourceIndex": 0},
+          {"lane": 1, "kind": 5, "sourceIndex": 15},
+          {"lane": 2, "kind": 5, "sourceIndex": 16}
+        ]
+      }
+    },
+    {
+      "name": "species-class-selection",
+      "request": {
+        "species": 16,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 20
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 1,
+        "speciesClassRuleIndex": 1,
+        "requiredMatchedOverrideMask": 32,
+        "traceContains": [
+          {"lane": 255, "kind": 1, "sourceIndex": 1},
+          {"lane": 0, "kind": 3, "sourceIndex": 5}
+        ]
+      }
+    },
+    {
+      "name": "forced-follower-profile",
+      "request": {
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096,
+        "forcedOverrideMask": 8192
+      },
+      "expected": {
+        "status": 0,
+        "forcedOverrideMask": 8192,
+        "requiredAppliedOverrideMask": 8192,
+        "profileFields": {
+          "owner.chillSpeed": 8,
+          "owner.chainPauseAction": 0,
+          "owner.walkPause": 0
+        },
+        "traceContains": [
+          {"lane": 0, "kind": 3, "sourceIndex": 13, "requiredFlags": 6}
+        ]
+      }
+    },
+    {
+      "name": "relative-override",
+      "request": {
+        "species": 150,
+        "level": 70,
+        "terrain": 0,
+        "groupFlags": 65536
+      },
+      "expected": {
+        "status": 0,
+        "requiredMatchedOverrideMask": 256,
+        "profileFields": {
+          "owner.chillSpeed": 8
+        },
+        "traceContains": [
+          {"lane": 0, "kind": 3, "sourceIndex": 8, "requiredFlags": 3}
+        ]
+      }
+    },
+    {
+      "name": "conditional-rooftop-replay",
+      "request": {
+        "species": 16,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 20,
+        "conditionTerrainMask": 64
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 1,
+        "requiredMatchedOverrideMask": 32,
+        "conditionalOverrideMask": 2048,
+        "requiredAppliedOverrideMask": 2080,
+        "traceContains": [
+          {"lane": 0, "kind": 4, "sourceIndex": 11, "requiredFlags": 10},
+          {"lane": 1, "kind": 4, "sourceIndex": 11, "requiredFlags": 10},
+          {"lane": 2, "kind": 4, "sourceIndex": 11, "requiredFlags": 10}
+        ]
+      }
+    },
+    {
+      "name": "explicit-picked-up-class",
+      "request": {
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096,
+        "behaviorClass": 3
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 3,
+        "matchedOverrideMask": 0,
+        "conditionalOverrideMask": 0,
+        "profileFields": {
+          "owner.chillState": 0,
+          "owner.chillSpeed": 16
+        }
+      }
+    },
+    {
+      "name": "legacy-forced-asleep-match-token",
+      "request": {
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096,
+        "behaviorClass": 253
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 0,
+        "requiredMatchedOverrideMask": 512,
+        "profileFields": {
+          "owner.stamina": 1,
+          "owner.restTime": 4
+        },
+        "traceContains": [
+          {"lane": 0, "kind": 3, "sourceIndex": 9, "requiredFlags": 3}
+        ]
+      }
+    }
+  ]
+}

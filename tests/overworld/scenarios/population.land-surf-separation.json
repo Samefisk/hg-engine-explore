@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "population.land-surf-separation",
+  "title": "Land and Surf populations use their own encounter terrain",
+  "status": "active",
+  "capabilities": ["population"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Enter Cherrygrove with both Land and Surf encounter regions"},
+    {"at": 1, "kind": "lifecycle", "value": "Observe spawned population terrain and species"}
+  ],
+  "stop": {"frameBudget": 5000, "condition": "Eligible Land and Surf spawn samples are observed"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["Surf-only species do not attach to Land terrain", "Population selection preserves encounter-method context"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cherrygrove_surf_spawn_terrain"]],
+    "result": "json-passed"
+  }
+}

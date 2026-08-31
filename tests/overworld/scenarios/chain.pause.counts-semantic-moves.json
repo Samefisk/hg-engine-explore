@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "chain.pause.counts-semantic-moves",
+  "title": "Chain pause counts semantic movement commits",
+  "status": "active",
+  "capabilities": ["chain.movement"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Select one active Ledyba with its resolved Flying insect profile"},
+    {"at": 1, "kind": "lifecycle", "value": "Observe natural movement through the next chain pause action"}
+  ],
+  "stop": {"frameBudget": 12000, "condition": "Ledyba completes the expected chain pause action"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["Skid and reposition work do not increment the chain count", "The pause action follows the authored semantic move count", "The actor keeps movement control after the pause"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "ledyba_chain_pause"]],
+    "result": "json-passed"
+  }
+}

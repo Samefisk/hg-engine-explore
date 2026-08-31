@@ -2,6 +2,9 @@
 CODE_BUILD_DIRS += $(BUILD)
 THUMB_HELP := $(BUILD)/thumb_help.o
 LINKED_OUTPUTS = build/linked.o
+OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS := \
+	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o \
+	$(BUILD)/overworld_actor_system_overlay/overworld_motion_model.o
 
 OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -fno-short-enums -fno-tree-dominator-opts -fno-tree-forwprop -fno-tree-loop-ivcanon
 OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions
@@ -12,6 +15,19 @@ INDIVIDUAL := individual
 OVERLAYS := $(filter-out $(INDIVIDUAL) $(shell cd $(C_SUBDIR); ls *.*),$(shell cd $(C_SUBDIR); ls))
 
 INDIVIDUAL_OVERLAYS = $(basename $(notdir $(wildcard $(C_SUBDIR)/$(INDIVIDUAL)/*.c)))
+
+$(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o: \
+		lib/overworld/overworld_behavior_resolver.c $(BUILD)/.compile-config \
+		| $(BUILD)/overworld_actor_system_overlay venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -I$(INCLUDE_SUBDIR) -c $< -o $@
+
+$(BUILD)/overworld_actor_system_overlay/overworld_motion_model.o: \
+		lib/overworld/overworld_motion_model.c $(BUILD)/.compile-config \
+		| $(BUILD)/overworld_actor_system_overlay venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -I$(INCLUDE_SUBDIR) -c $< -o $@
+
+-include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.d
+-include $(BUILD)/overworld_actor_system_overlay/overworld_motion_model.d
 
 # everything is expanded because it was not working for me otherwise
 # this is aggressively defined but works.  in order to add a new overlay, you just have to add to the top now.
@@ -31,11 +47,11 @@ $1_C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*
 $1_ASM_SRCS := $(wildcard $(ASM_SUBDIR)/$1/*.s)
 ALL_ASM_SRCS += $(wildcard $(ASM_SUBDIR)/$1/*.s)
 $1_ASM_OBJS := $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s))
-$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
+$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
 
-$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld
-	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),)) -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
+$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld
+	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),)) -o $(BUILD)/$1_linked.o $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
 $(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o
 	$(OBJCOPY) -O binary $(BUILD)/$1_linked.o $(BUILD)/output_$1.bin

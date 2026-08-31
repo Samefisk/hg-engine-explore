@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.transition-mid-motion",
+  "title": "Mounted motion completes through an area transition",
+  "status": "active",
+  "capabilities": ["actor.system", "world.transition", "mount.lifecycle", "hop"],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "lifecycle", "value": "Mount Mankey and approach an area boundary"},
+    {"at": 1, "kind": "input", "value": "Hop across the boundary while motion is active"}
+  ],
+  "stop": {"frameBudget": 5000, "condition": "The rebound motion finishes and a recovery Hop completes"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["The motion does not snap to the ground during rebind", "Rider and Pokémon remain synchronized", "The old field epoch is not dereferenced", "Input ownership returns"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_transition"]],
+    "result": "json-passed"
+  }
+}

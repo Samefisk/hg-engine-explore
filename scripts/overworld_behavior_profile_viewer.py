@@ -46,6 +46,8 @@ OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns
 HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
 BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
+BEHAVIOR_SCHEMA_SOURCE = ROOT / "tools/overworld/behavior_schema.json"
+BEHAVIOR_SCHEMA_METADATA = ROOT / "tools/overworld/generated/behavior_schema.json"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
@@ -155,6 +157,8 @@ DATA_SOURCE_FILES = (
     HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
+    BEHAVIOR_SCHEMA_SOURCE,
+    BEHAVIOR_SCHEMA_METADATA,
     SPECIES_HEADER,
     MAPS_HEADER,
     SPAWNS_PUBLIC_HEADER,
@@ -270,79 +274,15 @@ LEGACY_PROFILE_FIELDS = [
     "chainPauseVariance",
 ]
 
-# Stored profile schema v72. Active and Tired no longer duplicate complete
-# behavior lanes; they select an override profile and consume that profile's
-# Chill lane. Keep this order synchronized with
-# OverworldWildBehaviorProfileData and its three override-mask words.
-PROFILE_FIELDS = [
-    "chillState",
-    "alertState",
-    "alertEmote",
-    "alertTime",
-    "alertness",
-    "stamina",
-    "restTime",
-    "chillSpeed",
-    "range",
-    "jumpLevel",
-    "profileId",
-    "spawnState",
-    "chillAction",
-    "chillTarget",
-    "alertRange",
-    "playerAdjacentDirectionMasks",
-    "alertChance",
-    "spawnDestination",
-    "battleTrigger",
-    "hopAllowNonCardinal",
-    "hopMinDistance",
-    "hopMaxDistance",
-    "hopPause",
-    "teleportTime",
-    "teleportPause",
-    "alertSpecialAction",
-    "overworldLimit",
-    "spawnDestinationMinDistance",
-    "spawnDestinationMaxDistance",
-    "ramAccelerationSteps",
-    "ramMaxSpeed",
-    "chainPauseAction",
-    "chillAllowedTerrainMask",
-    "chillAllowedTerrainOverrideMask",
-    "hopTime",
-    "chaseBoostDistance",
-    "chaseBoostSpeed",
-    "hopSpinSpeed",
-    "spawnHopTime",
-    "circleRadius",
-    "continueWhenArrived",
-    "avoidPreviousTile",
-    "chainMovementVariance",
-    "chainPauseVariance",
-    "activeProfile",
-    "tiredProfile",
-    "hopElevationTimeScale",
-    "hopElevationArcScale",
-    "tilesToAccelerate",
-    "maxWalkSpeed",
-    "spawnDestinationMask",
-    "spawnDestinationOverrideMask",
-    "hopAllowVerticalObstacles",
-    "chainRepositionJumpCount",
-    "hopSwayWidth",
-    "spawnHopSwayWidth",
-    "chainRepositionSpeed",
-    "chainRepositionDistance",
-    "chainRepositionDust",
-    "chainRepositionAllowCardinal",
-    "chainRepositionAllowDiagonal",
-    "walkOptions",
-    "wanderStraightChance",
-    "chainPauseActionChance",
-    "walkPause",
-    "tilesBeforeTurnSkid",
-    "walkStompTime",
-]
+# The named schema now owns v72 order and host-facing field metadata. Positional
+# C records remain the ROM compatibility input during the resolver migration.
+_BEHAVIOR_SCHEMA = json.loads(BEHAVIOR_SCHEMA_SOURCE.read_text(encoding="utf-8"))
+_BEHAVIOR_SCHEMA_GENERATED = json.loads(BEHAVIOR_SCHEMA_METADATA.read_text(encoding="utf-8"))
+_BEHAVIOR_SCHEMA_EDITOR = _BEHAVIOR_SCHEMA_GENERATED.get("editor", {})
+if _BEHAVIOR_SCHEMA.get("blobVersion") != 72 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 67:
+    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v72 schema")
+BEHAVIOR_SCHEMA_FIELDS = tuple(_BEHAVIOR_SCHEMA_EDITOR["fields"])
+PROFILE_FIELDS = [field["key"] for field in BEHAVIOR_SCHEMA_FIELDS]
 
 # v71 stored four Walk speed tiers. v72 stores exact frame times and moves the
 # stomp threshold out of the packed Walk options byte.
@@ -588,6 +528,16 @@ FIELD_UNITS = {
     "chaseBoostSpeed": "frames",
     "circleRadius": "tiles",
 }
+
+# Preserve legacy-only fields while making every compact v72 field read from
+# the canonical schema. V2 consumes this same backend payload.
+for _schema_field in BEHAVIOR_SCHEMA_FIELDS:
+    FIELD_LABELS[_schema_field["key"]] = _schema_field["label"]
+    _display_unit = _schema_field["unit"]
+    if _display_unit:
+        FIELD_UNITS[_schema_field["key"]] = _display_unit
+    else:
+        FIELD_UNITS.pop(_schema_field["key"], None)
 
 PRIMITIVE_FIELDS = [
     "spawnLocomotion",
@@ -5949,6 +5899,13 @@ def build_data(
         "capabilities": capabilities,
         "profilesAvailable": True,
         "profileError": None,
+        "behaviorSchema": {
+            "name": _BEHAVIOR_SCHEMA["name"],
+            "schemaVersion": _BEHAVIOR_SCHEMA["schemaVersion"],
+            "blobVersion": _BEHAVIOR_SCHEMA["blobVersion"],
+            "source": str(BEHAVIOR_SCHEMA_SOURCE.relative_to(ROOT)),
+            "metadata": str(BEHAVIOR_SCHEMA_METADATA.relative_to(ROOT)),
+        },
         "allowedTerrains": [
             {
                 "key": key,

@@ -10,7 +10,7 @@ typedef struct LocalMapObject LocalMapObject;
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY_ADDR 0x023BC800
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_END_ADDR 0x023BD400
 #define OVERWORLD_WILD_RUNTIME_MAGIC 0x3152574F /* "OWR1" */
-#define OVERWORLD_WILD_RUNTIME_VERSION 9
+#define OVERWORLD_WILD_RUNTIME_VERSION 10
 
 typedef BOOL (*OverworldWildRuntimeValidateFunc)(void);
 typedef BOOL (*OverworldWildRuntimeQuerySurfaceFunc)(
@@ -47,24 +47,6 @@ typedef BOOL (*OverworldWildRuntimeWalkMomentumFinishFunc)(
     OverworldWildWalkStartStepCallback startStep,
     OverworldWildWalkEffectCallback effect,
     void *context);
-typedef BOOL (*OverworldWildRuntimeBehaviorMatchAppliesFunc)(
-    const OverworldWildBehaviorContext *context,
-    const OverworldWildBehaviorMatch *match);
-typedef BOOL (*OverworldWildRuntimeOverrideTargetsContextFunc)(
-    const OverworldWildBehaviorContext *context,
-    const OverworldWildBehaviorOverrideProfile *overrideProfile,
-    const u16 *overrideMembers,
-    u16 overrideMemberCount);
-typedef void (*OverworldWildRuntimeApplyBehaviorOverrideFunc)(
-    OverworldWildBehaviorProfileData *profile,
-    const OverworldWildBehaviorOverrideProfile *overrideProfile);
-typedef void (*OverworldWildRuntimeNormalizeMovementProfileFunc)(
-    OverworldWildBehaviorProfileData *profile,
-    u8 invalidState);
-typedef void (*OverworldWildRuntimeResolveInheritedPoliciesFunc)(
-    OverworldWildBehaviorProfileData *profile);
-typedef BOOL (*OverworldWildRuntimeValidateBehaviorDataBlobFunc)(
-    const OverworldWildBehaviorDataBlob *blob);
 typedef void (*OverworldWildRuntimePlayStepDirtParticleFunc)(
     LocalMapObject *object);
 typedef void (*OverworldWildRuntimePlayLandingHopParticleFunc)(
@@ -80,12 +62,9 @@ typedef struct OverworldWildRuntimeOverlayEntry {
     OverworldWildRuntimeWalkMomentumResetFunc walkMomentumReset;
     OverworldWildRuntimeWalkMomentumStartFunc walkMomentumStart;
     OverworldWildRuntimeWalkMomentumFinishFunc walkMomentumFinish;
-    OverworldWildRuntimeBehaviorMatchAppliesFunc behaviorMatchApplies;
-    OverworldWildRuntimeOverrideTargetsContextFunc overrideTargetsContext;
-    OverworldWildRuntimeApplyBehaviorOverrideFunc applyBehaviorOverride;
-    OverworldWildRuntimeNormalizeMovementProfileFunc normalizeMovementProfile;
-    OverworldWildRuntimeResolveInheritedPoliciesFunc resolveInheritedPolicies;
-    OverworldWildRuntimeValidateBehaviorDataBlobFunc validateBehaviorDataBlob;
+    /* ABI padding retained until overlay 156 can move. Resolver mechanics
+     * are private to the actor-system resolver service. */
+    u32 reservedResolverCallbacks[6];
     OverworldWildRuntimePlayStepDirtParticleFunc playStepDirtParticle;
     OverworldWildRuntimePlayLandingHopParticleFunc playLandingHopParticle;
 } OverworldWildRuntimeOverlayEntry;

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.ledge-up-and-down",
+  "title": "Hop crosses ledges only in permitted directions",
+  "status": "planned",
+  "capabilities": ["hop.ledge"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the actor at both sides of directional ledge fixtures"},
+    {"at": 1, "kind": "input", "value": "Request Hop across each permitted and blocked ledge direction"}
+  ],
+  "stop": {"frameBudget": 1800, "condition": "All ledge cases return terminal results"},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "CANDIDATE_REJECTED", "PLAN_ACCEPTED", "LOGICAL_COMMIT"],
+    "forbiddenEvents": [],
+    "invariants": ["Permitted ledge directions can cross the edge", "Blocked ledge directions do not start motion", "Every accepted landing tile is legal"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

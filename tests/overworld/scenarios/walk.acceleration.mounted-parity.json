@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.acceleration.mounted-parity",
+  "title": "Wild and mounted Walk share acceleration commits",
+  "status": "planned",
+  "capabilities": ["walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Bind wild and mounted actors to the same resolved Owner profile"},
+    {"at": 1, "kind": "input", "value": "Request seven uninterrupted Walk decisions for each actor"}
+  ],
+  "stop": {"frameBudget": 1200, "condition": "Both actors complete seven Walk decisions"},
+  "expect": {
+    "requiredEvents": ["PROFILE_RESOLVED", "LOGICAL_COMMIT", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED"],
+    "invariants": ["Wild and mounted travel-time sequences match", "Acceleration changes only after eligible Walk commits", "Player and mounted presentation remain synchronized"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.turn-skid.control-release",
+  "title": "Turn skid retains direction and returns rider control",
+  "status": "active",
+  "capabilities": ["walk.skid", "mount.presentation"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "input", "value": "Accelerate in one cardinal direction"},
+    {"at": 1, "kind": "input", "value": "Request the opposite direction at skid speed"}
+  ],
+  "stop": {"frameBudget": 1000, "condition": "The skid finishes and the opposite Walk starts"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["Facing does not turn during skid", "Player and mounted presentation stay synchronized", "Input ownership returns after skid"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "turn_skid"]],
+    "result": "json-passed"
+  }
+}

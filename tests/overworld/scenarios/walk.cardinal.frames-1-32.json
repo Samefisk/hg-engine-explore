@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.cardinal.frames-1-32",
+  "title": "Cardinal Walk completes in every authored travel time",
+  "status": "planned",
+  "capabilities": ["walk.exact"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "input", "value": "For each travel time 1 through 32, request one cardinal Walk"}
+  ],
+  "stop": {"frameBudget": 4096, "condition": "All 32 Walk motions return terminal results"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "PATH_ADVANCED", "LOGICAL_COMMIT", "MOTION_FINISHED"],
+    "forbiddenEvents": ["MOTION_CANCELED"],
+    "invariants": ["Each Walk duration equals its authored frame count", "Each accepted Walk has one path advance and one commit", "Input ownership returns after each Walk"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

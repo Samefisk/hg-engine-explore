@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.detach-restores-control",
+  "title": "Mounted detach always restores normal control",
+  "status": "active",
+  "capabilities": ["actor.system", "mount.lifecycle"],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "lifecycle", "value": "Mount Cyndaquil and exercise Walk, skid, crash, and repeated toggle boundaries"},
+    {"at": 1, "kind": "input", "value": "Dismount and request a normal player step"}
+  ],
+  "stop": {"frameBudget": 40000, "condition": "The stress route, dismount, and recovery step finish"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["No target reservation remains after detach", "Player input ownership returns", "A normal player step starts after detach"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cyndaquil_control_stress"]],
+    "result": "json-passed"
+  }
+}

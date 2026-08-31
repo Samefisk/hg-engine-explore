@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "overworld-scenario-v1",
+  "title": "Overworld scenario v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "status",
+    "capabilities",
+    "proofLevel",
+    "costTier",
+    "fixture",
+    "events",
+    "stop",
+    "expect",
+    "capture",
+    "adapter"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "planned"]},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"}
+    },
+    "proofLevel": {"enum": ["S0", "S1", "S2", "S3", "S4", "S5"]},
+    "costTier": {"type": "integer", "minimum": 0, "maximum": 5},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rom", "save", "seed"],
+      "properties": {
+        "rom": {"type": ["string", "null"]},
+        "save": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "kind"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "kind": {"enum": ["dsv", "sav"]}
+              }
+            }
+          ]
+        },
+        "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "kind", "value"],
+        "properties": {
+          "at": {"type": "integer", "minimum": 0},
+          "kind": {"enum": ["input", "lifecycle", "setup"]},
+          "value": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frameBudget", "condition"],
+      "properties": {
+        "frameBudget": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "condition": {"type": "string", "minLength": 1}
+      }
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredEvents", "forbiddenEvents", "invariants"],
+      "properties": {
+        "requiredEvents": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "forbiddenEvents": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "invariants": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "capture": {"enum": ["none", "failure", "always"]},
+    "adapter": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "commands", "result"],
+          "properties": {
+            "kind": {"const": "command-sequence"},
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "result": {"enum": ["exit-zero", "json-passed"]}
+          }
+        }
+      ]
+    }
+  }
+}

@@ -214,15 +214,17 @@ def main() -> None:
 
     save_constants = (REPO / "include/constants/save.h").read_text()
     require(
-        re.search(r"^#define NEW_HEAP3_SIZE 0x10AB00$", save_constants, re.MULTILINE)
+        re.search(r"^#define NEW_HEAP3_SIZE 0x106B00$", save_constants, re.MULTILINE)
         is not None,
-        "heap 3 does not reserve the mount block",
+        "heap 3 does not reserve the actor and mount blocks",
     )
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
     require(
-        "mov r1, #157" in startup
+        "mov r1, #158" in startup
+        and "mov r1, #157" in startup
+        and startup.index("mov r1, #158") < startup.index("mov r1, #157")
         and startup.index("mov r1, #157") < startup.index("mov r1, #156"),
-        "mount overlay is not boot-loaded before runtime use",
+        "actor and mount overlays are not boot-loaded before runtime use",
     )
     field_service = (REPO / "src/field/map_teleport.c").read_text()
     require(
@@ -268,6 +270,10 @@ def main() -> None:
         / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
     ).read_text()
     resident_spawns = (REPO / "src/overworld_wild_spawns.c").read_text()
+    actor_source = (
+        REPO
+        / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c"
+    ).read_text()
     require(
         "OverworldWildSpawns_BeginMountSelectedFollower" in spawns
         and "OverworldWildSpawns_ResolveBehaviorProfileForContext" in spawns
@@ -876,10 +882,23 @@ def main() -> None:
         spawns,
         re.DOTALL,
     )
-    runtime_refill_timer = re.search(
-        r"static void OverworldRuntime_TickWildRefillTimer\([^;]*?\)\s*\{"
-        r".*?\n\}",
-        mount_source,
+    population_start = actor_source.find(
+        "static OverworldActorFrameResult "
+        "OverworldActorSystem_PopulationFrameImpl("
+    )
+    population_end = actor_source.find(
+        "static void OverworldActorSystem_PopulationResetImpl(",
+        population_start,
+    )
+    runtime_refill_timer = (
+        actor_source[population_start:population_end]
+        if population_start >= 0 and population_end > population_start
+        else ""
+    )
+    player_frame = re.search(
+        r"static BOOL [^;]*?OverworldWildSpawns_OverlayOnPlayerFrame"
+        r"\([^;]*?\)\s*\{.*?\n\}",
+        spawns,
         re.DOTALL,
     )
     player_step = re.search(
@@ -894,15 +913,19 @@ def main() -> None:
         and "spawnCooldown--" not in refill_function.group(0)
         and "OW_WILD_REFILL_BASE_INTERVAL_FRAMES * sharedSpawnCount"
             in refill_function.group(0)
-        and runtime_refill_timer is not None
-        and "state->spawnCooldown--" in runtime_refill_timer.group(0)
+        and runtime_refill_timer
+        and "state->spawnCooldown--" in runtime_refill_timer
         and "state->spawnCooldown = OW_WILD_REFILL_TIMER_PENDING;"
-            in runtime_refill_timer.group(0)
-        and "gOverworldWildFieldIdleRearmPending != 0"
-            in runtime_refill_timer.group(0)
+            in runtime_refill_timer
+        and "gOverworldWildFieldIdleRearmPending == 0"
+            in runtime_refill_timer
         and "gOverworldWildFieldIdleRearmPending |="
-            in runtime_refill_timer.group(0)
-        and mount_source.count("OverworldRuntime_TickWildRefillTimer(state);") == 1
+            in runtime_refill_timer
+        and "OverworldRuntime_TickWildRefillTimer" not in mount_source
+        and player_frame is not None
+        and player_frame.group(0).count(
+            "OVERWORLD_ACTOR_SYSTEM_POPULATION_ENTRY->frame(fieldSystem, state);"
+        ) == 1
         and player_step is not None
         and "OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING"
             in player_step.group(0)

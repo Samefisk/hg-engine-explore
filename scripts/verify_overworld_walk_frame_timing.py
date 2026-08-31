@@ -135,9 +135,9 @@ def main() -> int:
             "runtime momentum does not use the shared Walk policy: "
             + ", ".join(missing)
         )
-    if "#define OVERWORLD_WILD_RUNTIME_VERSION 9" not in runtime_header:
+    if "#define OVERWORLD_WILD_RUNTIME_VERSION 10" not in runtime_header:
         raise SystemExit("runtime Walk ABI version was not advanced")
-    if "expected_header = (0x3152574F, 9, expected_entry_size)" \
+    if "expected_header = (0x3152574F, 10, expected_entry_size)" \
             not in packager_source:
         raise SystemExit("ROM packager expects a stale runtime Walk ABI version")
 

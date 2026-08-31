@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "warp.blocked-mid-motion",
+  "title": "Warp tiles do not fire during mounted motion",
+  "status": "planned",
+  "capabilities": ["world.warp-gating"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place a warp tile inside a multi-tile mounted path"},
+    {"at": 1, "kind": "input", "value": "Start the mounted motion across the warp tile"}
+  ],
+  "stop": {"frameBudget": 1200, "condition": "The motion reaches its terminal commit"},
+  "expect": {
+    "requiredEvents": ["PATH_ADVANCED", "LOGICAL_COMMIT"],
+    "forbiddenEvents": ["CONTEXT_CHANGED"],
+    "invariants": ["Warp evaluation does not run during interpolation or path advance", "Only an eligible terminal commit can trigger a warp"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

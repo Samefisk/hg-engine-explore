@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "teleport.fixed-and-per-tile",
+  "title": "Teleport supports fixed and per-tile duration",
+  "status": "planned",
+  "capabilities": ["teleport"],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Resolve one fixed-time and one per-tile Teleport profile"},
+    {"at": 1, "kind": "input", "value": "Run both Teleports with flicker disabled and enabled"}
+  ],
+  "stop": {"frameBudget": 2400, "condition": "All Teleport cases finish"},
+  "expect": {
+    "requiredEvents": ["PROFILE_RESOLVED", "MOTION_STARTED", "PATH_ADVANCED", "LOGICAL_COMMIT", "MOTION_FINISHED"],
+    "forbiddenEvents": [],
+    "invariants": ["Fixed timing is independent of distance", "Per-tile timing scales with distance", "Flicker changes visibility only", "Each Teleport commits once"]
+  },
+  "capture": "always",
+  "adapter": null
+}

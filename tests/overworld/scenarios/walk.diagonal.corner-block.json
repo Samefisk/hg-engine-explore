@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.diagonal.corner-block",
+  "title": "Diagonal Walk needs both cardinal side tiles",
+  "status": "planned",
+  "capabilities": ["walk.diagonal"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the actor beside one blocked cardinal side tile"},
+    {"at": 1, "kind": "input", "value": "Request the diagonal Walk through that corner"}
+  ],
+  "stop": {"frameBudget": 120, "condition": "The intent returns a terminal rejection"},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "CANDIDATE_REJECTED"],
+    "forbiddenEvents": ["MOTION_STARTED", "LOGICAL_COMMIT"],
+    "invariants": ["The destination and both cardinal side tiles must be legal", "Rejected movement does not change logical position"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

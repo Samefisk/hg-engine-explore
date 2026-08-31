@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.cardinal-and-diagonal",
+  "title": "Hop plans cardinal and nearest diagonal candidates",
+  "status": "planned",
+  "capabilities": ["hop"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "input", "value": "Request a clear cardinal Hop"},
+    {"at": 1, "kind": "setup", "value": "Block the straight landing but leave ordered near-diagonal landings"},
+    {"at": 2, "kind": "input", "value": "Request the same cardinal Hop"}
+  ],
+  "stop": {"frameBudget": 1600, "condition": "Both Hop decisions return terminal results"},
+  "expect": {
+    "requiredEvents": ["PLAN_ACCEPTED", "MOTION_STARTED", "PATH_ADVANCED", "LOGICAL_COMMIT"],
+    "forbiddenEvents": [],
+    "invariants": ["A clear cardinal candidate is preferred", "Fallback candidates are ordered by distance from the requested heading", "Each Hop has one terminal result"]
+  },
+  "capture": "failure",
+  "adapter": null
+}

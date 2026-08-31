@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.resolve.override-order",
+  "title": "Profile layers apply once in source order",
+  "status": "planned",
+  "capabilities": ["profile.composition"],
+  "proofLevel": "S1",
+  "costTier": 1,
+  "fixture": {"rom": null, "save": null, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Resolve a subject with two matching ordered overrides"}
+  ],
+  "stop": {"frameBudget": 1, "condition": "Resolver returns one result and provenance list"},
+  "expect": {
+    "requiredEvents": ["PROFILE_RESOLVED"],
+    "forbiddenEvents": [],
+    "invariants": ["Each matching layer applies at most once", "Later matching layers apply after earlier layers"]
+  },
+  "capture": "none",
+  "adapter": null
+}

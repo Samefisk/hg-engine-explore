@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.mounted-single-motion",
+  "title": "Mounted Hop moves rider and Pokémon as one motion",
+  "status": "active",
+  "capabilities": ["hop", "mount.presentation"],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "events": [
+    {"at": 0, "kind": "lifecycle", "value": "Mount the current Mankey follower"},
+    {"at": 1, "kind": "input", "value": "Hop repeatedly near trees, edges, and transition boundaries"}
+  ],
+  "stop": {"frameBudget": 40000, "condition": "The bounded Mankey stress route finishes and control returns"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["The player has no second jump arc", "Rider and Pokémon share logical and rendered motion", "Every started motion returns control"]
+  },
+  "capture": "failure",
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mankey_control_stress"]],
+    "result": "json-passed"
+  }
+}

@@ -411,12 +411,6 @@ def VerifyOverworldWildRuntimeOverlay(
         'OverworldWildRuntime_WalkMomentumReset',
         'OverworldWildRuntime_WalkMomentumStart',
         'OverworldWildRuntime_WalkMomentumFinish',
-        'OverworldWildRuntime_BehaviorMatchApplies',
-        'OverworldWildRuntime_OverrideTargetsContext',
-        'OverworldWildRuntime_ApplyBehaviorOverride',
-        'OverworldWildRuntime_NormalizeMovementProfile',
-        'OverworldWildRuntime_ResolveInheritedPolicies',
-        'OverworldWildRuntime_ValidateBehaviorDataBlob',
         'OverworldWildRuntime_PlayStepDirtParticle',
         'OverworldWildRuntime_PlayLandingHopParticle',
     ]
@@ -468,15 +462,14 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError('overlay 156 is shorter than its exported ABI entry')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 9, expected_entry_size)
+    expected_header = (0x3152574F, 10, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'
         )
-    actual_callbacks = struct.unpack_from(
-        f'<{len(callback_names)}I',
-        overlay,
-        8,
+    actual_callbacks = (
+        *struct.unpack_from('<6I', overlay, 8),
+        *struct.unpack_from('<2I', overlay, 56),
     )
     expected_callbacks = tuple(
         symbols[name][0] | 1
@@ -487,6 +480,8 @@ def VerifyOverworldWildRuntimeOverlay(
             'overlay 156 exported ABI does not exactly match its linked '
             'Thumb callbacks'
         )
+    if any(struct.unpack_from('<6I', overlay, 32)):
+        raise RuntimeError('overlay 156 retired resolver slots are not zero')
     if any((pointer & 1) == 0 for pointer in actual_callbacks):
         raise RuntimeError('overlay 156 exported a non-Thumb callback')
     if any(not expected_entry_address <= (pointer & ~1) < overlay_end
@@ -869,6 +864,22 @@ def writeall():
                 NEW_OVERLAYS[i],
                 overlayPath,
             )
+        if newOverlay == 158:
+            subprocess.check_call([
+                sys.executable,
+                "-B",
+                "scripts/generate_overworld_actor_system_debug.py",
+                "--linked", LINKED_SECTIONS[i + 1],
+                "--binary", NEW_OVERLAYS[i],
+                "--packaged", overlayPath,
+                "--overlay-table", "base/overarm9.bin",
+                "--header", "include/overworld_actor_system.h",
+                "--internal-header", "include/overworld_actor_system_internal.h",
+                "--resolver-header", "include/overworld_behavior_resolver.h",
+                "--motion-header", "include/overworld_motion_model.h",
+                "--output", "build/overworld-system.debug.json",
+                "--objdump", OBJDUMP,
+            ])
         #print(f"{OVERLAYS[i]} written to overlay {newOverlay}...")
 
     # all of the individual overlays

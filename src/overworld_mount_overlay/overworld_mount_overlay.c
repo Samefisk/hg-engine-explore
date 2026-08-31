@@ -1,5 +1,6 @@
 #include "../../include/overworld_mount.h"
 #include "../../include/overworld_mount_internal.h"
+#include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 
 #include "../../include/constants/buttons.h"
@@ -33,7 +34,6 @@
 #define OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT (1u << 0)
 #define OVERWORLD_MOUNT_TELEPORT_MAX_DISTANCE 6
 #define OVERWORLD_MOUNT_HOP_MAX_DISTANCE 16
-#define OVERWORLD_MOUNT_TELEPORT_FLICKER_PHASE_FRAMES 2
 #define OVERWORLD_MOUNT_CRASH_SHAKE_FRAMES 32
 #define OVERWORLD_MOUNT_CRASH_SHAKE_FX32 0x2000
 #define OVERWORLD_MOUNT_WALK_COMMAND 0x0C
@@ -64,30 +64,10 @@ static OverworldMountRuntimeState sOverworldMountState
 static u32 sOverworldMountNextSessionGeneration
     __attribute__((section(".overworld_mount_generation")));
 
-#define OW_WILD_POLICY_LOOK_PLAN_BASE_MASK 0x03
-#define OW_WILD_POLICY_LOOK_PLAN_FIRST_SHIFT 2
-#define OW_WILD_POLICY_LOOK_PLAN_SECOND_SHIFT 4
-#define OW_WILD_POLICY_LOOK_PLAN_TWO_GLANCES (1u << 6)
-
 static u8 OverworldWildMovementPolicy_BuildLookPlan(u8 baseDirection)
 {
-    u8 firstDirection;
-    u8 secondDirection = baseDirection;
-    BOOL twoGlances = (gf_rand() & 1u) != 0;
-
-    do {
-        firstDirection = gf_rand() & OW_WILD_POLICY_LOOK_PLAN_BASE_MASK;
-    } while (firstDirection == baseDirection);
-    if (twoGlances) {
-        secondDirection = baseDirection ^ 1u;
-        if (secondDirection == firstDirection) {
-            secondDirection = baseDirection ^ 2u;
-        }
-    }
-    return baseDirection
-        | (firstDirection << OW_WILD_POLICY_LOOK_PLAN_FIRST_SHIFT)
-        | (secondDirection << OW_WILD_POLICY_LOOK_PLAN_SECOND_SHIFT)
-        | (twoGlances ? OW_WILD_POLICY_LOOK_PLAN_TWO_GLANCES : 0);
+    return OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+        ->buildLookPlan(baseDirection);
 }
 
 static int OverworldWildMovementPolicy_ResolveLook(
@@ -96,29 +76,11 @@ static int OverworldWildMovementPolicy_ResolveLook(
     u8 totalFrames,
     u8 remainingFrames)
 {
-    BOOL twoGlances = (lookPlan & OW_WILD_POLICY_LOOK_PLAN_TWO_GLANCES) != 0;
-    u8 shift = 0;
-
-    if (totalFrames != 0) {
-        if (phase == OW_WILD_MOVEMENT_POLICY_LOOK_SECOND
-            && remainingFrames > (twoGlances
-                    ? (totalFrames * 2) / 3
-                    : totalFrames / 2)) {
-            return -1;
-        }
-        if (phase == OW_WILD_MOVEMENT_POLICY_LOOK_RETURN
-            && remainingFrames > (twoGlances
-                    ? totalFrames / 3
-                    : totalFrames / 2)) {
-            return -1;
-        }
-    }
-    if (phase == OW_WILD_MOVEMENT_POLICY_LOOK_FIRST) {
-        shift = OW_WILD_POLICY_LOOK_PLAN_FIRST_SHIFT;
-    } else if (phase == OW_WILD_MOVEMENT_POLICY_LOOK_SECOND) {
-        shift = OW_WILD_POLICY_LOOK_PLAN_SECOND_SHIFT;
-    }
-    return (lookPlan >> shift) & OW_WILD_POLICY_LOOK_PLAN_BASE_MASK;
+    return OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy->resolveLook(
+        lookPlan,
+        phase,
+        totalFrames,
+        remainingFrames);
 }
 
 static int OverworldWildMovementPolicy_ChooseWanderDirection(
@@ -127,30 +89,12 @@ static int OverworldWildMovementPolicy_ChooseWanderDirection(
     u8 previousDirection,
     u8 chance)
 {
-    int i;
-
-    if (chance == 100 || (chance != 0 && (gf_rand() % 100) < chance)) {
-        for (i = 0; i < directionCount; i++) {
-            if (directions[i] == previousDirection) {
-                return i;
-            }
-        }
-    }
-    /* A negative value below -1 tells Wander to exclude the old direction.
-     * This makes the authored percentage exact instead of only a preference. */
-    return -2;
-}
-
-static inline __attribute__((always_inline)) void
-OverworldWildMovementPolicy_RecordCompletedWalkTile(
-    OverworldWildWalkMomentumState *walkMomentum,
-    BOOL resetForWait)
-{
-    if (resetForWait) {
-        walkMomentum->turnDirection = 0;
-    } else if (walkMomentum->turnDirection != 0xFE) {
-        walkMomentum->turnDirection++;
-    }
+    return OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+        ->chooseWanderDirection(
+            directions,
+            directionCount,
+            previousDirection,
+            chance);
 }
 
 static BOOL OverworldWildMovementPolicy_PrepareChainPause(
@@ -162,72 +106,15 @@ static BOOL OverworldWildMovementPolicy_PrepareChainPause(
     const OverworldWildBehaviorProfileData *lane,
     u8 locomotion)
 {
-    u8 pauseAction = lane->chainPauseAction;
-    u8 pauseTicks;
-    u32 pauseFrames;
-
-    if (locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK) {
-        OverworldWildMovementPolicy_RecordCompletedWalkTile(
+    return OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+        ->prepareChainPause(
+            stepsRemaining,
+            deferredPauseTicks,
+            deferredPauseAction,
+            variancePhase,
             walkMomentum,
-            lane->walkPause != 0);
-    }
-    if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE) {
-        *deferredPauseTicks = 0;
-        goto chain_disabled;
-    }
-    if ((locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK
-            && !OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(lane->walkOptions))
-        || lane->ramAccelerationSteps == 0
-        || !((locomotion >= OW_WILD_BEHAVIOR_LOCOMOTION_WALK
-                && locomotion <= OW_WILD_BEHAVIOR_LOCOMOTION_HOP)
-            || locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT)) {
-chain_disabled:
-        *stepsRemaining = 0;
-        *deferredPauseAction = 0;
-        return FALSE;
-    }
-    if (*stepsRemaining == 0) {
-        *stepsRemaining = lane->ramAccelerationSteps;
-        if (lane->chainMovementVariance != 0) {
-            *variancePhase = (u8)(*variancePhase * 73u + 41u);
-            *stepsRemaining += (u8)(((u16)*variancePhase
-                * (lane->chainMovementVariance + 1u)) >> 8);
-        }
-    }
-    (*stepsRemaining)--;
-    if (*stepsRemaining != 0) {
-        return FALSE;
-    }
-    if (lane->chainPauseActionChance != 0
-        && lane->chainPauseActionChance < 100
-        && (gf_rand() % 100) >= lane->chainPauseActionChance) {
-        return FALSE;
-    }
-    if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE) {
-        pauseTicks = 0;
-    } else if (pauseAction >= OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS) {
-        pauseTicks = lane->chainRepositionSpeed;
-    } else {
-        pauseFrames = lane->ramMaxSpeed;
-        if (pauseFrames == 0
-            && pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND) {
-            pauseFrames = 60;
-        }
-        *variancePhase = (u8)(*variancePhase * 73u + 41u);
-        pauseFrames += (u8)(((u16)*variancePhase
-            * (lane->chainPauseVariance + 1u)) >> 8);
-        pauseTicks = (u8)((pauseFrames + 1u) / 2u);
-        if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS) {
-            pauseTicks /= lane->chainRepositionJumpCount;
-            if (pauseTicks == 0) {
-                pauseTicks = 1;
-            }
-            pauseTicks += pauseTicks;
-        }
-    }
-    *deferredPauseTicks = pauseTicks;
-    *deferredPauseAction = pauseAction | 0x80;
-    return TRUE;
+            lane,
+            locomotion);
 }
 
 const OverworldWildMovementPolicyEntry gOverworldWildMovementPolicyEntry
@@ -241,6 +128,8 @@ const OverworldWildMovementPolicyEntry gOverworldWildMovementPolicyEntry
 static void OverworldMount_FinishCustomMotion(void);
 static void OverworldMount_UpdateCustomMotion(void);
 static void OverworldMount_DrainLandStream(void);
+static BOOL OverworldMount_BeginSharedMotion(void);
+static void OverworldMount_CancelSharedMotion(u8 reason);
 static void OverworldMount_ResumeCustomMotionAfterMapTransition(void);
 static BOOL __attribute__((noinline))
 OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar);
@@ -626,6 +515,7 @@ static void OverworldMount_Cancel(u8 reason)
             != OVERWORLD_MOUNT_MOTION_NONE) {
         OverworldWalkMount_RebaseMotionTarget(&sOverworldMountState);
         OverworldMount_FinishCustomMotion();
+        OverworldMount_CancelSharedMotion(reason);
     }
     if (sOverworldMountState.motionStreamPreparing
         && OverworldMount_HasCurrentPlayer()) {
@@ -1011,18 +901,6 @@ static BOOL OverworldMount_IsLandingTileAllowed(
             targetY);
 }
 
-static s32 OverworldMount_LerpFx32(
-    s32 start,
-    s32 target,
-    u32 elapsed,
-    u32 total)
-{
-    if (elapsed >= total || total == 0) {
-        return target;
-    }
-    return start + (target - start) * (s32)elapsed / (s32)total;
-}
-
 static void __attribute__((section(".overworld_mount_motion")))
 OverworldMount_ApplyTeleportVisibility(BOOL visible)
 {
@@ -1163,6 +1041,133 @@ static void __attribute__((noinline)) OverworldMount_DrainLandStream(void)
     sOverworldMountState.motionStreamPreparing = FALSE;
 }
 
+static BOOL OverworldMount_BeginSharedMotion(void)
+{
+    OverworldActorMotionServiceCall call;
+    OverworldMotionPlan plan;
+    int distanceX;
+    int distanceY;
+
+    if (sOverworldMountState.snapshot.motionMode
+        == OVERWORLD_MOUNT_MOTION_CRASH) {
+        return TRUE;
+    }
+    memset(&plan, 0, sizeof(plan));
+    plan.version = OVERWORLD_MOTION_MODEL_VERSION;
+    plan.kind = sOverworldMountState.snapshot.motionMode
+            == OVERWORLD_MOUNT_MOTION_WALK
+        ? OVERWORLD_MOTION_KIND_WALK
+        : sOverworldMountState.snapshot.motionMode
+                == OVERWORLD_MOUNT_MOTION_HOP
+            ? OVERWORLD_MOTION_KIND_HOP
+            : OVERWORLD_MOTION_KIND_TELEPORT;
+    plan.facing = sOverworldMountState.motionDirection;
+    plan.fieldEpoch = OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->getFieldEpoch();
+    plan.startX = sOverworldMountState.motionStartX;
+    plan.startY = sOverworldMountState.motionStartY;
+    plan.targetX = sOverworldMountState.motionTargetX;
+    plan.targetY = sOverworldMountState.motionTargetY;
+    plan.startBaseY = sOverworldMountState.motionStartBaseY;
+    plan.targetBaseY = sOverworldMountState.motionTargetBaseY;
+    plan.duration = sOverworldMountState.motionFrameCount;
+    plan.direction = sOverworldMountState.motionDirection;
+    distanceX = plan.targetX - plan.startX;
+    distanceY = plan.targetY - plan.startY;
+    if (distanceX < 0) {
+        distanceX = -distanceX;
+    }
+    if (distanceY < 0) {
+        distanceY = -distanceY;
+    }
+    plan.distance = (u8)(distanceX > distanceY ? distanceX : distanceY);
+    plan.arcHeightQ4 = sOverworldMountState.motionArcHeightQ4;
+    if (plan.kind == OVERWORLD_MOTION_KIND_HOP) {
+        plan.spinSpeed = sOverworldMountState.motionFlicker & 0x0F;
+        plan.swayWidth = sOverworldMountState.motionFlicker >> 4;
+        plan.visibilityPolicy = OVERWORLD_MOTION_VISIBILITY_VISIBLE;
+        plan.pauseFrames = sOverworldMountState.snapshot.profile.hopPause;
+    } else if (plan.kind == OVERWORLD_MOTION_KIND_TELEPORT) {
+        plan.visibilityPolicy = sOverworldMountState.motionFlicker != 0
+            ? OVERWORLD_MOTION_VISIBILITY_FLICKER
+            : OVERWORLD_MOTION_VISIBILITY_HIDDEN;
+        plan.pauseFrames = sOverworldMountState.snapshot.profile.teleportPause;
+    }
+    plan.pathAdvancePolicy = OVERWORLD_MOTION_PATH_ADVANCE_PLAYER;
+    plan.commitPolicy = OVERWORLD_MOTION_COMMIT_NORMAL;
+
+    memset(&call, 0, sizeof(call));
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_BEGIN;
+    call.plan = &plan;
+    return OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call)
+            == OVERWORLD_ACTOR_RESULT_OK
+        && call.decision == OVERWORLD_MOTION_DECISION_ACCEPTED;
+}
+
+static BOOL OverworldMount_TickSharedMotion(OverworldMotionSample *sample)
+{
+    OverworldActorMotionServiceCall call;
+
+    memset(&call, 0, sizeof(call));
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_TICK;
+    call.fieldEpoch = OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->getFieldEpoch();
+    call.sample = sample;
+    if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call)
+        != OVERWORLD_ACTOR_RESULT_OK) {
+        return FALSE;
+    }
+    if (call.decision == OVERWORLD_MOTION_DECISION_STALE_FIELD) {
+        call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_REBIND_FIELD;
+        if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call)
+            != OVERWORLD_ACTOR_RESULT_OK
+            || call.decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
+            return FALSE;
+        }
+        call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_TICK;
+        if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call)
+            != OVERWORLD_ACTOR_RESULT_OK) {
+            return FALSE;
+        }
+    }
+    return call.decision == OVERWORLD_MOTION_DECISION_ACCEPTED;
+}
+
+static void OverworldMount_CommitSharedMotion(void)
+{
+    OverworldActorMotionServiceCall call;
+
+    memset(&call, 0, sizeof(call));
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_ACKNOWLEDGE_COMMIT;
+    call.fieldEpoch = OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->getFieldEpoch();
+    if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call)
+            == OVERWORLD_ACTOR_RESULT_OK
+        && call.decision == OVERWORLD_MOTION_DECISION_ACCEPTED) {
+        call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_RESET;
+        (void)OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call);
+    }
+}
+
+static void OverworldMount_CancelSharedMotion(u8 reason)
+{
+    OverworldActorMotionServiceCall call;
+
+    memset(&call, 0, sizeof(call));
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_CANCEL;
+    call.cancelReason = reason;
+    (void)OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->dispatch(&call);
+}
+
 static void OverworldMount_FinishCustomMotion(void)
 {
     FIELD_PLAYER_AVATAR *avatar;
@@ -1245,6 +1250,7 @@ static void OverworldMount_FinishCustomMotion(void)
     if (!walkMotion) {
         OverworldMount_ResetMomentum();
     }
+    OverworldMount_CommitSharedMotion();
     OverworldMount_SyncPresentation();
 }
 
@@ -1257,10 +1263,7 @@ OverworldMount_UpdateCustomMotion(void)
     s32 baseZ;
     s32 baseY;
     s32 arc;
-    u32 swayElapsed;
-    u8 spinFacing;
-    u8 spinSpeed;
-    u8 spinStep;
+    OverworldMotionSample sample;
 
     if (sOverworldMountState.snapshot.motionMode
             == OVERWORLD_MOUNT_MOTION_NONE
@@ -1286,71 +1289,31 @@ OverworldMount_UpdateCustomMotion(void)
         sOverworldMountState.motionLandingPauseStarted = TRUE;
     }
     (void)OverworldMount_UpdateLandStreamAnchor();
-    if (sOverworldMountState.motionElapsed == 0
-        && sOverworldMountState.snapshot.motionMode
-            == OVERWORLD_MOUNT_MOTION_TELEPORT) {
-        OverworldMount_ApplyTeleportVisibility(
-            sOverworldMountState.motionFlicker);
-    }
     if (sOverworldMountState.motionElapsed
         >= sOverworldMountState.motionFrameCount) {
         OverworldMount_FinishCustomMotion();
         return;
     }
-    sOverworldMountState.motionElapsed++;
     if (sOverworldMountState.snapshot.motionMode
         == OVERWORLD_MOUNT_MOTION_CRASH) {
+        sOverworldMountState.motionElapsed++;
         return;
     }
+    if (!OverworldMount_TickSharedMotion(&sample)) {
+        OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_CONTEXT_LOST);
+        return;
+    }
+    sOverworldMountState.motionElapsed = sample.elapsed;
     if (sOverworldMountState.snapshot.motionMode
         == OVERWORLD_MOUNT_MOTION_TELEPORT) {
-        OverworldMount_ApplyTeleportVisibility(
-            sOverworldMountState.motionFlicker
-                && ((sOverworldMountState.motionElapsed
-                    / OVERWORLD_MOUNT_TELEPORT_FLICKER_PHASE_FRAMES) & 1)
-                    == 0);
+        OverworldMount_ApplyTeleportVisibility(sample.visible);
         return;
     }
 
-    baseX = OverworldMount_LerpFx32(
-        ((s32)sOverworldMountState.motionStartX << 16) + 0x8000,
-        ((s32)sOverworldMountState.motionTargetX << 16) + 0x8000,
-        sOverworldMountState.motionElapsed,
-        sOverworldMountState.motionFrameCount);
-    baseZ = OverworldMount_LerpFx32(
-        ((s32)sOverworldMountState.motionStartY << 16) + 0x8000,
-        ((s32)sOverworldMountState.motionTargetY << 16) + 0x8000,
-        sOverworldMountState.motionElapsed,
-        sOverworldMountState.motionFrameCount);
-    baseY = OverworldMount_LerpFx32(
-        sOverworldMountState.motionStartBaseY,
-        sOverworldMountState.motionTargetBaseY,
-        sOverworldMountState.motionElapsed,
-        sOverworldMountState.motionFrameCount);
-    arc = 0;
-    if (sOverworldMountState.snapshot.motionMode
-            != OVERWORLD_MOUNT_MOTION_WALK) {
-        swayElapsed = sOverworldMountState.motionElapsed << 1;
-        arc = OVERWORLD_WILD_SURFACE_SERVICE_ENTRY->calculateJumpArc(
-            swayElapsed >= sOverworldMountState.motionFrameCount
-                ? swayElapsed - sOverworldMountState.motionFrameCount
-                : swayElapsed,
-            sOverworldMountState.motionFrameCount,
-            sOverworldMountState.motionFlicker >> 4);
-        if (swayElapsed >= sOverworldMountState.motionFrameCount) {
-            arc = -arc;
-        }
-        if (sOverworldMountState.motionStartY
-            == sOverworldMountState.motionTargetY) {
-            baseZ += arc;
-        } else {
-            baseX += arc;
-        }
-        arc = OVERWORLD_WILD_SURFACE_SERVICE_ENTRY->calculateJumpArc(
-            sOverworldMountState.motionElapsed,
-            sOverworldMountState.motionFrameCount,
-            sOverworldMountState.motionArcHeightQ4);
-    }
+    baseX = sample.renderX;
+    baseZ = sample.renderZ;
+    baseY = sample.baseY;
+    arc = sample.heightOffset;
     player->posVec[0] = (u32)baseX;
     player->posVec[1] = (u32)baseY;
     player->posVec[2] = (u32)baseZ;
@@ -1384,19 +1347,8 @@ OverworldMount_UpdateCustomMotion(void)
         avatar->unk14 = 2;
         return;
     }
-    spinSpeed = sOverworldMountState.motionFlicker & 0x0F;
-    if (spinSpeed != 0) {
-        /* Map the engine's N/S/W/E encoding onto the same clockwise
-         * N/E/S/W spin steps used by wild custom hops. Incrementing the raw
-         * direction value produces N/S/W/E jumps that look random. */
-        spinFacing = sOverworldMountState.motionDirection;
-        spinStep = (u8)(((spinFacing >> 1) & 1)
-            | (((spinFacing ^ (spinFacing >> 1)) & 1) << 1));
-        spinStep = (u8)((spinStep
-            + sOverworldMountState.motionElapsed / spinSpeed) & 3);
-        spinFacing = (u8)(((spinStep & 1) << 1)
-            | ((spinStep ^ (spinStep >> 1)) & 1));
-        OverworldMount_SetMountedFacing(spinFacing);
+    if ((sOverworldMountState.motionFlicker & 0x0F) != 0) {
+        OverworldMount_SetMountedFacing(sample.facing);
     }
 }
 
@@ -1493,14 +1445,17 @@ OverworldMount_TryStartCustomMotion(
     u32 frames;
 
     if (rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WALK) {
+        BOOL started;
+
         follower = OverworldMount_GetFollowerObject();
-        return OVERWORLD_WALK_MOUNT_MODULE_ENTRY->startFlatMotion(
+        started = OVERWORLD_WALK_MOUNT_MODULE_ENTRY->startFlatMotion(
             &sOverworldMountState,
             avatar,
             follower,
             OverworldMount_GetLandDataManager(),
             direction,
             facingDirection);
+        return started && OverworldMount_BeginSharedMotion();
     }
 
     /* The caller establishes player ownership and validates Walk collision. */
@@ -1639,6 +1594,11 @@ hop_target_found:
     sOverworldMountState.motionLandingPauseStarted = FALSE;
     sOverworldMountState.motionFrameCount = (u16)frames;
     sOverworldMountState.motionElapsed = 0;
+    if (!OverworldMount_BeginSharedMotion()) {
+        sOverworldMountState.snapshot.motionMode =
+            OVERWORLD_MOUNT_MOTION_NONE;
+        return FALSE;
+    }
     avatar->unk0 |= OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT;
     OverworldMount_ResetAvatarAfterCancel(avatar);
     /* Normalize any just-finished stock step before custom motion takes
@@ -2046,26 +2006,6 @@ static void OverworldMount_HandleFollowerSelectionRequest(
     }
 }
 
-static void OverworldRuntime_TickWildRefillTimer(
-    OverworldWildSpawnState *state)
-{
-    if (state == NULL
-        || state->movementRuntimeState == NULL
-        || gOverworldWildFieldIdleRearmPending != 0) {
-        return;
-    }
-    if (state->spawnCooldown == OW_WILD_REFILL_TIMER_PENDING) {
-        return;
-    }
-    if (state->spawnCooldown != 0) {
-        state->spawnCooldown--;
-        return;
-    }
-    state->spawnCooldown = OW_WILD_REFILL_TIMER_PENDING;
-    gOverworldWildFieldIdleRearmPending |=
-        OW_WILD_FIELD_IDLE_REARM_PENDING;
-}
-
 static BOOL __attribute__((used)) OverworldMount_Tick(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
@@ -2073,7 +2013,6 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
 {
     BOOL togglePressed = sOverworldMountState.bufferedTogglePending != 0;
 
-    OverworldRuntime_TickWildRefillTimer(state);
     OverworldMount_HandleFollowerSelectionRequest(fieldSystem, state);
     if (togglePressed
         && !OverworldFollowerSelector_IsActiveFlagSet()

@@ -805,8 +805,10 @@ typedef char OverworldWildSurfaceTemplateCountMustFitByteIndex[
     OWBD_SURFACE_TEMPLATE_COUNT <= 256 ? 1 : -1];
 typedef char OverworldWildSurfaceHitSizeMustRemain8Bytes[
     sizeof(OverworldWildSurfaceHit) == 8 ? 1 : -1];
+#ifndef OVERWORLD_BEHAVIOR_HOST
 typedef char OverworldWildSurfaceBlockCacheSizeMustRemain8Bytes[
     sizeof(OverworldWildSurfaceBlockCache) == 8 ? 1 : -1];
+#endif
 
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
