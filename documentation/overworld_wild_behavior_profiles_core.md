@@ -1,5 +1,10 @@
 # Behavior Profile Core Semantics
 
+> **Status: historical attempt collection.** It does not define the current
+> resolver contract. Use
+> [`documentation/overworld-system/architecture.md`](overworld-system/architecture.md)
+> and [`CONTEXT.md`](../CONTEXT.md) for current terms and target ownership.
+
 Generated from `documentation/overworld_wild_movement_attempt_log.md` during consolidation.
 The original attempt sections are copied verbatim below. Attempts may appear in multiple topic files on purpose.
 

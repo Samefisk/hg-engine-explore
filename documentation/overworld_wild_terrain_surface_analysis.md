@@ -1,5 +1,11 @@
 # Overworld Wild Pokemon Terrain and Surface Analysis
 
+> **Status: future design study.** Some version numbers and current-state
+> details below are stale. Use it for surface-model ideas, not as current
+> system truth. New surface work must use the actor, motion, world-adapter, and
+> verification contracts in
+> [`documentation/overworld-system/`](overworld-system/README.md).
+
 ## Verdict
 
 Expanded terrain support is feasible, and the refactored behavior-profile system is now a much better fit for it than the earlier analysis assumed. Profiles already support any combination of the current terrain bits, per-bit `INHERIT`/`ENABLE`/`DISABLE` semantics, and separate resolved Chill, Active, and Tired lanes.

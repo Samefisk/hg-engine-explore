@@ -1,5 +1,8 @@
 # Canopy Hopper Mankey Behavior
 
+> **Status: historical attempt collection.** Use it as evidence, not current
+> design. Start at [`overworld-system/README.md`](overworld-system/README.md).
+
 Generated from `documentation/overworld_wild_movement_attempt_log.md` during consolidation.
 The original attempt sections are copied verbatim below. Attempts may appear in multiple topic files on purpose.
 

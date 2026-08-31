@@ -1,17 +1,17 @@
 # Overworld Wild Shadow Rendering Attempts
 
+> **Status: historical attempt collection.** Use it as evidence, not current
+> design. New shadow work must add a scenario and semantic trace under the
+> process in [`overworld-system/README.md`](overworld-system/README.md).
+
 This file tracks the active long-hop shadow issue so repeated fixes do not
 circle back through the same failed render knobs.
 
-## Usage Rule
+## Historical usage
 
-Before trying a new shadow fix:
-
-- Read this file first.
-- Add the exact new idea to the attempt log before changing code.
-- Record the files, symbols, build result, runtime result, and what the result
-  proves after the attempt is tested.
-- Do not retry failed attempts unless the new test changes a stated variable.
+Read this file only to avoid repeating a failed rendering experiment. Record
+new proof in the feature map, scenario, run manifest, and trace instead of
+extending this narrative log.
 
 ## Current Issue
 

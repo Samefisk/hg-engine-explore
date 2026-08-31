@@ -1,5 +1,11 @@
 # Overworld Walk: diagonal movement and exact frame timing
 
+> **Status: pre-implementation research.** Its descriptions of the "current"
+> path predate exact-frame and diagonal Walk. The active timing contract is
+> [`overworld_walk_frame_timing_spec.md`](overworld_walk_frame_timing_spec.md),
+> and current system ownership is in
+> [`overworld-system/architecture.md`](overworld-system/architecture.md).
+
 ## Short answer
 
 The current ordinary `Walk` path is cardinal-only and uses the game's stock held-movement commands. The four profile speed values select fixed commands for 16, 8, 4, or 2 frames per tile. Diagonal movement exists only in the custom Hop and chain-reposition paths. Mounted ordinary walking also uses the stock cardinal path: it starts the same held command on the player and the mounted Pokémon.

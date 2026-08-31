@@ -1,5 +1,11 @@
 # Overworld Walk frame timing specification
 
+> **Status: active subordinate contract.** It is owned by the Motion Module in
+> [`documentation/overworld-system/architecture.md`](overworld-system/architecture.md).
+> If this contract changes, update the system feature map and wild/mounted
+> parity scenarios in
+> [`documentation/overworld-system/verification.md`](overworld-system/verification.md).
+
 ## Scope
 
 This change replaces the four Walk speed tiers with an exact travel time. It

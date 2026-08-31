@@ -1,5 +1,8 @@
 # Overworld Wild Diagonal Canopy Jump Attempts
 
+> **Status: historical attempt collection.** Use it as evidence, not current
+> design. Start at [`overworld-system/README.md`](overworld-system/README.md).
+
 Created: 2026-06-10 04:19 CEST
 
 This file records the diagonal 3-8 canopy jump work for Mankey and the research done after the

@@ -1,5 +1,10 @@
 # Movement Architecture And Frame Task
 
+> **Status: historical attempt collection, not current architecture.** The
+> canonical design is
+> [`documentation/overworld-system/architecture.md`](overworld-system/architecture.md).
+> The sections below preserve evidence from earlier movement experiments.
+
 Generated from `documentation/overworld_wild_movement_attempt_log.md` during consolidation.
 The original attempt sections are copied verbatim below. Attempts may appear in multiple topic files on purpose.
 

@@ -56,6 +56,18 @@ When it is present, use `.codex-reference/pokeheartgold/` as the read-only vanil
 - For stock ARM9 binary analysis, prefer `build/arm9.bin`; `base/arm9.bin` may already contain hg-engine patches.
 - Do not run `make dumprom` merely to create a Ghidra reference. It begins with a clean and performs broad extraction/migration work.
 
+## Overworld Pokémon System
+
+Before changing wild Pokémon, followers, mounts, behavior profiles, Walk, Hop, Teleport, terrain, streaming, or their verification, read `CONTEXT.md` and `documentation/overworld-system/README.md`. Load only the linked architecture, authoring, verification, or roadmap document needed for the task.
+
+- Treat `documentation/overworld-system/` as current design truth.
+- Treat the old movement index, movement architecture, investigation notes, and `*_attempts.md` files as historical evidence only.
+- Name the affected contract and actor roles before editing.
+- Use the verification feature map to choose proof. Static source or ABI checks do not prove runtime behavior.
+- Add a durable scenario or invariant check for each fixed runtime bug.
+- Keep one logical motion owner. Mounted control uses the normal resolved Pokémon profile, the player as the engine anchor, and the ridden Pokémon as dependent presentation.
+- Update the canonical system document when ownership, interfaces, invariants, failure reasons, or proof requirements change.
+
 ## Agent Pool Usage
 
 Actively use agents and push them to the max. Default to helper-agent parallelism, and treat solo work as the exception for tiny, single-file, obvious edits.

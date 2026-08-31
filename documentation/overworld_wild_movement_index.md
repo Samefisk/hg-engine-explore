@@ -1,5 +1,11 @@
 # Overworld Wild Movement Reference Index
 
+> **Status: historical archive index.** This file records experiments and can
+> contain stale or contradictory implementation claims. For current ownership,
+> invariants, and plans, start at
+> [`documentation/overworld-system/README.md`](overworld-system/README.md).
+> Use this index only to avoid repeating an old experiment.
+
 This replaces the deleted `documentation/overworld_wild_movement_attempt_log.md`.
 The old file was split into topic-based reference files. The topic files are intentionally bloated: they preserve copied attempt sections and may duplicate attempts across files for easier lookup.
 
