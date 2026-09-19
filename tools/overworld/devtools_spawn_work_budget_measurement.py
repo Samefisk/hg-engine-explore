@@ -453,7 +453,7 @@ class SpawnWorkBudgetMeasurement:
             "distanceProgress": 0,
             "maximumRenderDisplacement": 0,
             "observedFrames": 0,
-            "activeWalkFrames": 0,
+            "ownerWalkFrames": 0,
             "baseSpeed": None,
             "startedAtBaseSpeed": False,
             "accelerationObserved": False,
@@ -509,20 +509,20 @@ class SpawnWorkBudgetMeasurement:
                 self.entry["startedAtBaseSpeed"] = policy["speed"] == policy["base"]
             require(policy["base"] == self.entry["baseSpeed"],
                     "spawn-work Move entry changed its Walk base speed")
-            if actor.get("lane") == "ACTIVE":
-                self.entry["activeWalkFrames"] += 1
+            if actor.get("lane") == "OWNER":
+                self.entry["ownerWalkFrames"] += 1
             if policy["speed"] < policy["base"]:
                 self.entry["accelerationObserved"] = True
             if policy.get("chain", 0) > 0:
                 self.entry["chainObserved"] = True
             if policy.get("turn", 0) > 0:
                 self.entry["turnObserved"] = True
-        if (self.entry["activeWalkFrames"] > 0
+        if (self.entry["ownerWalkFrames"] > 0
                 and actor.get("lane") == "OWNER"
                 and actor.get("motionKind") == "NONE"):
             self.entry["walkPauseObserved"] = True
         if (self.entry["walkPauseObserved"]
-                and actor.get("lane") == "ACTIVE"
+                and actor.get("lane") == "OWNER"
                 and actor.get("motionKind") == "WALK"):
             self.entry["resumedAfterPause"] = True
         if actor.get("lane") == "TIRED":

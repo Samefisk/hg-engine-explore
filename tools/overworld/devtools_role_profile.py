@@ -14,7 +14,7 @@ import sys
 from tools.overworld.devtools_observer import NativeObservationError, public_bytes
 
 FOLLOWER_SLOT = 7
-PROFILE_BYTES, PRIMITIVE_BYTES = 216, 11
+PROFILE_BYTES, PRIMITIVE_BYTES = 144, 8
 BINDING_BYTES, SNAPSHOT_BYTES, SNAPSHOT_OFFSET = 16, 96, 8
 MAX_RECEIPTS = 128
 MAX_CAPTURES = 16

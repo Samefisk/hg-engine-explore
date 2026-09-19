@@ -72,18 +72,18 @@ class NativeWalkIntent:
             if (state != s.rt.WILD_STATE or field != s.rt.unsigned(s.emu, s.rt.G_FIELD_SYS_PTR)
                     or obj != current["engineIdentity"]["pointer"]):
                 raise WalkIntentError("Walk intent native context owner differs")
-            profile_bytes = public_bytes(s, profile, 216)
+            profile_bytes = public_bytes(s, profile, 144)
             resolved = o.profiles.get(current["publicSubject"]["behaviorFingerprint"], {})
-            if not resolved.get("resolved") or resolved.get("resultHex", "")[:432] != profile_bytes.hex():
+            if not resolved.get("resolved") or resolved.get("resultHex", "")[:288] != profile_bytes.hex():
                 raise WalkIntentError("Walk intent profile lacks exact native resolver identity")
             # The normal flat-Walk staged-target caller passes NULL here;
             # this routine uses the profile lane, not the optional primitives.
-            primitives_bytes = public_bytes(s, primitives, 11) if primitives else None
-            if primitives_bytes is not None and resolved["resultHex"][432:454] != primitives_bytes.hex():
+            primitives_bytes = public_bytes(s, primitives, 8) if primitives else None
+            if primitives_bytes is not None and resolved["resultHex"][288:304] != primitives_bytes.hex():
                 raise WalkIntentError("Walk intent primitives differ from native resolver")
             slot = raw[20]
-            spot = 2 if s.rt.unsigned(s.emu, state + 514 + slot, 1) else s.rt.unsigned(s.emu, state + 264 + slot, 1)
-            lane_index = 1 if spot == 2 else 2 if spot == 3 else 0
+            spot = 2 if s.rt.unsigned(s.emu, state + 494 + slot, 1) else s.rt.unsigned(s.emu, state + 264 + slot, 1)
+            lane_index = 1 if spot == 3 else 0
             lane = profile_bytes[lane_index * 72:(lane_index + 1) * 72]
             direction_mode = lane[19] & 0x03
             if direction_mode not in (0, 1, 2) or (self.direction < 4 and direction_mode == 2) \
@@ -128,9 +128,9 @@ class NativeWalkIntent:
         try:
             current = self.current()
             if (public_bytes(self.session, value["contextPointer"], 28).hex() != value["contextHex"]
-                    or public_bytes(self.session, value["profilePointer"], 216).hex() != value["profileHex"]
+                    or public_bytes(self.session, value["profilePointer"], 144).hex() != value["profileHex"]
                     or value["primitivesPointer"] and public_bytes(self.session,
-                        value["primitivesPointer"], 11).hex() != value["primitivesHex"]):
+                        value["primitivesPointer"], 8).hex() != value["primitivesHex"]):
                 raise WalkIntentError("Walk intent context or profile changed during call")
             if value["suppressed"]:
                 if context["returnValue"] != 0 or current != value["before"]:

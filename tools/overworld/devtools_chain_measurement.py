@@ -109,14 +109,14 @@ class LedybaChainMeasurement:
     def _profile(self, receipt):
         if receipt.get("resolved") is not True:
             return
-        result = _bytes(receipt.get("resultHex"), 256, "resolved profile")
+        result = _bytes(receipt.get("resultHex"), 200, "resolved profile")
         request = _bytes(receipt.get("requestHex"), 44, "resolver request").hex()
         fingerprint = _integer(receipt.get("fingerprint"), "profile fingerprint", 1)
-        lanes = [result[offset:offset + 72].hex() for offset in (0, 72, 144)]
+        lanes = [result[offset:offset + 72].hex() for offset in (0, 72)]
         if receipt.get("sourceSha256") != self.source_sha256 \
                 or receipt.get("lanes") != lanes \
-                or int.from_bytes(result[252:256], "little") != fingerprint \
-                or receipt.get("appliedOverrides") != int.from_bytes(result[248:252], "little"):
+                or int.from_bytes(result[176:180], "little") != fingerprint \
+                or receipt.get("appliedOverrides") != int.from_bytes(result[172:176], "little"):
             raise ValueError("resolver source, fingerprint or full lanes differ")
         value = {key: deepcopy(receipt[key]) for key in
                  ("fingerprint", "sourceSha256", "lanes", "resultHex", "appliedOverrides")}
@@ -298,7 +298,7 @@ class LedybaChainMeasurement:
                               if field["key"] == "walkOptions")
             self.walk_options = [bytes.fromhex(value)[walk_field["offset"]]
                                  for value in self.profile["lanes"]]
-            if self.walk_options != [96, 96, 96]:
+            if self.walk_options != [96, 96]:
                 raise ValueError("resolved Ledyba lanes lost face-player Walk")
             # All potential AI lanes must preserve the measured projection.
             if any(decode_lane(bytes.fromhex(lane), self.schema) != self.expectation for lane in self.profile["lanes"]):

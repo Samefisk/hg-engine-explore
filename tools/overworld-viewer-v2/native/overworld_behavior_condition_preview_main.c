@@ -7,6 +7,7 @@
 #define PREVIEW_HEADER_VALUES 23
 #define PREVIEW_CANDIDATE_VALUES 15
 #define PREVIEW_STATE_VALUES 7
+#define HOST_REQUEST_VERSION 2
 
 extern const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob;
 
@@ -178,11 +179,14 @@ int main(void)
     subjectContext.shiny = (u8)header[3];
     subjectContext.groupFlags = (u32)header[4];
     subjectContext.behaviorClass = (u8)header[5];
-    subjectContext.conditionTerrainMask = (u16)header[6];
 
     memset(&request, 0, sizeof(request));
     request.context = subjectContext;
     request.behaviorClass = subjectContext.behaviorClass;
+    request.winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request.targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    request.resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request.requestVersion = HOST_REQUEST_VERSION;
     trace.steps = traceSteps;
     trace.capacity = HOST_TRACE_CAPACITY;
     trace.count = 0;
@@ -212,7 +216,7 @@ int main(void)
     world.playerValid = (u8)header[17];
     world.subjectFacing = (u8)header[18];
     world.subjectMovementSpeed = (u8)header[19];
-    world.subjectTerrainMask = subjectContext.conditionTerrainMask;
+    world.subjectTerrainMask = (u16)header[6];
     world.actorCount = candidateCount;
 
     memset(candidates, 0, sizeof(candidates));
@@ -289,7 +293,7 @@ int main(void)
     memset(&request, 0, sizeof(request));
     request.context = subjectContext;
     request.behaviorClass = selection.behaviorClass;
-    request.conditionInputMode = BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT;
+    request.requestVersion = HOST_REQUEST_VERSION;
     request.activeConditionalMask = conditionResult.activeApplicationMask;
     request.winningConditionId = conditionResult.winningConditionId;
     request.targetSourceApplication = conditionResult.resolvedTargetSourceApplication;
@@ -297,6 +301,7 @@ int main(void)
     CopyTarget(&conditionResult.resolvedTarget, &request.resolvedTarget);
     trace.count = 0;
     trace.dropped = 0;
+    memset(&resolveResult, 0, sizeof(resolveResult));
     resolveStatus = BehaviorResolver_Resolve(
         blob, sizeof(*blob), &request, &resolveResult, &trace);
 

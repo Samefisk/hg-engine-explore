@@ -14,7 +14,7 @@ class RuleRemovalControlTests(unittest.TestCase):
             [dict(expected=dict(requiredAppliedOverrideMask=(1 << 1)))],
         )
         vectors = [dict(name="covered", request={}, expected=dict(requiredAppliedOverrideMask=1 << rule_index))]
-        result = dict(status=0, profileHex="00" * 216)
+        result = dict(status=0, profileHex="00" * 144)
         adapter = SimpleNamespace(resolve_many=Mock(side_effect=[[result], [result]]), build=Mock(return_value=root / "unused"))
         return root, vectors, adapter
 

@@ -42,7 +42,7 @@ class RoleProfileTests(unittest.TestCase):
         def linked(label,path,symbols,name,before,after,**kwargs):
             observer.tokens.append(hooks.add(0x02300000+(0x40 if label.endswith("mount") else 0),before))
         reader=RoleProfileObserver(observer,linked);reader.mount_state=0x023BC744
-        put(regs.r2,bytes(range(216)));put(regs.r3,bytes(range(11)))
+        put(regs.r2,bytes(range(144)));put(regs.r3,bytes(range(8)))
         return reader,s,actor,source,engine,regs,put,regs_calls
 
     def mount(self,f):
@@ -58,8 +58,8 @@ class RoleProfileTests(unittest.TestCase):
     def test_getter_returns_exact_output_and_bound_subject(self):
         f=self.fixture();reader=f[0]
         before=reader.getter_before();result=reader.getter_after(before,{})
-        self.assertEqual(result["profileHex"],bytes(range(216)).hex())
-        self.assertEqual(result["primitivesHex"],bytes(range(11)).hex())
+        self.assertEqual(result["profileHex"],bytes(range(144)).hex())
+        self.assertEqual(result["primitivesHex"],bytes(range(8)).hex())
         self.assertEqual(result["ownerAfter"]["publicSubject"]["subjectIdentity"],123)
         self.assertIsNone(result["returnValue"])
         # Getter observes changed bytes faithfully; host equality is the consumer's job.
@@ -96,7 +96,7 @@ class RoleProfileTests(unittest.TestCase):
             with self.subTest(profile=profile,primitives=primitives),self.assertRaises(NativeObservationError):
                 r.getter_before()
 
-    def test_nullable_getter_source_contract_and_active_caller(self):
+    def test_nullable_getter_source_contract_and_profile_only_caller(self):
         source=(Path(__file__).resolve().parents[2]/
             "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
         body=source.split("\nOverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot(",1)[1]
@@ -105,7 +105,7 @@ class RoleProfileTests(unittest.TestCase):
         self.assertIn("if (primitivesOut != NULL)",body)
         caller=source.split("static BOOL OverworldWildSpawns_IsCanopyHopperTreeTopSlot(",1)[1]
         caller=caller.split("\n}",1)[0]
-        self.assertIn("state, slot, NULL, &primitives);",caller)
+        self.assertRegex(caller, r"state,\s*slot,\s*&profile,\s*NULL\);")
 
     def test_mount_exact_owner_transfer_and_wrong_output_controls(self):
         for fault in (None,"owner","binding","phase","generation","return","subject"):
@@ -293,7 +293,7 @@ _Alignof(OverworldWildSurfaceCatalog)); }
             exe=str(Path(d)/"layout")
             subprocess.run(["cc","-DOVERWORLD_BEHAVIOR_HOST","-I",str(root/"include"),"-x","c","-","-o",exe],
                 input=code,text=True,capture_output=True,check=True)
-            self.assertEqual(subprocess.check_output([exe]).decode(),"216 11 16 96 72 88 2")
+            self.assertEqual(subprocess.check_output([exe]).decode(),"144 8 16 96 72 88 2")
         internal=(root/"include/overworld_mount_internal.h").read_text()
         prefix=internal.split("typedef struct OverworldMountRuntimeState {",1)[1].split("OverworldMountSnapshot snapshot;",1)[0]
         self.assertEqual(prefix.split(),["FieldSystem","*fieldSystem;","const","OverworldWildSurfaceCatalog","*surfaceCatalog;"])

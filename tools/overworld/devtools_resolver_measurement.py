@@ -84,7 +84,7 @@ class ResolverMeasurement:
                         and type(call.get("returnValue")) is int and call["returnValue"] == 0,
                         "resolver status failed")
                 raw_hex(case.get("requestHex"), 44)
-                raw_hex(case.get("resultHex"), 276)
+                raw_hex(case.get("resultHex"), 200)
                 checked_trace(case)
                 require(isinstance(case.get("blobIdentity"), dict) and isinstance(case.get("serviceIdentity"), dict),
                         "native input identity missing")

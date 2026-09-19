@@ -42,19 +42,16 @@ PROFILE_FIELD_OFFSETS = {
     "planTurnSkidPath": 69,
     "walkAccelerationStep": 71,
 }
-LANE_OFFSETS = {"owner": 0, "active": PROFILE_SIZE, "tired": PROFILE_SIZE * 2}
+LANE_OFFSETS = {"owner": 0, "tired": PROFILE_SIZE}
 PRIMITIVE_FIELD_OFFSETS = {
     "spawnLocomotion": 0,
     "chillLocomotion": 1,
     "chillTarget": 2,
     "alertLogic": 3,
     "alertReaction": 4,
-    "attentiveLocomotion": 5,
-    "attentiveTarget": 6,
-    "activeReaction": 7,
-    "tiredLocomotion": 8,
-    "tiredTarget": 9,
-    "tiredReaction": 10,
+    "tiredLocomotion": 5,
+    "tiredTarget": 6,
+    "tiredReaction": 7,
 }
 EXACT_KEYS = (
     "status",
@@ -219,9 +216,9 @@ def _profile_bytes(result: dict[str, Any]) -> bytes:
         profile = bytes.fromhex(encoded)
     except ValueError as error:
         raise AssertionError("profileHex is not hexadecimal") from error
-    if len(profile) != PROFILE_SIZE * 3:
+    if len(profile) != PROFILE_SIZE * 2:
         raise AssertionError(
-            f"profileHex has {len(profile)} bytes; expected {PROFILE_SIZE * 3}"
+            f"profileHex has {len(profile)} bytes; expected {PROFILE_SIZE * 2}"
         )
     return profile
 
@@ -350,7 +347,7 @@ def _run_override_order_scenario(
     _verify_result(result, vector["expected"])
     trace = result["trace"]
     lane_orders: dict[str, list[int]] = {}
-    for lane in range(3):
+    for lane in (0, 2):
         steps = [
             (index, step)
             for index, step in enumerate(trace)
@@ -421,7 +418,7 @@ def _run_follower_mounted_parity_scenario(
         and step.get("flags", 0) & 0x06 == 0x06
     ]
     if forced_steps != [
-        (0, follower_index), (1, follower_index), (2, follower_index)
+        (0, follower_index), (2, follower_index)
     ]:
         raise AssertionError(
             f"forced follower layer was not applied once per lane: {forced_steps}"
@@ -462,8 +459,8 @@ def main() -> int:
     if not blob.is_file():
         parser.error(f"behavior blob does not exist: {blob}")
     corpus = _load_json(golden_path)
-    if corpus.get("blobVersion") != 77:
-        parser.error("golden vectors do not target behavior blob v77")
+    if corpus.get("blobVersion") != 78:
+        parser.error("golden vectors do not target behavior blob v78")
     vectors = corpus.get("vectors")
     if not isinstance(vectors, list) or not vectors:
         parser.error("golden vector file has no vectors")

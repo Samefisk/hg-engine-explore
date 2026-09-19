@@ -748,33 +748,18 @@ def _parse_bool(value: str | None) -> int:
     return 1 if str(value or "").strip().lower() in {"1", "true", "yes", "shiny"} else 0
 
 
-def _application_source_index(application_order: int) -> int:
-    """Translate one-based compatibility order to the resolver source index."""
-
-    if application_order < 1:
-        raise ValueError(f"application order must be positive: {application_order}")
-    return application_order - 1
-
-
 def resolve_context(
     legacy: ModuleType,
     species_symbol: str,
     level_value: str | None,
     terrain_value: str | None,
     shiny_value: str | None,
-    condition_terrain_mask_value: str | None = None,
     forced_override_mask_value: str | None = None,
     behavior_class_value: str | None = None,
 ) -> dict[str, Any]:
     """Resolve one real runtime context and expose the complete layer stack."""
 
-    canonical_catalog = legacy.load_behavior_catalog_v3()
-    catalog = legacy.lower_behavior_catalog_v2(
-        legacy.lower_behavior_catalog_v3(
-            canonical_catalog,
-            allow_runtime_only=True,
-        )
-    )
+    canonical_catalog = legacy.load_behavior_catalog_v4()
     profiles_by_id = {
         profile["id"]: profile for profile in canonical_catalog["profiles"]
     }
@@ -785,13 +770,9 @@ def resolve_context(
     terrain_values, destination_values = legacy.parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
-    legacy.apply_catalog_symbol_values(catalog, macros)
     legacy.validate_canonical_spawn_group_constants(macros)
     class_labels = legacy.invert_labels(macros, legacy.CLASS_PREFIX)
     group_labels = legacy.invert_labels(macros, legacy.GROUP_PREFIX)
-    variable_overrides = legacy.catalog_behavior_overrides(
-        catalog, macros, group_labels
-    )
     species = legacy.parse_species(expressions, macros, species_order)
     legacy.apply_species_type_metadata(species, legacy.parse_species_type_metadata(macros))
     canonical_type_metadata = legacy.parse_species_type_metadata(
@@ -845,12 +826,6 @@ def resolve_context(
             raise ValueError(f"{label} must be from 0 to {maximum}")
         return value
 
-    condition_terrain_mask = resolver_integer(
-        condition_terrain_mask_value,
-        "condition terrain mask",
-        default=0,
-        maximum=0xFFFF,
-    )
     forced_override_mask = resolver_integer(
         forced_override_mask_value,
         "forced override mask",
@@ -887,7 +862,6 @@ def resolve_context(
             "terrain": context["terrain"],
             "shiny": context["shiny"],
             "groupFlags": context["groupFlags"],
-            "conditionTerrainMask": condition_terrain_mask,
             "forcedOverrideMask": forced_override_mask,
             "behaviorClass": requested_behavior_class,
         },
@@ -929,12 +903,12 @@ def resolve_context(
     applied_mask = int(canonical.get("appliedOverrideMask", 0))
     matched_application_ids = [
         applications[index]["id"]
-        for index in range(min(len(applications), len(variable_overrides)))
+        for index in range(len(applications))
         if matched_mask & (1 << index)
     ]
     applied_application_ids = [
         applications[index]["id"]
-        for index in range(min(len(applications), len(variable_overrides)))
+        for index in range(len(applications))
         if applied_mask & (1 << index)
     ]
 
@@ -942,7 +916,7 @@ def resolve_context(
     normalizations: list[dict[str, Any]] = []
     changes_by_override: dict[int, list[dict[str, Any]]] = {}
     previous_by_lane: dict[int, dict[str, dict[str, Any]]] = {}
-    lane_names = {0: "Owner", 1: "Active", 2: "Tired"}
+    lane_names = {0: "Owner", 2: "Tired"}
     kind_names = {
         2: "Selected profile",
         3: "Profile application",
@@ -991,14 +965,13 @@ def resolve_context(
             "changes": [],
         }
     ]
-    for source_index, (application, override) in enumerate(
-        zip(applications, variable_overrides)
-    ):
-        profile_order = int(override["order"])
+    for source_index, application in enumerate(applications):
+        profile_order = source_index + 1
         profile_source = profiles_by_id[application["profile"]]
         matched = bool(matched_mask & (1 << source_index))
         applied = bool(applied_mask & (1 << source_index))
-        members = override.get("memberSymbols") or []
+        target = application.get("target") or {}
+        members = target.get("members") or []
         matched_member = symbol if matched and symbol in members else ""
         resolver_layers.append({
             "id": application["id"],
@@ -1011,14 +984,12 @@ def resolve_context(
             "summary": (
                 f"Matched member {species_entry['name']}"
                 if matched_member
-                else override.get("summary", "Shared context")
+                else target.get("mode", "Shared context")
             ),
             "memberCount": len(members),
             "matchedMember": matched_member,
-            "match": override["match"],
-            "fields": legacy.behavior_override_mask_summary(
-                override["behavior"]
-            )["labels"],
+            "match": target.get("match", {}),
+            "fields": list(profile_source.get("fields", {})),
             "changes": changes_by_override.get(source_index, []),
         })
 
@@ -1073,7 +1044,6 @@ def resolve_context(
             "terrain": {"symbol": terrain_symbol, "value": terrain},
             "shiny": bool(context["shiny"]),
             "groups": group_names,
-            "conditionTerrainMask": condition_terrain_mask,
             "forcedOverrideMask": forced_override_mask,
             "requestedRuntimeClass": requested_behavior_class,
         },
@@ -1104,10 +1074,10 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
     catalog_wrapper = payload.get("profileCatalog")
     catalog = catalog_wrapper.get("catalog") if isinstance(catalog_wrapper, dict) and "catalog" in catalog_wrapper else catalog_wrapper
     if not isinstance(catalog, dict):
-        catalog = legacy.load_behavior_catalog_v3()
+        catalog = legacy.load_behavior_catalog_v4()
     legacy.validate_behavior_catalog(catalog)
-    if catalog.get("catalogVersion") != 3:
-        raise ValueError("condition preview needs a V3 profile catalog")
+    if catalog.get("catalogVersion") != 4:
+        raise ValueError("condition preview needs a V4 profile catalog")
 
     subject_input = payload.get("subject")
     observation = payload.get("observation")
@@ -1312,7 +1282,7 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
         lane = int(step.get("lane", 255))
         kind = int(step.get("kind", 255))
         encoded = step.get("profileHex")
-        if lane not in {0, 1, 2} or not isinstance(encoded, str):
+        if lane not in {0, 2} or not isinstance(encoded, str):
             continue
         current = legacy.decode_native_profile(macros, encoded)
         previous = previous_by_lane.get(lane)

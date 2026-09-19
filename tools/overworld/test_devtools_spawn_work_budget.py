@@ -63,11 +63,11 @@ def snapshot(index):
         stage = index - (EXPECTED_DESTINATION_UPDATES + 1)
         state = [
             (631, "OWNER", "WALK", 7, 0, 0),
-            (630, "ACTIVE", "WALK", 7, 0, 0),
-            (629, "ACTIVE", "WALK", 6, 1, 1),
-            (628, "ACTIVE", "WALK", 5, 2, 0),
+            (630, "OWNER", "WALK", 7, 0, 0),
+            (629, "OWNER", "WALK", 6, 1, 1),
+            (628, "OWNER", "WALK", 5, 2, 0),
             (628, "OWNER", "NONE", 5, 0, 0),
-            (627, "ACTIVE", "WALK", 5, 1, 0),
+            (627, "OWNER", "WALK", 5, 1, 0),
             (626, "TIRED", "WALK", 4, 1, 1),
         ][min(stage, 6)]
         actor_x, lane, motion, speed, chain, turn = state

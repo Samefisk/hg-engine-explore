@@ -362,9 +362,9 @@ def read_resolver_request(rt, emu, address):
 '''),
     "read_resolver_result": _function_ast_shape('''
 def read_resolver_result(rt, emu, address):
-    """Stable 256-byte BehaviorResolveResult compatibility prefix."""
-    value = rt.actor_memory_read(emu, _public_abi_address(address, 256, allow_stack=True), 256)
-    if len(value) != 256:
+    """BehaviorResolveResult v2: fixed 200-byte conditional-profile output."""
+    value = rt.actor_memory_read(emu, _public_abi_address(address, 200, allow_stack=True), 200)
+    if len(value) != 200:
         raise ObservationFailure("public resolver result byte count changed")
     return value
 '''),
@@ -378,9 +378,9 @@ def read_walk_policy_call(rt, emu, address):
 '''),
     "read_resolved_lane": _function_ast_shape('''
 def read_resolved_lane(rt, emu, address, schema):
-    """One v76 lane addressed by the checked public Walk policy call."""
+    """One current 72-byte lane addressed by the checked public Walk policy call."""
     if schema["compactSize"] != 72:
-        raise ObservationFailure("normal recorder supports only public v76 lanes")
+        raise ObservationFailure("normal recorder supports only current public lanes")
     value = rt.actor_memory_read(emu, _public_abi_address(address, 72, allow_stack=True), 72)
     if len(value) != 72:
         raise ObservationFailure("public resolved lane byte count changed")

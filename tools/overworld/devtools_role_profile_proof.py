@@ -84,7 +84,7 @@ def inspect_reader_control(events):
         field,surface=struct.unpack_from("<II",before)
         require(field==mount["owner"]["fieldPointer"]==mount["ownerAfter"]["fieldPointer"]
                 and surface==mount["surfacePointer"], "calibration native pointers differ")
-        require(before[8:80]==raw_hex(mount["ownerHex"],72)==raw_hex(mount["profileHex"],216)[:72]
+        require(before[8:80]==raw_hex(mount["ownerHex"],72)==raw_hex(mount["profileHex"],144)[:72]
                 and before[80:96]==raw_hex(mount["bindingHex"],16), "calibration Begin bytes differ")
         generation,phase,cancel,motion,reserved=struct.unpack_from("<IBBBB",before,96)
         require(generation==number(mount["sessionGeneration"],1) and phase==mount["mountPhase"]==1
@@ -151,8 +151,8 @@ def _inspect(events, initial, final):
             require(initial["actorFrame"] <= d["entryActorFrame"] <= d["returnActorFrame"] <= final["actorFrame"],
                     "event actor clock outside endpoints")
         previous_sequence,previous_frame,previous_cycle=sequence,frame,returned
-        raw_hex(d["profileHex"],216);raw_hex(d["primitivesHex"],11)
-        for key,size in (("profilePointer",216),("primitivesPointer",11)):
+        raw_hex(d["profileHex"],144);raw_hex(d["primitivesHex"],8)
+        for key,size in (("profilePointer",144),("primitivesPointer",8)):
             p=number(d[key],0x02000000,0x027E3FB0)
             require(p%4==0 and (p+size<=0x02400000 or 0x027E0000<=p and p+size<=0x027E3FC0),
                     "invalid profile output pointer")
@@ -171,7 +171,7 @@ def _inspect(events, initial, final):
     getter=matches[-1]["data"]
     require(getter["profileHex"] == mount["profileHex"] and getter["primitivesHex"] == mount["primitivesHex"],
             "getter/Begin bytes differ")
-    require(raw_hex(mount["ownerHex"],72) == raw_hex(getter["profileHex"],216)[:72], "stored Owner bytes differ")
+    require(raw_hex(mount["ownerHex"],72) == raw_hex(getter["profileHex"],144)[:72], "stored Owner bytes differ")
     pid,species,map_id,map_gen,encounter,form,level,party,behavior = struct.unpack("<IHHHHBBBB",raw_hex(mount["bindingHex"],16))
     require((pid,species,form,level,party,map_id,map_gen,encounter)==(
         WITNESS["subjectIdentity"],WITNESS["species"],WITNESS["form"],WITNESS["level"],PARTY_SLOT,
@@ -204,7 +204,7 @@ def negative_controls(events, initial, final):
         elif name=="wrong-pid":
             next(a for a in f["actors"] if a.get("role")=="MOUNTED")["subjectIdentity"]^=1
         elif name=="wrong-lane":
-            next(a for a in f["actors"] if a.get("role")=="MOUNTED")["lane"]="ACTIVE"
+            next(a for a in f["actors"] if a.get("role")=="MOUNTED")["lane"]="TIRED"
         else: mount["returnNativeCycle"]=f["nativeCycle"]+1
         try:
             inspect_transfer(e,i,f)

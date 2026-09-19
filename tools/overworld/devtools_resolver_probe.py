@@ -54,7 +54,7 @@ class ResolverProbe:
             if isinstance(vector, dict)
         } if isinstance(vectors, list) else {}
         self.vectors = [by_name.get(name) for name in CASE_NAMES]
-        require(corpus.get("blobVersion") == 77
+        require(corpus.get("blobVersion") == 78
                 and all(isinstance(vector, dict) for vector in self.vectors),
                 "canonical resolver cases differ")
         self.requests = [request_bytes(v["request"]) for v in self.vectors]
@@ -123,7 +123,7 @@ class ResolverProbe:
                     trace.append(dict(sourceIndex=source, lane=lane, kind=kind, flags=flags,
                                       profileHex=observed[offset + 8:offset + 80].hex()))
                 self.receipts.append(dict(name=vector["name"], requestHex=request.hex(),
-                    resultHex=observed[RESULT:RESULT + 276].hex(), status=status,
+                    resultHex=observed[RESULT:RESULT + 200].hex(), status=status,
                     traceDropped=dropped, trace=trace, blobIdentity=deepcopy(self.blob_identity),
                     serviceIdentity=deepcopy(self.service), dispatchClock=dispatched, returnClock=returned))
             self.completed = True

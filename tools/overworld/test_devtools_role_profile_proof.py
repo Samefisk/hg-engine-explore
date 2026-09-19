@@ -70,7 +70,7 @@ class RoleProfileProofTests(unittest.TestCase):
             if fault=="pid":f["actors"][0]["subjectIdentity"]+=1
             if fault=="object":m["ownerAfter"]["sourceIdentity"]["object"]+=4
             if fault=="role":m["owner"]["publicSubject"]["role"]="WILD"
-            if fault=="lane":f["actors"][0]["lane"]="ACTIVE"
+            if fault=="lane":f["actors"][0]["lane"]="TIRED"
             if fault=="ownership":f["actors"][0]["inputOwnership"]=0
             if fault=="profile":m["profileHex"]="ff"+m["profileHex"][2:]
             if fault=="primitives":m["primitivesHex"]="ff"+m["primitivesHex"][2:]

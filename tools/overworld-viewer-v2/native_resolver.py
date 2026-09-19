@@ -20,6 +20,7 @@ from typing import Any, Mapping
 
 
 _BUILD_LOCK = threading.Lock()
+REQUEST_VERSION = 2
 
 
 def _repo_root() -> Path:
@@ -371,12 +372,21 @@ def preview_conditions(
 
 
 def _condition_request_values(request: Mapping[str, Any]) -> tuple[int, ...]:
-    mode = request.get("conditionInputMode", "legacy")
-    if isinstance(mode, str):
-        try:
-            mode = {"legacy": 0, "explicit": 1}[mode]
-        except KeyError as error:
-            raise ValueError(f"unknown condition input mode: {mode}") from error
+    for removed in ("conditionInputMode", "conditionTerrainMask"):
+        if removed in request:
+            raise ValueError(
+                f"native resolver {removed} was removed; use requestVersion 2"
+            )
+    request_version = request.get("requestVersion", REQUEST_VERSION)
+    try:
+        request_version = int(request_version)
+    except (TypeError, ValueError) as error:
+        raise ValueError("native resolver requestVersion must be an integer") from error
+    if request_version != REQUEST_VERSION:
+        raise ValueError(
+            f"unsupported native resolver requestVersion {request_version}; "
+            f"expected {REQUEST_VERSION}"
+        )
     target = request.get("resolvedTarget") or {}
     if not isinstance(target, Mapping):
         raise ValueError("resolvedTarget must be an object")
@@ -388,7 +398,7 @@ def _condition_request_values(request: Mapping[str, Any]) -> tuple[int, ...]:
             raise ValueError(f"unknown resolved target kind: {kind}") from error
     values = (
         request.get("activeConditionalMask", 0),
-        mode,
+        request_version,
         kind,
         target.get("actorSlot", 0),
         target.get("actorGeneration", 0),
@@ -431,16 +441,14 @@ def resolve(
         str(request.get("shiny", 0)),
         "--groups",
         str(request.get("groupFlags", 0)),
-        "--condition-terrain-mask",
-        str(request.get("conditionTerrainMask", 0)),
         "--forced-override-mask",
         str(request.get("forcedOverrideMask", 0)),
         "--behavior-class",
         str(behavior_class),
         "--active-conditional-mask",
         str(condition_values[0]),
-        "--condition-input",
-        "explicit" if condition_values[1] == 1 else "legacy",
+        "--request-version",
+        str(condition_values[1]),
         "--target-kind",
         str(condition_values[2]),
         "--target-actor-slot",
@@ -517,7 +525,6 @@ def resolve_many(
             request.get("terrain", 0),
             request.get("shiny", 0),
             request.get("groupFlags", 0),
-            request.get("conditionTerrainMask", 0),
             request.get("forcedOverrideMask", 0),
             behavior_class,
         ) + _condition_request_values(request)

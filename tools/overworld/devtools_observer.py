@@ -1529,7 +1529,7 @@ class NativeObservation:
     def _resolver_after(self, value, context):
         if context["returnValue"] != 0:
             return {"requestHex": value["requestHex"], "resolved": False}
-        result = public_bytes(self.session, value["resultAddress"], 256)
+        result = public_bytes(self.session, value["resultAddress"], 200)
         if not value["controlledCall"]:
             # Discovery is one bounded private receipt. A later prepared probe
             # must authenticate current code/blob and recheck this field owner.
@@ -1539,11 +1539,11 @@ class NativeObservation:
             self.resolver_discovery.update(status=0,
                 entryNativeCycle=context["entry"]["nativeCycle"],
                 returnNativeCycle=context["returned"]["nativeCycle"])
-        fingerprint = int.from_bytes(result[252:256], "little")
+        fingerprint = int.from_bytes(result[176:180], "little")
         receipt = {"requestHex": value["requestHex"], "resultHex": result.hex(), "resolved": True,
                    "fingerprint": fingerprint, "sourceSha256": self.source_hash,
-                   "lanes": [result[n:n + 72].hex() for n in (0, 72, 144)],
-                   "appliedOverrides": int.from_bytes(result[248:252], "little")}
+                   "lanes": [result[n:n + 72].hex() for n in (0, 72)],
+                   "appliedOverrides": int.from_bytes(result[172:176], "little")}
         if fingerprint not in self.profiles and len(self.profiles) >= self.MAX_PROFILES:
             self.profiles.popitem(last=False)
             self.profiles_evicted += 1

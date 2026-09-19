@@ -498,7 +498,10 @@ assert.throws(() => removeConditionalProfileCondition(setConditionalProfileKind(
         self.assertNotIn('title: "Active state"', profile_editor)
         self.assertNotIn('data-lifecycle-tab="active"', profile_editor)
         self.assertIn('title: "Conditions"', profile_editor)
-        self.assertIn('Old Active and attentive values', profile_editor)
+        self.assertNotIn('Old Active and attentive values', profile_editor)
+        self.assertNotIn('"activeProfile"', profile_editor)
+        self.assertNotIn('"attentiveState"', profile_editor)
+        self.assertNotIn('conditionalStates', profile_editor)
         self.assertIn(
             "if (resetConditionState) ui.conditionPreview.nextState = [];",
             profile_editor,

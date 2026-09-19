@@ -9,9 +9,9 @@ from tools.overworld.devtools_resolver_parity import CASE_NAMES
 class ResolverMeasurementTests(unittest.TestCase):
     def fixture(self):
         pointer = 0x02040000
-        cases = [dict(name=name, status=0, requestHex="00"*44, resultHex="00"*276,
+        cases = [dict(name=name, status=0, requestHex="00"*44, resultHex="00"*200,
                       traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00"*72)],
-                      blobIdentity={"size":100}, serviceIdentity={"version":1},
+                      blobIdentity={"size":100}, serviceIdentity={"version":2},
                       dispatchClock={"frame":900,"nativeCycle":2000}, returnClock={"frame":900,"nativeCycle":2000})
                  for name in CASE_NAMES]
         calls = [dict(routine="allocate_work_memory", requestedArguments=[11,8000], returnValue=pointer)]

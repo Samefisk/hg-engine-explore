@@ -18,17 +18,17 @@ class ResolverParityTests(unittest.TestCase):
         by_name = {vector["name"]: vector for vector in all_vectors}
         vectors = [by_name[name] for name in CASE_NAMES]
         blob = {"size": 100, "sha256": "a" * 64}
-        service = dict(magic=0x5250574F, version=1, size=16, resolveAddress=0x023B0001, entrySha256="b" * 64)
+        service = dict(magic=0x5250574F, version=2, size=16, resolveAddress=0x023B0001, entrySha256="b" * 64)
         host = []; native = []
         for index, vector in enumerate(vectors):
             result = {key: index for key in METADATA}
-            result.update(status=0, profileHex=bytes([index] * 216).hex(), primitivesHex=bytes([index] * 11).hex(),
+            result.update(status=0, profileHex=bytes([index] * 144).hex(), primitivesHex=bytes([index] * 8).hex(),
                 resolvedTarget=dict(kind=0, actorSlot=0, actorGeneration=0, fieldEpoch=0,
                                     mapGeneration=0, encounterGeneration=0),
                 winningConditionId=65535, targetSourceApplication=255,
                 resolvedTargetConditionId=65535,
                 traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00" * 72),
-                                       dict(sourceIndex=1, lane=1, kind=3, flags=3, profileHex="01" * 72)])
+                                       dict(sourceIndex=1, lane=2, kind=3, flags=3, profileHex="01" * 72)])
             host.append(result)
             native.append(dict(name=vector["name"], requestHex=request_bytes(vector["request"]).hex(),
                 resultHex=host_result_bytes(result).hex(), status=0, traceDropped=0, trace=deepcopy(result["trace"]),
@@ -46,7 +46,7 @@ class ResolverParityTests(unittest.TestCase):
 
     def test_every_result_byte_is_compared(self):
         vectors, native, host, identities = self.fixture()
-        for offset in range(276):
+        for offset in range(200):
             changed = deepcopy(native)
             raw = bytearray.fromhex(changed[0]["resultHex"]); raw[offset] ^= 1
             changed[0]["resultHex"] = raw.hex()
@@ -78,7 +78,7 @@ class ResolverParityTests(unittest.TestCase):
         self.assertEqual(len(raw), 44)
         self.assertEqual(int.from_bytes(raw[:2], "little"), 155)
         self.assertEqual(raw[8:12], bytes([1, 0, 0, 0]))
-        self.assertEqual(raw[36:40], bytes([255, 255, 0, 0]))
+        self.assertEqual(raw[36:40], bytes([255, 255, 2, 0]))
         self.assertEqual(raw[40:], bytes([255, 255, 0, 0]))
         root = Path(__file__).resolve().parents[2]
         header = (root / "include/overworld_behavior_resolver.h").read_text()
@@ -108,13 +108,13 @@ int main(void) {
                            capture_output=True, check=True)
             native = subprocess.run([executable], capture_output=True, check=True).stdout
         host = dict(zip(METADATA, range(3,12)))
-        host.update(profileHex="11"*216, primitivesHex="22"*11,
+        host.update(profileHex="11"*144, primitivesHex="22"*8,
                     resolvedTarget=dict(kind=0, actorSlot=0, actorGeneration=0,
                                         fieldEpoch=0, mapGeneration=0,
                                         encounterGeneration=0),
                     winningConditionId=65535, targetSourceApplication=255)
         host["resolvedTargetConditionId"] = 65535
-        self.assertEqual(len(native),276)
+        self.assertEqual(len(native),200)
         self.assertEqual(host_result_bytes(host), native)
 
     def test_request_bytes_match_compiled_public_layout(self):
@@ -124,20 +124,19 @@ int main(void) {
 #include "overworld_behavior_resolver.h"
 int main(void) {
  BehaviorResolveRequest r; memset(&r,0,sizeof r);
- r.context.species=155; r.context.conditionTerrainMask=64;
+ r.context.species=155; r.context.reserved=0;
  r.context.groupFlags=4096; r.context.level=5; r.context.terrain=2;
  r.context.shiny=1; r.forcedOverrideMask=4; r.activeConditionalMask=8;
  r.resolvedTarget.actorSlot=1; r.resolvedTarget.actorGeneration=2;
  r.resolvedTarget.fieldEpoch=3; r.resolvedTarget.mapGeneration=4;
  r.resolvedTarget.encounterGeneration=5; r.resolvedTarget.actorReserved=6;
  r.resolvedTarget.kind=2; r.winningConditionId=7; r.behaviorClass=1;
- r.targetSourceApplication=3; r.conditionInputMode=1;
+ r.targetSourceApplication=3; r.requestVersion=2;
  r.resolvedTargetConditionId=9;
  return fwrite(&r,1,sizeof r,stdout)==sizeof r ? 0 : 1;
 }'''
         request = dict(
             species=155,
-            conditionTerrainMask=64,
             groupFlags=4096,
             level=5,
             terrain=2,
@@ -156,7 +155,7 @@ int main(void) {
             winningConditionId=7,
             behaviorClass=1,
             targetSourceApplication=3,
-            conditionInputMode="explicit",
+            requestVersion=2,
             resolvedTargetConditionId=9,
         )
         with tempfile.TemporaryDirectory() as directory:

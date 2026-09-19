@@ -9,7 +9,7 @@ import hashlib
 import struct
 
 CASE_NAMES = ("default-class-and-lanes", "species-class-selection", "forced-follower-profile",
-              "relative-override", "conditional-rooftop-replay", "explicit-picked-up-class",
+              "stantler-runner-one-frame-acceleration", "conditional-rooftop-replay", "explicit-picked-up-class",
               "legacy-forced-asleep-match-token", "explicit-canopy-conditional-application")
 METADATA = ("behaviorClass", "behaviorLimitKey", "speciesClassRuleIndex", "matchedClassRuleMask",
             "matchedOverrideMask", "forcedOverrideMask", "conditionalOverrideMask", "appliedOverrideMask",
@@ -38,18 +38,15 @@ def raw_hex(value, size):
 
 def request_bytes(request):
     """Public request layout plus the Workshop adapter's defaults."""
-    allowed = {"species", "conditionTerrainMask", "groupFlags", "level", "terrain", "shiny",
+    allowed = {"species", "groupFlags", "level", "terrain", "shiny",
                "forcedOverrideMask", "behaviorClass", "activeConditionalMask",
-               "conditionInputMode", "resolvedTarget", "winningConditionId",
+               "requestVersion", "resolvedTarget", "winningConditionId",
                "targetSourceApplication", "resolvedTargetConditionId"}
     require(isinstance(request, dict) and set(request) <= allowed, "unknown request field")
     behavior_class = request.get("behaviorClass", "auto")
     behavior_class = 255 if behavior_class == "auto" else integer(behavior_class, 255)
-    condition_mode = request.get("conditionInputMode", "legacy")
-    if isinstance(condition_mode, str):
-        require(condition_mode in ("legacy", "explicit"), "invalid condition input mode")
-        condition_mode = int(condition_mode == "explicit")
-    condition_mode = integer(condition_mode, 1)
+    request_version = integer(request.get("requestVersion", 2), 255)
+    require(request_version == 2, "unsupported request version")
     target = request.get("resolvedTarget") or {}
     require(isinstance(target, dict), "invalid resolved target")
     target_kind = target.get("kind", "none")
@@ -58,7 +55,7 @@ def request_bytes(request):
         target_kind = {"none": 0, "player": 1, "actor": 2}[target_kind]
     return struct.pack("<HHIBBBBII6HBBHBBBBH2x",
         integer(request.get("species", 0), 65535),
-        integer(request.get("conditionTerrainMask", 0), 65535), integer(request.get("groupFlags", 0)),
+        0, integer(request.get("groupFlags", 0)),
         integer(request.get("level", 1), 255), integer(request.get("terrain", 0), 255),
         integer(request.get("shiny", 0), 255), 0,
         integer(request.get("forcedOverrideMask", 0)),
@@ -73,16 +70,14 @@ def request_bytes(request):
         integer(request.get("winningConditionId", 65535), 65535),
         behavior_class,
         integer(request.get("targetSourceApplication", 255), 255),
-        condition_mode, 0,
+        request_version, 0,
         integer(request.get("resolvedTargetConditionId", 65535), 65535))
 
 
 def host_result_bytes(result):
     require(isinstance(result, dict), "missing host result")
-    # Eleven byte-sized primitives; the alignment byte follows behaviorLimitKey,
-    # not the primitives. The compiled public-layout test anchors all 256 bytes.
-    prefix = raw_hex(result.get("profileHex"), 216) + raw_hex(result.get("primitivesHex"), 11) + struct.pack(
-        "<BBxHIIIIII", *(integer(result.get(key), 255 if index < 2 else 65535 if index == 2 else 0xFFFFFFFF)
+    prefix = raw_hex(result.get("profileHex"), 144) + raw_hex(result.get("primitivesHex"), 8) + struct.pack(
+        "<BBHIIIIII", *(integer(result.get(key), 255 if index < 2 else 65535 if index == 2 else 0xFFFFFFFF)
                         for index, key in enumerate(METADATA)))
     target = result.get("resolvedTarget") or {}
     require(isinstance(target, dict), "missing resolved target")
@@ -109,7 +104,7 @@ def checked_trace(result):
         require(isinstance(step, dict) and set(step) == {"sourceIndex", "lane", "kind", "flags", "profileHex"},
                 "provenance fields differ")
         integer(step["sourceIndex"], 65535)
-        require(type(step["lane"]) is int and step["lane"] in (0, 1, 2, 255), "invalid provenance lane")
+        require(type(step["lane"]) is int and step["lane"] in (0, 2, 255), "invalid provenance lane")
         integer(step["kind"], 6)
         integer(step["flags"], 15)
         raw_hex(step["profileHex"], 72)
@@ -131,6 +126,7 @@ def compare_resolver_parity(vectors, native_receipts, host_results, *, blob_iden
             {"magic", "version", "size", "resolveAddress", "entrySha256"}, "service identity missing")
     for key in ("magic", "version", "size", "resolveAddress"):
         require(integer(service_identity[key]) > 0, "empty service identity")
+    require(service_identity["version"] == 2, "unsupported resolver service version")
     raw_hex(service_identity["entrySha256"], 32)
     cases = []
     for vector, native, host in zip(vectors, native_receipts, host_results):
@@ -146,7 +142,7 @@ def compare_resolver_parity(vectors, native_receipts, host_results, *, blob_iden
         require(raw_hex(native.get("requestHex"), 44) == request, "native request differs")
         require(type(native.get("status")) is int and type(host.get("status")) is int
                 and native["status"] == host["status"] == 0, "native/host status differs or failed")
-        result = raw_hex(native.get("resultHex"), 276)
+        result = raw_hex(native.get("resultHex"), 200)
         require(result == host_result_bytes(host), "full result bytes differ")
         require(checked_trace(native) == checked_trace(host), "ordered provenance differs")
         cases.append({"name": vector["name"], "status": 0, "requestHex": request.hex(),

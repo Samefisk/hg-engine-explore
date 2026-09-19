@@ -313,10 +313,11 @@ class SharedNativeObserverTests(unittest.TestCase):
 
     def test_preboot_resolution_and_nested_spawn_are_framed_only_at_complete_queue(self):
         f = self.f
-        request, result = bytearray(44), bytearray(256)
+        request, result = bytearray(44), bytearray(200)
         request[:2] = struct.pack("<H", 165)
-        result[:216] = bytes(range(72)) * 3
-        struct.pack_into("<II", result, 248, 7, 44)
+        request[38] = 2
+        result[:144] = bytes(range(72)) * 2
+        struct.pack_into("<II", result, 172, 7, 44)
         f.put(0x02220000, request); f.put(0x02220100, result)
         f.enter("behavior-resolved", r2=0x02220000, r3=0x02220100)
         f.returned(0)
@@ -344,7 +345,7 @@ class SharedNativeObserverTests(unittest.TestCase):
                          {"pointer": 0x02210000, "mapId": 34, "tile": [550, 381]})
         profiles = f.observer.snapshot(include_profiles=True)["resolvedProfiles"]
         self.assertEqual(profiles[0]["fingerprint"], 44)
-        self.assertEqual(profiles[0]["lanes"], [bytes(range(72)).hex()] * 3)
+        self.assertEqual(profiles[0]["lanes"], [bytes(range(72)).hex()] * 2)
         self.assertEqual(f.hooks.error, None)
 
     def test_prepared_bytes_and_player_entry_tile_do_not_follow_later_changes(self):
@@ -363,12 +364,14 @@ class SharedNativeObserverTests(unittest.TestCase):
         self.assertEqual(receipt["jumpReceipts"][0]["playerAtEntry"]["tile"], [550, 381])
         self.assertIsNone(f.hooks.error)
 
-    def resolve_profile(self, terrain_mask=0, *, sp=0x027E3740, lr=0x02001081):
+    def resolve_profile(self, conditional_mask=0, *, sp=0x027E3740, lr=0x02001081):
         f = self.f
-        request, result = bytearray(44), bytearray(256)
-        struct.pack_into("<HH", request, 0, 165, terrain_mask)
-        result[:216] = bytes(range(72)) * 3
-        struct.pack_into("<II", result, 248, 7, 44)
+        request, result = bytearray(44), bytearray(200)
+        struct.pack_into("<H", request, 0, 165)
+        struct.pack_into("<I", request, 16, conditional_mask)
+        request[38] = 2
+        result[:144] = bytes(range(72)) * 2
+        struct.pack_into("<II", result, 172, 7, 44)
         f.put(0x02220000, request); f.put(0x02220100, result)
         f.enter("behavior-resolved", sp=sp, lr=lr, r2=0x02220000, r3=0x02220100)
         return request, result
@@ -385,8 +388,8 @@ class SharedNativeObserverTests(unittest.TestCase):
         self.resolve_profile(); f.returned(0, sp=0x027E3740, address=0x02001080)
         f.enter("spawn-prepared", r2=0, r3=0)
         requests = []
-        for terrain_mask in (0, 0x40):
-            request, result = self.resolve_profile(terrain_mask)
+        for conditional_mask in (0, 0x40):
+            request, result = self.resolve_profile(conditional_mask)
             requests.append(request.hex())
             f.returned(0, sp=0x027E3740, address=0x02001080)
         source["personality"] = 100  # The completed receipts must not change.
@@ -1120,7 +1123,7 @@ class CallbackPoolPlacementTests(unittest.TestCase):
         self.authored = {"overrideProfiles": [
             {"name": "Flying insect", "fields": {"spawnDestination": {
                 "operator": "replace", "value": "OW_WILD_SPAWN_DESTINATION_POOL"}}},
-            {"name": "Active", "fields": {}},
+            {"name": "Default active", "fields": {}},
         ]}
         self.f = Fixture(self.directory.name, authored_profiles=self.authored)
         self.addCleanup(self.f.observer.close)
@@ -1135,14 +1138,15 @@ class CallbackPoolPlacementTests(unittest.TestCase):
         f.put(pointer + 12, struct.pack("<I", f.actor["subjectIdentity"] ^ 0x10000000))
         args = dict(r0=f.rt.WILD_STATE, r1=0x02231000, r2=terrain, r3=0)
         f.enter("spawn-finalized", **args)
-        request, result = bytearray(44), bytearray(256)
+        request, result = bytearray(44), bytearray(200)
         struct.pack_into("<H", request, 0, f.actor["species"])
         request[8:10] = bytes((f.actor["level"], terrain))
-        for lane in (0, 72, 144):
+        request[38] = 2
+        for lane in (0, 72):
             # Observe the known broad native compatibility result, rather
             # than substituting the expected POOL-preservation rule into it.
             struct.pack_into("<HH", result, lane + 52, 15, 1023)
-        struct.pack_into("<IIIII", result, 236, 1, 0, 0, 3, f.actor["behaviorFingerprint"])
+        struct.pack_into("<IIIII", result, 160, 1, 0, 0, 3, f.actor["behaviorFingerprint"])
         f.put(0x02220000, request); f.put(0x02220100, result)
         f.enter("behavior-resolved", sp=0x027E3740, lr=0x02001081,
                 r2=0x02220000, r3=0x02220100)

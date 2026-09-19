@@ -585,7 +585,6 @@ class V2ViewerHandler(legacy.ViewerHandler):
                             (query.get("level") or [None])[0],
                             (query.get("terrain") or [None])[0],
                             (query.get("shiny") or [None])[0],
-                            (query.get("conditionTerrainMask") or [None])[0],
                             (query.get("forcedOverrideMask") or [None])[0],
                             (query.get("behaviorClass") or [None])[0],
                         ),

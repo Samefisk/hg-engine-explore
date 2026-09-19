@@ -38,32 +38,33 @@ SCHEMA = {
         {"key": "hopPause", "cType": "u8", "offset": 22},
     ],
 }
-PROFILE = bytearray(256)
+PROFILE = bytearray(200)
 PROFILE[21] = 6
 PROFILE[22] = 5
-PROFILE[248:252] = MATCHED_MASK.to_bytes(4, "little")
-PROFILE[252:256] = FINGERPRINT.to_bytes(4, "little")
+PROFILE[172:176] = MATCHED_MASK.to_bytes(4, "little")
+PROFILE[176:180] = FINGERPRINT.to_bytes(4, "little")
 REQUEST = bytearray(44)
 REQUEST[:2] = (56).to_bytes(2, "little")
+REQUEST[38] = 2
 PROFILE_RECEIPT = {
     "requestHex": REQUEST.hex(), "resultHex": PROFILE.hex(),
     "resolved": True, "fingerprint": FINGERPRINT,
     "sourceSha256": SOURCE,
-    "lanes": [PROFILE[offset:offset + 72].hex() for offset in (0, 72, 144)],
+    "lanes": [PROFILE[offset:offset + 72].hex() for offset in (0, 72)],
     "appliedOverrides": MATCHED_MASK,
 }
 
 
 def profile_receipt(fingerprint, mask):
     profile = bytearray(PROFILE)
-    profile[248:252] = mask.to_bytes(4, "little")
-    profile[252:256] = fingerprint.to_bytes(4, "little")
+    profile[172:176] = mask.to_bytes(4, "little")
+    profile[176:180] = fingerprint.to_bytes(4, "little")
     return {
         "requestHex": REQUEST.hex(), "resultHex": profile.hex(),
         "resolved": True, "fingerprint": fingerprint,
         "sourceSha256": SOURCE,
         "lanes": [profile[offset:offset + 72].hex()
-                  for offset in (0, 72, 144)],
+                  for offset in (0, 72)],
         "appliedOverrides": mask,
     }
 SUBJECT = {
@@ -233,7 +234,7 @@ class UnmountedZeroStutterTests(unittest.TestCase):
             **PROFILE_RECEIPT,
             "resultHex": profile.hex(),
             "lanes": [profile[offset:offset + 72].hex()
-                      for offset in (0, 72, 144)],
+                      for offset in (0, 72)],
         }
         initial["nativeObservation"]["resolvedProfiles"] = [receipt]
         with self.assertRaisesRegex(ValueError, "resolved Mankey profile changed"):

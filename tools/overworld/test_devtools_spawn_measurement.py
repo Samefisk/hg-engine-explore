@@ -14,7 +14,7 @@ from tools.overworld.test_devtools_chain_measurement import SOURCE, SCHEMA, Stre
 AUTHORED = {"overrideProfiles": [
     {"name": "Flying insect", "fields": {"spawnDestination": {
         "operator": "replace", "value": "OW_WILD_SPAWN_DESTINATION_POOL"}}},
-    {"name": "Active", "fields": {}},
+    {"name": "Later override", "fields": {}},
 ]}
 
 
@@ -39,8 +39,8 @@ def fixture():
         inputEncounter=deepcopy(receipt["inputEncounter"]))
     profile = receipt["resolverReceipts"][0]
     raw = bytearray.fromhex(profile["resultHex"])
-    struct.pack_into("<I", raw, 236, 1)
-    raw[218] = raw[222] = 0
+    struct.pack_into("<I", raw, 160, 1)
+    raw[146] = raw[150] = 0
     profile["resultHex"] = raw.hex()
     spawn["finalization"] = {"status": "matched", "receipt": receipt}
     return spawn
@@ -53,7 +53,7 @@ def check(spawn, source=AUTHORED):
 def landing_stream(*, replaced=False):
     stream = Stream()
     raw = bytearray.fromhex(stream.profile["resultHex"])
-    struct.pack_into("<I", raw, 236, 1)
+    struct.pack_into("<I", raw, 160, 1)
     stream.profile["resultHex"] = raw.hex()
     stream.items[0][0]["nativeObservation"]["resolvedProfiles"] = [deepcopy(stream.profile)]
     stream.motion("HOP", (16, 0), pause=2, spawn=True)
@@ -145,19 +145,19 @@ class PoolSpawnReceiptTests(unittest.TestCase):
         self.assertIsNotNone(compiler, "missing ARM compiler is not an ABI pass")
         program = '''#include "overworld_behavior_resolver.h"
 #include <stddef.h>
-_Static_assert(sizeof(BehaviorResolveResult) == 276, "result size");
-_Static_assert(offsetof(BehaviorResolveResult, matchedOverrideMask) == 236, "Owner matches");
-_Static_assert(offsetof(BehaviorResolveResult, forcedOverrideMask) == 240, "Owner forced");
-_Static_assert(offsetof(BehaviorResolveResult, conditionalOverrideMask) == 244, "Owner conditional");
-_Static_assert(offsetof(BehaviorResolveResult, appliedOverrideMask) == 248, "all applied");
-_Static_assert(offsetof(BehaviorResolveResult, primitives.chillTarget) == 218, "chill target");
-_Static_assert(offsetof(BehaviorResolveResult, primitives.attentiveTarget) == 222, "attentive target");
+_Static_assert(sizeof(BehaviorResolveResult) == 200, "result size");
+_Static_assert(offsetof(BehaviorResolveResult, matchedOverrideMask) == 160, "Owner matches");
+_Static_assert(offsetof(BehaviorResolveResult, forcedOverrideMask) == 164, "Owner forced");
+_Static_assert(offsetof(BehaviorResolveResult, conditionalOverrideMask) == 168, "Owner conditional");
+_Static_assert(offsetof(BehaviorResolveResult, appliedOverrideMask) == 172, "all applied");
+_Static_assert(offsetof(BehaviorResolveResult, primitives.chillTarget) == 146, "chill target");
+_Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "tired target");
 '''
         command = [compiler, "-x", "c", "-std=c11", "-mthumb", "-mcpu=arm946e-s",
                    "-I" + str(root / "include"), "-fsyntax-only", "-"]
         correct = subprocess.run(command, input=program, text=True, capture_output=True, timeout=20)
         self.assertEqual(correct.returncode, 0, correct.stderr[-3000:])
-        wrong = subprocess.run(command, input=program.replace("== 236", "== 248"),
+        wrong = subprocess.run(command, input=program.replace("== 160", "== 172"),
                                text=True, capture_output=True, timeout=20)
         self.assertNotEqual(wrong.returncode, 0, "combined applied mask is not Owner provenance")
 
@@ -177,9 +177,9 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.attentiveTarget) == 22
         # not our expected destination. The output still belongs to this PID.
         profile = receipt["resolverReceipts"][0]
         raw = bytearray.fromhex(profile["resultHex"])
-        for offset in (0, 72, 144):
+        for offset in (0, 72):
             struct.pack_into("<HH", raw, offset + 52, 15, 1023)
-        profile.update(resultHex=raw.hex(), lanes=[raw[n:n + 72].hex() for n in (0, 72, 144)])
+        profile.update(resultHex=raw.hex(), lanes=[raw[n:n + 72].hex() for n in (0, 72)])
         result = check(spawn)
         self.assertFalse(result["passed"])
         self.assertEqual(result["reason"], "pool-destination-replaced")
@@ -226,7 +226,7 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.attentiveTarget) == 22
                 elif fault == "input-species": r["inputEncounter"]["species"] = 56
                 elif fault == "profile-source": r["resolverReceipts"][0]["sourceSha256"] = "b" * 64
                 elif fault == "profile-request": r["resolverReceipts"][0]["requestHex"] = "00" * 44
-                elif fault == "profile-bytes": r["resolverReceipts"][0]["lanes"] = ["00" * 72] * 3
+                elif fault == "profile-bytes": r["resolverReceipts"][0]["lanes"] = ["00" * 72] * 2
                 elif fault == "headbutt": spawn["terrain"] = r["terrain"] = 2
                 elif fault == "short-input": r["inputPrefixHex"] = r["inputPrefixHex"][:-2]
                 elif fault == "pair-ineligible": r["pairEligible"] = False
@@ -244,23 +244,23 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.attentiveTarget) == 22
                 spawn = fixture()
                 profile = spawn["finalization"]["receipt"]["resolverReceipts"][0]
                 raw = bytearray.fromhex(profile["resultHex"])
-                struct.pack_into("<I", raw, 236, 3)
+                struct.pack_into("<I", raw, 160, 3)
                 profile["resultHex"] = raw.hex()
                 with self.assertRaises(ValueError): check(spawn, source)
 
-    def test_active_only_destination_does_not_replace_owner_pool(self):
+    def test_unapplied_later_destination_does_not_replace_owner_pool(self):
         source = deepcopy(AUTHORED)
         source["overrideProfiles"][1]["fields"] = {"spawnDestination": {
             "operator": "replace", "value": "OW_WILD_SPAWN_DESTINATION_CANOPY"}}
         self.assertTrue(check(fixture(), source)["passed"])
 
     def test_conditional_treetop_and_inconsistent_owner_masks_are_outside_witness(self):
-        for offset, value in ((244, 1), (240, 1), (236, 4), (218, 4), (222, 4)):
+        for offset, value in ((168, 1), (164, 1), (160, 4), (146, 4), (150, 4)):
             with self.subTest(offset=offset):
                 spawn = fixture()
                 profile = spawn["finalization"]["receipt"]["resolverReceipts"][0]
                 raw = bytearray.fromhex(profile["resultHex"])
-                if offset >= 236:
+                if offset >= 160:
                     struct.pack_into("<I", raw, offset, value)
                 else:
                     raw[offset] = value

@@ -16,10 +16,10 @@ from tools.overworld import devtools_cli
 
 class DevtoolsCliTests(unittest.TestCase):
     def test_job_summary_omits_repeated_measurement_history_not_failures(self):
-        history = [{"laneHex": "ab" * 216, "samples": list(range(100))}] * 100
+        history = [{"laneHex": "ab" * 72, "samples": list(range(100))}] * 100
         measure = {"ready": False, "completeMotions": 55, "eligibleMoves": 54,
             "intervals": history, "actions": history, "interruptedIntervals": history,
-            "selectedProfileReceipt": {"resultHex": "cd" * 256},
+            "selectedProfileReceipt": {"resultHex": "cd" * 200},
             "failures": [{"code": "stalled", "details": {"lastCommit": 55}}],
             "measurementErrors": [{"reason": "chain-boundary-overdue", "actual": 15}]}
         response = {"ok": True, "result": {"execution": "shared-devtools", "runId": "test-example",
@@ -186,8 +186,8 @@ class DevtoolsCliTests(unittest.TestCase):
             "resolved": True,
             "appliedOverrides": index,
             "sourceSha256": format(index + 1, "064x"),
-            "lanes": [(f"{index + 10:02x}" * 72)] * 3,
-            "resultHex": f"{index + 20:02x}" * 256,
+            "lanes": [(f"{index + 10:02x}" * 72)] * 2,
+            "resultHex": f"{index + 20:02x}" * 200,
             "requestHex": f"{index + 30:02x}" * 44,
         } for index in range(6)]
         response = {"ok": True, "session": {"id": "session-profiles", "state": "ready"},

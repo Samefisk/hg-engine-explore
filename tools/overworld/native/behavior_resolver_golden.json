@@ -1,10 +1,11 @@
 {
   "formatVersion": 1,
-  "blobVersion": 77,
+  "blobVersion": 78,
   "vectors": [
     {
       "name": "default-class-and-lanes",
       "request": {
+        "requestVersion": 2,
         "species": 155,
         "level": 5,
         "terrain": 0,
@@ -20,10 +21,6 @@
           "owner.stopSkid": 0,
           "owner.planTurnSkidPath": 0,
           "owner.walkAccelerationStep": 1,
-          "active.chillSpeed": 16,
-          "active.stopSkid": 0,
-          "active.planTurnSkidPath": 0,
-          "active.walkAccelerationStep": 1,
           "tired.chillSpeed": 16,
           "tired.stopSkid": 0,
           "tired.planTurnSkidPath": 0,
@@ -35,10 +32,9 @@
           "chillTarget": 1,
           "tiredReaction": 5
         },
-        "requiredAppliedOverrideMask": 33024,
+        "requiredAppliedOverrideMask": 32768,
         "traceContains": [
           {"lane": 0, "kind": 2, "sourceIndex": 0},
-          {"lane": 1, "kind": 5, "sourceIndex": 8},
           {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
@@ -46,6 +42,7 @@
     {
       "name": "stantler-runner-one-frame-acceleration",
       "request": {
+        "requestVersion": 2,
         "species": 234,
         "level": 5,
         "terrain": 0,
@@ -55,8 +52,8 @@
         "status": 0,
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 8,
-        "requiredAppliedOverrideMask": 33032,
-        "fingerprint": 3723102225,
+        "requiredAppliedOverrideMask": 32776,
+        "fingerprint": 567618902,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 7,
@@ -64,12 +61,6 @@
           "owner.maxWalkSpeed": 4,
           "owner.walkAccelerationStep": 1,
           "owner.planTurnSkidPath": 1,
-          "active.chillSpeed": 8,
-          "active.chainPauseAction": 7,
-          "active.tilesToAccelerate": 1,
-          "active.maxWalkSpeed": 4,
-          "active.walkAccelerationStep": 1,
-          "active.planTurnSkidPath": 1,
           "tired.chillSpeed": 8,
           "tired.chainPauseAction": 7,
           "tired.tilesToAccelerate": 1,
@@ -79,9 +70,7 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
-          {"lane": 1, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
           {"lane": 2, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 8},
           {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
@@ -89,6 +78,7 @@
     {
       "name": "mareep-gentle-grazer-all-lanes",
       "request": {
+        "requestVersion": 2,
         "species": 179,
         "level": 5,
         "terrain": 0,
@@ -98,8 +88,8 @@
         "status": 0,
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 128,
-        "requiredAppliedOverrideMask": 33152,
-        "fingerprint": 4051616482,
+        "requiredAppliedOverrideMask": 32896,
+        "fingerprint": 1184497362,
         "profileFields": {
           "owner.hopPause": 0,
           "owner.chillSpeed": 14,
@@ -110,15 +100,6 @@
           "owner.chainPauseActionChance": 25,
           "owner.walkPause": 0,
           "owner.walkPauseVariance": 6,
-          "active.chillSpeed": 14,
-          "active.hopPause": 0,
-          "active.chainPause": 24,
-          "active.chainPauseAction": 2,
-          "active.chainMovementVariance": 5,
-          "active.chainPauseVariance": 36,
-          "active.chainPauseActionChance": 25,
-          "active.walkPause": 0,
-          "active.walkPauseVariance": 6,
           "tired.chillSpeed": 14,
           "tired.hopPause": 0,
           "tired.chainPause": 24,
@@ -131,9 +112,7 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
-          {"lane": 1, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
           {"lane": 2, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 8},
           {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
@@ -141,6 +120,7 @@
     {
       "name": "species-class-selection",
       "request": {
+        "requestVersion": 2,
         "species": 16,
         "level": 5,
         "terrain": 0,
@@ -160,6 +140,7 @@
     {
       "name": "rattata-move-from-off-screen",
       "request": {
+        "requestVersion": 2,
         "species": 19,
         "level": 4,
         "terrain": 0,
@@ -174,7 +155,6 @@
           "owner.spawnState": 1,
           "owner.chillAction": 1,
           "owner.chillSpeed": 7,
-          "active.spawnState": 1,
           "tired.spawnState": 1
         },
         "primitiveFields": {
@@ -183,7 +163,6 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 1},
-          {"lane": 1, "kind": 5, "sourceIndex": 1},
           {"lane": 2, "kind": 5, "sourceIndex": 1}
         ]
       }
@@ -191,6 +170,7 @@
     {
       "name": "mankey-canopy-capability-land",
       "request": {
+        "requestVersion": 2,
         "species": 56,
         "level": 5,
         "terrain": 0,
@@ -202,14 +182,11 @@
         "requiredMatchedOverrideMask": 327684,
         "requiredAppliedOverrideMask": 327684,
         "conditionalOverrideMask": 0,
-        "fingerprint": 1420892909,
+        "fingerprint": 1494539596,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
           "owner.hopAllowNonCardinal": 1,
-          "active.chillAction": 2,
-          "active.hopPause": 5,
-          "active.hopAllowNonCardinal": 1,
           "tired.chillAction": 2,
           "tired.hopPause": 5,
           "tired.hopAllowNonCardinal": 1
@@ -222,7 +199,6 @@
           {"lane": 0, "kind": 3, "sourceIndex": 2, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 18, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 2},
           {"lane": 2, "kind": 5, "sourceIndex": 2}
         ]
       }
@@ -230,11 +206,13 @@
     {
       "name": "mankey-canopy-capability-on-canopy",
       "request": {
+        "requestVersion": 2,
         "species": 56,
         "level": 5,
         "terrain": 0,
         "groupFlags": 0,
-        "conditionTerrainMask": 4
+        "activeConditionalMask": 131072,
+        "winningConditionId": 1247
       },
       "expected": {
         "status": 0,
@@ -242,16 +220,12 @@
         "requiredMatchedOverrideMask": 327684,
         "conditionalOverrideMask": 131072,
         "requiredAppliedOverrideMask": 458756,
-        "fingerprint": 1617962076,
+        "fingerprint": 1251223057,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
           "owner.hopAllowNonCardinal": 1,
           "owner.hopAllowVerticalObstacles": 1,
-          "active.chillAction": 2,
-          "active.hopPause": 5,
-          "active.hopAllowNonCardinal": 1,
-          "active.hopAllowVerticalObstacles": 1,
           "tired.chillAction": 2,
           "tired.hopPause": 5,
           "tired.hopAllowNonCardinal": 1,
@@ -264,9 +238,8 @@
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 2, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 18, "requiredFlags": 3},
           {"lane": 0, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 0, "kind": 3, "sourceIndex": 18, "requiredFlags": 3},
           {"lane": 2, "kind": 4, "sourceIndex": 17, "requiredFlags": 10}
         ]
       }
@@ -274,6 +247,7 @@
     {
       "name": "sentret-canopy-capability-land",
       "request": {
+        "requestVersion": 2,
         "species": 161,
         "level": 5,
         "terrain": 0,
@@ -285,14 +259,11 @@
         "requiredMatchedOverrideMask": 4259842,
         "requiredAppliedOverrideMask": 4259842,
         "conditionalOverrideMask": 0,
-        "fingerprint": 710536658,
+        "fingerprint": 1514029235,
         "profileFields": {
           "owner.chillAction": 1,
           "owner.hopPause": 0,
           "owner.hopAllowNonCardinal": 0,
-          "active.chillAction": 1,
-          "active.hopPause": 0,
-          "active.hopAllowNonCardinal": 0,
           "tired.chillAction": 1,
           "tired.hopPause": 0,
           "tired.hopAllowNonCardinal": 0
@@ -305,7 +276,6 @@
           {"lane": 0, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 22, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 1},
           {"lane": 2, "kind": 5, "sourceIndex": 1}
         ]
       }
@@ -313,11 +283,13 @@
     {
       "name": "sentret-canopy-capability-on-canopy",
       "request": {
+        "requestVersion": 2,
         "species": 161,
         "level": 5,
         "terrain": 0,
         "groupFlags": 0,
-        "conditionTerrainMask": 4
+        "activeConditionalMask": 131072,
+        "winningConditionId": 1247
       },
       "expected": {
         "status": 0,
@@ -325,16 +297,12 @@
         "requiredMatchedOverrideMask": 4259842,
         "conditionalOverrideMask": 131072,
         "requiredAppliedOverrideMask": 4390914,
-        "fingerprint": 3058885345,
+        "fingerprint": 2595793930,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 0,
           "owner.hopAllowNonCardinal": 1,
           "owner.hopAllowVerticalObstacles": 1,
-          "active.chillAction": 2,
-          "active.hopPause": 0,
-          "active.hopAllowNonCardinal": 1,
-          "active.hopAllowVerticalObstacles": 1,
           "tired.chillAction": 2,
           "tired.hopPause": 0,
           "tired.hopAllowNonCardinal": 1,
@@ -347,9 +315,8 @@
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
           {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 22, "requiredFlags": 3},
           {"lane": 0, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 0, "kind": 3, "sourceIndex": 22, "requiredFlags": 3},
           {"lane": 2, "kind": 4, "sourceIndex": 17, "requiredFlags": 10}
         ]
       }
@@ -357,6 +324,7 @@
     {
       "name": "forced-follower-profile",
       "request": {
+        "requestVersion": 2,
         "species": 155,
         "level": 5,
         "terrain": 0,
@@ -366,7 +334,7 @@
       "expected": {
         "status": 0,
         "forcedOverrideMask": 33554432,
-        "requiredAppliedOverrideMask": 33587456,
+        "requiredAppliedOverrideMask": 33587200,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 0,
@@ -380,6 +348,7 @@
     {
       "name": "selected-test-class",
       "request": {
+        "requestVersion": 2,
         "species": 150,
         "level": 70,
         "terrain": 0,
@@ -400,21 +369,22 @@
     {
       "name": "conditional-rooftop-replay",
       "request": {
+        "requestVersion": 2,
         "species": 16,
         "level": 5,
         "terrain": 0,
         "groupFlags": 20,
-        "conditionTerrainMask": 64
+        "activeConditionalMask": 1048576,
+        "winningConditionId": 23303
       },
       "expected": {
         "status": 0,
         "behaviorClass": 1,
         "requiredMatchedOverrideMask": 32,
         "conditionalOverrideMask": 1048576,
-        "requiredAppliedOverrideMask": 1081632,
+        "requiredAppliedOverrideMask": 1081376,
         "traceContains": [
           {"lane": 0, "kind": 4, "sourceIndex": 20, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 20, "requiredFlags": 10},
           {"lane": 2, "kind": 4, "sourceIndex": 20, "requiredFlags": 10}
         ]
       }
@@ -422,6 +392,7 @@
     {
       "name": "explicit-picked-up-class",
       "request": {
+        "requestVersion": 2,
         "species": 155,
         "level": 5,
         "terrain": 0,
@@ -442,6 +413,7 @@
     {
       "name": "legacy-forced-asleep-match-token",
       "request": {
+        "requestVersion": 2,
         "species": 155,
         "level": 5,
         "terrain": 0,
@@ -464,10 +436,10 @@
     {
       "name": "explicit-canopy-conditional-application",
       "request": {
+        "requestVersion": 2,
         "species": 56,
         "level": 5,
         "terrain": 0,
-        "conditionInputMode": "explicit",
         "activeConditionalMask": 131072,
         "winningConditionId": 1247
       },
@@ -477,7 +449,7 @@
         "conditionalOverrideMask": 131072,
         "requiredMatchedOverrideMask": 327684,
         "requiredAppliedOverrideMask": 458756,
-        "fingerprint": 2787928825,
+        "fingerprint": 1251223057,
         "winningConditionId": 1247,
         "targetSourceApplication": 255,
         "resolvedTargetConditionId": 65535,

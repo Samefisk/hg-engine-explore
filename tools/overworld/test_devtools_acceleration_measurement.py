@@ -35,14 +35,14 @@ def fixture(role="WILD", durations=(9, 9, 5, 5, 3, 3, 2), *, initial_commit=0, b
                        "walkAccelerationStep": acceleration,
                        "hopAllowNonCardinal": direction_mode}.items():
         lane[next(f["offset"] for f in SCHEMA["fields"] if f["key"] == key)] = value
-    lanes = [bytearray(lane) for _ in range(3)]
+    lanes = [bytearray(lane) for _ in range(2)]
     for index, item in enumerate(lanes):
         item[0] = index
     stream.lanes = [item.hex() for item in lanes]
-    lane = lanes[{2: 1, 3: 2}.get(lane_state, 0)]
+    lane = lanes[1 if lane_state == 3 else 0]
     profile = bytearray.fromhex(stream.profile["resultHex"])
-    profile[:216] = b"".join(lanes)
-    profile[252:256] = fingerprint.to_bytes(4, "little")
+    profile[:144] = b"".join(lanes)
+    profile[176:180] = fingerprint.to_bytes(4, "little")
     stream.profile.update(resultHex=profile.hex(), lanes=stream.lanes, fingerprint=fingerprint)
     request_profile = bytearray.fromhex(stream.profile["requestHex"])
     request_profile[:2] = species.to_bytes(2, "little")
@@ -188,7 +188,7 @@ class AccelerationMeasurementTests(unittest.TestCase):
             elif fault == "source": profiles[0]["sourceSha256"] = "wrong"
             elif fault == "mask":
                 data = bytearray.fromhex(profiles[0]["resultHex"])
-                data[248:252] = (9).to_bytes(4, "little")
+                data[172:176] = (9).to_bytes(4, "little")
                 profiles[0].update(resultHex=data.hex(), appliedOverrides=9)
             elif fault == "oversize": profiles *= 65
             with self.subTest(fault=fault):

@@ -254,17 +254,17 @@ class UnmountedZeroStutterMeasurement:
             except (TypeError, ValueError):
                 continue
             lanes = [raw[offset:offset + compact_size].hex()
-                     for offset in (0, compact_size, compact_size * 2)]
+                     for offset in (0, compact_size)]
             if (receipt.get("resolved") is True
                     and receipt.get("sourceSha256") == self.source_sha256
                     and receipt.get("fingerprint") == fingerprint
                     and receipt.get("appliedOverrides") == mask
-                    and len(raw) == 256
+                    and len(raw) == 200
                     and len(request) == 44
                     and int.from_bytes(request[:2], "little") == 56
                     and receipt.get("lanes") == lanes
-                    and int.from_bytes(raw[248:252], "little") == mask
-                    and int.from_bytes(raw[252:256], "little") == fingerprint):
+                    and int.from_bytes(raw[172:176], "little") == mask
+                    and int.from_bytes(raw[176:180], "little") == fingerprint):
                 matches.append(raw[:compact_size])
         if not matches:
             return

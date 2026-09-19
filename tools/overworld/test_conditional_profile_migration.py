@@ -155,7 +155,7 @@ class ConditionalProfileMigrationTests(unittest.TestCase):
                 "shiny": 0,
                 "groupFlags": 0,
                 "behaviorClass": "auto",
-                "conditionInputMode": "explicit",
+                "requestVersion": 2,
             }
             inactive = native_resolver.resolve(
                 None,
@@ -184,6 +184,23 @@ class ConditionalProfileMigrationTests(unittest.TestCase):
                     self.assertEqual(self.owner_field(active, field), expected)
                 if not case["expectedOwnerFields"]:
                     self.assertEqual(active["profileHex"], inactive["profileHex"])
+
+    def test_host_adapter_rejects_removed_request_inputs(self) -> None:
+        for request, message in (
+            ({"requestVersion": 1}, "unsupported native resolver requestVersion 1"),
+            ({"requestVersion": 0}, "unsupported native resolver requestVersion 0"),
+            ({"conditionInputMode": "explicit"}, "conditionInputMode was removed"),
+            ({"conditionTerrainMask": 1}, "conditionTerrainMask was removed"),
+        ):
+            with self.subTest(request=request), self.assertRaisesRegex(
+                ValueError, message
+            ):
+                native_resolver.resolve(
+                    None,
+                    request,
+                    root=ROOT,
+                    executable=self.resolver,
+                )
 
 
 if __name__ == "__main__":

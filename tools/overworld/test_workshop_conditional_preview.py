@@ -69,13 +69,22 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
 
         evaluation = result["conditionEvaluation"]
         self.assertEqual(
-            evaluation["activeApplicationIds"], ["apply-bird-rooftop"]
+            evaluation["activeApplicationIds"],
+            ["apply-default-active", "apply-bird-rooftop"],
         )
         self.assertEqual(
             evaluation["winningCondition"]["conditionId"],
             "condition-bird-rooftop",
         )
-        self.assertIsNone(evaluation["targetSource"])
+        self.assertEqual(
+            evaluation["targetSource"],
+            {
+                "profileId": "default-active",
+                "applicationId": "apply-default-active",
+                "conditionId": "condition-aggressive-chase-notices-player",
+                "target": {"kind": "player"},
+            },
+        )
         layer = next(
             layer
             for layer in result["resolverLayers"]

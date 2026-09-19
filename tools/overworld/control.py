@@ -225,14 +225,14 @@ def _packaged_resolver_oracle() -> dict[str, Any] | None:
             "default-class-and-lanes",
             "species-class-selection",
             "forced-follower-profile",
-            "relative-override",
+            "stantler-runner-one-frame-acceleration",
             "conditional-rooftop-replay",
             "explicit-picked-up-class",
             "legacy-forced-asleep-match-token",
             "explicit-canopy-conditional-application",
         )
         by_name = {item.get("name"): item for item in corpus["vectors"]}
-        if corpus.get("blobVersion") != 77 or any(name not in by_name for name in names):
+        if corpus.get("blobVersion") != 78 or any(name not in by_name for name in names):
             return None
         adapter_path = REPO / "tools/overworld-viewer-v2/native_resolver.py"
         module_spec = importlib.util.spec_from_file_location(
@@ -2818,7 +2818,7 @@ def _resolver_probe_oracle(repo):
     corpus = json.loads((repo / "tools/overworld/native/behavior_resolver_golden.json").read_text())
     by_name = {vector.get("name"): vector for vector in corpus["vectors"]}
     vectors = [by_name.get(name) for name in CASE_NAMES]
-    if corpus["blobVersion"] != 77 \
+    if corpus["blobVersion"] != 78 \
             or not all(isinstance(vector, dict) for vector in vectors):
         raise ValidationFailure("resolver golden cases changed")
     path = repo / "tools/overworld-viewer-v2/native_resolver.py"
@@ -2830,12 +2830,12 @@ def _resolver_probe_oracle(repo):
     service = next(s for s in descriptor["privateServices"] if s["name"] == "resolver")
     elf = repo / "build/overworld_actor_system_overlay_linked.o"
     address = linked_symbol(linked_symbols(elf), "BehaviorResolver_Resolve") & ~1
-    if service["status"] != "available" or service["version"] != 1 or service["size"] != 16 \
+    if service["status"] != "available" or service["version"] != 2 or service["size"] != 16 \
             or service["callbacks"]["resolve"] != address | 1:
         raise ValidationFailure("resolver service differs from packaged linked function")
     return {"vectors": vectors, "hostResults": results,
         "blobIdentity": {"size": len(blob), "sha256": hashlib.sha256(blob).hexdigest()},
-        "serviceIdentity": {"magic": 0x5250574F, "version": 1, "size": 16,
+        "serviceIdentity": {"magic": 0x5250574F, "version": 2, "size": 16,
             "resolveAddress": address | 1, "entrySha256": hashlib.sha256(_elf_code(elf,address,32)).hexdigest()},
         "callAddresses": {"allocate_work_memory": STOCK_CALLS["allocate_work_memory"][0],
                           "free": STOCK_CALLS["free"][0], "resolve_behavior": address}}
