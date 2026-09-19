@@ -28,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = Path("data/overworld_behavior_profiles.json")
 SELF_PATH = Path("scripts/report_overworld_active_profile_migration.py")
 TEST_PATH = Path("tools/overworld/test_report_overworld_active_profile_migration.py")
+MAPPING_PATH = Path(
+    "tools/overworld/fixtures/conditional_profile_migration_v1.json"
+)
 
 CLASSIFICATIONS = (
     "condition_input",
@@ -530,6 +533,33 @@ def scan_catalog(root: Path) -> list[dict[str, object]]:
     return findings
 
 
+def mapped_legacy_sources(root: Path) -> set[str]:
+    """Return the reviewed CP6 source-profile mappings when present."""
+
+    path = root / MAPPING_PATH
+    if not path.is_file():
+        return set()
+    try:
+        mapping = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"cannot parse {MAPPING_PATH}: {error}") from error
+    entries = mapping.get("mappings")
+    if mapping.get("version") != 1 or not isinstance(entries, list):
+        raise RuntimeError(f"{MAPPING_PATH} has an unsupported shape")
+    sources = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or not isinstance(
+            entry.get("legacySourceProfile"), str
+        ):
+            raise RuntimeError(
+                f"{MAPPING_PATH} mapping {index} has no legacySourceProfile"
+            )
+        sources.append(entry["legacySourceProfile"])
+    if len(sources) != len(set(sources)):
+        raise RuntimeError(f"{MAPPING_PATH} has duplicate legacy source profiles")
+    return set(sources)
+
+
 def build_inventory(
     root: Path = ROOT,
     files: Sequence[Path] | None = None,
@@ -578,6 +608,19 @@ def build_inventory(
     by_kind = Counter(str(item["kind"]) for item in ordered)
     unclassified = [item["id"] for item in ordered if item["classification"] is None]
     forbidden = [item["id"] for item in ordered if item["forbiddenAtCp7"]]
+    mapped_sources = mapped_legacy_sources(root)
+    migration_sources = [
+        item for item in ordered
+        if item["kind"] == "catalog_active_profile_reference"
+    ]
+    mapped_source_findings = [
+        item["id"] for item in migration_sources
+        if item["details"]["sourceProfile"] in mapped_sources
+    ]
+    unmapped_source_findings = [
+        item["id"] for item in migration_sources
+        if item["details"]["sourceProfile"] not in mapped_sources
+    ]
     return {
         "schemaVersion": 1,
         "source": "Git worktree files plus semantic named-catalog inspection",
@@ -591,11 +634,15 @@ def build_inventory(
             "findingCount": len(ordered),
             "unclassifiedCount": len(unclassified),
             "forbiddenAtCp7Count": len(forbidden),
+            "mappedLegacySourceCount": len(mapped_source_findings),
+            "unmappedLegacySourceCount": len(unmapped_source_findings),
             "byClassification": dict(sorted(by_classification.items())),
             "byKind": dict(sorted(by_kind.items())),
         },
         "unclassifiedFindingIds": unclassified,
         "forbiddenFindingIds": forbidden,
+        "mappedLegacySourceFindingIds": mapped_source_findings,
+        "unmappedLegacySourceFindingIds": unmapped_source_findings,
         "findings": ordered,
     }
 

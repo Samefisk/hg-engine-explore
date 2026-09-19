@@ -151,6 +151,24 @@ def _application_indexes(root: Path) -> dict[str, int]:
     }
 
 
+def _select_rule_removal_index(root: Path, vectors: list[dict[str, Any]]) -> int:
+    """Choose one golden-covered, unconditional application to mutate."""
+    catalog = _load_json(root / "data/overworld_behavior_profiles.json")
+    conditional_profiles = {
+        profile["id"]
+        for profile in catalog["profiles"]
+        if profile.get("conditions")
+    }
+    covered_mask = 0
+    for vector in vectors:
+        covered_mask |= vector["expected"].get("requiredAppliedOverrideMask", 0)
+    for index, application in enumerate(catalog["applications"]):
+        if application["profile"] not in conditional_profiles \
+                and covered_mask & (1 << index):
+            return index
+    raise AssertionError("golden vectors cover no unconditional resolver application")
+
+
 def verify_rule_removal(root, blob, vectors, adapter, executable):
     """A successful mutant execution must fail unchanged golden expectations.
 
@@ -163,18 +181,7 @@ def verify_rule_removal(root, blob, vectors, adapter, executable):
         raise AssertionError("baseline resolver result count differs")
     for vector, result in zip(vectors, baseline):
         _verify_result(result, vector["expected"])
-    catalog = _load_json(root / "data/overworld_behavior_profiles.json")
-    rule_index = _application_indexes(root)[
-        catalog["runtimeBindings"]["defaultActiveApplication"]
-    ]
-    if not any(
-        vector["expected"].get("requiredAppliedOverrideMask", 0)
-        & (1 << rule_index)
-        for vector in vectors
-    ):
-        raise AssertionError(
-            f"golden vectors no longer require removed rule{rule_index}"
-        )
+    rule_index = _select_rule_removal_index(root, vectors)
     source = (root / "lib/overworld/overworld_behavior_resolver.c").read_text()
     changed = _remove_recorded_rule(source, rule_index)
     with tempfile.TemporaryDirectory(prefix="ow-resolver-rule-control-") as directory:
@@ -442,7 +449,7 @@ def main() -> int:
     )
     parser.add_argument("--force-host-build", action="store_true")
     parser.add_argument("--rule-removal-control", action="store_true",
-                        help="omit the named default-active application and require unchanged goldens to reject it")
+                        help="omit one covered unconditional application and require unchanged goldens to reject it")
     parser.add_argument("--scenario", choices=PROFILE_SCENARIOS)
     arguments = parser.parse_args()
 

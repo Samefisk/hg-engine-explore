@@ -38,7 +38,25 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
 
     def compatibility_v1(self, catalog: dict | None = None) -> dict:
         source = self.catalog if catalog is None else catalog
-        return VIEWER.lower_behavior_catalog_v2(VIEWER.lower_behavior_catalog_v3(source))
+        return VIEWER.lower_behavior_catalog_v2(
+            VIEWER.lower_behavior_catalog_v3(self.legacy_compatible_catalog(source))
+        )
+
+    @staticmethod
+    def legacy_compatible_catalog(source: dict) -> dict:
+        """Keep V1/V2 migration tests on their terrain-only source domain."""
+
+        compatible = copy.deepcopy(source)
+        for profile in compatible["profiles"]:
+            if profile["kind"] != "conditional":
+                continue
+            if any(
+                condition["when"]["kind"] == "notice-target"
+                for condition in profile["conditions"]
+            ):
+                profile["kind"] = "normal"
+                profile.pop("conditions")
+        return compatible
 
     @staticmethod
     def notice_condition(
@@ -83,7 +101,14 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             profile["id"]: profile for profile in self.catalog["profiles"]
             if profile["kind"] == "conditional"
         }
-        self.assertEqual(set(conditional), {"canopy-hop-surface", "bird-rooftop"})
+        self.assertEqual(set(conditional), {
+            "ambush-plant-active",
+            "bird-rooftop",
+            "canopy-hop-surface",
+            "default-active",
+            "skittish",
+            "swaying-plant-active",
+        })
         self.assertEqual(
             conditional["canopy-hop-surface"]["conditions"][0]["id"],
             "condition-canopy-hopper-on-canopy",
@@ -99,10 +124,10 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         self.assertEqual(schema["properties"]["catalogVersion"]["const"], 3)
 
     def test_v2_read_only_migration_recreates_owned_conditions(self) -> None:
-        v2 = VIEWER.lower_behavior_catalog_v3(self.catalog)
+        compatible = self.legacy_compatible_catalog(self.catalog)
+        v2 = VIEWER.lower_behavior_catalog_v3(compatible)
         migrated = VIEWER.migrate_behavior_catalog_v2(v2)
-        self.assertEqual(migrated, self.catalog)
-        self.assertEqual(VIEWER.load_behavior_catalog_v2(), v2)
+        self.assertEqual(migrated, compatible)
 
         no_op = copy.deepcopy(v2)
         no_op["conditionalStates"].append({
@@ -160,17 +185,27 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             VIEWER.lower_behavior_catalog_v3(changed)
 
         source = VIEWER.BEHAVIOR_DATA_SOURCE.read_text()
+        base_counts = VIEWER.behavior_blob_counts(source)
         rendered = VIEWER.render_behavior_catalog(changed, source)
         counts = VIEWER.behavior_blob_counts(rendered)
-        self.assertEqual(counts["OWBD_CONDITION_ENTRY_COUNT"], 4)
-        self.assertEqual(counts["OWBD_OVERRIDE_MEMBER_COUNT"], 300)
+        self.assertEqual(
+            counts["OWBD_CONDITION_ENTRY_COUNT"],
+            base_counts["OWBD_CONDITION_ENTRY_COUNT"] + 2,
+        )
+        self.assertEqual(
+            counts["OWBD_OVERRIDE_MEMBER_COUNT"],
+            base_counts["OWBD_OVERRIDE_MEMBER_COUNT"] + 2,
+        )
         entries = VIEWER.parse_initializer(
             VIEWER.extract_braced_initializer(
                 VIEWER.strip_c_comments(VIEWER.join_line_continuations(rendered)),
                 "sOverworldWildBehaviorConditionEntries",
             )
         )
-        self.assertEqual(len(entries), 4)
+        self.assertEqual(
+            len(entries),
+            base_counts["OWBD_CONDITION_ENTRY_COUNT"] + 2,
+        )
         self.assertTrue(all(len(entry) == 24 for entry in entries))
 
         with mock.patch.object(
@@ -192,10 +227,16 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             self.notice_condition("condition-bird-second"),
         ])
         metadata, before = VIEWER._catalog_condition_layout(changed)
-        before_ids = [entry["conditionId"] for entry in before[-3:]]
+        before_ids = [
+            entry["conditionId"] for entry in before
+            if entry["profile"]["id"] == profile["id"]
+        ]
         profile["conditions"][-2:] = reversed(profile["conditions"][-2:])
         reordered_metadata, after = VIEWER._catalog_condition_layout(changed)
-        after_ids = [entry["conditionId"] for entry in after[-3:]]
+        after_ids = [
+            entry["conditionId"] for entry in after
+            if entry["profile"]["id"] == profile["id"]
+        ]
         self.assertEqual(metadata, reordered_metadata)
         self.assertEqual(after_ids, [before_ids[0], before_ids[2], before_ids[1]])
 
@@ -281,7 +322,7 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             },
         )
         write.assert_called_once_with(changed)
-        VIEWER.lower_behavior_catalog_v3(changed)
+        VIEWER.validate_behavior_catalog(changed)
 
     def test_complete_catalog_save_no_op_does_not_write(self) -> None:
         body = json.dumps({"catalog": self.catalog}).encode()
@@ -299,7 +340,8 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             VIEWER.apply_profile_catalog_changes(body)
 
     def test_v1_migration_and_compatibility_writer_are_lossless(self) -> None:
-        v2 = VIEWER.lower_behavior_catalog_v3(self.catalog)
+        compatible = self.legacy_compatible_catalog(self.catalog)
+        v2 = VIEWER.lower_behavior_catalog_v3(compatible)
         lowered = VIEWER.lower_behavior_catalog_v2(v2)
         plain_v1 = json.loads(json.dumps(lowered))
         migrated = VIEWER.migrate_behavior_catalog_v1(plain_v1)
@@ -316,7 +358,7 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
             VIEWER.lift_compatibility_behavior_catalog(lowered),
             v2,
         )
-        self.assertEqual(VIEWER.migrate_behavior_catalog_v2(v2), self.catalog)
+        self.assertEqual(VIEWER.migrate_behavior_catalog_v2(v2), compatible)
 
     def test_selection_materializes_parent_but_application_uses_local_fields(self) -> None:
         lowered = self.compatibility_v1()

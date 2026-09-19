@@ -768,8 +768,13 @@ def resolve_context(
 ) -> dict[str, Any]:
     """Resolve one real runtime context and expose the complete layer stack."""
 
-    canonical_catalog = legacy.load_behavior_catalog_v2()
-    catalog = legacy.load_behavior_catalog()
+    canonical_catalog = legacy.load_behavior_catalog_v3()
+    catalog = legacy.lower_behavior_catalog_v2(
+        legacy.lower_behavior_catalog_v3(
+            canonical_catalog,
+            allow_runtime_only=True,
+        )
+    )
     profiles_by_id = {
         profile["id"]: profile for profile in canonical_catalog["profiles"]
     }

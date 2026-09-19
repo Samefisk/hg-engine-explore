@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "timerPolicy": "Fixed actor-system frames. Duration approximates the old completed-action phase at the authored nominal action time. Cooldown is duration plus the old rest time.",
+  "mappings": [
+    {
+      "legacySourceProfile": "default",
+      "legacyActiveApplication": "apply-default-active",
+      "classification": "presentation-only",
+      "conditionalProfile": "default-active",
+      "conditionalApplication": "apply-default-active",
+      "conditionIds": [
+        "condition-default-notices-player",
+        "condition-aggressive-chase-notices-player",
+        "condition-aggressive-ram-notices-player",
+        "condition-gentle-grazer-notices-player",
+        "condition-throwing-notices-player",
+        "condition-playful-notices-player"
+      ],
+      "responseFields": []
+    },
+    {
+      "legacySourceProfile": "flying-insect",
+      "legacyActiveApplication": "apply-default-active",
+      "classification": "presentation-only",
+      "conditionalProfile": "default-active",
+      "conditionalApplication": "apply-default-active",
+      "conditionIds": [
+        "condition-flying-insect-notices-player"
+      ],
+      "responseFields": []
+    },
+    {
+      "legacySourceProfile": "nervous-scavenger",
+      "legacyActiveApplication": "apply-nervous-scavenger",
+      "classification": "presentation-only",
+      "conditionalProfile": "default-active",
+      "conditionalApplication": "apply-default-active",
+      "conditionIds": [
+        "condition-nervous-scavenger-notices-player",
+        "condition-playful-scavenger-notices-player"
+      ],
+      "responseFields": []
+    },
+    {
+      "legacySourceProfile": "hopping-scavenger",
+      "legacyActiveApplication": "apply-hopping-scavenger",
+      "classification": "presentation-only",
+      "conditionalProfile": "default-active",
+      "conditionalApplication": "apply-default-active",
+      "conditionIds": [
+        "condition-hopping-scavenger-notices-player",
+        "condition-hopping-thrower-notices-player"
+      ],
+      "responseFields": []
+    },
+    {
+      "legacySourceProfile": "baby-pokemon",
+      "legacyActiveApplication": "apply-skittish",
+      "classification": "flee",
+      "conditionalProfile": "skittish",
+      "conditionalApplication": "apply-skittish",
+      "conditionIds": [
+        "condition-baby-notices-player",
+        "condition-igglybuff-notices-player"
+      ],
+      "responseFields": [
+        "chillState"
+      ]
+    },
+    {
+      "legacySourceProfile": "swaying-plant",
+      "legacyActiveApplication": "apply-swaying-plant-active",
+      "classification": "ordinary",
+      "conditionalProfile": "swaying-plant-active",
+      "conditionalApplication": "apply-swaying-plant-active",
+      "conditionIds": [
+        "condition-swaying-plant-notices-player"
+      ],
+      "responseFields": [
+        "chainMovementVariance",
+        "chainPauseAction",
+        "chainPauseVariance",
+        "chillAction",
+        "chillSpeed",
+        "chillState",
+        "chillTarget",
+        "ramAccelerationSteps",
+        "ramMaxSpeed",
+        "wanderStraightChance"
+      ]
+    },
+    {
+      "legacySourceProfile": "ambush-plant",
+      "legacyActiveApplication": "apply-ambush-plant-active",
+      "classification": "chase",
+      "conditionalProfile": "ambush-plant-active",
+      "conditionalApplication": "apply-ambush-plant-active",
+      "conditionIds": [
+        "condition-ambush-plant-notices-player"
+      ],
+      "responseFields": [
+        "chillAction",
+        "chillState",
+        "chillTarget",
+        "hopAllowNonCardinal",
+        "hopMaxDistance",
+        "hopMinDistance",
+        "hopPause",
+        "hopSpinSpeed",
+        "hopSwayWidth",
+        "hopTime"
+      ]
+    }
+  ],
+  "terrainMigrations": [
+    {
+      "conditionalProfile": "canopy-hop-surface",
+      "conditionId": "condition-canopy-hopper-on-canopy"
+    },
+    {
+      "conditionalProfile": "bird-rooftop",
+      "conditionId": "condition-bird-rooftop"
+    }
+  ],
+  "semanticCases": [
+    {
+      "id": "presentation-only-default",
+      "species": 1,
+      "conditionalApplication": "apply-default-active",
+      "conditionId": "condition-default-notices-player",
+      "expectedOwnerFields": {}
+    },
+    {
+      "id": "baby-flees-player",
+      "species": 173,
+      "conditionalApplication": "apply-skittish",
+      "conditionId": "condition-baby-notices-player",
+      "expectedOwnerFields": {
+        "chillState": 4
+      }
+    },
+    {
+      "id": "swaying-plant-speeds-up",
+      "species": 69,
+      "conditionalApplication": "apply-swaying-plant-active",
+      "conditionId": "condition-swaying-plant-notices-player",
+      "expectedOwnerFields": {
+        "chillSpeed": 11
+      }
+    },
+    {
+      "id": "ambush-plant-chases-player",
+      "species": 71,
+      "conditionalApplication": "apply-ambush-plant-active",
+      "conditionId": "condition-ambush-plant-notices-player",
+      "expectedOwnerFields": {
+        "chillState": 3,
+        "chillAction": 2,
+        "chillTarget": 2,
+        "hopTime": 6
+      }
+    }
+  ]
+}

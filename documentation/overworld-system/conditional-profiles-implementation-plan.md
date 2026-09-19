@@ -13,7 +13,22 @@ until the CP7 cutover gate passes.
 | CP3 | Complete | The 44-byte request and 276-byte result support explicit conditions. Ordered resolver tests, 15 goldens, and host/package fixtures prove the new one-pass path. Legacy callers remain on the compatibility mode. |
 | CP4 | Complete | The role adapter prepares bounded condition entries at bind, clears them with actor identity, evaluates at the idle decision boundary, resolves in shadow mode, and emits armed-only trace facts. The old path still owns visible behavior. |
 | CP5 | Complete | The Workshop authors ordered, profile-owned conditions and previews draft data through the shared portable evaluator and resolver. The Active tab is gone; Conditions replaces Alert authoring. |
-| CP6–CP8 | Not started | Catalog migration, cutover, deletion, and live acceptance remain. |
+| CP6 | Complete | All seven old Active-profile sources and both terrain conditions have profile-owned condition homes. Migration fixtures cover chase, flee, presentation-only alert, and terrain response. The inventory reports 1,784 classified findings, zero unclassified findings, seven mapped legacy sources, and zero unmapped sources. |
+| CP7–CP8 | Not started | Make the evaluator authoritative, remove the old Active/attentive path and compatibility formats, then run host, ROM, live, and pacing acceptance. |
+
+## Latest handoff
+
+- Current slice: CP6 complete; its exit gate is green.
+- Named catalog, generated catalog, Workshop compatibility views, migration
+  inventory, resolver goldens, and migration fixtures changed.
+- Generated schema and catalog checks pass. Workshop authoring passes 15
+  tests. The focused catalog, evaluator, resolver, inventory, and migration
+  set passes 46 tests. All 15 resolver goldens and the actual-C rule-removal
+  control pass.
+- Catalog storage stays V78 and semantic fingerprints stay V77 through CP6.
+- The old runtime path still owns visible behavior.
+- First CP7 action: make the Wild/Follower idle boundary consume evaluator and
+  resolver output before deleting the shadow and legacy state paths.
 
 This plan changes who owns alert and active behavior. It does not design a
 general condition language.
@@ -505,6 +520,8 @@ Steps:
    - expected target rule;
    - expected duration and cooldown mode;
    - parity proof.
+   The reviewed mapping is in
+   [conditional-profiles-migration.md](conditional-profiles-migration.md).
 3. Ask for a product decision only when old data does not define one of these
    values or when two mappings would create different visible behavior.
 4. Convert current terrain/speed conditionalStates entries to condition entries

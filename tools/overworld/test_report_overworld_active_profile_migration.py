@@ -44,6 +44,9 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
     def test_current_tree_is_complete_and_classified(self) -> None:
         self.assertGreater(self.report["summary"]["findingCount"], 100)
         self.assertEqual(self.report["summary"]["unclassifiedCount"], 0)
+        self.assertEqual(self.report["summary"]["mappedLegacySourceCount"], 7)
+        self.assertEqual(self.report["summary"]["unmappedLegacySourceCount"], 0)
+        self.assertEqual(self.report["unmappedLegacySourceFindingIds"], [])
         self.assertEqual(self.report["unclassifiedFindingIds"], [])
         observed = set(self.report["summary"]["byClassification"])
         self.assertEqual(observed, set(INVENTORY.CLASSIFICATIONS))
@@ -51,7 +54,7 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
     def test_catalog_semantics_name_every_migration_record(self) -> None:
         self.assertEqual(len(self.findings_for(kind="catalog_active_profile_reference")), 7)
         self.assertEqual(len(self.findings_for(kind="catalog_default_active_binding")), 1)
-        self.assertEqual(len(self.findings_for(kind="catalog_conditional_state_entry")), 2)
+        self.assertEqual(len(self.findings_for(kind="catalog_conditional_state_entry")), 0)
         response_profiles = {
             finding["symbol"]
             for finding in self.findings_for(kind="catalog_active_response_profile")
@@ -64,9 +67,23 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
             "swaying-plant-active",
             "ambush-plant-active",
         })
-        for finding in self.findings_for(kind="catalog_conditional_state_entry"):
-            self.assertTrue(finding["details"]["parentApplication"])
-            self.assertTrue(finding["details"]["application"])
+        self.assertEqual(
+            {
+                profile["id"]
+                for profile in json.loads(
+                    (REPO / INVENTORY.CATALOG_PATH).read_text()
+                )["profiles"]
+                if profile.get("kind") == "conditional"
+            },
+            {
+                "ambush-plant-active",
+                "bird-rooftop",
+                "canopy-hop-surface",
+                "default-active",
+                "skittish",
+                "swaying-plant-active",
+            },
+        )
 
     def test_report_covers_runtime_workshop_packages_traces_and_tests(self) -> None:
         required = (

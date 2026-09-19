@@ -1766,6 +1766,7 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_CLASS_PHANTOM_STALKER": "Teleport stalker",
         "OW_WILD_BEHAVIOR_CLASS_THROWING": "Throwing",
         "OW_WILD_BEHAVIOR_CLASS_PICKED_UP": "Picked up",
+        "OW_WILD_BEHAVIOR_CLASS_TEST": "Test",
         "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP": "Forced asleep",
     }
     if symbol in label_overrides:
@@ -8270,7 +8271,10 @@ def load_behavior_catalog_v2() -> dict:
 def load_behavior_catalog() -> dict:
     """Return the retired V1-shaped view used by legacy HTTP handlers."""
 
-    return lower_behavior_catalog_v2(lower_behavior_catalog_v3(load_behavior_catalog_v3()))
+    return lower_behavior_catalog_v2(lower_behavior_catalog_v3(
+        load_behavior_catalog_v3(),
+        allow_runtime_only=True,
+    ))
 
 
 def behavior_authoring_context() -> tuple[dict[str, str], list[str], dict[str, int]]:

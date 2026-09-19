@@ -35,11 +35,11 @@
           "chillTarget": 1,
           "tiredReaction": 5
         },
-        "requiredAppliedOverrideMask": 98304,
+        "requiredAppliedOverrideMask": 33024,
         "traceContains": [
           {"lane": 0, "kind": 2, "sourceIndex": 0},
-          {"lane": 1, "kind": 5, "sourceIndex": 15},
-          {"lane": 2, "kind": 5, "sourceIndex": 16}
+          {"lane": 1, "kind": 5, "sourceIndex": 8},
+          {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
     },
@@ -55,8 +55,8 @@
         "status": 0,
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 8,
-        "requiredAppliedOverrideMask": 98312,
-        "fingerprint": 2279901407,
+        "requiredAppliedOverrideMask": 33032,
+        "fingerprint": 3723102225,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 7,
@@ -81,8 +81,8 @@
           {"lane": 0, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
           {"lane": 1, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
           {"lane": 2, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 15},
-          {"lane": 2, "kind": 5, "sourceIndex": 16}
+          {"lane": 1, "kind": 5, "sourceIndex": 8},
+          {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
     },
@@ -98,8 +98,8 @@
         "status": 0,
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 128,
-        "requiredAppliedOverrideMask": 98432,
-        "fingerprint": 4174463268,
+        "requiredAppliedOverrideMask": 33152,
+        "fingerprint": 4051616482,
         "profileFields": {
           "owner.hopPause": 0,
           "owner.chillSpeed": 14,
@@ -133,8 +133,8 @@
           {"lane": 0, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
           {"lane": 1, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
           {"lane": 2, "kind": 3, "sourceIndex": 7, "requiredFlags": 3},
-          {"lane": 1, "kind": 5, "sourceIndex": 15},
-          {"lane": 2, "kind": 5, "sourceIndex": 16}
+          {"lane": 1, "kind": 5, "sourceIndex": 8},
+          {"lane": 2, "kind": 5, "sourceIndex": 15}
         ]
       }
     },
@@ -199,10 +199,10 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 655364,
-        "requiredAppliedOverrideMask": 655364,
+        "requiredMatchedOverrideMask": 327684,
+        "requiredAppliedOverrideMask": 327684,
         "conditionalOverrideMask": 0,
-        "fingerprint": 3919212064,
+        "fingerprint": 1420892909,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
@@ -220,8 +220,8 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 2, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 19, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 18, "requiredFlags": 3},
           {"lane": 1, "kind": 5, "sourceIndex": 2},
           {"lane": 2, "kind": 5, "sourceIndex": 2}
         ]
@@ -239,10 +239,10 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 655364,
-        "conditionalOverrideMask": 262144,
-        "requiredAppliedOverrideMask": 917508,
-        "fingerprint": 4213290027,
+        "requiredMatchedOverrideMask": 327684,
+        "conditionalOverrideMask": 131072,
+        "requiredAppliedOverrideMask": 458756,
+        "fingerprint": 1617962076,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
@@ -263,11 +263,11 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 2, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 19, "requiredFlags": 3},
-          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
+          {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 18, "requiredFlags": 3},
+          {"lane": 0, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 1, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 2, "kind": 4, "sourceIndex": 17, "requiredFlags": 10}
         ]
       }
     },
@@ -282,10 +282,10 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 8519682,
-        "requiredAppliedOverrideMask": 8519682,
+        "requiredMatchedOverrideMask": 4259842,
+        "requiredAppliedOverrideMask": 4259842,
         "conditionalOverrideMask": 0,
-        "fingerprint": 3340338503,
+        "fingerprint": 710536658,
         "profileFields": {
           "owner.chillAction": 1,
           "owner.hopPause": 0,
@@ -303,8 +303,8 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 23, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 22, "requiredFlags": 3},
           {"lane": 1, "kind": 5, "sourceIndex": 1},
           {"lane": 2, "kind": 5, "sourceIndex": 1}
         ]
@@ -322,10 +322,10 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 8519682,
-        "conditionalOverrideMask": 262144,
-        "requiredAppliedOverrideMask": 8781826,
-        "fingerprint": 1485360002,
+        "requiredMatchedOverrideMask": 4259842,
+        "conditionalOverrideMask": 131072,
+        "requiredAppliedOverrideMask": 4390914,
+        "fingerprint": 3058885345,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 0,
@@ -346,11 +346,11 @@
         },
         "traceContains": [
           {"lane": 0, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 23, "requiredFlags": 3},
-          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
+          {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
+          {"lane": 0, "kind": 3, "sourceIndex": 22, "requiredFlags": 3},
+          {"lane": 0, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 1, "kind": 4, "sourceIndex": 17, "requiredFlags": 10},
+          {"lane": 2, "kind": 4, "sourceIndex": 17, "requiredFlags": 10}
         ]
       }
     },
@@ -361,24 +361,24 @@
         "level": 5,
         "terrain": 0,
         "groupFlags": 4096,
-        "forcedOverrideMask": 67108864
+        "forcedOverrideMask": 33554432
       },
       "expected": {
         "status": 0,
-        "forcedOverrideMask": 67108864,
-        "requiredAppliedOverrideMask": 67207168,
+        "forcedOverrideMask": 33554432,
+        "requiredAppliedOverrideMask": 33587456,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 0,
           "owner.walkPause": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 26, "requiredFlags": 6}
+          {"lane": 0, "kind": 3, "sourceIndex": 25, "requiredFlags": 6}
         ]
       }
     },
     {
-      "name": "relative-override",
+      "name": "selected-test-class",
       "request": {
         "species": 150,
         "level": 70,
@@ -387,12 +387,13 @@
       },
       "expected": {
         "status": 0,
-        "requiredMatchedOverrideMask": 256,
+        "behaviorClass": 4,
+        "matchedOverrideMask": 0,
         "profileFields": {
           "owner.chillSpeed": 8
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 8, "requiredFlags": 3}
+          {"lane": 255, "kind": 1, "sourceIndex": 113, "requiredFlags": 3}
         ]
       }
     },
@@ -409,12 +410,12 @@
         "status": 0,
         "behaviorClass": 1,
         "requiredMatchedOverrideMask": 32,
-        "conditionalOverrideMask": 2097152,
-        "requiredAppliedOverrideMask": 2195488,
+        "conditionalOverrideMask": 1048576,
+        "requiredAppliedOverrideMask": 1081632,
         "traceContains": [
-          {"lane": 0, "kind": 4, "sourceIndex": 21, "requiredFlags": 10},
-          {"lane": 1, "kind": 4, "sourceIndex": 21, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 21, "requiredFlags": 10}
+          {"lane": 0, "kind": 4, "sourceIndex": 20, "requiredFlags": 10},
+          {"lane": 1, "kind": 4, "sourceIndex": 20, "requiredFlags": 10},
+          {"lane": 2, "kind": 4, "sourceIndex": 20, "requiredFlags": 10}
         ]
       }
     },
@@ -450,13 +451,13 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 134217728,
+        "requiredMatchedOverrideMask": 67108864,
         "profileFields": {
           "owner.stamina": 1,
           "owner.restTime": 4
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 27, "requiredFlags": 3}
+          {"lane": 0, "kind": 3, "sourceIndex": 26, "requiredFlags": 3}
         ]
       }
     },
@@ -467,16 +468,16 @@
         "level": 5,
         "terrain": 0,
         "conditionInputMode": "explicit",
-        "activeConditionalMask": 262144,
+        "activeConditionalMask": 131072,
         "winningConditionId": 1247
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "conditionalOverrideMask": 262144,
-        "requiredMatchedOverrideMask": 131076,
-        "requiredAppliedOverrideMask": 917508,
-        "fingerprint": 4146356538,
+        "conditionalOverrideMask": 131072,
+        "requiredMatchedOverrideMask": 327684,
+        "requiredAppliedOverrideMask": 458756,
+        "fingerprint": 2787928825,
         "winningConditionId": 1247,
         "targetSourceApplication": 255,
         "resolvedTargetConditionId": 65535,
@@ -497,8 +498,8 @@
           "owner.hopAllowVerticalObstacles": 1
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
+          {"lane": 0, "kind": 3, "sourceIndex": 16, "requiredFlags": 3},
+          {"lane": 0, "kind": 4, "sourceIndex": 17, "requiredFlags": 10}
         ]
       }
     }
