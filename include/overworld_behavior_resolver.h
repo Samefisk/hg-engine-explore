@@ -7,13 +7,7 @@
 #define BEHAVIOR_RESOLVER_NO_SOURCE 0xFFFF
 #define BEHAVIOR_RESOLVER_NO_APPLICATION 0xFF
 #define BEHAVIOR_RESOLVER_NO_CONDITION 0xFFFF
-
-typedef enum BehaviorResolveConditionInputMode {
-    /* Compatibility mode for callers that have not adopted the evaluator. */
-    BEHAVIOR_RESOLVE_CONDITIONS_LEGACY = 0,
-    /* The condition evaluator owns the active mask and resolved target. */
-    BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT = 1,
-} BehaviorResolveConditionInputMode;
+#define BEHAVIOR_RESOLVE_REQUEST_VERSION 2
 
 typedef enum BehaviorResolveTargetKind {
     BEHAVIOR_RESOLVE_TARGET_NONE = 0,
@@ -39,11 +33,12 @@ typedef enum BehaviorResolveStatus {
     BEHAVIOR_RESOLVE_INVALID_BLOB = 2,
     BEHAVIOR_RESOLVE_INVALID_CONTEXT = 3,
     BEHAVIOR_RESOLVE_TRACE_TRUNCATED = 4,
+    BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION = 5,
 } BehaviorResolveStatus;
 
 typedef enum BehaviorResolutionLane {
     BEHAVIOR_RESOLUTION_LANE_OWNER = 0,
-    BEHAVIOR_RESOLUTION_LANE_ACTIVE = 1,
+    BEHAVIOR_RESOLUTION_LANE_RESERVED = 1,
     BEHAVIOR_RESOLUTION_LANE_TIRED = 2,
     BEHAVIOR_RESOLUTION_LANE_NONE = 0xFF,
 } BehaviorResolutionLane;
@@ -73,7 +68,7 @@ typedef struct BehaviorResolveRequest {
      * tokens while out-of-range base classes normalize to Default. */
     u8 behaviorClass;
     u8 targetSourceApplication;
-    u8 conditionInputMode;
+    u8 requestVersion;
     u8 reserved;
     u16 resolvedTargetConditionId;
     u8 reserved2[2];
@@ -118,8 +113,8 @@ typedef struct BehaviorResolveResult {
 
 typedef char BehaviorResolveRequestSizeMustRemain44Bytes[
     sizeof(BehaviorResolveRequest) == 44 ? 1 : -1];
-typedef char BehaviorResolveResultSizeMustRemain276Bytes[
-    sizeof(BehaviorResolveResult) == 276 ? 1 : -1];
+typedef char BehaviorResolveResultSizeMustRemain200Bytes[
+    sizeof(BehaviorResolveResult) == 200 ? 1 : -1];
 typedef char BehaviorResolveTargetReferenceSizeMustRemain14Bytes[
     sizeof(BehaviorResolveTargetReference) == 14 ? 1 : -1];
 

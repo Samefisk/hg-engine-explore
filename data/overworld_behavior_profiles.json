@@ -1,6 +1,6 @@
 {
-  "catalogVersion": 3,
-  "schema": "../tools/overworld/schemas/behavior-authoring-v3.schema.json",
+  "catalogVersion": 4,
+  "schema": "../tools/overworld/schemas/behavior-authoring-v4.schema.json",
   "fieldSchema": "../tools/overworld/behavior_schema.json",
   "generatedCompatibilityOutput": "OverworldWildBehaviorData.c",
   "rootProfile": "default",
@@ -15,10 +15,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_QUESTION_MARK"
@@ -26,10 +22,6 @@
         "alertTime": {
           "operator": "replace",
           "value": "10"
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": "3"
         },
         "stamina": {
           "operator": "replace",
@@ -67,17 +59,9 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
         },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS"
-        },
         "playerAdjacentDirectionMasks": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": "100"
         },
         "spawnDestination": {
           "operator": "replace",
@@ -186,10 +170,6 @@
         "chainPauseVariance": {
           "operator": "replace",
           "value": "0"
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-default-active"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -307,10 +287,6 @@
       "parent": "default",
       "kind": "normal",
       "fields": {
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
@@ -391,10 +367,6 @@
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
         },
-        "alertness": {
-          "operator": "replace",
-          "value": "14"
-        },
         "stamina": {
           "operator": "replace",
           "value": "6"
@@ -406,10 +378,6 @@
         "spawnState": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE"
         },
         "hopMaxDistance": {
           "operator": "replace",
@@ -459,19 +427,11 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_NONE"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_NONE"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_NONE"
         },
         "alertTime": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "alertness": {
           "operator": "replace",
           "value": "0"
         },
@@ -498,14 +458,6 @@
         "chillAction": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE"
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_NONE"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": "0"
         },
         "hopMaxDistance": {
           "operator": "replace",
@@ -656,10 +608,6 @@
       "parent": "default",
       "kind": "normal",
       "fields": {
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
@@ -668,17 +616,9 @@
           "operator": "replace",
           "value": 20
         },
-        "alertness": {
-          "operator": "replace",
-          "value": 2
-        },
         "stamina": {
           "operator": "replace",
           "value": 60
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
         },
         "alertSpecialAction": {
           "operator": "replace",
@@ -692,10 +632,6 @@
       "parent": "default",
       "kind": "normal",
       "fields": {
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_HEART"
@@ -704,17 +640,9 @@
           "operator": "replace",
           "value": 20
         },
-        "alertness": {
-          "operator": "replace",
-          "value": 3
-        },
         "stamina": {
           "operator": "replace",
           "value": 60
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
         }
       }
     },
@@ -864,10 +792,6 @@
       "parent": "default",
       "kind": "normal",
       "fields": {
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
@@ -875,10 +799,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 10
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 7
         },
         "stamina": {
           "operator": "replace",
@@ -911,14 +831,6 @@
         "chillAction": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 100
         },
         "spawnDestination": {
           "operator": "replace",
@@ -967,10 +879,6 @@
         "chainMovementVariance": {
           "operator": "replace",
           "value": 6
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-default-active"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -1044,10 +952,6 @@
           "operator": "replace",
           "value": 14
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_HOP"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
@@ -1055,18 +959,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 12
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 2
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 80
         },
         "ramAccelerationSteps": {
           "operator": "replace",
@@ -1274,10 +1166,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_IDLE"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_NONE"
-        },
         "chillSpeed": {
           "operator": "replace",
           "value": 8
@@ -1285,10 +1173,6 @@
         "spawnState": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 0
         },
         "spawnDestination": {
           "operator": "replace",
@@ -1399,10 +1283,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
@@ -1410,10 +1290,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 10
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 3
         },
         "stamina": {
           "operator": "replace",
@@ -1451,17 +1327,9 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
         },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS"
-        },
         "playerAdjacentDirectionMasks": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 100
         },
         "spawnDestination": {
           "operator": "replace",
@@ -1490,10 +1358,6 @@
         "chainPauseVariance": {
           "operator": "replace",
           "value": 24
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-nervous-scavenger"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -1551,10 +1415,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
@@ -1562,10 +1422,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 10
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 3
         },
         "stamina": {
           "operator": "replace",
@@ -1603,17 +1459,9 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
         },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS"
-        },
         "playerAdjacentDirectionMasks": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 100
         },
         "spawnDestination": {
           "operator": "replace",
@@ -1642,10 +1490,6 @@
         "chainPauseVariance": {
           "operator": "replace",
           "value": 24
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-hopping-scavenger"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -1747,10 +1591,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
         },
-        "alertChance": {
-          "operator": "replace",
-          "value": 0
-        },
         "spawnDestination": {
           "operator": "replace",
           "value": "OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER"
@@ -1779,10 +1619,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
@@ -1790,10 +1626,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 10
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 14
         },
         "stamina": {
           "operator": "replace",
@@ -1830,14 +1662,6 @@
         "chillTarget": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 100
         },
         "spawnDestination": {
           "operator": "replace",
@@ -2217,12 +2041,7 @@
       "name": "Baby Pokemon",
       "parent": "default",
       "kind": "normal",
-      "fields": {
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-skittish"
-        }
-      }
+      "fields": {}
     },
     {
       "id": "swaying-plant",
@@ -2281,10 +2100,6 @@
         "chainPauseVariance": {
           "operator": "replace",
           "value": 50
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-swaying-plant-active"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -2448,10 +2263,6 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
         },
-        "alertState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH"
-        },
         "alertEmote": {
           "operator": "replace",
           "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
@@ -2459,18 +2270,6 @@
         "alertTime": {
           "operator": "replace",
           "value": 8
-        },
-        "alertness": {
-          "operator": "replace",
-          "value": 4
-        },
-        "alertRange": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
-        },
-        "alertChance": {
-          "operator": "replace",
-          "value": 100
         },
         "stamina": {
           "operator": "replace",
@@ -2483,10 +2282,6 @@
         "spawnState": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
-        "activeProfile": {
-          "operator": "replace",
-          "value": "apply-ambush-plant-active"
         },
         "tiredProfile": {
           "operator": "replace",
@@ -5010,7 +4805,6 @@
     ],
     "pickedUpProfile": "picked-up",
     "followerApplication": "apply-follower-pokemon",
-    "defaultActiveApplication": "apply-default-active",
     "defaultTiredApplication": "apply-default-tired",
     "forcedAsleepApplication": "apply-forced-asleep",
     "forcedAsleepClassToken": "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP"

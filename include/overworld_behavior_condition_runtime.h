@@ -5,7 +5,7 @@
 #include "overworld_behavior_resolver.h"
 #include "overworld_wild_behavior_data.h"
 
-#define OVERWORLD_BEHAVIOR_CONDITION_RUNTIME_VERSION 2
+#define OVERWORLD_BEHAVIOR_CONDITION_RUNTIME_VERSION 3
 #define OVERWORLD_BEHAVIOR_CONDITION_SERVICE_ENTRY_ADDR 0x023C22A0
 
 typedef struct OverworldBehaviorConditionCandidate {

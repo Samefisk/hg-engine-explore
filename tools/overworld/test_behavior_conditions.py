@@ -328,12 +328,24 @@ int main(void)
     OverworldBehaviorConditionWorldView world = {0};
     OverworldBehaviorConditionCandidate candidates[2] = {0};
     OverworldWildBehaviorContext subjectContext = {0};
+    BehaviorResolveRequest request = {0};
     OverworldWildBehaviorConditionEntry *entry;
 
     assert(blob != NULL);
     memcpy(blob, &gOverworldWildBehaviorDataBlob, sizeof(*blob));
     assert(blob->header.overrideProfileCount > 2);
     blob->header.conditionEntryCount = 2;
+
+    request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
+    request.winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request.resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request.targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    assert(OverworldBehaviorCondition_ValidateResolveRequest(blob, &request));
+    request.requestVersion = 1;
+    assert(!OverworldBehaviorCondition_ValidateResolveRequest(blob, &request));
+    request.requestVersion = 0;
+    assert(!OverworldBehaviorCondition_ValidateResolveRequest(blob, &request));
+    request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
 
     entry = &blob->conditionEntries[0];
     SetAllSubject(blob, entry, 1);

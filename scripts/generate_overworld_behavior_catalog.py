@@ -31,11 +31,6 @@ def main() -> int:
         action="store_true",
         help="fail if the catalog and generated C/header are not synchronized",
     )
-    action.add_argument(
-        "--migrate-v2",
-        action="store_true",
-        help="rewrite a V1 catalog as the unified V2 model and regenerate compatibility data",
-    )
     parser.add_argument("--catalog", type=Path, help="named catalog input")
     parser.add_argument("--source-template", type=Path, help="compatibility C template")
     parser.add_argument("--header-template", type=Path, help="compatibility header template")
@@ -55,25 +50,12 @@ def main() -> int:
         parser.error("named behavior catalog is missing")
     catalog = authoring.json.loads(catalog_path.read_text())
     authoring.validate_behavior_catalog(catalog)
-    if args.migrate_v2 and catalog["catalogVersion"] == 1:
-        catalog = authoring.migrate_behavior_catalog_v1(catalog)
     current_source = source_template.read_text()
     current_header = header_template.read_text()
     generated_source = authoring.render_behavior_catalog(catalog, current_source)
     generated_header = authoring.render_behavior_catalog_header(
         current_header, catalog, generated_source
     )
-
-    if args.migrate_v2:
-        if args.source_output is not None:
-            parser.error("--migrate-v2 does not accept explicit output paths")
-        if catalog_path != authoring.BEHAVIOR_CATALOG_SOURCE.resolve():
-            catalog_path.write_text(authoring.json.dumps(catalog, indent=2, ensure_ascii=False) + "\n")
-            print(f"Migrated {catalog_path} to catalog V2")
-            return 0
-        authoring.write_behavior_catalog(catalog)
-        print(f"Migrated {catalog_path} to catalog V2 and regenerated compatibility data")
-        return 0
 
     if args.check:
         stale = []

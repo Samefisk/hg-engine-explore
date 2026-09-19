@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "behavior-authoring-v3.schema.json",
+  "$id": "behavior-authoring-v4.schema.json",
   "title": "Conditional overworld behavior profile catalog",
   "type": "object",
   "additionalProperties": false,
@@ -16,9 +16,9 @@
     "runtimeBindings"
   ],
   "properties": {
-    "catalogVersion": { "const": 3 },
+    "catalogVersion": { "const": 4 },
     "schema": {
-      "const": "../tools/overworld/schemas/behavior-authoring-v3.schema.json"
+      "const": "../tools/overworld/schemas/behavior-authoring-v4.schema.json"
     },
     "fieldSchema": { "const": "../tools/overworld/behavior_schema.json" },
     "generatedCompatibilityOutput": { "const": "OverworldWildBehaviorData.c" },
@@ -321,24 +321,6 @@
               "items": { "$ref": "#/$defs/expression" }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "when": {
-                "properties": { "kind": { "const": "terrain-motion" } },
-                "required": ["kind"]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "target": {
-                "properties": { "kind": { "const": "none" } },
-                "required": ["kind"]
-              }
-            }
-          }
         }
       ]
     },
@@ -373,6 +355,24 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "when": {
+                "properties": { "kind": { "const": "terrain-motion" } },
+                "required": ["kind"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "properties": { "kind": { "const": "none" } },
+                "required": ["kind"]
+              }
+            }
+          }
         }
       ]
     },
@@ -404,7 +404,6 @@
         "speciesSelectors",
         "pickedUpProfile",
         "followerApplication",
-        "defaultActiveApplication",
         "defaultTiredApplication",
         "forcedAsleepApplication",
         "forcedAsleepClassToken"
@@ -434,7 +433,6 @@
         },
         "pickedUpProfile": { "$ref": "#/$defs/id" },
         "followerApplication": { "$ref": "#/$defs/id" },
-        "defaultActiveApplication": { "$ref": "#/$defs/id" },
         "defaultTiredApplication": { "$ref": "#/$defs/id" },
         "forcedAsleepApplication": { "$ref": "#/$defs/id" },
         "forcedAsleepClassToken": { "$ref": "#/$defs/expression" }

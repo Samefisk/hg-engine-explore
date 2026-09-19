@@ -123,7 +123,6 @@
 #define OW_WILD_SPAWNER_PHANTOM_STALK_ALERT_FRAMES 24
 #define OW_WILD_SPAWNER_PHANTOM_STALK_RANGE (OW_WILD_SPAWNER_MOVEMENT_RANGE * 2)
 #define OW_WILD_SPAWNER_PREVIOUS_TILE_NONE -1
-#define OW_WILD_SPAWNER_ONIX_RAM_ALERTNESS 14
 #define OW_WILD_SPAWNER_ONIX_RAM_START_SPEED 2
 #define OW_WILD_SPAWNER_ONIX_RAM_RANGE 16
 #define OW_WILD_SPAWNER_ONIX_RAM_SPEED_UP_TILES 3
@@ -226,7 +225,7 @@
 #define OW_WILD_SPAWNER_BUBBLE_ID_NONE 0xFF
 #define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
 #define OW_WILD_SPAWNER_SPOT_STATE_EMOTING 1
-#define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
+#define OW_WILD_SPAWNER_SPOT_STATE_RESERVED 2
 #define OW_WILD_SPAWNER_SPOT_STATE_TIRED 3
 #define OW_WILD_BEHAVIOR_KIND_NONE 0
 #define OW_WILD_BEHAVIOR_KIND_IDLE 1
@@ -239,9 +238,6 @@
 #define OW_WILD_BEHAVIOR_KIND_ASLEEP 8
 #define OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE 10
 #define OW_WILD_BEHAVIOR_KIND_NO_VISUAL 11
-#define OW_WILD_BEHAVIOR_ALERT_STATE_NONE 0
-#define OW_WILD_BEHAVIOR_ALERT_STATE_HOP 1
-#define OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH 2
 #define OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE 0
 #define OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP 1
 #define OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW 2
@@ -378,10 +374,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
     {
 {
             OW_WILD_BEHAVIOR_KIND_WANDER,
-            OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+            0,
             OW_WILD_SPAWNER_BUBBLE_ID_QUESTION_MARK,
             10,
-            3,
+            0,
             20,
             10,
             16,
@@ -391,9 +387,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP,
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             OW_WILD_BEHAVIOR_TARGET_NONE,
-            OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
+            0,
             OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
-            100,
+            0,
             OW_WILD_SPAWN_DESTINATION_POOL,
             OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
             OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY,
@@ -421,7 +417,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_BOOL_NO,
             0,
             0,
-            8,
+            0,
             15,
             100,
             100,
@@ -448,10 +444,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         },
 {
             OW_WILD_BEHAVIOR_KIND_WANDER,
-            OW_WILD_BEHAVIOR_ALERT_STATE_HOP,
+            0,
             OW_WILD_SPAWNER_BUBBLE_ID_ANGRY,
             15,
-            3,
+            0,
             40,
             4,
             16,
@@ -461,9 +457,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR,
             OW_WILD_BEHAVIOR_LOCOMOTION_HOP,
             OW_WILD_BEHAVIOR_TARGET_NONE,
-            OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
+            0,
             OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
-            100,
+            0,
             OW_WILD_SPAWN_DESTINATION_POOL,
             OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
             OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY,
@@ -491,7 +487,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_BOOL_NO,
             0,
             0,
-            8,
+            0,
             15,
             100,
             100,
@@ -518,10 +514,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         },
 {
             OW_WILD_BEHAVIOR_KIND_WANDER,
-            OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+            0,
             OW_WILD_SPAWNER_BUBBLE_ID_ANGRY,
             10,
-            14,
+            0,
             6,
             4,
             16,
@@ -531,9 +527,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR,
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             OW_WILD_BEHAVIOR_TARGET_NONE,
-            OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE,
+            0,
             OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
-            100,
+            0,
             OW_WILD_SPAWN_DESTINATION_POOL,
             OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
             OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY,
@@ -561,7 +557,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_BOOL_NO,
             0,
             0,
-            8,
+            0,
             15,
             100,
             100,
@@ -588,7 +584,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         },
 {
             OW_WILD_BEHAVIOR_KIND_NONE,
-            OW_WILD_BEHAVIOR_ALERT_STATE_NONE,
+            0,
             OW_WILD_SPAWNER_BUBBLE_ID_NONE,
             0,
             0,
@@ -601,7 +597,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR,
             OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
             OW_WILD_BEHAVIOR_TARGET_NONE,
-            OW_WILD_BEHAVIOR_ALERT_RANGE_NONE,
+            0,
             OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
             0,
             OW_WILD_SPAWN_DESTINATION_POOL,
@@ -631,7 +627,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_BOOL_NO,
             0,
             0,
-            8,
+            0,
             15,
             100,
             100,
@@ -658,10 +654,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         },
 {
             OW_WILD_BEHAVIOR_KIND_IDLE,
-            OW_WILD_BEHAVIOR_ALERT_STATE_NONE,
+            0,
             OW_WILD_SPAWNER_BUBBLE_ID_QUESTION_MARK,
             10,
-            3,
+            0,
             20,
             10,
             8,
@@ -671,7 +667,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP,
             OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
             OW_WILD_BEHAVIOR_TARGET_NONE,
-            OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
+            0,
             OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
             0,
             OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER,
@@ -701,7 +697,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_BOOL_NO,
             0,
             0,
-            8,
+            0,
             15,
             100,
             100,
@@ -996,10 +992,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
@@ -1009,9 +1003,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
                 | OW_WILD_BEHAVIOR_OVERRIDE_PLAYER_ADJACENT_DIRECTION_MASKS
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION
                 | OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER,
             OW_WILD_BEHAVIOR_OVERRIDE2_RAM_ACCELERATION_STEPS
@@ -1020,7 +1012,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE,
             OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_TILES_TO_ACCELERATE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_MAX_WALK_SPEED
@@ -1033,10 +1024,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_TIME_VARIANCE,
             {
                 OW_WILD_BEHAVIOR_KIND_WANDER,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK,
                 10,
-                3,
+                0,
                 20,
                 10,
                 7,
@@ -1046,9 +1037,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_SPAWN_STATE_MOVE_FROM_OFF_SCREEN,
                 OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
                 OW_WILD_BEHAVIOR_TARGET_NONE,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
+                0,
                 OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
-                100,
+                0,
                 OW_WILD_SPAWN_DESTINATION_GRASS,
                 OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
                 0,
@@ -1076,7 +1067,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_BOOL_YES,
                 2,
                 24,
-                1,
+                0,
                 1,
                 0,
                 0,
@@ -1130,10 +1121,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
@@ -1143,9 +1132,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
                 | OW_WILD_BEHAVIOR_OVERRIDE_PLAYER_ADJACENT_DIRECTION_MASKS
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION
                 | OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
@@ -1160,7 +1147,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE,
             OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_TIME_SCALE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_ARC_SCALE
@@ -1175,10 +1161,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_TIME_VARIANCE,
             {
                 OW_WILD_BEHAVIOR_KIND_WANDER,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK,
                 10,
-                3,
+                0,
                 20,
                 10,
                 7,
@@ -1188,9 +1174,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN,
                 OW_WILD_BEHAVIOR_LOCOMOTION_HOP,
                 OW_WILD_BEHAVIOR_TARGET_NONE,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS,
+                0,
                 OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES,
-                100,
+                0,
                 OW_WILD_SPAWN_DESTINATION_GRASS,
                 OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE,
                 OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL,
@@ -1218,7 +1204,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_BOOL_YES,
                 2,
                 24,
-                2,
+                0,
                 2,
                 30,
                 150,
@@ -1614,10 +1600,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
             0,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
+            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
@@ -1626,8 +1610,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE
@@ -1640,7 +1622,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE2_SPAWN_HOP_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE,
             OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_ARC_SCALE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_JUMP_COUNT
@@ -1658,10 +1639,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_TIME_VARIANCE,
             {
                 0,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_ANGRY,
                 10,
-                7,
+                0,
                 32,
                 20,
                 5,
@@ -1671,9 +1652,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN,
                 OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
                 0,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS,
                 0,
-                100,
+                0,
+                0,
                 OW_WILD_SPAWN_DESTINATION_POOL,
                 0,
                 OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY,
@@ -1701,7 +1682,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_BOOL_YES,
                 6,
                 0,
-                8,
+                0,
                 15,
                 0,
                 0,
@@ -1754,13 +1735,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
             0,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
+            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
-                | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE,
+                | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED,
             OW_WILD_BEHAVIOR_OVERRIDE2_RAM_ACCELERATION_STEPS
                 | OW_WILD_BEHAVIOR_OVERRIDE2_RAM_MAX_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_PAUSE_ACTION
@@ -1775,10 +1752,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE,
             {
                 0,
-                OW_WILD_BEHAVIOR_ALERT_STATE_HOP,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK,
                 12,
-                2,
+                0,
                 0,
                 0,
                 14,
@@ -1788,9 +1765,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS,
                 0,
-                80,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -1985,7 +1962,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE,
             OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_OPTIONS
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WANDER_STRAIGHT_CHANCE
@@ -2036,7 +2012,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_BOOL_YES,
                 2,
                 50,
-                10,
+                0,
                 11,
                 0,
                 0,
@@ -2307,26 +2283,21 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             12,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
-                | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE,
+                | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE
-                | OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE,
+            OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE,
             {
                 OW_WILD_BEHAVIOR_KIND_IDLE,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK,
                 8,
-                4,
+                0,
                 3,
                 90,
                 0,
@@ -2336,9 +2307,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR,
                 OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
                 OW_WILD_BEHAVIOR_TARGET_NONE,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS,
-                0,
-                100,
                 0,
                 0,
                 0,
@@ -2366,7 +2334,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                13,
+                0,
+                0,
+                0,
+                0,
                 14,
                 0,
                 0,
@@ -2939,21 +2910,18 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
             14,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
+            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_SPECIAL_ACTION,
             0,
             0,
             {
                 0,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_ANGRY,
                 20,
-                2,
+                0,
                 60,
                 0,
                 0,
@@ -2963,7 +2931,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS,
+                0,
                 0,
                 0,
                 0,
@@ -3254,10 +3222,8 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             15,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
@@ -3267,8 +3233,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION
                 | OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
@@ -3290,10 +3254,10 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME,
             {
                 OW_WILD_BEHAVIOR_KIND_WANDER,
-                OW_WILD_BEHAVIOR_ALERT_STATE_SPEECH,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_ANGRY,
                 10,
-                14,
+                0,
                 6,
                 4,
                 16,
@@ -3303,9 +3267,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR,
                 OW_WILD_BEHAVIOR_LOCOMOTION_WANDER,
                 OW_WILD_BEHAVIOR_TARGET_NONE,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE,
                 0,
-                100,
+                0,
+                0,
                 OW_WILD_SPAWN_DESTINATION_POOL,
                 OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH,
                 OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY,
@@ -3386,20 +3350,17 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
             15,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
+            OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS
-                | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE,
+                | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA,
             0,
             0,
             {
                 0,
-                OW_WILD_BEHAVIOR_ALERT_STATE_HOP,
+                0,
                 OW_WILD_SPAWNER_BUBBLE_ID_HEART,
                 20,
-                3,
+                0,
                 60,
                 0,
                 0,
@@ -3409,7 +3370,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS,
+                0,
                 0,
                 0,
                 0,
@@ -3595,7 +3556,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             0,
             0,
-            OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE,
+            0,
             {
                 0,
                 0,
@@ -3641,7 +3602,7 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 0,
                 0,
                 0,
-                23,
+                0,
                 0,
                 0,
                 0,
@@ -3698,7 +3659,6 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
-                | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION,
             OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK,

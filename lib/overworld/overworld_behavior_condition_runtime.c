@@ -81,12 +81,8 @@ BOOL OverworldBehaviorCondition_ValidateResolveRequest(
         || request->context.level > 100
         || request->context.terrain > OW_WILD_SPAWN_TERRAIN_FISHING
         || request->context.shiny > 1
-        || request->conditionInputMode
-            > BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
+        || request->requestVersion != BEHAVIOR_RESOLVE_REQUEST_VERSION) {
         return FALSE;
-    }
-    if (request->conditionInputMode == BEHAVIOR_RESOLVE_CONDITIONS_LEGACY) {
-        return TRUE;
     }
     if ((request->activeConditionalMask & ~validOverrideMask) != 0
         || request->resolvedTarget.kind > BEHAVIOR_RESOLVE_TARGET_ACTOR) {

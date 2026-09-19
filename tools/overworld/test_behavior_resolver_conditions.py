@@ -48,7 +48,7 @@ static BehaviorResolveRequest ExplicitRequest(u32 activeMask)
     request.winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     request.resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     request.targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
-    request.conditionInputMode = BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT;
+    request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
     return request;
 }
 
@@ -98,9 +98,23 @@ int main(void)
     u16 i;
 
     assert(blob != NULL);
+    assert(sizeof(OverworldWildBehaviorProfileData) == 72);
+    assert(sizeof(OverworldWildBehaviorProfile) == 144);
+    assert(sizeof(OverworldWildBehaviorPrimitives) == 8);
+    assert(sizeof(BehaviorResolveRequest) == 44);
+    assert(sizeof(BehaviorResolveResult) == 200);
+    assert(BEHAVIOR_RESOLUTION_LANE_OWNER == 0);
+    assert(BEHAVIOR_RESOLUTION_LANE_RESERVED == 1);
+    assert(BEHAVIOR_RESOLUTION_LANE_TIRED == 2);
     memcpy(blob, &gOverworldWildBehaviorDataBlob, sizeof(*blob));
     assert(blob->header.overrideProfileCount >= 4);
     assert(blob->header.conditionEntryCount >= 2);
+    request = ExplicitRequest(0);
+    blob->header.version = OVERWORLD_WILD_BEHAVIOR_DATA_VERSION - 1;
+    assert(BehaviorResolver_Resolve(
+        blob, sizeof(*blob), &request, &first, NULL)
+        == BEHAVIOR_RESOLVE_INVALID_BLOB);
+    blob->header.version = OVERWORLD_WILD_BEHAVIOR_DATA_VERSION;
     for (i = 0; i < blob->header.overrideProfileCount; i++) {
         ClearApplication(&blob->overrideProfiles[i]);
     }
@@ -193,6 +207,16 @@ int main(void)
     assert(BehaviorResolver_Resolve(
         blob, sizeof(*blob), &request, &first, NULL)
         == BEHAVIOR_RESOLVE_INVALID_CONTEXT);
+
+    request = ExplicitRequest(0);
+    request.requestVersion = 1;
+    assert(BehaviorResolver_Resolve(
+        blob, sizeof(*blob), &request, &first, NULL)
+        == BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION);
+    request.requestVersion = 0;
+    assert(BehaviorResolver_Resolve(
+        blob, sizeof(*blob), &request, &first, NULL)
+        == BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION);
     request = ExplicitRequest(1u << 1);
     request.winningConditionId = 101;
     SetActorTarget(&request, 1, 101);

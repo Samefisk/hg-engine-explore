@@ -15,10 +15,10 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VALIDATE_ADDR 0x023C3059
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_CLEANUP_ADDR 0x023C3101
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
-#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 11
+#define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 12
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 78
-#define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 77
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 79
+#define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 78
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -53,7 +53,6 @@ struct OverworldWildBehaviorPrimitives;
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FLYING_INSECT 7
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER 12
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 25
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE 8
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED 15
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD_ROOFTOP 11
 typedef char OverworldWildBehaviorOverrideProfileCountMustFitApplicabilityMask[
@@ -332,14 +331,15 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_HOP_SWAY_WIDTH_MAX 8
 #define OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4 16
 
-/* Compact blob representation. Active and tired runtime lanes are composed
- * from the Chill lane of the referenced override profiles. */
+/* Compact blob representation. The Tired runtime lane is composed from the
+ * Owner lane of the referenced override profile. Reserved bytes preserve the
+ * 72-byte storage layout after old alert-condition and Active bindings leave. */
 typedef struct OverworldWildBehaviorProfileData {
     u8 chillState;
-    u8 alertState;
+    u8 reserved01;
     u8 alertEmote;
     u8 alertTime;
-    u8 alertness;
+    u8 reserved04;
     u8 stamina;
     u8 restTime;
     u8 chillSpeed;
@@ -349,9 +349,9 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 spawnState;
     u8 chillAction;
     u8 chillTarget;
-    u8 alertRange;
+    u8 reserved14;
     u8 playerAdjacentDirectionMasks;
-    u8 alertChance;
+    u8 reserved16;
     u8 spawnDestination;
     u8 battleTrigger;
     /* Low two bits select cardinal/diagonal movement. High six bits store
@@ -382,7 +382,7 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 avoidPreviousTile;
     u8 chainMovementVariance;
     u8 chainPauseVariance;
-    u8 activeProfile;
+    u8 reserved46;
     u8 tiredProfile;
     u8 hopElevationTimeScale;
     u8 hopElevationArcScale;
@@ -430,10 +430,10 @@ typedef struct OverworldWildBehaviorProfile {
         OverworldWildBehaviorProfileData owner;
         struct {
             u8 chillState;
-            u8 alertState;
+            u8 reserved01;
             u8 alertEmote;
             u8 alertTime;
-            u8 alertness;
+            u8 reserved04;
             u8 stamina;
             u8 restTime;
             u8 chillSpeed;
@@ -443,9 +443,9 @@ typedef struct OverworldWildBehaviorProfile {
             u8 spawnState;
             u8 chillAction;
             u8 chillTarget;
-            u8 alertRange;
+            u8 reserved14;
             u8 playerAdjacentDirectionMasks;
-            u8 alertChance;
+            u8 reserved16;
             u8 spawnDestination;
             u8 battleTrigger;
             u8 hopAllowNonCardinal;
@@ -473,7 +473,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 avoidPreviousTile;
             u8 chainMovementVariance;
             u8 chainPauseVariance;
-            u8 activeProfile;
+            u8 reserved46;
             u8 tiredProfile;
             u8 hopElevationTimeScale;
             u8 hopElevationArcScale;
@@ -497,67 +497,6 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tilesBeforeTurnSkid;
             u8 walkStompTime;
             u8 walkAccelerationStep;
-        };
-    };
-    union {
-        OverworldWildBehaviorProfileData active;
-        struct {
-            u8 attentiveState;
-            u8 _activePad01[5];
-            u8 _activePad06;
-            u8 attentiveSpeed;
-            u8 _activePad08[4];
-            u8 movementStyle;
-            u8 targetSelector;
-            u8 _activePad14;
-            u8 attentivePlayerAdjacentDirectionMasks;
-            u8 _activePad16[2];
-            u8 attentiveBattle;
-            u8 attentiveHopAllowNonCardinal;
-            u8 attentiveHopMinDistance;
-            u8 attentiveHopMaxDistance;
-            u8 attentiveHopPause;
-            u8 attentiveTeleportTime;
-            u8 attentiveTeleportPause;
-            u8 _activePad25[4];
-            u8 attentiveRamAccelerationSteps;
-            u8 attentiveRamMaxSpeed;
-            u8 attentiveChainPauseAction;
-            u16 attentiveAllowedTerrainMask;
-            u16 attentiveAllowedTerrainOverrideMask;
-            u8 attentiveHopTime;
-            u8 attentiveChaseBoostDistance;
-            u8 attentiveChaseBoostSpeed;
-            u8 attentiveHopSpinSpeed;
-            u8 _activePad40;
-            u8 attentiveCircleRadius;
-            u8 attentiveContinueWhenArrived;
-            u8 attentiveAvoidPreviousTile;
-            u8 attentiveChainMovementVariance;
-            u8 attentiveChainPauseVariance;
-            u8 _activePad46[2];
-            u8 attentiveHopElevationTimeScale;
-            u8 attentiveHopElevationArcScale;
-            u8 attentiveTilesToAccelerate;
-            u8 attentiveMaxWalkSpeed;
-            u16 attentiveSpawnDestinationMask;
-            u16 attentiveSpawnDestinationOverrideMask;
-            u8 attentiveHopAllowVerticalObstacles;
-            u8 attentiveChainRepositionJumpCount;
-            u8 attentiveHopSwayWidth;
-            u8 attentiveSpawnHopSwayWidth;
-            u8 attentiveChainRepositionSpeed;
-            u8 attentiveChainRepositionDistance;
-            u8 attentiveChainRepositionDust;
-            u8 attentiveChainRepositionAllowCardinal;
-            u8 attentiveChainRepositionAllowDiagonal;
-            u8 attentiveWalkOptions;
-            u8 attentiveWanderStraightChance;
-            u8 attentiveChainPauseActionChance;
-            u8 attentiveWalkPause;
-            u8 attentiveTilesBeforeTurnSkid;
-            u8 attentiveWalkStompTime;
-            u8 attentiveWalkAccelerationStep;
         };
     };
     union {
@@ -617,7 +556,7 @@ typedef struct OverworldWildBehaviorProfile {
     };
 } OverworldWildBehaviorProfile;
 
-/* Mechanical actions resolved from the three behavior lanes. AI policy stays
+/* Mechanical actions resolved from the Owner and Tired behavior lanes. AI policy stays
  * in the profile; actor controllers may safely snapshot these primitives. */
 typedef struct OverworldWildBehaviorPrimitives {
     u8 spawnLocomotion;
@@ -625,26 +564,28 @@ typedef struct OverworldWildBehaviorPrimitives {
     u8 chillTarget;
     u8 alertLogic;
     u8 alertReaction;
-    u8 attentiveLocomotion;
-    u8 attentiveTarget;
-    u8 activeReaction;
     u8 tiredLocomotion;
     u8 tiredTarget;
     u8 tiredReaction;
 } OverworldWildBehaviorPrimitives;
 
-typedef char OverworldWildBehaviorProfileSizeMustRemain216Bytes[
-    sizeof(OverworldWildBehaviorProfile) == 216 ? 1 : -1];
+typedef char OverworldWildBehaviorProfileSizeMustRemain144Bytes[
+    sizeof(OverworldWildBehaviorProfile) == 144 ? 1 : -1];
+typedef char OverworldWildBehaviorPrimitivesSizeMustRemain8Bytes[
+    sizeof(OverworldWildBehaviorPrimitives) == 8 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorContext {
     u16 species;
-    u16 conditionTerrainMask;
+    u16 reserved;
     u32 groupFlags;
     u8 level;
     u8 terrain;
     u8 shiny;
     u8 behaviorClass;
 } OverworldWildBehaviorContext;
+
+typedef char OverworldWildBehaviorContextSizeMustRemain12Bytes[
+    sizeof(OverworldWildBehaviorContext) == 12 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorMatch {
     u32 groupMask;
@@ -749,10 +690,8 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 #define OW_WILD_BEHAVIOR_NO_FASTER_THAN(value) OW_WILD_BEHAVIOR_AT_LEAST(value)
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE (1u << 0)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE (1u << 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE (1u << 2)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME (1u << 3)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERTNESS (1u << 4)
 #define OW_WILD_BEHAVIOR_OVERRIDE_STAMINA (1u << 5)
 #define OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME (1u << 6)
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED (1u << 7)
@@ -762,9 +701,7 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE (1u << 11)
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION (1u << 12)
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET (1u << 13)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_RANGE (1u << 14)
 #define OW_WILD_BEHAVIOR_OVERRIDE_PLAYER_ADJACENT_DIRECTION_MASKS (1u << 15)
-#define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_CHANCE (1u << 16)
 #define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_DESTINATION (1u << 17)
 #define OW_WILD_BEHAVIOR_OVERRIDE_BATTLE_TRIGGER (1u << 18)
 #define OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL (1u << 19)
@@ -794,7 +731,6 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE (1u << 1)
-#define OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE (1u << 2)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE (1u << 3)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_TIME_SCALE (1u << 4)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ELEVATION_ARC_SCALE (1u << 5)
